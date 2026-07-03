@@ -98,10 +98,12 @@ export interface DocVerifyResult {
   };
 }
 
-/** Calls gemini-doc-verify right after upload. Network/config failures are
- *  treated as pass-through (route to manual review server-side later) rather
- *  than blocking the user — the authoritative check still runs post-submit
- *  in the async worker regardless of this result. */
+/** Calls gemini-doc-verify right after upload. Network/config failures
+ *  return null, meaning "the check could not run" — NOT "the document
+ *  passed". Callers must decide what null means for their document type:
+ *  the post-submit worker (ocr-doc-verify) only re-checks address proof,
+ *  never gst_certificate/pan_card, so for those two types a null result
+ *  here is the only check that will ever run and must fail closed. */
 async function verifyUploadedDocument(
   documentType: VerificationDocumentType,
   storagePath:  string,
@@ -197,6 +199,18 @@ export async function uploadAddressProof(
     return { path: null, error: new Error(verify.message), verify };
   }
 
+  // Register in the same verification_documents table as GST/PAN uploads so
+  // the admin review console's document list (which only reads this table)
+  // shows the address proof alongside the other documents.
+  const { error: rpcError } = await supabase().rpc('register_verification_document', {
+    p_org_id:        orgId,
+    p_document_type: documentType,
+    p_storage_path:  path,
+    p_mime_type:     file.mimeType,
+    p_size_bytes:    bytes.byteLength,
+  });
+  if (rpcError) return { path: null, error: new Error(rpcError.message), verify };
+
   return { path, error: null, verify };
 }
 
@@ -231,12 +245,17 @@ export async function uploadVerificationDocument(
 
   const verify = await verifyUploadedDocument(documentType, path, typedValues?.gstin, typedValues?.pan);
 
-  // Gemini explicitly rejected the document (mismatch/unreadable) — remove
-  // the file and don't register it, so a bad upload never counts toward
-  // "document uploaded" in the wizard or submit_business_verification.
-  if (verify && !verify.passed) {
+  // Gemini explicitly rejected the document (mismatch/unreadable), or the
+  // check couldn't run at all (verify === null) — remove the file and don't
+  // register it. Nothing downstream re-checks gst_certificate/pan_card, so
+  // a null result here must fail closed rather than silently pass through.
+  if (!verify || !verify.passed) {
     await supabase().storage.from(VERIFICATION_BUCKET).remove([path]);
-    return { path: null, error: new Error(verify.message), verify };
+    return {
+      path: null,
+      error: new Error(verify?.message ?? 'Could not verify this document right now. Please try again.'),
+      verify,
+    };
   }
 
   const { error: rpcError } = await supabase().rpc('register_verification_document', {
@@ -286,6 +305,7 @@ export interface SubmitVerificationPayload {
   address_pincode?:    string;
   address_proof_path?: string;
   address_proof_type?: AddressProofType;
+  gst_not_applicable?: boolean;
 }
 
 export async function submitBusinessVerification(
@@ -298,6 +318,7 @@ export async function submitBusinessVerification(
     p_address_pincode:    payload.address_pincode     ?? null,
     p_address_proof_path: payload.address_proof_path  ?? null,
     p_address_proof_type: payload.address_proof_type  ?? null,
+    p_gst_not_applicable: payload.gst_not_applicable   ?? null,
   });
 
   if (error) return { ok: false, frozen_at: null, error: new Error(error.message) };

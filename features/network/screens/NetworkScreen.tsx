@@ -58,6 +58,10 @@ import {
   ConnectionRoleModal,
   type ConnectionInviteRole,
 } from "@/features/network/components/ConnectionRoleModal";
+import {
+  getNetworkActions,
+  isRegisteredOrgId,
+} from "@/features/network/utils/networkActions.util";
 import { queryKeys } from "@/lib/queryKeys";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { useInboundProtocolInviteActions } from "@/lib/hooks/useInboundProtocolInviteActions";
@@ -100,6 +104,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -175,9 +180,6 @@ type NetworkProfileNode = {
   gstin?: string | null;
   operating_model?: string | null;
 };
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function getNetworkNodeLocation(item: ConnectedOrg): string {
   const cityState = [item.city, item.state]
@@ -422,9 +424,7 @@ function NetworkScreenInner() {
     setProtocolRoleModalOpen(false);
     setProtocolSending(false);
     setProtocolCancelling(false);
-    const isUuid =
-      typeof nodeOrgId === "string" &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nodeOrgId);
+    const isUuid = isRegisteredOrgId(nodeOrgId);
 
     if (!nodeOrgId || !isUuid) {
       setSelectedProfileStats({ totalTrips: null });
@@ -530,9 +530,7 @@ function NetworkScreenInner() {
    *  caller is also safe. */
   const handleOpenMutualProfile = useCallback(
     (row: Pick<MutualConnectionRow, "id" | "name">) => {
-      const looksLikeOrgUuid =
-        typeof row.id === "string" &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id);
+      const looksLikeOrgUuid = isRegisteredOrgId(row.id);
       if (!looksLikeOrgUuid) {
         if (__DEV__) {
           console.warn(
@@ -585,6 +583,23 @@ function NetworkScreenInner() {
           ? "REQUEST SENT"
           : selectedProfileNode.status
       : null;
+
+  /** Single source of truth for the profile modal's Connect/Message CTAs —
+   *  keeps this modal's button state identical to the discover cards for
+   *  the same org, and disables (rather than alert-after-tap) actions that
+   *  would otherwise fail on an unregistered or driver profile. */
+  const profileNetworkActions = selectedProfileNode
+    ? getNetworkActions({
+        isRegisteredOrg: isRegisteredOrgId(selectedProfileNode.id),
+        connectionStatus:
+          profileEffectiveStatus === "CONNECTED"
+            ? "connected"
+            : profileEffectiveStatus === "REQUEST SENT"
+              ? "pending"
+              : "none",
+        isDriver: selectedProfileNode.type === "DRIVER",
+      })
+    : null;
 
   const handleOpenProfileFromConnection = useCallback(
     (item: ConnectedOrg) => {
@@ -652,35 +667,22 @@ function NetworkScreenInner() {
   const trendPct = totalConnections > 0 ? Math.round((pendingCount / totalConnections) * 100) : 0;
 
   const handleSendProtocolFromProfile = () => {
-    if (!selectedProfileNode || !orgId) return;
-    if (profileEffectiveStatus === "CONNECTED") {
-      Alert.alert(
-        "Network protocol",
-        "You are already connected with this organization.",
-      );
+    if (!selectedProfileNode || !orgId || !profileNetworkActions) return;
+    if (profileNetworkActions.primaryAction === "invite") {
+      // No phone number is captured on this profile shape (Discover/mutual
+      // snapshot), so runConnectionInvite's phone-lookup path can't apply
+      // here — fall back to the same generic share text it itself uses
+      // when a contact has no Pulse account yet.
+      void Share.share({
+        message: `Hi ${selectedProfileNode.name}, join me on Pulse to manage loads, trips, payments, and network requests together.`,
+      });
       return;
     }
-    if (profileEffectiveStatus === "REQUEST SENT") {
-      /* "Request sent" tap is wired to the cancel button now; this
-       *  branch is just a safety net if some other call path triggers
-       *  the send handler while a request is already pending. */
+    if (profileNetworkActions.primaryAction !== "connect") {
+      // Button should already be disabled/hidden for every other state —
+      // this is a safety net, not the primary gate, so it stays silent.
       return;
     }
-    if (selectedProfileNode.type === "DRIVER") {
-      Alert.alert(
-        "Network protocol",
-        "Driver protocol can be sent from driver invite flows.",
-      );
-      return;
-    }
-    if (!UUID_REGEX.test(selectedProfileNode.id)) {
-      Alert.alert(
-        "Network protocol",
-        "This profile is not linked to an organization account yet. Use invite flows to connect first.",
-      );
-      return;
-    }
-
     setProtocolRoleModalOpen(true);
   };
 
@@ -706,7 +708,7 @@ function NetworkScreenInner() {
         );
         return;
       }
-      Alert.alert("Could not send protocol", error.message);
+      Alert.alert("Could not connect", error.message);
       return;
     }
 
@@ -749,21 +751,21 @@ function NetworkScreenInner() {
     invalidateNetwork();
     if (alreadyInvited) {
       Alert.alert(
-        "Protocol status",
+        "Already requested",
         "A request was already pending for this organization.",
       );
       return;
     }
     Alert.alert(
-      "Protocol sent",
-      `Request sent to ${selectedProfileNode.name}.`,
+      "Request sent",
+      `Connect request sent to ${selectedProfileNode.name}.`,
     );
   };
 
   const handleCancelProtocolFromProfile = async () => {
     if (!selectedProfileNode || !orgId) return;
     if (protocolCancelling) return;
-    if (!UUID_REGEX.test(selectedProfileNode.id)) return;
+    if (!isRegisteredOrgId(selectedProfileNode.id)) return;
     setProtocolCancelling(true);
     const { error } = await cancelPendingConnectionRequestByOrgPair(
       orgId,
@@ -793,13 +795,9 @@ function NetworkScreenInner() {
 
   const handleOpenDirectMessage = async () => {
     if (!selectedProfileNode || !orgId) return;
-    if (!UUID_REGEX.test(selectedProfileNode.id)) {
-      Alert.alert(
-        "Direct message",
-        "This profile is not linked to an app organization yet, so chat cannot be opened.",
-      );
-      return;
-    }
+    // Button is disabled (see profileNetworkActions.secondaryEnabled) for
+    // unregistered profiles — this stays as a safety net, not the gate.
+    if (!isRegisteredOrgId(selectedProfileNode.id)) return;
     const orgName = organization?.name?.trim() || "My Organization";
     try {
       const { getOrCreateNetworkConversation } = await import("@/features/chat/services/chat.service");
@@ -1408,8 +1406,8 @@ function NetworkScreenInner() {
                       isWideNetwork && styles.profileCtaStackDesktop,
                     ]}
                   >
-                    {profileEffectiveStatus !== "CONNECTED" ? (
-                      profileEffectiveStatus === "REQUEST SENT" ? (
+                    {profileNetworkActions?.primaryAction !== "message" ? (
+                      profileNetworkActions?.primaryAction === "pending" ? (
                         /* Request already exists for this org. The
                          *  primary CTA flips to a withdraw button so
                          *  the user can recall the invite from the
@@ -1474,7 +1472,8 @@ function NetworkScreenInner() {
                             </Text>
                           </Pressable>
                         </View>
-                      ) : (
+                      ) : profileNetworkActions?.primaryAction === "connect" ||
+                        profileNetworkActions?.primaryAction === "invite" ? (
                         <Pressable
                           style={({ pressed }) => [
                             styles.profilePrimaryBtn,
@@ -1482,18 +1481,20 @@ function NetworkScreenInner() {
                           ]}
                           onPress={() => handleSendProtocolFromProfile()}
                           accessibilityRole="button"
-                          accessibilityLabel="Send protocol"
+                          accessibilityLabel={profileNetworkActions.primaryLabel}
                         >
                           <UserPlus size={12} color={Theme.textOnPrimary} />
                           <Text style={styles.profilePrimaryBtnText}>
-                            Send protocol
+                            {profileNetworkActions.primaryLabel}
                           </Text>
                         </Pressable>
-                      )
+                      ) : null
                     ) : null}
                     <NetworkProfileDirectMessageButton
                       compact={isMobileLayout}
                       onPress={() => void handleOpenDirectMessage()}
+                      disabled={!(profileNetworkActions?.secondaryEnabled ?? true)}
+                      helperText={profileNetworkActions?.secondaryHelperText ?? null}
                     />
                   </View>
                 </ScrollView>
@@ -1501,7 +1502,7 @@ function NetworkScreenInner() {
         </View>
       </Modal>
       ) : null}
-      {/* Role picker for "Send protocol" — same modal used by Discover so
+      {/* Role picker for "Connect" — same modal used by Discover so
        *  the entire app shares one invite flow (Add as Client / Supplier
        *  → submit). Rendered outside the profile modal so it can appear
        *  on top of (or alongside) it. */}

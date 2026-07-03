@@ -208,7 +208,7 @@ Deno.serve(async (req: Request) => {
   // ── Fetch org data ────────────────────────────────────────────────────────
   const { data: org } = await db
     .from('organizations')
-    .select('id, name, gstin, business_pan, cin, address_proof_path, registration_type')
+    .select('id, name, gstin, business_pan, cin, address_proof_path, registration_type, gst_not_applicable')
     .eq('id', job.organization_id)
     .single();
 
@@ -266,8 +266,14 @@ Deno.serve(async (req: Request) => {
 
   // ── Pillar 1: Tax registry (GSTIN + PAN) ──────────────────────────────────
   if (job.pillar_1_tax_status === 'QUEUED') {
-    const gstinResult = await verifyGstin(org.gstin ?? '', supabaseUrl, serviceRoleKey);
-    const panResult   = await verifyPan(org.business_pan ?? '', hypervergeKey);
+    // Businesses below the GST registration threshold legitimately have no
+    // GSTIN — treat that leg as auto-passed rather than sending an empty
+    // string to the registry check, which would fail format validation and
+    // wrongly flag the whole submission.
+    const gstinResult: RegistryResult = org.gst_not_applicable
+      ? { passed: true, status: 'NOT_APPLICABLE', detail: { skipped: 'gst_not_applicable' } }
+      : await verifyGstin(org.gstin ?? '', supabaseUrl, serviceRoleKey);
+    const panResult = await verifyPan(org.business_pan ?? '', hypervergeKey);
 
     const p1Passed = gstinResult.passed && panResult.passed;
     const p1Manual = gstinResult.status === 'MANUAL_REVIEW' || panResult.status === 'MANUAL_REVIEW';

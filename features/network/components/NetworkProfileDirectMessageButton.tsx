@@ -4,40 +4,61 @@
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import { Mail } from "lucide-react-native";
-import { Platform, Pressable, StyleSheet, Text } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 export type NetworkProfileDirectMessageButtonProps = {
   onPress: () => void;
   /** Taller touch target on narrow viewports (profile modal mobile layout). */
   compact?: boolean;
   disabled?: boolean;
+  /** Shown under the button when disabled, e.g. why messaging isn't available yet. */
+  helperText?: string | null;
+  label?: string;
 };
 
 export function NetworkProfileDirectMessageButton({
   onPress,
   compact = false,
   disabled = false,
+  helperText = null,
+  label = "Message",
 }: NetworkProfileDirectMessageButtonProps) {
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.button,
-        compact && styles.buttonCompact,
-        disabled && styles.buttonDisabled,
-        pressed && !disabled && { opacity: 0.88 },
-      ]}
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel="Direct message"
-    >
-      <Mail size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
-      <Text style={[styles.label, compact && styles.labelCompact]}>Direct message</Text>
-    </Pressable>
+    <View style={styles.wrap}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.button,
+          compact && styles.buttonCompact,
+          disabled && styles.buttonDisabled,
+          pressed && !disabled && { opacity: 0.88 },
+        ]}
+        onPress={onPress}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityHint={disabled && helperText ? helperText : undefined}
+      >
+        <Mail size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
+        <Text style={[styles.label, compact && styles.labelCompact]}>{label}</Text>
+      </Pressable>
+      {disabled && helperText ? (
+        <Text style={styles.helperText}>{helperText}</Text>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrap: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  helperText: {
+    marginTop: 6,
+    fontSize: 11,
+    color: Theme.textSecondary,
+    textAlign: "center",
+  },
   button: {
     width: "100%",
     alignSelf: "stretch",

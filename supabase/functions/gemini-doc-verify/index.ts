@@ -157,14 +157,20 @@ async function handle(req: Request): Promise<Response> {
   }
 
   // ── 3. Call Gemini Vision for field extraction ─────────────────────────────
-  const prompt = `Extract the following fields from this Indian business document. Return ONLY a valid JSON object with these exact keys. If a field is not visible, use null.
+  const prompt = `Extract the following fields from this Indian document. Return ONLY a valid JSON object with these exact keys. If a field is not visible, use null.
 
 {
   "gstin": "<15-character GSTIN or null>",
   "pan": "<10-character PAN or null>",
-  "document_type": "<'gst_certificate' | 'pan_card' | 'lease_agreement' | 'utility_bill' | 'other' | 'unreadable'>",
+  "document_type": "<'gst_certificate' | 'pan_card' | 'lease_agreement' | 'utility_bill' | 'aadhaar_card' | 'voter_id' | 'other' | 'unreadable'>",
   "legible": <true | false>
 }
+
+Only set "gstin" if this document is a GST registration certificate (has a
+GSTIN, legal/trade name, and GST registry letterhead). Only set "pan" if this
+document is an actual PAN card. Do not extract a gstin or pan value from any
+other document type (Aadhaar, voter ID, driving licence, etc.) even if it
+contains a similarly-shaped number.
 
 Return ONLY the JSON — no markdown, no explanation.`;
 
@@ -180,7 +186,17 @@ Return ONLY the JSON — no markdown, no explanation.`;
             { text: prompt },
           ],
         }],
-        generationConfig: { temperature: 0, maxOutputTokens: 256 },
+        generationConfig: {
+          temperature: 0,
+          // gemini-2.5-flash spends part of maxOutputTokens on internal
+          // "thinking" before writing the visible response — with a low
+          // budget the model can exhaust it mid-JSON, producing truncated
+          // output like `{"gstin":` with nothing after it. Disable thinking
+          // (not needed for a straight extraction task) and give the
+          // visible output a generous ceiling.
+          maxOutputTokens: 1024,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       }),
     },
   );
@@ -201,12 +217,33 @@ Return ONLY the JSON — no markdown, no explanation.`;
     legible: boolean;
   };
 
+  const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
   try {
-    const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-    const cleaned = rawText.replace(/```json?\n?|\n?```/g, '').trim();
-    extracted = JSON.parse(cleaned);
+    // Gemini sometimes prefixes/suffixes the JSON with prose despite
+    // instructions ("Here's the data:\n\n{...}\n\nLet me know if..."), which
+    // fails a strict whole-string parse even though valid JSON is present.
+    // Strip markdown fences, then extract the first {...} block rather than
+    // requiring the entire response to be clean JSON.
+    const withoutFences = rawText.replace(/```json?\n?|\n?```/g, '').trim();
+    const jsonMatch = withoutFences.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON object found in response');
+    extracted = JSON.parse(jsonMatch[0]);
   } catch {
-    return json({ error: 'Failed to parse extracted fields from Gemini response' }, 500);
+    // Gemini returned something we still couldn't salvage a JSON object
+    // from — most likely a safety refusal or plain-language explanation
+    // instead of the requested JSON (seen on sensitive ID documents like
+    // Aadhaar). Treat as "could not verify", not a transport error — a 500
+    // here gets swallowed by the client as a pass-through, which would
+    // silently accept an unverified document. Surface the raw text in the
+    // response itself (get_logs doesn't expose console output from this
+    // environment) so it's visible in the client console during triage.
+    console.error('[gemini-doc-verify] unparseable response:', rawText);
+    return json({
+      passed: false, route_to_manual: true,
+      message: 'Could not verify this document right now. Please try again.',
+      extracted: { gstin: null, pan: null, document_type: null, legible: false },
+      debug_raw_gemini_text: rawText,
+    });
   }
 
   const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -217,7 +254,24 @@ Return ONLY the JSON — no markdown, no explanation.`;
   // auto-fills it from `extracted` instead of comparing. Still requires the
   // extracted value to match the real GSTIN/PAN format before trusting it.
   if (document_type === 'gst_certificate') {
-    if (!extracted.legible || !extracted.gstin) {
+    if (!extracted.legible) {
+      return json({
+        passed: false, route_to_manual: true,
+        message: 'Could not read a GSTIN from this document. Please upload a clear photo of your GST certificate.',
+        extracted,
+      });
+    }
+    // Check the document's own classification before checking for a
+    // missing GSTIN — a PAN card/Aadhaar with no GSTIN should say "wrong
+    // document", not the more generic "could not read a GSTIN".
+    if (extracted.document_type !== 'gst_certificate') {
+      return json({
+        passed: false, route_to_manual: true,
+        message: 'This doesn\'t look like a GST certificate. Please upload the correct document.',
+        extracted,
+      });
+    }
+    if (!extracted.gstin) {
       return json({
         passed: false, route_to_manual: true,
         message: 'Could not read a GSTIN from this document. Please upload a clear photo of your GST certificate.',
@@ -253,7 +307,24 @@ Return ONLY the JSON — no markdown, no explanation.`;
   }
 
   if (document_type === 'pan_card') {
-    if (!extracted.legible || !extracted.pan) {
+    if (!extracted.legible) {
+      return json({
+        passed: false, route_to_manual: true,
+        message: 'Could not read a PAN from this document. Please upload a clear photo of your PAN card.',
+        extracted,
+      });
+    }
+    // Check the document's own classification before checking for a
+    // missing PAN — a GST cert/Aadhaar with no PAN should say "wrong
+    // document", not the more generic "could not read a PAN".
+    if (extracted.document_type !== 'pan_card') {
+      return json({
+        passed: false, route_to_manual: true,
+        message: 'This doesn\'t look like a PAN card. Please upload the correct document.',
+        extracted,
+      });
+    }
+    if (!extracted.pan) {
       return json({
         passed: false, route_to_manual: true,
         message: 'Could not read a PAN from this document. Please upload a clear photo of your PAN card.',

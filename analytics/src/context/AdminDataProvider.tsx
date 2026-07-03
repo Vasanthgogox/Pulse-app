@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type {
-  Organization, AdminContextValue, AccountFilter,
+  Organization, AdminContextValue,
   OrgUser, UsageMetric, FeatureFlag,
   BillingTier, AppStatus, CheckStatus,
   AuditEntry, AutomatedCheck, BusinessDocument,
@@ -67,7 +67,6 @@ function mapOrg(
     gstin:                (row.gstin as string) ?? '—',
     pan:                  (row.business_pan as string) ?? '—',
     cin:                  (row.cin as string) ?? undefined,
-    registration_number:  (row.gstin as string) ?? '—',
     registration_date:    (row.created_at as string) ?? '',
     directors:            [],
     registered_address:   [row.address_line, row.city, row.state].filter(Boolean).join(', ') || '—',
@@ -76,15 +75,18 @@ function mapOrg(
     state:                (row.state as string) ?? '—',
     contact_name:         members[0] ? ((members[0] as Record<string, unknown>).display_name as string ?? '—') : '—',
     contact_email:        members[0] ? ((members[0] as Record<string, unknown>).email as string ?? '—') : '—',
-    contact_phone:        '—',
+    contact_phone:        members[0] ? ((members[0] as Record<string, unknown>).phone as string ?? '—') : '—',
     submission_date:      (row.submitted_at as string) ?? (row.created_at as string) ?? '',
     status,
     risk_score:           'Low',
     risk_factors:         [],
     assigned_to:          'System',
-    rejection_reason:     undefined,
-    rejection_notes:      undefined,
+    rejection_reason:     (row.rejection_reasons as { checklist?: string[] } | null)?.checklist?.[0] ?? undefined,
+    rejection_notes:      (row.kyc_rejected_reason as string) ?? undefined,
     escalation_reason:    undefined,
+    approval_notes:       status === 'Approved'
+      ? [...(auditByOrg[row.id as string] ?? [])].reverse().find(e => e.event_type === 'approved')?.detail
+      : undefined,
     automated_checks:     mapChecks(row, jobsByOrg[row.id as string]),
     documents:            docsByOrg[row.id as string] ?? [] as BusinessDocument[],
     audit_trail:          auditByOrg[row.id as string] ?? [] as AuditEntry[],
@@ -120,19 +122,26 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function mapAuditEventType(prev: string | null, next: string): AuditEntry['event_type'] {
-  if (!prev) return 'submitted';
+// submit_business_verification writes new_status='pending' both for a
+// user's first-ever submission and a resubmission after rejection — the
+// same transition escalateApp also produces today (see its TODO). notes
+// is the only field that actually distinguishes them, so check it first
+// rather than inferring intent from the status pair alone.
+function mapAuditEventType(prev: string | null, next: string, notes: string | null): AuditEntry['event_type'] {
+  if (notes === 'user_submitted') return 'submitted';
   if (next === 'verified') return 'approved';
   if (next === 'rejected') return 'rejected';
   if (next === 'pending')  return 'escalated';
+  if (!prev) return 'submitted';
   return 'comment';
 }
 
-function auditTitle(prev: string | null, next: string): string {
-  if (!prev) return 'Application submitted';
+function auditTitle(prev: string | null, next: string, notes: string | null): string {
+  if (notes === 'user_submitted') return 'Submitted for verification';
   if (next === 'verified') return 'Approved';
   if (next === 'rejected') return 'Rejected';
   if (next === 'pending')  return 'Escalated for review';
+  if (!prev) return 'Application submitted';
   return `Status changed to ${next}`;
 }
 
@@ -153,15 +162,22 @@ function mapPillarStatus(pillarStatus: string | undefined, fallbackPresent: bool
 }
 
 function mapChecks(row: Record<string, unknown>, job: Record<string, unknown> | undefined): AutomatedCheck[] {
-  const gstinStatus = mapPillarStatus(job?.pillar_1_tax_status as string | undefined, !!row.gstin);
-  const panStatus   = gstinStatus; // pillar_1_tax_status covers GSTIN + PAN together — see verification-worker/index.ts
-  const ocrStatus   = mapPillarStatus(job?.ocr_status as string | undefined, !!row.address_proof_path);
+  const gstNotApplicable = row.gst_not_applicable === true;
+  // pillar_1_tax_status covers GSTIN + PAN together (see verification-worker/index.ts),
+  // but a gst_not_applicable org has nothing to check on the GSTIN side — surface that
+  // as N/A instead of an ever-pending registry check, without affecting PAN's status.
+  const pillar1Status = mapPillarStatus(job?.pillar_1_tax_status as string | undefined, !!row.gstin);
+  const gstinStatus: CheckStatus = gstNotApplicable ? 'N/A' : pillar1Status;
+  const panStatus    = pillar1Status;
+  const ocrStatus    = mapPillarStatus(job?.ocr_status as string | undefined, !!row.address_proof_path);
 
   return [
     {
       id: 'gstin', label: 'GSTIN Registry',
       status: gstinStatus,
-      detail: job
+      detail: gstNotApplicable
+        ? 'GST not registered — declared not applicable'
+        : job
         ? `GSTIN: ${row.gstin ?? '—'} · registry check ${(job.pillar_1_tax_status as string ?? 'not queued').toLowerCase()}`
         : row.gstin ? `GSTIN: ${row.gstin} · not yet submitted for verification` : 'Not submitted',
     },
@@ -214,7 +230,6 @@ function mapDocumentStatus(s: string): BusinessDocument['status'] {
 export function AdminDataProvider({ children }: { children: React.ReactNode }) {
   const [applications, setApplications] = useState<Organization[]>([]);
   const [selectedId, setSelectedId]     = useState<string | null>(null);
-  const [accountFilter, setAccountFilter] = useState<AccountFilter>('All Orgs');
   const [searchQuery, setSearchQuery]   = useState('');
   const [isLoading, setIsLoading]       = useState(true);
   const [error, setError]               = useState<string | null>(null);
@@ -241,14 +256,14 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
 
       // Fetch profiles for all member user_ids
       const userIds = [...new Set((members ?? []).map(m => m.user_id as string))];
-      let profileMap: Record<string, { full_name: string; email: string }> = {};
+      let profileMap: Record<string, { full_name: string; email: string; phone: string | null }> = {};
       if (userIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, full_name, email')
+          .select('id, full_name, email, phone')
           .in('id', userIds);
         for (const p of (profiles ?? [])) {
-          profileMap[p.id] = { full_name: p.full_name, email: p.email };
+          profileMap[p.id] = { full_name: p.full_name, email: p.email, phone: p.phone ?? null };
         }
       }
 
@@ -262,6 +277,7 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
           ...m,
           display_name: profile?.full_name ?? null,
           email: profile?.email ?? null,
+          phone: profile?.phone ?? null,
         });
       }
 
@@ -287,14 +303,15 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
       for (const a of (auditRows ?? [])) {
         const oid = a.org_id as string;
         if (!auditByOrg[oid]) auditByOrg[oid] = [];
+        const notes = (a.notes as string | null) ?? null;
         auditByOrg[oid].push({
           id:         a.id as string,
           timestamp:  a.created_at as string,
-          actor:      (a.changed_by as string) ?? 'system',
-          actor_type: a.changed_by ? 'admin' : 'system',
-          event_type: mapAuditEventType(a.previous_status as string | null, a.new_status as string),
-          title:      auditTitle(a.previous_status as string | null, a.new_status as string),
-          detail:     (a.notes as string) ?? undefined,
+          actor:      notes === 'user_submitted' ? 'applicant' : (a.changed_by as string) ?? 'system',
+          actor_type: notes === 'user_submitted' ? 'applicant' : a.changed_by ? 'admin' : 'system',
+          event_type: mapAuditEventType(a.previous_status as string | null, a.new_status as string, notes),
+          title:      auditTitle(a.previous_status as string | null, a.new_status as string, notes),
+          detail:     notes ?? undefined,
         });
       }
 
@@ -372,13 +389,13 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
   // what the mobile wizard's submit/frozen-view code expects. This console runs under
   // the service_role key with no per-admin session, so p_admin_id is passed as null;
   // the audit trail records the action without attributing it to a specific admin user.
-  const approveApp = useCallback(async (id: string) => {
+  const approveApp = useCallback(async (id: string, notes?: string) => {
     setIsActing(true);
     try {
       const { error } = await supabase.rpc('admin_approve_profile', {
         p_org_id:   id,
         p_admin_id: null,
-        p_notes:    null,
+        p_notes:    notes?.trim() || null,
       });
       if (error) throw error;
       await loadData();
@@ -449,8 +466,6 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
     selectedOrg: selectedApp,
     selectApplication: setSelectedId,
     setSelectedOrgById: setSelectedId,
-    accountFilter,
-    setAccountFilter,
     searchQuery,
     setSearchQuery,
     isLoading,

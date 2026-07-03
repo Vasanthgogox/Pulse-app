@@ -17,8 +17,8 @@ export function formatDateTime(iso: string): string {
 }
 
 export function timeAgo(iso: string): string {
-  const diff = Date.parse('2026-06-29T10:00:00Z') - Date.parse(iso);
-  const mins  = Math.floor(diff / 60000);
+  const diff = Date.now() - Date.parse(iso);
+  const mins  = Math.max(0, Math.floor(diff / 60000));
   if (mins < 60)   return `${mins}m ago`;
   const hrs  = Math.floor(mins / 60);
   if (hrs < 24)    return `${hrs}h ago`;

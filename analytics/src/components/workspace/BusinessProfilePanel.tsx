@@ -88,7 +88,7 @@ export function BusinessProfilePanel() {
     );
   }
 
-  const { company_name, entity_type, gstin, pan, cin, registration_number, registration_date,
+  const { company_name, entity_type, gstin, pan, cin, registration_date,
           directors, registered_address, city, state, pincode, contact_name, contact_email,
           contact_phone, trade_name, automated_checks } = selectedApp;
 
@@ -116,11 +116,11 @@ export function BusinessProfilePanel() {
           <CopyField label="GSTIN" value={gstin} />
           <CopyField label="PAN" value={pan} />
           {cin && <CopyField label="CIN" value={cin} />}
-          <CopyField label="Reg. Number" value={registration_number} />
-          <CopyField label="Reg. Date" value={new Date(registration_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} />
+          <CopyField label="Org Created" value={new Date(registration_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} />
         </div>
 
-        {/* Directors */}
+        {/* Directors — hidden until MCA lookup or a real director/partner field is collected */}
+        {directors.length > 0 && (
         <div>
           <SectionHeader icon={User} title={entity_type === 'Proprietorship' ? 'Proprietor' : entity_type === 'Partnership' ? 'Partners' : 'Directors'} />
           <div className="space-y-2">
@@ -145,6 +145,7 @@ export function BusinessProfilePanel() {
             ))}
           </div>
         </div>
+        )}
 
         {/* Address */}
         <div>

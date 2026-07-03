@@ -7,7 +7,6 @@ import {
   Clock3,
   Scale,
   Sparkles,
-  Timer,
   Truck,
   Wallet,
 } from "lucide-react-native";
@@ -267,7 +266,7 @@ export const AwardedIndentDeployModalPage = memo(function AwardedIndentDeployMod
 
         {showTimingCard ? (
           <View style={styles.timingCard}>
-            {timing.dueByLabel ? (
+            {timing.combinedLabel ? (
               <View style={styles.timingLine}>
                 {timing.tone === "overdue" ? (
                   <AlertTriangle
@@ -286,7 +285,7 @@ export const AwardedIndentDeployModalPage = memo(function AwardedIndentDeployMod
                   style={[styles.timingText, dueTextStyle(timing.tone)]}
                   numberOfLines={2}
                 >
-                  {timing.dueByLabel}
+                  {timing.combinedLabel}
                 </Text>
               </View>
             ) : null}
@@ -295,14 +294,6 @@ export const AwardedIndentDeployModalPage = memo(function AwardedIndentDeployMod
                 <AlertTriangle size={12} color="#DC2626" strokeWidth={2.2} />
                 <Text style={[styles.timingText, styles.timingDueOverdue]} numberOfLines={2}>
                   Contact shipper to confirm — pickup window has passed
-                </Text>
-              </View>
-            ) : null}
-            {timing.awardedDurationLabel ? (
-              <View style={styles.timingLine}>
-                <Timer size={12} color={Theme.textMuted} strokeWidth={2.2} />
-                <Text style={[styles.timingText, styles.timingDuration]} numberOfLines={2}>
-                  {timing.awardedDurationLabel}
                 </Text>
               </View>
             ) : null}

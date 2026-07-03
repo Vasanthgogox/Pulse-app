@@ -346,7 +346,7 @@ export async function getWorkspaceKyc(orgId: string): Promise<{
 }> {
   const { data, error } = await supabase()
     .from('organizations')
-    .select('id,name,logo_url,business_pan,gstin,cin,msme_number,tan_number,iec_number,registration_type,business_type,address_line,city,state,pincode,address_pincode,address_proof_path,address_proof_type,frozen_at,submitted_at,verification_status,verified_at,kyc_rejected_reason,rejection_reasons')
+    .select('id,name,logo_url,business_pan,gstin,gst_not_applicable,cin,msme_number,tan_number,iec_number,registration_type,business_type,address_line,city,state,pincode,address_pincode,address_proof_path,address_proof_type,frozen_at,submitted_at,verification_status,verified_at,kyc_rejected_reason,rejection_reasons')
     .eq('id', orgId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), kyc: null };
@@ -358,15 +358,21 @@ export async function updateWorkspaceKyc(
   fields: {
     business_pan?: string | null;
     gstin?: string | null;
+    gst_not_applicable?: boolean;
     cin?: string | null;
     msme_number?: string | null;
     tan_number?: string | null;
     iec_number?: string | null;
+    address_line?: string | null;
+    city?: string | null;
+    state?: string | null;
   },
 ): Promise<{ error: Error | null; kyc: WorkspaceKyc | null }> {
   const coreFields = { business_pan: fields.business_pan, gstin: fields.gstin, cin: fields.cin };
   const hasCoreUpdate = Object.values(coreFields).some((v) => v !== undefined);
-  const hasExtUpdate = fields.msme_number !== undefined || fields.tan_number !== undefined || fields.iec_number !== undefined;
+  const hasExtUpdate = fields.msme_number !== undefined || fields.tan_number !== undefined
+    || fields.iec_number !== undefined || fields.gst_not_applicable !== undefined
+    || fields.address_line !== undefined || fields.city !== undefined || fields.state !== undefined;
 
   if (hasCoreUpdate) {
     const { data, error } = await supabase().rpc('update_workspace_kyc', {
@@ -384,13 +390,17 @@ export async function updateWorkspaceKyc(
     if (fields.msme_number !== undefined) patch.msme_number = fields.msme_number?.trim().toUpperCase() || null;
     if (fields.tan_number !== undefined) patch.tan_number = fields.tan_number?.trim().toUpperCase() || null;
     if (fields.iec_number !== undefined) patch.iec_number = fields.iec_number?.trim() || null;
+    if (fields.gst_not_applicable !== undefined) patch.gst_not_applicable = fields.gst_not_applicable;
+    if (fields.address_line !== undefined) patch.address_line = fields.address_line?.trim() || null;
+    if (fields.city !== undefined) patch.city = fields.city?.trim() || null;
+    if (fields.state !== undefined) patch.state = fields.state?.trim() || null;
     const { error } = await supabase().from('organizations').update(patch).eq('id', orgId);
     if (error) return { error: new Error(error.message), kyc: null };
   }
 
   const { data: fresh, error: fetchErr } = await supabase()
     .from('organizations')
-    .select('id,name,logo_url,business_pan,gstin,cin,msme_number,tan_number,iec_number,registration_type,business_type,address_line,city,state,pincode,address_pincode,address_proof_path,address_proof_type,frozen_at,submitted_at,verification_status,verified_at,kyc_rejected_reason,rejection_reasons')
+    .select('id,name,logo_url,business_pan,gstin,gst_not_applicable,cin,msme_number,tan_number,iec_number,registration_type,business_type,address_line,city,state,pincode,address_pincode,address_proof_path,address_proof_type,frozen_at,submitted_at,verification_status,verified_at,kyc_rejected_reason,rejection_reasons')
     .eq('id', orgId)
     .maybeSingle();
   if (fetchErr) return { error: new Error(fetchErr.message), kyc: null };

@@ -10,7 +10,7 @@
  * If the profile is already PENDING or VERIFIED, renders a read-only frozen
  * view instead of the form.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { CheckCircle, Clock, FileText, Lock, Upload, XCircle } from 'lucide-react-native';
@@ -69,6 +70,16 @@ const ADDRESS_PROOF_TYPES: { value: AddressProofType; label: string }[] = [
 ];
 
 const TOTAL_STEPS = 3;
+
+const draftKey = (orgId: string) => `business-verify-draft:${orgId}`;
+
+interface WizardDraft {
+  step:    number;
+  step0:   Step0State;
+  gstin:   string;
+  pan:     string;
+  proofType: AddressProofType | null;
+}
 
 /** Signup collects business_type (SOLE_PROPRIETOR/PVT_LTD/…); map it to the
  *  verification registration_type enum so the wizard prefills. OPC/OTHER have
@@ -127,7 +138,7 @@ function FrozenStatusView({ kyc }: { kyc: WorkspaceKyc }) {
         <SectionHeader label="Submitted Details" />
         <ReadRow label="Company"           value={kyc.name} />
         <ReadRow label="Registration Type" value={REGISTRATION_TYPES.find(t => t.value === kyc.registration_type)?.label} />
-        <ReadRow label="GSTIN"             value={kyc.gstin} />
+        <ReadRow label="GSTIN"             value={kyc.gst_not_applicable ? 'Not applicable' : kyc.gstin} />
         <ReadRow label="PAN"               value={kyc.business_pan} />
         <ReadRow label="CIN"               value={kyc.cin} />
 
@@ -262,6 +273,7 @@ function isStep0Valid(s: Step0State): boolean {
 interface Step1State {
   gstin:            string;
   pan:              string;
+  gstNotApplicable: boolean;
   gstinValidated:   boolean;
   gstinValidating:  boolean;
   gstinError:       string | null;
@@ -314,9 +326,11 @@ function Step1TaxCredentials({
       : null;
 
   const incompleteReasons: string[] = [];
-  if (!state.gstinValidated) incompleteReasons.push('Verify your GSTIN');
+  if (!state.gstNotApplicable) {
+    if (!state.gstinValidated) incompleteReasons.push('Verify your GSTIN');
+    if (!state.gstCertPath) incompleteReasons.push('Upload GST registration certificate');
+  }
   if (!panFormatValid) incompleteReasons.push('Enter a valid PAN');
-  if (!state.gstCertPath) incompleteReasons.push('Upload GST registration certificate');
   if (!state.panCardPath) incompleteReasons.push('Upload PAN card copy');
 
   return (
@@ -327,44 +341,62 @@ function Step1TaxCredentials({
         subtitle="Your PAN and GSTIN are verified before submission."
       />
 
-      <View>
-        <OnboardingFocusedField
-          label="GSTIN"
-          value={state.gstin}
-          onChangeText={v => {
-            const next = v.toUpperCase().replace(/\s/g, '');
-            if (next === state.gstin) return; // no real change — don't drop an already-verified state
-            onChange({ gstin: next, gstinValidated: false, gstinError: null });
-          }}
-          placeholder="29ABCDE1234F1Z5"
-          autoCapitalize="characters"
-          maxLength={15}
-          errorMessage={state.gstinError ?? gstinFormatError}
-          hintMessage={state.gstinValidated ? gstinHint : (!state.gstinError && !gstinFormatError ? gstinHint : undefined)}
-        />
-        {gstinFormatValid && !state.gstinValidated && !state.gstinValidating && (
-          <Pressable style={styles.validateButton} onPress={onValidateGstin}>
-            <Text style={styles.validateButtonText}>Verify GSTIN →</Text>
-          </Pressable>
-        )}
-        {state.gstinValidating && (
-          <View style={styles.validatingRow}>
-            <ActivityIndicator size="small" color={Theme.primary} />
-            <Text style={styles.validatingText}>Checking GST registry…</Text>
-          </View>
-        )}
-      </View>
+      {!state.gstNotApplicable && (
+        <View>
+          <OnboardingFocusedField
+            label="GSTIN"
+            value={state.gstin}
+            onChangeText={v => {
+              const next = v.toUpperCase().replace(/\s/g, '');
+              if (next === state.gstin) return; // no real change — don't drop an already-verified state
+              onChange({ gstin: next, gstinValidated: false, gstinError: null });
+            }}
+            placeholder="29ABCDE1234F1Z5"
+            autoCapitalize="characters"
+            maxLength={15}
+            errorMessage={state.gstinError ?? gstinFormatError}
+            hintMessage={state.gstinValidated ? gstinHint : (!state.gstinError && !gstinFormatError ? gstinHint : undefined)}
+          />
+          {gstinFormatValid && !state.gstinValidated && !state.gstinValidating && (
+            <Pressable style={styles.validateButton} onPress={onValidateGstin}>
+              <Text style={styles.validateButtonText}>Verify GSTIN →</Text>
+            </Pressable>
+          )}
+          {state.gstinValidating && (
+            <View style={styles.validatingRow}>
+              <ActivityIndicator size="small" color={Theme.primary} />
+              <Text style={styles.validatingText}>Checking GST registry…</Text>
+            </View>
+          )}
+        </View>
+      )}
 
-      <DocumentUploadZone
-        label="GST Registration Certificate"
-        state={{
-          uploading:    state.gstCertUploading,
-          uploadedPath: state.gstCertPath,
-          fileName:     state.gstCertFileName,
-          uploadError:  state.gstCertUploadError,
-        }}
-        onPickFile={onPickGstCert}
-      />
+      {!state.gstNotApplicable && (
+        <DocumentUploadZone
+          label="GST Registration Certificate"
+          state={{
+            uploading:    state.gstCertUploading,
+            uploadedPath: state.gstCertPath,
+            fileName:     state.gstCertFileName,
+            uploadError:  state.gstCertUploadError,
+          }}
+          onPickFile={onPickGstCert}
+        />
+      )}
+
+      <Pressable
+        style={styles.gstToggleRow}
+        onPress={() => onChange({ gstNotApplicable: !state.gstNotApplicable })}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: state.gstNotApplicable }}
+      >
+        <View style={[styles.checkbox, state.gstNotApplicable && styles.checkboxChecked]}>
+          {state.gstNotApplicable && <CheckCircle size={14} color={Theme.screenBackground} />}
+        </View>
+        <Text style={styles.gstToggleText}>
+          I don't have a GSTIN (my business isn't registered for GST)
+        </Text>
+      </Pressable>
 
       <OnboardingFocusedField
         label="PAN (Permanent Account Number)"
@@ -401,7 +433,8 @@ function Step1TaxCredentials({
 }
 
 function isStep1Valid(s: Step1State): boolean {
-  return s.gstinValidated && PAN_REGEX.test(s.pan) && !!s.gstCertPath && !!s.panCardPath;
+  const gstOk = s.gstNotApplicable || (s.gstinValidated && !!s.gstCertPath);
+  return gstOk && PAN_REGEX.test(s.pan) && !!s.panCardPath;
 }
 
 // ─── Shared document upload zone ───────────────────────────────────────────────
@@ -560,6 +593,7 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
   const [step1, setStep1] = useState<Step1State>({
     gstin:             '',
     pan:               '',
+    gstNotApplicable:  false,
     gstinValidated:    false,
     gstinValidating:   false,
     gstinError:        null,
@@ -583,47 +617,91 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
     uploadError:  null,
   });
 
-  // Load current KYC state
+  // Once the DB prefill + draft restore have both run, further state changes
+  // should be persisted to the draft — guards against overwriting the draft
+  // with the initial empty state while data is still loading.
+  const draftReady = useRef(false);
+
+  // Load current KYC state, then layer the local draft on top so unsaved
+  // form fields (GSTIN/PAN/address, not yet pushed via updateWorkspaceKyc)
+  // survive a refresh instead of appearing blank.
   useEffect(() => {
     if (!orgId) return;
-    Promise.all([getWorkspaceKyc(orgId), getVerificationDocuments(orgId)]).then(
-      ([{ kyc: data }, { documents }]) => {
-        if (data) {
-          setKyc(data);
-          // Pre-fill from existing data
-          setStep0(s => ({
-            ...s,
-            registrationType: data.registration_type
-              ?? BUSINESS_TYPE_TO_REGISTRATION[data.business_type ?? ''] ?? null,
-            addressLine:      data.address_line       ?? '',
-            city:             data.city               ?? '',
-            state:            data.state              ?? '',
-            pincode:          data.address_pincode ?? data.pincode ?? '',
-          }));
+    Promise.all([
+      getWorkspaceKyc(orgId),
+      getVerificationDocuments(orgId),
+      AsyncStorage.getItem(draftKey(orgId)),
+    ]).then(([{ kyc: data }, { documents }, rawDraft]) => {
+      if (data) {
+        setKyc(data);
+        // Pre-fill from existing data
+        setStep0(s => ({
+          ...s,
+          registrationType: data.registration_type
+            ?? BUSINESS_TYPE_TO_REGISTRATION[data.business_type ?? ''] ?? null,
+          addressLine:      data.address_line       ?? '',
+          city:             data.city               ?? '',
+          state:            data.state              ?? '',
+          pincode:          data.address_pincode ?? data.pincode ?? '',
+        }));
 
-          const gstCert = documents.find(d => d.document_type === 'gst_certificate');
-          const panCard = documents.find(d => d.document_type === 'pan_card');
+        const gstCert = documents.find(d => d.document_type === 'gst_certificate');
+        const panCard = documents.find(d => d.document_type === 'pan_card');
+        setStep1(s => ({
+          ...s,
+          gstin: data.gstin            ?? '',
+          pan:   data.business_pan     ?? '',
+          gstNotApplicable: data.gst_not_applicable ?? false,
+          gstinValidated: !!data.gstin, // treat as validated if already saved
+          gstCertPath:     gstCert?.storage_path ?? null,
+          gstCertFileName: gstCert ? 'Existing document' : null,
+          panCardPath:     panCard?.storage_path ?? null,
+          panCardFileName: panCard ? 'Existing document' : null,
+        }));
+        setStep2(s => ({
+          ...s,
+          proofType:    data.address_proof_type ?? null,
+          uploadedPath: data.address_proof_path ?? null,
+          fileName:     data.address_proof_path ? 'Existing document' : null,
+        }));
+      }
+
+      if (rawDraft) {
+        try {
+          const draft = JSON.parse(rawDraft) as WizardDraft;
+          setStep(draft.step ?? 0);
+          setStep0(s => ({ ...s, ...draft.step0 }));
           setStep1(s => ({
             ...s,
-            gstin: data.gstin            ?? '',
-            pan:   data.business_pan     ?? '',
-            gstinValidated: !!data.gstin, // treat as validated if already saved
-            gstCertPath:     gstCert?.storage_path ?? null,
-            gstCertFileName: gstCert ? 'Existing document' : null,
-            panCardPath:     panCard?.storage_path ?? null,
-            panCardFileName: panCard ? 'Existing document' : null,
+            gstin: draft.gstin || s.gstin,
+            pan:   draft.pan   || s.pan,
+            // GSTIN text changed since last DB save — re-verify before continuing
+            gstinValidated: draft.gstin && draft.gstin !== data?.gstin ? false : s.gstinValidated,
           }));
-          setStep2(s => ({
-            ...s,
-            proofType:    data.address_proof_type ?? null,
-            uploadedPath: data.address_proof_path ?? null,
-            fileName:     data.address_proof_path ? 'Existing document' : null,
-          }));
+          setStep2(s => ({ ...s, proofType: draft.proofType ?? s.proofType }));
+        } catch {
+          // corrupt draft — ignore and fall back to DB-only state
         }
-        setLoading(false);
-      },
-    );
+      }
+
+      draftReady.current = true;
+      setLoading(false);
+    });
   }, [orgId]);
+
+  // Persist draft form fields (not yet written to DB) so a refresh mid-flow
+  // restores the same values instead of reverting to the last saved step.
+  useEffect(() => {
+    if (!orgId || !draftReady.current) return;
+    const draft: WizardDraft = {
+      step,
+      step0,
+      gstin: step1.gstin,
+      pan:   step1.pan,
+      proofType: step2.proofType,
+    };
+    AsyncStorage.setItem(draftKey(orgId), JSON.stringify(draft));
+  }, [orgId, step, step0, step1.gstin, step1.pan, step2.proofType]);
 
   const handleValidateGstin = async () => {
     setStep1(s => ({ ...s, gstinValidating: true, gstinError: null }));
@@ -764,7 +842,11 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
   const handleNext = async () => {
     if (step === 0) {
       // Save address + registration type to org before advancing
-      const { error } = await updateWorkspaceKyc(orgId, {});
+      const { error } = await updateWorkspaceKyc(orgId, {
+        address_line: step0.addressLine || null,
+        city:         step0.city || null,
+        state:        step0.state || null,
+      });
       if (error) { Alert.alert('Could not save', error.message); return; }
       setStep(1);
       return;
@@ -773,7 +855,8 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
       // Save PAN + GSTIN via existing RPC before advancing
       const { error } = await updateWorkspaceKyc(orgId, {
         business_pan: step1.pan   || null,
-        gstin:        step1.gstin || null,
+        gstin:        step1.gstNotApplicable ? null : (step1.gstin || null),
+        gst_not_applicable: step1.gstNotApplicable,
       });
       if (error) { Alert.alert('Could not save', error.message); return; }
       setStep(2);
@@ -791,6 +874,7 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
       address_pincode:    step0.pincode   || undefined,
       address_proof_path: step2.uploadedPath ?? undefined,
       address_proof_type: step2.proofType   ?? undefined,
+      gst_not_applicable: step1.gstNotApplicable,
     });
     setSubmitting(false);
 
@@ -798,6 +882,8 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
       Alert.alert('Submission Failed', error?.message ?? 'Could not submit. Please try again.');
       return;
     }
+
+    await AsyncStorage.removeItem(draftKey(orgId));
 
     // Refresh KYC state to render frozen view
     const { kyc: refreshed } = await getWorkspaceKyc(orgId);
@@ -957,6 +1043,32 @@ const styles = StyleSheet.create({
 
   validatingRow:  { flexDirection: 'row', alignItems: 'center', gap: space[2], marginBottom: space[3] },
   validatingText: { fontSize: 13, color: colors.textSecondary },
+
+  gstToggleRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           space[3],
+    marginBottom:  space[5],
+  },
+  checkbox: {
+    width:           20,
+    height:          20,
+    borderRadius:    radius.sm,
+    borderWidth:     1.5,
+    borderColor:     colors.borderDefault,
+    alignItems:      'center',
+    justifyContent:  'center',
+    backgroundColor: Theme.surface,
+  },
+  checkboxChecked: {
+    backgroundColor: Theme.primary,
+    borderColor:     Theme.primary,
+  },
+  gstToggleText: {
+    flex:     1,
+    fontSize: 13,
+    color:    colors.textSecondary,
+  },
 
   docUploadField: { marginBottom: space[4] },
   incompleteBanner: {

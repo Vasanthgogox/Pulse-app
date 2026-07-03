@@ -6,6 +6,7 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ConnectionInviteRole } from "@/features/network/components/ConnectionRoleModal";
 import { NetworkHubGlassButton } from "@/features/network/components/NetworkHubGlassButton";
+import { getNetworkActions } from "@/features/network/utils/networkActions.util";
 import { MutualConnectionsFacepile } from "@/features/network/components/MutualConnectionsFacepile";
 import {
   MutedStarMetric,
@@ -109,6 +110,17 @@ export function NetworkPartyDiscoverListCard({
   const isConnected = status === "approved";
   const hasMutuals = mutualCount > 0 && Boolean(viewerOrgId);
 
+  // This card only ever renders for orgs already resolved to a real Pulse
+  // account (phone-lookup / contacts-on-Pulse call sites) — isRegisteredOrg
+  // is always true here; getNetworkActions is used only to keep the
+  // connect/pending/connected label+enabled state identical to the profile
+  // modal for the same org, not to introduce an invite state this card
+  // structurally never receives.
+  const networkActions = getNetworkActions({
+    isRegisteredOrg: true,
+    connectionStatus: isConnected ? "connected" : isPending ? "pending" : "none",
+  });
+
   /** Status button label stays compact ("Request sent"); the role used
    *  for the invitation is communicated by a sibling pill rendered just
    *  before the button. */
@@ -189,7 +201,7 @@ export function NetworkPartyDiscoverListCard({
       ) : (
         <NetworkHubGlassButton
           variant="primary"
-          label={t("networkDiscoverConnect")}
+          label={networkActions.primaryLabel}
           size="default"
           onPress={onConnect}
           loading={loading}
@@ -392,7 +404,7 @@ export function NetworkPartyDiscoverListCard({
                 ) : (
                   <NetworkHubGlassButton
                     variant="primary"
-                    label={t("networkDiscoverConnect")}
+                    label={networkActions.primaryLabel}
                     size={mobileGrid ? "compact" : "default"}
                     onPress={onConnect}
                     loading={loading}

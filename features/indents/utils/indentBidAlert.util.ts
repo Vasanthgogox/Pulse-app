@@ -136,7 +136,34 @@ export type IndentDeployTimingInfo = {
   /** e.g. "Est. 14H 22M" or "450 km" when stored on indent */
   transitDurationLabel: string | null;
   tone: IndentBidAlertTone;
+  /**
+   * Single human sentence combining award age + pickup due/overdue state,
+   * e.g. "Pickup overdue by 6 days — awarded 4 days ago". Two separate
+   * relative-time lines read as two alarms instead of one story; this is
+   * the copy the UI should prefer when both pieces are present.
+   */
+  combinedLabel: string | null;
 };
+
+/** Merge "awarded X ago" + "pickup due/overdue Y" into one sentence so the
+ *  two clocks (time since award, time to/past pickup) don't read as two
+ *  unrelated alerts. */
+function combineAwardedAndDueLabels(
+  awardedAgoLabel: string | null,
+  dueByLabel: string | null,
+  tone: IndentBidAlertTone,
+): string | null {
+  if (!dueByLabel) return awardedAgoLabel;
+  if (!awardedAgoLabel) return dueByLabel;
+
+  const awardedAgo = awardedAgoLabel.replace(/^Awarded /, "");
+  if (tone === "overdue") {
+    // "Pickup overdue X ago" -> "Pickup overdue by X"
+    const overdueBy = dueByLabel.replace(/^Pickup overdue /, "");
+    return `Pickup overdue by ${overdueBy} — awarded ${awardedAgo}`;
+  }
+  return `${dueByLabel} — awarded ${awardedAgo}`;
+}
 
 /** Route / ETA hint from indent row when present (trips copy these fields on create). */
 export function formatIndentTransitDurationLabel(indent: {
@@ -180,11 +207,18 @@ export function buildIndentDeployTiming(
 ): IndentDeployTimingInfo {
   const alert = buildIndentAwardedBidAlert(quote, indent.pickup_date, now);
   const transitDurationLabel = formatIndentTransitDurationLabel(indent);
+  const tone = alert?.tone ?? "neutral";
+  const combinedLabel = combineAwardedAndDueLabels(
+    alert?.awardedAgoLabel ?? null,
+    alert?.dueByLabel ?? null,
+    tone,
+  );
 
   return {
     dueByLabel: alert?.dueByLabel ?? null,
     awardedDurationLabel: alert?.awardedAgoLabel ?? null,
     transitDurationLabel,
-    tone: alert?.tone ?? "neutral",
+    tone,
+    combinedLabel,
   };
 }

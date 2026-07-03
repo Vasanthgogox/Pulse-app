@@ -63,6 +63,7 @@ export interface WorkspaceKyc {
   logo_url: string | null;
   business_pan: string | null;
   gstin: string | null;
+  gst_not_applicable: boolean;
   cin: string | null;
   msme_number: string | null;
   tan_number: string | null;

@@ -164,14 +164,19 @@ Deno.serve(async (req: Request) => {
         },
         {
           type: 'text',
-          text: `Extract the following fields from this Indian business document. Return ONLY a valid JSON object with these exact keys. If a field is not visible, use null.
+          text: `Extract the following fields from this Indian document. Return ONLY a valid JSON object with these exact keys. If a field is not visible, use null.
 
 {
   "gstin": "<15-character GSTIN or null>",
   "pan": "<10-character PAN or null>",
   "company_name": "<registered company name or null>",
-  "document_type": "<'gst_certificate' | 'pan_card' | 'lease_agreement' | 'utility_bill' | 'other'>"
+  "document_type": "<'gst_certificate' | 'pan_card' | 'lease_agreement' | 'utility_bill' | 'aadhaar_card' | 'voter_id' | 'other'>"
 }
+
+Only set "gstin" if this document is a GST registration certificate. Only
+set "pan" if this document is an actual PAN card. Do not extract a gstin or
+pan value from any other document type (Aadhaar, voter ID, driving licence,
+etc.) even if it contains a similarly-shaped number.
 
 Return ONLY the JSON — no markdown, no explanation.`,
         },

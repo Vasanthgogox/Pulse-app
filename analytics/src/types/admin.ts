@@ -35,13 +35,14 @@ export interface AuditEntry {
 
 export interface BusinessApplication {
   id: string; company_name: string; trade_name?: string; entity_type: EntityType;
-  gstin: string; pan: string; cin?: string; registration_number: string; registration_date: string;
+  gstin: string; pan: string; cin?: string; registration_date: string;
   directors: Director[];
   registered_address: string; pincode: string; city: string; state: string;
   contact_name: string; contact_email: string; contact_phone: string;
   submission_date: string; status: AppStatus; risk_score: RiskLevel; risk_factors: string[];
   assigned_to: string;
   rejection_reason?: string; rejection_notes?: string; escalation_reason?: string;
+  approval_notes?: string;
   automated_checks: AutomatedCheck[];
   documents: BusinessDocument[];
   audit_trail: AuditEntry[];
@@ -62,6 +63,12 @@ export const REJECTION_REASONS = [
 ] as const;
 
 export type RejectionReason = typeof REJECTION_REASONS[number];
+
+export const APPROVAL_QUICK_NOTES = [
+  'All documents verified — clean approval',
+  'Verified via manual registry cross-check',
+  'Minor discrepancy noted, approved with review',
+] as const;
 
 // ─── Organization-level additions ─────────────────────────────────────────────
 
@@ -84,8 +91,6 @@ export interface UsageMetric {
 export interface FeatureFlag {
   id: string; label: string; description: string; enabled: boolean;
 }
-
-export type AccountFilter = 'All Orgs' | 'Pending Verification' | 'Active Accounts' | 'Suspended/Flagged';
 
 // ─── Organization — superset of BusinessApplication ──────────────────────────
 
@@ -111,8 +116,6 @@ export interface AdminContextValue {
   setSelectedOrgById: (id: string) => void;      // alias for selectApplication
 
   // Filters
-  accountFilter:      AccountFilter;
-  setAccountFilter:   (f: AccountFilter) => void;
   searchQuery:        string;
   setSearchQuery:     (q: string) => void;
 
@@ -123,7 +126,7 @@ export interface AdminContextValue {
   isActing:           boolean;
 
   // Async actions — all return Promise<void>; error surfaces via alert
-  approveApp:         (id: string) => Promise<void>;
+  approveApp:         (id: string, notes?: string) => Promise<void>;
   rejectApp:          (id: string, reason: string, notes: string) => Promise<void>;
   escalateApp:        (id: string, reason: string) => Promise<void>;
   suspendUser:        (orgId: string, userId: string) => Promise<void>;

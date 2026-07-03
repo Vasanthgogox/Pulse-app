@@ -3,6 +3,12 @@ import { AwardedIndentDeployModal } from "@/features/indents/components/AwardedI
 import { AwardedIndentDeployPeek } from "@/features/indents/components/AwardedIndentDeployPeek";
 import { buildPendingAwardedDeployQueue } from "@/features/indents/utils/pendingAwardedDeploy.util";
 import {
+  clearDeploySnooze,
+  decideDeployVisibility,
+  loadDeploySnoozes,
+  saveDeploySnooze,
+} from "@/features/indents/utils/awardedDeploySnooze.util";
+import {
   useMarketIndentsQuery,
   useMyDirectQuotesQuery,
 } from "@/lib/queries/useIndentsQuery";
@@ -23,7 +29,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { AppState, type AppStateStatus } from "react-native";
 
 /** Delay before connection-invite modals may appear after minimizing the deploy alert. */
 const CONNECTION_INVITE_DEFER_AFTER_MINIMIZE_MS = 3000;
@@ -77,8 +82,11 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     [orgId, myQuotes, marketIndents, indentIdsWithTrip],
   );
 
-  const [sessionSnoozedIds, setSessionSnoozedIds] = useState<Set<string>>(new Set());
-  /** Indents the user collapsed — stay on peek until they expand (survives spurious AppState). */
+  /** Later-snooze timestamps (ms) persisted across restarts, keyed by indent id. */
+  const [snoozeByIndentId, setSnoozeByIndentId] = useState<Record<string, number>>({});
+  const [snoozesLoaded, setSnoozesLoaded] = useState(false);
+  /** Indents the user collapsed via the drag-to-minimize gesture — an
+   *  in-session-only "not now", distinct from the persisted Later snooze. */
   const [sessionCollapsedIndentIds, setSessionCollapsedIndentIds] = useState<Set<string>>(
     new Set(),
   );
@@ -87,9 +95,52 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   const [minimized, setMinimized] = useState(false);
   const [inviteDeferralActive, setInviteDeferralActive] = useState(false);
   const inviteDeferralTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   /** Set when user taps Assign — keeps deploy cards hidden until allocation route ends. */
   const [deployFlowIndentId, setDeployFlowIndentId] = useState<string | null>(null);
+  /** Ticks periodically so a snooze cooldown expiring mid-session re-evaluates
+   *  visibility without requiring a data refetch or app foreground. */
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!orgId) {
+      setSnoozeByIndentId({});
+      setSnoozesLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    setSnoozesLoaded(false);
+    loadDeploySnoozes(orgId).then((map) => {
+      if (cancelled) return;
+      setSnoozeByIndentId(map);
+      setSnoozesLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Once a snoozed indent leaves the live queue (trip created, or award
+  // withdrawn), drop its snooze record so it doesn't linger in storage.
+  useEffect(() => {
+    if (!orgId || !snoozesLoaded) return;
+    const liveIds = new Set(pendingQueue.map((item) => item.indent.id));
+    for (const indentId of Object.keys(snoozeByIndentId)) {
+      if (!liveIds.has(indentId)) {
+        clearDeploySnooze(orgId, indentId);
+        setSnoozeByIndentId((prev) => {
+          if (!(indentId in prev)) return prev;
+          const next = { ...prev };
+          delete next[indentId];
+          return next;
+        });
+      }
+    }
+  }, [orgId, snoozesLoaded, pendingQueue, snoozeByIndentId]);
 
   const clearInviteDeferral = useCallback(() => {
     if (inviteDeferralTimerRef.current != null) {
@@ -126,10 +177,9 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     }
   }, [onDeployFlowScreen, deployFlowPathIndentId]);
 
-  const visibleQueue = useMemo(
-    () => pendingQueue.filter((item) => !sessionSnoozedIds.has(item.indent.id)),
-    [pendingQueue, sessionSnoozedIds],
-  );
+  // Snoozed items stay in the visible queue — a persisted Later demotes an
+  // award to the peek for the cooldown window, it does not hide it outright.
+  const visibleQueue = pendingQueue;
 
   useEffect(() => {
     if (queueViewIndex >= visibleQueue.length && visibleQueue.length > 0) {
@@ -147,45 +197,39 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   const activeIndentCollapsed =
     activeItem != null && sessionCollapsedIndentIds.has(activeItem.indent.id);
 
+  // Explicit visibility decision for the active item: a brand-new award (no
+  // snooze record) always gets the full modal; a snoozed one only escalates
+  // back once the cooldown expires or it has gone severely overdue since the
+  // user last saw it. Foreground/background has no bearing on any of this —
+  // only pendingQueue contents (data) and nowMs (cooldown expiry) do.
+  const activeSnoozeDecision = useMemo(() => {
+    if (!activeItem) return "full_modal" as const;
+    return decideDeployVisibility({
+      snoozedAtMs: snoozeByIndentId[activeItem.indent.id],
+      pickupDateIso: activeItem.indent.pickup_date,
+      nowMs,
+    });
+  }, [activeItem, snoozeByIndentId, nowMs]);
+
+  // Tapping the peek to expand is an explicit user action — it should always
+  // reveal the full modal, even mid-cooldown, so "expand" never feels stuck.
+  const [explicitlyExpandedIndentId, setExplicitlyExpandedIndentId] = useState<string | null>(
+    null,
+  );
+  const activeIndentExplicitlyExpanded =
+    activeItem != null && explicitlyExpandedIndentId === activeItem.indent.id;
+
+  const activeIndentSnoozedToPeek =
+    activeSnoozeDecision === "peek" && !activeIndentExplicitlyExpanded;
+
   const hasPendingDeploy = Boolean(activeItem) && !deployFlowActive;
   const showExpandedDeployModal =
-    hasPendingDeploy && !minimized && !activeIndentCollapsed;
-  const showMinimizedPeek = hasPendingDeploy && (minimized || activeIndentCollapsed);
+    hasPendingDeploy && !minimized && !activeIndentCollapsed && !activeIndentSnoozedToPeek;
+  const showMinimizedPeek =
+    hasPendingDeploy && (minimized || activeIndentCollapsed || activeIndentSnoozedToPeek);
 
   const blocksConnectionInvitations = showExpandedDeployModal;
   const deferConnectionInvitations = inviteDeferralActive;
-
-  useEffect(() => {
-    if (!orgId) return;
-    const onAppStateChange = (next: AppStateStatus) => {
-      const prev = appStateRef.current;
-      appStateRef.current = next;
-      const becameActive =
-        next === "active" && (prev === "background" || prev === "inactive");
-      if (!becameActive) return;
-      clearInviteDeferral();
-      setSessionSnoozedIds(new Set());
-      setSessionCollapsedIndentIds(new Set());
-      setQueueViewIndex(0);
-      setDismissedForSession(false);
-      setDeployFlowIndentId(null);
-      setMinimized(false);
-    };
-    const sub = AppState.addEventListener("change", onAppStateChange);
-    return () => sub.remove();
-  }, [orgId, clearInviteDeferral]);
-
-  useEffect(() => {
-    if (!dismissedForSession && pendingQueue.length > 0 && visibleQueue.length > 0) {
-      return;
-    }
-    const hasNewVisibleAward = pendingQueue.some(
-      (item) => !sessionSnoozedIds.has(item.indent.id),
-    );
-    if (hasNewVisibleAward) {
-      setDismissedForSession(false);
-    }
-  }, [dismissedForSession, pendingQueue, sessionSnoozedIds, visibleQueue.length]);
 
   const handleMinimize = useCallback(() => {
     if (activeItem) {
@@ -205,14 +249,16 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
         next.delete(indentId);
         return next;
       });
+      setExplicitlyExpandedIndentId(indentId);
     }
     setMinimized(false);
     clearInviteDeferral();
   }, [activeItem, clearInviteDeferral]);
 
   const handleLater = useCallback(() => {
-    if (!activeItem) return;
+    if (!activeItem || !orgId) return;
     const snoozedId = activeItem.indent.id;
+    const snoozedAtMs = Date.now();
     setSessionCollapsedIndentIds((prev) => {
       if (!prev.has(snoozedId)) return prev;
       const next = new Set(prev);
@@ -220,16 +266,10 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
       return next;
     });
     setMinimized(false);
-    setSessionSnoozedIds((prev) => {
-      const next = new Set(prev).add(snoozedId);
-      const remaining = pendingQueue.filter((item) => !next.has(item.indent.id));
-      if (remaining.length === 0) {
-        setDismissedForSession(true);
-      }
-      setQueueViewIndex((i) => Math.max(0, Math.min(i, Math.max(0, remaining.length - 1))));
-      return next;
-    });
-  }, [activeItem, pendingQueue]);
+    setExplicitlyExpandedIndentId((prev) => (prev === snoozedId ? null : prev));
+    setSnoozeByIndentId((prev) => ({ ...prev, [snoozedId]: snoozedAtMs }));
+    saveDeploySnooze(orgId, snoozedId, snoozedAtMs);
+  }, [activeItem, orgId]);
 
   const handleAssign = useCallback(() => {
     if (!activeItem) return;
@@ -250,11 +290,11 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   const presentNextDeploy = useCallback(() => {
     clearInviteDeferral();
     setDismissedForSession(false);
-    setSessionSnoozedIds(new Set());
     setSessionCollapsedIndentIds(new Set());
     setQueueViewIndex(0);
     setDeployFlowIndentId(null);
     setMinimized(false);
+    setExplicitlyExpandedIndentId(null);
   }, [clearInviteDeferral]);
 
   const value = useMemo(

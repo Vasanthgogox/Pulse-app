@@ -647,27 +647,32 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
     if (pending.employeeCount?.trim()) orgUpdates.employee_count = pending.employeeCount.trim();
   }
 
-  // profiles.update and org_members.select both need only userId — run concurrently.
-  // organizations.update depends on the org_members result, so it waits after.
-  const [, membership] = await Promise.all([
-    Object.keys(profileUpdates).length > 0
-      ? supabase().from("profiles").update(profileUpdates).eq("id", userId)
-      : Promise.resolve(null),
-    Object.keys(orgUpdates).length > 0
-      ? supabase()
-          .from("organization_members")
-          .select("organization_id")
-          .eq("user_id", userId)
-          .eq("status", "active")
-          .in("role", ["owner", "admin"])
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle()
-      : Promise.resolve(null),
-  ]);
+  const profileUpdatePromise = Object.keys(profileUpdates).length > 0
+    ? supabase().from("profiles").update(profileUpdates).eq("id", userId)
+    : Promise.resolve(null);
 
   if (Object.keys(orgUpdates).length > 0) {
-    const orgId = (membership as { data?: { organization_id?: string } | null } | null)?.data?.organization_id;
+    // handle_new_user's trigger (which creates the organizations +
+    // organization_members rows) runs asynchronously relative to this
+    // call — right after exchangeCodeForSession, it may not have committed
+    // yet. A single immediate lookup can find nothing and silently drop
+    // address/city/state with no error. Retry briefly instead of giving up
+    // on the first miss.
+    let orgId: string | undefined;
+    for (let attempt = 0; attempt < 5 && !orgId; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 400));
+      const { data } = await supabase()
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .in("role", ["owner", "admin"])
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      orgId = data?.organization_id;
+    }
+
     const orgFilter = orgId
       ? { column: "id" as const, value: orgId }
       : { column: "owner_id" as const, value: userId };
@@ -676,6 +681,8 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
       .update(orgUpdates)
       .eq(orgFilter.column, orgFilter.value);
   }
+
+  await profileUpdatePromise;
 
   void trySyncMyDriverRowsUserId();
 }

@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAdmin } from '@/context/AdminDataProvider';
 import { timeAgo } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { Organization, AccountFilter, AppStatus, RiskLevel } from '@/types/admin';
+import type { Organization, AppStatus, QueueFilter, RiskLevel } from '@/types/admin';
 
 // ─── Badge configs ────────────────────────────────────────────────────────────
 
@@ -20,14 +21,10 @@ const RISK_VARIANT: Record<RiskLevel, 'success' | 'warning' | 'destructive'> = {
   Low: 'success', Medium: 'warning', High: 'destructive',
 };
 
-const ACCOUNT_FILTERS: AccountFilter[] = ['All Orgs', 'Pending Verification', 'Active Accounts', 'Suspended/Flagged'];
+const STATUS_TABS: QueueFilter[] = ['All', 'Pending', 'Under Review', 'Escalated', 'Approved', 'Rejected'];
 
-function matchesAccountFilter(app: Organization, filter: AccountFilter): boolean {
-  if (filter === 'All Orgs')           return true;
-  if (filter === 'Pending Verification') return ['Pending', 'Under Review', 'Escalated'].includes(app.status);
-  if (filter === 'Active Accounts')    return app.status === 'Approved';
-  if (filter === 'Suspended/Flagged')  return app.status === 'Rejected' || app.risk_score === 'High';
-  return true;
+function matchesStatusTab(app: Organization, tab: QueueFilter): boolean {
+  return tab === 'All' || app.status === tab;
 }
 
 function matchesSearch(app: Organization, q: string): boolean {
@@ -82,14 +79,15 @@ function AppRow({ app }: { app: Organization }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ApplicationQueue() {
-  const { applications, accountFilter, setAccountFilter, searchQuery, setSearchQuery } = useAdmin();
+  const { applications, searchQuery, setSearchQuery } = useAdmin();
+  const [statusTab, setStatusTab] = useState<QueueFilter>('All');
 
   const filtered = applications
-    .filter(a => matchesAccountFilter(a, accountFilter))
+    .filter(a => matchesStatusTab(a, statusTab))
     .filter(a => matchesSearch(a, searchQuery));
 
-  const countFor = (f: AccountFilter) =>
-    applications.filter(a => matchesAccountFilter(a, f)).length;
+  const countForStatus = (t: QueueFilter) =>
+    applications.filter(a => matchesStatusTab(a, t)).length;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -115,21 +113,18 @@ export function ApplicationQueue() {
         </div>
       </div>
 
-      {/* Account filter dropdown */}
-      <div className="shrink-0 border-b border-border px-3 py-2">
-        <Select value={accountFilter} onValueChange={v => setAccountFilter(v as AccountFilter)}>
-          <SelectTrigger size="sm" className="text-[11px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ACCOUNT_FILTERS.map(f => (
-              <SelectItem key={f} value={f} className="text-[12px]">
-                {f}
-                <span className="ml-auto pl-2 text-[10px] text-muted-foreground">{countFor(f)}</span>
-              </SelectItem>
+      {/* Status tabs */}
+      <div className="shrink-0 overflow-x-auto border-b border-border px-3 py-2">
+        <Tabs value={statusTab} onValueChange={v => setStatusTab(v as QueueFilter)}>
+          <TabsList variant="button" size="xs">
+            {STATUS_TABS.map(t => (
+              <TabsTrigger key={t} value={t} className="gap-1">
+                {t}
+                <span className="text-[10px] text-muted-foreground">{countForStatus(t)}</span>
+              </TabsTrigger>
             ))}
-          </SelectContent>
-        </Select>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* Results header */}
