@@ -18,6 +18,7 @@ import {
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
+  ArrowLeft,
   BadgeCheck,
   Building2,
   Camera,
@@ -25,6 +26,7 @@ import {
   MapPin,
   Sparkles,
 } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
@@ -62,6 +64,8 @@ export function NetworkDesktopHubHero({
 }: Props) {
   const { profile } = useAuth();
   const { width } = useWindowDimensions();
+  const router = useRouter();
+  const canGoBack = router.canGoBack();
   const isNarrow = width < 720;
   const officeMapQ = useOrganizationOfficeMap(orgId);
   const { logoUri, logoStoragePath, uploading, canEdit, onLogoPress } =
@@ -202,6 +206,17 @@ export function NetworkDesktopHubHero({
     <View style={styles.hero}>
       <View style={styles.heroHexOverlay} pointerEvents="none" />
       <View style={styles.heroInner}>
+        {canGoBack ? (
+          <Pressable
+            onPress={() => router.back()}
+            style={({ pressed }) => [styles.heroBackCorner, pressed && { opacity: 0.85 }]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <ArrowLeft size={16} color={METRONIC.text} strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={onProfilePress}
           style={({ pressed }) => [styles.heroWelcomeCorner, pressed && { opacity: 0.9 }]}

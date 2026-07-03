@@ -135,7 +135,7 @@ export function FinancePromoCard({
                 <View style={[styles.bulletIconWrap, { backgroundColor: bullet.tint }]}>
                   <AnimatedBulletIcon
                     bullet={bullet}
-                    size={isColumn ? 12 : 14}
+                    size={isColumn ? 11 : 12}
                     index={index}
                   />
                 </View>
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     width: "48%",
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 7,
     minWidth: 0,
   },
   bulletRowColumn: {
@@ -248,24 +248,24 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   bulletIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
+    width: 22,
+    height: 22,
+    borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   bulletLabel: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textMuted,
-    lineHeight: 15,
+    lineHeight: 13,
     letterSpacing: -0.1,
   },
   bulletLabelColumn: {
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 9,
+    lineHeight: 12,
   },
   illusWrap: {
     width: 112,
