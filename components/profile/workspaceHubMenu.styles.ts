@@ -373,13 +373,16 @@ export const hubStyles = StyleSheet.create({
   partyRowIconSlot: {
     width: 40,
     height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "transparent",
   },
   partyGridLabel: {
     fontSize: 11,
-    fontWeight: "600",
-    color: METRONIC.text,
+    fontWeight: "400",
+    color: METRONIC.muted,
     textAlign: "center",
   },
   valuePill: {

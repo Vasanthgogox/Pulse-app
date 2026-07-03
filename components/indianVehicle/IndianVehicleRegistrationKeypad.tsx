@@ -46,6 +46,8 @@ export interface IndianVehicleRegistrationKeypadProps {
   disabled?: boolean;
   /** Current normalized plate length — disables input keys at max; gates delete at 0. */
   normalizedLength?: number;
+  /** Denser keys + tighter chrome for the bounded desktop/tablet wizard card. */
+  compact?: boolean;
 }
 
 type KeyVariant = "char" | "special" | "disabled";
@@ -60,6 +62,7 @@ type KeyCellProps = {
   accessibilityLabel: string;
   style?: StyleProp<ViewStyle>;
   textStyle?: "letter" | "utility";
+  compact?: boolean;
 };
 
 function KeyCell({
@@ -72,6 +75,7 @@ function KeyCell({
   accessibilityLabel,
   style,
   textStyle = "letter",
+  compact = false,
 }: KeyCellProps) {
   const isDisabled = disabled || variant === "disabled";
   const isSpecial = variant === "special" || variant === "disabled";
@@ -82,6 +86,7 @@ function KeyCell({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.key,
+        compact && styles.keyCompact,
         { flex },
         isSpecial ? styles.keySpecial : styles.keyChar,
         isDisabled && styles.keyInactive,
@@ -94,7 +99,7 @@ function KeyCell({
     >
       {icon === "delete" ? (
         <Delete
-          size={22}
+          size={compact ? 18 : 22}
           color={isDisabled ? APPLE_DISABLED_TEXT : Theme.textPrimaryDark}
           strokeWidth={2}
         />
@@ -102,6 +107,7 @@ function KeyCell({
         <Text
           style={[
             styles.keyText,
+            compact && styles.keyTextCompact,
             styles.keyTextSpecial,
             isDisabled && styles.keyTextInactive,
           ]}
@@ -112,6 +118,7 @@ function KeyCell({
         <Text
           style={[
             styles.keyText,
+            compact && styles.keyTextCompact,
             textStyle === "utility" && styles.keyTextUtility,
             isSpecial && styles.keyTextSpecial,
             isDisabled && styles.keyTextInactive,
@@ -134,6 +141,7 @@ export const IndianVehicleRegistrationKeypad = memo(
     onKey,
     disabled = false,
     normalizedLength = 0,
+    compact = false,
   }: IndianVehicleRegistrationKeypadProps) {
     const atMax = normalizedLength >= INDIAN_VEHICLE_TOTAL_LENGTH;
     const canDelete = normalizedLength > 0 && !disabled;
@@ -157,10 +165,10 @@ export const IndianVehicleRegistrationKeypad = memo(
 
     if (kind === "numbers") {
       return (
-        <View style={styles.wrap}>
-          <View style={styles.grid}>
+        <View style={[styles.wrap, compact && styles.wrapCompact]}>
+          <View style={[styles.grid, compact && styles.gridCompact]}>
             {NUMBER_ROWS.map((row, rowIdx) => (
-              <View key={`num-row-${rowIdx}`} style={styles.row}>
+              <View key={`num-row-${rowIdx}`} style={[styles.row, compact && styles.rowCompact]}>
                 {row.map((digit) => (
                   <KeyCell
                     key={digit}
@@ -168,18 +176,20 @@ export const IndianVehicleRegistrationKeypad = memo(
                     onPress={() => handlePress(digit)}
                     disabled={inputLocked}
                     variant="char"
+                    compact={compact}
                     accessibilityLabel={`Digit ${digit}`}
                   />
                 ))}
               </View>
             ))}
-            <View style={styles.row}>
-            <View style={styles.numPadSpacer} pointerEvents="none" accessibilityElementsHidden />
+            <View style={[styles.row, compact && styles.rowCompact]}>
+            <View style={[styles.numPadSpacer, compact && styles.numPadSpacerCompact]} pointerEvents="none" accessibilityElementsHidden />
               <KeyCell
                 label="0"
                 onPress={() => handlePress("0")}
                 disabled={inputLocked}
                 variant="char"
+                compact={compact}
                 accessibilityLabel="Digit 0"
               />
               <KeyCell
@@ -187,6 +197,7 @@ export const IndianVehicleRegistrationKeypad = memo(
                 onPress={() => handlePress("⌫")}
                 disabled={!canDelete}
                 variant="special"
+                compact={compact}
                 accessibilityLabel="Delete"
               />
             </View>
@@ -196,9 +207,9 @@ export const IndianVehicleRegistrationKeypad = memo(
     }
 
     return (
-      <View style={styles.wrap}>
-        <View style={styles.grid}>
-          <View style={styles.row}>
+      <View style={[styles.wrap, compact && styles.wrapCompact]}>
+        <View style={[styles.grid, compact && styles.gridCompact]}>
+          <View style={[styles.row, compact && styles.rowCompact]}>
             {LETTER_ROW_1.map((letter) => (
               <KeyCell
                 key={letter}
@@ -206,12 +217,13 @@ export const IndianVehicleRegistrationKeypad = memo(
                 onPress={() => handlePress(letter)}
                 disabled={inputLocked}
                 variant="char"
+                compact={compact}
                 accessibilityLabel={`Letter ${letter}`}
               />
             ))}
           </View>
 
-          <View style={[styles.row, styles.rowInset]}>
+          <View style={[styles.row, styles.rowInset, compact && styles.rowCompact]}>
             <RowSpacer flex={0.45} />
             {LETTER_ROW_2.map((letter) => (
               <KeyCell
@@ -220,17 +232,19 @@ export const IndianVehicleRegistrationKeypad = memo(
                 onPress={() => handlePress(letter)}
                 disabled={inputLocked}
                 variant="char"
+                compact={compact}
                 accessibilityLabel={`Letter ${letter}`}
               />
             ))}
             <RowSpacer flex={0.45} />
           </View>
 
-          <View style={styles.row}>
+          <View style={[styles.row, compact && styles.rowCompact]}>
             <KeyCell
               icon="shift"
               variant="disabled"
               flex={1.35}
+              compact={compact}
               accessibilityLabel="Shift not used for plates"
             />
             {LETTER_ROW_3.map((letter) => (
@@ -241,6 +255,7 @@ export const IndianVehicleRegistrationKeypad = memo(
                 disabled={inputLocked}
                 variant="char"
                 flex={1}
+                compact={compact}
                 accessibilityLabel={`Letter ${letter}`}
               />
             ))}
@@ -250,16 +265,18 @@ export const IndianVehicleRegistrationKeypad = memo(
               disabled={!canDelete}
               variant="special"
               flex={1.35}
+              compact={compact}
               accessibilityLabel="Delete"
             />
           </View>
 
-          <View style={styles.row}>
+          <View style={[styles.row, compact && styles.rowCompact]}>
             <KeyCell
               label={modeToggleLabel}
               variant="disabled"
               flex={1.25}
               textStyle="utility"
+              compact={compact}
               accessibilityLabel={
                 kind === "letters"
                   ? "Numbers switch automatic for this field"
@@ -269,6 +286,7 @@ export const IndianVehicleRegistrationKeypad = memo(
             <KeyCell
               variant="disabled"
               flex={3.8}
+              compact={compact}
               accessibilityLabel="Space not used for plates"
               style={styles.spaceKey}
             />
@@ -277,6 +295,7 @@ export const IndianVehicleRegistrationKeypad = memo(
               variant="disabled"
               flex={1.25}
               textStyle="utility"
+              compact={compact}
               accessibilityLabel="Return not used for plates"
               style={styles.returnKey}
             />
@@ -300,15 +319,27 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  wrapCompact: {
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingTop: 5,
+    paddingBottom: 5,
+  },
   grid: {
     width: "100%",
     gap: 7,
+  },
+  gridCompact: {
+    gap: 5,
   },
   row: {
     flexDirection: "row",
     alignItems: "stretch",
     width: "100%",
     gap: 6,
+  },
+  rowCompact: {
+    gap: 5,
   },
   rowInset: {
     paddingHorizontal: 2,
@@ -319,6 +350,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
+
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -333,6 +365,10 @@ const styles = StyleSheet.create({
       },
       default: {},
     }),
+  },
+  keyCompact: {
+    minHeight: 34,
+    borderRadius: 7,
   },
   keyChar: {
     backgroundColor: APPLE_KEY_BG,
@@ -362,6 +398,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
   },
+  numPadSpacerCompact: {
+    minHeight: 34,
+  },
   keyPressed: {
     backgroundColor: "#E8EAED",
     transform: [{ scale: 0.98 }],
@@ -381,6 +420,9 @@ const styles = StyleSheet.create({
       ios: { fontFamily: "System" },
       default: {},
     }),
+  },
+  keyTextCompact: {
+    fontSize: 17,
   },
   keyTextUtility: {
     fontSize: 16,

@@ -23,7 +23,11 @@ import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import {
   ArrowLeft,
+  ArrowRight,
   Check,
+  CheckCircle2,
+  Circle,
+  Clock,
   MapPin,
   Package,
   Search,
@@ -164,13 +168,187 @@ export default function CreatePostScreen() {
     (vehicleEntryMode === "idle" ? !!selectedVehicleId : vehicleType.trim().length > 0) &&
     availability.trim().length > 0;
 
-  const pickColumns =
-    windowWidth >= 1024 ? 4 : windowWidth >= 640 ? 2 : 1;
-  const pickCellWidth =
-    pickColumns === 4 ? "24%" : pickColumns === 2 ? "49%" : "100%";
+  const pickColumns = windowWidth >= 640 ? 2 : 1;
+  const pickCellWidth = pickColumns === 2 ? "49%" : "100%";
   const isDesktop = windowWidth >= 1024;
 
   const canSubmit = (canSubmitLoadPick || canSubmitLoadManual || canSubmitVehicle) && !submitting;
+
+  const selectedIndent = useMemo(
+    () => broadcastableIndents.find((i) => i.id === selectedIndentId) ?? null,
+    [broadcastableIndents, selectedIndentId],
+  );
+
+  /** Live preview of the story being composed (desktop side panel). */
+  const preview = useMemo(() => {
+    if (type === "LOAD" && loadEntryMode === "pick") {
+      const w = selectedIndent?.weight != null ? selectedIndent.weight / 1000 : null;
+      const r = selectedIndent
+        ? resolveSupplierTargetDisplayRate(selectedIndent.supplier_target, selectedIndent.client_price)
+        : null;
+      return {
+        kind: "LOAD" as const,
+        origin: selectedIndent?.pickup_area ?? "",
+        destination: selectedIndent?.drop_location ?? "",
+        vehicleType: selectedIndent?.vehicle_type ?? "",
+        material: selectedIndent?.load_type ?? "",
+        weight: w != null ? `${w % 1 === 0 ? w : w.toFixed(1)} T` : "",
+        rate: r != null ? `₹${Number(r).toLocaleString("en-IN")}` : "",
+        availability: "",
+      };
+    }
+    if (type === "LOAD") {
+      return {
+        kind: "LOAD" as const,
+        origin: origin.trim(),
+        destination: destination.trim(),
+        vehicleType: vehicleType.trim(),
+        material: material.trim(),
+        weight: weight.trim() ? `${weight.trim()} T` : "",
+        rate: rate.trim() ? `₹${rate.trim()}` : "",
+        availability: "",
+      };
+    }
+    return {
+      kind: "VEHICLE" as const,
+      origin: origin.trim(),
+      destination: destination.trim(),
+      vehicleType: vehicleType.trim(),
+      material: "",
+      weight: "",
+      rate: "",
+      availability: availability.trim(),
+    };
+  }, [type, loadEntryMode, selectedIndent, origin, destination, vehicleType, material, weight, rate, availability]);
+
+  /** Required-field checklist shown on the deploy panel. */
+  const readiness = useMemo<{ label: string; done: boolean }[]>(() => {
+    if (type === "LOAD" && loadEntryMode === "pick") {
+      return [{ label: "Load indent selected", done: !!selectedIndentId }];
+    }
+    if (type === "LOAD") {
+      return [
+        { label: "Pickup location", done: origin.trim().length > 0 },
+        { label: "Drop location", done: destination.trim().length > 0 },
+      ];
+    }
+    return [
+      { label: "Current location", done: origin.trim().length > 0 },
+      {
+        label: vehicleEntryMode === "idle" ? "Vehicle selected" : "Vehicle type",
+        done:
+          vehicleEntryMode === "idle" ? !!selectedVehicleId : vehicleType.trim().length > 0,
+      },
+      { label: "Availability window", done: availability.trim().length > 0 },
+    ];
+  }, [type, loadEntryMode, selectedIndentId, origin, destination, vehicleEntryMode, selectedVehicleId, vehicleType, availability]);
+
+  const isLoadStory = type === "LOAD";
+  const previewAccent = isLoadStory ? "#f59e0b" : Theme.primary;
+
+  const renderPreviewPanel = () => (
+    <View style={styles.previewCol}>
+      <Text style={styles.previewKicker}>Live preview</Text>
+      <View style={styles.previewCard}>
+        <View style={[styles.previewAccentBar, { backgroundColor: previewAccent }]} />
+        <View style={styles.previewTopRow}>
+          <View style={[styles.previewBadge, { backgroundColor: previewAccent + "18" }]}>
+            {isLoadStory ? (
+              <Truck size={13} color={previewAccent} />
+            ) : (
+              <MapPin size={13} color={previewAccent} />
+            )}
+            <Text style={[styles.previewBadgeText, { color: previewAccent }]}>
+              {isLoadStory ? "Load" : "Vehicle free"}
+            </Text>
+          </View>
+          <View style={styles.previewExpiry}>
+            <Clock size={11} color={Theme.textMuted} />
+            <Text style={styles.previewExpiryText}>Expires in 24h</Text>
+          </View>
+        </View>
+
+        <View style={styles.previewRoute}>
+          <Text
+            style={[styles.previewCity, !preview.origin && styles.previewCityMuted]}
+            numberOfLines={1}
+          >
+            {preview.origin || (isLoadStory ? "Pickup" : "Current location")}
+          </Text>
+          <ArrowRight size={15} color={Theme.textMuted} />
+          <Text
+            style={[styles.previewCity, !preview.destination && styles.previewCityMuted]}
+            numberOfLines={1}
+          >
+            {preview.destination || (isLoadStory ? "Drop" : "Anywhere")}
+          </Text>
+        </View>
+
+        {(preview.vehicleType || preview.weight || preview.rate || preview.material) && (
+          <View style={styles.previewChips}>
+            {preview.vehicleType ? (
+              <View style={styles.previewChip}>
+                <Text style={styles.previewChipText}>{preview.vehicleType}</Text>
+              </View>
+            ) : null}
+            {preview.weight ? (
+              <View style={styles.previewChip}>
+                <Text style={styles.previewChipText}>{preview.weight}</Text>
+              </View>
+            ) : null}
+            {preview.material ? (
+              <View style={styles.previewChip}>
+                <Text style={styles.previewChipText}>{preview.material}</Text>
+              </View>
+            ) : null}
+            {preview.rate ? (
+              <View style={[styles.previewChip, styles.previewChipRate]}>
+                <Text style={[styles.previewChipText, styles.previewChipRateText]}>
+                  {preview.rate}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        {preview.availability ? (
+          <Text style={styles.previewAvailability} numberOfLines={2}>
+            {preview.availability}
+          </Text>
+        ) : null}
+
+        <View style={styles.previewFooter}>
+          <View style={[styles.previewOrgDot, { backgroundColor: previewAccent }]} />
+          <Text style={styles.previewFooterText} numberOfLines={1}>
+            {organization?.name ?? "Your organization"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.readinessCard}>
+        <Text style={styles.readinessTitle}>Before you deploy</Text>
+        {readiness.map((item) => (
+          <View key={item.label} style={styles.readinessRow}>
+            {item.done ? (
+              <CheckCircle2 size={15} color="#10b981" />
+            ) : (
+              <Circle size={15} color={Theme.borderMedium} />
+            )}
+            <Text style={[styles.readinessLabel, item.done && styles.readinessLabelDone]}>
+              {item.label}
+            </Text>
+          </View>
+        ))}
+        <View style={styles.readinessDivider} />
+        <View style={styles.readinessHintRow}>
+          <Clock size={12} color={Theme.textMuted} />
+          <Text style={styles.readinessHint}>
+            Visible to the Pulse network for 24 hours, then auto-expires.
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
 
   const handleSubmit = async () => {
     if (!orgId || !canSubmit) return;
@@ -285,14 +463,20 @@ export default function CreatePostScreen() {
         </Pressable>
         <Text style={styles.headerTitle}>Broadcast story</Text>
         <Pressable
-          style={[styles.publishBtn, !canSubmit && styles.publishBtnDisabled]}
+          style={[
+            styles.publishBtn,
+            canSubmit ? styles.publishBtnActive : styles.publishBtnDisabled,
+          ]}
           onPress={handleSubmit}
           disabled={!canSubmit || submitting}
         >
           {submitting ? (
             <LoadingIndicator size={14} color="#fff" />
           ) : (
-            <Text style={styles.publishBtnText}>Deploy</Text>
+            <View style={styles.publishBtnInner}>
+              <Zap size={12} color={Theme.buttonPrimaryText} fill={Theme.buttonPrimaryText} />
+              <Text style={styles.publishBtnText}>Deploy</Text>
+            </View>
           )}
         </Pressable>
       </View>
@@ -312,7 +496,9 @@ export default function CreatePostScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.canvas}>
+          <View style={[styles.canvas, isDesktop && styles.canvasWide]}>
+           <View style={[styles.workspace, isDesktop && styles.workspaceWide]}>
+            <View style={[styles.formCol, isDesktop && styles.formColWide]}>
             <View style={styles.hintBox}>
               <Text style={styles.hintText}>
                 Stories expire in 24 hours. Only load and vehicle availability — no personal or
@@ -774,6 +960,9 @@ export default function CreatePostScreen() {
               </View>
             </View>
           )}
+            </View>
+            {isDesktop ? renderPreviewPanel() : null}
+           </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -789,6 +978,210 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     paddingHorizontal: Layout.screenPaddingHorizontal,
     gap: 10,
+  },
+  canvasWide: {
+    alignSelf: "center",
+    maxWidth: 1040,
+    paddingHorizontal: 24,
+  },
+  workspace: {
+    width: "100%",
+  },
+  workspaceWide: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 28,
+  },
+  formCol: {
+    width: "100%",
+    gap: 10,
+  },
+  formColWide: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 620,
+    gap: 12,
+  },
+  previewCol: {
+    width: 320,
+    gap: 12,
+  },
+  previewKicker: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    marginLeft: 2,
+  },
+  previewCard: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    padding: 16,
+    paddingLeft: 20,
+    gap: 14,
+    overflow: "hidden",
+    ...Platform.select({
+      web: { boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)" } as object,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+      },
+    }),
+  },
+  previewAccentBar: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+  },
+  previewTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  previewBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  previewBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  previewExpiry: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  previewExpiryText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  previewRoute: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  previewCity: {
+    flexShrink: 1,
+    fontSize: 17,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.3,
+  },
+  previewCityMuted: {
+    color: Theme.textMuted,
+    fontWeight: "600",
+  },
+  previewChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  previewChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+  },
+  previewChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  previewChipRate: {
+    backgroundColor: Theme.primary + "12",
+    borderColor: Theme.primary + "30",
+  },
+  previewChipRateText: {
+    color: Theme.primary,
+    fontWeight: "800",
+  },
+  previewAvailability: {
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 17,
+    color: Theme.textSecondary,
+  },
+  previewFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
+    paddingTop: 11,
+  },
+  previewOrgDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  previewFooterText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  readinessCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    padding: 14,
+    gap: 9,
+  },
+  readinessTitle: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    marginBottom: 1,
+  },
+  readinessRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  readinessLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  readinessLabelDone: {
+    color: Theme.textPrimaryDark,
+    fontWeight: "700",
+  },
+  readinessDivider: {
+    height: 1,
+    backgroundColor: Theme.surfaceBorder,
+    marginVertical: 2,
+  },
+  readinessHintRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+  },
+  readinessHint: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "500",
+    lineHeight: 14,
+    color: Theme.textMuted,
   },
   header: {
     flexDirection: "row",
@@ -820,14 +1213,28 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   publishBtn: {
-    backgroundColor: "#6b7280",
+    backgroundColor: Theme.primary,
     borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     minWidth: 64,
     alignItems: "center",
+    justifyContent: "center",
   },
-  publishBtnDisabled: { opacity: 0.4 },
+  publishBtnActive: {
+    backgroundColor: Theme.primary,
+    ...Platform.select({
+      web: { boxShadow: "0 4px 12px rgba(37, 99, 235, 0.28)" } as object,
+      default: {
+        shadowColor: Theme.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28,
+        shadowRadius: 10,
+      },
+    }),
+  },
+  publishBtnDisabled: { backgroundColor: "#9ca3af", opacity: 0.55 },
+  publishBtnInner: { flexDirection: "row", alignItems: "center", gap: 6 },
   publishBtnText: { fontSize: 12, fontWeight: "800", color: Theme.buttonPrimaryText, letterSpacing: 0.2 },
   hintBox: {
     marginTop: 4,

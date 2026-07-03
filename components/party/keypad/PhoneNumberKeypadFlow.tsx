@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type TextInput as TextInputType,
 } from "react-native";
@@ -53,7 +54,12 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
   const showCursor = digits.length < maxLength;
   const useAppleKeypad = !wizardShell && keypadVariant === "apple";
   const inputPlatform = useInputPlatform();
+  const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === "web" && inputPlatform === "desktop";
+  // Bounded, content-sized wizard card (party flows on web ≥ 720): stack input +
+  // keypad at the top instead of spreading them with space-between over a fixed
+  // full-screen height, which leaves a large gap above the footer.
+  const groupTop = Platform.OS === "web" && width >= 720 && !wizardShell;
   const inputRef = useRef<TextInputType>(null);
 
   const handleKey = useCallback(
@@ -93,7 +99,7 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
   );
 
   return (
-    <View style={flow.root} testID={Platform.OS === "web" ? undefined : testID}>
+    <View style={groupTop ? styles.rootGrouped : flow.root} testID={Platform.OS === "web" ? undefined : testID}>
       <View style={wizardShell ? flow.mainPaddedWizard : flow.mainPadded}>
         <View style={wizardShell ? fullPageWizardStyles.wizardFieldBlock : undefined}>
           <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.label}>
@@ -152,7 +158,7 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
 
       <View
         style={
-          wizardShell
+          wizardShell || groupTop
             ? flow.keypadDockWizard
             : useAppleKeypad
               ? flow.keypadDockApple
@@ -172,6 +178,11 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
 });
 
 const styles = StyleSheet.create({
+  rootGrouped: {
+    width: "100%",
+    justifyContent: "flex-start",
+    gap: 16,
+  },
   label: {
     color: Theme.textMuted,
     fontSize: 10,

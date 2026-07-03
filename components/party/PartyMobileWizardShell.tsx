@@ -4,6 +4,7 @@ import {
   Platform,
   Pressable,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -53,18 +54,29 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
   advanceLabel = "Continue",
 }: PartyMobileWizardShellProps) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const currentIdx = Math.max(0, stepIds.indexOf(currentStep));
 
   const isKeypadLayout = bodyLayout === "keypad";
+  // The party wizards are always hosted in a bounded, centered card on web ≥ 720.
+  // There the shell must size to its content instead of stretching (flex:1) to a
+  // fixed card height, which would leave a large empty gap above the footer.
+  const cardFit = Platform.OS === "web" && width >= 720;
 
   return (
     <KeyboardAvoidingView
-      style={styles.root}
+      style={cardFit ? styles.rootFit : styles.root}
       behavior={
         isKeypadLayout ? undefined : Platform.OS === "ios" ? "padding" : undefined
       }
     >
-      <View style={[styles.root, styles.shellColumn, { paddingTop: insets.top }]}>
+      <View
+        style={[
+          cardFit ? styles.rootFit : styles.root,
+          cardFit ? styles.shellColumnFit : styles.shellColumn,
+          { paddingTop: insets.top },
+        ]}
+      >
         <View style={styles.topBar}>
           <Pressable
             style={styles.backBtn}
@@ -111,14 +123,18 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
           style={[
             styles.body,
             isKeypadLayout
-              ? styles.bodyKeypad
+              ? cardFit
+                ? styles.bodyKeypadFit
+                : styles.bodyKeypad
               : hideFooter
                 ? styles.bodySource
-                : styles.bodyFields,
+                : cardFit
+                  ? styles.bodyFieldsFit
+                  : styles.bodyFields,
           ]}
         >
           <View style={isKeypadLayout ? styles.bodyKeypadHeader : undefined}>
-            <Text style={styles.stepTitle}>{stepTitle}</Text>
+            <Text style={[styles.stepTitle, cardFit && styles.stepTitleCompact]}>{stepTitle}</Text>
             {isKeypadLayout ? (
               <Text style={styles.stepHintKeypad}>{stepHint}</Text>
             ) : stepHint ? (
@@ -126,7 +142,9 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
             ) : null}
           </View>
           {isKeypadLayout ? (
-            <View style={styles.bodyKeypadContent}>{children}</View>
+            <View style={cardFit ? styles.bodyKeypadContentFit : styles.bodyKeypadContent}>
+              {children}
+            </View>
           ) : (
             children
           )}

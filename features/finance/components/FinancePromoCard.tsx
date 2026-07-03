@@ -2,12 +2,21 @@
  * Finance empty-state / promo card (borderless, aligned with network grow banner).
  */
 import Theme from "@/constants/Theme";
+import { HubPromoHeroLottie } from "@/components/hub/HubPromoLottie";
 import {
   FINANCE_PROMO_PRESETS,
   fitFinanceIllustration,
+  type FinancePromoBullet,
   type FinancePromoVariant,
 } from "@/lib/financePromoAssets";
 import {
+  resolveFinancePromoHeroLottie,
+  resolveFinancePromoHeroVisualScale,
+} from "@/lib/financePromoLottieAssets";
+import { useEffect, useRef } from "react";
+import {
+  Animated,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -16,6 +25,57 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+
+const USE_NATIVE_DRIVER = Platform.OS !== "web";
+
+/** Subtle, staggered float + breathe so the bullet glyphs feel alive without distraction. */
+function AnimatedBulletIcon({
+  bullet,
+  size,
+  index,
+}: {
+  bullet: FinancePromoBullet;
+  size: number;
+  index: number;
+}) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const { Icon } = bullet;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(index * 160),
+        Animated.timing(progress, {
+          toValue: 1,
+          duration: 1100,
+          useNativeDriver: USE_NATIVE_DRIVER,
+        }),
+        Animated.timing(progress, {
+          toValue: 0,
+          duration: 1100,
+          useNativeDriver: USE_NATIVE_DRIVER,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [index, progress]);
+
+  const translateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -2],
+  });
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.12],
+  });
+
+  return (
+    <Animated.View style={{ transform: [{ translateY }, { scale }] }}>
+      <Icon size={size} color={Theme.primary} strokeWidth={2.1} />
+    </Animated.View>
+  );
+}
 
 export type FinancePromoCardProps = {
   variant: FinancePromoVariant;
@@ -39,7 +99,8 @@ export function FinancePromoCard({
 }: FinancePromoCardProps) {
   const { width } = useWindowDimensions();
   const preset = FINANCE_PROMO_PRESETS[variant];
-  const Illustration = preset.illustration;
+  const heroLottie = resolveFinancePromoHeroLottie(variant);
+  const heroRenderScale = resolveFinancePromoHeroVisualScale(variant);
   const isColumn = layout === "column";
   const garageVisualBoost = variant === "garage" ? 1.22 : 1;
   const illusBoxW = Math.round(
@@ -66,23 +127,32 @@ export function FinancePromoCard({
             {resolvedDescription}
           </Text>
           <View style={[styles.bulletGrid, isColumn && styles.bulletGridColumn]}>
-            {preset.bullets.map(({ label, Icon, tint }) => (
+            {preset.bullets.map((bullet, index) => (
               <View
-                key={label}
+                key={bullet.label}
                 style={[styles.bulletRow, isColumn && styles.bulletRowColumn]}
               >
-                <View style={[styles.bulletIconWrap, { backgroundColor: tint }]}>
-                  <Icon size={isColumn ? 12 : 14} color={Theme.primary} strokeWidth={2.1} />
+                <View style={[styles.bulletIconWrap, { backgroundColor: bullet.tint }]}>
+                  <AnimatedBulletIcon
+                    bullet={bullet}
+                    size={isColumn ? 12 : 14}
+                    index={index}
+                  />
                 </View>
                 <Text style={[styles.bulletLabel, isColumn && styles.bulletLabelColumn]}>
-                  {label}
+                  {bullet.label}
                 </Text>
               </View>
             ))}
           </View>
         </View>
         <View style={[styles.illusWrap, isColumn && styles.illusWrapColumn]}>
-          <Illustration width={illusSize.width} height={illusSize.height} />
+          <HubPromoHeroLottie
+            source={heroLottie}
+            width={illusSize.width}
+            height={illusSize.height}
+            renderScale={heroRenderScale}
+          />
         </View>
       </View>
       {showCta ? (

@@ -317,7 +317,7 @@ function RegistryFeedList({
             <AlertRegistrySignalCard
               key={entry.id}
               mode="active"
-              onPress={() => finance.onOpenDetail("ops", ops.id, "active")}
+              onPress={() => finance.onOpenOps(ops)}
               avatar={presentation.avatar}
               actorName={presentation.actorName}
               actionText={presentation.actionText}
@@ -338,7 +338,7 @@ function RegistryFeedList({
                   />
                   <RegistryPrimaryButton
                     label={opsActionLabel(ops)}
-                    onPress={() => finance.onOpenDetail("ops", ops.id, "active")}
+                    onPress={() => finance.onOpenOps(ops)}
                   />
                 </RegistryCardActions>
               }
