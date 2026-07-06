@@ -2,16 +2,26 @@ import { useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
+import { useOptionalActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { usePendingOnboarding } from '@/contexts/PendingOnboardingContext';
+import { useOptionalPendingOnboarding } from '@/contexts/PendingOnboardingContext';
 import { platformIdentityService } from '@/lib/platform-identity';
+import type { IdentityInvitation } from '@/lib/onboarding/identityTypes';
+
+export type CompleteInvitationJoinOptions = {
+  invitationStatus?: IdentityInvitation['status'];
+  /** The invitation's assigned role (e.g. a PlatformTeamRole) — carried into the resulting workspace context. */
+  role?: string;
+};
 
 export function useCompleteInvitationJoin() {
   const { refreshSession } = useAuth();
   const { refreshOrganization } = useOrganization();
-  const { refresh: refreshWorkspaces, switchWorkspace } = useActiveWorkspace();
-  const { clearPending } = usePendingOnboarding();
+  const workspace = useOptionalActiveWorkspace();
+  const refreshWorkspaces = workspace?.refresh ?? (async () => {});
+  const switchWorkspace = workspace?.switchWorkspace ?? (async () => {});
+  const pendingCtx = useOptionalPendingOnboarding();
+  const clearPending = pendingCtx?.clearPending ?? (async () => {});
   const queryClient = useQueryClient();
 
   const deps = useMemo(
@@ -34,9 +44,17 @@ export function useCompleteInvitationJoin() {
   );
 
   const completeInvitationJoin = useCallback(
-    async (inviteId: string): Promise<{ error: Error | null; organizationId: string | null }> => {
+    async (
+      inviteId: string,
+      options?: CompleteInvitationJoinOptions,
+    ): Promise<{ error: Error | null; organizationId: string | null }> => {
       return platformIdentityService.acceptInvitation(
-        { inviteId, proposedRelationshipType: 'EMPLOYEE' },
+        {
+          inviteId,
+          proposedRelationshipType: 'EMPLOYEE',
+          invitationStatus: options?.invitationStatus,
+          role: options?.role,
+        },
         deps,
       );
     },
@@ -47,9 +65,15 @@ export function useCompleteInvitationJoin() {
   const completeTeamJoinAfterAuth = useCallback(
     async (
       inviteId?: string | null,
+      options?: CompleteInvitationJoinOptions,
     ): Promise<{ error: Error | null; organizationId: string | null }> => {
       return platformIdentityService.acceptInvitation(
-        { inviteId, proposedRelationshipType: 'EMPLOYEE' },
+        {
+          inviteId,
+          proposedRelationshipType: 'EMPLOYEE',
+          invitationStatus: options?.invitationStatus,
+          role: options?.role,
+        },
         deps,
       );
     },

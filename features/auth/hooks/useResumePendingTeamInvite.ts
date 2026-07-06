@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
+import { useOptionalActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useOptionalPendingOnboarding } from '@/contexts/PendingOnboardingContext';
 import { acceptTeamInvite } from '@/features/organization/services/members.service';
@@ -19,7 +19,9 @@ export function useResumePendingTeamInvite() {
   const router = useRouter();
   const { refreshSession } = useAuth();
   const { refreshOrganization } = useOrganization();
-  const { refresh: refreshWorkspaces, switchWorkspace } = useActiveWorkspace();
+  const workspace = useOptionalActiveWorkspace();
+  const refreshWorkspaces = workspace?.refresh ?? (async () => {});
+  const switchWorkspace = workspace?.switchWorkspace ?? (async () => {});
   const queryClient = useQueryClient();
   const pendingCtx = useOptionalPendingOnboarding();
   const { completeInvitationJoin } = useCompleteInvitationJoin();

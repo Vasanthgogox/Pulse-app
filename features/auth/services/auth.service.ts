@@ -133,6 +133,13 @@ export interface SignInResult {
   error: Error | null;
   /** True when Supabase email confirmation is enabled and the user must click the verification link. */
   emailVerificationRequired?: boolean;
+  /**
+   * Set when sign-in itself succeeded but onboarding metadata (business profile
+   * details captured before the OAuth session existed) failed to fully save.
+   * Callers should branch on this status — not on the presence of a message —
+   * and use OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE (or their own copy) to inform the user.
+   */
+  metadataStatus?: 'partial_failure';
 }
 
 export interface SignUpOptions {
@@ -565,7 +572,10 @@ export async function signInWithGoogle(): Promise<SignInResult> {
       return { error: new Error(exchangeError.message || "Google sign in failed") };
     }
 
-    await applyPendingOAuthMetadata();
+    const metadataResult = await applyPendingOAuthMetadata();
+    if (metadataResult.status === 'partial_failure') {
+      return { error: null, metadataStatus: 'partial_failure' };
+    }
     return { error: null };
   } catch (e) {
     if (isNetworkError(e)) {
@@ -592,11 +602,24 @@ export async function setPendingOAuthMetadata(
   }
 }
 
+export type PendingOAuthMetadataStep = 'auth_metadata' | 'profile' | 'organization';
+
+export type PendingOAuthMetadataResult =
+  | { status: 'success' }
+  | { status: 'skipped' }
+  | { status: 'partial_failure'; failedSteps: PendingOAuthMetadataStep[] };
+
+export const OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE =
+  "You're signed in, but we couldn't finish saving some of your business information. " +
+  'Please review your business profile after entering the workspace.';
+
 /**
- * Applies any pending metadata intended for the next OAuth session.
- * Current implementation is a no-op and kept for callback flow compatibility.
+ * Applies onboarding metadata (role, business profile details) captured before the
+ * OAuth session existed. Auth metadata, profile, and organization writes are each
+ * checked independently — callers must not infer success from the absence of a
+ * thrown error; inspect the returned status instead.
  */
-export async function applyPendingOAuthMetadata(): Promise<void> {
+export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataResult> {
   let raw: string | null = null;
   try {
     raw = await AsyncStorage.getItem(PENDING_OAUTH_METADATA_KEY);
@@ -605,7 +628,7 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
   }
   if (!raw) {
     void trySyncMyDriverRowsUserId();
-    return;
+    return { status: 'skipped' };
   }
 
   let pending: PendingOAuthOnboardingMetadata | null = null;
@@ -618,8 +641,10 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
   }
   if (!pending) {
     void trySyncMyDriverRowsUserId();
-    return;
+    return { status: 'skipped' };
   }
+
+  const failedSteps: PendingOAuthMetadataStep[] = [];
 
   const authData: Record<string, unknown> = {};
   const role = pending.role === "driver" ? "driver" : "user";
@@ -653,14 +678,16 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
 
   const { error: updateAuthError } = await supabase().auth.updateUser({ data: authData });
   if (updateAuthError) {
-    throw new Error(updateAuthError.message || "Could not save onboarding details.");
+    console.warn('[auth] applyPendingOAuthMetadata: auth metadata update failed:', updateAuthError.message);
+    failedSteps.push('auth_metadata');
   }
 
   const { data: userData } = await supabase().auth.getUser();
   const userId = userData.user?.id;
   if (!userId) {
     void trySyncMyDriverRowsUserId();
-    return;
+    failedSteps.push('profile', 'organization');
+    return { status: 'partial_failure', failedSteps };
   }
 
   const profileUpdates: Record<string, unknown> = {};
@@ -689,7 +716,7 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
 
   // profiles.update and org_members.select both need only userId — run concurrently.
   // organizations.update depends on the org_members result, so it waits after.
-  const [, membership] = await Promise.all([
+  const [profileResult, membership] = await Promise.all([
     Object.keys(profileUpdates).length > 0
       ? supabase().from("profiles").update(profileUpdates).eq("id", userId)
       : Promise.resolve(null),
@@ -706,18 +733,31 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
       : Promise.resolve(null),
   ]);
 
+  if (profileResult?.error) {
+    console.warn('[auth] applyPendingOAuthMetadata: profile update failed:', profileResult.error.message);
+    failedSteps.push('profile');
+  }
+
   if (Object.keys(orgUpdates).length > 0) {
     const orgId = (membership as { data?: { organization_id?: string } | null } | null)?.data?.organization_id;
     const orgFilter = orgId
       ? { column: "id" as const, value: orgId }
       : { column: "owner_id" as const, value: userId };
-    await supabase()
+    const { error: orgUpdateError } = await supabase()
       .from("organizations")
       .update(orgUpdates)
       .eq(orgFilter.column, orgFilter.value);
+    if (orgUpdateError) {
+      console.warn('[auth] applyPendingOAuthMetadata: organization update failed:', orgUpdateError.message);
+      failedSteps.push('organization');
+    }
   }
 
   void trySyncMyDriverRowsUserId();
+
+  return failedSteps.length > 0
+    ? { status: 'partial_failure', failedSteps }
+    : { status: 'success' };
 }
 
 export async function signOut(): Promise<void> {

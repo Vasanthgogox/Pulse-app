@@ -114,14 +114,14 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 18,
+    paddingTop: 14,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     alignItems: "stretch",
   },
   contentColumn: {
     width: "100%",
     maxWidth: CONTENT_MAX_WIDTH,
-    gap: 18,
+    gap: 12,
     alignSelf: "center",
   },
   fillBody: {

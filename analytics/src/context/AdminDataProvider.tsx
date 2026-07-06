@@ -6,6 +6,7 @@ import type {
   AuditEntry, AutomatedCheck, BusinessDocument,
 } from '@/types/admin';
 import { supabase } from '@/lib/supabase';
+import { fetchKycDocumentsByOrg } from '@/lib/kycDocuments';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -19,12 +20,33 @@ export function useAdmin(): AdminContextValue {
 
 // ─── Map DB row → Organization ────────────────────────────────────────────────
 
+function ensureRequiredDocuments(orgId: string, docs: BusinessDocument[]): BusinessDocument[] {
+  const required: BusinessDocument['type'][] = ['GST Certificate', 'PAN Card', 'Address Proof'];
+  const result = [...docs];
+  for (const type of required) {
+    if (!result.some((d) => d.type === type)) {
+      result.push({
+        id: `${orgId}-${type.replace(/\s+/g, '_').toLowerCase()}`,
+        type,
+        file_name: '',
+        status: 'Missing',
+        uploaded_at: '',
+        url: '',
+        mime_type: 'application/pdf',
+        size_kb: 0,
+      });
+    }
+  }
+  return result;
+}
+
 function mapOrg(
   row: Record<string, unknown>,
   members: Record<string, unknown>[],
   tripCounts: Record<string, number>,
   featureFlagMap: Record<string, Record<string, boolean>>,
   auditByOrg: Record<string, AuditEntry[]>,
+  documents: BusinessDocument[],
 ): Organization {
   const status = mapStatus(row.verification_status as string);
 
@@ -83,8 +105,8 @@ function mapOrg(
     rejection_reason:     undefined,
     rejection_notes:      undefined,
     escalation_reason:    undefined,
-    automated_checks:     mapChecks(row),
-    documents:            [] as BusinessDocument[],
+    automated_checks:     mapChecks(row, documents),
+    documents:            ensureRequiredDocuments(row.id as string, documents),
     audit_trail:          auditByOrg[row.id as string] ?? [] as AuditEntry[],
     billing_tier:         'Starter' as BillingTier,
     api_usage:            0,
@@ -134,22 +156,52 @@ function auditTitle(prev: string | null, next: string): string {
   return `Status changed to ${next}`;
 }
 
-function mapChecks(row: Record<string, unknown>): AutomatedCheck[] {
+function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]): AutomatedCheck[] {
+  const docCheck = (type: BusinessDocument['type']): AutomatedCheck['status'] => {
+    const doc = documents.find((d) => d.type === type);
+    if (!doc || doc.status === 'Missing') return 'Pending';
+    if (doc.status === 'Flagged' || doc.status === 'Expired') return 'Failed';
+    if (doc.status === 'Unreadable') return 'Manual Review';
+    return 'Passed';
+  };
+
+  const addressPassed =
+    docCheck('Address Proof') === 'Passed' || !!row.address_proof_path;
+
   return [
     {
-      id: 'gstin', label: 'GSTIN Registry',
+      id: 'gstin',
+      label: 'GSTIN Registry',
       status: row.gstin ? 'Passed' : 'Pending',
       detail: row.gstin ? `GSTIN: ${row.gstin}` : 'Not submitted',
     },
     {
-      id: 'pan', label: 'PAN Verification',
+      id: 'pan',
+      label: 'PAN Verification',
       status: row.business_pan ? 'Passed' : 'Pending',
       detail: row.business_pan ? `PAN: ${row.business_pan}` : 'Not submitted',
     },
     {
-      id: 'address', label: 'Address Proof',
-      status: row.address_proof_path ? 'Passed' : 'Pending',
-      detail: row.address_proof_type as string ?? 'Not uploaded',
+      id: 'gst_cert',
+      label: 'GST Certificate',
+      status: docCheck('GST Certificate'),
+      detail:
+        documents.find((d) => d.type === 'GST Certificate')?.file_name ?? 'Not uploaded',
+    },
+    {
+      id: 'pan_card',
+      label: 'PAN Card',
+      status: docCheck('PAN Card'),
+      detail: documents.find((d) => d.type === 'PAN Card')?.file_name ?? 'Not uploaded',
+    },
+    {
+      id: 'address',
+      label: 'Address Proof',
+      status: addressPassed ? 'Passed' : 'Pending',
+      detail:
+        (row.address_proof_type as string) ??
+        documents.find((d) => d.type === 'Address Proof')?.file_name ??
+        'Not uploaded',
     },
   ];
 }
@@ -254,8 +306,17 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         featureFlagMap[oid][f.flag_id as string] = f.enabled as boolean;
       }
 
+      const docsByOrg = await fetchKycDocumentsByOrg();
+
       const mapped = (orgs ?? []).map((o) =>
-        mapOrg(o as Record<string, unknown>, byOrg[o.id] ?? [], tripCounts, featureFlagMap, auditByOrg),
+        mapOrg(
+          o as Record<string, unknown>,
+          byOrg[o.id] ?? [],
+          tripCounts,
+          featureFlagMap,
+          auditByOrg,
+          docsByOrg[o.id as string] ?? [],
+        ),
       );
       setApplications(mapped);
       if (mapped.length > 0 && !selectedId) setSelectedId(mapped[0].id);

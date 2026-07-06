@@ -91,8 +91,9 @@ export default function AuthCallback() {
           if (error) throw new Error(error.message || "Google sign in failed");
         }
 
-        // Ensure any pending metadata (role/operatingModel) is applied.
-        await authService.applyPendingOAuthMetadata();
+        // Ensure any pending metadata (role/operatingModel) is applied. Authentication has
+        // already succeeded above — this only reports whether business details also saved.
+        const metadataResult = await authService.applyPendingOAuthMetadata();
 
         // Strip code/error query params from URL after successful code-exchange callback.
         if (typeof window !== "undefined" && window.history?.replaceState) {
@@ -101,7 +102,11 @@ export default function AuthCallback() {
 
         // Go directly to app entry; AuthGuard routes user without extra hop.
         if (mounted) {
-          setMessage("Sign in successful. Redirecting to workspace…");
+          setMessage(
+            metadataResult.status === 'partial_failure'
+              ? authService.OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE
+              : "Sign in successful. Redirecting to workspace…",
+          );
           if (!tryCompleteOAuthPopup(ROUTES.INDEX)) {
             setRedirectTo(ROUTES.INDEX as Href);
           }

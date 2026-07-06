@@ -113,12 +113,12 @@ Phone → OTP (not blocked) → resolver → `existing_member` → password → 
 - `runOnboardingResolverPipeline()` — invitations → memberships → org policy → domain
 - `OrganizationIdentityPolicy` + `loadOrganizationIdentityPolicy()` stub
 - `RelationshipType` + `MembershipLifecycleStatus` + `PersonStatus`
-- `evaluateMembershipPolicy()` policy engine with `requiredActions`
+- `evaluateJoinPoliciesV1()` policy engine (`membershipPolicyEngineV1.ts`) with `requiredActions`
 - `OrganizationEmploymentPolicy` (per-org, `allowDualEmployment`)
 - `proposedRelationshipType` on invitations (role assigned later)
 - Separate `invitationPicker` / `workspaceSwitcher` / policy engine modules
 - `OnboardingDomainContext` + `mapDomainContextToUi()` — three-layer pipeline
-- `completeOnboarding()` / `completeOnboardingAfterJoin()` — shared post-join orchestration
+- `platformIdentityService.acceptInvitation()` / `.switchWorkspace()` — shared post-join orchestration (superseded the earlier `completeOnboarding.util.ts`, removed in the PR-008 cutover — see [PLATFORM_IDENTITY.md](./PLATFORM_IDENTITY.md))
 - Entry channel taxonomy (`onboardingEntryChannels.ts`)
 
 ---
@@ -178,7 +178,7 @@ Entry (Hub, SMS, Email, QR, Deep Link, Corporate Portal, Entra, Okta, HR Directo
  mapDomainContextToUi()  →  Appropriate screen
         │
         ▼
- completeOnboarding()  →  accept (if needed) + refresh identity + navigate
+ platformIdentityService.acceptInvitation()  →  accept (if needed) + refresh identity + navigate
 ```
 
 The pipeline **never assumes phone is mandatory**. Enterprise orgs may disable phone entirely (`requireSso: true`, `allowedProviders: ['entra']`).
@@ -224,9 +224,10 @@ interface IdentityProvider {
 | Provider | File | V1 |
 |----------|------|-----|
 | Phone | `phoneIdentityProvider.ts` | Implemented (OTP in UI, RPC resolve) |
-| Email | `emailIdentityProvider.ts` | Stub |
+| Email | `emailIdentityProvider.ts` | Implemented (session `email_confirmed_at` check, `resolve_pending_team_invitations_by_email` RPC) |
 | Employee ID | `employeeIdentityProvider.ts` | Stub |
-| SSO (Entra, Google, Okta, Auth0, SAML) | `ssoIdentityProvider.ts` | Stub |
+| SSO — Google | `ssoIdentityProvider.ts` | Implemented (verified against the session's linked Supabase identity) |
+| SSO — Entra, Okta, Auth0, SAML | `ssoIdentityProvider.ts` | Explicit "not configured" error — no Supabase Auth provider registered for these yet (ops/infra task, not code) |
 
 Register new providers via `registerIdentityProvider()` — core pipeline unchanged.
 
@@ -272,22 +273,25 @@ V1 phone RPCs (`resolve_pending_team_invitations_by_phone`) remain the backing s
 
 ### Complete onboarding orchestration
 
-All scenarios end with the same orchestrator (`completeOnboarding.util.ts`):
+All scenarios end with the same orchestrator — `platformIdentityService` (see [PLATFORM_IDENTITY.md](./PLATFORM_IDENTITY.md)). The earlier `completeOnboarding.util.ts` shim was removed in the PR-008 cutover once it had zero remaining callers.
 
 ```
-accept invitation (when required)
-  → refresh Platform Identity (session)
-  → refresh memberships / organizations
-  → switch organization/workspace
-  → rebuild caches
+acceptInvitation(input, deps)
+  → evaluateJoin() policy gate (employment, org status, identity provider, invitation state)
+  → accept invitation (when allowed)
+  → switchWorkspace()
+      → refresh Platform Identity (session)
+      → refresh memberships / organizations
+      → switch organization/workspace
+      → rebuild caches
   → clear pending onboarding
   → navigate
 ```
 
-- `completeOnboarding({ inviteId })` — invite accept + shared rebuild (V1 team join)
-- `completeOnboardingAfterJoin(organizationId)` — owner provisioning / org switch (future)
+- `platformIdentityService.acceptInvitation({ inviteId })` — invite accept + shared rebuild (team join)
+- `platformIdentityService.switchWorkspace({ organizationId })` — owner provisioning / org switch
 
-`useCompleteInvitationJoin` delegates to `completeOnboarding()` — behavior unchanged.
+`useCompleteInvitationJoin` delegates to `platformIdentityService.acceptInvitation()` — behavior unchanged.
 
 ### Platform Identity domain model (target)
 
@@ -360,20 +364,19 @@ Future marketplace orgs may set `2` or `allowDualEmployment: true` without redes
 
 ### Membership policy engine
 
-`evaluateMembershipPolicy()` in `membershipPolicyEngine.ts` — extensible structured result:
+`evaluateJoinPoliciesV1()` in `lib/platform-identity/policy/membershipPolicyEngineV1.ts` — composable evaluators, each returning a structured `PolicyDecision`, combined into one result:
 
 ```typescript
 {
   allowed: false,
   reason: 'ACTIVE_EMPLOYMENT_EXISTS',
-  blockingMembership: { ... },
   requiredActions: ['LEAVE_ORGANIZATION'],
 }
 ```
 
-Future rules plug in here: expired invite, SSO required, corporate email, contractor approval, suspended org, HR approval — **without changing onboarding UI**.
+Implemented today: employment (`ACTIVE_EMPLOYMENT_EXISTS`), person status, organization status (suspended/archived/deleted), identity provider requirements (`SSO_REQUIRED`, `CORPORATE_EMAIL_REQUIRED`, `PHONE_VERIFICATION_REQUIRED`), and invitation state (`INVITATION_EXPIRED`, `INVITATION_ALREADY_ACCEPTED`). Still future: contractor approval, HR approval, compliance/geographic/licensing evaluators — added as new evaluator functions **without changing onboarding UI**.
 
-`validateInvitationAcceptance()` is a deprecated alias.
+The earlier `lib/onboarding/membershipPolicyEngine.ts` (and its `validateInvitationAcceptance()` alias in the also-removed `employmentPolicy.ts`) were deleted in the PR-008 cutover — both had zero remaining callers once `MembershipPolicyRequiredAction` was relocated into `policyDecision.ts`.
 
 ### Invitations → relationships
 
@@ -392,7 +395,7 @@ Large enterprises invite first, assign department/role after onboarding.
 |---------|--------|---------|
 | Invitation picker | `invitationPicker.util.ts` | Choose pending invite to accept |
 | Workspace switcher | `workspaceSwitcher.util.ts` | Switch active org among memberships |
-| Policy engine | `membershipPolicyEngine.ts` | Evaluate accept / employment rules |
+| Policy engine | `membershipPolicyEngineV1.ts` (`lib/platform-identity/policy/`) | Evaluate accept / employment / identity-provider / invitation rules |
 
 ### Invitation acceptance flow
 
@@ -403,10 +406,10 @@ Load existing memberships (lifecycle-normalized)
         ↓
 Load organization employment policy
         ↓
-evaluateMembershipPolicy()
+evaluateJoinPoliciesV1()
         ↓
   ACTIVE EMPLOYEE elsewhere? → reject + LEAVE_ORGANIZATION
-  else → accept → completeOnboardingAfterJoin
+  else → accept → platformIdentityService.switchWorkspace()
 ```
 
 ### Onboarding completion flow
@@ -416,7 +419,7 @@ Verify identity
         ↓
 Resolve invitation
         ↓
-evaluateMembershipPolicy()   ← org employment policy + person status
+evaluateJoinPoliciesV1()   ← org employment policy + person status + identity provider + invitation state
         ↓
 Accept invitation
         ↓
@@ -476,24 +479,24 @@ Okta, Google Workspace, and Azure AD fit the same resolver once IdP verification
 |--------|------|
 | `identityTypes.ts` | Discriminated `InvitationIdentity`, `IdentityInvitation`, match helpers |
 | `organizationIdentityPolicy.ts` | Per-org policy + `missingRequiredIdentities()` |
-| `identityProviders/` | `IdentityProvider` registry (phone implemented) |
+| `identityProviders/` | `IdentityProvider` registry — phone, email, and Google SSO real; Entra/Okta/Auth0/SAML explicit "not configured" |
 | `onboardingInvitationResolver.ts` | `resolveInvitationsByIdentities()` via providers |
 | `onboardingMembershipResolver.ts` | Membership resolve stub |
 | `onboardingResolverPipeline.ts` | Full pipeline orchestrator |
 | `onboardingDomainContext.ts` | Domain facts builder |
 | `mapDomainContextToUi.ts` | UI mapper (V1 enum) |
-| `completeOnboarding.util.ts` | Shared post-join orchestration |
+| `platformIdentityService.acceptInvitation()` / `.switchWorkspace()` | Shared post-join orchestration (`lib/platform-identity/`) |
 | `onboardingContext.ts` | `resolveOnboardingContext()` entry |
 | `invitationModel.util.ts` | V1 row ↔ `IdentityInvitation` adapters |
-| `teamInvitationResolver.service.ts` | V1 phone RPCs + accept (unchanged) |
+| `teamInvitationResolver.service.ts` | Phone + email RPCs (`resolve_pending_team_invitations_by_phone`/`_by_email`) + accept |
 
 ### Migration path
 
 1. **Done:** V1 enum mapper kept; domain layer + IdentityProvider registry added — no breaking change.
-2. **Done:** `completeOnboarding()` shared orchestration; `useCompleteInvitationJoin` delegates.
-3. **Next:** Implement `emailIdentityProvider.resolveInvitations` + email verification.
-4. **Next:** `ssoIdentityProvider` for Entra / Google / Okta.
-5. **Platform Identity:** `platform.invitations` + `platform.organization_identity_policies`.
+2. **Done:** `platformIdentityService.acceptInvitation()`/`.switchWorkspace()` shared orchestration; `useCompleteInvitationJoin` delegates. The earlier `completeOnboarding.util.ts` was removed once fully orphaned (PR-008 cutover).
+3. **Done:** `emailIdentityProvider.resolveInvitations` + real email verification (session `email_confirmed_at`).
+4. **Done:** `ssoIdentityProvider` for Google (session-linked identity check). Entra / Okta / Auth0 / SAML remain explicit "not configured" pending Supabase Auth provider setup for each.
+5. **Platform Identity:** `platform.invitations` + `platform.organization_identity_policies` — still not started; `organization_team_invites` remains the backing store for both phone and email resolution.
 
 ---
 
@@ -594,14 +597,14 @@ Phone invites remain on `organization_team_invites` until `platform.invitations`
 | `membershipTypes.ts` | `RelationshipType`, lifecycle, `PersonStatus` |
 | `platformMembership.ts` | Membership model (relationship ≠ role) |
 | `organizationEmploymentPolicy.ts` | Per-org `maxActiveEmploymentMemberships` |
-| `membershipPolicyEngine.ts` | `evaluateMembershipPolicy()` |
+| `membershipPolicyEngineV1.ts` (`lib/platform-identity/policy/`) | `evaluateJoinPoliciesV1()` — composable evaluators |
 | `invitationPicker.util.ts` | Pending invite picker (isolated) |
 | `workspaceSwitcher.util.ts` | Workspace switcher (isolated) |
 | `platformIdentityDomain.ts` | User → Identity + Membership domain snapshot |
 | `organizationIdentityPolicy.ts` | Per-org allowed providers + requirements |
 | `onboardingResolverPipeline.ts` | Full resolve pipeline |
 | `onboardingInvitationResolver.ts` | Provider-based invitation resolve |
-| `completeOnboarding.util.ts` | Shared post-join orchestration |
+| `platformIdentity.service.ts` (`lib/platform-identity/`) | `acceptInvitation()` / `.switchWorkspace()` — shared post-join orchestration |
 | `onboardingDomainContext.ts` | Domain facts after resolve |
 | `mapDomainContextToUi.ts` | Domain → V1 UI enum |
 | `onboardingContext.ts` | `resolveOnboardingContext()` orchestrator |

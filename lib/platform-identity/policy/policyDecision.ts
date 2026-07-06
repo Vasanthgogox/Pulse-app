@@ -1,4 +1,12 @@
-import type { MembershipPolicyRequiredAction } from '@/lib/onboarding/membershipPolicyEngine';
+export type MembershipPolicyRequiredAction =
+  | 'LEAVE_ORGANIZATION'
+  | 'COMPLETE_SSO'
+  | 'VERIFY_CORPORATE_EMAIL'
+  | 'VERIFY_PHONE'
+  | 'REQUEST_NEW_INVITATION'
+  | 'CONTRACTOR_APPROVAL'
+  | 'HR_APPROVAL'
+  | 'CONTACT_ADMIN';
 
 export type PolicyEvaluatorId =
   | 'person_status_v1'

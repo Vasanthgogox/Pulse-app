@@ -70,10 +70,3 @@ export async function evaluateJoinPoliciesV1(
 
   return combinePolicyDecisions(decisions);
 }
-
-/** @deprecated Use evaluateJoinPoliciesV1 */
-export async function evaluateMembershipPolicyV1(
-  input: EvaluateJoinInput,
-): Promise<CombinedPolicyResult> {
-  return evaluateJoinPoliciesV1(input);
-}

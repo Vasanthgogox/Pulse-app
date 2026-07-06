@@ -42,6 +42,8 @@ export type LedgerSettlementPctDockProps = {
   accentColor: string;
   /** Light = default cards; dark = legacy ink hero (avoid on new layouts). */
   variant?: "light" | "dark";
+  /** Tighter tiles for mobile ledger amount step. */
+  compact?: boolean;
 };
 
 export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
@@ -50,6 +52,7 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
   onAmountChange,
   accentColor,
   variant = "light",
+  compact = false,
 }: LedgerSettlementPctDockProps) {
   const dark = variant === "dark";
   const activePct = useMemo(
@@ -78,15 +81,17 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
     <View
       style={[
         styles.dock,
+        compact && styles.dockCompact,
         dark && styles.dockDark,
       ]}
     >
-      <Text style={[styles.sectionLabel, dark && styles.sectionLabelDark]}>
+      <Text style={[styles.sectionLabel, compact && styles.sectionLabelCompact, dark && styles.sectionLabelDark]}>
         Quick settlement
       </Text>
       <Pressable
         style={({ pressed }) => [
           styles.fullPayTile,
+          compact && styles.fullPayTileCompact,
           dark && styles.fullPayTileDark,
           fullActive && styles.fullPayTileActive,
           fullActive && { borderColor: accentColor },
@@ -97,17 +102,17 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
         accessibilityRole="button"
         accessibilityLabel={`Full payment, ${formatINR(dueTotalInr)}`}
       >
-        <Text style={[styles.fullPayLabel, dark && styles.fullPayLabelDark, fullActive && { color: accentColor }]}>
+        <Text style={[styles.fullPayLabel, compact && styles.fullPayLabelCompact, dark && styles.fullPayLabelDark, fullActive && { color: accentColor }]}>
           Full payment
         </Text>
-        <Text style={[styles.fullPayAmount, { color: accentColor }]}>
+        <Text style={[styles.fullPayAmount, compact && styles.fullPayAmountCompact, { color: accentColor }]}>
           {formatINR(dueTotalInr)}
         </Text>
       </Pressable>
-      <Text style={[styles.subsectionLabel, dark && styles.subsectionLabelDark]}>
+      <Text style={[styles.subsectionLabel, compact && styles.subsectionLabelCompact, dark && styles.subsectionLabelDark]}>
         Or choose % of due
       </Text>
-      <View style={styles.pctGrid}>
+      <View style={[styles.pctGrid, compact && styles.pctGridCompact]}>
         {SETTLEMENT_PCTS.map((pct) => {
           const preview = Math.round((dueTotalInr * pct) / 100);
           const active = activePct === pct;
@@ -116,6 +121,7 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
               key={pct}
               style={({ pressed }) => [
                 styles.pctTile,
+                compact && styles.pctTileCompact,
                 dark && styles.pctTileDark,
                 active && styles.pctTileActive,
                 active && { borderColor: accentColor },
@@ -129,6 +135,7 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
               <Text
                 style={[
                   styles.pctTilePct,
+                  compact && styles.pctTilePctCompact,
                   dark && styles.pctTilePctDark,
                   active && styles.pctTilePctActive,
                   active && { color: accentColor },
@@ -139,6 +146,7 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
               <Text
                 style={[
                   styles.pctTileAmt,
+                  compact && styles.pctTileAmtCompact,
                   dark && styles.pctTileAmtDark,
                   active && styles.pctTileAmtActive,
                   active && !dark && { color: LedgerSyncPalette.ink },
@@ -168,6 +176,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
     zIndex: 2,
   },
+  dockCompact: {
+    paddingTop: 8,
+    marginTop: 6,
+    paddingBottom: 2,
+  },
   dockDark: {
     borderTopColor: "rgba(255,255,255,0.12)",
     marginTop: 10,
@@ -185,6 +198,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     width: "100%",
   },
+  sectionLabelCompact: {
+    marginBottom: 6,
+    fontSize: 7,
+    letterSpacing: 0.6,
+  },
   sectionLabelDark: {
     color: LedgerSyncPalette.muted,
     letterSpacing: 0.8,
@@ -200,6 +218,11 @@ const styles = StyleSheet.create({
     lineHeight: 10,
     textAlign: "center",
     width: "100%",
+  },
+  subsectionLabelCompact: {
+    marginTop: 6,
+    marginBottom: 6,
+    fontSize: 7,
   },
   subsectionLabelDark: {
     color: LedgerSyncPalette.muted,
@@ -217,6 +240,12 @@ const styles = StyleSheet.create({
     minHeight: 52,
     cursor: "pointer",
   },
+  fullPayTileCompact: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    minHeight: 44,
+    borderRadius: 10,
+  },
   fullPayTileDark: {
     borderColor: "rgba(255,255,255,0.18)",
     backgroundColor: "rgba(255,255,255,0.04)",
@@ -232,6 +261,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     textTransform: "uppercase",
   },
+  fullPayLabelCompact: {
+    fontSize: 9,
+  },
   fullPayLabelDark: {
     color: "rgba(255,255,255,0.72)",
   },
@@ -242,12 +274,19 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     lineHeight: 18,
   },
+  fullPayAmountCompact: {
+    fontSize: 13,
+    lineHeight: 16,
+  },
   pctGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
     width: "100%",
     justifyContent: "space-between",
+  },
+  pctGridCompact: {
+    gap: 6,
   },
   pctTile: {
     width: "31%",
@@ -265,6 +304,12 @@ const styles = StyleSheet.create({
     minHeight: 50,
     cursor: "pointer",
   },
+  pctTileCompact: {
+    paddingVertical: 5,
+    paddingHorizontal: 2,
+    minHeight: 42,
+    borderRadius: 8,
+  },
   pctTileDark: {
     borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(255,255,255,0.04)",
@@ -280,6 +325,10 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     lineHeight: 16,
   },
+  pctTilePctCompact: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
   pctTilePctDark: {
     color: "rgba(255,255,255,0.9)",
   },
@@ -293,6 +342,10 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     lineHeight: 12,
     textAlign: "center",
+  },
+  pctTileAmtCompact: {
+    fontSize: 8,
+    lineHeight: 11,
   },
   pctTileAmtDark: {
     color: "rgba(255,255,255,0.55)",

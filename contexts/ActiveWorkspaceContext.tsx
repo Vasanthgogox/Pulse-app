@@ -13,6 +13,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type Context,
   type ReactNode,
 } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -124,10 +125,24 @@ function workspaceToCurrentOrganization(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Context
+// Context (global singleton — Metro can duplicate modules across async chunks)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ActiveWorkspaceContext = createContext<ActiveWorkspaceState | undefined>(undefined);
+const PULSE_ACTIVE_WORKSPACE_CONTEXT_KEY = '__pulse_active_workspace_context__';
+
+function getOrCreateActiveWorkspaceContext(): Context<ActiveWorkspaceState | undefined> {
+  const g = globalThis as typeof globalThis & {
+    [PULSE_ACTIVE_WORKSPACE_CONTEXT_KEY]?: Context<ActiveWorkspaceState | undefined>;
+  };
+  if (!g[PULSE_ACTIVE_WORKSPACE_CONTEXT_KEY]) {
+    g[PULSE_ACTIVE_WORKSPACE_CONTEXT_KEY] = createContext<ActiveWorkspaceState | undefined>(
+      undefined,
+    );
+  }
+  return g[PULSE_ACTIVE_WORKSPACE_CONTEXT_KEY];
+}
+
+const ActiveWorkspaceContext = getOrCreateActiveWorkspaceContext();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider

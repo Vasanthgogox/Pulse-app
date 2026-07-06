@@ -36,6 +36,9 @@ function DocTabTrigger({ doc }: { doc: BusinessDocument }) {
 function DocViewer({ doc }: { doc: BusinessDocument }) {
   const cfg = DOC_STATUS[doc.status];
   const StatusIcon = cfg.icon;
+  const isImage = doc.mime_type.startsWith('image/');
+  const isPdf = doc.mime_type === 'application/pdf';
+  const canPreview = !!doc.url && doc.status !== 'Missing';
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -79,9 +82,9 @@ function DocViewer({ doc }: { doc: BusinessDocument }) {
         </div>
       )}
 
-      {/* Mock document preview area */}
-      <div className="flex-1 rounded-xl border border-border bg-muted/30 overflow-hidden">
-        {doc.status === 'Missing' ? (
+      {/* Document preview */}
+      <div className="flex-1 rounded-xl border border-border bg-muted/30 overflow-hidden min-h-[320px]">
+        {doc.status === 'Missing' || !canPreview ? (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
               <XCircle className="mx-auto size-10 text-muted-foreground/30" />
@@ -89,53 +92,32 @@ function DocViewer({ doc }: { doc: BusinessDocument }) {
               <p className="mt-1 text-[11px] text-muted-foreground/70">Applicant has not provided this document</p>
             </div>
           </div>
+        ) : isImage ? (
+          <div className="flex h-full items-center justify-center bg-black/5 p-4">
+            <img
+              src={doc.url}
+              alt={doc.file_name}
+              className="max-h-full max-w-full rounded-md object-contain shadow-sm"
+            />
+          </div>
+        ) : isPdf ? (
+          <iframe
+            title={doc.file_name}
+            src={doc.url}
+            className="h-full w-full min-h-[480px] bg-white"
+          />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
-            {/* Simulated PDF page stack */}
-            <div className="relative">
-              {(doc.page_count ?? 1) > 1 && (
-                <>
-                  <div className="absolute -right-1.5 -top-1.5 h-48 w-36 rounded border border-border bg-card shadow-sm opacity-50" />
-                  <div className="absolute -right-0.5 -top-0.5 h-48 w-36 rounded border border-border bg-card shadow-sm opacity-75" />
-                </>
-              )}
-              <div className={[
-                'relative flex h-48 w-36 flex-col items-center justify-center gap-2 rounded border bg-white shadow-md',
-                doc.status === 'Unreadable' ? 'opacity-40' : '',
-                doc.status === 'Expired' ? 'border-red-300' : 'border-border',
-              ].join(' ')}>
-                <FileText className={[
-                  'size-10',
-                  doc.status === 'Flagged' ? 'text-red-400' : 'text-muted-foreground/40',
-                ].join(' ')} />
-                <span className="text-[10px] text-muted-foreground/60 font-mono uppercase tracking-wide">
-                  {doc.mime_type.split('/')[1]}
-                </span>
-                {doc.status === 'Unreadable' && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded">
-                    <div className="rotate-[-15deg] rounded border border-amber-400 bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700">
-                      Unreadable
-                    </div>
-                  </div>
-                )}
-                {doc.status === 'Expired' && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded">
-                    <div className="rotate-[-15deg] rounded border border-red-400 bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-700">
-                      Expired
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <p className="text-[11px] text-muted-foreground">
-              {doc.file_name}
-              {doc.page_count && doc.page_count > 1 && ` · ${doc.page_count} pages`}
-            </p>
-
-            <p className="max-w-[200px] text-center text-[10px] text-muted-foreground/60">
-              In production, the document renders here via signed URL or embedded PDF viewer.
-            </p>
+            <FileText className="size-10 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">{doc.file_name}</p>
+            <a
+              href={doc.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Open document
+            </a>
           </div>
         )}
       </div>
