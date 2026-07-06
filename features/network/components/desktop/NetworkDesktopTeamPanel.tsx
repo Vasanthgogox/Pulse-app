@@ -50,8 +50,8 @@ export function NetworkDesktopTeamPanel({
         <View style={styles.teamPanelTitleCol}>
           <Text style={[styles.sectionTitle, layout.sectionTitle]}>Team members</Text>
           <Text style={[styles.sectionSub, layout.sectionSub]}>
-            {inviteOpen
-              ? "Find a colleague by phone and choose their role"
+              {inviteOpen
+              ? "Add employees by name and phone — they can join even without a Pulse account yet"
               : `Manage who can access ${orgName || "your organization"}`}
           </Text>
         </View>

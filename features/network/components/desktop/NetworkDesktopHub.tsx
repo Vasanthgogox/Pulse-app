@@ -39,7 +39,8 @@ import { networkDesktopChatStyles as chatStyles } from "@/features/network/compo
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useLayoutInsets } from "@/lib/layoutInsets";
-import { MessageSquare, MoreHorizontal, UserPlus } from "lucide-react-native";
+import { ChevronLeft, MessageSquare, MoreHorizontal, UserPlus } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
 const NetworkDesktopChatOverlay = lazy(
@@ -169,6 +170,8 @@ export function NetworkDesktopHub({
   bottomScrollInset = 0,
 }: Props) {
   const { user, profile } = useAuth();
+  const router = useRouter();
+  const canGoBack = router.canGoBack();
   const layout = useProfileHubCompactLayout();
   const compact = layout.compact;
   const layoutInsets = useLayoutInsets();
@@ -427,6 +430,17 @@ export function NetworkDesktopHub({
       {compact ? (
         <View style={mobile.pageChrome}>
           <View style={mobile.chromeTopRow}>
+            {canGoBack ? (
+              <Pressable
+                style={mobile.chromeInlineAction}
+                onPress={() => router.back()}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <ChevronLeft size={18} color={METRONIC.text} strokeWidth={2.4} />
+              </Pressable>
+            ) : null}
             <View style={mobile.chromeTitleBlock}>
               <Text style={mobile.chromeTitle} numberOfLines={2}>
                 {orgName}
@@ -435,6 +449,31 @@ export function NetworkDesktopHub({
                 {[modelLabel, email !== "—" ? email : null].filter(Boolean).join(" · ")}
               </Text>
             </View>
+            <Pressable
+              style={[
+                mobile.chromeInlineAction,
+                (chatOpen || tab === "chat") && mobile.chromeInlineActionActive,
+              ]}
+              onPress={() => {
+                if (chatOpen || tab === "chat") {
+                  setChatOpen(false);
+                  if (tab === "chat") setTab("connections");
+                  return;
+                }
+                openChatWithPartner(null);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
+            >
+              <MessageSquare
+                size={16}
+                color={chatOpen || tab === "chat" ? Theme.primary : METRONIC.text}
+                strokeWidth={2}
+              />
+            </Pressable>
+            <Pressable style={mobile.chromeInlineAction} hitSlop={8}>
+              <MoreHorizontal size={16} color={METRONIC.text} strokeWidth={2} />
+            </Pressable>
             <Pressable
               onPress={() => selectTab("profile")}
               hitSlop={8}
@@ -451,24 +490,40 @@ export function NetworkDesktopHub({
               )}
             </Pressable>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={mobile.chromePillsScroll}
-            contentContainerStyle={mobile.chromePillsContent}
-          >
-            <View style={mobile.chromePill}>
-              <Text style={mobile.chromePillText}>WORKSPACE</Text>
-            </View>
-            <View style={mobile.chromePill}>
-              <Text style={mobile.chromePillText}>{modelLabel.toUpperCase()}</Text>
-            </View>
-            <View style={mobile.chromePill}>
-              <Text style={mobile.chromePillText}>
-                {totalConnections} CONNECTION{totalConnections === 1 ? "" : "S"}
+          <View style={mobile.chromeMetaRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={mobile.chromePillsScrollInline}
+              contentContainerStyle={mobile.chromePillsContentInline}
+            >
+              <View style={mobile.chromePill}>
+                <Text style={mobile.chromePillText}>WORKSPACE</Text>
+              </View>
+              <View style={mobile.chromePill}>
+                <Text style={mobile.chromePillText}>{modelLabel.toUpperCase()}</Text>
+              </View>
+              <View style={mobile.chromePill}>
+                <Text style={mobile.chromePillText}>
+                  {totalConnections} CONNECTION{totalConnections === 1 ? "" : "S"}
+                </Text>
+              </View>
+            </ScrollView>
+            <Pressable
+              style={[
+                mobile.chromeInviteBtn,
+                invitationsOpen && mobile.chromeInviteBtnActive,
+              ]}
+              onPress={() => onInvitationsOpenChange(!invitationsOpen)}
+              accessibilityRole="button"
+              accessibilityLabel="Connection invites"
+            >
+              <UserPlus size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
+              <Text style={mobile.chromeInviteBtnText}>
+                {pendingInviteCount > 0 ? `Invites (${pendingInviteCount})` : "Invites"}
               </Text>
-            </View>
-          </ScrollView>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <NetworkDesktopHubHero
@@ -520,49 +575,7 @@ export function NetworkDesktopHub({
           })}
         </ScrollView>
 
-        {compact ? (
-          <View style={mobile.tabActionsRow}>
-            <Pressable
-              style={[
-                mobile.tabActionPrimary,
-                invitationsOpen && { backgroundColor: Theme.primary },
-              ]}
-              onPress={() => onInvitationsOpenChange(!invitationsOpen)}
-              accessibilityRole="button"
-              accessibilityLabel="Connection invites"
-            >
-              <UserPlus size={15} color={Theme.textOnPrimary} strokeWidth={2.2} />
-              <Text style={mobile.tabActionPrimaryText}>
-                {pendingInviteCount > 0 ? `Invites (${pendingInviteCount})` : "Invites"}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[
-                mobile.tabActionIcon,
-                (chatOpen || tab === "chat") && mobile.tabActionIconActive,
-              ]}
-              onPress={() => {
-                if (chatOpen || tab === "chat") {
-                  setChatOpen(false);
-                  if (tab === "chat") setTab("connections");
-                  return;
-                }
-                openChatWithPartner(null);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
-            >
-              <MessageSquare
-                size={17}
-                color={chatOpen || tab === "chat" ? Theme.primary : METRONIC.text}
-                strokeWidth={2}
-              />
-            </Pressable>
-            <Pressable style={mobile.tabActionIcon} hitSlop={8}>
-              <MoreHorizontal size={17} color={METRONIC.text} strokeWidth={2} />
-            </Pressable>
-          </View>
-        ) : (
+        {compact ? null : (
           <View style={styles.tabActions}>
             <Pressable
               style={[

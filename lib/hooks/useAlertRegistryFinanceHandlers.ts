@@ -85,7 +85,7 @@ export function useAlertRegistryFinanceHandlers(): {
     (req: SalaryRequestWithDriverRow) => {
       const tripId = Array.isArray(req.trip_ids) ? req.trip_ids[0] : null;
       if (tripId) {
-        router.push(`/trip-ledger/${tripId}` as const);
+        router.push(`/trip/${tripId}` as const);
         return;
       }
       router.push("/(tabs)/finance" as Parameters<typeof router.push>[0]);
@@ -109,7 +109,7 @@ export function useAlertRegistryFinanceHandlers(): {
       } else if (entityType === "SUPPLIER" && entityId) {
         router.push(`/supplier/${entityId}?tab=trips` as const);
       } else if (tripId) {
-        router.push(`/trip-ledger/${tripId}` as const);
+        router.push(`/trip/${tripId}` as const);
       } else {
         router.push("/(tabs)/finance");
       }

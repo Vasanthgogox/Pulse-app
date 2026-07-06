@@ -12,7 +12,7 @@ import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { FinanceTxnTypography } from '@/constants/FinanceTxnTypography';
 import Theme from '@/constants/Theme';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import FeedbackHeaderIllustration from "@/assets/illustrations/customer-giving-feedback-for-delivery-service.svg";
+import { RatingsRegistryHeroLottie } from "@/features/ratings/components/RatingsRegistryHeroLottie";
 import {
     getClientById,
     getClientDetails,
@@ -1016,9 +1016,7 @@ export function TripRatingsBlock({
   const isWorkspace = layoutVariant === 'workspace';
   const isRegistry = layoutVariant === 'registry';
   const isRegistrySidebar = isRegistry && embeddedSidebar;
-  const feedbackHeaderIllusSize = isRegistrySidebar
-    ? 220
-    : Math.max(164, Math.min(220, width * 0.46));
+  const ratingsHeroIconSize = isRegistrySidebar ? 56 : 44;
   const isWidePanel = isWorkspace || isRegistry;
   const isCompactWorkspace = isWidePanel && width < 1100;
   const operationalTripLabel = getTripOperationalDisplay({
@@ -1516,14 +1514,7 @@ export function TripRatingsBlock({
                         isRegistrySidebar && styles.regHeaderIllusViewportSidebar,
                       ]}
                     >
-                      <FeedbackHeaderIllustration
-                        width={feedbackHeaderIllusSize}
-                        height={feedbackHeaderIllusSize}
-                        style={[
-                          styles.regHeaderIllusSvg,
-                          isRegistrySidebar && styles.regHeaderIllusSvgSidebar,
-                        ]}
-                      />
+                      <RatingsRegistryHeroLottie iconSize={ratingsHeroIconSize} />
                     </View>
                   </View>
                 </View>
@@ -2736,33 +2727,25 @@ const styles = StyleSheet.create({
   },
   regHeaderIllusWrap: {
     width: '100%',
-    minHeight: 82,
+    minHeight: 56,
     justifyContent: 'center',
-    alignItems: 'flex-start',
-    marginTop: -14,
+    alignItems: 'center',
+    marginTop: 0,
+    marginBottom: 2,
   },
   regHeaderIllusWrapSidebar: {
-    minHeight: 96,
-    marginTop: -18,
+    minHeight: 68,
+    marginBottom: 4,
   },
   regHeaderIllusViewport: {
     width: '100%',
-    height: 86,
-    overflow: 'hidden',
-    alignItems: 'flex-start',
+    minHeight: 52,
+    overflow: 'visible',
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: 10,
   },
   regHeaderIllusViewportSidebar: {
-    height: 98,
-  },
-  regHeaderIllusSvg: {
-    marginTop: -56,
-    marginBottom: -70,
-  },
-  regHeaderIllusSvgSidebar: {
-    marginTop: -62,
-    marginBottom: -78,
+    minHeight: 64,
   },
   regStack: { gap: 5 },
   regStackSidebar: { gap: 12 },

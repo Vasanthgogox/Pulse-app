@@ -3,12 +3,98 @@
  * Handles team member invite, list, role change, and removal.
  */
 import { supabase } from "@/lib/supabase";
-import type { OrgMember, OrgMemberRole, UserProfileForInvite, TeamInvite } from "@/types/organization";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import type {
+  OrgMember,
+  OrgTeamRoster,
+  PendingPhoneTeamInvite,
+  TeamInvite,
+  UserProfileForInvite,
+} from "@/types/organization";
+import {
+  buildTeamInvitePermissions,
+  orgMemberRoleForPlatformRole,
+  type PlatformTeamRole,
+} from "@/features/organization/utils/teamInviteRoles.util";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function normalizePhone(phone: string): string {
   return phone.replace(/\s+/g, "").trim();
+}
+
+// ─── List members + pending phone invites ─────────────────────────────────────
+
+export async function getOrgTeamRoster(orgId: string): Promise<{
+  error: Error | null;
+  roster: OrgTeamRoster;
+}> {
+  const empty: OrgTeamRoster = { members: [], pendingPhoneInvites: [] };
+  try {
+    const [membersRes, pendingRes] = await Promise.all([
+      getOrganizationMembers(orgId),
+      getPendingPhoneTeamInvites(orgId),
+    ]);
+    if (membersRes.error) return { error: membersRes.error, roster: empty };
+    if (pendingRes.error) return { error: pendingRes.error, roster: empty };
+    return {
+      error: null,
+      roster: {
+        members: membersRes.members,
+        pendingPhoneInvites: pendingRes.invites,
+      },
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), roster: empty };
+  }
+}
+
+export async function getPendingPhoneTeamInvites(orgId: string): Promise<{
+  error: Error | null;
+  invites: PendingPhoneTeamInvite[];
+}> {
+  try {
+    const { data, error } = await supabase().rpc("get_org_team_pending_invites", {
+      p_org_id: orgId,
+    });
+    if (error) return { error: new Error(error.message), invites: [] };
+    return { error: null, invites: (data ?? []) as PendingPhoneTeamInvite[] };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), invites: [] };
+  }
+}
+
+export function subscribeToOrgTeamRoster(
+  orgId: string,
+  onChange: () => void,
+): () => void {
+  const channel: RealtimeChannel = supabase()
+    .channel(`org-team:${orgId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "organization_members",
+        filter: `organization_id=eq.${orgId}`,
+      },
+      () => onChange(),
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "organization_team_invites",
+        filter: `organization_id=eq.${orgId}`,
+      },
+      () => onChange(),
+    )
+    .subscribe();
+
+  return () => {
+    supabase().removeChannel(channel);
+  };
 }
 
 // ─── List members ──────────────────────────────────────────────────────────────
@@ -103,18 +189,20 @@ export async function lookupUserByPhone(phone: string): Promise<{
   }
 }
 
-// ─── Invite member ──────────────────────────────────────────────────────────────
+// ─── Invite member (existing Pulse user) ─────────────────────────────────────
 
 export async function inviteTeamMember(
   orgId: string,
   userId: string,
-  role: OrgMemberRole,
+  platformRole: PlatformTeamRole,
 ): Promise<{
   error: Error | null;
   member: OrgMember | null;
   alreadyMember?: boolean;
   alreadyInvited?: boolean;
 }> {
+  const role = orgMemberRoleForPlatformRole(platformRole);
+  const permissions = buildTeamInvitePermissions(platformRole);
   try {
     // Check for existing membership
     const { data: existing } = await supabase()
@@ -134,7 +222,12 @@ export async function inviteTeamMember(
       // Inactive → re-activate
       const { data: updated, error: updateErr } = await supabase()
         .from("organization_members")
-        .update({ status: "invited", role, joined_at: new Date().toISOString() })
+        .update({
+          status: "invited",
+          role,
+          permissions,
+          joined_at: new Date().toISOString(),
+        })
         .eq("id", existing.id)
         .select()
         .maybeSingle();
@@ -149,7 +242,7 @@ export async function inviteTeamMember(
         user_id: userId,
         role,
         status: "invited",
-        permissions: {},
+        permissions,
         joined_at: new Date().toISOString(),
       })
       .select()
@@ -162,16 +255,111 @@ export async function inviteTeamMember(
   }
 }
 
+// ─── Invite employee without Pulse account (phone pending) ───────────────────
+
+export async function createPendingTeamInvite(
+  orgId: string,
+  params: {
+    phone: string;
+    name: string;
+    email?: string | null;
+    platformRole: PlatformTeamRole;
+  },
+): Promise<{
+  error: Error | null;
+  invite: PendingPhoneTeamInvite | null;
+  alreadyPending?: boolean;
+}> {
+  const role = orgMemberRoleForPlatformRole(params.platformRole);
+  const permissions = buildTeamInvitePermissions(params.platformRole);
+  try {
+    const { data, error } = await supabase().rpc("create_team_invite_pending", {
+      p_org_id: orgId,
+      p_phone: normalizePhone(params.phone),
+      p_name: params.name.trim(),
+      p_email: params.email?.trim() || null,
+      p_role: role,
+      p_permissions: permissions,
+    });
+    if (error) {
+      if (error.message.includes("already has a Pulse account")) {
+        return { error: new Error(error.message), invite: null };
+      }
+      return { error: new Error(error.message), invite: null };
+    }
+    return { error: null, invite: data as PendingPhoneTeamInvite };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), invite: null };
+  }
+}
+
+export async function cancelPendingTeamInvite(
+  inviteId: string,
+): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase().rpc("cancel_team_invite_pending", {
+      p_invite_id: inviteId,
+    });
+    if (error) return { error: new Error(error.message) };
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
+/**
+ * Unified invite: existing Pulse user → membership row;
+ * new employee → pending phone invite (claimed on signup).
+ */
+export async function inviteTeamMemberByContact(
+  orgId: string,
+  params: {
+    phone: string;
+    name: string;
+    email?: string | null;
+    platformRole: PlatformTeamRole;
+    existingUserId?: string | null;
+  },
+): Promise<{
+  error: Error | null;
+  kind: "member" | "pending" | null;
+  member: OrgMember | null;
+  pendingInvite: PendingPhoneTeamInvite | null;
+  alreadyMember?: boolean;
+  alreadyInvited?: boolean;
+}> {
+  if (params.existingUserId) {
+    const res = await inviteTeamMember(orgId, params.existingUserId, params.platformRole);
+    return {
+      error: res.error,
+      kind: res.member ? "member" : null,
+      member: res.member,
+      pendingInvite: null,
+      alreadyMember: res.alreadyMember,
+      alreadyInvited: res.alreadyInvited,
+    };
+  }
+  const res = await createPendingTeamInvite(orgId, params);
+  return {
+    error: res.error,
+    kind: res.invite ? "pending" : null,
+    member: null,
+    pendingInvite: res.invite,
+  };
+}
+
 // ─── Update role ──────────────────────────────────────────────────────────────
 
 export async function updateMemberRole(
   memberId: string,
-  role: OrgMemberRole,
+  platformRole: PlatformTeamRole,
 ): Promise<{ error: Error | null }> {
+  const role = orgMemberRoleForPlatformRole(platformRole);
+  const permissions = buildTeamInvitePermissions(platformRole);
   try {
     const { error } = await supabase()
       .from("organization_members")
-      .update({ role })
+      .update({ role, permissions })
       .eq("id", memberId);
     if (error) return { error: new Error(error.message) };
     return { error: null };
@@ -197,8 +385,14 @@ export async function removeMember(memberId: string): Promise<{ error: Error | n
 
 // ─── Cancel invite (by admin) ──────────────────────────────────────────────────
 
-export async function cancelTeamInvite(memberId: string): Promise<{ error: Error | null }> {
-  return removeMember(memberId);
+export async function cancelTeamInvite(
+  memberOrInviteId: string,
+  kind: "member" | "phone_pending" = "member",
+): Promise<{ error: Error | null }> {
+  if (kind === "phone_pending") {
+    return cancelPendingTeamInvite(memberOrInviteId);
+  }
+  return removeMember(memberOrInviteId);
 }
 
 // ─── Invitee: accept ────────────────────────────────────────────────────────────

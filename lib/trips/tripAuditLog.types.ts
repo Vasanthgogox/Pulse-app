@@ -24,6 +24,7 @@ export type TripAuditLogEntry = {
   detail: string;
   detailLines?: string[];
   amountLabel?: string;
+  headlineTarget?: string;
   /** Other people involved (driver, party, previous assignee). */
   people?: TripAuditLogPerson[];
 };

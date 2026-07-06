@@ -236,7 +236,7 @@ export function AlertDetailScreen({
   const handleTertiary = useCallback(() => {
     const tripId = resolveTripId({ kind, salary, shared, ops });
     if (tripId) {
-      router.push(`/trip-ledger/${tripId}` as const);
+      router.push(`/trip/${tripId}` as const);
       onNavigateAway?.();
     }
   }, [kind, salary, shared, ops, router, onNavigateAway]);

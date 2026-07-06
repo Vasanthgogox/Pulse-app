@@ -1202,6 +1202,13 @@ function PartyRegistrationPortalInner(
   const shellMaxWidth = layoutWide
     ? Math.min(540, Math.max(400, viewportW - 48))
     : Math.max(280, viewportW - 24);
+  /**
+   * Max height cap for the content-sized desktop card that hosts the step
+   * wizard. The card sizes to its content; this only prevents very tall steps
+   * from exceeding the viewport (no minimum floor, so short steps like the
+   * keypad don't get clipped or padded with empty space).
+   */
+  const wizardDesktopHeight = Math.min(Math.max(viewportH - 48, 360), 760);
   const keyboardInset =
     !layoutWide &&
     viewportH > 0 &&
@@ -1210,10 +1217,11 @@ function PartyRegistrationPortalInner(
       ? viewportH - visualViewportHeight
       : 0;
 
-  const useContactWizard =
-    !layoutWide && (kind === "client" || kind === "supplier");
-  const useDriverWizard = !layoutWide && kind === "driver";
-  const useVehicleWizard = !layoutWide && kind === "vehicle";
+  // Step-by-step wizard is now used on desktop too (rendered inside a centered
+  // card via renderWizardModal); mobile keeps the full-screen presentation.
+  const useContactWizard = kind === "client" || kind === "supplier";
+  const useDriverWizard = kind === "driver";
+  const useVehicleWizard = kind === "vehicle";
   const isDriverReviewTone = kind === "driver";
   const driverCompensationBitsCount =
     (driverPayableAmount != null && driverPayableAmount > 0 ? 1 : 0) +
@@ -1745,16 +1753,86 @@ function PartyRegistrationPortalInner(
     );
   };
 
-  if (useContactWizard) {
+  /**
+   * Present a step wizard. Mobile / narrow web → full-screen slide.
+   * Desktop (wide web) → same wizard hosted inside a centered card so it matches
+   * the mobile experience. The review step renders its own centered overlay, so
+   * on desktop it's shown directly (no extra card wrapper).
+   */
+  const renderWizardModal = (body: ReactNode, extra?: ReactNode) => {
+    const isReview = step !== "form";
+    // Success dialog closes the portal on OK (handleCreateSuccessOk → onClose);
+    // the combined form relied on it, so the wizard flow renders it too.
+    const successModal = (
+      <PartyCreateSuccessModal
+        visible={showCreateSuccess}
+        kind={kind}
+        invited={createSuccessInvited}
+        onOk={handleCreateSuccessOk}
+      />
+    );
+
+    if (!layoutWide) {
+      return (
+        <>
+          <Modal
+            visible
+            animationType="slide"
+            presentationStyle="fullScreen"
+            onRequestClose={onClose}
+          >
+            {body}
+            {extra}
+          </Modal>
+          {successModal}
+        </>
+      );
+    }
+
     return (
       <>
         <Modal
           visible
-          animationType="slide"
-          presentationStyle="fullScreen"
+          transparent
+          animationType="fade"
+          presentationStyle="overFullScreen"
+          statusBarTranslucent
           onRequestClose={onClose}
         >
-          {step === "form" ? (
+          {isReview ? (
+            <>
+              {body}
+              {extra}
+            </>
+          ) : (
+            <View style={partyAddModalChromeStyles.overlay}>
+              <Pressable
+                style={partyAddModalChromeStyles.overlayDismissHit}
+                onPress={onClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              />
+              <View
+                style={[
+                  partyAddModalChromeStyles.shell,
+                  styles.wizardDesktopCard,
+                  { maxWidth: shellMaxWidth, maxHeight: wizardDesktopHeight },
+                ]}
+              >
+                {body}
+              </View>
+              {extra}
+            </View>
+          )}
+        </Modal>
+        {successModal}
+      </>
+    );
+  };
+
+  if (useContactWizard) {
+    return renderWizardModal(
+      step === "form" ? (
             <PartyContactMobileWizard
               entityTitle={formTitle.toUpperCase()}
               subtitle="Fill required fields and continue."
@@ -1809,22 +1887,13 @@ function PartyRegistrationPortalInner(
               title={reviewConfirmTitle}
               message={reviewConfirmMessage}
             />
-          )}
-        </Modal>
-      </>
+      ),
     );
   }
 
   if (useDriverWizard) {
-    return (
-      <>
-        <Modal
-          visible
-          animationType="slide"
-          presentationStyle="fullScreen"
-          onRequestClose={onClose}
-        >
-          {step === "form" ? (
+    return renderWizardModal(
+      step === "form" ? (
             <PartyDriverMobileWizard
               entityTitle={formTitle.toUpperCase()}
               wizardStep={driverWizardStep}
@@ -1877,22 +1946,13 @@ function PartyRegistrationPortalInner(
               title={reviewConfirmTitle}
               message={reviewConfirmMessage}
             />
-          )}
-        </Modal>
-      </>
+      ),
     );
   }
 
   if (useVehicleWizard) {
-    return (
-      <>
-        <Modal
-          visible
-          animationType="slide"
-          presentationStyle="fullScreen"
-          onRequestClose={onClose}
-        >
-          {step === "form" ? (
+    return renderWizardModal(
+      step === "form" ? (
             <PartyVehicleMobileWizard
               entityTitle={formTitle.toUpperCase()}
               wizardStep={vehicleWizardStep}
@@ -1940,10 +2000,8 @@ function PartyRegistrationPortalInner(
               title={reviewConfirmTitle}
               message={reviewConfirmMessage}
             />
-          )}
-          {renderVehiclePickerModals({ overlay: true })}
-        </Modal>
-      </>
+      ),
+      renderVehiclePickerModals({ overlay: true }),
     );
   }
 
@@ -2752,19 +2810,24 @@ function SummaryDetailRow({
     >
       <View
         style={[
-          styles.summaryDetailAccent,
-          isDriverTone && styles.summaryDetailAccentDriver,
-        ]}
-      />
-      <View
-        style={[
           styles.summaryDetailIconBubble,
           isDriverTone && styles.summaryDetailIconBubbleDriver,
+          emphasized && styles.summaryDetailIconBubbleEmphasis,
+          emphasized && isDriverTone && styles.summaryDetailIconBubbleEmphasisDriver,
         ]}
       >
         <Icon
-          size={18}
-          color={iconColor ?? (isDriverTone ? "#15803d" : "#334155")}
+          size={17}
+          color={
+            iconColor ??
+            (emphasized
+              ? isDriverTone
+                ? "#15803d"
+                : "#1d4ed8"
+              : isDriverTone
+                ? "#15803d"
+                : "#475569")
+          }
           strokeWidth={2.2}
         />
       </View>
@@ -2802,6 +2865,18 @@ const styles = StyleSheet.create({
   shellWideDesktop: {
     maxHeight: 800,
     minHeight: 0,
+    ...(Platform.OS === "web"
+      ? ({
+          boxShadow:
+            "0 80px 160px -40px rgba(15,23,42,0.14), 0 1px 0 rgba(255,255,255,0.06)",
+        } as ViewStyle)
+      : ({} as ViewStyle)),
+  },
+  /** Desktop card that hosts the mobile step wizard (fixed height so the
+   *  wizard's flex column + bottom action fill the card cleanly). */
+  wizardDesktopCard: {
+    alignSelf: "center",
+    maxHeight: "100%",
     ...(Platform.OS === "web"
       ? ({
           boxShadow:
@@ -3276,21 +3351,25 @@ const styles = StyleSheet.create({
   },
 
   summaryDetailsCard: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    backgroundColor: "#f3f7fd",
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 6,
+    backgroundColor: "#f7f9fd",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#e7edf6",
     gap: 0,
   },
   summaryDetailsCardDriver: {
     backgroundColor: "#f0fdf4",
     borderWidth: 1,
     borderColor: "#bbf7d0",
-    borderRadius: 16,
+    borderRadius: 18,
   },
   summaryDetailsHeading: {
     ...FinanceTxnTypography.columnTitle,
-    marginBottom: 12,
+    marginBottom: 4,
+    paddingHorizontal: 2,
   },
   summaryDetailsHeadingDriver: {
     color: "#166534",
@@ -3299,27 +3378,19 @@ const styles = StyleSheet.create({
 
   summaryDetailRow: {
     flexDirection: "row",
-    alignItems: "stretch",
-    backgroundColor: "#ffffff",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#dbeafe",
-    marginBottom: 12,
-    overflow: "hidden",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e2e8f2",
   },
   summaryDetailRowLast: {
-    marginBottom: 4,
+    borderBottomWidth: 0,
   },
-  summaryDetailRowEmphasis: {
-    borderColor: "#a5b4fc",
-    ...Platform.select({
-      web: { backgroundColor: "#f8faff" } as object,
-      default: { backgroundColor: "#f8faff" },
-    }),
-  },
+  summaryDetailRowEmphasis: {},
   summaryDetailRowDriver: {
-    borderColor: "#bbf7d0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: "#d6f0dc",
   },
   summaryDetailRowEmphasisDriver: {
     borderColor: "#4ade80",
@@ -3328,30 +3399,31 @@ const styles = StyleSheet.create({
       default: { backgroundColor: "#f7fff8" },
     }),
   },
-  summaryDetailAccent: {
-    width: 4,
-    backgroundColor: "#3b82f6",
-  },
-  summaryDetailAccentDriver: {
-    backgroundColor: "#22c55e",
-  },
   summaryDetailIconBubble: {
-    width: 56,
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f1f5ff",
-    borderRightWidth: 1,
-    borderRightColor: "#dbeafe",
+    backgroundColor: "#eef2fb",
+    borderWidth: 1,
+    borderColor: "#e2e8f5",
   },
   summaryDetailIconBubbleDriver: {
-    backgroundColor: "#f0fdf4",
-    borderRightColor: "#dcfce7",
+    backgroundColor: "#ecfdf3",
+    borderColor: "#c7f0d5",
+  },
+  summaryDetailIconBubbleEmphasis: {
+    backgroundColor: "#e0e9fd",
+    borderColor: "#c3d5fb",
+  },
+  summaryDetailIconBubbleEmphasisDriver: {
+    backgroundColor: "#d6f5df",
+    borderColor: "#a7e5bc",
   },
   summaryDetailCopy: {
     flex: 1,
     justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
     minWidth: 0,
   },
   summaryDetailLabel: {
@@ -3363,19 +3435,22 @@ const styles = StyleSheet.create({
   },
   summaryDetailValue: {
     ...FinanceTxnTypography.fieldValue,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 18,
+    color: Theme.textPrimaryDark,
   },
   summaryDetailValueEmphasis: {
     ...FinanceTxnTypography.partyTitle,
-    fontSize: 12,
+    fontSize: 15,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    lineHeight: 16,
+    lineHeight: 20,
+    letterSpacing: 0.2,
   },
   summaryDetailValueProse: {
     ...FinanceTxnTypography.fieldValue,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 11,
+    lineHeight: 16,
     color: Theme.textSecondary,
   },
   summaryDetailValueProseDriver: {

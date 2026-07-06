@@ -69,6 +69,43 @@ export const profileHubLayoutStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  /** Meta chips + Invites CTA share one row. */
+  chromeMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chromePillsScrollInline: {
+    flex: 1,
+    marginLeft: -GUTTER,
+  },
+  chromePillsContentInline: {
+    paddingLeft: GUTTER,
+    paddingRight: 4,
+    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chromeInviteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 32,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    flexShrink: 0,
+    backgroundColor: METRONIC.text,
+  },
+  chromeInviteBtnActive: {
+    backgroundColor: Theme.primary,
+  },
+  chromeInviteBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textOnPrimary,
+    includeFontPadding: false,
+  },
   /** Badges + trailing chrome actions on one row */
   chromeBadgeRow: {
     flexDirection: 'row',

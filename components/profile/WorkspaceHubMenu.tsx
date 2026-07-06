@@ -38,6 +38,8 @@ import { useWorkspaceProductsQuery } from "@/lib/queries/useWorkspaceProductsQue
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import {
+  Building2,
+  Car,
   ChevronRight,
   FolderOpen,
   Globe,
@@ -47,13 +49,14 @@ import {
   Settings,
   Shield,
   Sparkles,
+  Truck,
+  User,
   X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
-  type ImageSourcePropType,
   Modal,
   Pressable,
   ScrollView,
@@ -66,12 +69,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const MENU_ICON_SIZE = 14;
 const MENU_ICON_STROKE = 2.1;
 
-const HUB_PARTY_PNG = {
-  customer: require("@/assets/icon and logos/client-collaboration.png"),
-  supplier: require("@/assets/icon and logos/client.png"),
-  driver: require("@/assets/icon and logos/taxi-driver.png"),
-  vehicle: require("@/assets/icon and logos/truck.png"),
-} as const;
+const GRID_ICON_SIZE = 20;
 
 function hubLucideIcon(
   Icon: typeof Shield,
@@ -82,15 +80,9 @@ function hubLucideIcon(
   );
 }
 
-function hubPngIcon(source: ImageSourcePropType, scale = 1) {
-  const size = 22 * scale;
-  return (
-    <Image
-      source={source}
-      style={{ width: size, height: size }}
-      resizeMode="contain"
-    />
-  );
+/** Party grid glyph — same lucide format as the rest of the hub, sized for the grid slot. */
+function hubGridIcon(Icon: typeof Shield, color: string) {
+  return <Icon size={GRID_ICON_SIZE} color={color} strokeWidth={2.1} />;
 }
 
 function orgInitials(name: string): string {
@@ -270,25 +262,33 @@ export function WorkspaceHubMenu({
     {
       id: "party-customers",
       label: "Customer",
-      icon: hubPngIcon(HUB_PARTY_PNG.customer, 1.05),
+      icon: hubGridIcon(Building2, "#2563eb"),
+      iconBg: HUB_ICON_WELL.sky,
+      iconBorder: HUB_ICON_WELL.skyBorder,
       route: ROUTES.partyDirectory("customers"),
     },
     {
       id: "party-suppliers",
       label: "Supplier",
-      icon: hubPngIcon(HUB_PARTY_PNG.supplier, 1.02),
+      icon: hubGridIcon(Truck, "#d97706"),
+      iconBg: HUB_ICON_WELL.amber,
+      iconBorder: HUB_ICON_WELL.amberBorder,
       route: ROUTES.partyDirectory("suppliers"),
     },
     {
       id: "party-drivers",
       label: "Driver",
-      icon: hubPngIcon(HUB_PARTY_PNG.driver, 1.08),
+      icon: hubGridIcon(User, "#059669"),
+      iconBg: HUB_ICON_WELL.emerald,
+      iconBorder: HUB_ICON_WELL.emeraldBorder,
       route: ROUTES.partyDirectory("drivers"),
     },
     {
       id: "party-vehicles",
       label: "Vehicle",
-      icon: hubPngIcon(HUB_PARTY_PNG.vehicle, 1.02),
+      icon: hubGridIcon(Car, HUB_PURPLE),
+      iconBg: HUB_ICON_WELL.slate,
+      iconBorder: HUB_ICON_WELL.slateBorder,
       route: ROUTES.partyDirectory("vehicles"),
     },
   ];
@@ -403,7 +403,19 @@ export function WorkspaceHubMenu({
               accessibilityRole="button"
               accessibilityLabel={row.label}
             >
-              <View style={hubStyles.partyRowIconSlot}>{row.icon}</View>
+              <View
+                style={[
+                  hubStyles.partyRowIconSlot,
+                  row.iconBg
+                    ? {
+                        backgroundColor: row.iconBg,
+                        borderColor: row.iconBorder,
+                      }
+                    : null,
+                ]}
+              >
+                {row.icon}
+              </View>
               <Text style={hubStyles.partyGridLabel} numberOfLines={1}>
                 {row.label}
               </Text>

@@ -308,6 +308,9 @@ function TimelineEntryRow({
         <Text style={styles.headline} numberOfLines={4}>
           <Text style={styles.actorName}>{entry.recordedBy}</Text>
           <Text style={styles.actionText}> {phrase}</Text>
+          {entry.headlineTarget ? (
+            <Text style={styles.targetName}> {entry.headlineTarget}</Text>
+          ) : null}
         </Text>
 
         <View style={styles.metaRow}>
@@ -807,6 +810,10 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontWeight: "400",
+    color: METRONIC.ink,
+  },
+  targetName: {
+    fontWeight: "600",
     color: METRONIC.ink,
   },
   metaRow: {

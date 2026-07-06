@@ -2,7 +2,14 @@
  * Full-page Indian plate entry: display + segment guide + custom keypad (no system keyboard).
  */
 import { memo, useCallback, useMemo } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { Truck } from "lucide-react-native";
 
 import Layout from "@/constants/Layout";
@@ -46,7 +53,12 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
     const displayValue = value.trim();
     const showCursor = normLen < INDIAN_VEHICLE_TOTAL_LENGTH;
     const inputPlatform = useInputPlatform();
+    const { width } = useWindowDimensions();
     const isDesktopWeb = Platform.OS === "web" && inputPlatform === "desktop";
+    // Bounded, content-sized wizard card (party flows on web ≥ 720): stack input +
+    // keypad at the top instead of spreading them with space-between over a fixed
+    // full-screen height, which leaves a large gap above the footer.
+    const groupTop = Platform.OS === "web" && width >= 720 && !wizardShell;
 
     const handleKey = useCallback(
       (key: string) => {
@@ -66,7 +78,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
     });
 
     return (
-      <View style={styles.root} testID={testID}>
+      <View style={groupTop ? styles.rootGrouped : styles.root} testID={testID}>
         <View style={[styles.main, wizardShell && styles.mainWizard]}>
           <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.regLabel}>
             Registration
@@ -95,6 +107,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
             disabled={!isDesktopWeb}
             style={({ pressed }) => [
               styles.displayRow,
+              groupTop && styles.displayRowCompact,
               error && styles.displayRowError,
               isDesktopWeb && pressed && styles.displayRowPressed,
             ]}
@@ -110,6 +123,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
               style={[
                 styles.displayValue,
                 displayMono,
+                groupTop && styles.displayValueCompact,
                 !displayValue && styles.displayPlaceholder,
               ]}
               numberOfLines={1}
@@ -123,11 +137,12 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
           </Pressable>
         </View>
 
-        <View style={[styles.keypadDock, wizardShell && flow.keypadDockWizard]}>
+        <View style={[styles.keypadDock, (wizardShell || groupTop) && flow.keypadDockWizard]}>
           <IndianVehicleRegistrationKeypad
             kind={keyboardKind}
             onKey={handleKey}
             normalizedLength={normLen}
+            compact={groupTop}
           />
         </View>
       </View>
@@ -151,6 +166,11 @@ const styles = StyleSheet.create({
     minHeight: 0,
     width: "100%",
     justifyContent: "space-between",
+  },
+  rootGrouped: {
+    width: "100%",
+    justifyContent: "flex-start",
+    gap: 16,
   },
   main: {
     flexShrink: 1,
@@ -208,6 +228,11 @@ const styles = StyleSheet.create({
     minHeight: 56,
     backgroundColor: Theme.surfaceForm,
   },
+  displayRowCompact: {
+    paddingVertical: 10,
+    minHeight: 46,
+    borderRadius: 10,
+  },
   displayRowError: {
     borderColor: Theme.destructive,
     borderWidth: 2,
@@ -227,6 +252,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 1.2,
     color: Theme.textPrimaryDark,
+  },
+  displayValueCompact: {
+    fontSize: 16,
+    letterSpacing: 1,
   },
   displayPlaceholder: {
     color: Theme.textMuted,

@@ -20,6 +20,7 @@ import { getTripOperationalDisplay } from "@/features/operations/display";
 import { LedgerDayDivider } from "@/features/finance/components/LedgerDayDivider";
 import {
   CASH_LEDGER_MAX_WIDTH,
+  CASH_LEDGER_ENTITY_DESKTOP_MAX_WIDTH,
   LEDGER_DESKTOP_BREAKPOINT,
   LEDGER_DESKTOP_PADDING,
   LEDGER_RIGHT_COLUMN_WIDTH,
@@ -343,9 +344,13 @@ export function LedgerTransactionListView({
   const { width: windowWidth } = useWindowDimensions();
   const isDesktopLedger =
     Platform.OS === "web" && windowWidth >= LEDGER_DESKTOP_BREAKPOINT;
-  const ledgerContentMaxWidth = isDesktopLedger || !fullWidth
-    ? CASH_LEDGER_MAX_WIDTH
-    : undefined;
+  const useEntityDesktopTable =
+    isDesktopLedger && embedInParentScroll && useTimelineLayout;
+  const ledgerContentMaxWidth = useEntityDesktopTable
+    ? CASH_LEDGER_ENTITY_DESKTOP_MAX_WIDTH
+    : isDesktopLedger || !fullWidth
+      ? CASH_LEDGER_MAX_WIDTH
+      : undefined;
   const ledgerContentPadding = isDesktopLedger
     ? LEDGER_DESKTOP_PADDING
     : fullWidth
@@ -459,7 +464,9 @@ export function LedgerTransactionListView({
   >("transaction");
   const effectiveFiscalSubTab = showFiscalSubTabs
     ? fiscalSubTab
-    : "transaction";
+    : useEntityDesktopTable
+      ? "table"
+      : "transaction";
 
   /** Render "Secured" inside scroll so it does not sit fixed over the list on mobile */
   const showSecuredFooterInScroll =
@@ -678,15 +685,20 @@ export function LedgerTransactionListView({
                 | undefined
             }
           />
-        ) : showHistoryHeader &&
-          useTimelineLayout &&
+        ) : useTimelineLayout &&
           effectiveFiscalSubTab === "table" ? (
-          <ScrollView
-            style={styles.tableViewScroll}
-            contentContainerStyle={styles.tableViewScrollContent}
-            showsVerticalScrollIndicator={false}
-            {...tabBarScrollProps}
-          >
+          (() => {
+            const TableWrapper = embedInParentScroll ? View : ScrollView;
+            const tableWrapperProps = embedInParentScroll
+              ? { style: styles.entityDesktopTableWrap }
+              : {
+                  style: styles.tableViewScroll,
+                  contentContainerStyle: styles.tableViewScrollContent,
+                  showsVerticalScrollIndicator: false as const,
+                  ...tabBarScrollProps,
+                };
+            return (
+              <TableWrapper {...tableWrapperProps}>
             {groups.map(({ key, rows: sectionRows }) => {
               const dayIn = sectionRows.reduce(
                 (s, r) => s + Number(r.amount_in ?? 0),
@@ -725,7 +737,12 @@ export function LedgerTransactionListView({
                     </View>
                   ) : null}
                   {isSectionExpanded(key) && (
-                    <View style={styles.tableViewTable}>
+                    <View
+                      style={[
+                        styles.tableViewTable,
+                        useEntityDesktopTable && styles.tableViewTableEntityDesktop,
+                      ]}
+                    >
                       <View style={styles.tableViewHeader}>
                         <View
                           style={[
@@ -934,14 +951,18 @@ export function LedgerTransactionListView({
                 </View>
               );
             })}
-            {showSecuredFooterInScroll && (
+            {!embedInParentScroll && showSecuredFooterInScroll ? (
               <View style={styles.gridFooter}>
                 <FontAwesome name="shield" size={28} color={Theme.textMuted} />
                 <Text style={styles.gridFooterText}>Secured</Text>
               </View>
-            )}
-            <View style={styles.scrollBottomSpacer} />
-          </ScrollView>
+            ) : null}
+            {!embedInParentScroll ? (
+              <View style={styles.scrollBottomSpacer} />
+            ) : null}
+              </TableWrapper>
+            );
+          })()
         ) : (
           (() => {
             const ScrollWrapper = embedInParentScroll ? View : ScrollView;
@@ -1872,8 +1893,14 @@ const styles = StyleSheet.create({
   },
   tableViewScroll: { flex: 1, width: '100%', minHeight: 0 },
   tableViewScrollContent: {
-    width: '100%',
-    paddingBottom: Layout.sectionSpacing + 8,
+    paddingBottom: 24,
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  entityDesktopTableWrap: {
+    width: "100%",
+    alignSelf: "center",
+    paddingBottom: 8,
   },
   scrollBottomSpacer: { height: Layout.sectionSpacing },
   loadMoreBtn: {
@@ -1961,6 +1988,13 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   tableViewTable: { backgroundColor: Theme.screenBackground },
+  tableViewTableEntityDesktop: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    overflow: "hidden",
+  },
   tableViewHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1982,8 +2016,8 @@ const styles = StyleSheet.create({
   },
   tableViewCol1: { flex: 2, minWidth: 0 },
   tableViewCol2: { flex: 1.15, minWidth: 0 },
-  tableViewCol3: { width: 72, alignItems: "flex-end", flexShrink: 0 },
-  tableViewCol4: { width: 72, alignItems: "flex-end", flexShrink: 0 },
+  tableViewCol3: { width: 96, alignItems: "flex-end", flexShrink: 0 },
+  tableViewCol4: { width: 96, alignItems: "flex-end", flexShrink: 0 },
   tableViewThIn: { color: Theme.darkGreen, textAlign: "right" },
   tableViewThOut: { color: Theme.teslaRed, textAlign: "right" },
   tableViewRow: {

@@ -15,7 +15,13 @@ export interface CurrentOrganization {
   };
 }
 
-export type OrgMemberRole = 'owner' | 'admin' | 'member' | 'driver';
+export type OrgMemberRole =
+  | 'owner'
+  | 'admin'
+  | 'member'
+  | 'dispatcher'
+  | 'finance'
+  | 'driver';
 export type OrgMemberStatus = 'active' | 'inactive' | 'invited';
 
 export interface OrgMember {
@@ -49,6 +55,25 @@ export interface TeamInvite {
   joined_at: string;
   org_name: string;
 }
+
+/** Admin invite for someone without a Pulse account yet (phone-only). */
+export interface PendingPhoneTeamInvite {
+  id: string;
+  organization_id: string;
+  invitee_name: string;
+  invitee_phone: string;
+  invitee_email?: string | null;
+  role: OrgMemberRole;
+  permissions: Record<string, unknown>;
+  status: 'pending';
+  created_at: string;
+  expires_at: string;
+}
+
+export type OrgTeamRoster = {
+  members: OrgMember[];
+  pendingPhoneInvites: PendingPhoneTeamInvite[];
+};
 
 // ─── Workspace KYC ────────────────────────────────────────────────────────────
 

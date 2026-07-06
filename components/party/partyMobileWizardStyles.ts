@@ -14,6 +14,16 @@ export const partyMobileWizardStyles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  /** Carded desktop/tablet: size to content instead of filling a fixed height. */
+  rootFit: {
+    flexGrow: 0,
+    flexShrink: 1,
+    backgroundColor: Theme.screenBackground,
+  },
+  shellColumnFit: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -97,9 +107,19 @@ export const partyMobileWizardStyles = StyleSheet.create({
   bodyFields: {
     flex: 1,
   },
+  bodyFieldsFit: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   bodyKeypad: {
     flex: 1,
     minHeight: 0,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+  },
+  bodyKeypadFit: {
+    flexGrow: 0,
+    flexShrink: 0,
     paddingBottom: 0,
     paddingHorizontal: 0,
   },
@@ -112,6 +132,12 @@ export const partyMobileWizardStyles = StyleSheet.create({
     minHeight: 0,
     width: "100%",
   },
+  bodyKeypadContentFit: {
+    width: "100%",
+    // Carded desktop/tablet: inset the input + keypad to match the padded header
+    // (the full-screen mobile layout intentionally bleeds them to the edges).
+    paddingHorizontal: padX,
+  },
   bodySource: {
     flexGrow: 0,
     flexShrink: 0,
@@ -122,6 +148,10 @@ export const partyMobileWizardStyles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: -0.3,
     lineHeight: 26,
+  },
+  stepTitleCompact: {
+    fontSize: 17,
+    lineHeight: 22,
   },
   stepHint: {
     marginTop: 4,
@@ -360,45 +390,58 @@ export const partyMobileWizardStyles = StyleSheet.create({
   },
   reviewCard: {
     width: "100%",
-    maxWidth: 380,
-    borderRadius: 22,
+    maxWidth: 400,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 16,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 18,
     alignItems: "center",
     gap: 8,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    elevation: 12,
+    ...Platform.select({
+      web: {
+        boxShadow:
+          "0 40px 90px -30px rgba(15,23,42,0.28), 0 2px 8px rgba(15,23,42,0.06)",
+      } as object,
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 16 },
+        shadowOpacity: 0.16,
+        shadowRadius: 26,
+        elevation: 14,
+      },
+    }),
   },
   reviewAnimationWrap: {
-    width: 112,
-    height: 112,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#eef4ff",
+    borderWidth: 1,
+    borderColor: "#dbe7fb",
+    marginBottom: 2,
   },
   reviewAnimation: {
-    width: "100%",
-    height: "100%",
+    width: 58,
+    height: 58,
   },
   reviewCardTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     textAlign: "center",
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   reviewCardMessage: {
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 18,
     color: Theme.textSecondary,
     textAlign: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
   },
   reviewSummaryScroll: {
     width: "100%",
