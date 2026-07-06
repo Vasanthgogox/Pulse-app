@@ -13,6 +13,9 @@ export interface LedgerTx {
   amount_out?: number;
   party_name?: string | null;
   trip_id?: string | null;
+  /** ISO date of the transaction. Used for month-scoped aggregation (Goals balance snapshot). */
+  transaction_date?: string | null;
+  created_at?: string | null;
 }
 
 /**

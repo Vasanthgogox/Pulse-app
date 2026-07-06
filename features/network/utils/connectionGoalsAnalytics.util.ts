@@ -163,6 +163,25 @@ function tripsInMonthKeys(
   });
 }
 
+function txMonthKey(tx: LedgerTx): string | null {
+  const raw = tx.transaction_date ?? tx.created_at;
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function transactionsInMonthKeys(
+  transactions: readonly LedgerTx[],
+  monthKeys: readonly string[],
+): LedgerTx[] {
+  const set = new Set(monthKeys);
+  return transactions.filter((tx) => {
+    const key = txMonthKey(tx);
+    return key != null && set.has(key);
+  });
+}
+
 function computeTripMetrics(trips: readonly TripRow[]): GoalsActuals {
   let revenueInr = 0;
   let tripCount = 0;
@@ -250,11 +269,14 @@ export function computePayableReceivableSnapshot(
   transactions: readonly LedgerTx[],
   monthKeys?: readonly string[],
 ): PayableReceivableSnapshot {
-  const scopedTrips =
-    monthKeys && monthKeys.length > 0 ? tripsInMonthKeys(trips, monthKeys) : trips;
-  const customerAgg = aggregateCustomers(clients, scopedTrips, transactions);
-  const supplierAgg = aggregateSuppliers(suppliers, scopedTrips, transactions);
-  const driverAgg = aggregateDrivers(drivers, scopedTrips, transactions);
+  const hasScope = Boolean(monthKeys && monthKeys.length > 0);
+  const scopedTrips = hasScope ? tripsInMonthKeys(trips, monthKeys!) : trips;
+  const scopedTx = hasScope
+    ? transactionsInMonthKeys(transactions, monthKeys!)
+    : transactions;
+  const customerAgg = aggregateCustomers(clients, scopedTrips, scopedTx);
+  const supplierAgg = aggregateSuppliers(suppliers, scopedTrips, scopedTx);
+  const driverAgg = aggregateDrivers(drivers, scopedTrips, scopedTx);
 
   let receivableBilled = 0;
   let receivableCollected = 0;
