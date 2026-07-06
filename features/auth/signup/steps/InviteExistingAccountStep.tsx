@@ -1,0 +1,172 @@
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import Theme from "@/constants/Theme";
+import type { SignUpFlow } from "@/features/auth/signup/hooks/useBusinessSignUpFlow";
+import { SignUpPulseField } from "@/features/auth/signup/SignUpPulseField";
+import { SignUpPulseFormStep } from "@/features/auth/signup/SignUpPulseFormStep";
+import { SIGNUP_ACCOUNT_SCROLL_PAD } from "@/features/auth/signup/signUpConstants";
+import { Eye, EyeOff } from "lucide-react-native";
+
+export function InviteExistingAccountStep({ flow }: { flow: SignUpFlow }) {
+  const invite = flow.selectedInvite;
+  const orgName = invite?.organizationName ?? 'your workspace';
+  const roleLabel = invite?.platformRoleLabel;
+
+  const masked = flow.inviteEmailMasked;
+  const canSignIn =
+    !!(flow.email.trim() || flow.onboardingContext?.existingAccountEmail) &&
+    flow.password.length >= 6 &&
+    !flow.loading;
+
+  return (
+    <SignUpPulseFormStep
+      title="Account already exists"
+      subtitle="Sign in to accept your team invitation. Your workspace will load automatically — no second signup."
+      primaryLabel="Sign in & accept invite"
+      onPrimary={flow.signInToAcceptInvitation}
+      primaryDisabled={!canSignIn}
+      primaryLoading={flow.loading}
+      inlinePrimary
+      keyboardAware
+      scrollRef={flow.accountScrollRef}
+      scrollPaddingBottom={SIGNUP_ACCOUNT_SCROLL_PAD}
+      footerAccessory={
+        <>
+          <Pressable onPress={flow.useAlternateEmailForInvite} style={styles.secondary}>
+            <Text style={styles.secondaryText}>Use a different email instead</Text>
+          </Pressable>
+          <Pressable onPress={flow.startOwnerOnboarding} style={styles.link}>
+            <Text style={styles.linkText}>Create my own workspace</Text>
+          </Pressable>
+        </>
+      }
+    >
+      <View style={styles.summary}>
+        {invite ? (
+          <>
+            <SummaryRow label="Organization" value={invite.organizationName} />
+            <SummaryRow label="Invited by" value={invite.invitedByName} />
+            {roleLabel ? <SummaryRow label="Role" value={roleLabel} /> : null}
+          </>
+        ) : (
+          <SummaryRow label="Workspace" value={orgName} />
+        )}
+        {masked ? <SummaryRow label="Registered as" value={masked} /> : null}
+      </View>
+
+      <View style={styles.warnBox}>
+        <Text style={styles.warnTitle}>Wrong signup path</Text>
+        <Text style={styles.warnBody}>
+          Team invites for existing users require sign-in. If this is not your account,
+          use a different email or ask your admin to re-invite the correct person.
+        </Text>
+      </View>
+
+      <SignUpPulseField
+        label="Email Address"
+        required
+        value={flow.email}
+        onChangeText={flow.setEmail}
+        placeholder={flow.onboardingContext?.existingAccountEmail ?? 'you@example.com'}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        editable={!flow.loading}
+        errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.email : null}
+      />
+      <SignUpPulseField
+        label="Password"
+        required
+        value={flow.password}
+        onChangeText={flow.setPassword}
+        placeholder="Your existing password"
+        secureTextEntry={!flow.showPassword}
+        editable={!flow.loading}
+        errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.password : null}
+        rightAccessory={
+          <Pressable onPress={flow.toggleShowPassword} hitSlop={8}>
+            {flow.showPassword ? (
+              <EyeOff size={18} color={Theme.textMuted} />
+            ) : (
+              <Eye size={18} color={Theme.textMuted} />
+            )}
+          </Pressable>
+        }
+      />
+    </SignUpPulseFormStep>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.row}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value}>{value}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  summary: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    padding: 14,
+    gap: 8,
+    marginBottom: 8,
+    backgroundColor: Theme.surfaceGray,
+  },
+  warnBox: {
+    borderWidth: 1,
+    borderColor: Theme.warningMuted,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    backgroundColor: Theme.warningMuted,
+    gap: 4,
+  },
+  warnTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.warning,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  warnBody: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    lineHeight: 17,
+  },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  label: {
+    fontSize: 12,
+    color: Theme.textMuted,
+    flex: 1,
+  },
+  value: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    flex: 1.2,
+    textAlign: "right",
+  },
+  secondary: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: Theme.buttonPrimaryRadius,
+    paddingVertical: 13,
+    alignItems: "center",
+    backgroundColor: Theme.cardWhite,
+  },
+  secondaryText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  link: { marginTop: 16, alignItems: "center" },
+  linkText: { fontSize: 13, fontWeight: "600", color: Theme.primary },
+});

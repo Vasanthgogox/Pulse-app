@@ -10,6 +10,11 @@ import {
   inviteTeamMemberByContact,
 } from "@/features/organization/services/members.service";
 import {
+  precheckTeamInviteContact,
+  precheckToProfile,
+  type TeamInvitePrecheckResult,
+} from "@/features/organization/services/teamInvitePrecheck.service";
+import {
   permissionLabel,
   platformRoleLabel,
   TEAM_INVITE_ROLE_OPTIONS,
@@ -341,6 +346,7 @@ export function InviteMemberFlow({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [successKind, setSuccessKind] = useState<"member" | "pending" | null>(null);
+  const [precheck, setPrecheck] = useState<TeamInvitePrecheckResult | null>(null);
 
   const handleContinue = async () => {
     const trimmedName = employeeName.trim();
@@ -357,17 +363,48 @@ export function InviteMemberFlow({
     setSearchError(null);
     setFoundProfile(null);
     setIsNewEmployee(false);
+    setPrecheck(null);
 
-    const { error, profile } = await lookupUserByPhone(trimmedPhone);
+    const [{ error, profile }, pre] = await Promise.all([
+      lookupUserByPhone(trimmedPhone),
+      precheckTeamInviteContact(orgId, trimmedPhone, employeeEmail.trim() || null),
+    ]);
     setSearching(false);
 
     if (error) {
       setSearchError(error.message);
       return;
     }
+    if (pre.error) {
+      setSearchError(pre.error.message);
+      return;
+    }
+
+    const check = pre.result;
+    setPrecheck(check);
+
+    if (check?.recommendedAction === "already_member") {
+      setSearchError("This person is already an active member of your team.");
+      return;
+    }
+    if (check?.recommendedAction === "already_invited") {
+      setSearchError("An invitation has already been sent to this person.");
+      return;
+    }
+
+    const profileFromPrecheck = check ? precheckToProfile(check) : null;
     if (profile) {
       setFoundProfile(profile);
       setIsNewEmployee(false);
+    } else if (profileFromPrecheck) {
+      setFoundProfile(profileFromPrecheck);
+      setIsNewEmployee(false);
+    } else if (check?.recommendedAction === "email_registered") {
+      setSearchError(
+        check.message ??
+          "This email already has a Pulse account. Remove the email or ask them to sign in — do not use Awaiting Signup.",
+      );
+      return;
     } else {
       setIsNewEmployee(true);
     }
@@ -397,6 +434,14 @@ export function InviteMemberFlow({
     }
     if (result.alreadyInvited) {
       setSubmitError("An invitation has already been sent to this person.");
+      return;
+    }
+    if (result.precheckAction === "invite_existing_user" && result.kind === "member") {
+      setSuccessKind("member");
+      setSuccess(true);
+      setTimeout(() => {
+        onInvited();
+      }, embedded ? 600 : 900);
       return;
     }
     if (result.error) {
@@ -443,8 +488,8 @@ export function InviteMemberFlow({
               {platformRoleLabel(selectedRole)}
             </Text>
             {successKind === "pending"
-              ? ". They will join your workspace automatically when they sign up with this phone number."
-              : ". They'll need to accept the invite to access the org."}
+              ? ". They will join when they sign up with this phone (new account only)."
+              : ". They sign in with their existing Pulse account to accept."}
           </Text>
         </View>
       ) : step === "phone" ? (
@@ -537,6 +582,26 @@ export function InviteMemberFlow({
             fallbackName={employeeName.trim()}
             fallbackPhone={phone.trim()}
           />
+
+          {precheck?.otherOrgs && precheck.otherOrgs.length > 0 ? (
+            <View style={ui.conflictBanner}>
+              <Text style={ui.conflictTitle}>Already on Pulse</Text>
+              <Text style={ui.conflictBody}>
+                This person is active in{" "}
+                {precheck.otherOrgs.map((o) => o.name).join(", ")}. They can join your
+                workspace after signing in — no new account or duplicate signup.
+              </Text>
+            </View>
+          ) : null}
+
+          {!isNewEmployee && foundProfile ? (
+            <View style={ui.conflictBannerInfo}>
+              <Text style={ui.conflictBody}>
+                Invitation will be sent to their existing Pulse account. They sign in to
+                accept — not through new business signup.
+              </Text>
+            </View>
+          ) : null}
 
           <View style={ui.sectionHeader}>
             <Shield size={16} color={Theme.textSecondary} strokeWidth={2} />
@@ -832,6 +897,35 @@ const embeddedFlow = StyleSheet.create({
     color: Theme.destructive,
     lineHeight: 17,
   },
+  conflictBanner: {
+    marginBottom: 14,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.warningMuted,
+    backgroundColor: Theme.warningMuted,
+    gap: 4,
+  },
+  conflictBannerInfo: {
+    marginBottom: 14,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+  },
+  conflictTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.warning,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  conflictBody: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    lineHeight: 17,
+  },
   primaryBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1006,6 +1100,35 @@ const modal = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: Theme.destructive,
+    lineHeight: 18,
+  },
+  conflictBanner: {
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.warningMuted,
+    backgroundColor: Theme.warningMuted,
+    gap: 4,
+  },
+  conflictBannerInfo: {
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+  },
+  conflictTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.warning,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  conflictBody: {
+    fontSize: 13,
+    color: Theme.textSecondary,
     lineHeight: 18,
   },
 

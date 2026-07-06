@@ -90,7 +90,16 @@ export function OnboardingPersonaHub() {
         return (
           <Pressable
             key={persona.id}
-            onPress={() => router.push(persona.route as never)}
+            onPress={() => {
+              if (persona.id === 'join_team') {
+                router.push({
+                  pathname: ROUTES.ONBOARDING.BUSINESS,
+                  params: { intent: 'team' },
+                });
+                return;
+              }
+              router.push(persona.route as never);
+            }}
             style={({ pressed }) => [
               styles.card,
               isDesktop && styles.cardDesktop,

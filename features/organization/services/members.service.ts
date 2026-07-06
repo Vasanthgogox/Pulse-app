@@ -12,6 +12,10 @@ import type {
   UserProfileForInvite,
 } from "@/types/organization";
 import {
+  precheckTeamInviteContact,
+  precheckToProfile,
+} from "@/features/organization/services/teamInvitePrecheck.service";
+import {
   buildTeamInvitePermissions,
   orgMemberRoleForPlatformRole,
   type PlatformTeamRole,
@@ -327,7 +331,66 @@ export async function inviteTeamMemberByContact(
   pendingInvite: PendingPhoneTeamInvite | null;
   alreadyMember?: boolean;
   alreadyInvited?: boolean;
+  precheckAction?: string;
 }> {
+  if (!params.existingUserId) {
+    const pre = await precheckTeamInviteContact(orgId, params.phone, params.email);
+    if (pre.error) return { error: pre.error, kind: null, member: null, pendingInvite: null };
+    const check = pre.result;
+    if (check) {
+      if (check.recommendedAction === "already_member") {
+        return {
+          error: null,
+          kind: null,
+          member: null,
+          pendingInvite: null,
+          alreadyMember: true,
+          precheckAction: check.recommendedAction,
+        };
+      }
+      if (check.recommendedAction === "already_invited") {
+        return {
+          error: null,
+          kind: null,
+          member: null,
+          pendingInvite: null,
+          alreadyInvited: true,
+          precheckAction: check.recommendedAction,
+        };
+      }
+      if (
+        check.recommendedAction === "invite_existing_user" ||
+        check.recommendedAction === "email_registered"
+      ) {
+        const profile = precheckToProfile(check);
+        if (profile?.user_id) {
+          const res = await inviteTeamMember(orgId, profile.user_id, params.platformRole);
+          return {
+            error: res.error,
+            kind: res.member ? "member" : null,
+            member: res.member,
+            pendingInvite: null,
+            alreadyMember: res.alreadyMember,
+            alreadyInvited: res.alreadyInvited,
+            precheckAction: check.recommendedAction,
+          };
+        }
+        if (check.recommendedAction === "email_registered") {
+          return {
+            error: new Error(
+              check.message ??
+                "This email already has a Pulse account. They must sign in to accept — not sign up again.",
+            ),
+            kind: null,
+            member: null,
+            pendingInvite: null,
+            precheckAction: check.recommendedAction,
+          };
+        }
+      }
+    }
+  }
+
   if (params.existingUserId) {
     const res = await inviteTeamMember(orgId, params.existingUserId, params.platformRole);
     return {

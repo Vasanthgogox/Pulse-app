@@ -11,6 +11,21 @@ import {
 } from "expo-router";
 import { useEffect, useState } from "react";
 
+/** When OAuth opened in a popup (sandboxed iframe fallback), finish in the opener tab. */
+function tryCompleteOAuthPopup(redirectPath: string): boolean {
+  if (typeof window === "undefined") return false;
+  const opener = window.opener;
+  if (!opener || opener.closed) return false;
+  try {
+    opener.location.replace(`${window.location.origin}${redirectPath}`);
+    opener.focus();
+    window.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function AuthCallback() {
   const rootNavigationState = useRootNavigationState();
   const params = useLocalSearchParams<{
@@ -87,15 +102,18 @@ export default function AuthCallback() {
         // Go directly to app entry; AuthGuard routes user without extra hop.
         if (mounted) {
           setMessage("Sign in successful. Redirecting to workspace…");
-          setRedirectTo(ROUTES.INDEX as Href);
+          if (!tryCompleteOAuthPopup(ROUTES.INDEX)) {
+            setRedirectTo(ROUTES.INDEX as Href);
+          }
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Google sign in failed";
         if (mounted) {
           setMessage("Google sign in failed. Redirecting to sign in…");
-          setRedirectTo(
-            `${ROUTES.SIGN_IN}?oauth_error=${encodeURIComponent(msg)}` as Href,
-          );
+          const signInPath = `${ROUTES.SIGN_IN}?oauth_error=${encodeURIComponent(msg)}`;
+          if (!tryCompleteOAuthPopup(signInPath)) {
+            setRedirectTo(signInPath as Href);
+          }
         }
       }
     })();
