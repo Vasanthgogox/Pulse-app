@@ -179,6 +179,8 @@ export function FinanceScreen() {
     driverOffers,
     connectionRequestsSent,
     entitiesLoading,
+    tripsError,
+    refetchTrips,
     garagePeriodOptions,
     indentsForFinance,
     setPendingDriverSalaryRequests,
@@ -1958,6 +1960,9 @@ export function FinanceScreen() {
             });
             queryClient.invalidateQueries({
               queryKey: queryKeys.vehicles.all(orgId),
+            });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.trips.finite(orgId),
             });
           }
         }}

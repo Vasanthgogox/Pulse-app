@@ -55,6 +55,9 @@ export interface UseFinanceEntitiesResult {
   connectionRequestsSent: ConnectionRequestRow[];
   pendingDriverSalaryRequests: SalaryRequestWithDriverRow[];
   entitiesLoading: boolean;
+  /** True when the trips fetch (get_trips_for_org) failed — party ledgers may show zero trips even though trips exist. */
+  tripsError: boolean;
+  refetchTrips: () => void;
   garagePeriodOptions: { value: string; label: string }[];
   /** Pending/quoted/awarded indents for finance aggregation (pre-trip customer billing visibility). */
   indentsForFinance: IndentRow[];
@@ -71,7 +74,7 @@ export function useFinanceEntities({
   const orgId = canAccess ? organizationId : null;
 
   const { data: clientRows = [], isPending: clientsLoading } = useClientsQuery(orgId);
-  const { data: tripRows = [], isPending: tripsLoading } = useTripsQuery(orgId);
+  const { data: tripRows = [], isPending: tripsLoading, isError: tripsError, refetch: refetchTrips } = useTripsQuery(orgId);
   const { data: supplierRows = [], isPending: suppliersLoading } = useSuppliersQuery(orgId);
   const { data: vehicleRows = [], isPending: vehiclesLoading } = useVehiclesQuery(orgId);
   const { data: driverRows = [], isPending: driversLoading } = useDriversQuery(orgId);
@@ -243,6 +246,8 @@ export function useFinanceEntities({
     connectionRequestsSent,
     pendingDriverSalaryRequests,
     entitiesLoading,
+    tripsError,
+    refetchTrips: () => refetchTrips(),
     indentsForFinance,
     garagePeriodOptions,
     setPendingDriverSalaryRequests,
