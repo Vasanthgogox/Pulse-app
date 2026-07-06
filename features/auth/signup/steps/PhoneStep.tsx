@@ -13,13 +13,19 @@ export function PhoneStep({ flow }: { flow: SignUpFlow }) {
   const hint = flow.phoneExistsCheck?.loading
     ? 'Checking number…'
     : !flow.phoneExistsCheck?.loading && flow.phoneExistsCheck?.exists
-      ? 'This number is already registered.'
+      ? flow.isTeamInviteEntry
+        ? 'Account found — verify OTP to sign in and accept your invite.'
+        : 'Account found — verify OTP to continue.'
       : null;
 
   return (
     <SignUpPulseKeypadStep
-      title="Welcome aboard for business"
-      subtitle="Enter your Indian mobile number to get started."
+      title={flow.isTeamInviteEntry ? 'Join your team' : 'Welcome aboard for business'}
+      subtitle={
+        flow.isTeamInviteEntry
+          ? 'Verify your mobile number. We will match your admin invitation — no new workspace.'
+          : 'Enter your Indian mobile number to get started.'
+      }
       value={flow.phone}
       onChange={flow.setPhone}
       maxDigits={10}
@@ -28,16 +34,12 @@ export function PhoneStep({ flow }: { flow: SignUpFlow }) {
       displayPrefix="+91"
       emptyPlaceholder="000 000 0000"
       onPrimary={flow.continuePhone}
-      primaryDisabled={
-        !flow.phoneValid ||
-        !!flow.phoneExistsCheck?.loading ||
-        !!(flow.phoneExistsCheck?.exists && !flow.phoneExistsCheck?.loading)
-      }
+      primaryDisabled={!flow.phoneValid || !!flow.phoneExistsCheck?.loading}
       primaryLoading={flow.loading || !!flow.phoneExistsCheck?.loading}
       primaryLabel="Send OTP"
       errorMessage={flow.phoneInlineError}
       hintMessage={hint}
-      showGoogle
+      showGoogle={!flow.isTeamInviteEntry}
       onGoogle={flow.continueWithGoogleFromWelcome}
       googleDisabled={flow.loading || flow.googleLoading || !flow.isOnline}
       googleLoading={flow.googleLoading}

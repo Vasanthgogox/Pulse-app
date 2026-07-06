@@ -13,7 +13,11 @@ export function OtpStep({ flow }: { flow: SignUpFlow }) {
   return (
     <SignUpPulseKeypadStep
       title="Verify your number"
-      subtitle={`Enter the 6-digit code we sent to +91 ${flow.phone}`}
+      subtitle={
+        flow.isTeamInviteEntry
+          ? `Enter the code sent to +91 ${flow.phone}. Next we look up your team invitation.`
+          : `Enter the 6-digit code we sent to +91 ${flow.phone}`
+      }
       value={cleanOtp}
       onChange={flow.setOtp}
       maxDigits={OTP_LENGTH}

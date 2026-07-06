@@ -8,6 +8,11 @@ import { SignUpPulseShell } from './SignUpPulseShell';
 import { AccountStep } from './steps/AccountStep';
 import { CompanyDetailsStep } from './steps/CompanyDetailsStep';
 import { CompanyLocationStep } from './steps/CompanyLocationStep';
+import { InvitePickerStep } from './steps/InvitePickerStep';
+import { InviteAcceptanceStep } from './steps/InviteAcceptanceStep';
+import { InviteExistingAccountStep } from './steps/InviteExistingAccountStep';
+import { InviteExpiredStep } from './steps/InviteExpiredStep';
+import { InviteNotFoundStep } from './steps/InviteNotFoundStep';
 import { OrgLogoStep } from './steps/OrgLogoStep';
 import { OrgStep } from './steps/OrgStep';
 import { OtpStep } from './steps/OtpStep';
@@ -28,6 +33,13 @@ function BusinessStepContent({
     case 1:
       return <OtpStep flow={flow} />;
     case 2:
+      if (flow.signupTrack === 'invite') {
+        if (flow.invitePhase === 'picker') return <InvitePickerStep flow={flow} />;
+        if (flow.invitePhase === 'expired') return <InviteExpiredStep flow={flow} />;
+        if (flow.invitePhase === 'no_invite') return <InviteNotFoundStep flow={flow} />;
+        if (flow.invitePhase === 'existing_account') return <InviteExistingAccountStep flow={flow} />;
+        return <InviteAcceptanceStep flow={flow} />;
+      }
       return <OrgStep flow={flow} />;
     case 3:
       return <CompanyDetailsStep flow={flow} />;
@@ -57,7 +69,7 @@ export default function BusinessSignUpScreen() {
         onBack={flow.handleBack}
         stepLabels={STEP_LABELS}
         currentStepIndex={Math.min(flow.step, STEP_LABELS.length - 1)}
-        hideProgress={flow.step >= 8}
+        hideProgress={flow.step >= 8 || flow.signupTrack === 'invite'}
         isDesktop={flow.isDesktop && Platform.OS !== 'web'}
       >
         <View style={styles.mobileStepFlex}>

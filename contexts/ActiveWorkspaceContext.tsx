@@ -19,6 +19,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { supabase } from '@/lib/supabase';
 import { withTimeout } from '@/lib/authEngine';
+import {
+  clearPlatformWorkspaceStore,
+  syncPlatformWorkspaceFromActive,
+} from '@/lib/platform-identity/workspace/workspaceContextStore';
 import type { CurrentOrganization } from '@/types/organization';
 import type { ActiveWorkspaceState, Workspace, WorkspaceMember } from '@/types/workspace';
 
@@ -167,6 +171,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           setMemberRole(null);
           setRoleMap(new Map());
           setCurrentOrganizationRef.current(null);
+          clearPlatformWorkspaceStore();
           setIsLoading(false);
         }
         return;
@@ -236,10 +241,20 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         if (stale()) return;
 
         setActiveWorkspace(targetWorkspace);
-        setMemberRole(targetWorkspace ? (newRoleMap.get(targetWorkspace.id) ?? null) : null);
+        const role = targetWorkspace ? (newRoleMap.get(targetWorkspace.id) ?? null) : null;
+        setMemberRole(role);
         setCurrentOrganization(
           targetWorkspace ? workspaceToCurrentOrganization(targetWorkspace) : null,
         );
+        if (targetWorkspace) {
+          syncPlatformWorkspaceFromActive({
+            personId: currentUser.uid,
+            organizationId: targetWorkspace.id,
+            role,
+          });
+        } else {
+          clearPlatformWorkspaceStore();
+        }
       } catch (e) {
         if (!stale()) {
           setError(e instanceof Error ? e : new Error(String(e)));
@@ -273,9 +288,15 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
     async (workspaceId: string) => {
       const found = workspaces.find((w) => w.id === workspaceId);
       if (!found) return;
+      const role = roleMap.get(workspaceId) ?? null;
       setActiveWorkspace(found);
-      setMemberRole(roleMap.get(workspaceId) ?? null);
+      setMemberRole(role);
       setCurrentOrganizationRef.current(workspaceToCurrentOrganization(found));
+      syncPlatformWorkspaceFromActive({
+        personId: userRef.current?.uid ?? null,
+        organizationId: found.id,
+        role,
+      });
       try {
         await AsyncStorage.setItem(STORAGE_KEY, workspaceId);
       } catch {

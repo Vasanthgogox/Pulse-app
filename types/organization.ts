@@ -68,6 +68,9 @@ export interface PendingPhoneTeamInvite {
   status: 'pending';
   created_at: string;
   expires_at: string;
+  /** Email on invite matches an existing Pulse account — signup path is invalid. */
+  email_conflict?: boolean;
+  conflict_org_names?: string[];
 }
 
 export type OrgTeamRoster = {

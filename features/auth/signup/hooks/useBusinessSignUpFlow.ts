@@ -2,6 +2,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import {
   checkExistingUserByPhone,
+  checkEmailRegisteredForSignup,
   checkOrganizationNameTaken,
   resendVerificationEmail,
   setPendingOAuthMetadata,
@@ -9,9 +10,24 @@ import {
   type OperatingModel,
 } from '@/features/auth';
 import { getOrganizationsForUser } from '@/features/organization/services/organization.service';
+import {
+  formatInvitationAge,
+  type InvitationResolverResult,
+  type ResolvedTeamInvitation,
+} from '@/features/organization/services/teamInvitationResolver.service';
+import { shadowCheckPlatformIdentity } from '@/features/organization/utils/platformIdentityShadowCheck.util';
 import { validateEmail } from '@/lib/emailValidation';
 import { formatMobileNumber } from '@/lib/format';
 import { ROUTES } from '@/lib/routes';
+import { phoneIdentity } from '@/lib/onboarding/identityTypes';
+import { entryChannelFromParams } from '@/lib/onboarding/onboardingEntryChannels';
+import { platformIdentityService } from '@/lib/platform-identity';
+import {
+  onboardingContextAnalyticsEvent,
+  onboardingContextToUi,
+  type ResolvedOnboardingContext,
+} from '@/lib/onboarding/onboardingContext';
+import { trackOnboardingEvent } from '@/lib/onboarding/onboardingAnalytics';
 import {
   clearBusinessSignupBranding,
   hydrateBusinessSignupBrandingFlag,
@@ -39,7 +55,7 @@ import {
   updateOrganizationLogo,
 } from '@/lib/avatarUpload';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, useWindowDimensions } from 'react-native';
 
@@ -59,14 +75,27 @@ import {
   type MonthlyVolume,
 } from '../signUpConstants';
 import { useCountdown } from './useCountdown';
+import { parseSignupEntryIntent, signupEntrySource } from '../signupEntryIntent';
+
+import { useCompleteInvitationJoin } from './useCompleteInvitationJoin';
+import type { InvitePhase, SignupTrack } from '../signupInviteTypes';
+import { usePendingOnboarding } from '@/contexts/PendingOnboardingContext';
 
 export { STEP_LABELS };
+export type { InvitePhase, SignupTrack } from '../signupInviteTypes';
 
 export function useBusinessSignUpFlow() {
   const { width } = useWindowDimensions();
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ intent?: string; invite?: string; ref?: string }>();
+  const entryIntent = parseSignupEntryIntent(searchParams);
+  const entrySource = signupEntrySource(searchParams);
+  const isTeamInviteEntry = entryIntent === 'team';
   const isOnline = useIsOnline();
   const { signUp, signIn, signInWithGoogle, refreshSession } = useAuth();
+  const { pending: pendingOnboarding, isHydrated: pendingHydrated, setPendingInvitation, clearPending } =
+    usePendingOnboarding();
+  const { completeInvitationJoin, completeTeamJoinAfterAuth } = useCompleteInvitationJoin();
   const scrollRef = useRef<ScrollView>(null);
   const accountScrollRef = useRef<ScrollView>(null);
   const locationScrollRef = useRef<ScrollView>(null);
@@ -140,6 +169,31 @@ export function useBusinessSignUpFlow() {
   const [step3Attempted, setStep3Attempted] = useState(false);
   const [step4Attempted, setStep4Attempted] = useState(false);
   const [step5Attempted, setStep5Attempted] = useState(false);
+  const [inviteAccountAttempted, setInviteAccountAttempted] = useState(false);
+  const [inviteEmailMasked, setInviteEmailMasked] = useState<string | null>(null);
+  const [inviteUseAlternateEmail, setInviteUseAlternateEmail] = useState(false);
+
+  // Invitation resolver (post-OTP, pre-org onboarding)
+  const [signupTrack, setSignupTrack] = useState<SignupTrack>('owner');
+  const [invitePhase, setInvitePhase] = useState<InvitePhase>('accept');
+  const [resolvedInvites, setResolvedInvites] = useState<InvitationResolverResult | null>(null);
+  const [selectedInviteId, setSelectedInviteId] = useState<string | null>(null);
+  const [onboardingContext, setOnboardingContext] = useState<ResolvedOnboardingContext | null>(null);
+
+  const selectedInvite = useMemo(() => {
+    const pool = resolvedInvites?.active ?? [];
+    if (selectedInviteId) {
+      return pool.find((i) => i.inviteId === selectedInviteId) ?? null;
+    }
+    return pool[0] ?? null;
+  }, [resolvedInvites, selectedInviteId]);
+
+  useEffect(() => {
+    trackOnboardingEvent(
+      isTeamInviteEntry ? 'join_company_started' : 'owner_signup_started',
+      { entryHint: entryIntent, source: entrySource },
+    );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Derived / memoised ──────────────────────────────────────────────────
 
@@ -245,6 +299,60 @@ export function useBusinessSignUpFlow() {
     };
   }, []);
 
+  // Resume member invite onboarding after app restart (pending invitation in storage).
+  useEffect(() => {
+    if (!pendingHydrated || !pendingOnboarding) return;
+    if (step !== 0) return;
+    const storedPhone = pendingOnboarding.phone.trim();
+    if (!storedPhone) return;
+
+    setPhoneRaw(formatMobileNumber(storedPhone));
+    setSignupTrack('invite');
+    setInvitePhase(pendingOnboarding.phase);
+    setResolvedInvites(pendingOnboarding.resolved);
+    setSelectedInviteId(pendingOnboarding.inviteId);
+    if (pendingOnboarding.invitation?.inviteeName && !fullName.trim()) {
+      setFullName(pendingOnboarding.invitation.inviteeName.trim());
+    }
+    const ui = onboardingContextToUi({
+      type:
+        pendingOnboarding.phase === 'existing_account'
+          ? 'existing_member'
+          : pendingOnboarding.phase === 'no_invite'
+            ? 'no_invitation'
+            : pendingOnboarding.phase === 'expired'
+              ? 'expired_invites'
+              : pendingOnboarding.phase === 'picker'
+                ? 'multiple_invites'
+                : 'team',
+      invitations: pendingOnboarding.resolved,
+      selectedInvite: pendingOnboarding.invitation,
+      selectedInviteId: pendingOnboarding.inviteId,
+      phoneAccountExists: false,
+      existingAccountEmail: null,
+      existingAccountMasked: null,
+    });
+    setOnboardingContext({
+      type:
+        ui.invitePhase === 'existing_account'
+          ? 'existing_member'
+          : ui.invitePhase === 'no_invite'
+            ? 'no_invitation'
+            : ui.invitePhase === 'expired'
+              ? 'expired_invites'
+              : ui.invitePhase === 'picker'
+                ? 'multiple_invites'
+                : 'team',
+      invitations: pendingOnboarding.resolved,
+      selectedInvite: pendingOnboarding.invitation,
+      selectedInviteId: pendingOnboarding.inviteId,
+      phoneAccountExists: false,
+      existingAccountEmail: null,
+      existingAccountMasked: null,
+    });
+    setStep(2);
+  }, [pendingHydrated, pendingOnboarding]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Resolve org when entering branding steps (trigger may lag sign-up).
   // sessionEnsuredRef prevents re-running ensureAuthSession on every back/forward
   // between steps 6 and 7, which would otherwise fire signIn+refreshSession on each
@@ -322,6 +430,30 @@ export function useBusinessSignUpFlow() {
 
   const handleBack = () => {
     if (step === 0) { router.back(); return; }
+    if (step === 2 && signupTrack === 'invite') {
+      if (invitePhase === 'accept' && (resolvedInvites?.active.length ?? 0) > 1) {
+        setInvitePhase('picker');
+        return;
+      }
+      if (invitePhase === 'existing_account') {
+        setInvitePhase('accept');
+        return;
+      }
+      if (invitePhase === 'no_invite' || invitePhase === 'expired') {
+        setSignupTrack('owner');
+        setResolvedInvites(null);
+        setSelectedInviteId(null);
+        void clearPending();
+        goToPage(1);
+        return;
+      }
+      setSignupTrack('owner');
+      setResolvedInvites(null);
+      setSelectedInviteId(null);
+      void clearPending();
+      goToPage(1);
+      return;
+    }
     if (step === 8) {
       clearBusinessSignupBranding();
       router.replace('/');
@@ -355,7 +487,13 @@ export function useBusinessSignUpFlow() {
       } else if (organizations.length > 0) {
         const match =
           organizations.find((o) => o.name.trim().toLowerCase() === trimmed) ?? organizations[0];
-        if (match?.id) return match.id;
+        if (match?.id) {
+          void shadowCheckPlatformIdentity({
+            flow: 'business_signup',
+            legacyOrganizationIds: organizations.map((o) => o.id),
+          });
+          return match.id;
+        }
       }
       if (attempt < 5) {
         await new Promise((resolve) => setTimeout(resolve, 400));
@@ -402,6 +540,46 @@ export function useBusinessSignUpFlow() {
 
   // ─── Step actions ────────────────────────────────────────────────────────
 
+  const applyOnboardingContext = async (context: ResolvedOnboardingContext) => {
+    const ui = onboardingContextToUi(context);
+    setOnboardingContext(context);
+    setSignupTrack(ui.signupTrack);
+    setInvitePhase(ui.invitePhase);
+    setResolvedInvites(context.invitations);
+    setSelectedInviteId(context.selectedInviteId);
+
+    if (context.existingAccountEmail && !email.trim()) {
+      setEmail(context.existingAccountEmail);
+    }
+    if (context.existingAccountMasked) {
+      setInviteEmailMasked(context.existingAccountMasked);
+    }
+    if (context.selectedInvite && !fullName.trim() && context.selectedInvite.inviteeName.trim()) {
+      setFullName(context.selectedInvite.inviteeName.trim());
+    }
+
+    const phase = ui.invitePhase;
+    await setPendingInvitation({
+      phone,
+      resolved: context.invitations,
+      phase,
+      inviteId: context.selectedInviteId,
+      invitation: context.selectedInvite,
+    });
+
+    trackOnboardingEvent(
+      onboardingContextAnalyticsEvent(context.type) as Parameters<typeof trackOnboardingEvent>[0],
+      {
+        entryHint: entryIntent,
+        onboardingType: context.type,
+        inviteId: context.selectedInviteId,
+        inviteCount: context.invitations.active.length,
+        phoneAccountExists: context.phoneAccountExists,
+        source: entrySource,
+      },
+    );
+  };
+
   const startOtpCountdown = () => otpCountdown.start(OTP_RESEND_SECS, setOtpResendSecs);
 
   const continuePhone = async () => {
@@ -422,25 +600,257 @@ export function useBusinessSignUpFlow() {
     }
 
     if (existing.exists && existing.email) {
-      return Alert.alert(
-        'Account exists',
-        existing.masked_email
-          ? `Sign in with ${existing.masked_email}.`
-          : 'An account with this phone already exists.',
-        [{ text: 'Sign in', onPress: () => router.replace(`${ROUTES.SIGN_IN}?email=${encodeURIComponent(existing!.email!)}`) }],
-      );
+      setEmail((prev) => prev || existing.email || '');
     }
+
     setOtp('');
     startOtpCountdown();
     goToPage(1);
   };
 
-  const verifyOtp = () => {
+  const verifyOtp = async () => {
     const clean = otp.replace(/\s/g, '');
     if (clean.length < OTP_LENGTH) return Alert.alert('Invalid', 'Enter the 6-digit OTP.');
-    // Mock OTP in all environments until a real SMS provider is wired.
+    if (!isOnline) return Alert.alert('No internet', 'Connect to continue.');
+
+    setLoading(true);
+
+    try {
+      let phoneAccount = phoneExistsCheck;
+      if (!phoneAccount || phoneAccount.loading) {
+        const r = await checkExistingUserByPhone(phone);
+        phoneAccount = {
+          loading: false,
+          exists: r.exists,
+          email: r.email,
+          masked_email: r.masked_email,
+        };
+        setPhoneExistsCheck(phoneAccount);
+      }
+
+      const storedPhone = normalizeIndianPhoneForMetadata(phone) ?? phone.trim();
+      const verifiedPhone = phoneIdentity(storedPhone, true);
+      const entryChannel = entryChannelFromParams(searchParams);
+      const emptyInvites: InvitationResolverResult = { active: [], expired: [] };
+
+      const { error, result } = await platformIdentityService.resolveInvitations({
+        identities: [verifiedPhone],
+      });
+
+      // Mock OTP accepts any 6 digits — never block verification on resolver/DB failures.
+      // Team join → limited-access screen; owner path → continue without invites.
+      const inviteResult = error ? emptyInvites : result;
+      if (error) {
+        if (__DEV__) {
+          console.warn('[onboarding] invitation resolver unavailable:', error.message);
+        }
+      }
+
+      const context = await platformIdentityService.resolveOnboardingContext({
+        entryHint: entryIntent,
+        entryChannel,
+        verifiedIdentities: [verifiedPhone],
+        inviteResult,
+        phoneAccountExists: Boolean(phoneAccount?.exists),
+        existingAccountEmail: phoneAccount?.email ?? null,
+        existingAccountMasked: phoneAccount?.masked_email ?? null,
+        isInviteEmailRegistered: async (em) => {
+          const r = await checkEmailRegisteredForSignup(em);
+          return { exists: r.exists, masked_email: r.masked_email };
+        },
+      });
+
+      trackOnboardingEvent('otp_verified', {
+        entryHint: entryIntent,
+        onboardingType: context.type,
+        inviteCount: inviteResult.active.length,
+        phoneAccountExists: context.phoneAccountExists,
+        source: entrySource,
+      });
+
+      platformIdentityService.recordIdentityVerified({
+        method: 'phone_otp',
+        identities: [verifiedPhone],
+        entryChannel,
+        entryHint: entryIntent,
+      });
+
+      await applyOnboardingContext(context);
+
+      if (context.type === 'owner') {
+        await clearPending();
+      }
+
+      goToPage(2);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Verification could not complete.';
+      Alert.alert('Could not continue', message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectInvite = (inviteId: string) => setSelectedInviteId(inviteId);
+
+  const continueInvitePicker = async () => {
+    if (!selectedInviteId || !resolvedInvites) return;
+    const invite = resolvedInvites.active.find((i) => i.inviteId === selectedInviteId);
+    if (invite && !fullName.trim()) setFullName(invite.inviteeName.trim());
+    setInviteUseAlternateEmail(false);
+
+    const phoneAccount = phoneExistsCheck;
+    const verifiedPhone = phoneIdentity(phone, true);
+    const context = await platformIdentityService.resolveOnboardingContext({
+      entryHint: entryIntent,
+      verifiedIdentities: [verifiedPhone],
+      inviteResult: {
+        active: invite ? [invite] : [],
+        expired: resolvedInvites.expired,
+      },
+      phoneAccountExists: Boolean(phoneAccount?.exists),
+      existingAccountEmail: phoneAccount?.email ?? null,
+      existingAccountMasked: phoneAccount?.masked_email ?? null,
+      isInviteEmailRegistered: async (em) => {
+        const r = await checkEmailRegisteredForSignup(em);
+        return { exists: r.exists, masked_email: r.masked_email };
+      },
+    });
+    await applyOnboardingContext(context);
+  };
+
+  const useAlternateEmailForInvite = () => {
+    setInviteUseAlternateEmail(true);
+    setInviteEmailMasked(null);
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setInviteAccountAttempted(false);
+    setInvitePhase('accept');
+  };
+
+  const startOwnerOnboarding = async () => {
+    setSignupTrack('owner');
+    setInvitePhase('accept');
+    setResolvedInvites(null);
+    setSelectedInviteId(null);
+    setInviteUseAlternateEmail(false);
+    setInviteEmailMasked(null);
+    await clearPending();
     goToPage(2);
   };
+
+  const requestNewInvitation = () => {
+    Alert.alert(
+      'Request a new invitation',
+      'Ask your workspace admin to invite this phone number again from Team members.',
+    );
+  };
+
+  const acceptTeamInvitation = async () => {
+    if (!selectedInvite) return;
+    if (!isOnline) return Alert.alert('No internet', 'Connect to continue.');
+    setInviteAccountAttempted(true);
+    const { fullName: fn, email: em, password: pw, confirmPassword: cp } = step5Errors;
+    if (fn || em || pw || cp) return;
+
+    const emailCheck = await checkEmailRegisteredForSignup(email.trim());
+    if (emailCheck.exists) {
+      setInviteEmailMasked(emailCheck.masked_email ?? email.trim());
+      setInvitePhase('existing_account');
+      return Alert.alert(
+        'Account already exists',
+        'This email is already registered. Sign in to accept the invite, or use a different email.',
+      );
+    }
+
+    const storedPhone = normalizeIndianPhoneForMetadata(phone);
+    if (!storedPhone || !extractIndianMobileTenDigits(phone)) {
+      return Alert.alert('Invalid', 'Enter a valid phone number.');
+    }
+
+    setLoading(true);
+    const signUpResult = await signUp({
+      email: email.trim(),
+      password,
+      fullName: fullName.trim(),
+      role: 'user',
+      phone: storedPhone,
+      operatingModel: 'HYBRID',
+      onboardingType: 'member',
+    });
+    if (signUpResult.error) {
+      setLoading(false);
+      return Alert.alert('Error', signUpResult.error.message);
+    }
+
+    const hasSession = await ensureAuthSession();
+    if (!hasSession) {
+      setLoading(false);
+      return Alert.alert(
+        'Confirm your email',
+        'Verify your email, then sign in to accept the invitation.',
+      );
+    }
+
+    const joinResult = await completeInvitationJoin(selectedInvite.inviteId);
+    setLoading(false);
+    if (joinResult.error) {
+      trackOnboardingEvent('invitation_accept_failed', { inviteId: selectedInvite.inviteId });
+      return Alert.alert('Could not accept invitation', joinResult.error.message);
+    }
+
+    trackOnboardingEvent('invitation_accepted', { inviteId: selectedInvite.inviteId });
+    router.replace(ROUTES.TABS.TRIPS as Parameters<typeof router.replace>[0]);
+  };
+
+  const signInToAcceptInvitation = async () => {
+    if (!isOnline) return Alert.alert('No internet', 'Connect to continue.');
+    setInviteAccountAttempted(true);
+    const { email: em, password: pw } = step5Errors;
+    if (em || pw) return;
+
+    const signInEmail = email.trim() || onboardingContext?.existingAccountEmail?.trim() || '';
+    if (!signInEmail) {
+      return Alert.alert('Email required', 'Enter the email for your existing Pulse account.');
+    }
+
+    setLoading(true);
+    const signInResult = await signIn(signInEmail, password, true);
+    if (signInResult.error) {
+      setLoading(false);
+      return Alert.alert('Sign in failed', signInResult.error.message);
+    }
+
+    await ensureAuthSession();
+    trackOnboardingEvent('existing_account_signed_in', {
+      inviteId: selectedInvite?.inviteId ?? selectedInviteId,
+    });
+
+    const joinResult = await completeTeamJoinAfterAuth(
+      selectedInvite?.inviteId ?? selectedInviteId,
+    );
+    setLoading(false);
+    if (joinResult.error) {
+      trackOnboardingEvent('invitation_accept_failed', {
+        inviteId: selectedInvite?.inviteId ?? selectedInviteId,
+      });
+      const msg = joinResult.error.message;
+      if (/phone number does not match/i.test(msg)) {
+        return Alert.alert(
+          'Phone mismatch',
+          'Your account phone does not match this invite. Ask your admin to invite your registered email instead.',
+        );
+      }
+      return Alert.alert('Could not accept invitation', msg);
+    }
+
+    trackOnboardingEvent('invitation_accepted', {
+      inviteId: selectedInvite?.inviteId ?? selectedInviteId,
+    });
+    router.replace(ROUTES.TABS.TRIPS as Parameters<typeof router.replace>[0]);
+  };
+
+  const formatInviteAge = formatInvitationAge;
 
   const continueOrgCheck = async () => {
     setStep2Attempted(true);
@@ -536,6 +946,7 @@ export function useBusinessSignUpFlow() {
       role: 'user',
       phone: storedPhone,
       operatingModel,
+      onboardingType: 'owner',
       companyName: orgName.trim(),
       addressLine: streetAddress.trim(),
       locality: locality.trim() || undefined,
@@ -796,6 +1207,9 @@ export function useBusinessSignUpFlow() {
     step,
     goToPage,
     handleBack,
+    entryIntent,
+    isTeamInviteEntry,
+    onboardingContext,
 
     // step 0
     phone,
@@ -901,6 +1315,23 @@ export function useBusinessSignUpFlow() {
     continueFromProfilePhoto,
     skipProfilePhoto,
     finishBusinessSignup: clearBusinessSignupBranding,
+
+    // invitation resolver
+    signupTrack,
+    invitePhase,
+    resolvedInvites,
+    selectedInviteId,
+    selectedInvite,
+    inviteAccountAttempted,
+    inviteEmailMasked,
+    selectInvite,
+    continueInvitePicker,
+    startOwnerOnboarding,
+    requestNewInvitation,
+    acceptTeamInvitation,
+    signInToAcceptInvitation,
+    useAlternateEmailForInvite,
+    formatInviteAge,
   };
 }
 

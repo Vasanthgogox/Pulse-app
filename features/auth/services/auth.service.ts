@@ -6,6 +6,8 @@
  */
 import { validateEmail } from "@/lib/emailValidation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { OnboardingType } from '@/lib/onboarding/onboardingTypes';
+import { createsOrganization, onboardingTypeToMetadata } from '@/lib/onboarding/onboardingTypes';
 import {
   extractIndianMobileTenDigits,
   normalizeIndianPhoneForMetadata,
@@ -155,8 +157,13 @@ export interface SignUpOptions {
   fleetSizeBand?: string;
   /** Monthly shipment volume band for broker / hybrid (auth metadata). */
   monthlyVolumeBand?: string;
-  /** When true the DB trigger skips org + membership creation (user is joining an existing org). */
+  /**
+   * What the user is becoming during onboarding (stored as onboarding_type in auth metadata).
+   * `owner` provisions org + membership; `member` and other types join existing orgs later.
+   * @deprecated Use onboardingType. Kept for backward compatibility with older clients.
+   */
   skipOrgCreation?: boolean;
+  onboardingType?: OnboardingType;
 }
 
 export interface PendingOAuthOnboardingMetadata {
@@ -175,7 +182,9 @@ export interface PendingOAuthOnboardingMetadata {
   employeeCount?: string;
   fleetSizeBand?: string;
   monthlyVolumeBand?: string;
+  /** @deprecated Use onboardingType */
   skipOrgCreation?: boolean;
+  onboardingType?: OnboardingType;
 }
 
 const PENDING_OAUTH_METADATA_KEY = "@pulse_pending_oauth_metadata_v1";
@@ -199,6 +208,7 @@ export async function signUp({
   fleetSizeBand,
   monthlyVolumeBand,
   skipOrgCreation,
+  onboardingType: onboardingTypeOption,
 }: SignUpOptions): Promise<SignInResult> {
   const emailErr = validateEmail(email ?? "");
   if (emailErr) return { error: new Error(emailErr) };
@@ -247,7 +257,12 @@ export async function signUp({
     if (employeeCount?.trim()) metadata.employee_count = employeeCount.trim();
     if (fleetSizeBand?.trim()) metadata.fleet_size_band = fleetSizeBand.trim();
     if (monthlyVolumeBand?.trim()) metadata.monthly_volume_band = monthlyVolumeBand.trim();
-    if (skipOrgCreation) metadata.skip_org_creation = true;
+
+    const onboardingType: OnboardingType =
+      onboardingTypeOption ??
+      (skipOrgCreation ? 'member' : 'owner');
+    Object.assign(metadata, onboardingTypeToMetadata(onboardingType));
+
     // Canonical E.164-style India (+91…) for profiles.phone and metadata; RPCs normalize to 10 digits for lookup.
     if (phone != null && phone !== "") {
       const e164 = normalizeIndianPhoneForMetadata(phone);
@@ -477,6 +492,28 @@ export async function updatePasswordWithCurrentSession(newPassword: string): Pro
   }
 }
 
+/**
+ * OAuth must run in a top-level browsing context. Embedded previews (e.g. IDE
+ * simple browser) load the app in a sandboxed iframe where Supabase/Google pages
+ * cannot execute scripts.
+ */
+function startWebOAuthRedirect(url: string): void {
+  if (typeof window === "undefined") return;
+
+  if (window.self !== window.top) {
+    try {
+      window.top!.location.href = url;
+      return;
+    } catch {
+      // Cross-origin parent — fall through to popup.
+    }
+    const popup = window.open(url, "pulse_oauth", "noopener,noreferrer");
+    if (popup) return;
+  }
+
+  window.location.assign(url);
+}
+
 /** Google OAuth sign-in for web and native (Expo). */
 export async function signInWithGoogle(): Promise<SignInResult> {
   try {
@@ -492,9 +529,7 @@ export async function signInWithGoogle(): Promise<SignInResult> {
       });
       if (error) return { error: new Error(error.message || "Google sign in failed") };
       if (!data?.url) return { error: new Error("Could not start Google sign in.") };
-      if (typeof window !== "undefined") {
-        window.location.assign(data.url);
-      }
+      startWebOAuthRedirect(data.url);
       return { error: null };
     }
 
@@ -605,7 +640,12 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
   if (pending.employeeCount?.trim()) authData.employee_count = pending.employeeCount.trim();
   if (pending.fleetSizeBand?.trim()) authData.fleet_size_band = pending.fleetSizeBand.trim();
   if (pending.monthlyVolumeBand?.trim()) authData.monthly_volume_band = pending.monthlyVolumeBand.trim();
-  if (pending.skipOrgCreation) authData.skip_org_creation = true;
+
+  const pendingOnboardingType: OnboardingType =
+    pending.onboardingType ??
+    (pending.skipOrgCreation ? 'member' : 'owner');
+  Object.assign(authData, onboardingTypeToMetadata(pendingOnboardingType));
+
   if (pending.phone != null && pending.phone !== "") {
     const e164 = normalizeIndianPhoneForMetadata(pending.phone);
     if (e164) authData.phone = e164;
@@ -631,7 +671,7 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
     if (e164) profileUpdates.phone = e164;
   }
   const orgUpdates: Record<string, unknown> = {};
-  if (!pending.skipOrgCreation) {
+  if (createsOrganization(pendingOnboardingType)) {
     if (pending.companyName?.trim()) orgUpdates.name = pending.companyName.trim();
     if (pending.operatingModel) orgUpdates.operating_model = pending.operatingModel;
     if (pending.addressLine?.trim()) orgUpdates.address_line = pending.addressLine.trim();
@@ -912,6 +952,39 @@ export async function checkExistingUserByPhone(
     }
     return {
       error: e instanceof Error ? e : new Error("Check failed"),
+      exists: false,
+    };
+  }
+}
+
+export interface CheckEmailRegisteredResult {
+  error: Error | null;
+  exists: boolean;
+  masked_email?: string;
+}
+
+/** Pre-signup check: email already registered on Pulse (anon-safe RPC). */
+export async function checkEmailRegisteredForSignup(
+  email: string,
+): Promise<CheckEmailRegisteredResult> {
+  const trimmed = (email ?? "").trim().toLowerCase();
+  if (!trimmed || !trimmed.includes("@")) {
+    return { error: null, exists: false };
+  }
+  try {
+    const { data, error } = await supabase().rpc("check_email_registered_for_signup", {
+      p_email: trimmed,
+    });
+    if (error) return { error: new Error(error.message), exists: false };
+    const payload = (data ?? {}) as { exists?: boolean; masked_email?: string };
+    return {
+      error: null,
+      exists: Boolean(payload.exists),
+      masked_email: payload.masked_email,
+    };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
       exists: false,
     };
   }

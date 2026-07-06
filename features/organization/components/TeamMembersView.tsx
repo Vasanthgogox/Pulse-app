@@ -6,6 +6,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { partyInitialsFromName } from "@/lib/partyAvatarDisplay";
 import { useOrgMembersQuery, useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
 import {
   updateMemberRole,
@@ -242,20 +243,18 @@ function PendingPhoneInviteCard({
             </Text>
           </View>
           <View style={cardStyles.pendingPill}>
-            <Text style={cardStyles.pendingPillText}>AWAITING SIGNUP</Text>
+            <Text style={cardStyles.pendingPillText}>
+              {invite.email_conflict ? "ACCOUNT EXISTS" : "AWAITING SIGNUP"}
+            </Text>
           </View>
         </View>
       </View>
 
       <View style={cardStyles.cardBody}>
-        <View style={cardStyles.avatarWrap}>
-          <PartyAvatar
-            name={invite.invitee_name.toUpperCase()}
-            avatarUrl={null}
-            entityType="client"
-            size={58}
-            borderStyle={cardStyles.avatarBorder}
-          />
+        <View style={cardStyles.pendingAvatarWrap}>
+          <Text style={cardStyles.pendingInitials} numberOfLines={1}>
+            {partyInitialsFromName(invite.invitee_name)}
+          </Text>
         </View>
         <Text style={cardStyles.name} numberOfLines={1}>
           {invite.invitee_name.toUpperCase()}
@@ -263,6 +262,25 @@ function PendingPhoneInviteCard({
         <Text style={cardStyles.phone} numberOfLines={1}>
           {invite.invitee_phone}
         </Text>
+        {invite.invitee_email?.trim() ? (
+          <Text style={cardStyles.email} numberOfLines={1}>
+            {invite.invitee_email.trim()}
+          </Text>
+        ) : (
+          <Text style={cardStyles.emailMuted} numberOfLines={1}>
+            No email on invite
+          </Text>
+        )}
+        {invite.email_conflict ? (
+          <View style={cardStyles.conflictBox}>
+            <Text style={cardStyles.conflictTitle}>Pulse account found</Text>
+            <Text style={cardStyles.conflictText}>
+              {invite.conflict_org_names?.length
+                ? `Linked to ${invite.conflict_org_names.join(", ")}. They must sign in — not sign up again.`
+                : "This email is already registered. Ask them to sign in to accept."}
+            </Text>
+          </View>
+        ) : null}
         <View style={cardStyles.metaRow}>
           <View style={cardStyles.metaChip}>
             <Text style={cardStyles.metaChipText}>
@@ -271,7 +289,9 @@ function PendingPhoneInviteCard({
           </View>
         </View>
         <Text style={cardStyles.phoneHint}>
-          Joins automatically when they sign up with this number.
+          {invite.email_conflict
+            ? "Cancel this invite and re-send as an existing-user invitation from Team."
+            : "Joins when they sign up with this phone number."}
         </Text>
       </View>
 
@@ -413,6 +433,20 @@ const cardStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
+  pendingAvatarWrap: {
+    marginTop: -22,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 36,
+  },
+  pendingInitials: {
+    fontSize: 24,
+    fontWeight: "800",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.4,
+    textAlign: "center",
+  },
   avatarBorder: {
     borderWidth: 2,
     borderColor: Theme.screenBackground,
@@ -433,6 +467,47 @@ const cardStyles = StyleSheet.create({
     color: Theme.textMutedDemo,
     textAlign: "center",
     marginTop: 1,
+  },
+  email: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    marginTop: 2,
+    paddingHorizontal: 6,
+  },
+  emailMuted: {
+    fontSize: 8,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  conflictBox: {
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.warningMuted,
+    backgroundColor: Theme.warningMuted,
+    width: "100%",
+    gap: 2,
+  },
+  conflictTitle: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.warning,
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.2,
+  },
+  conflictText: {
+    fontSize: 8,
+    color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 11,
   },
   phoneHint: {
     fontSize: 8,

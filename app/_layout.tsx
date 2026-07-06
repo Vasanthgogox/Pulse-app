@@ -74,6 +74,8 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { PendingOnboardingProvider } from '@/contexts/PendingOnboardingContext';
+import { PendingInviteResumeGate } from '@/components/PendingInviteResumeGate';
 import { PushTokenRegistration } from '@/components/PushTokenRegistration';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
@@ -368,9 +370,11 @@ export default function RootLayout() {
           >
             <NetworkProvider>
               <AuthProvider>
+                <PendingOnboardingProvider>
                 <PushTokenRegistration />
                 <OrganizationProvider>
                   <ActiveWorkspaceProvider>
+                  <PendingInviteResumeGate />
                   <WalletProvider>
                     <KeyboardAccessoryProvider>
                       <GlobalSyncProvider>
@@ -382,6 +386,7 @@ export default function RootLayout() {
                   </WalletProvider>
                   </ActiveWorkspaceProvider>
                 </OrganizationProvider>
+                </PendingOnboardingProvider>
               </AuthProvider>
             </NetworkProvider>
           </PersistQueryClientProvider>

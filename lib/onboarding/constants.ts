@@ -34,7 +34,7 @@ export const ONBOARDING_PERSONAS: OnboardingPersonaCard[] = [
   {
     id: 'join_team',
     title: 'Join your company',
-    subtitle: 'You were invited by your admin — activate without creating a new workspace.',
+    subtitle: 'Verify your phone, accept your admin invite — one flow, no duplicate workspace.',
     eyebrow: 'Team member',
     route: '/onboarding/join-team',
     icon: 'users',
