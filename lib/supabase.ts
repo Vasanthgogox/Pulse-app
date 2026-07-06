@@ -37,11 +37,40 @@ function retryDelayMs(attempt: number): number {
   return Math.min(2_000 * Math.pow(2, attempt - 1), 8_000);
 }
 
-/** Fetch with timeout and one retry to cope with flaky home WiFi / DNS. */
+// /auth/v1/token (session refresh) gets its own retry policy with jitter.
+// During a sustained DB/auth outage (see 2026-07-05 incident: clients retried
+// refresh_token every 15-20s with no effective backoff, adding load while the
+// backend was degraded), the default policy had no jitter, so many devices
+// recovering together retried in lockstep.
+//
+// IMPORTANT: every caller of authService.refreshSession() wraps it in
+// withTimeout(..., AUTH_TIMEOUT_MS) or withTimeout(..., AUTH_RESTORE_REFRESH_TIMEOUT_MS)
+// (lib/authEngine.ts — 15s / 25s). withTimeout() races the promise but does not
+// abort the underlying fetch, so retries that would run past the caller's
+// timeout are not just wasted — the abandoned fetch keeps running in the
+// background. Keep this ceiling comfortably under the smallest caller timeout
+// (15s) so the full retry sequence always resolves (or exhausts) before any
+// caller gives up on it.
+const AUTH_TOKEN_MAX_RETRIES = 2; // 3 total attempts: initial + 2 retries
+function authTokenRetryDelayMs(attempt: number): number {
+  const base = Math.min(2_000 * Math.pow(2, attempt - 1), 8_000); // 2s, then 4s
+  // +/-20% jitter so many devices recovering from the same outage don't retry in lockstep.
+  const jitter = base * 0.2 * (Math.random() * 2 - 1);
+  return Math.round(base + jitter);
+}
+function isAuthTokenRequest(input: RequestInfo | URL): boolean {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  return url.includes('/auth/v1/token');
+}
+
+/** Fetch with timeout and retry to cope with flaky networks and backend outages. */
 async function fetchWithTimeoutAndRetry(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
+  const isAuthToken = isAuthTokenRequest(input);
+  const maxRetries = isAuthToken ? AUTH_TOKEN_MAX_RETRIES : MAX_RETRIES;
+  const delayForAttempt = isAuthToken ? authTokenRetryDelayMs : retryDelayMs;
   const doFetch = (signal?: AbortSignal) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -55,24 +84,24 @@ async function fetchWithTimeoutAndRetry(
     return fetch(input, merged).finally(() => clearTimeout(timeoutId));
   };
   let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const res = await doFetch(init?.signal ?? undefined);
-      if (isRetryableHttpResponse(res) && attempt < MAX_RETRIES) {
-        await new Promise((r) => setTimeout(r, retryDelayMs(attempt)));
+      if (isRetryableHttpResponse(res) && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, delayForAttempt(attempt)));
         continue;
       }
       return res;
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
       const isRetryable =
-        attempt < MAX_RETRIES &&
+        attempt < maxRetries &&
         (lastError.name === 'AbortError' ||
           lastError.message === 'Network request failed' ||
           lastError.message === 'Load failed' ||
           /timeout|network|failed|access control checks/i.test(lastError.message));
       if (!isRetryable) throw lastError;
-      await new Promise((r) => setTimeout(r, retryDelayMs(attempt)));
+      await new Promise((r) => setTimeout(r, delayForAttempt(attempt)));
     }
   }
   throw lastError ?? new Error('Network request failed');
