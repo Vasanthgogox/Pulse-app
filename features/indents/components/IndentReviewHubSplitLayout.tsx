@@ -19,7 +19,6 @@ import type { IndentBidAlertInfo } from "@/features/indents/utils/bidding/indent
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { TinyEmptyLottie } from "@/components/TinyEmptyLottie";
 import { EMPTY_STATE_LOTTIE } from "@/lib/emptyStateLottieAssets";
-import Feather from "@expo/vector-icons/Feather";
 import type { ReactNode } from "react";
 import {
   Platform,
@@ -75,10 +74,8 @@ export type IndentReviewHubBidsPaneProps = {
 
 function SupplierBidInvitePanel({
   compact,
-  onQuotePress,
 }: {
   compact: boolean;
-  onQuotePress: () => void;
 }) {
   return (
     <View style={[styles.supplierInviteCard, compact && styles.supplierInviteCardCompact]}>
@@ -94,16 +91,6 @@ function SupplierBidInvitePanel({
           status updates here in real time.
         </Text>
       </View>
-      <TouchableOpacity
-        style={[styles.bidNowBtn, compact && styles.bidNowBtnCompact]}
-        onPress={onQuotePress}
-        activeOpacity={0.9}
-        accessibilityRole="button"
-        accessibilityLabel="Bid now"
-      >
-        <Feather name="send" size={14} color={Theme.buttonPrimaryText} />
-        <Text style={styles.bidNowBtnText}>Bid now</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -236,9 +223,7 @@ export function IndentReviewHubBidsBody(props: IndentReviewHubBidsPaneProps) {
   }
 
   if (canOpenQuoteModal && onQuotePress) {
-    return (
-      <SupplierBidInvitePanel compact={compact} onQuotePress={onQuotePress} />
-    );
+    return <SupplierBidInvitePanel compact={compact} />;
   }
 
   if (supplierQuoteActionHint === "locked") {
@@ -423,7 +408,7 @@ const styles = StyleSheet.create({
     gap: 12,
     flexGrow: 1,
     minHeight: 280,
-    justifyContent: "space-between",
+    justifyContent: "center",
     ...Platform.select({
       web: { boxShadow: "0 2px 12px rgba(15,23,42,0.06)" } as object,
       default: {},
@@ -473,29 +458,5 @@ const styles = StyleSheet.create({
   supplierInviteBodyCompact: {
     fontSize: 10,
     lineHeight: 14,
-  },
-  bidNowBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: 999,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    minHeight: 42,
-  },
-  bidNowBtnCompact: {
-    minHeight: 38,
-    paddingVertical: 9,
-  },
-  bidNowBtnText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.buttonPrimaryText,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
   },
 });
