@@ -46,6 +46,10 @@ export type DriverTripRow = {
   started_at?: string | null;
   created_at: string;
   updated_at: string;
+  client_price?: number | null;
+  supplier_rate?: number | null;
+  driver_commission?: number | null;
+  distance?: number | null;
 };
 
 /** Map supplier view row → legacy TripRow for screens not yet migrated off TripRow. */
@@ -111,15 +115,15 @@ export function driverRowToTripRow(row: DriverTripRow): TripRow {
     indent_id: null,
     source: 'assigned',
     client_name: '',
-    client_price: 0,
-    supplier_rate: 0,
+    client_price: row.client_price ?? 0,
+    supplier_rate: row.supplier_rate ?? 0,
     margin: 0,
     platform_fee: 0,
-    driver_commission: 0,
+    driver_commission: row.driver_commission ?? 0,
     is_guaranteed: false,
     payment_status: 'pending',
     amount_paid: 0,
-    distance: null,
+    distance: row.distance ?? null,
     estimated_duration: null,
     client_id: null,
     supplier_id: null,

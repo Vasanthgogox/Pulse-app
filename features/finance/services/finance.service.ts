@@ -1261,6 +1261,43 @@ export async function createLedgerEntry(
       row: null,
     };
   }
+  // Client trip receipts must never push total received past the trip's billed sales —
+  // this is how a ₹45,000 trip once showed ₹66,720 received (Ajio/AJI862AJITRIP000004 incident).
+  if (normalizedContactType === "client" && tripContext.tripId && amountIn > 0) {
+    const { data: tripRow } = await supabase()
+      .from("trips")
+      .select("id, client_price, supplier_rate, organization_id, indent_id")
+      .eq("id", tripContext.tripId)
+      .maybeSingle();
+    if (tripRow) {
+      const isIntegratedShipperReceipt =
+        tripRow.indent_id != null && tripRow.organization_id === orgId;
+      const sales = Number(
+        (isIntegratedShipperReceipt
+          ? tripRow.supplier_rate
+          : tripRow.client_price) ?? 0,
+      );
+      if (sales > 0) {
+        const { data: existingTx } = await supabase()
+          .from("transactions")
+          .select("amount_in")
+          .eq("trip_id", tripContext.tripId)
+          .eq("organization_id", orgId);
+        const alreadyReceived = (existingTx ?? []).reduce(
+          (sum, tx) => sum + Number(tx.amount_in ?? 0),
+          0,
+        );
+        if (alreadyReceived + amountIn > sales) {
+          return {
+            error: new Error(
+              `This payment (₹${amountIn}) would take total received (₹${alreadyReceived + amountIn}) past the trip's billed sales (₹${sales}).`,
+            ),
+            row: null,
+          };
+        }
+      }
+    }
+  }
   const partyName = (
     (resolvedPartyName || fallbackPartyName).trim() || "—"
   ).slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);

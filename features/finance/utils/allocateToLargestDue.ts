@@ -80,36 +80,42 @@ export function allocateAmountsToLargestDueTrips(
   }
 
   for (const rawAmount of amounts) {
-    if (heap.length === 0) break;
-    const amount = Number(rawAmount ?? 0);
-    let best = heapPop(heap);
+    let remaining = Number(rawAmount ?? 0);
 
-    while (best) {
-      const sales = salesByTripId.get(best.tripId) ?? 0;
-      const currentPaid = paidByTripId[best.tripId] ?? 0;
-      const currentVersion = versionByTripId.get(best.tripId) ?? 0;
-      const currentDue = Math.max(0, sales - currentPaid);
-      if (best.version === currentVersion && best.due === currentDue) {
-        break;
+    // A single payment can exceed one trip's due, so keep assigning the
+    // leftover to the next-largest-due trip instead of overpaying the first.
+    while (remaining > 0 && heap.length > 0) {
+      let best = heapPop(heap);
+
+      while (best) {
+        const sales = salesByTripId.get(best.tripId) ?? 0;
+        const currentPaid = paidByTripId[best.tripId] ?? 0;
+        const currentVersion = versionByTripId.get(best.tripId) ?? 0;
+        const currentDue = Math.max(0, sales - currentPaid);
+        if (best.version === currentVersion && best.due === currentDue) {
+          break;
+        }
+        best = heapPop(heap);
       }
-      best = heapPop(heap);
+
+      if (!best || best.due <= 0) break;
+
+      const tripId = best.tripId;
+      const applied = Math.min(remaining, best.due);
+      const nextPaid = (paidByTripId[tripId] ?? 0) + applied;
+      paidByTripId[tripId] = nextPaid;
+      remaining -= applied;
+
+      const nextVersion = (versionByTripId.get(tripId) ?? 0) + 1;
+      versionByTripId.set(tripId, nextVersion);
+
+      heapPush(heap, {
+        tripId,
+        due: Math.max(0, (salesByTripId.get(tripId) ?? 0) - nextPaid),
+        order: orderByTripId.get(tripId) ?? 0,
+        version: nextVersion,
+      });
     }
-
-    if (!best) break;
-
-    const tripId = best.tripId;
-    const nextPaid = (paidByTripId[tripId] ?? 0) + amount;
-    paidByTripId[tripId] = nextPaid;
-
-    const nextVersion = (versionByTripId.get(tripId) ?? 0) + 1;
-    versionByTripId.set(tripId, nextVersion);
-
-    heapPush(heap, {
-      tripId,
-      due: Math.max(0, (salesByTripId.get(tripId) ?? 0) - nextPaid),
-      order: orderByTripId.get(tripId) ?? 0,
-      version: nextVersion,
-    });
   }
 
   return paidByTripId;
