@@ -11,6 +11,10 @@ export type ProvisionCostBreakdownLine = {
   label: string;
   amount: number;
   variant?: "default" | "section" | "child" | "emphasis" | "good";
+  /** Share of the revised trip cost, 0–100. Shown as a "(NN%)" suffix. */
+  percentOfTotal?: number;
+  /** Explanatory sub-text under the label, e.g. how salary was derived. */
+  note?: string;
 };
 
 const BREAKDOWN_COL_AMT = 76;
@@ -73,16 +77,23 @@ function CostBreakdownTable({
                   └
                 </Text>
               ) : null}
-              <Text
-                style={[
-                  styles.breakdownTdLabel,
-                  isChild && styles.breakdownTdLabelChild,
-                  isSection && styles.breakdownTdLabelSection,
-                ]}
-                numberOfLines={2}
-              >
-                {line.label}
-              </Text>
+              <View style={styles.breakdownLabelTextWrap}>
+                <Text
+                  style={[
+                    styles.breakdownTdLabel,
+                    isChild && styles.breakdownTdLabelChild,
+                    isSection && styles.breakdownTdLabelSection,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {line.label}
+                </Text>
+                {line.note ? (
+                  <Text style={styles.breakdownTdNote} numberOfLines={1}>
+                    {line.note}
+                  </Text>
+                ) : null}
+              </View>
             </View>
             <View style={styles.breakdownColAmt}>
               <Text
@@ -95,6 +106,11 @@ function CostBreakdownTable({
               >
                 {formatINR(line.amount)}
               </Text>
+              {typeof line.percentOfTotal === "number" ? (
+                <Text style={styles.breakdownTdPct} numberOfLines={1}>
+                  {line.percentOfTotal}%
+                </Text>
+              ) : null}
             </View>
           </View>
         );
@@ -657,13 +673,33 @@ const styles = StyleSheet.create({
     width: 8,
     flexShrink: 0,
   },
-  breakdownTdLabel: {
+  breakdownLabelTextWrap: {
     flex: 1,
+    minWidth: 0,
+  },
+  breakdownTdLabel: {
     fontSize: 10,
     fontWeight: "500",
     color: Theme.textSecondary,
     lineHeight: 13,
     minWidth: 0,
+  },
+  breakdownTdNote: {
+    fontSize: 8.5,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    lineHeight: 11,
+    marginTop: 1,
+    fontVariant: ["tabular-nums"],
+  },
+  breakdownTdPct: {
+    fontSize: 8.5,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    fontVariant: ["tabular-nums"],
+    textAlign: "right",
+    lineHeight: 11,
+    marginTop: 1,
   },
   breakdownTdLabelChild: {
     fontSize: 9,

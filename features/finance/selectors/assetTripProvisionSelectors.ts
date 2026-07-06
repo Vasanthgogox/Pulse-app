@@ -3,6 +3,7 @@ import type { TripCostEvent } from "@/features/finance/domain/tripCostEvent";
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
 import type { DriverOfferForAggregation } from "@/features/finance/aggregation/types";
 import { selectAssetTripOperationalCost } from "./tripAccountingSelectors";
+import { formatINR } from "@/lib/format";
 
 function roundCurrency(amount: number): number {
   return Math.round((Number(amount) || 0) * 100) / 100;
@@ -126,18 +127,35 @@ export type AssetProvisionCostBreakdownLine = {
   label: string;
   amount: number;
   variant?: "default" | "section" | "child" | "emphasis" | "good";
+  /** Share of the revised trip cost, 0–100. Shown as a "(NN%)" suffix. */
+  percentOfTotal?: number;
+  /** Explanatory sub-text, e.g. how salary was derived. */
+  note?: string;
 };
 
 export function buildAssetProvisionCostBreakdownLines(
   breakdown: AssetTripProvisionCostBreakdown,
 ): AssetProvisionCostBreakdownLine[] {
+  const total = breakdown.totalBaseCostInr;
+  const pct = (amount: number): number | undefined =>
+    total > 0 ? roundCurrency((amount / total) * 100) : undefined;
+
   const lines: AssetProvisionCostBreakdownLine[] = [
-    { label: "Driver commission", amount: breakdown.driverCommissionInr },
+    {
+      label: "Driver commission",
+      amount: breakdown.driverCommissionInr,
+      percentOfTotal: pct(breakdown.driverCommissionInr),
+    },
   ];
   if (breakdown.salaryAllocationInr > 0) {
     lines.push({
       label: `Salary · ${breakdown.daysOperated}d`,
       amount: breakdown.salaryAllocationInr,
+      percentOfTotal: pct(breakdown.salaryAllocationInr),
+      note:
+        breakdown.monthlySalaryInr > 0
+          ? `${formatINR(breakdown.monthlySalaryInr)}/mo ÷ ${breakdown.daysInMonth}d × ${breakdown.daysOperated}d`
+          : undefined,
     });
   }
 
@@ -147,6 +165,7 @@ export function buildAssetProvisionCostBreakdownLines(
       label: "Posted trip expenses",
       amount: split.totalInr,
       variant: "section",
+      percentOfTotal: pct(split.totalInr),
     });
     if (split.fuelInr > 0) {
       lines.push({ label: "Fuel", amount: split.fuelInr, variant: "child" });
