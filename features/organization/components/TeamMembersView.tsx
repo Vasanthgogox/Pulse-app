@@ -13,16 +13,16 @@ import {
   removeMember,
   cancelTeamInvite,
 } from "@/features/organization/services/members.service";
+import { MemberEditModal } from "@/features/organization/components/MemberEditModal";
 import type { OrgMember, PendingPhoneTeamInvite } from "@/types/organization";
 import {
   memberDisplayRoleLabel,
   platformRoleFromMember,
-  TEAM_INVITE_ROLE_OPTIONS,
   type PlatformTeamRole,
 } from "@/features/organization/utils/teamInviteRoles.util";
 import {
   Check,
-  ChevronDown,
+  Pencil,
   Search,
   Shield,
   Trash2,
@@ -33,10 +33,7 @@ import {
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
-  ActionSheetIOS,
-  
   Alert,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -85,71 +82,22 @@ function MemberCard({
   member,
   isCurrentUser,
   canManage,
-  onRoleChange,
-  onRemove,
+  onEdit,
 }: {
   member: OrgMember;
   isCurrentUser: boolean;
   canManage: boolean;
-  onRoleChange: (member: OrgMember, role: PlatformTeamRole) => void;
-  onRemove: (member: OrgMember) => void;
+  onEdit: (member: OrgMember) => void;
 }) {
   const displayName = member.full_name || member.phone || member.email || "Unknown";
   const isOwner = member.role === "owner";
   const isPending = member.status === "invited";
-
-  const handleActions = () => {
-    if (!canManage || isOwner || isCurrentUser) return;
-    const currentPlatform =
-      platformRoleFromMember(member) ?? ("operator" as PlatformTeamRole);
-    const alternateRoles = TEAM_INVITE_ROLE_OPTIONS.filter(
-      (o) => o.value !== currentPlatform,
-    );
-    const roleOptions = alternateRoles.map((o) => `Set as ${o.label}`);
-    const options = [...roleOptions, "Remove from team", "Cancel"];
-    const removeIndex = roleOptions.length;
-    const cancelIndex = roleOptions.length + 1;
-
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options,
-          destructiveButtonIndex: removeIndex,
-          cancelButtonIndex: cancelIndex,
-        },
-        (idx) => {
-          if (idx != null && idx >= 0 && idx < alternateRoles.length) {
-            onRoleChange(member, alternateRoles[idx]!.value);
-          } else if (idx === removeIndex) {
-            onRemove(member);
-          }
-        },
-      );
-    } else {
-      Alert.alert(
-        displayName,
-        "Choose an action",
-        [
-          ...alternateRoles.map((o) => ({
-            text: `Set as ${o.label}`,
-            onPress: () => onRoleChange(member, o.value),
-          })),
-          {
-            text: "Remove from team",
-            style: "destructive",
-            onPress: () => onRemove(member),
-          },
-          { text: "Cancel", style: "cancel" },
-        ],
-      );
-    }
-  };
+  const canEdit = canManage && !isOwner && !isCurrentUser;
 
   return (
     <View style={cardStyles.card}>
       <View style={cardStyles.cardCover}>
-        <View style={cardStyles.coverOrbLarge} />
-        <View style={cardStyles.coverOrbSmall} />
+        <View style={cardStyles.coverGradient} />
         <View style={cardStyles.badgeRow}>
           <View style={[cardStyles.rolePill, { borderColor: roleBadgeColor(member) }]}>
             <Shield size={9} color={roleBadgeColor(member)} strokeWidth={2.4} />
@@ -167,49 +115,51 @@ function MemberCard({
               <Text style={cardStyles.activePillText}>ACTIVE</Text>
             </View>
           )}
-          {isCurrentUser && (
+          {isCurrentUser ? (
             <View style={cardStyles.youPill}>
               <Text style={cardStyles.youPillText}>YOU</Text>
             </View>
-          )}
+          ) : null}
         </View>
       </View>
 
       <View style={cardStyles.cardBody}>
         <View style={cardStyles.avatarWrap}>
           <PartyAvatar
-            name={displayName.toUpperCase()}
+            name={displayName}
             avatarUrl={member.avatar_url ?? null}
             entityType="client"
-            size={58}
+            size={54}
             borderStyle={cardStyles.avatarBorder}
           />
         </View>
         <Text style={cardStyles.name} numberOfLines={1}>
-          {displayName.toUpperCase()}
+          {displayName}
         </Text>
         {!!member.phone && (
           <Text style={cardStyles.phone} numberOfLines={1}>
             {member.phone}
           </Text>
         )}
+        {!!member.email && (
+          <Text style={cardStyles.email} numberOfLines={1}>
+            {member.email}
+          </Text>
+        )}
         <View style={cardStyles.metaRow}>
-          <View style={cardStyles.metaChip}>
-            <Text style={cardStyles.metaChipText}>
-              {formatRelative(member.joined_at)}
-            </Text>
-          </View>
+          <Text style={cardStyles.metaText}>{formatRelative(member.joined_at)}</Text>
         </View>
       </View>
 
-      {canManage && !isOwner && !isCurrentUser && (
+      {canEdit ? (
         <Pressable
-          onPress={handleActions}
-          style={({ pressed }) => [cardStyles.actionBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => onEdit(member)}
+          style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
         >
-          <ChevronDown size={14} color={Theme.textSecondary} strokeWidth={2.2} />
+          <Pencil size={12} color={Theme.primary} strokeWidth={2.2} />
+          <Text style={cardStyles.editBtnText}>Edit</Text>
         </Pressable>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -310,43 +260,28 @@ function PendingPhoneInviteCard({
 const cardStyles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 18,
-    borderWidth: 1,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.055,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
     overflow: "hidden",
   },
   cardCover: {
-    height: 72,
+    height: 56,
     overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
   },
-  coverOrbLarge: {
-    position: "absolute",
-    width: 120,
-    height: 64,
-    borderRadius: 60,
-    top: -16,
-    left: -24,
-    backgroundColor: Theme.borderLight,
-    transform: [{ rotate: "-10deg" }],
-  },
-  coverOrbSmall: {
-    position: "absolute",
-    width: 80,
-    height: 48,
-    borderRadius: 40,
-    right: -18,
-    bottom: -12,
-    backgroundColor: Theme.surface,
-    transform: [{ rotate: "14deg" }],
+  coverGradient: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Theme.surfaceGray,
+    opacity: 0.95,
   },
   badgeRow: {
     position: "absolute",
@@ -371,8 +306,7 @@ const cardStyles = StyleSheet.create({
   rolePillText: {
     fontSize: 8,
     fontWeight: "700",
-    fontStyle: "italic",
-    letterSpacing: 0.2,
+    letterSpacing: 0.25,
   },
   pendingPill: {
     minHeight: 20,
@@ -384,9 +318,8 @@ const cardStyles = StyleSheet.create({
   pendingPillText: {
     fontSize: 8,
     fontWeight: "700",
-    fontStyle: "italic",
     color: Theme.warning,
-    letterSpacing: 0.2,
+    letterSpacing: 0.25,
   },
   activePill: {
     minHeight: 20,
@@ -400,9 +333,8 @@ const cardStyles = StyleSheet.create({
   activePillText: {
     fontSize: 8,
     fontWeight: "700",
-    fontStyle: "italic",
     color: Theme.darkGreen,
-    letterSpacing: 0.2,
+    letterSpacing: 0.25,
   },
   youPill: {
     minHeight: 20,
@@ -416,21 +348,21 @@ const cardStyles = StyleSheet.create({
   youPillText: {
     fontSize: 8,
     fontWeight: "700",
-    fontStyle: "italic",
     color: Theme.aggregatePillText,
   },
   cardBody: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
+    paddingTop: 0,
     paddingBottom: 10,
     alignItems: "center",
     gap: 2,
   },
   avatarWrap: {
-    marginTop: -29,
+    marginTop: -26,
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
   pendingAvatarWrap: {
@@ -452,28 +384,25 @@ const cardStyles = StyleSheet.create({
     borderColor: Theme.screenBackground,
   },
   name: {
-    fontSize: 11,
-    fontWeight: "800",
-    fontStyle: "italic",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
     textAlign: "center",
-    lineHeight: 14,
-    marginTop: 4,
+    lineHeight: 15,
+    marginTop: 6,
   },
   phone: {
-    fontSize: 9,
-    fontWeight: "400",
-    color: Theme.textMutedDemo,
-    textAlign: "center",
-    marginTop: 1,
-  },
-  email: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "500",
     color: Theme.textSecondary,
     textAlign: "center",
-    marginTop: 2,
+  },
+  email: {
+    fontSize: 9,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    textAlign: "center",
     paddingHorizontal: 6,
   },
   emailMuted: {
@@ -518,32 +447,27 @@ const cardStyles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   metaRow: {
-    flexDirection: "row",
-    justifyContent: "center",
     marginTop: 6,
   },
-  metaChip: {
-    minHeight: 20,
-    justifyContent: "center",
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-  },
-  metaChipText: {
-    fontSize: 8,
+  metaText: {
+    fontSize: 9,
     fontWeight: "500",
-    fontStyle: "italic",
-    color: Theme.textSecondary,
+    color: Theme.textMuted,
   },
-  actionBtn: {
-    height: 38,
+  editBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 5,
+    height: 36,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.surfaceGray,
+  },
+  editBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.primary,
   },
 });
 
@@ -617,6 +541,7 @@ export function TeamMembersView({
   );
   const [search, setSearch] = useState("");
   const [actionId, setActionId] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<OrgMember | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   React.useEffect(() => {
@@ -680,13 +605,24 @@ export function TeamMembersView({
       const { error } = await updateMemberRole(member.id, role);
       if (error) {
         Alert.alert("Could not update role", error.message);
-        return;
+        return false;
       }
       invalidate();
       await query.refetch();
+      return true;
     } finally {
       setActionId(null);
     }
+  };
+
+  const handleEditSave = async (member: OrgMember, role: PlatformTeamRole) => {
+    const ok = await handleRoleChange(member, role);
+    if (ok) setEditingMember(null);
+  };
+
+  const handleEditRemove = (member: OrgMember) => {
+    setEditingMember(null);
+    handleRemove(member);
   };
 
   const handleCancelPhoneInvite = (invite: PendingPhoneTeamInvite) => {
@@ -852,8 +788,7 @@ export function TeamMembersView({
                         member={m}
                         isCurrentUser={m.user_id === currentUserId}
                         canManage={canManage}
-                        onRoleChange={handleRoleChange}
-                        onRemove={handleRemove}
+                        onEdit={setEditingMember}
                       />
                     )}
                   </View>
@@ -893,8 +828,7 @@ export function TeamMembersView({
                       member={item.member}
                       isCurrentUser={item.member.user_id === currentUserId}
                       canManage={canManage}
-                      onRoleChange={handleRoleChange}
-                      onRemove={handleRemove}
+                      onEdit={setEditingMember}
                     />
                   )}
                 </View>
@@ -929,20 +863,44 @@ export function TeamMembersView({
   );
 
   if (embedded) {
-    return <View style={styles.embeddedRoot}>{body}</View>;
+    return (
+      <View style={styles.embeddedRoot}>
+        {body}
+        <MemberEditModal
+          visible={!!editingMember}
+          member={editingMember}
+          saving={!!editingMember && actionId === editingMember.id}
+          desktopMetronic={desktopMetronic}
+          onClose={() => setEditingMember(null)}
+          onSave={(member, role) => void handleEditSave(member, role)}
+          onRemove={handleEditRemove}
+        />
+      </View>
+    );
   }
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.loaderAccent} />
-      }
-    >
-      {body}
-    </ScrollView>
+    <>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.loaderAccent} />
+        }
+      >
+        {body}
+      </ScrollView>
+      <MemberEditModal
+        visible={!!editingMember}
+        member={editingMember}
+        saving={!!editingMember && actionId === editingMember.id}
+        desktopMetronic={desktopMetronic}
+        onClose={() => setEditingMember(null)}
+        onSave={(member, role) => void handleEditSave(member, role)}
+        onRemove={handleEditRemove}
+      />
+    </>
   );
 }
 

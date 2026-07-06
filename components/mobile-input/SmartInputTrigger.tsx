@@ -61,7 +61,11 @@ export function SmartInputTrigger({
     return (
       <View style={styles.heroWrapper}>
         <TouchableOpacity
-          style={[styles.heroPressable, disabled && styles.rowDisabled]}
+          style={[
+            styles.heroPressable,
+            compact && styles.heroPressableCompact,
+            disabled && styles.rowDisabled,
+          ]}
           onPress={onPress}
           disabled={disabled}
           activeOpacity={0.72}
@@ -70,10 +74,19 @@ export function SmartInputTrigger({
           accessibilityState={{ disabled }}
         >
           <View style={styles.heroAmountRow}>
-            <Text style={[styles.heroPrefix, { color: heroAccentColor }]}>{heroPrefix}</Text>
+            <Text
+              style={[
+                styles.heroPrefix,
+                compact && styles.heroPrefixCompact,
+                { color: heroAccentColor },
+              ]}
+            >
+              {heroPrefix}
+            </Text>
             <Text
               style={[
                 styles.heroValue,
+                compact && styles.heroValueCompact,
                 !hasValue && styles.heroPlaceholder,
                 valueStyle,
               ]}
@@ -81,10 +94,14 @@ export function SmartInputTrigger({
               {hasValue ? displayValue : placeholder || '0'}
             </Text>
             {suffix && hasValue ? (
-              <Text style={[styles.heroSuffix, valueStyle]}>{suffix}</Text>
+              <Text style={[styles.heroSuffix, compact && styles.heroSuffixCompact, valueStyle]}>
+                {suffix}
+              </Text>
             ) : null}
           </View>
-          <Text style={styles.heroTapHint}>Tap to edit amount</Text>
+          <Text style={[styles.heroTapHint, compact && styles.heroTapHintCompact]}>
+            Tap to edit amount
+          </Text>
         </TouchableOpacity>
         {errorMessage ? (
           <Text style={styles.heroErrorText}>{errorMessage}</Text>
@@ -401,6 +418,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     minWidth: 200,
   },
+  heroPressableCompact: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    minWidth: 0,
+    width: '100%',
+  },
   heroAmountRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -414,6 +437,10 @@ const styles = StyleSheet.create({
     lineHeight: 40,
     marginRight: 2,
   },
+  heroPrefixCompact: {
+    fontSize: 26,
+    lineHeight: 30,
+  },
   heroValue: {
     fontSize: 44,
     fontWeight: '300',
@@ -421,6 +448,11 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     fontVariant: ['tabular-nums'],
     lineHeight: 48,
+  },
+  heroValueCompact: {
+    fontSize: 32,
+    lineHeight: 36,
+    letterSpacing: -0.6,
   },
   heroPlaceholder: {
     color: Theme.textMuted,
@@ -432,12 +464,19 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     marginLeft: 2,
   },
+  heroSuffixCompact: {
+    fontSize: 16,
+  },
   heroTapHint: {
     marginTop: 6,
     fontSize: 10,
     fontWeight: '600',
     color: Theme.textMuted,
     letterSpacing: 0.2,
+  },
+  heroTapHintCompact: {
+    marginTop: 3,
+    fontSize: 9,
   },
   heroErrorText: {
     marginTop: 6,

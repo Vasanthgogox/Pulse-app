@@ -1,25 +1,24 @@
-import { useRouter } from 'expo-router';
-import { Platform, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { View } from 'react-native';
 
-import { OperationalHeader } from '@/components/operational';
-import { BusinessVerificationWizard } from '@/features/organization/components/workspace/BusinessVerificationWizard';
+import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { ROUTES } from '@/lib/routes';
+import { useRouter } from 'expo-router';
 
+/** Legacy route — verification is inline on Workspace → Org identity & KYC. */
 export default function BusinessVerifyScreen() {
   const router = useRouter();
-  const handleBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(ROUTES.WORKSPACE);
-  };
+
+  useEffect(() => {
+    router.replace({
+      pathname: ROUTES.WORKSPACE,
+      params: { panel: 'kyc' },
+    } as Parameters<typeof router.replace>[0]);
+  }, [router]);
 
   return (
-    <View style={styles.root}>
-      <OperationalHeader title="Verify Business" onBack={handleBack} />
-      <BusinessVerificationWizard onDone={handleBack} />
+    <View style={{ flex: 1 }}>
+      <CenteredLoadingView />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-});

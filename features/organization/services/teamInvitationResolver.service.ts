@@ -104,6 +104,37 @@ export async function resolveTeamInvitationsByPhone(
   }
 }
 
+/** Mirrors resolveTeamInvitationsByPhone, filtering by verified email instead. */
+export async function resolveTeamInvitationsByEmail(
+  email: string,
+): Promise<{ error: Error | null; result: InvitationResolverResult }> {
+  const empty: InvitationResolverResult = { active: [], expired: [] };
+  try {
+    await supabase().rpc("expire_stale_team_invitations_by_email", { p_email: email });
+
+    const { data, error } = await supabase().rpc(
+      "resolve_pending_team_invitations_by_email",
+      { p_email: email },
+    );
+    if (error) return { error: new Error(error.message), result: empty };
+
+    const rows = (data ?? []) as Parameters<typeof mapRow>[0][];
+    const mapped = rows.map(mapRow);
+    return {
+      error: null,
+      result: {
+        active: mapped.filter((i) => !i.isExpired && i.status === "pending"),
+        expired: mapped.filter((i) => i.isExpired || i.status === "expired"),
+      },
+    };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      result: empty,
+    };
+  }
+}
+
 export async function acceptPendingTeamInvitation(inviteId: string): Promise<{
   error: Error | null;
   organizationId: string | null;

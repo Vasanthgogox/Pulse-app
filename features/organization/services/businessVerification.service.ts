@@ -180,7 +180,7 @@ export async function uploadAddressProof(
   if (formatError) return { path: null, error: new Error(formatError), verify: null };
 
   const ext = file.fileName.split('.').pop()?.toLowerCase() ?? 'jpg';
-  const path = `${orgId}/address-proof-${Date.now()}.${ext}`;
+  const path = `${orgId}/address_proof-${Date.now()}.${ext}`;
 
   const { error } = await supabase()
     .storage.from(VERIFICATION_BUCKET)
@@ -288,6 +288,13 @@ export async function getVerificationDocuments(
   return { documents: (data ?? []) as VerificationDocumentRecord[], error: null };
 }
 
+export async function getVerificationDocumentSignedUrl(
+  storagePath: string,
+  ttlSeconds = 3600,
+): Promise<string | null> {
+  return getAddressProofSignedUrl(storagePath, ttlSeconds);
+}
+
 export async function getAddressProofSignedUrl(
   storagePath: string,
   ttlSeconds = 3600,
@@ -296,6 +303,48 @@ export async function getAddressProofSignedUrl(
     .storage.from(VERIFICATION_BUCKET)
     .createSignedUrl(storagePath, ttlSeconds);
   return data?.signedUrl ?? null;
+}
+
+// ─── Draft saves (pre-submit, inline KYC page) ────────────────────────────────
+
+export type VerificationDraftPayload = {
+  registration_type?: RegistrationType | null;
+  address_line?: string | null;
+  city?: string | null;
+  state?: string | null;
+  address_pincode?: string | null;
+  address_proof_path?: string | null;
+  address_proof_type?: AddressProofType | null;
+};
+
+export async function saveVerificationDraft(
+  orgId: string,
+  payload: VerificationDraftPayload,
+): Promise<{ error: Error | null }> {
+  const patch: Record<string, unknown> = {};
+  if (payload.registration_type !== undefined) {
+    patch.registration_type = payload.registration_type;
+  }
+  if (payload.address_line !== undefined) {
+    patch.address_line = payload.address_line?.trim() || null;
+  }
+  if (payload.city !== undefined) patch.city = payload.city?.trim() || null;
+  if (payload.state !== undefined) patch.state = payload.state?.trim() || null;
+  if (payload.address_pincode !== undefined) {
+    const digits = payload.address_pincode?.replace(/\D/g, '') ?? '';
+    patch.address_pincode = digits || null;
+  }
+  if (payload.address_proof_path !== undefined) {
+    patch.address_proof_path = payload.address_proof_path?.trim() || null;
+  }
+  if (payload.address_proof_type !== undefined) {
+    patch.address_proof_type = payload.address_proof_type;
+  }
+
+  if (Object.keys(patch).length === 0) return { error: null };
+
+  const { error } = await supabase().from('organizations').update(patch).eq('id', orgId);
+  return { error: error ? new Error(error.message) : null };
 }
 
 // ─── Submit for verification ───────────────────────────────────────────────────

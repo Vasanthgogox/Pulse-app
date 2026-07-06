@@ -161,8 +161,15 @@ export interface LedgerMobileWizardProps {
    * Trip-detail mobile capture: Amount (settlement + partial %) → payment type/mode/UTR.
    */
   tripDirectTwoStepFlow?: boolean;
+  /**
+   * Mobile entity / party flows: after amount, use payment capture (type + mode + UTR)
+   * instead of separate paymentType → paymentMode → details → review steps.
+   */
+  paymentCaptureAfterAmount?: boolean;
   /** Label for final authorize button on trip-direct step 2. */
   submitButtonLabel?: string;
+  /** Parent hook when user clears trip to pick another (entity finance flows). */
+  onChangeTripRequest?: () => void;
 }
 
 function parseAmount(raw: string): number {
@@ -194,6 +201,20 @@ function buildSteps(props: LedgerMobileWizardProps): LedgerWizardStep[] {
     const steps: LedgerWizardStep[] = [];
     if (props.showPaymentTypeStep) steps.push("paymentType");
     steps.push("amountPayment");
+    return steps;
+  }
+
+  if (props.paymentCaptureAfterAmount) {
+    const steps: LedgerWizardStep[] = [];
+    if (!props.typeLocked && !props.isEditMode) steps.push("direction");
+    if (!props.partyLocked && !props.hidePartyStep) steps.push("party");
+    if (props.tripBeforeAmount) {
+      if (!props.tripLocked) steps.push("trip");
+      steps.push("amount", "paymentCapture");
+    } else {
+      steps.push("amount", "paymentCapture");
+      if (!props.tripLocked) steps.push("trip");
+    }
     return steps;
   }
 
@@ -393,6 +414,9 @@ function FocusedTripCardSection({
 /** Single horizontal gutter for all mobile wizard screens. */
 const PAGE_PAD = Layout.screenPaddingHorizontal;
 
+/** Two-step amount → payment capture progress dots. */
+const PAYMENT_PAIR_PROGRESS = [0, 1] as const;
+
 /** Footer FAB + hint — keep list scroll end above this on mobile web. */
 const WIZARD_FOOTER_CLEARANCE = 88;
 
@@ -481,6 +505,15 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
   const { title, hint } = stepMeta(currentStep, props);
   const canAdvance = canAdvanceStep(currentStep, props);
   const accent = props.type === "in" ? Theme.darkGreen : Theme.teslaRed;
+  const usesPaymentCapturePair =
+    props.tripDirectTwoStepFlow || props.paymentCaptureAfterAmount;
+  const amountStepIndex = steps.indexOf("amount");
+  const paymentCaptureStepIndex = steps.indexOf("paymentCapture");
+  const inAmountPaymentPair =
+    usesPaymentCapturePair &&
+    amountStepIndex >= 0 &&
+    paymentCaptureStepIndex === amountStepIndex + 1 &&
+    (currentStep === "amount" || currentStep === "paymentCapture");
 
   const filteredParties = useMemo(() => {
     const q = partySearch.trim().toLowerCase();
@@ -523,8 +556,17 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
       return;
     }
     if (!canAdvance) return;
+    const nextStep = steps[stepIndex + 1];
+    if (currentStep === "amount" && nextStep === "paymentCapture") {
+      if (props.paymentTypeItems.some((item) => item.selected)) {
+        props.onPaymentTypeExpandedChange?.(false);
+      }
+      if (props.paymentModeId) {
+        props.onPaymentModeExpandedChange?.(false);
+      }
+    }
     setStepIndex((i) => Math.min(steps.length - 1, i + 1));
-  }, [canAdvance, currentStep, props, steps.length]);
+  }, [canAdvance, currentStep, props, steps, stepIndex]);
 
   const handleTripPick = useCallback(
     (id: string | null) => {
@@ -539,6 +581,21 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
     },
     [currentStep, props, steps],
   );
+
+  const tripStepIndex = steps.indexOf("trip");
+  const showChangeTrip =
+    !props.tripLocked &&
+    !!props.selectedTripId &&
+    tripStepIndex >= 0 &&
+    currentStep !== "trip";
+
+  const handleChangeTrip = useCallback(() => {
+    props.onChangeTripRequest?.();
+    props.onTripSelect(null);
+    if (tripStepIndex >= 0) {
+      setStepIndex(tripStepIndex);
+    }
+  }, [props, tripStepIndex]);
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const yesterdayIso = (() => {
@@ -565,33 +622,97 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
         props.selectedTripId),
   );
 
-  const renderMobileTripHeader = () => {
-    if (!showMobileTripHeader) return null;
+  const renderAmountTopBar = () => {
+    const hasHeaderContent = showMobileTripHeader || showChangeTrip;
     return (
-      <View style={styles.mobileTripHeaderBand}>
-        <LedgerHeaderTripDetail
-          partyName={mobilePartyName}
-          tripNumber={mobileTripNumber}
-          routeLabel={mobileTripRoute}
-          compact
-          fill={false}
-        />
+      <View
+        style={[
+          styles.amountTopBar,
+          hasHeaderContent && styles.amountTopBarWithDetail,
+          { paddingTop: insets.top + 4 },
+        ]}
+      >
+        <Pressable
+          style={styles.amountBackBtn}
+          onPress={handleBack}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <ChevronLeft size={22} color="#0f172a" strokeWidth={2.5} />
+        </Pressable>
+        {showMobileTripHeader ? (
+          <View style={styles.amountTopBarDetail}>
+            <LedgerHeaderTripDetail
+              partyName={mobilePartyName}
+              tripNumber={mobileTripNumber}
+              routeLabel={mobileTripRoute}
+              compact
+              fill={false}
+            />
+          </View>
+        ) : (
+          <View style={styles.amountTopBarDetail} />
+        )}
+        {showChangeTrip ? (
+          <Pressable
+            style={styles.amountTopBarChangeTrip}
+            onPress={handleChangeTrip}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Change trip"
+          >
+            <Text style={styles.changeTripBtn}>Change trip</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   };
 
-  const twoStepLabel =
-    props.tripDirectTwoStepFlow && steps.length === 2
+  const renderMobileTripHeader = () => {
+    if (!showMobileTripHeader && !showChangeTrip) return null;
+    return (
+      <View style={styles.mobileTripHeaderBand}>
+        <View style={styles.mobileTripHeaderRow}>
+          {showMobileTripHeader ? (
+            <View style={styles.mobileTripHeaderMain}>
+              <LedgerHeaderTripDetail
+                partyName={mobilePartyName}
+                tripNumber={mobileTripNumber}
+                routeLabel={mobileTripRoute}
+                compact
+                fill={false}
+              />
+            </View>
+          ) : (
+            <View style={styles.mobileTripHeaderMain} />
+          )}
+          {showChangeTrip ? (
+            <Pressable
+              onPress={handleChangeTrip}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Change trip"
+            >
+              <Text style={styles.changeTripBtn}>Change trip</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    );
+  };
+
+  const twoStepLabel = inAmountPaymentPair
+    ? currentStep === "amount"
+      ? "Step 1 of 2 · Amount & settlement"
+      : "Step 2 of 2 · Payment details"
+    : props.twoStepTripLockedFlow && steps.length === 2
       ? `Step ${stepIndex + 1} of 2 · ${
-          currentStep === "amount" ? "Amount & settlement" : "Payment details"
+          currentStep === "paymentType" ? "Category" : "Amount & payment"
         }`
-      : props.twoStepTripLockedFlow && steps.length === 2
-        ? `Step ${stepIndex + 1} of 2 · ${
-            currentStep === "paymentType" ? "Category" : "Amount & payment"
-          }`
-        : null;
+      : null;
   const advanceLabel =
-    props.tripDirectTwoStepFlow && currentStep === "amount"
+    inAmountPaymentPair && currentStep === "amount"
       ? "Continue to payment"
       : props.twoStepTripLockedFlow && currentStep === "paymentType"
       ? "Continue to amount"
@@ -643,49 +764,51 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
     );
   };
 
-  const renderAmount = () => {
+  const renderAmount = (opts?: { embedded?: boolean }) => {
     const isIn = props.type === "in";
     const dueLabel = isIn ? "Total receivable" : "Total payable";
     const payLinePrefix = isIn ? "Receiving from" : "Paying";
     const showFocusedCard = shouldShowFocusedTripCard("amount", props) && !!props.focusedTripCard;
+    const compactAmountLayout = showFocusedCard;
 
-    return (
-      <ScrollView
-        style={styles.amountScroll}
-        contentContainerStyle={[
-          styles.amountScrollContent,
-          showFocusedCard && styles.amountScrollContentWithFocused,
-        ]}
-        keyboardShouldPersistTaps="always"
-        showsVerticalScrollIndicator={false}
-      >
+    const amountBody = (
+      <>
         {showFocusedCard ? renderFocusedTripCard() : null}
-        <View style={styles.amountHeroStack}>
-          <View style={styles.amountHeroCenter}>
-            <View style={styles.amountAvatarRing}>
-              <EntityAvatar
-                name={amountPartyVisual.name}
-                avatarUrl={amountPartyVisual.avatarUrl}
-                avatarSeed={amountPartyVisual.avatarSeed}
-                entityType={amountPartyVisual.entityType}
-                isIntegrated={amountPartyVisual.isIntegrated}
-                size={56}
-                showIntegrationBadge={false}
-              />
-            </View>
+        <View style={[styles.amountHeroStack, compactAmountLayout && styles.amountHeroStackTight]}>
+          <View style={[styles.amountHeroCenter, compactAmountLayout && styles.amountHeroCenterTight]}>
+            {!compactAmountLayout ? (
+              <>
+                <View style={styles.amountAvatarRing}>
+                  <EntityAvatar
+                    name={amountPartyVisual.name}
+                    avatarUrl={amountPartyVisual.avatarUrl}
+                    avatarSeed={amountPartyVisual.avatarSeed}
+                    entityType={amountPartyVisual.entityType}
+                    isIntegrated={amountPartyVisual.isIntegrated}
+                    size={56}
+                    showIntegrationBadge={false}
+                  />
+                </View>
 
-            <Text style={styles.amountPayLine} numberOfLines={2}>
-              {payLinePrefix}{" "}
-              <Text style={styles.amountPayLineName}>{amountPartyVisual.name}</Text>
-            </Text>
+                <Text style={styles.amountPayLine} numberOfLines={2}>
+                  {payLinePrefix}{" "}
+                  <Text style={styles.amountPayLineName}>{amountPartyVisual.name}</Text>
+                </Text>
 
-            {amountPartyVisual.contextLine && !showFocusedCard ? (
-              <Text style={styles.amountContextLineCentered} numberOfLines={2}>
-                {amountPartyVisual.contextLine}
-              </Text>
+                {amountPartyVisual.contextLine ? (
+                  <Text style={styles.amountContextLineCentered} numberOfLines={2}>
+                    {amountPartyVisual.contextLine}
+                  </Text>
+                ) : null}
+              </>
             ) : null}
 
-            <View style={styles.amountHeroInputWrap}>
+            <View
+              style={[
+                styles.amountHeroInputWrap,
+                compactAmountLayout && styles.amountHeroInputWrapTight,
+              ]}
+            >
               <SmartInput
                 type="currency"
                 value={parseAmount(props.amountStr)}
@@ -695,6 +818,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
                 label={isIn ? "Amount received" : "Amount paid"}
                 submitLabel="Apply"
                 variant="hero"
+                density={compactAmountLayout ? "compact" : "default"}
                 heroAccentColor={accent}
                 placeholder="0"
                 required={false}
@@ -731,6 +855,24 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
             ) : null}
           </View>
         </View>
+      </>
+    );
+
+    if (opts?.embedded) {
+      return amountBody;
+    }
+
+    return (
+      <ScrollView
+        style={styles.amountScroll}
+        contentContainerStyle={[
+          styles.amountScrollContent,
+          showFocusedCard && styles.amountScrollContentWithFocused,
+        ]}
+        keyboardShouldPersistTaps="always"
+        showsVerticalScrollIndicator={false}
+      >
+        {amountBody}
       </ScrollView>
     );
   };
@@ -738,27 +880,16 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
   const renderAmountFullPage = () => {
     return (
       <View style={styles.amountFullPage}>
-        <View style={[styles.amountMinimalTop, { paddingTop: insets.top + 6 }]}>
-          <Pressable
-            style={styles.amountBackBtn}
-            onPress={handleBack}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-          >
-            <ChevronLeft size={22} color="#0f172a" strokeWidth={2.5} />
-          </Pressable>
-        </View>
-        {renderMobileTripHeader()}
-        {props.tripDirectTwoStepFlow ? (
+        {renderAmountTopBar()}
+        {inAmountPaymentPair && currentStep === "amount" ? (
           <View style={styles.tripDirectStepBand}>
             <View style={styles.tripDirectProgressRow}>
-              {steps.map((id, i) => (
+              {PAYMENT_PAIR_PROGRESS.map((i) => (
                 <View
-                  key={id}
+                  key={i}
                   style={[
                     styles.tripDirectProgressDot,
-                    i <= stepIndex && styles.tripDirectProgressDotActive,
+                    i === 0 && styles.tripDirectProgressDotActive,
                   ]}
                 />
               ))}
@@ -766,18 +897,28 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
             <Text style={styles.twoStepFlowLabel}>Step 1 of 2 · Amount & settlement</Text>
           </View>
         ) : null}
-        <View style={styles.amountFullPageBody}>{renderAmount()}</View>
-        <LedgerSettlementPctDock
-          dueTotalInr={dueTotalInr}
-          amountStr={props.amountStr}
-          onAmountChange={handleAmountChange}
-          accentColor={accent}
-          variant="light"
-        />
+        <ScrollView
+          style={styles.amountFullPageScroll}
+          contentContainerStyle={styles.amountFullPageScrollContent}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
+        >
+          {renderAmount({ embedded: true })}
+          <View style={styles.amountPctDockInline}>
+            <LedgerSettlementPctDock
+              dueTotalInr={dueTotalInr}
+              amountStr={props.amountStr}
+              onAmountChange={handleAmountChange}
+              accentColor={accent}
+              variant="light"
+              compact
+            />
+          </View>
+        </ScrollView>
         <OperationalBottomActionBar>
           <OperationalButton
             intent="bottomSticky"
-            label={props.tripDirectTwoStepFlow ? "Continue to payment" : "Continue"}
+            label={advanceLabel}
             onPress={handleAdvance}
             disabled={!canAdvance}
             density="high"
@@ -1438,16 +1579,29 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
           </Pressable>
           <View style={styles.mobileHeaderCenter}>
             <View style={c.progressRow}>
-              {steps.map((id, i) => (
-                <View
-                  key={id}
-                  style={[
-                    c.progressDot,
-                    i <= stepIndex && c.progressDotActive,
-                    compact && i <= stepIndex && styles.progressDotActiveCompact,
-                  ]}
-                />
-              ))}
+              {inAmountPaymentPair && currentStep === "paymentCapture" ? (
+                PAYMENT_PAIR_PROGRESS.map((i) => (
+                  <View
+                    key={i}
+                    style={[
+                      c.progressDot,
+                      c.progressDotActive,
+                      compact && styles.progressDotActiveCompact,
+                    ]}
+                  />
+                ))
+              ) : (
+                steps.map((id, i) => (
+                  <View
+                    key={id}
+                    style={[
+                      c.progressDot,
+                      i <= stepIndex && c.progressDotActive,
+                      compact && i <= stepIndex && styles.progressDotActiveCompact,
+                    ]}
+                  />
+                ))
+              )}
             </View>
           </View>
           <View style={c.backBtnSpacer} />
@@ -1482,7 +1636,9 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
             currentStep === "party" || currentStep === "trip" ? styles.bodyFlex : null,
           ]}
         >
-          {currentStep !== "amount" ? renderFocusedTripCard() : null}
+          {currentStep !== "amount" && currentStep !== "paymentCapture"
+            ? renderFocusedTripCard()
+            : null}
           <View style={[styles.stepHeader, currentStep === "review" && styles.stepHeaderReview]}>
             {compact ? (
               <View style={styles.compactContext}>
@@ -1502,7 +1658,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
               </View>
             ) : null}
             {currentStep !== "review" &&
-            !(props.tripDirectTwoStepFlow && currentStep === "paymentCapture") ? (
+            !(usesPaymentCapturePair && currentStep === "paymentCapture") ? (
               <Text style={[c.stepTitle, compact && styles.stepTitleCompact]}>{title}</Text>
             ) : currentStep === "review" ? (
               <Text style={[c.stepTitle, compact && styles.stepTitleCompact]}>Confirm sync</Text>
@@ -1512,7 +1668,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
             ) : null}
             {hint &&
             currentStep !== "review" &&
-            !(props.tripDirectTwoStepFlow && currentStep === "paymentCapture") ? (
+            !(usesPaymentCapturePair && currentStep === "paymentCapture") ? (
               <Text style={[c.stepHint, compact && styles.stepHintCompact]}>{hint}</Text>
             ) : currentStep === "review" ? (
               <Text style={[c.stepHint, compact && styles.stepHintCompact]}>
@@ -1534,11 +1690,11 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
           {currentStep === "review" ||
           currentStep === "amountPayment" ||
           currentStep === "paymentCapture" ? (
-            props.tripDirectTwoStepFlow && currentStep === "paymentCapture" ? (
+            usesPaymentCapturePair && currentStep === "paymentCapture" ? (
               <View style={styles.twoStepFooterRow}>
                 <Pressable
                   style={styles.twoStepFooterBackBtn}
-                  onPress={() => setStepIndex(0)}
+                  onPress={() => setStepIndex(amountStepIndex >= 0 ? amountStepIndex : 0)}
                   accessibilityRole="button"
                   accessibilityLabel="Back to amount"
                 >
@@ -1689,8 +1845,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   focusedNodeSectionCompact: {
-    marginBottom: 10,
-    gap: 5,
+    marginBottom: 6,
+    gap: 4,
   },
   focusedNodeEyebrow: {
     fontSize: 9,
@@ -1710,11 +1866,32 @@ const styles = StyleSheet.create({
   mobileTripHeaderBand: {
     width: "100%",
     paddingHorizontal: PAGE_PAD,
-    paddingTop: 4,
-    paddingBottom: 10,
+    paddingTop: 2,
+    paddingBottom: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: LedgerSyncPalette.border,
     backgroundColor: Theme.cardWhite,
+  },
+  mobileTripHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+    width: "100%",
+    minWidth: 0,
+  },
+  mobileTripHeaderMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  changeTripBtn: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: LedgerSyncPalette.indigo,
+    textTransform: "uppercase",
+    letterSpacing: 1.6,
+    paddingTop: 2,
+    flexShrink: 0,
   },
   mobileHeaderParty: {
     fontSize: 10,
@@ -1827,6 +2004,22 @@ const styles = StyleSheet.create({
     width: "100%",
     minWidth: 0,
   },
+  amountFullPageScroll: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    minWidth: 0,
+  },
+  amountFullPageScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: PAGE_PAD,
+    paddingTop: 6,
+    paddingBottom: 8,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+    gap: 8,
+  },
   amountScroll: {
     flex: 1,
   },
@@ -1841,7 +2034,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   amountScrollContentWithFocused: {
-    gap: 14,
+    gap: 8,
   },
   amountPctDock: {
     paddingHorizontal: 16,
@@ -1851,10 +2044,19 @@ const styles = StyleSheet.create({
     borderTopColor: "#e2e8f0",
     backgroundColor: Theme.screenBackground,
   },
+  amountPctDockInline: {
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+    paddingBottom: 4,
+  },
   amountHeroStack: {
     width: "100%",
     alignSelf: "stretch",
     minWidth: 0,
+  },
+  amountHeroStackTight: {
+    marginTop: -2,
   },
   amountHeroCenter: {
     width: "100%",
@@ -1863,10 +2065,37 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     minWidth: 0,
   },
+  amountHeroCenterTight: {
+    gap: 4,
+  },
   amountMinimalTop: {
     paddingHorizontal: PAGE_PAD,
     paddingBottom: 4,
     width: "100%",
+  },
+  amountTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: PAGE_PAD,
+    paddingBottom: 8,
+    width: "100%",
+    minWidth: 0,
+    backgroundColor: Theme.cardWhite,
+  },
+  amountTopBarWithDetail: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: LedgerSyncPalette.border,
+  },
+  amountTopBarDetail: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  amountTopBarChangeTrip: {
+    flexShrink: 0,
+    alignSelf: "center",
+    maxWidth: 88,
   },
   amountBackBtn: {
     width: 40,
@@ -1910,6 +2139,10 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     marginTop: 8,
     marginBottom: 4,
+  },
+  amountHeroInputWrapTight: {
+    marginTop: 2,
+    marginBottom: 0,
   },
   amountDueChip: {
     marginTop: 4,

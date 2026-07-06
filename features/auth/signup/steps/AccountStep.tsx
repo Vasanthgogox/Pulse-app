@@ -111,6 +111,19 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         }
       />
 
+      {flow.accountOrgConflictMessage ? (
+        <SignUpPulseField
+          label="Workspace Name"
+          required
+          value={flow.orgName}
+          onChangeText={flow.setOrgName}
+          placeholder="Your company name"
+          autoCapitalize="words"
+          editable={!flow.loading}
+          errorMessage={flow.accountOrgConflictMessage}
+        />
+      ) : null}
+
       <Pressable
         onPress={flow.continueWithGoogle}
         disabled={flow.loading || flow.googleLoading}

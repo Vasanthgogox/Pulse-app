@@ -2416,11 +2416,6 @@ export function AddTransactionModal({
   const ledgerTripDirectTwoStepFlow =
     ledgerTripDirectCapture && ledgerMobileFlow && !isEditMode;
   const ledgerUseMobileWizard = ledgerMobileFlow;
-  const ledgerCaptureSinglePageActive =
-    fullPage &&
-    !isEditMode &&
-    (ledgerFullPageViewportFit ||
-      (ledgerTripDirectCapture && !ledgerMobileFlow));
 
   const ledgerWizardFromPartyContext = Boolean(
     entryContextLabel ||
@@ -2429,6 +2424,30 @@ export function AddTransactionModal({
       (dueAmountIn != null && dueAmountIn > 0) ||
       (dueAmountOut != null && dueAmountOut > 0),
   );
+
+  /** Finance entity overlay — pick trip (due first) before amount; not trip-detail direct capture. */
+  const ledgerEntityTripPickFlow = Boolean(
+    fullPage &&
+      !isEditMode &&
+      !tripLocked &&
+      !(defaultTripId ?? "").trim() &&
+      (ledgerWizardFromPartyContext || lockedVehicleId != null),
+  );
+
+  const ledgerCaptureSinglePageActive =
+    fullPage &&
+    !isEditMode &&
+    !ledgerEntityTripPickFlow &&
+    (ledgerFullPageViewportFit ||
+      (ledgerTripDirectCapture && !ledgerMobileFlow));
+
+  /** Entity flow after trip pick (or explicit no-trip): same left/right split as capture mode. */
+  const ledgerEntityPastTripPick =
+    ledgerEntityTripPickFlow &&
+    (selectedTripIds.length > 0 || !ledgerMissionRegistryExpanded);
+
+  const ledgerDesktopPaymentSplitActive =
+    ledgerCaptureSinglePageActive || ledgerEntityPastTripPick;
 
   const ledgerWizardTrips = useMemo(() => {
     const source =
@@ -2547,10 +2566,18 @@ export function AddTransactionModal({
 
   useEffect(() => {
     if (!visible || !fullPage) return;
-    if (ledgerWizardFromPartyContext) {
+    if (ledgerEntityTripPickFlow || ledgerWizardFromPartyContext) {
       setMissionTripFilterDue("has_due");
     }
-  }, [visible, fullPage, ledgerWizardFromPartyContext]);
+  }, [visible, fullPage, ledgerEntityTripPickFlow, ledgerWizardFromPartyContext]);
+
+  useEffect(() => {
+    if (!visible || !ledgerEntityTripPickFlow) return;
+    setLedgerMissionRegistryExpanded(true);
+    selectLedgerTrip(null);
+    setAmountStr("");
+    ledgerAmountUserEditedRef.current = false;
+  }, [visible, ledgerEntityTripPickFlow, ledgerWizardFlowSessionKey, selectLedgerTrip]);
 
   useEffect(() => {
     if (!visible) {
@@ -2563,7 +2590,7 @@ export function AddTransactionModal({
   }, [visible, ledgerWizardFlowSessionKey, ledgerFullPageViewportFit]);
 
   useEffect(() => {
-    if (!ledgerCaptureSinglePageActive) return;
+    if (!ledgerDesktopPaymentSplitActive) return;
     if (isEditMode || lockedAmount != null) return;
     if (ledgerAmountUserEditedRef.current) return;
     if (amountStr.replace(/,/g, "").trim()) return;
@@ -2571,7 +2598,7 @@ export function AddTransactionModal({
       setAmountStr(formatLedgerSyncAmountInput(ledgerDueAmountInr));
     }
   }, [
-    ledgerCaptureSinglePageActive,
+    ledgerDesktopPaymentSplitActive,
     isEditMode,
     lockedAmount,
     amountStr,
@@ -2664,6 +2691,13 @@ export function AddTransactionModal({
     ledgerWizardShowPaymentType &&
     (isPartyLocked || partyId != null) &&
     Boolean(defaultType);
+
+  /** Mobile party/entity flows: amount → payment capture (skip multi-step review). */
+  const ledgerPaymentCaptureAfterAmount =
+    ledgerUseMobileWizard &&
+    !isEditMode &&
+    !ledgerTripDirectTwoStepFlow &&
+    !ledgerMobileTwoStepTripFlow;
 
   useEffect(() => {
     if (!paymentModeId) {
@@ -3628,12 +3662,8 @@ export function AddTransactionModal({
     const ledgerTripDesktopSplit = fullPage && !stackTripFinancialBand;
     /** Desktop capture: single page — category + amount on right; mode + UTR on left. */
     const ledgerDesktopOnSetupStep = false;
-    const ledgerDesktopOnPaymentStep = ledgerCaptureSinglePageActive;
+    const ledgerDesktopOnPaymentStep = ledgerDesktopPaymentSplitActive;
     const LEDGER_PROTOCOL_SUMMARY_LOGO = ledgerTripDesktopSplit ? 20 : mob ? 18 : 20;
-    /** Stacked mobile/tablet: cap list height; desktop split fills the matched pane height. */
-    const missionListMaxHeight = stackTripFinancialBand
-      ? Math.min(240, Math.max(140, Math.floor(Dimensions.get("window").height * 0.26)))
-      : 320;
     const selectedLedgerTripId =
       selectedTripIds[0] ?? (defaultTripId?.trim() || null);
     const activeLedgerTrip =
@@ -3650,6 +3680,17 @@ export function AddTransactionModal({
       !tripLocked &&
       selectedLedgerTripId == null &&
       !ledgerMissionRegistryExpanded;
+    /** Entity finance page: trip pick is step 1 — hide payment until a trip is chosen. */
+    const ledgerPartyTripPickGate =
+      ledgerEntityTripPickFlow &&
+      selectedLedgerTripId == null &&
+      !ledgerNoTripMinimized;
+    /** Stacked mobile/tablet: cap list height; desktop split fills the matched pane height. */
+    const missionListMaxHeight = ledgerPartyTripPickGate
+      ? Math.min(520, Math.max(320, Math.floor(Dimensions.get("window").height * 0.45)))
+      : stackTripFinancialBand
+        ? Math.min(240, Math.max(140, Math.floor(Dimensions.get("window").height * 0.26)))
+        : 320;
 
     /** Split desktop band: always stack sync value + date vertically; stacked mobile band uses width rule. */
     const ledgerSyncHeroStack =
@@ -3846,7 +3887,7 @@ export function AddTransactionModal({
         usesScroll={protocolTypeStripUsesScroll}
         tileGap={protocolTileGap}
         sectionStyle={
-          ledgerDesktopOnSetupStep && ledgerCaptureSinglePageActive
+          ledgerDesktopOnSetupStep && ledgerDesktopPaymentSplitActive
             ? undefined
             : ledgerTripDesktopSplit && !ledgerDesktopOnSetupStep
               ? styles.ledgerProtocolSectionStackTop
@@ -3899,11 +3940,11 @@ export function AddTransactionModal({
     );
 
     const capturePaymentTypeCollapsed =
-      ledgerCaptureSinglePageActive &&
+      ledgerDesktopPaymentSplitActive &&
       !paymentTypeExpanded &&
       Boolean(selectedPaymentTypeLabel);
     const capturePaymentModeCollapsed =
-      ledgerCaptureSinglePageActive && !paymentModeExpanded && Boolean(paymentModeId);
+      ledgerDesktopPaymentSplitActive && !paymentModeExpanded && Boolean(paymentModeId);
 
     const ledgerDesktopLeftCategoryBand = (
       <View style={styles.ledgerDesktopPaymentSectionCard}>
@@ -4415,7 +4456,7 @@ export function AddTransactionModal({
         </ScrollView>
     );
 
-    const ledgerProvisionBody = ledgerCaptureSinglePageActive ? (
+    const ledgerProvisionBody = ledgerDesktopPaymentSplitActive ? (
       ledgerProvisionStepCombined
     ) : (
       <View
@@ -4507,7 +4548,7 @@ export function AddTransactionModal({
       );
     };
 
-    const missionLedgerBlock = ledgerCaptureSinglePageActive ? (
+    const missionLedgerBlock = ledgerDesktopPaymentSplitActive ? (
       <View style={[styles.missionCard, styles.missionCardTripPaneFill]}>
         <ScrollView
           style={styles.ledgerDesktopLeftScroll}
@@ -4557,13 +4598,17 @@ export function AddTransactionModal({
         <View style={[styles.missionHead, mob && styles.ledgerMobMissionHead]}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.missionTitle, mob && styles.ledgerMobMissionTitle]}>
-              {showHeaderTripDetail
-                ? "Settlement"
-                : ledgerTripFocusMode || (tripLocked && activeLedgerTrip)
-                  ? "Focused Node"
-                  : ledgerNoTripMinimized
-                    ? "No voyage linked"
-                    : "Select Voyage Registry"}
+              {ledgerPartyTripPickGate
+                ? "Select trip"
+                : showHeaderTripDetail
+                  ? "Settlement"
+                  : ledgerTripFocusMode || (tripLocked && activeLedgerTrip)
+                    ? "Focused trip"
+                    : ledgerNoTripMinimized
+                      ? "No trip linked"
+                      : ledgerEntityTripPickFlow
+                        ? "Trips with due"
+                        : "Select trip"}
             </Text>
           </View>
           {ledgerTripFocusMode || ledgerNoTripMinimized ? (
@@ -5135,7 +5180,7 @@ export function AddTransactionModal({
           <View style={styles.ledgerV2HeaderTitleBlock}>
               <LedgerHeaderTripDetail
                 title={
-                  ledgerCaptureSinglePageActive
+                  ledgerDesktopPaymentSplitActive
                     ? isEditMode
                       ? "Edit ledger"
                       : "Record payment"
@@ -5147,9 +5192,11 @@ export function AddTransactionModal({
                 tripNumber={showHeaderTripDetail ? headerTripNumber : null}
                 routeLabel={showHeaderTripDetail ? headerTripRoute : null}
                 hint={
-                  ledgerCaptureSinglePageActive && !showHeaderTripDetail
-                    ? "Category, amount & sync"
-                    : null
+                  ledgerPartyTripPickGate
+                    ? "Choose a trip with outstanding due"
+                    : ledgerDesktopPaymentSplitActive && !showHeaderTripDetail
+                      ? "Category, amount & sync"
+                      : null
                 }
                 compact={mob}
               />
@@ -5205,7 +5252,8 @@ export function AddTransactionModal({
             stackTripFinancialBand && styles.ledgerV2TripFirstBandStack,
             mob && styles.ledgerMobTripBand,
             ledgerTripDesktopSplit && styles.ledgerV2TripFirstBandFill,
-            ledgerCaptureSinglePageActive && styles.ledgerV2TripFirstBandCapture,
+            ledgerDesktopPaymentSplitActive && styles.ledgerV2TripFirstBandCapture,
+            ledgerPartyTripPickGate && styles.ledgerV2TripFirstBandTripPickOnly,
           ]}
         >
           <View
@@ -5214,25 +5262,28 @@ export function AddTransactionModal({
               stackTripFinancialBand && styles.ledgerTripPaneCardStack,
               mob && styles.ledgerMobPaneCard,
               ledgerTripDesktopSplit && styles.ledgerTripPaneCardLeftRegistry,
-              ledgerCaptureSinglePageActive && styles.ledgerTripPaneCardTransparent,
+              ledgerDesktopPaymentSplitActive && styles.ledgerTripPaneCardTransparent,
+              ledgerPartyTripPickGate && styles.ledgerTripPaneCardTripPickFull,
             ]}
           >
             {missionLedgerBlock}
           </View>
+          {!ledgerPartyTripPickGate ? (
           <View
             style={[
               styles.ledgerTripPaneCard,
               stackTripFinancialBand && styles.ledgerTripPaneCardStack,
               mob && styles.ledgerMobPaneCard,
               ledgerTripDesktopSplit && styles.ledgerTripPaneCardRightWide,
-              ledgerCaptureSinglePageActive && styles.ledgerTripPaneCardTransparent,
+              ledgerDesktopPaymentSplitActive && styles.ledgerTripPaneCardTransparent,
             ]}
           >
             {ledgerProvisionBody}
           </View>
+          ) : null}
         </View>
 
-        {!ledgerCaptureSinglePageActive ? (
+        {!ledgerDesktopPaymentSplitActive && !ledgerEntityTripPickFlow ? (
             <View
               style={[
             styles.ledgerV2Grid,
@@ -5397,6 +5448,9 @@ export function AddTransactionModal({
                   const trip = id ? resolveTripOptionById(id) : null;
                   selectMissionTrip(trip);
                 }}
+                onChangeTripRequest={() => {
+                  setLedgerMissionRegistryExpanded(true);
+                }}
                 trips={ledgerWizardTrips}
                 tripLocked={tripLocked}
                 tripDisplay={tripNumber || lockedTripDisplay || null}
@@ -5433,6 +5487,7 @@ export function AddTransactionModal({
                 focusedTripCard={ledgerFocusedTripCardElement}
                 twoStepTripLockedFlow={ledgerMobileTwoStepTripFlow}
                 tripDirectTwoStepFlow={ledgerTripDirectTwoStepFlow}
+                paymentCaptureAfterAmount={ledgerPaymentCaptureAfterAmount}
                 submitButtonLabel="Authorize Financial Sync"
                 headerTripNumber={showHeaderTripDetail ? headerTripNumber : null}
                 headerTripRoute={showHeaderTripDetail ? headerTripRoute : null}
@@ -7744,6 +7799,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 12,
   },
+  ledgerV2TripFirstBandTripPickOnly: {
+    flexDirection: "column",
+  },
   ledgerV2TripFirstBandStack: {
     flexDirection: "column",
     alignItems: "stretch",
@@ -7777,6 +7835,11 @@ const styles = StyleSheet.create({
   ledgerTripPaneCardRightWide: {
     flex: 7,
     flexDirection: "column",
+  },
+  ledgerTripPaneCardTripPickFull: {
+    flex: 1,
+    width: "100%",
+    minHeight: 280,
   },
   ledgerTripPaneCardTransparent: {
     backgroundColor: "transparent",

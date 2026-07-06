@@ -93,10 +93,3 @@ export async function resolveInvitationsByIdentities(
     matchedBy,
   };
 }
-
-/** @deprecated Use resolveInvitationsByIdentities({ identities: [phoneIdentity(phone, true)] }) */
-export async function resolvePendingInvitationsByPhone(phone: string) {
-  return resolveInvitationsByIdentities({
-    identities: [{ type: 'phone', value: phone, verified: true }],
-  });
-}

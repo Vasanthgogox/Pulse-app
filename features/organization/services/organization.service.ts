@@ -340,13 +340,16 @@ export async function getOrgProfileFields(orgId: string): Promise<{
 
 // ─── Workspace KYC ────────────────────────────────────────────────────────────
 
+const WORKSPACE_KYC_SELECT =
+  'id,name,logo_url,business_pan,gstin,gst_not_applicable,cin,msme_number,tan_number,iec_number,verification_status,verified_at,kyc_rejected_reason,rejection_reasons,registration_type,business_type,address_line,city,state,pincode,address_pincode,address_proof_path,address_proof_type,frozen_at,submitted_at';
+
 export async function getWorkspaceKyc(orgId: string): Promise<{
   error: Error | null;
   kyc: WorkspaceKyc | null;
 }> {
   const { data, error } = await supabase()
     .from('organizations')
-    .select('id,name,logo_url,business_pan,gstin,gst_not_applicable,cin,msme_number,tan_number,iec_number,registration_type,business_type,address_line,city,state,pincode,address_pincode,address_proof_path,address_proof_type,frozen_at,submitted_at,verification_status,verified_at,kyc_rejected_reason,rejection_reasons')
+    .select(WORKSPACE_KYC_SELECT)
     .eq('id', orgId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), kyc: null };
@@ -400,7 +403,7 @@ export async function updateWorkspaceKyc(
 
   const { data: fresh, error: fetchErr } = await supabase()
     .from('organizations')
-    .select('id,name,logo_url,business_pan,gstin,gst_not_applicable,cin,msme_number,tan_number,iec_number,registration_type,business_type,address_line,city,state,pincode,address_pincode,address_proof_path,address_proof_type,frozen_at,submitted_at,verification_status,verified_at,kyc_rejected_reason,rejection_reasons')
+    .select(WORKSPACE_KYC_SELECT)
     .eq('id', orgId)
     .maybeSingle();
   if (fetchErr) return { error: new Error(fetchErr.message), kyc: null };

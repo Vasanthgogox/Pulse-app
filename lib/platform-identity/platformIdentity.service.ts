@@ -4,9 +4,10 @@ import { acceptPendingTeamInvitation } from '@/features/organization/services/te
 import { acceptTeamInvite, getMyTeamInvites } from '@/features/organization/services/members.service';
 import { shadowCheckPlatformIdentity } from '@/features/organization/utils/platformIdentityShadowCheck.util';
 import type { SignupEntryIntent } from '@/features/auth/signup/signupEntryIntent';
-import type { InvitationResolverResult } from '@/features/organization/services/teamInvitationResolver.service';
-import type { InvitationIdentity } from '@/lib/onboarding/identityTypes';
+import type { IdentityInvitation, InvitationIdentity } from '@/lib/onboarding/identityTypes';
 import type { OnboardingEntryChannel } from '@/lib/onboarding/onboardingEntryChannels';
+import type { OrganizationIdentityPolicy } from '@/lib/onboarding/organizationIdentityPolicy';
+import { loadOrganizationIdentityPolicy } from '@/lib/onboarding/organizationIdentityPolicy';
 import {
   resolveInvitationsByIdentities,
   type ResolveInvitationsInput,
@@ -57,6 +58,13 @@ export type AcceptInvitationInput = {
   proposedOrganizationName?: string;
   personStatus?: PersonStatus;
   organizationEmploymentPolicy?: OrganizationEmploymentPolicy;
+  /** Auto-loaded via loadOrganizationIdentityPolicy() when omitted, same pattern as organizationEmploymentPolicy. */
+  organizationIdentityPolicy?: OrganizationIdentityPolicy;
+  verifiedIdentities?: InvitationIdentity[];
+  /** Invitation lifecycle state — pass the invitation's current status when known. */
+  invitationStatus?: IdentityInvitation['status'];
+  /** The invitation's assigned role (e.g. a PlatformTeamRole) — carried into the resulting workspace context. */
+  role?: string;
 };
 
 export type AcceptInvitationResult = {
@@ -208,6 +216,10 @@ export const platformIdentityService = {
       input.organizationEmploymentPolicy ??
       (await loadOrganizationEmploymentPolicy(input.proposedOrganizationId));
 
+    const orgIdentityPolicy =
+      input.organizationIdentityPolicy ??
+      (await loadOrganizationIdentityPolicy(input.proposedOrganizationId));
+
     const policy = await platformIdentityService.evaluateJoin({
       personStatus: input.personStatus ?? 'ACTIVE',
       proposedRelationshipType,
@@ -215,6 +227,9 @@ export const platformIdentityService = {
       proposedOrganizationName: input.proposedOrganizationName,
       existingMemberships: memberships,
       organizationEmploymentPolicy: orgEmploymentPolicy,
+      organizationIdentityPolicy: orgIdentityPolicy,
+      verifiedIdentities: input.verifiedIdentities,
+      invitationStatus: input.invitationStatus,
     });
 
     if (!policy.allowed) {
@@ -232,6 +247,7 @@ export const platformIdentityService = {
 
     const { inviteId } = input;
     let organizationId: string | null = null;
+    let membershipId: string | null = null;
 
     if (inviteId) {
       const acceptResult = await acceptPendingTeamInvitation(inviteId);
@@ -239,6 +255,7 @@ export const platformIdentityService = {
         return { error: acceptResult.error, organizationId: null, policy };
       }
       organizationId = acceptResult.organizationId;
+      membershipId = acceptResult.membershipId;
       if (!organizationId) {
         return {
           error: new Error('Invitation accepted but organization was not returned.'),
@@ -284,6 +301,9 @@ export const platformIdentityService = {
     const switchResult = await platformIdentityService.switchWorkspace({
       organizationId,
       personId: session?.user?.id ?? null,
+      membershipId,
+      relationshipType: proposedRelationshipType,
+      role: input.role,
       deps,
     });
 

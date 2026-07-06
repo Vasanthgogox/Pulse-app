@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useOptionalActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
 import { useOptionalPendingOnboarding } from '@/contexts/PendingOnboardingContext';
 import { useResumePendingTeamInvite } from '@/features/auth/hooks/useResumePendingTeamInvite';
 import { getMyTeamInvites } from '@/features/organization/services/members.service';
@@ -11,12 +12,14 @@ import { getMyTeamInvites } from '@/features/organization/services/members.servi
 export function PendingInviteResumeGate() {
   const { user, status } = useAuth();
   const pendingCtx = useOptionalPendingOnboarding();
+  const workspace = useOptionalActiveWorkspace();
   const { resumePendingTeamInvite, resumeMembershipInvite } = useResumePendingTeamInvite();
   const resumeAttemptedRef = useRef<string | null>(null);
 
   useEffect(() => {
     const uid = user?.uid;
     if (status !== 'authenticated' || !uid || !pendingCtx?.isHydrated) return;
+    if (!workspace || workspace.isLoading) return;
     if (resumeAttemptedRef.current === uid) return;
 
     resumeAttemptedRef.current = uid;
@@ -40,6 +43,8 @@ export function PendingInviteResumeGate() {
     resumePendingTeamInvite,
     status,
     user?.uid,
+    workspace,
+    workspace?.isLoading,
   ]);
 
   return null;

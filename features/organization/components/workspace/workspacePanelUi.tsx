@@ -134,11 +134,22 @@ export function profileCompletionPct(snap: OrgProfileSnapshot | null): number {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-export function SectionHeader({ label, color = PURPLE }: { label: string; color?: string }) {
+export function SectionHeader({
+  label,
+  color = PURPLE,
+  trailing,
+}: {
+  label: string;
+  color?: string;
+  trailing?: React.ReactNode;
+}) {
   return (
     <View style={sh.wrap}>
-      <View style={[sh.accent, { backgroundColor: color }]} />
-      <Text style={sh.title}>{label}</Text>
+      <View style={sh.left}>
+        <View style={[sh.accent, { backgroundColor: color }]} />
+        <Text style={sh.title}>{label}</Text>
+      </View>
+      {trailing}
     </View>
   );
 }
@@ -147,19 +158,27 @@ const sh = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 8,
     backgroundColor: Theme.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
-  accent: { width: 2, height: 10, borderRadius: 1 },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    flex: 1,
+    minWidth: 0,
+  },
+  accent: { width: 2, height: 9, borderRadius: 1, flexShrink: 0 },
   title: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.1,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
     color: Theme.textMuted,
   },
@@ -168,10 +187,29 @@ const sh = StyleSheet.create({
 export function KycProgressBlock({
   pct,
   barColor,
+  inline,
 }: {
   pct: number;
   barColor: string;
+  /** When true, renders a single compact row (bar + label). */
+  inline?: boolean;
 }) {
+  if (inline) {
+    return (
+      <View style={kp.inlineWrap}>
+        <View style={kp.inlineTrack}>
+          <View
+            style={[
+              kp.fill,
+              { width: `${pct}%` as `${number}%`, backgroundColor: barColor },
+            ]}
+          />
+        </View>
+        <Text style={kp.inlineLabel}>{pct}%</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={kp.wrap}>
       <View style={kp.track}>
@@ -188,15 +226,36 @@ export function KycProgressBlock({
 }
 
 const kp = StyleSheet.create({
-  wrap: { paddingHorizontal: 14, paddingBottom: 10, gap: 6 },
+  wrap: { paddingHorizontal: 12, paddingBottom: 8, gap: 5 },
   track: {
-    height: 5,
-    borderRadius: 3,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: Theme.surfaceGray,
     overflow: 'hidden',
   },
-  fill: { height: '100%', borderRadius: 3 },
-  label: { fontSize: 10, fontWeight: '700', color: Theme.textMuted, letterSpacing: 0.4 },
+  fill: { height: '100%', borderRadius: 2 },
+  label: { fontSize: 10, fontWeight: '500', color: Theme.textMuted },
+  inlineWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+    minWidth: 88,
+  },
+  inlineTrack: {
+    width: 56,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Theme.surfaceGray,
+    overflow: 'hidden',
+  },
+  inlineLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Theme.textMuted,
+    minWidth: 28,
+    textAlign: 'right',
+  },
 });
 
 export function InfoRow({ label, value }: { label: string; value: string }) {
@@ -214,22 +273,22 @@ const ir = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    minHeight: 52,
+    minHeight: 40,
   },
   label: {
     fontSize: 11,
     color: Theme.textMuted,
     fontWeight: '500',
     flexShrink: 0,
-    letterSpacing: -0.05,
+    letterSpacing: 0,
   },
   value: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     color: Theme.textPrimaryDark,
     textAlign: 'right',
     flex: 1,
@@ -258,7 +317,7 @@ export function ProfileFieldRow({
       </View>
       <View style={pf.text}>
         <Text style={pf.label}>{label}</Text>
-        <Text style={[pf.value, !filled && pf.valueMissing]} numberOfLines={1}>
+        <Text style={[pf.value, !filled && pf.valueMissing]} numberOfLines={2}>
           {filled ? value : 'Not filled'}
         </Text>
       </View>
@@ -271,35 +330,36 @@ const pf = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
+    minHeight: 40,
   },
   dot: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
   },
-  text: { flex: 1, minWidth: 0 },
+  text: { flex: 1, minWidth: 0, gap: 1 },
   label: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Theme.textMuted,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginBottom: 1,
-  },
-  value: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.05,
+    letterSpacing: -0.1,
   },
-  valueMissing: { color: Theme.textMuted, fontStyle: 'italic' },
+  value: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: Theme.textSecondary,
+    lineHeight: 14,
+  },
+  valueMissing: { color: Theme.textMuted, fontStyle: 'normal' },
 });
 
 export function OrgIdCopyRow({
@@ -404,35 +464,43 @@ export function KycFieldRow({
   verificationStatus,
   canEdit,
   onSave,
+  onValidateGstin,
 }: {
   field: KycField;
   value: string | null | undefined;
   verificationStatus: string | null | undefined;
   canEdit: boolean;
   onSave: (field: KycField, val: string) => Promise<void>;
+  onValidateGstin?: (
+    gstin: string,
+  ) => Promise<{ ok: boolean; message?: string; registryName?: string }>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? '');
   const [saving, setSaving] = useState(false);
+  const [gstinValidating, setGstinValidating] = useState(false);
+  const [gstinHint, setGstinHint] = useState<string | null>(null);
   const [validationErr, setValidationErr] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
 
   const isVerified = verificationStatus === 'verified';
+  const isFrozen = isVerified || verificationStatus === 'pending';
   const hasValue = !!value?.trim();
 
   const statusIcon = isVerified
-    ? <CheckCircle2 size={14} color={GREEN} strokeWidth={2.2} />
+    ? <CheckCircle2 size={12} color={GREEN} strokeWidth={2.2} />
     : hasValue
-    ? <Clock size={14} color={AMBER} strokeWidth={2.2} />
-    : <CircleDashed size={14} color={Theme.textMuted} strokeWidth={2} />;
+    ? <Clock size={12} color={AMBER} strokeWidth={2.2} />
+    : <CircleDashed size={12} color={Theme.textMuted} strokeWidth={2} />;
 
   const statusColor = isVerified ? GREEN : hasValue ? AMBER : Theme.textMuted;
   const statusBg = isVerified ? GREEN_TINT : hasValue ? AMBER_TINT : Theme.surfaceGray;
 
   const handleEdit = () => {
-    if (!canEdit || isVerified) return;
+    if (!canEdit || isFrozen) return;
     setDraft(value ?? '');
     setValidationErr(null);
+    setGstinHint(null);
     setEditing(true);
     setTimeout(() => inputRef.current?.focus(), 80);
   };
@@ -449,6 +517,30 @@ export function KycFieldRow({
     }
   };
 
+  const handleValidateGstin = async () => {
+    if (!onValidateGstin || field !== 'gstin') return;
+    const err = validateKyc(field, draft);
+    if (err) { setValidationErr(err); return; }
+    setGstinValidating(true);
+    setValidationErr(null);
+    try {
+      const result = await onValidateGstin(draft.trim().toUpperCase());
+      if (!result.ok) {
+        setValidationErr(result.message ?? 'GSTIN validation failed');
+        setGstinHint(null);
+        return;
+      }
+      setGstinHint(
+        result.registryName
+          ? `Verified — ${result.registryName}`
+          : 'GSTIN verified and saved',
+      );
+      setEditing(false);
+    } finally {
+      setGstinValidating(false);
+    }
+  };
+
   const displayValue = isVerified
     ? 'Verified'
     : hasValue
@@ -457,30 +549,16 @@ export function KycFieldRow({
 
   return (
     <View style={kf.wrap}>
-      <View style={kf.topRow}>
+      <View style={kf.row}>
         <View style={[kf.iconBox, { backgroundColor: statusBg }]}>{statusIcon}</View>
-        <View style={kf.body}>
-          <View style={kf.titleRow}>
-            <Text style={kf.label}>{kycLabel(field)}</Text>
-            {canEdit && !isVerified && !editing ? (
-              <Pressable
-                style={kf.editBtn}
-                onPress={handleEdit}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={`Edit ${kycLabel(field)}`}
-              >
-                <Pencil size={11} color={PURPLE} strokeWidth={2.2} />
-                <Text style={kf.editBtnText}>Edit</Text>
-              </Pressable>
-            ) : isVerified ? (
-              <Lock size={12} color={Theme.textMuted} strokeWidth={2} />
-            ) : null}
-          </View>
-          <Text style={kf.hint} numberOfLines={2}>
+        <View style={kf.main}>
+          <Text style={kf.label}>{kycLabel(field)}</Text>
+          <Text style={kf.hint} numberOfLines={1}>
             {kycSub(field)}
           </Text>
-          {!editing ? (
+        </View>
+        {!editing ? (
+          <View style={kf.trailing}>
             <Text
               style={[
                 kf.valueLine,
@@ -491,8 +569,22 @@ export function KycFieldRow({
             >
               {displayValue}
             </Text>
-          ) : null}
-        </View>
+            {canEdit && !isFrozen ? (
+              <Pressable
+                style={kf.editBtn}
+                onPress={handleEdit}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${kycLabel(field)}`}
+              >
+                <Pencil size={10} color={PURPLE} strokeWidth={2.2} />
+                <Text style={kf.editBtnText}>Edit</Text>
+              </Pressable>
+            ) : isFrozen ? (
+              <Lock size={11} color={Theme.textMuted} strokeWidth={2} />
+            ) : null}
+          </View>
+        ) : null}
       </View>
       {editing ? (
         <View style={kf.editor}>
@@ -508,10 +600,23 @@ export function KycFieldRow({
             onSubmitEditing={() => void handleSave()}
           />
           <View style={kf.actionRow}>
+            {field === 'gstin' && onValidateGstin && draft.trim().length === 15 ? (
+              <Pressable
+                style={({ pressed }) => [kf.saveBtn, pressed && { opacity: 0.9 }]}
+                onPress={() => void handleValidateGstin()}
+                disabled={gstinValidating || saving}
+              >
+                {gstinValidating ? (
+                  <LoadingIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={kf.saveBtnText}>Verify GSTIN</Text>
+                )}
+              </Pressable>
+            ) : null}
             <Pressable
               style={({ pressed }) => [kf.saveBtn, pressed && { opacity: 0.9 }]}
               onPress={() => void handleSave()}
-              disabled={saving}
+              disabled={saving || gstinValidating}
               accessibilityRole="button"
               accessibilityLabel={`Save ${kycLabel(field)}`}
             >
@@ -519,7 +624,7 @@ export function KycFieldRow({
                 <LoadingIndicator size="small" color="#fff" />
               ) : (
                 <>
-                  <Check size={13} color="#fff" strokeWidth={2.8} />
+                  <Check size={11} color="#fff" strokeWidth={2.8} />
                   <Text style={kf.saveBtnText}>Save</Text>
                 </>
               )}
@@ -533,6 +638,7 @@ export function KycFieldRow({
               <Text style={kf.cancelText}>Cancel</Text>
             </Pressable>
           </View>
+          {gstinHint ? <Text style={kf.hintOk}>{gstinHint}</Text> : null}
           {validationErr ? <Text style={kf.errText}>{validationErr}</Text> : null}
         </View>
       ) : null}
@@ -544,10 +650,14 @@ export function KycFieldsList({
   kyc,
   canEdit,
   onSave,
+  onValidateGstin,
 }: {
   kyc: WorkspaceKyc | null;
   canEdit: boolean;
   onSave: (field: KycField, val: string) => Promise<void>;
+  onValidateGstin?: (
+    gstin: string,
+  ) => Promise<{ ok: boolean; message?: string; registryName?: string }>;
 }) {
   return (
     <>
@@ -559,6 +669,7 @@ export function KycFieldsList({
           verificationStatus={kyc?.verification_status}
           canEdit={canEdit}
           onSave={onSave}
+          onValidateGstin={field === 'gstin' ? onValidateGstin : undefined}
         />
       ))}
     </>
@@ -567,123 +678,123 @@ export function KycFieldsList({
 
 const kf = StyleSheet.create({
   wrap: {
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    gap: 0,
+    gap: 8,
   },
-  topRow: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 40,
   },
   iconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    marginTop: 1,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
   },
-  body: { flex: 1, minWidth: 0, gap: 3 },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    minHeight: 22,
-  },
+  main: { flex: 1, minWidth: 0, gap: 1 },
   label: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.05,
-    flex: 1,
-    minWidth: 0,
+    letterSpacing: -0.1,
   },
   hint: {
     fontSize: 10,
     color: Theme.textMuted,
-    lineHeight: 14,
-    fontWeight: '500',
+    lineHeight: 13,
+    fontWeight: '400',
+  },
+  trailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexShrink: 0,
+    maxWidth: '42%',
   },
   valueLine: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '500',
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginTop: 1,
+    textAlign: 'right',
+    flexShrink: 1,
   },
   valueEmpty: {
     color: Theme.textMuted,
-    fontStyle: 'italic',
-    fontWeight: '500',
+    fontStyle: 'normal',
+    fontWeight: '400',
     fontFamily: undefined,
-    letterSpacing: -0.05,
+    letterSpacing: 0,
   },
   editor: {
-    marginTop: 10,
-    marginLeft: 46,
-    gap: 8,
+    marginLeft: 38,
+    gap: 6,
     alignSelf: 'stretch',
     minWidth: 0,
   },
   input: {
     alignSelf: 'stretch',
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 20,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
     color: Theme.textPrimaryDark,
     borderWidth: 1,
-    borderColor: PURPLE_BORDER,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: Theme.borderMedium,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     backgroundColor: Theme.screenBackground,
-    minHeight: 44,
+    minHeight: 34,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' as const } : null),
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 8,
+    gap: 6,
     flexWrap: 'wrap',
   },
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    gap: 4,
+    height: 30,
+    paddingHorizontal: 10,
+    borderRadius: 6,
     backgroundColor: PURPLE,
     flexShrink: 0,
   },
-  saveBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  saveBtnText: { fontSize: 11, fontWeight: '600', color: '#fff' },
   cancelBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     flexShrink: 0,
   },
-  cancelText: { fontSize: 11, color: Theme.textMuted, fontWeight: '600' },
+  cancelText: { fontSize: 11, color: Theme.textMuted, fontWeight: '500' },
   errText: { fontSize: 10, color: Theme.negative, fontWeight: '500' },
+  hintOk: { fontSize: 10, color: GREEN, fontWeight: '500' },
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: PURPLE_TINT,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 5,
+    backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: PURPLE_BORDER,
+    borderColor: Theme.borderMedium,
     flexShrink: 0,
   },
   editBtnText: { fontSize: 10, fontWeight: '600', color: PURPLE },
@@ -693,37 +804,37 @@ const oid = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    minHeight: 52,
+    minHeight: 40,
   },
   icon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: PURPLE_BORDER,
+    borderColor: Theme.borderLight,
   },
   text: { flex: 1, minWidth: 0, gap: 2 },
   label: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     color: Theme.textPrimaryDark,
     letterSpacing: -0.05,
   },
   value: {
     fontSize: 9,
     color: Theme.textMuted,
-    fontWeight: '500',
+    fontWeight: '400',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    letterSpacing: 0.1,
+    letterSpacing: 0.05,
   },
-  hint: { fontSize: 11, fontWeight: '600', color: PURPLE },
+  hint: { fontSize: 10, fontWeight: '500', color: PURPLE },
 });
 
 
@@ -760,14 +871,14 @@ export const workspacePanelStyles = StyleSheet.create({
   /** Detail pane cards — aligned with WorkspaceHubMenu sectionCard */
   detailCard: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e4e7ef',
+    borderColor: '#e8ebf0',
     overflow: 'hidden',
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
     elevation: 1,
   },
   card: {
@@ -807,19 +918,19 @@ export const workspacePanelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginHorizontal: 14,
-    marginBottom: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
+    marginHorizontal: 12,
+    marginBottom: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
   },
-  kycReadonlyText: { fontSize: 10, color: Theme.textMuted, flex: 1, fontWeight: '500', lineHeight: 14 },
-  kycStack: { gap: 18, width: '100%' },
+  kycReadonlyText: { fontSize: 10, color: Theme.textMuted, flex: 1, fontWeight: '400', lineHeight: 14 },
+  kycStack: { gap: 12, width: '100%' },
   /** Shared vertical stack for workspace detail panes (settings, KYC, etc.). */
-  panelStack: { gap: 18, width: '100%' },
+  panelStack: { gap: 12, width: '100%' },
 
   // Hub-aligned form fields (settings, account edit)
   panelFieldGroup: {

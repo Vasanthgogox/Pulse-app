@@ -9,6 +9,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type Context,
   type ReactNode,
 } from 'react';
 
@@ -37,9 +38,21 @@ type PendingOnboardingState = {
   clearPending: () => Promise<void>;
 };
 
-const PendingOnboardingContext = createContext<PendingOnboardingState | undefined>(
-  undefined,
-);
+const PULSE_PENDING_ONBOARDING_CONTEXT_KEY = '__pulse_pending_onboarding_context__';
+
+function getOrCreatePendingOnboardingContext(): Context<PendingOnboardingState | undefined> {
+  const g = globalThis as typeof globalThis & {
+    [PULSE_PENDING_ONBOARDING_CONTEXT_KEY]?: Context<PendingOnboardingState | undefined>;
+  };
+  if (!g[PULSE_PENDING_ONBOARDING_CONTEXT_KEY]) {
+    g[PULSE_PENDING_ONBOARDING_CONTEXT_KEY] = createContext<PendingOnboardingState | undefined>(
+      undefined,
+    );
+  }
+  return g[PULSE_PENDING_ONBOARDING_CONTEXT_KEY];
+}
+
+const PendingOnboardingContext = getOrCreatePendingOnboardingContext();
 
 export function PendingOnboardingProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<PendingMemberInvitation | null>(null);

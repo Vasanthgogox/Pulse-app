@@ -4,6 +4,7 @@ import {
   checkExistingUserByPhone,
   checkEmailRegisteredForSignup,
   checkOrganizationNameTaken,
+  OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE,
   resendVerificationEmail,
   setPendingOAuthMetadata,
   updateProfile,
@@ -16,6 +17,7 @@ import {
   type ResolvedTeamInvitation,
 } from '@/features/organization/services/teamInvitationResolver.service';
 import { shadowCheckPlatformIdentity } from '@/features/organization/utils/platformIdentityShadowCheck.util';
+import { legacyTeamInviteToIdentityInvitation } from '@/lib/onboarding/invitationModel.util';
 import { validateEmail } from '@/lib/emailValidation';
 import { formatMobileNumber } from '@/lib/format';
 import { ROUTES } from '@/lib/routes';
@@ -35,6 +37,12 @@ import {
   readBusinessSignupBrandingStep,
   setBusinessSignupBrandingActive,
 } from '@/lib/onboarding/businessSignupBranding.util';
+import {
+  clearPendingPersonalization,
+  getPendingPersonalization,
+  markPendingPersonalizationRetried,
+  setPendingPersonalization,
+} from '@/lib/onboarding/pendingPersonalization.util';
 import {
   extractIndianMobileTenDigits,
   isPhoneValid,
@@ -124,6 +132,7 @@ export function useBusinessSignUpFlow() {
   const [orgCheck, setOrgCheck] = useState<{ loading: boolean; taken: boolean } | null>(null);
   const orgCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [orgTakenError, setOrgTakenError] = useState<string | null>(null);
+  const [accountOrgConflictMessage, setAccountOrgConflictMessage] = useState<string | null>(null);
 
   // Step 3
   const [businessType, setBusinessType] = useState<BusinessType | null>(null);
@@ -375,6 +384,39 @@ export function useBusinessSignUpFlow() {
     };
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Apply any personalization queued before email verification (see persistProfilePhoto),
+  // once a session exists. Runs independent of `step` since the resumed step after
+  // verification can be 6, 7, or 8. Retried exactly once per mount; cleared on success only.
+  // TODO: this only replays because the branding gate (businessSignupBranding.util)
+  // keeps routing the user back into this hook until Step 8 finishes — that's a signup
+  // implementation detail, not a real dependency of the personalization queue. Move this
+  // replay into something that watches session/auth state directly (e.g. AuthContext or a
+  // profile bootstrap step) so it keeps working if the branding gate's lifecycle changes.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const entry = await getPendingPersonalization('profile_photo');
+      if (!entry || entry.retried || cancelled) return;
+
+      const { data: { session } } = await supabase().auth.getSession();
+      if (!session?.user?.id || cancelled) return;
+
+      const { error } = await updateProfile({ avatar_url: null, avatar_seed: entry.avatarSeed });
+      if (cancelled) return;
+      if (error) {
+        await markPendingPersonalizationRetried('profile_photo');
+        return;
+      }
+      await clearPendingPersonalization('profile_photo');
+      setProfileAvatarSeed(entry.avatarSeed);
+      setProfilePreviewUri(null);
+      await refreshSession();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (step >= 6 && step <= 8) {
       setBusinessSignupBrandingActive(true);
@@ -524,10 +566,14 @@ export function useBusinessSignUpFlow() {
     setOrgNameRaw(t);
     setStep2Attempted(false);
     setOrgTakenError(null);
+    setAccountOrgConflictMessage(null);
   };
 
   const orgTakenMessage = (name: string) =>
     `The workspace '${name}' is already registered. Please ask your company's administrator to send you an invite.`;
+
+  const ACCOUNT_ORG_CONFLICT_MESSAGE =
+    'This workspace name is no longer available. Please choose a different name to continue.';
 
   const setOperatingModel = (m: OperatingModel) => {
     setOperatingModelRaw(m);
@@ -792,7 +838,10 @@ export function useBusinessSignUpFlow() {
       );
     }
 
-    const joinResult = await completeInvitationJoin(selectedInvite.inviteId);
+    const joinResult = await completeInvitationJoin(selectedInvite.inviteId, {
+      invitationStatus: legacyTeamInviteToIdentityInvitation(selectedInvite).status,
+      role: selectedInvite.platformRole ?? undefined,
+    });
     setLoading(false);
     if (joinResult.error) {
       trackOnboardingEvent('invitation_accept_failed', { inviteId: selectedInvite.inviteId });
@@ -828,6 +877,12 @@ export function useBusinessSignUpFlow() {
 
     const joinResult = await completeTeamJoinAfterAuth(
       selectedInvite?.inviteId ?? selectedInviteId,
+      selectedInvite
+        ? {
+            invitationStatus: legacyTeamInviteToIdentityInvitation(selectedInvite).status,
+            role: selectedInvite.platformRole ?? undefined,
+          }
+        : undefined,
     );
     setLoading(false);
     if (joinResult.error) {
@@ -904,8 +959,7 @@ export function useBusinessSignUpFlow() {
     const trimmed = orgName.trim();
     if (orgCheck && !orgCheck.loading) {
       if (orgCheck.taken) {
-        setOrgTakenError(orgTakenMessage(trimmed));
-        goToPage(2);
+        setAccountOrgConflictMessage(ACCOUNT_ORG_CONFLICT_MESSAGE);
         return false;
       }
       return true;
@@ -917,11 +971,30 @@ export function useBusinessSignUpFlow() {
     }
     if (dup.taken) {
       setOrgCheck({ loading: false, taken: true });
-      setOrgTakenError(orgTakenMessage(trimmed));
-      goToPage(2);
+      setAccountOrgConflictMessage(ACCOUNT_ORG_CONFLICT_MESSAGE);
       return false;
     }
     return true;
+  };
+
+  /**
+   * Enters the post-auth branding flow (workspace logo / profile photo / success) —
+   * the single transition an authenticated "owner" business signup uses regardless of
+   * whether authentication came from email/password or Google, so the two paths can't
+   * drift apart on navigation the way they did before PR-012B. Safe to call more than
+   * once: setBusinessSignupBrandingActive/goToPage are idempotent, and — like the
+   * step 6/7 resolution effect above — a null resolveProvisionedOrgId() result never
+   * overwrites an already-resolved id.
+   */
+  const enterPostAuthBranding = async () => {
+    // Set before resolving the org so the index boot guard can't route the user
+    // away from logo/photo while org resolution is still in flight.
+    setBusinessSignupBrandingActive(true);
+    goToPage(6);
+
+    await ensureAuthSession();
+    const orgId = await resolveProvisionedOrgId();
+    if (orgId) setProvisionedOrgId(orgId);
   };
 
   const createAccount = async () => {
@@ -963,14 +1036,8 @@ export function useBusinessSignUpFlow() {
     if (result.error) return Alert.alert('Error', result.error.message);
     if (result.emailVerificationRequired) setEmailVerificationRequired(true);
 
-    // Advance to branding before auth refresh so index boot guard cannot skip logo/photo.
-    setBusinessSignupBrandingActive(true);
-    goToPage(6);
-
     setLoading(true);
-    await ensureAuthSession();
-    const orgId = await resolveProvisionedOrgId();
-    setProvisionedOrgId(orgId);
+    await enterPostAuthBranding();
     setLoading(false);
   };
 
@@ -1009,9 +1076,18 @@ export function useBusinessSignUpFlow() {
     });
     if (pending.error) { setGoogleLoading(false); return Alert.alert('Error', pending.error.message); }
 
-    const { error } = await signInWithGoogle(true);
+    const { error, metadataStatus } = await signInWithGoogle(true);
     setGoogleLoading(false);
     if (error) return Alert.alert('Error', error.message);
+    if (metadataStatus === 'partial_failure') {
+      Alert.alert("You're signed in", OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE);
+    }
+
+    // Follow the same post-auth progression as the email/password path (createAccount)
+    // instead of leaving the user on this screen with no way forward. Scoped to this
+    // path only — continueWithGoogleFromWelcome collects no business data and is a
+    // separate express-signup entry point, not covered by this fix.
+    await enterPostAuthBranding();
   };
 
   const continueWithGoogleFromWelcome = async () => {
@@ -1025,9 +1101,12 @@ export function useBusinessSignUpFlow() {
       ...(storedPhone && tenDigits ? { phone: storedPhone } : {}),
     });
     if (pending.error) { setGoogleLoading(false); return Alert.alert('Error', pending.error.message); }
-    const { error } = await signInWithGoogle(true);
+    const { error, metadataStatus } = await signInWithGoogle(true);
     setGoogleLoading(false);
     if (error) return Alert.alert('Error', error.message);
+    if (metadataStatus === 'partial_failure') {
+      Alert.alert("You're signed in", OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE);
+    }
   };
 
   const resendVerification = async () => {
@@ -1122,7 +1201,15 @@ export function useBusinessSignUpFlow() {
     try {
       const { data: { session } } = await supabase().auth.getSession();
       if (!session?.user?.id) {
-        // Email verification pending — advance without blocking onboarding.
+        // Email verification pending — queue the choice instead of discarding it
+        // silently; it's applied automatically once a session exists (see effect below).
+        if (profileAvatarSeed) {
+          await setPendingPersonalization({
+            kind: 'profile_photo',
+            avatarSeed: profileAvatarSeed,
+            retried: false,
+          });
+        }
         return true;
       }
 
@@ -1275,6 +1362,7 @@ export function useBusinessSignUpFlow() {
     googleLoading,
     step5Attempted,
     step5Errors,
+    accountOrgConflictMessage,
     passwordStrength,
     confirmMismatch,
     scrollAccountFieldIntoView,

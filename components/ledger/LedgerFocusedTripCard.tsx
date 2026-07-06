@@ -63,7 +63,7 @@ export const LedgerFocusedTripCard = memo(function LedgerFocusedTripCard({
         <View style={styles.checkWatermark} pointerEvents="none">
           <View style={[styles.checkWatermarkRing, compact && styles.checkWatermarkRingCompact]}>
             <Check
-              size={compact ? 40 : 48}
+              size={compact ? 32 : 48}
               color="rgba(16,185,129,0.14)"
               strokeWidth={2.5}
             />
@@ -171,8 +171,8 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardCompact: {
-    padding: 12,
-    borderRadius: 14,
+    padding: 10,
+    borderRadius: 12,
   },
   watermark: {
     position: "absolute",
@@ -197,9 +197,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(16,185,129,0.1)",
   },
   checkWatermarkRingCompact: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
   },
   inner: {
     position: "relative",
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   innerCompact: {
-    gap: 8,
+    gap: 6,
   },
   head: {
     flexDirection: "row",

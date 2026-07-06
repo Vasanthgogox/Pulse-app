@@ -6,6 +6,7 @@ import type {
   AuditEntry, AutomatedCheck, BusinessDocument,
 } from '@/types/admin';
 import { supabase } from '@/lib/supabase';
+import { fetchKycDocumentsByOrg } from '@/lib/kycDocuments';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -19,14 +20,33 @@ export function useAdmin(): AdminContextValue {
 
 // ─── Map DB row → Organization ────────────────────────────────────────────────
 
+function ensureRequiredDocuments(orgId: string, docs: BusinessDocument[]): BusinessDocument[] {
+  const required: BusinessDocument['type'][] = ['GST Certificate', 'PAN Card', 'Address Proof'];
+  const result = [...docs];
+  for (const type of required) {
+    if (!result.some((d) => d.type === type)) {
+      result.push({
+        id: `${orgId}-${type.replace(/\s+/g, '_').toLowerCase()}`,
+        type,
+        file_name: '',
+        status: 'Missing',
+        uploaded_at: '',
+        url: '',
+        mime_type: 'application/pdf',
+        size_kb: 0,
+      });
+    }
+  }
+  return result;
+}
+
 function mapOrg(
   row: Record<string, unknown>,
   members: Record<string, unknown>[],
   tripCounts: Record<string, number>,
   featureFlagMap: Record<string, Record<string, boolean>>,
   auditByOrg: Record<string, AuditEntry[]>,
-  docsByOrg: Record<string, BusinessDocument[]>,
-  jobsByOrg: Record<string, Record<string, unknown>>,
+  documents: BusinessDocument[],
 ): Organization {
   const status = mapStatus(row.verification_status as string);
 
@@ -84,11 +104,8 @@ function mapOrg(
     rejection_reason:     (row.rejection_reasons as { checklist?: string[] } | null)?.checklist?.[0] ?? undefined,
     rejection_notes:      (row.kyc_rejected_reason as string) ?? undefined,
     escalation_reason:    undefined,
-    approval_notes:       status === 'Approved'
-      ? [...(auditByOrg[row.id as string] ?? [])].reverse().find(e => e.event_type === 'approved')?.detail
-      : undefined,
-    automated_checks:     mapChecks(row, jobsByOrg[row.id as string]),
-    documents:            docsByOrg[row.id as string] ?? [] as BusinessDocument[],
+    automated_checks:     mapChecks(row, documents),
+    documents:            ensureRequiredDocuments(row.id as string, documents),
     audit_trail:          auditByOrg[row.id as string] ?? [] as AuditEntry[],
     billing_tier:         'Starter' as BillingTier,
     api_usage:            0,
@@ -145,55 +162,52 @@ function auditTitle(prev: string | null, next: string, notes: string | null): st
   return `Status changed to ${next}`;
 }
 
-// Maps verification_jobs.<pillar>_status (pillar_status_type from
-// 20261101000005) to the admin console's CheckStatus. Falls back to a
-// field-presence check only when no job row exists yet (org hasn't reached
-// submit_business_verification, so the async worker was never queued).
-function mapPillarStatus(pillarStatus: string | undefined, fallbackPresent: boolean): CheckStatus {
-  switch (pillarStatus) {
-    case 'PASSED':        return 'Passed';
-    case 'FAILED':        return 'Failed';
-    case 'MANUAL_REVIEW': return 'Manual Review';
-    case 'QUEUED':
-    case 'PROCESSING':    return 'Pending';
-    case 'NOT_STARTED':   return 'N/A';
-    default:              return fallbackPresent ? 'Pending' : 'N/A';
-  }
-}
+function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]): AutomatedCheck[] {
+  const docCheck = (type: BusinessDocument['type']): AutomatedCheck['status'] => {
+    const doc = documents.find((d) => d.type === type);
+    if (!doc || doc.status === 'Missing') return 'Pending';
+    if (doc.status === 'Flagged' || doc.status === 'Expired') return 'Failed';
+    if (doc.status === 'Unreadable') return 'Manual Review';
+    return 'Passed';
+  };
 
-function mapChecks(row: Record<string, unknown>, job: Record<string, unknown> | undefined): AutomatedCheck[] {
-  const gstNotApplicable = row.gst_not_applicable === true;
-  // pillar_1_tax_status covers GSTIN + PAN together (see verification-worker/index.ts),
-  // but a gst_not_applicable org has nothing to check on the GSTIN side — surface that
-  // as N/A instead of an ever-pending registry check, without affecting PAN's status.
-  const pillar1Status = mapPillarStatus(job?.pillar_1_tax_status as string | undefined, !!row.gstin);
-  const gstinStatus: CheckStatus = gstNotApplicable ? 'N/A' : pillar1Status;
-  const panStatus    = pillar1Status;
-  const ocrStatus    = mapPillarStatus(job?.ocr_status as string | undefined, !!row.address_proof_path);
+  const addressPassed =
+    docCheck('Address Proof') === 'Passed' || !!row.address_proof_path;
 
   return [
     {
-      id: 'gstin', label: 'GSTIN Registry',
-      status: gstinStatus,
-      detail: gstNotApplicable
-        ? 'GST not registered — declared not applicable'
-        : job
-        ? `GSTIN: ${row.gstin ?? '—'} · registry check ${(job.pillar_1_tax_status as string ?? 'not queued').toLowerCase()}`
-        : row.gstin ? `GSTIN: ${row.gstin} · not yet submitted for verification` : 'Not submitted',
+      id: 'gstin',
+      label: 'GSTIN Registry',
+      status: row.gstin ? 'Passed' : 'Pending',
+      detail: row.gstin ? `GSTIN: ${row.gstin}` : 'Not submitted',
     },
     {
-      id: 'pan', label: 'PAN Verification',
-      status: panStatus,
-      detail: job
-        ? `PAN: ${row.business_pan ?? '—'} · registry check ${(job.pillar_1_tax_status as string ?? 'not queued').toLowerCase()}`
-        : row.business_pan ? `PAN: ${row.business_pan} · not yet submitted for verification` : 'Not submitted',
+      id: 'pan',
+      label: 'PAN Verification',
+      status: row.business_pan ? 'Passed' : 'Pending',
+      detail: row.business_pan ? `PAN: ${row.business_pan}` : 'Not submitted',
     },
     {
-      id: 'address', label: 'Address Proof / OCR Congruence',
-      status: ocrStatus,
-      detail: job
-        ? `${(row.address_proof_type as string) ?? 'document'} · OCR ${(job.ocr_status as string ?? 'not queued').toLowerCase()}`
-        : row.address_proof_path ? `${row.address_proof_type as string ?? 'Uploaded'} · not yet submitted for verification` : 'Not uploaded',
+      id: 'gst_cert',
+      label: 'GST Certificate',
+      status: docCheck('GST Certificate'),
+      detail:
+        documents.find((d) => d.type === 'GST Certificate')?.file_name ?? 'Not uploaded',
+    },
+    {
+      id: 'pan_card',
+      label: 'PAN Card',
+      status: docCheck('PAN Card'),
+      detail: documents.find((d) => d.type === 'PAN Card')?.file_name ?? 'Not uploaded',
+    },
+    {
+      id: 'address',
+      label: 'Address Proof',
+      status: addressPassed ? 'Passed' : 'Pending',
+      detail:
+        (row.address_proof_type as string) ??
+        documents.find((d) => d.type === 'Address Proof')?.file_name ??
+        'Not uploaded',
     },
   ];
 }
@@ -326,49 +340,17 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         featureFlagMap[oid][f.flag_id as string] = f.enabled as boolean;
       }
 
-      // Fetch verification documents for all orgs (GST cert, PAN card, address
-      // proof — see 20261111000000_verification_documents_registry.sql).
-      // Signed URLs generated directly since this console runs under
-      // service_role and bypasses storage RLS.
-      const { data: docRows } = await supabase
-        .from('verification_documents')
-        .select('*')
-        .neq('status', 'REPLACED')
-        .order('created_at', { ascending: false });
-      const docsByOrg: Record<string, BusinessDocument[]> = {};
-      for (const d of (docRows ?? [])) {
-        const oid = d.org_id as string;
-        const storagePath = d.storage_path as string;
-        const { data: signed } = await supabase.storage
-          .from('verification-documents')
-          .createSignedUrl(storagePath, 3600);
-        if (!docsByOrg[oid]) docsByOrg[oid] = [];
-        docsByOrg[oid].push({
-          id:         d.id as string,
-          type:       mapDocumentType(d.document_type as string),
-          file_name:  storagePath.split('/').pop() ?? storagePath,
-          status:     mapDocumentStatus(d.status as string),
-          uploaded_at: d.created_at as string,
-          url:        signed?.signedUrl ?? '',
-          mime_type:  d.mime_type as BusinessDocument['mime_type'],
-          size_kb:    Math.round((d.size_bytes as number) / 1024),
-        });
-      }
-
-      // Fetch verification_jobs (real OCR / tax-registry / MCA pillar results —
-      // see 20261101000005_verification_tiers_async_workers.sql) so
-      // Automated Pre-Checks reflects what the async worker actually found,
-      // not just whether the org typed a GSTIN/PAN into the form.
-      const { data: jobRows } = await supabase
-        .from('verification_jobs')
-        .select('*');
-      const jobsByOrg: Record<string, Record<string, unknown>> = {};
-      for (const j of (jobRows ?? [])) {
-        jobsByOrg[j.organization_id as string] = j as Record<string, unknown>;
-      }
+      const docsByOrg = await fetchKycDocumentsByOrg();
 
       const mapped = (orgs ?? []).map((o) =>
-        mapOrg(o as Record<string, unknown>, byOrg[o.id] ?? [], tripCounts, featureFlagMap, auditByOrg, docsByOrg, jobsByOrg),
+        mapOrg(
+          o as Record<string, unknown>,
+          byOrg[o.id] ?? [],
+          tripCounts,
+          featureFlagMap,
+          auditByOrg,
+          docsByOrg[o.id as string] ?? [],
+        ),
       );
       setApplications(mapped);
       if (mapped.length > 0 && !selectedId) setSelectedId(mapped[0].id);

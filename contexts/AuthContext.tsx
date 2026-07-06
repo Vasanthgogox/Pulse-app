@@ -77,7 +77,9 @@ interface AuthContextType {
   /** Optimistic profile patch after avatar/name edits (before refreshSession completes). */
   patchProfile: (updates: Partial<UserProfile>) => void;
   signIn: (email: string, password: string, keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
-  signInWithGoogle: (keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
+  signInWithGoogle: (
+    keepSignedIn?: boolean,
+  ) => Promise<{ error: Error | null; metadataStatus?: 'partial_failure' }>;
   signUp: (options: authService.SignUpOptions) => Promise<{ error: Error | null; emailVerificationRequired?: boolean }>;
   signOut: () => Promise<void>;
 }
@@ -651,7 +653,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isCurrentAuthAttempt(signInAttemptId)) return { error: null };
       await refreshSessionInternal();
     }
-    return wrapActionResult(result);
+    return { ...wrapActionResult(result), metadataStatus: result.metadataStatus };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const signUp = useCallback(async (

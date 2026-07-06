@@ -20,10 +20,10 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
 
   return (
     <SignUpPulseFormStep
-      title={verifying ? 'Verify to activate' : 'Workspace ready'}
+      title={verifying ? 'Workspace created' : 'Workspace ready'}
       subtitle={
         verifying
-          ? `Check ${flow.email} to unlock operations.`
+          ? `We've sent a verification link to ${flow.email}. Open it, then come back and sign in to start managing trips.`
           : `${flow.orgName} is live on the Pulse network.`
       }
       primaryLabel={
@@ -44,7 +44,7 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
       primaryDisabled={verifying && flow.resendingSecs > 0}
       primaryLoading={enteringOps}
       secondaryAction={{
-        label: 'Sign in on another device',
+        label: verifying ? 'Continue after verification' : 'Sign in on another device',
         onPress: () => {
           flow.finishBusinessSignup();
           router.replace(ROUTES.SIGN_IN);
@@ -60,17 +60,19 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
           profileImage={hasChosenProfilePhoto ? profilePreset?.image : undefined}
           profilePhotoLabel="Profile photo selected"
           checkpoints={[
-            { id: 'org', label: 'Organization created', status: 'complete' },
+            { id: 'org', label: 'Workspace created', status: 'complete' },
+            { id: 'profile', label: 'Business profile complete', status: 'complete' },
             {
               id: 'verify',
               label: verifying ? 'Email verification' : 'Identity verified',
               status: verifying ? 'in_progress' : 'complete',
+              detail: verifying ? `Link sent to ${flow.email}` : undefined,
             },
             {
               id: 'ops',
               label: 'Operational access',
               status: verifying ? 'pending' : 'complete',
-              detail: verifying ? 'Blocked until email confirmed' : 'Unlocked',
+              detail: verifying ? 'Unlocks once you verify and sign back in' : 'Unlocked',
             },
           ]}
         />

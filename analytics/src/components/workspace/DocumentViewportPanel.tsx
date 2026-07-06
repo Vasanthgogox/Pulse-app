@@ -36,6 +36,9 @@ function DocTabTrigger({ doc }: { doc: BusinessDocument }) {
 function DocViewer({ doc }: { doc: BusinessDocument }) {
   const cfg = DOC_STATUS[doc.status];
   const StatusIcon = cfg.icon;
+  const isImage = doc.mime_type.startsWith('image/');
+  const isPdf = doc.mime_type === 'application/pdf';
+  const canPreview = !!doc.url && doc.status !== 'Missing';
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -79,11 +82,9 @@ function DocViewer({ doc }: { doc: BusinessDocument }) {
         </div>
       )}
 
-      {/* Document preview area — real signed-URL render when available,
-          mock placeholder as fallback (e.g. signed URL failed to generate,
-          or applicant hasn't uploaded yet). */}
-      <div className="flex-1 rounded-xl border border-border bg-muted/30 overflow-hidden">
-        {doc.status === 'Missing' ? (
+      {/* Document preview */}
+      <div className="flex-1 rounded-xl border border-border bg-muted/30 overflow-hidden min-h-[320px]">
+        {doc.status === 'Missing' || !canPreview ? (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
               <XCircle className="mx-auto size-10 text-muted-foreground/30" />
@@ -91,30 +92,32 @@ function DocViewer({ doc }: { doc: BusinessDocument }) {
               <p className="mt-1 text-[11px] text-muted-foreground/70">Applicant has not provided this document</p>
             </div>
           </div>
-        ) : doc.url && doc.mime_type === 'application/pdf' ? (
-          <iframe
-            src={doc.url}
-            title={doc.file_name}
-            className="h-full w-full border-0"
-          />
-        ) : doc.url ? (
-          <div className="flex h-full items-center justify-center overflow-auto p-4">
+        ) : isImage ? (
+          <div className="flex h-full items-center justify-center bg-black/5 p-4">
             <img
               src={doc.url}
               alt={doc.file_name}
-              className={[
-                'max-h-full max-w-full rounded shadow-md object-contain',
-                doc.status === 'Unreadable' ? 'opacity-40' : '',
-              ].join(' ')}
+              className="max-h-full max-w-full rounded-md object-contain shadow-sm"
             />
           </div>
+        ) : isPdf ? (
+          <iframe
+            title={doc.file_name}
+            src={doc.url}
+            className="h-full w-full min-h-[480px] bg-white"
+          />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
             <FileText className="size-10 text-muted-foreground/40" />
-            <p className="text-[11px] text-muted-foreground">{doc.file_name}</p>
-            <p className="max-w-[200px] text-center text-[10px] text-muted-foreground/60">
-              Preview unavailable — signed URL could not be generated.
-            </p>
+            <p className="text-sm text-muted-foreground">{doc.file_name}</p>
+            <a
+              href={doc.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Open document
+            </a>
           </div>
         )}
       </div>

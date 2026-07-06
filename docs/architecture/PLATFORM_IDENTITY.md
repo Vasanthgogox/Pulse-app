@@ -89,6 +89,8 @@ Composable evaluators → `CombinedPolicyResult`:
 person_status_v1
 employment_v1
 organization_status_v1
+identity_provider_v1   (SSO / corporate email / phone requirements)
+invitation_v1          (invitation expiry / already-accepted)
 (future: compliance_v1, geographic_v1, licensing_v1)
         ↓
 combinePolicyDecisions() → { allowed, decisions, primaryBlock }
@@ -150,7 +152,9 @@ lib/onboarding/               ← clients (UI routing, branding, pending storage
 
 1. **Done:** Façade + v1 policy engine + workspace store + API request context helpers.
 2. **Done:** Audit persistence stub + `organizations.platform_status` migration.
-3. **Next:** Wire Edge Functions / REST proxies to validate `X-Pulse-Organization-Id`.
-4. **Next:** SCIM / Entra / Okta providers register on `IdentityProvider` registry.
+3. **Done:** `emailIdentityProvider` verifies against the real Supabase session and resolves invitations via `resolve_pending_team_invitations_by_email`; `ssoIdentityProvider` verifies Google via the session's linked identities. Entra/Okta/Auth0/SAML remain explicit "not configured" until those IdPs are registered with Supabase Auth.
+4. **Done (Architecture Freeze Review + cutover):** Removed `lib/onboarding/completeOnboarding.util.ts`, `employmentPolicy.ts`, and the deprecated `membershipPolicyEngine.ts`/`evaluateMembershipPolicyV1` — all confirmed to have zero remaining callers once `MembershipPolicyRequiredAction` was relocated into `policyDecision.ts`. `platformIdentityService.acceptInvitation()`/`.switchWorkspace()` and `membershipPolicyEngineV1.evaluateJoinPoliciesV1()` are now the sole implementations for onboarding orchestration and membership policy, respectively.
+5. **Next:** Wire Edge Functions / REST proxies to validate `X-Pulse-Organization-Id`.
+6. **Next:** SCIM / Entra / Okta providers register on `IdentityProvider` registry.
 
 See also: [TEAM_INVITATION_ONBOARDING.md](./TEAM_INVITATION_ONBOARDING.md)

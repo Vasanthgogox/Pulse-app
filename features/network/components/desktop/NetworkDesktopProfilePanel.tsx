@@ -328,8 +328,8 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
     <View style={[styles.panel, layout.panel]}>
       <View style={[styles.sectionToolbar, layout.sectionToolbar]}>
         <View style={styles.teamPanelTitleCol}>
-          <Text style={[styles.sectionTitle, layout.sectionTitle]}>My Profile</Text>
-          <Text style={[styles.sectionSub, layout.sectionSub]}>
+          <Text style={styles.profilePageTitle}>My Profile</Text>
+          <Text style={styles.profilePageSub}>
             Personal identity and workspace branding
           </Text>
         </View>
@@ -339,30 +339,33 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
 
       <View style={styles.profileSplitRow}>
         <View style={styles.profileCol}>
-          <View style={[styles.salesCard, styles.salesCardPad]}>
-            <Text style={styles.profileCardTitle}>Personal identity</Text>
-            <Text style={styles.profileCardSub}>
-              Shown in chat and team communications
-            </Text>
+          <View style={[styles.salesCard, styles.profileCardPad, styles.profileCard]}>
+            <View style={styles.profileCardHeader}>
+              <Text style={styles.profileCardTitle}>Personal identity</Text>
+              <Text style={styles.profileCardSub}>
+                Shown in chat and team communications
+              </Text>
+            </View>
 
-            <View style={styles.profileAvatarRow}>
-              <View style={styles.profileAvatarRing}>
-                {userAvatarUri ? (
-                  <Image
-                    source={{ uri: userAvatarUri }}
-                    style={styles.profileAvatarImage}
-                  />
-                ) : (
-                  <PartyAvatar
-                    name={fullName || "User"}
-                    avatarUrl={profile?.avatar_url ?? null}
-                    avatarSeed={profile?.avatar_seed ?? null}
-                    size={66}
-                    shape="circle"
-                  />
-                )}
-              </View>
-              <View style={styles.profileAvatarActions}>
+            <View style={styles.profileCardBody}>
+              <View style={styles.profileAvatarRow}>
+                <View style={styles.profileAvatarRing}>
+                  {userAvatarUri ? (
+                    <Image
+                      source={{ uri: userAvatarUri }}
+                      style={styles.profileAvatarImage}
+                    />
+                  ) : (
+                    <PartyAvatar
+                      name={fullName || "User"}
+                      avatarUrl={profile?.avatar_url ?? null}
+                      avatarSeed={profile?.avatar_seed ?? null}
+                      size={52}
+                      shape="circle"
+                    />
+                  )}
+                </View>
+                <View style={styles.profileAvatarActions}>
                 <Pressable
                   style={styles.profileActionBtn}
                   onPress={() => void handleUploadPhoto()}
@@ -372,7 +375,7 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                     <LoadingIndicator size="small" color={METRONIC.link} />
                   ) : (
                     <>
-                      <Camera size={14} color={METRONIC.link} strokeWidth={2.2} />
+                      <Camera size={12} color={METRONIC.link} strokeWidth={2.2} />
                       <Text style={styles.profileActionBtnText}>Upload photo</Text>
                     </>
                   )}
@@ -388,7 +391,7 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                     style={styles.profileActionBtn}
                     onPress={handleRemovePhoto}
                   >
-                    <Trash2 size={14} color={Theme.negative} strokeWidth={2.2} />
+                    <Trash2 size={12} color={Theme.negative} strokeWidth={2.2} />
                     <Text
                       style={[styles.profileActionBtnText, { color: Theme.negative }]}
                     >
@@ -400,13 +403,8 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
             </View>
 
             {showPresets ? (
-              <View>
-                <Text
-                  style={[
-                    styles.profileFieldLabel,
-                    { marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.6 },
-                  ]}
-                >
+              <View style={{ marginBottom: 10 }}>
+                <Text style={[styles.profileFieldLabel, { marginBottom: 6 }]}>
                   Male avatars
                 </Text>
                 <View style={styles.profilePresetGrid}>
@@ -428,12 +426,7 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                     );
                   })}
                 </View>
-                <Text
-                  style={[
-                    styles.profileFieldLabel,
-                    { marginTop: 14, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.6 },
-                  ]}
-                >
+                <Text style={[styles.profileFieldLabel, { marginTop: 10, marginBottom: 6 }]}>
                   Female avatars
                 </Text>
                 <View style={styles.profilePresetGrid}>
@@ -488,32 +481,38 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                 <Text style={styles.profileFieldReadonlyText}>{email || "—"}</Text>
               </View>
             </View>
+            </View>
 
-            <Pressable
-              style={[
-                styles.profileSaveBtn,
-                (!profileDirty || profileSaving) && styles.profileSaveBtnDisabled,
-              ]}
-              onPress={() => void handleSaveProfile()}
-              disabled={!profileDirty || profileSaving}
-            >
-              {profileSaving ? (
-                <LoadingIndicator size="small" color={Theme.textOnPrimary} />
-              ) : (
-                <Text style={styles.profileSaveBtnText}>Save profile</Text>
-              )}
-            </Pressable>
+            <View style={styles.profileCardFooter}>
+              <Pressable
+                style={[
+                  styles.profileSaveBtn,
+                  (!profileDirty || profileSaving) && styles.profileSaveBtnDisabled,
+                ]}
+                onPress={() => void handleSaveProfile()}
+                disabled={!profileDirty || profileSaving}
+              >
+                {profileSaving ? (
+                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+                ) : (
+                  <Text style={styles.profileSaveBtnText}>Save profile</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
 
         <View style={styles.profileCol}>
-          <View style={[styles.salesCard, styles.salesCardPad]}>
-            <Text style={styles.profileCardTitle}>Workspace branding</Text>
-            <Text style={styles.profileCardSub}>
-              Logo and name shown on network, invoices and partner profiles
-            </Text>
+          <View style={[styles.salesCard, styles.profileCardPad, styles.profileCard]}>
+            <View style={styles.profileCardHeader}>
+              <Text style={styles.profileCardTitle}>Workspace branding</Text>
+              <Text style={styles.profileCardSub}>
+                Logo and name shown on network, invoices and partner profiles
+              </Text>
+            </View>
 
-            <View style={styles.profileLogoRow}>
+            <View style={styles.profileCardBody}>
+              <View style={styles.profileLogoRow}>
               <View style={styles.profileLogoThumb}>
                 {logoUri ? (
                   <Image source={{ uri: logoUri }} style={styles.profileLogoImage} />
@@ -535,7 +534,7 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                     ) : (
                       <>
                         <UploadCloud
-                          size={14}
+                          size={12}
                           color={METRONIC.link}
                           strokeWidth={2.2}
                         />
@@ -549,7 +548,7 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                       onPress={handleRemoveLogo}
                       disabled={logoUploading}
                     >
-                      <Trash2 size={14} color={Theme.negative} strokeWidth={2.2} />
+                      <Trash2 size={12} color={Theme.negative} strokeWidth={2.2} />
                       <Text
                         style={[
                           styles.profileActionBtnText,
@@ -562,7 +561,7 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                   ) : null}
                 </View>
               ) : (
-                <Text style={styles.profileCardSub}>
+                <Text style={[styles.profileCardSub, { marginBottom: 0 }]}>
                   Only workspace owners and admins can change branding.
                 </Text>
               )}
@@ -579,22 +578,25 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                 editable={canEdit}
               />
             </View>
+            </View>
 
             {canEdit ? (
-              <Pressable
-                style={[
-                  styles.profileSaveBtn,
-                  (!orgDirty || orgSaving) && styles.profileSaveBtnDisabled,
-                ]}
-                onPress={() => void handleSaveOrgName()}
-                disabled={!orgDirty || orgSaving}
-              >
-                {orgSaving ? (
-                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
-                ) : (
-                  <Text style={styles.profileSaveBtnText}>Save workspace</Text>
-                )}
-              </Pressable>
+              <View style={styles.profileCardFooter}>
+                <Pressable
+                  style={[
+                    styles.profileSaveBtn,
+                    (!orgDirty || orgSaving) && styles.profileSaveBtnDisabled,
+                  ]}
+                  onPress={() => void handleSaveOrgName()}
+                  disabled={!orgDirty || orgSaving}
+                >
+                  {orgSaving ? (
+                    <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+                  ) : (
+                    <Text style={styles.profileSaveBtnText}>Save workspace</Text>
+                  )}
+                </Pressable>
+              </View>
             ) : null}
           </View>
         </View>

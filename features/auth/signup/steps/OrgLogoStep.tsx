@@ -13,15 +13,25 @@ function orgInitials(name: string): string {
 
 export function OrgLogoStep({ flow }: { flow: SignUpFlow }) {
   const initials = orgInitials(flow.orgName);
+  // Workspace provisioning (background poll in useBusinessSignUpFlow) and logo upload are
+  // two different waits; show which one is actually happening instead of one generic spinner.
+  const isProvisioning = !flow.provisionedOrgId;
 
   return (
     <SignUpPhotoPickerStep
-      title="Workspace logo"
+      title={isProvisioning ? 'Preparing your workspace' : 'Workspace logo'}
       subtitle={
-        <Text style={styles.subtitle}>
-          Add a logo for <Text style={styles.highlight}>{flow.orgName}</Text>. You can change this
-          later in workspace settings.
-        </Text>
+        isProvisioning ? (
+          <Text style={styles.subtitle}>
+            Setting up <Text style={styles.highlight}>{flow.orgName}</Text>. This usually takes a
+            few seconds.
+          </Text>
+        ) : (
+          <Text style={styles.subtitle}>
+            Add a logo for <Text style={styles.highlight}>{flow.orgName}</Text>. You can change
+            this later in workspace settings.
+          </Text>
+        )
       }
       previewUri={flow.logoPreviewUri}
       previewFallback={
@@ -30,8 +40,8 @@ export function OrgLogoStep({ flow }: { flow: SignUpFlow }) {
         </View>
       }
       onUpload={flow.uploadOrgLogo}
-      uploading={flow.logoUploading}
-      uploadLabel="Upload workspace logo"
+      uploading={isProvisioning || flow.logoUploading}
+      uploadLabel={isProvisioning ? 'Preparing your workspace…' : 'Upload workspace logo'}
       primaryLabel="Continue"
       onPrimary={flow.continueFromLogo}
       onSkip={flow.skipOrgLogo}
