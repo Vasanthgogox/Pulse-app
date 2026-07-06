@@ -74,7 +74,7 @@ import { useLoadCenterFilters } from "@/features/network/hooks/useLoadCenterFilt
 import { useSuccessToast } from "@/features/network/hooks/useSuccessToast";
 import { useTripDeployment } from "@/features/network/hooks/useTripDeployment";
 import { AwardModal } from "@/features/network/components/AwardModal";
-import { BidModal } from "@/features/network/components/BidModal";
+import { BidModal } from "@/features/network/components/bidding/BidModal";
 import { LoadCenterIntegratedPartiesBanner } from "@/features/network/components/LoadCenterIntegratedPartiesBanner";
 import { LoadCenterIntegratedPartiesRow } from "@/features/network/components/LoadCenterIntegratedPartiesRow";
 import { LoadCenterUnderlineTabStrip } from "@/features/network/components/LoadCenterUnderlineTabStrip";

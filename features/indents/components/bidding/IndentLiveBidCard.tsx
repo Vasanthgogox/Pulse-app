@@ -13,14 +13,14 @@ import { IndentHubInsightTicketTail } from "@/features/indents/components/Indent
 import { EntityAvatar } from "@/components/EntityAvatar";
 import Theme from "@/constants/Theme";
 import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
-import type { IndentBidBadge } from "@/features/indents/utils/indentLiveBids.util";
-import { buildIndentBidFooterInsight } from "@/features/indents/utils/indentLiveBids.util";
+import type { IndentBidBadge } from "@/features/indents/utils/bidding/indentLiveBids.util";
+import { buildIndentBidFooterInsight } from "@/features/indents/utils/bidding/indentLiveBids.util";
 import {
   indentHubCardShadow,
   indentReviewHubLayout,
   indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
-import type { IndentBidAlertInfo } from "@/features/indents/utils/indentBidAlert.util";
+import type { IndentBidAlertInfo } from "@/features/indents/utils/bidding/indentBidAlert.util";
 import { formatINR } from "@/lib/format";
 
 export interface IndentLiveBidCardProps {

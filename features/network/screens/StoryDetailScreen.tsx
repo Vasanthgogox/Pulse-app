@@ -6,10 +6,10 @@
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { BidSheet } from "@/features/network/components/BidSheet";
+import { BidSheet } from "@/features/network/components/bidding/BidSheet";
 import { StoryBroadcastPreview } from "@/features/network/components/StoryBroadcastPreview";
 import { StoryOwnerFooterActions } from "@/features/network/components/StoryDetailFooterActions";
-import { StoryOwnerBidsSheet } from "@/features/network/components/StoryOwnerBidsSheet";
+import { StoryOwnerBidsSheet } from "@/features/network/components/bidding/StoryOwnerBidsSheet";
 import { StoryViewersSheet } from "@/features/network/components/StoryViewersSheet";
 import {
   deactivatePost,
@@ -25,7 +25,7 @@ import {
 import {
   buildStoryOwnerBidRows,
   storyOwnerBidsLabel,
-} from "@/features/network/utils/storyOwnerBids.util";
+} from "@/features/network/utils/bidding/storyOwnerBids.util";
 import {
   buildStoryOwnerViewRows,
   storyOwnerViewsLabel,

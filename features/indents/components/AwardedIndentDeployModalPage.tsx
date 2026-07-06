@@ -22,7 +22,7 @@ import type { PendingAwardedDeployItem } from "@/features/indents/utils/pendingA
 import {
   buildIndentDeployTiming,
   type IndentBidAlertTone,
-} from "@/features/indents/utils/indentBidAlert.util";
+} from "@/features/indents/utils/bidding/indentBidAlert.util";
 import { formatINR, formatIndentTonsToCarry } from "@/lib/format";
 
 const FINANCE_SCORECARD_GRADIENT = [

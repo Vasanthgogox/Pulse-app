@@ -1,11 +1,11 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { BidReceivedHammer } from "@/features/indents/components/BidReceivedHammer";
+import { BidReceivedHammer } from "@/features/indents/components/bidding/BidReceivedHammer";
 import {
   IndentBidsAwaitingPanel,
   LiveBidsSectionHeader,
-} from "@/features/indents/components/IndentBidsAwaitingPanel";
-import { IndentLiveBidsPanel } from "@/features/indents/components/IndentLiveBidsPanel";
+} from "@/features/indents/components/bidding/IndentBidsAwaitingPanel";
+import { IndentLiveBidsPanel } from "@/features/indents/components/bidding/IndentLiveBidsPanel";
 import {
   IndentSupplierQuoteCard,
   type SupplierQuoteActionHint,
@@ -15,7 +15,7 @@ import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.s
 import {
   indentReviewHubSplitLayout as splitStyles,
 } from "@/features/indents/styles/indentReviewHubStyles";
-import type { IndentBidAlertInfo } from "@/features/indents/utils/indentBidAlert.util";
+import type { IndentBidAlertInfo } from "@/features/indents/utils/bidding/indentBidAlert.util";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { TinyEmptyLottie } from "@/components/TinyEmptyLottie";
 import { EMPTY_STATE_LOTTIE } from "@/lib/emptyStateLottieAssets";

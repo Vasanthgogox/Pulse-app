@@ -32,13 +32,13 @@ export { awardIndentToTrip, batchAwardIndentsToTrips, createTripFromAssignedInde
 export type { AwardIndentOptions, BatchAwardResult, CreateTripFromAssignedIndentOptions } from '@/features/indents/services/indentConversionService';
 
 export { IndentDetailScreen };
-export { IndentBidAmountEntry } from '@/features/indents/components/IndentBidAmountEntry';
-export type { IndentBidAmountEntryProps } from '@/features/indents/components/IndentBidAmountEntry';
-export { IndentLiveBidsPanel } from '@/features/indents/components/IndentLiveBidsPanel';
-export { IndentLiveBidCard } from '@/features/indents/components/IndentLiveBidCard';
+export { IndentBidAmountEntry } from '@/features/indents/components/bidding/IndentBidAmountEntry';
+export type { IndentBidAmountEntryProps } from '@/features/indents/components/bidding/IndentBidAmountEntry';
+export { IndentLiveBidsPanel } from '@/features/indents/components/bidding/IndentLiveBidsPanel';
+export { IndentLiveBidCard } from '@/features/indents/components/bidding/IndentLiveBidCard';
 export { IndentSupplierQuoteCard } from '@/features/indents/components/IndentSupplierQuoteCard';
-export { buildIndentLiveBidsViewModel } from '@/features/indents/utils/indentLiveBids.util';
-export { BidReceivedHammer } from '@/features/indents/components/BidReceivedHammer';
+export { buildIndentLiveBidsViewModel } from '@/features/indents/utils/bidding/indentLiveBids.util';
+export { BidReceivedHammer } from '@/features/indents/components/bidding/BidReceivedHammer';
 export {
   indentReviewHubLayout,
   indentReviewHubSpecValue,

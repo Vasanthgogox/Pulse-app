@@ -4,8 +4,8 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import type { StoryOwnerBidRow } from "@/features/network/utils/storyOwnerBids.util";
-import { storyOwnerBidsLabel } from "@/features/network/utils/storyOwnerBids.util";
+import type { StoryOwnerBidRow } from "@/features/network/utils/bidding/storyOwnerBids.util";
+import { storyOwnerBidsLabel } from "@/features/network/utils/bidding/storyOwnerBids.util";
 import { formatINR } from "@/lib/format";
 import Feather from "@expo/vector-icons/Feather";
 import { Gavel, Truck, X, Zap } from "lucide-react-native";

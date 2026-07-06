@@ -2,7 +2,7 @@
  * BidModal — full-screen bid amount entry (ledger / GPay-style keypad).
  * Extracted from LoadCenterView.tsx.
  */
-import { IndentBidAmountEntry } from "@/features/indents/components/IndentBidAmountEntry";
+import { IndentBidAmountEntry } from "@/features/indents/components/bidding/IndentBidAmountEntry";
 import {
   createDirectQuote,
   getIndentDisplayNumber,

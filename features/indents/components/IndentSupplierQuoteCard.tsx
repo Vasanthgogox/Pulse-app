@@ -17,12 +17,12 @@ import {
   indentReviewHubLayout,
   indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
-import type { IndentBidAlertInfo } from "@/features/indents/utils/indentBidAlert.util";
+import type { IndentBidAlertInfo } from "@/features/indents/utils/bidding/indentBidAlert.util";
 import type {
   IndentBidFooterMetric,
   IndentBidMetricTone,
-} from "@/features/indents/utils/indentLiveBids.util";
-import { buildSupplierQuoteFooterInsight } from "@/features/indents/utils/indentLiveBids.util";
+} from "@/features/indents/utils/bidding/indentLiveBids.util";
+import { buildSupplierQuoteFooterInsight } from "@/features/indents/utils/bidding/indentLiveBids.util";
 import { formatINR } from "@/lib/format";
 
 const NOTCH = 10;

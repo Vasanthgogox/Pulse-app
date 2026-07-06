@@ -4,11 +4,11 @@ import { IndentHubMedalGlyph, IndentHubGlyphSlot } from "@/features/indents/comp
 
 import { EntityAvatar } from "@/components/EntityAvatar";
 import Theme from "@/constants/Theme";
-import { IndentLiveBidCard } from "@/features/indents/components/IndentLiveBidCard";
+import { IndentLiveBidCard } from "@/features/indents/components/bidding/IndentLiveBidCard";
 import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
 import { indentReviewHubText } from "@/features/indents/styles/indentReviewHubStyles";
-import { buildIndentAwardedBidAlert } from "@/features/indents/utils/indentBidAlert.util";
-import { buildIndentLiveBidsViewModel } from "@/features/indents/utils/indentLiveBids.util";
+import { buildIndentAwardedBidAlert } from "@/features/indents/utils/bidding/indentBidAlert.util";
+import { buildIndentLiveBidsViewModel } from "@/features/indents/utils/bidding/indentLiveBids.util";
 import { formatINR } from "@/lib/format";
 
 export interface IndentLiveBidsPanelProps {

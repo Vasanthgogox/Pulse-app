@@ -6,7 +6,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from '@/constants/Theme';
 import { getLinkedOrgProfilesBatch } from '@/features/clients/services/clients.service';
-import { BidSheet } from '@/features/network/components/BidSheet';
+import { BidSheet } from '@/features/network/components/bidding/BidSheet';
 import { useNetworkFeedQuery, useAfterPostDeleted } from '@/lib/queries/usePostsQuery';
 import {
   useBidsForPostQuery,

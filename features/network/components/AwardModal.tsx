@@ -4,7 +4,7 @@
  */
 import Theme from "@/constants/Theme";
 import { getIndentDisplayNumber, type IndentRow } from "@/features/indents";
-import { IndentLiveBidsPanel } from "@/features/indents/components/IndentLiveBidsPanel";
+import { IndentLiveBidsPanel } from "@/features/indents/components/bidding/IndentLiveBidsPanel";
 import {
   indentReviewHubStyles,
   indentReviewHubText,

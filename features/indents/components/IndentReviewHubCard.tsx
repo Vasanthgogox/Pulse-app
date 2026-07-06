@@ -23,8 +23,8 @@ import {
   indentReviewHubSpecValue,
   indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
-import type { IndentBidAlertInfo } from "@/features/indents/utils/indentBidAlert.util";
-import type { IndentBidFooterInsight } from "@/features/indents/utils/indentLiveBids.util";
+import type { IndentBidAlertInfo } from "@/features/indents/utils/bidding/indentBidAlert.util";
+import type { IndentBidFooterInsight } from "@/features/indents/utils/bidding/indentLiveBids.util";
 import { formatINR } from "@/lib/format";
 
 const cardShadow = indentHubCardShadow as ViewStyle;

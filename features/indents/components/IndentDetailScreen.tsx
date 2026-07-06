@@ -12,7 +12,7 @@ import {
   indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { IndentBidAmountEntry } from "@/features/indents/components/IndentBidAmountEntry";
+import { IndentBidAmountEntry } from "@/features/indents/components/bidding/IndentBidAmountEntry";
 import { IndentGiveLoadPartiesStrip } from "@/features/indents/components/IndentGiveLoadPartiesStrip";
 import { IndentLinkedTripCard } from "@/features/indents/components/IndentLinkedTripCard";
 import { IndentReviewHubCard } from "@/features/indents/components/IndentReviewHubCard";
@@ -24,8 +24,8 @@ import {
 import { IndentSupplierPartySummary } from "@/features/indents/components/IndentSupplierPartySummary";
 import type { SupplierQuoteActionHint } from "@/features/indents/components/IndentSupplierQuoteCard";
 import { shareIndentOnWhatsApp } from "@/features/indents/utils/indentShare.util";
-import { buildSupplierQuoteFooterInsight } from "@/features/indents/utils/indentLiveBids.util";
-import { buildIndentAwardedBidAlert } from "@/features/indents/utils/indentBidAlert.util";
+import { buildSupplierQuoteFooterInsight } from "@/features/indents/utils/bidding/indentLiveBids.util";
+import { buildIndentAwardedBidAlert } from "@/features/indents/utils/bidding/indentBidAlert.util";
 import { resolveIndentClientEntityDisplayName } from "@/features/indents/utils/indentPartyDisplay.util";
 import {
     createDirectQuote,

@@ -18,12 +18,12 @@ import {
 import Theme from "@/constants/Theme";
 import { IndentHubPerforation } from "@/features/indents/components/IndentHubPerforation";
 import { indentReviewHubLayout } from "@/features/indents/styles/indentReviewHubStyles";
-import type { IndentBidAlertInfo } from "@/features/indents/utils/indentBidAlert.util";
+import type { IndentBidAlertInfo } from "@/features/indents/utils/bidding/indentBidAlert.util";
 import type {
   IndentBidFooterInsight,
   IndentBidFooterMetric,
   IndentBidMetricTone,
-} from "@/features/indents/utils/indentLiveBids.util";
+} from "@/features/indents/utils/bidding/indentLiveBids.util";
 
 const RECO_STAR = "#D97706";
 

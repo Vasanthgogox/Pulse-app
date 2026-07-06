@@ -1,5 +1,5 @@
 import type { StoryViewRow } from "@/features/network/services/story-views.service";
-import type { StoryOwnerBidRow } from "@/features/network/utils/storyOwnerBids.util";
+import type { StoryOwnerBidRow } from "@/features/network/utils/bidding/storyOwnerBids.util";
 
 export type StoryOwnerViewRow = {
   key: string;
