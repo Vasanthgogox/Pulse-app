@@ -217,8 +217,16 @@ function LaneActionFooter({
 }) {
   if (!action) return null;
   return (
-    <View style={[styles.laneActionFooter, isDesktop && styles.laneActionFooterDesktop]}>
-      <View style={styles.laneActionBtnSlot}>{action}</View>
+    <View
+      style={[
+        styles.laneActionFooter,
+        !isDesktop && styles.laneActionFooterMobile,
+        isDesktop && styles.laneActionFooterDesktop,
+      ]}
+    >
+      <View style={[styles.laneActionBtnSlot, !isDesktop && styles.laneActionBtnSlotMobile]}>
+        {action}
+      </View>
       <View style={[styles.laneActionHintSlot, isDesktop && styles.laneActionHintSlotDesktop]}>
         {hint ?? null}
       </View>
@@ -308,9 +316,11 @@ const styles = StyleSheet.create({
   },
   laneColumn: {
     flex: 1,
+    flexBasis: 0,
     minWidth: 0,
     flexDirection: "column",
     alignItems: "stretch",
+    alignSelf: "stretch",
   },
   laneColumnDesktop: {},
   laneCardGrow: {
@@ -324,6 +334,10 @@ const styles = StyleSheet.create({
     marginTop: 6,
     gap: 4,
   },
+  laneActionFooterMobile: {
+    marginTop: "auto",
+    paddingTop: 6,
+  },
   laneActionFooterDesktop: {
     marginTop: 8,
   },
@@ -331,6 +345,10 @@ const styles = StyleSheet.create({
     width: "100%",
     minHeight: 38,
     justifyContent: "center",
+    alignItems: "stretch",
+  },
+  laneActionBtnSlotMobile: {
+    minHeight: 44,
   },
   laneActionHintSlot: {
     width: "100%",
@@ -408,7 +426,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 6,
   },
-  metricCell: { flex: 1, minWidth: 0, maxWidth: 148, gap: 3 },
+  metricCell: { flex: 1, minWidth: 0, gap: 3 },
   metricCellDesktop: { maxWidth: 168 },
   metricCellEnd: { alignItems: "flex-end" },
   metricCellEndDesktop: { marginLeft: "auto" as const },
@@ -442,11 +460,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   metricValueHero: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "900",
-    letterSpacing: -0.45,
+    letterSpacing: -0.35,
     fontVariant: ["tabular-nums"],
-    lineHeight: 26,
+    lineHeight: 22,
   },
   metricValueHeroDesktop: {
     fontSize: 24,

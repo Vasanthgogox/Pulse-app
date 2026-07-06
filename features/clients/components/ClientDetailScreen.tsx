@@ -2505,7 +2505,12 @@ export default function ClientDetailScreen({
 
         {/* Tab: Cash Flow — same card layout as Finance Cash page, only transactions relevant to this client */}
         {detailSubTab === "cash" && (
-          <View style={styles.cashSection}>
+          <View
+            style={[
+              styles.cashSection,
+              isWebDesktop && styles.cashSectionWebDesktop,
+            ]}
+          >
             <Suspense fallback={<LazySuspenseNullFallback />}>
             <LedgerTransactionListView
               transactions={cashFlowTransactionRows}
@@ -3323,6 +3328,11 @@ const styles = StyleSheet.create({
   emptyRow: edc.emptyRow,
   emptyRowText: edc.emptyRowText,
   cashSection: { marginBottom: 24 },
+  cashSectionWebDesktop: {
+    width: "100%",
+    maxWidth: 920,
+    alignSelf: "center",
+  },
   cashCard: {
     flexDirection: "row",
     alignItems: "center",

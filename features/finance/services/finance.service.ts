@@ -1300,16 +1300,24 @@ export async function createLedgerEntry(
     ledger_category: enriched.ledger_category ?? null,
   };
 
+  const {
+    data: { user: authUser },
+  } = await supabase().auth.getUser();
+  const insertPayload = {
+    ...payload,
+    ...(authUser?.id ? { created_by: authUser.id } : {}),
+  };
+
   let { data, error } = await supabase()
     .from("transactions")
-    .insert(payload)
+    .insert(insertPayload)
     .select(LEDGER_TX_SELECT_WITH_TRIPS)
     .single();
 
   if (error && isMissingTripsDisplayTripIdError(error)) {
     ({ data, error } = await supabase()
       .from("transactions")
-      .insert(payload)
+      .insert(insertPayload)
       .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
       .single());
   }
@@ -1324,7 +1332,7 @@ export async function createLedgerEntry(
   ) {
     // Integrated / getLoad: trip_id may be rejected (incl. after passthrough first attempt). Retry unanchored + QMETA trip_number.
     const unanchoredPayload = {
-      ...payload,
+      ...insertPayload,
       trip_id: null,
       description: buildUnanchoredLedgerRetryDescription(
         payload.description,

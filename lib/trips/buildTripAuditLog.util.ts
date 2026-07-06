@@ -14,6 +14,8 @@ import type {
 
 export type TripActivityUserProfile = {
   full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
   avatar_url?: string | null;
   avatar_seed?: string | null;
 };
@@ -62,16 +64,32 @@ function formatAmount(n: number): string {
   return n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
+function profileDisplayName(
+  profile: TripActivityUserProfile | undefined,
+): string | null {
+  if (!profile) return null;
+  return (
+    profile.full_name?.trim() ||
+    profile.phone?.trim() ||
+    profile.email?.trim() ||
+    null
+  );
+}
+
 export function resolveTripActivityUserLabel(
   userId: string | null | undefined,
   currentUserId: string | null | undefined,
   userDisplayById: Record<string, string>,
   fallback = "Team member",
+  userProfileById?: Record<string, TripActivityUserProfile>,
 ): string {
   if (!userId) return fallback;
   if (currentUserId && userId === currentUserId) return "You";
-  const name = userDisplayById[userId]?.trim();
-  return name || fallback;
+  const fromMap = userDisplayById[userId]?.trim();
+  if (fromMap) return fromMap;
+  const fromProfile = profileDisplayName(userProfileById?.[userId]);
+  if (fromProfile) return fromProfile;
+  return fallback;
 }
 
 function categoryLabel(category: TripAuditLogCategory): string {
@@ -122,6 +140,7 @@ function resolveStatusActor(
   userDisplayById: Record<string, string>,
   currentUserId: string | null | undefined,
   driverDisplayName: string | null | undefined,
+  userProfileById: Record<string, TripActivityUserProfile>,
 ): string {
   const context = item.status_context;
   if (context === "created") {
@@ -132,6 +151,7 @@ function resolveStatusActor(
       currentUserId,
       userDisplayById,
       "Team member",
+      userProfileById,
     );
   }
   if (context === "accepted") {
@@ -145,6 +165,7 @@ function resolveStatusActor(
         currentUserId,
         userDisplayById,
         "Driver",
+        userProfileById,
       )
     );
   }
@@ -153,6 +174,7 @@ function resolveStatusActor(
     currentUserId,
     userDisplayById,
     context === "assigned" ? "Dispatcher" : "Team member",
+    userProfileById,
   );
 }
 
@@ -269,6 +291,7 @@ export function buildTripAuditLog(params: {
           currentUserId,
           userDisplayById,
           "Dispatcher",
+          userProfileById,
         );
     const actorAvatar = isDriverDeclined
       ? resolveActivityActorAvatar(
@@ -334,11 +357,12 @@ export function buildTripAuditLog(params: {
       title: isDriverDeclined
         ? "rejected assignment"
         : isReassign
-          ? "reassigned driver"
-          : "assigned driver",
+          ? "reassigned"
+          : "assigned",
       recordedAtLabel: formatAuditTimestamp(row.changed_at),
       recordedBy: actor,
       actorAvatar,
+      headlineTarget: !isDriverDeclined && driver ? driver : undefined,
       contextLabel: isDriverDeclined
         ? "Assignment declined"
         : isReassign
@@ -362,6 +386,7 @@ export function buildTripAuditLog(params: {
       userDisplayById,
       currentUserId,
       driverDisplayName ?? trip.driver_display_name,
+      userProfileById,
     );
     const label = item.status_label?.trim() || "Trip update";
     const category: TripAuditLogCategory =
@@ -437,6 +462,7 @@ export function buildTripAuditLog(params: {
       currentUserId,
       userDisplayById,
       "Team member",
+      userProfileById,
     );
 
     const partyAvatar = resolveActivityActorAvatar(
@@ -456,9 +482,14 @@ export function buildTripAuditLog(params: {
       at,
       category: "payment",
       categoryLabel: categoryLabel("payment"),
-      title: isIn ? "recorded customer payment" : "recorded supplier payment",
+      title: isIn
+        ? "recorded customer payment for"
+        : tx.contact_type === "driver"
+          ? "recorded driver payment to"
+          : "recorded supplier payment to",
       recordedAtLabel: formatAuditTimestamp(at),
       recordedBy: actor,
+      headlineTarget: party !== "—" ? party : undefined,
       actorAvatar: resolveActivityActorAvatar(
         actor,
         tx.created_by,
@@ -467,11 +498,21 @@ export function buildTripAuditLog(params: {
       ),
       contextLabel: isIn ? "Cash in" : "Cash out",
       detail: typeLabel,
-      detailLines: party !== "—" ? [`Party: ${party}`] : undefined,
       amountLabel: signedAmount,
       people:
         party !== "—"
-          ? [{ name: party, role: isIn ? "Client" : "Supplier", avatar: partyAvatar }]
+          ? [
+              {
+                name: party,
+                role:
+                  tx.contact_type === "driver"
+                    ? "Driver"
+                    : isIn
+                      ? "Client"
+                      : "Supplier",
+                avatar: partyAvatar,
+              },
+            ]
           : undefined,
     });
   }
@@ -485,6 +526,7 @@ export function buildTripAuditLog(params: {
       currentUserId,
       userDisplayById,
       "Team member",
+      userProfileById,
     );
     entries.push({
       id: "status-created-fallback",

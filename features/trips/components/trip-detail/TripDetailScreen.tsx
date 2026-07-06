@@ -124,10 +124,6 @@ import {
   mergeMapLocationTrail,
   resolveMapTruckLocation,
 } from "@/features/trips/utils/mapDriverTracking.util";
-import {
-  formatManifestEteFromEstimatedDuration,
-  formatManifestEteFromRouteSeconds,
-} from "@/features/trips/utils/manifestEta.util";
 import { buildManifestDeliveryPlan } from "@/features/trips/utils/manifestDeliveryPlan.util";
 import { buildDriverLastPingDisplay } from "@/features/trips/utils/driverLastPingDisplay.util";
 import { TripDetailTrackingHub } from "./TripDetailTrackingHub";
@@ -1077,23 +1073,6 @@ export default function TripDetailScreen({
     manifestRouteFetchEndpoints?.from.longitude,
     manifestRouteFetchEndpoints?.to.latitude,
     manifestRouteFetchEndpoints?.to.longitude,
-  ]);
-
-  /** ETE manifest: driver route ETA when assigned; create-trip ETA otherwise. */
-  const manifestEteLabel = useMemo(() => {
-    const tr = detail.trip;
-    if (!tr) return "—";
-    if (hasAssignedDriverForEta) {
-      if (manifestRouteEtaSeconds != null) {
-        return formatManifestEteFromRouteSeconds(manifestRouteEtaSeconds);
-      }
-      return formatManifestEteFromEstimatedDuration(tr.estimated_duration);
-    }
-    return formatManifestEteFromEstimatedDuration(tr.estimated_duration);
-  }, [
-    detail.trip,
-    hasAssignedDriverForEta,
-    manifestRouteEtaSeconds,
   ]);
 
   const liveTrackingDeliveryPlan = useMemo(
@@ -2168,7 +2147,11 @@ export default function TripDetailScreen({
         }
         receivableAction={
           <TouchableOpacity
-            style={[neoStyles.laneActionBtn, neoStyles.laneActionBtnPrimary]}
+            style={[
+              neoStyles.laneActionBtn,
+              neoStyles.laneActionBtnPrimary,
+              financeLayout === "mobile" && neoStyles.laneActionBtnMobile,
+            ]}
             onPress={() => {
               const dueHint = Math.max(0, Math.round(receivableAfterAdjustments));
               pushTripLedgerQuickEntry(
@@ -2183,8 +2166,18 @@ export default function TripDetailScreen({
             }}
             activeOpacity={0.88}
           >
-            <Feather name="credit-card" size={14} color="#fff" />
-            <Text style={neoStyles.laneActionBtnText} numberOfLines={2}>
+            <Feather
+              name="credit-card"
+              size={financeLayout === "mobile" ? 13 : 14}
+              color={Theme.buttonPrimaryText}
+            />
+            <Text
+              style={[
+                neoStyles.laneActionBtnText,
+                financeLayout === "mobile" && neoStyles.laneActionBtnTextMobile,
+              ]}
+              numberOfLines={2}
+            >
               Capture payment
             </Text>
           </TouchableOpacity>
@@ -2199,7 +2192,11 @@ export default function TripDetailScreen({
         payableAction={
           showRecordSupplierPayoutCta ? (
             <TouchableOpacity
-              style={[neoStyles.laneActionBtn, neoStyles.laneActionBtnDark]}
+              style={[
+                neoStyles.laneActionBtn,
+                neoStyles.laneActionBtnDark,
+                financeLayout === "mobile" && neoStyles.laneActionBtnMobile,
+              ]}
               onPress={() => {
                 const dueOut = Math.max(0, Math.round(supplierDueAfterAdjustments));
                 pushTripLedgerQuickEntry(
@@ -2214,9 +2211,13 @@ export default function TripDetailScreen({
               }}
               activeOpacity={0.88}
             >
-              <Feather name="arrow-up-right" size={14} color="#fff" />
+              <Feather name="arrow-up-right" size={financeLayout === "mobile" ? 13 : 14} color="#fff" />
               <Text
-                style={[neoStyles.laneActionBtnText, neoStyles.laneActionBtnDarkText]}
+                style={[
+                  neoStyles.laneActionBtnText,
+                  neoStyles.laneActionBtnDarkText,
+                  financeLayout === "mobile" && neoStyles.laneActionBtnTextMobile,
+                ]}
                 numberOfLines={2}
               >
                 Record supplier payout
@@ -2832,9 +2833,9 @@ export default function TripDetailScreen({
                   style={[styles.refHeroMetaItem, styles.refHeroMetaItemRight]}
                 >
                   <View>
-                    <Text style={styles.refHeroMetaLabel}>ETE manifest</Text>
+                    <Text style={styles.refHeroMetaLabel}>ETA manifest</Text>
                     <Text style={styles.refHeroMetaValue} numberOfLines={1}>
-                      {manifestEteLabel}
+                      {liveTrackingDeliveryPlan.driverEtaLabel}
                     </Text>
                   </View>
                   <View style={styles.refHeroMetaIconGhost}>
@@ -3542,10 +3543,10 @@ export default function TripDetailScreen({
                     <View style={neoStyles.heroMetricDivider} />
                     <View style={neoStyles.heroMetric}>
                       <Text style={neoStyles.heroMetricLabel}>
-                        ETE Manifest
+                        ETA Manifest
                       </Text>
                       <Text style={neoStyles.heroMetricValue}>
-                        {manifestEteLabel}
+                        {liveTrackingDeliveryPlan.driverEtaLabel}
                       </Text>
                     </View>
                     <View style={neoStyles.heroMetricDivider} />
@@ -4090,7 +4091,7 @@ export default function TripDetailScreen({
                             <Text style={neoStyles.radarSpeed}>
                               {resolvedDistanceLabel ?? "Calculating"}{" "}
                               <Text style={neoStyles.radarSpeedUnit}>
-                                · ETA {manifestEteLabel}
+                                · ETA {liveTrackingDeliveryPlan.driverEtaLabel}
                               </Text>
                             </Text>
                           )}
@@ -8624,6 +8625,13 @@ const neoStyles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 6,
     borderRadius: 12,
+    alignSelf: "stretch",
+  },
+  laneActionBtnMobile: {
+    minHeight: 44,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    gap: 5,
   },
   laneActionBtnPrimary: {
     backgroundColor: Theme.buttonPrimary,
@@ -8643,6 +8651,11 @@ const neoStyles = StyleSheet.create({
     letterSpacing: 0.15,
     textAlign: "center",
     lineHeight: 14,
+  },
+  laneActionBtnTextMobile: {
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 0.1,
   },
   laneActionBtnDarkText: {
     color: Theme.buttonDarkText,

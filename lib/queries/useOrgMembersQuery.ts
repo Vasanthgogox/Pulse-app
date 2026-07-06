@@ -1,25 +1,43 @@
 /**
  * TanStack Query hooks for organization member management.
  */
+import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  getOrganizationMembers,
   getMyTeamInvites,
+  getOrgTeamRoster,
+  subscribeToOrgTeamRoster,
 } from '@/features/organization/services/members.service';
+import type { OrgTeamRoster } from '@/types/organization';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
+const EMPTY_ROSTER: OrgTeamRoster = { members: [], pendingPhoneInvites: [] };
+
 export function useOrgMembersQuery(orgId: string | null) {
-  return useQuery({
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
     queryKey: queryKeys.orgMembers.all(orgId ?? ''),
     queryFn: async () => {
-      const res = await getOrganizationMembers(orgId!);
+      const res = await getOrgTeamRoster(orgId!);
       if (res.error) throw res.error;
-      return res.members;
+      return res.roster;
     },
     enabled: !!orgId,
     staleTime: STALE.slow,
   });
+
+  useEffect(() => {
+    if (!orgId) return;
+    return subscribeToOrgTeamRoster(orgId, () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.orgMembers.all(orgId),
+      });
+    });
+  }, [orgId, queryClient]);
+
+  return query;
 }
 
 export function useMyTeamInvitesQuery() {
@@ -48,3 +66,5 @@ export function useInvalidateTeamInvites() {
     qc.invalidateQueries({ queryKey: queryKeys.teamInvites.mine() });
   };
 }
+
+export { EMPTY_ROSTER };

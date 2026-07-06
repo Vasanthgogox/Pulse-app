@@ -1980,9 +1980,15 @@ export default function SupplierDetailScreen({
         )}
 
         {detailSubTab === "cash" && (
-          <View style={styles.cashSection}>
+          <View
+            style={[
+              styles.cashSection,
+              isWebDesktop && styles.cashSectionWebDesktop,
+            ]}
+          >
             <LedgerTransactionListView
               transactions={cashFlowTransactionRows}
+              fullWidth
               tripDetailsMap={supplierTripDetailsMap}
               tripOptions={tripOptions.map((t) => ({
                 id: t.id,
@@ -2741,6 +2747,11 @@ const styles = StyleSheet.create({
   emptyRow: edc.emptyRow,
   emptyRowText: edc.emptyRowText,
   cashSection: { marginBottom: 24 },
+  cashSectionWebDesktop: {
+    width: "100%",
+    maxWidth: 920,
+    alignSelf: "center",
+  },
   sharedSection: { marginBottom: 24 },
   analyticsSection: {
     marginBottom: 24,

@@ -118,6 +118,8 @@ export function TripAuditLogPanel({
         profileMap[uid] = profile;
         const name =
           profile.full_name?.trim() ||
+          profile.phone?.trim() ||
+          profile.email?.trim() ||
           "";
         if (name) displayMap[uid] = name;
       };
@@ -133,6 +135,8 @@ export function TripAuditLogPanel({
               member.phone?.trim() ||
               member.email?.trim() ||
               null,
+            email: member.email?.trim() || null,
+            phone: member.phone?.trim() || null,
             avatar_url: member.avatar_url ?? null,
             avatar_seed: null,
           });
@@ -151,6 +155,8 @@ export function TripAuditLogPanel({
               profile.phone?.trim() ||
               profile.email?.trim() ||
               null,
+            email: profile.email?.trim() || null,
+            phone: profile.phone?.trim() || null,
             avatar_url: profile.avatar_url ?? null,
             avatar_seed: profile.avatar_seed ?? null,
           });

@@ -7,13 +7,18 @@ import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import {
   lookupUserByPhone,
-  inviteTeamMember,
+  inviteTeamMemberByContact,
 } from "@/features/organization/services/members.service";
-import type { OrgMemberRole, UserProfileForInvite } from "@/types/organization";
+import {
+  permissionLabel,
+  platformRoleLabel,
+  TEAM_INVITE_ROLE_OPTIONS,
+  type PlatformTeamRole,
+} from "@/features/organization/utils/teamInviteRoles.util";
+import type { UserProfileForInvite } from "@/types/organization";
 import {
   Check,
   ChevronLeft,
-  Phone,
   Search,
   Shield,
   User,
@@ -32,34 +37,51 @@ import {
   TextInput,
   View,
 } from "react-native";
-import {
-  METRONIC,
-  networkDesktopHubStyles as hubStyles,
-} from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type InviteMemberLayout = "modal" | "embedded";
 
 // ─── Role option ───────────────────────────────────────────────────────────────
 
-const ROLE_OPTIONS: { value: OrgMemberRole; label: string; description: string }[] = [
-  { value: "admin", label: "Admin", description: "Can invite and manage team members, edit org settings" },
-  { value: "member", label: "Member", description: "Can access and use org resources" },
-];
+function RolePermissionsPanel({ role }: { role: PlatformTeamRole }) {
+  const option = TEAM_INVITE_ROLE_OPTIONS.find((o) => o.value === role);
+  if (!option) return null;
+  return (
+    <View style={permStyles.panel}>
+      <Text style={permStyles.panelTitle}>Permissions included</Text>
+      <View style={permStyles.chipWrap}>
+        {option.grants.map((grant) => (
+          <View key={grant} style={permStyles.chip}>
+            <Check size={10} color={Theme.darkGreen} strokeWidth={2.8} />
+            <Text style={permStyles.chipText}>{permissionLabel(grant)}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
 
 function RoleOption({
   option,
   selected,
   onSelect,
+  compact,
 }: {
-  option: (typeof ROLE_OPTIONS)[0];
+  option: (typeof TEAM_INVITE_ROLE_OPTIONS)[0];
   selected: boolean;
   onSelect: () => void;
+  compact?: boolean;
 }) {
   return (
     <Pressable
       onPress={onSelect}
-      style={({ pressed }) => [roleStyles.row, selected && roleStyles.rowSelected, pressed && { opacity: 0.85 }]}
+      style={({ pressed }) => [
+        roleStyles.row,
+        compact && roleStyles.rowCompact,
+        selected && roleStyles.rowSelected,
+        pressed && { opacity: 0.85 },
+      ]}
     >
       <View style={[roleStyles.radio, selected && roleStyles.radioSelected]}>
         {selected && <View style={roleStyles.radioDot} />}
@@ -69,11 +91,57 @@ function RoleOption({
           {option.label}
         </Text>
         <Text style={roleStyles.desc}>{option.description}</Text>
+        <Text style={roleStyles.grantCount}>
+          {option.grants.length} permissions
+        </Text>
       </View>
       {selected && <Check size={16} color={Theme.primary} strokeWidth={2.5} />}
     </Pressable>
   );
 }
+
+const permStyles = StyleSheet.create({
+  panel: {
+    marginTop: 4,
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: METRONIC.bodyBg,
+    gap: 8,
+  },
+  panelTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: METRONIC.subtle,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.positiveMuted,
+    maxWidth: "100%",
+  },
+  chipText: {
+    fontSize: 11,
+    color: METRONIC.text,
+    lineHeight: 14,
+    flexShrink: 1,
+  },
+});
 
 const roleStyles = StyleSheet.create({
   row: {
@@ -111,11 +179,103 @@ const roleStyles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: "600", color: Theme.textPrimaryDark },
   labelSelected: { color: Theme.primary },
   desc: { fontSize: 12, color: Theme.textMuted, marginTop: 2, lineHeight: 16 },
+  grantCount: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: METRONIC.link,
+    marginTop: 4,
+  },
+  rowCompact: {
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
 });
 
 // ─── User preview card ────────────────────────────────────────────────────────
 
-function UserPreviewCard({ profile }: { profile: UserProfileForInvite }) {
+const previewStyles = StyleSheet.create({
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.positiveMuted,
+    backgroundColor: "rgba(21,128,61,0.03)",
+    marginBottom: 20,
+  },
+  cardNew: {
+    borderColor: "rgba(217,119,6,0.35)",
+    backgroundColor: "rgba(217,119,6,0.05)",
+  },
+  info: { flex: 1, minWidth: 0 },
+  name: { fontSize: 14, fontWeight: "700", color: Theme.textPrimaryDark },
+  sub: { fontSize: 12, color: Theme.textMuted, marginTop: 2 },
+  foundBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: Theme.positiveMuted,
+  },
+  foundBadgeNew: {
+    backgroundColor: "rgba(217,119,6,0.12)",
+  },
+  foundBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.darkGreen,
+  },
+  foundBadgeTextNew: {
+    color: Theme.warning,
+  },
+});
+
+function UserPreviewCard({
+  profile,
+  isNewEmployee,
+  fallbackName,
+  fallbackPhone,
+}: {
+  profile: UserProfileForInvite | null;
+  isNewEmployee: boolean;
+  fallbackName: string;
+  fallbackPhone: string;
+}) {
+  if (isNewEmployee) {
+    return (
+      <View style={[previewStyles.card, previewStyles.cardNew]}>
+        <PartyAvatar
+          name={fallbackName.toUpperCase()}
+          entityType="client"
+          size={48}
+        />
+        <View style={previewStyles.info}>
+          <Text style={previewStyles.name} numberOfLines={1}>
+            {fallbackName}
+          </Text>
+          <Text style={previewStyles.sub} numberOfLines={1}>
+            {fallbackPhone}
+          </Text>
+          <Text style={previewStyles.sub}>
+            No Pulse account yet — they will join when they sign up with this number.
+          </Text>
+        </View>
+        <View style={[previewStyles.foundBadge, previewStyles.foundBadgeNew]}>
+          <User size={11} color={Theme.warning} strokeWidth={2.4} />
+          <Text style={[previewStyles.foundBadgeText, previewStyles.foundBadgeTextNew]}>
+            New
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!profile) return null;
   const displayName = profile.full_name || profile.phone || profile.email || "Unknown";
   return (
     <View style={previewStyles.card}>
@@ -142,42 +302,11 @@ function UserPreviewCard({ profile }: { profile: UserProfileForInvite }) {
       </View>
       <View style={previewStyles.foundBadge}>
         <Check size={11} color={Theme.darkGreen} strokeWidth={2.8} />
-        <Text style={previewStyles.foundBadgeText}>Found</Text>
+        <Text style={previewStyles.foundBadgeText}>On Pulse</Text>
       </View>
     </View>
   );
 }
-
-const previewStyles = StyleSheet.create({
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.positiveMuted,
-    backgroundColor: "rgba(21,128,61,0.03)",
-    marginBottom: 20,
-  },
-  info: { flex: 1, minWidth: 0 },
-  name: { fontSize: 14, fontWeight: "700", color: Theme.textPrimaryDark },
-  sub: { fontSize: 12, color: Theme.textMuted, marginTop: 2 },
-  foundBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: Theme.positiveMuted,
-  },
-  foundBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.darkGreen,
-  },
-});
 
 // ─── Main modal ────────────────────────────────────────────────────────────────
 
@@ -200,68 +329,82 @@ export function InviteMemberFlow({
   const insets = useSafeAreaInsets();
   const ui = embedded ? embeddedFlow : modal;
   const [step, setStep] = useState<Step>("phone");
+  const [employeeName, setEmployeeName] = useState("");
   const [phone, setPhone] = useState("");
+  const [employeeEmail, setEmployeeEmail] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [foundProfile, setFoundProfile] = useState<UserProfileForInvite | null>(null);
-  const [selectedRole, setSelectedRole] = useState<OrgMemberRole>("member");
+  const [isNewEmployee, setIsNewEmployee] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<PlatformTeamRole>("operator");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [successKind, setSuccessKind] = useState<"member" | "pending" | null>(null);
 
-  const handleSearch = async () => {
-    const trimmed = phone.trim();
-    if (!trimmed) {
-      setSearchError("Please enter a phone number.");
+  const handleContinue = async () => {
+    const trimmedName = employeeName.trim();
+    const trimmedPhone = phone.trim();
+    if (!trimmedName) {
+      setSearchError("Enter the employee's name.");
+      return;
+    }
+    if (!trimmedPhone) {
+      setSearchError("Enter a mobile number.");
       return;
     }
     setSearching(true);
     setSearchError(null);
     setFoundProfile(null);
+    setIsNewEmployee(false);
 
-    const { error, profile } = await lookupUserByPhone(trimmed);
+    const { error, profile } = await lookupUserByPhone(trimmedPhone);
     setSearching(false);
 
     if (error) {
       setSearchError(error.message);
       return;
     }
-    if (!profile) {
-      setSearchError(
-        "No user found with that phone number. They need to sign up with Pulse first.",
-      );
-      return;
+    if (profile) {
+      setFoundProfile(profile);
+      setIsNewEmployee(false);
+    } else {
+      setIsNewEmployee(true);
     }
-    setFoundProfile(profile);
     setStep("role");
   };
 
   const handleInvite = async () => {
-    if (!foundProfile) return;
+    const trimmedName = employeeName.trim();
+    const trimmedPhone = phone.trim();
+    if (!trimmedName || !trimmedPhone) return;
     setSubmitting(true);
     setSubmitError(null);
 
-    const { error, member, alreadyMember, alreadyInvited } = await inviteTeamMember(
-      orgId,
-      foundProfile.user_id,
-      selectedRole,
-    );
+    const result = await inviteTeamMemberByContact(orgId, {
+      phone: trimmedPhone,
+      name: trimmedName,
+      email: employeeEmail.trim() || null,
+      platformRole: selectedRole,
+      existingUserId: foundProfile?.user_id ?? null,
+    });
 
     setSubmitting(false);
 
-    if (alreadyMember) {
+    if (result.alreadyMember) {
       setSubmitError("This person is already an active member of your team.");
       return;
     }
-    if (alreadyInvited) {
+    if (result.alreadyInvited) {
       setSubmitError("An invitation has already been sent to this person.");
       return;
     }
-    if (error) {
-      setSubmitError(error.message);
+    if (result.error) {
+      setSubmitError(result.error.message);
       return;
     }
-    if (member) {
+    if (result.kind) {
+      setSuccessKind(result.kind);
       setSuccess(true);
       setTimeout(() => {
         onInvited();
@@ -273,11 +416,16 @@ export function InviteMemberFlow({
     if (step === "role") {
       setStep("phone");
       setFoundProfile(null);
+      setIsNewEmployee(false);
       setSubmitError(null);
     } else {
       onClose();
     }
   };
+
+  const invitedLabel = isNewEmployee
+    ? employeeName.trim() || phone.trim()
+    : foundProfile?.full_name || foundProfile?.phone || employeeName.trim();
 
   const stepContent = (
     <>
@@ -286,25 +434,45 @@ export function InviteMemberFlow({
           <View style={ui.successCircle}>
             <Check size={embedded ? 22 : 28} color={Theme.textOnPrimary} strokeWidth={2.8} />
           </View>
-          <Text style={ui.successTitle}>Invitation sent</Text>
+          <Text style={ui.successTitle}>
+            {successKind === "pending" ? "Employee added" : "Invitation sent"}
+          </Text>
           <Text style={ui.successSub}>
-            {foundProfile?.full_name || foundProfile?.phone} has been invited as{" "}
+            {invitedLabel} has been added as{" "}
             <Text style={{ fontWeight: "700" }}>
-              {selectedRole === "admin" ? "Admin" : "Member"}
+              {platformRoleLabel(selectedRole)}
             </Text>
-            . They'll need to accept the invite to access the org.
+            {successKind === "pending"
+              ? ". They will join your workspace automatically when they sign up with this phone number."
+              : ". They'll need to accept the invite to access the org."}
           </Text>
         </View>
       ) : step === "phone" ? (
         <>
           <View style={ui.sectionHeader}>
-            <Phone size={16} color={Theme.textSecondary} strokeWidth={2} />
-            <Text style={ui.sectionTitle}>Phone number</Text>
+            <User size={16} color={Theme.textSecondary} strokeWidth={2} />
+            <Text style={ui.sectionTitle}>Employee details</Text>
           </View>
           <Text style={ui.sectionDesc}>
-            Enter the phone number of the person you'd like to invite. They must already
-            have a Pulse account.
+            Add a team member by name and phone. If they do not have a Pulse account
+            yet, they are saved as pending and join automatically when they sign up
+            with this number.
           </Text>
+
+          <View style={ui.inputWrap}>
+            <TextInput
+              style={ui.input}
+              placeholder="Full name"
+              placeholderTextColor={Theme.textMuted}
+              value={employeeName}
+              onChangeText={(v) => {
+                setEmployeeName(v);
+                setSearchError(null);
+              }}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+          </View>
 
           <View style={ui.inputWrap}>
             <TextInput
@@ -317,9 +485,21 @@ export function InviteMemberFlow({
                 setSearchError(null);
               }}
               keyboardType="phone-pad"
-              returnKeyType="search"
-              onSubmitEditing={handleSearch}
-              autoFocus={!embedded}
+              returnKeyType="next"
+            />
+          </View>
+
+          <View style={[ui.inputWrap, { marginBottom: 16 }]}>
+            <TextInput
+              style={ui.input}
+              placeholder="Email (optional)"
+              placeholderTextColor={Theme.textMuted}
+              value={employeeEmail}
+              onChangeText={setEmployeeEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              returnKeyType="done"
+              onSubmitEditing={handleContinue}
             />
           </View>
 
@@ -331,11 +511,11 @@ export function InviteMemberFlow({
           )}
 
           <Pressable
-            onPress={handleSearch}
+            onPress={handleContinue}
             disabled={searching}
             style={({ pressed }) => [
               ui.primaryBtn,
-              embedded && hubStyles.teamInviteBtn,
+              embedded && ui.primaryBtnEmbedded,
               pressed && { opacity: 0.85 },
             ]}
           >
@@ -344,33 +524,40 @@ export function InviteMemberFlow({
             ) : (
               <>
                 <Search size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
-                <Text style={[ui.primaryBtnText, embedded && hubStyles.teamInviteBtnText]}>
-                  Search
-                </Text>
+                <Text style={ui.primaryBtnText}>Continue</Text>
               </>
             )}
           </Pressable>
         </>
       ) : (
         <>
-          {foundProfile && <UserPreviewCard profile={foundProfile} />}
+          <UserPreviewCard
+            profile={foundProfile}
+            isNewEmployee={isNewEmployee}
+            fallbackName={employeeName.trim()}
+            fallbackPhone={phone.trim()}
+          />
 
           <View style={ui.sectionHeader}>
             <Shield size={16} color={Theme.textSecondary} strokeWidth={2} />
-            <Text style={ui.sectionTitle}>Access role</Text>
+            <Text style={ui.sectionTitle}>Role & permissions</Text>
           </View>
           <Text style={[ui.sectionDesc, { marginBottom: 14 }]}>
-            Choose what level of access this person should have in your organisation.
+            Choose a platform role. Permissions are enforced by Pulse Identity
+            when the invite is accepted.
           </Text>
 
-          {ROLE_OPTIONS.map((opt) => (
+          {TEAM_INVITE_ROLE_OPTIONS.map((opt) => (
             <RoleOption
               key={opt.value}
               option={opt}
               selected={selectedRole === opt.value}
               onSelect={() => setSelectedRole(opt.value)}
+              compact={embedded}
             />
           ))}
+
+          <RolePermissionsPanel role={selectedRole} />
 
           {!!submitError && (
             <View style={ui.errorRow}>
@@ -384,8 +571,8 @@ export function InviteMemberFlow({
             disabled={submitting}
             style={({ pressed }) => [
               ui.primaryBtn,
-              { marginTop: 8 },
-              embedded && hubStyles.teamInviteBtn,
+              embedded && ui.primaryBtnEmbedded,
+              { marginTop: 4 },
               pressed && { opacity: 0.85 },
             ]}
           >
@@ -394,9 +581,7 @@ export function InviteMemberFlow({
             ) : (
               <>
                 <UserPlus2 size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
-                <Text style={[ui.primaryBtnText, embedded && hubStyles.teamInviteBtnText]}>
-                  Send invitation
-                </Text>
+                <Text style={ui.primaryBtnText}>Send invitation</Text>
               </>
             )}
           </Pressable>
@@ -478,10 +663,12 @@ export function InviteMemberFlow({
         </Pressable>
         <View style={modal.headerCenter}>
           <Text style={modal.headerTitle}>
-            {step === "phone" ? "Invite Team Member" : "Set Role"}
+            {step === "phone" ? "Invite Team Member" : "Role & Permissions"}
           </Text>
           <Text style={modal.headerSub}>
-            {step === "phone" ? "Find by phone number" : "Choose their access level"}
+            {step === "phone"
+              ? "Name and phone — account optional"
+              : "Choose platform role and review access"}
           </Text>
         </View>
         <Pressable onPress={onClose} style={modal.closeBtn} hitSlop={8}>
@@ -655,6 +842,14 @@ const embeddedFlow = StyleSheet.create({
     borderRadius: 8,
     alignSelf: "flex-start",
     minWidth: 140,
+    backgroundColor: METRONIC.accent,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+  },
+  primaryBtnEmbedded: {
+    alignSelf: "stretch",
+    width: "100%",
+    minWidth: 0,
   },
   primaryBtnText: {
     fontSize: 13,

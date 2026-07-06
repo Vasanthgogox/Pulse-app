@@ -797,7 +797,7 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
   const vehicles = vehiclesQ.data ?? [];
   // Only include non-driver members as potential KAMs
   const teamMembers = useMemo(
-    () => (orgMembersQ.data ?? []).filter((m) => m.role !== "driver" && m.status === "active"),
+    () => (orgMembersQ.data?.members ?? []).filter((m) => m.role !== "driver" && m.status === "active"),
     [orgMembersQ.data],
   );
   const memberById = useMemo(

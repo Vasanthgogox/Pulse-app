@@ -12,7 +12,13 @@ import {
   removeMember,
   cancelTeamInvite,
 } from "@/features/organization/services/members.service";
-import type { OrgMember, OrgMemberRole } from "@/types/organization";
+import type { OrgMember, PendingPhoneTeamInvite } from "@/types/organization";
+import {
+  memberDisplayRoleLabel,
+  platformRoleFromMember,
+  TEAM_INVITE_ROLE_OPTIONS,
+  type PlatformTeamRole,
+} from "@/features/organization/utils/teamInviteRoles.util";
 import {
   Check,
   ChevronDown,
@@ -41,21 +47,16 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function roleLabel(role: OrgMemberRole): string {
-  switch (role) {
-    case "owner": return "OWNER";
-    case "admin": return "ADMIN";
-    case "driver": return "DRIVER";
-    default: return "MEMBER";
-  }
+function roleLabel(member: OrgMember): string {
+  return memberDisplayRoleLabel(member);
 }
 
-function roleBadgeColor(role: OrgMemberRole): string {
-  switch (role) {
-    case "owner": return Theme.primary;
-    case "admin": return Theme.darkGreen;
-    default: return Theme.textSecondary;
-  }
+function roleBadgeColor(member: OrgMember): string {
+  const platform = platformRoleFromMember(member);
+  if (member.role === "owner") return Theme.primary;
+  if (platform === "admin" || member.role === "admin") return Theme.darkGreen;
+  if (platform === "planner" || member.role === "dispatcher") return Theme.pulseIndigo;
+  return Theme.textSecondary;
 }
 
 function getInitials(name: string | null | undefined): string {
@@ -89,7 +90,7 @@ function MemberCard({
   member: OrgMember;
   isCurrentUser: boolean;
   canManage: boolean;
-  onRoleChange: (member: OrgMember, role: OrgMemberRole) => void;
+  onRoleChange: (member: OrgMember, role: PlatformTeamRole) => void;
   onRemove: (member: OrgMember) => void;
 }) {
   const displayName = member.full_name || member.phone || member.email || "Unknown";
@@ -98,22 +99,27 @@ function MemberCard({
 
   const handleActions = () => {
     if (!canManage || isOwner || isCurrentUser) return;
-    const options = [
-      member.role === "admin" ? "Make Member" : "Make Admin",
-      "Remove from team",
-      "Cancel",
-    ];
+    const currentPlatform =
+      platformRoleFromMember(member) ?? ("operator" as PlatformTeamRole);
+    const alternateRoles = TEAM_INVITE_ROLE_OPTIONS.filter(
+      (o) => o.value !== currentPlatform,
+    );
+    const roleOptions = alternateRoles.map((o) => `Set as ${o.label}`);
+    const options = [...roleOptions, "Remove from team", "Cancel"];
+    const removeIndex = roleOptions.length;
+    const cancelIndex = roleOptions.length + 1;
+
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options,
-          destructiveButtonIndex: 1,
-          cancelButtonIndex: 2,
+          destructiveButtonIndex: removeIndex,
+          cancelButtonIndex: cancelIndex,
         },
         (idx) => {
-          if (idx === 0) {
-            onRoleChange(member, member.role === "admin" ? "member" : "admin");
-          } else if (idx === 1) {
+          if (idx != null && idx >= 0 && idx < alternateRoles.length) {
+            onRoleChange(member, alternateRoles[idx]!.value);
+          } else if (idx === removeIndex) {
             onRemove(member);
           }
         },
@@ -123,10 +129,10 @@ function MemberCard({
         displayName,
         "Choose an action",
         [
-          {
-            text: member.role === "admin" ? "Make Member" : "Make Admin",
-            onPress: () => onRoleChange(member, member.role === "admin" ? "member" : "admin"),
-          },
+          ...alternateRoles.map((o) => ({
+            text: `Set as ${o.label}`,
+            onPress: () => onRoleChange(member, o.value),
+          })),
           {
             text: "Remove from team",
             style: "destructive",
@@ -144,10 +150,10 @@ function MemberCard({
         <View style={cardStyles.coverOrbLarge} />
         <View style={cardStyles.coverOrbSmall} />
         <View style={cardStyles.badgeRow}>
-          <View style={[cardStyles.rolePill, { borderColor: roleBadgeColor(member.role) }]}>
-            <Shield size={9} color={roleBadgeColor(member.role)} strokeWidth={2.4} />
-            <Text style={[cardStyles.rolePillText, { color: roleBadgeColor(member.role) }]}>
-              {roleLabel(member.role)}
+          <View style={[cardStyles.rolePill, { borderColor: roleBadgeColor(member) }]}>
+            <Shield size={9} color={roleBadgeColor(member)} strokeWidth={2.4} />
+            <Text style={[cardStyles.rolePillText, { color: roleBadgeColor(member) }]}>
+              {roleLabel(member)}
             </Text>
           </View>
           {isPending ? (
@@ -203,6 +209,80 @@ function MemberCard({
           <ChevronDown size={14} color={Theme.textSecondary} strokeWidth={2.2} />
         </Pressable>
       )}
+    </View>
+  );
+}
+
+// ─── Pending phone invite (no Pulse account yet) ───────────────────────────────
+
+function PendingPhoneInviteCard({
+  invite,
+  canManage,
+  onCancel,
+}: {
+  invite: PendingPhoneTeamInvite;
+  canManage: boolean;
+  onCancel: (invite: PendingPhoneTeamInvite) => void;
+}) {
+  const roleText = memberDisplayRoleLabel({
+    role: invite.role,
+    permissions: invite.permissions,
+  });
+
+  return (
+    <View style={cardStyles.card}>
+      <View style={cardStyles.cardCover}>
+        <View style={cardStyles.coverOrbLarge} />
+        <View style={cardStyles.coverOrbSmall} />
+        <View style={cardStyles.badgeRow}>
+          <View style={[cardStyles.rolePill, { borderColor: Theme.warning }]}>
+            <Shield size={9} color={Theme.warning} strokeWidth={2.4} />
+            <Text style={[cardStyles.rolePillText, { color: Theme.warning }]}>
+              {roleText}
+            </Text>
+          </View>
+          <View style={cardStyles.pendingPill}>
+            <Text style={cardStyles.pendingPillText}>AWAITING SIGNUP</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={cardStyles.cardBody}>
+        <View style={cardStyles.avatarWrap}>
+          <PartyAvatar
+            name={invite.invitee_name.toUpperCase()}
+            avatarUrl={null}
+            entityType="client"
+            size={58}
+            borderStyle={cardStyles.avatarBorder}
+          />
+        </View>
+        <Text style={cardStyles.name} numberOfLines={1}>
+          {invite.invitee_name.toUpperCase()}
+        </Text>
+        <Text style={cardStyles.phone} numberOfLines={1}>
+          {invite.invitee_phone}
+        </Text>
+        <View style={cardStyles.metaRow}>
+          <View style={cardStyles.metaChip}>
+            <Text style={cardStyles.metaChipText}>
+              Invited {formatRelative(invite.created_at)}
+            </Text>
+          </View>
+        </View>
+        <Text style={cardStyles.phoneHint}>
+          Joins automatically when they sign up with this number.
+        </Text>
+      </View>
+
+      {canManage ? (
+        <Pressable
+          onPress={() => onCancel(invite)}
+          style={({ pressed }) => [cardStyles.actionBtn, pressed && { opacity: 0.7 }]}
+        >
+          <Trash2 size={14} color={Theme.destructive} strokeWidth={2.2} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -354,6 +434,14 @@ const cardStyles = StyleSheet.create({
     textAlign: "center",
     marginTop: 1,
   },
+  phoneHint: {
+    fontSize: 8,
+    color: Theme.textMuted,
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 11,
+    paddingHorizontal: 8,
+  },
   metaRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -410,7 +498,10 @@ function EmptyPending({ onInvite }: { onInvite?: () => void }) {
     <View style={styles.emptyWrap}>
       <UserCheck size={32} color={Theme.textSection} strokeWidth={1.5} />
       <Text style={styles.emptyTitle}>No pending invites</Text>
-      <Text style={styles.emptySub}>Sent invitations will appear here.</Text>
+      <Text style={styles.emptySub}>
+        Sent invitations appear here. New employees without a Pulse account show as
+        awaiting signup until they register with the invited phone number.
+      </Text>
       {onInvite ? (
         <Pressable
           onPress={onInvite}
@@ -460,9 +551,16 @@ export function TeamMembersView({
   const query = useOrgMembersQuery(orgId);
   const invalidate = useInvalidateOrgMembers(orgId);
 
-  const all = query.data ?? [];
+  const roster = query.data;
+  const all = roster?.members ?? [];
+  const pendingPhoneInvites = roster?.pendingPhoneInvites ?? [];
   const activeMembers = useMemo(() => all.filter((m) => m.status === "active"), [all]);
   const pendingMembers = useMemo(() => all.filter((m) => m.status === "invited"), [all]);
+  const pendingCount = pendingMembers.length + pendingPhoneInvites.length;
+
+  type PendingGridItem =
+    | { kind: "member"; member: OrgMember }
+    | { kind: "phone"; invite: PendingPhoneTeamInvite };
 
   const applySearch = (list: OrgMember[]) => {
     const q = search.trim().toLowerCase();
@@ -475,6 +573,24 @@ export function TeamMembersView({
     );
   };
 
+  const pendingItems = useMemo<PendingGridItem[]>(() => {
+    const q = search.trim().toLowerCase();
+    const phoneItems: PendingGridItem[] = pendingPhoneInvites
+      .filter((invite) => {
+        if (!q) return true;
+        return (
+          invite.invitee_name.toLowerCase().includes(q) ||
+          invite.invitee_phone.toLowerCase().includes(q) ||
+          (invite.invitee_email ?? "").toLowerCase().includes(q)
+        );
+      })
+      .map((invite) => ({ kind: "phone" as const, invite }));
+    const memberItems: PendingGridItem[] = applySearch(pendingMembers).map(
+      (member) => ({ kind: "member" as const, member }),
+    );
+    return [...phoneItems, ...memberItems];
+  }, [pendingPhoneInvites, pendingMembers, search]);
+
   const displayList = applySearch(tab === "members" ? activeMembers : pendingMembers);
 
   const onRefresh = async () => {
@@ -483,7 +599,7 @@ export function TeamMembersView({
     setRefreshing(false);
   };
 
-  const handleRoleChange = async (member: OrgMember, role: OrgMemberRole) => {
+  const handleRoleChange = async (member: OrgMember, role: PlatformTeamRole) => {
     setActionId(member.id);
     try {
       const { error } = await updateMemberRole(member.id, role);
@@ -496,6 +612,34 @@ export function TeamMembersView({
     } finally {
       setActionId(null);
     }
+  };
+
+  const handleCancelPhoneInvite = (invite: PendingPhoneTeamInvite) => {
+    Alert.alert(
+      "Cancel invitation?",
+      `Remove the invite for ${invite.invitee_name}? They will not be added when they sign up.`,
+      [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Cancel invite",
+          style: "destructive",
+          onPress: async () => {
+            setActionId(invite.id);
+            try {
+              const { error } = await cancelTeamInvite(invite.id, "phone_pending");
+              if (error) {
+                Alert.alert("Error", error.message);
+                return;
+              }
+              invalidate();
+              await query.refetch();
+            } finally {
+              setActionId(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleRemove = (member: OrgMember) => {
@@ -541,9 +685,14 @@ export function TeamMembersView({
   }
 
   const numColumns = desktopMetronic ? 3 : 2;
-  const rows: OrgMember[][] = [];
+  const memberRows: OrgMember[][] = [];
   for (let i = 0; i < displayList.length; i += numColumns) {
-    rows.push(displayList.slice(i, i + numColumns));
+    memberRows.push(displayList.slice(i, i + numColumns));
+  }
+
+  const pendingRows: PendingGridItem[][] = [];
+  for (let i = 0; i < pendingItems.length; i += numColumns) {
+    pendingRows.push(pendingItems.slice(i, i + numColumns));
   }
 
   const body = (
@@ -557,7 +706,7 @@ export function TeamMembersView({
       >
         {(["members", "pending"] as const).map((k) => {
           const on = tab === k;
-          const count = k === "members" ? activeMembers.length : pendingMembers.length;
+          const count = k === "members" ? activeMembers.length : pendingCount;
           return (
             <Pressable
               key={k}
@@ -610,26 +759,64 @@ export function TeamMembersView({
         />
       </View>
 
-      {displayList.length === 0 ? (
-        tab === "members" ? (
+      {tab === "members" ? (
+        displayList.length === 0 ? (
           <EmptyMembers onInvite={canManage ? onInvite : undefined} />
         ) : (
-          <EmptyPending onInvite={canManage ? onInvite : undefined} />
+          <View style={[styles.grid, embedded && styles.gridEmbedded]}>
+            {memberRows.map((row, ri) => (
+              <View key={`row-${ri}`} style={styles.gridRow}>
+                {row.map((m) => (
+                  <View key={m.id} style={styles.gridCell}>
+                    {actionId === m.id ? (
+                      <View style={[styles.gridCell, styles.busyCard]}>
+                        <LoadingIndicator color={Theme.loaderAccent} />
+                      </View>
+                    ) : (
+                      <MemberCard
+                        member={m}
+                        isCurrentUser={m.user_id === currentUserId}
+                        canManage={canManage}
+                        onRoleChange={handleRoleChange}
+                        onRemove={handleRemove}
+                      />
+                    )}
+                  </View>
+                ))}
+                {row.length < numColumns
+                  ? Array.from({ length: numColumns - row.length }).map((_, i) => (
+                      <View key={`spacer-${ri}-${i}`} style={styles.gridCell} />
+                    ))
+                  : null}
+              </View>
+            ))}
+          </View>
         )
+      ) : pendingItems.length === 0 ? (
+        <EmptyPending onInvite={canManage ? onInvite : undefined} />
       ) : (
         <View style={[styles.grid, embedded && styles.gridEmbedded]}>
-          {rows.map((row, ri) => (
-            <View key={`row-${ri}`} style={styles.gridRow}>
-              {row.map((m) => (
-                <View key={m.id} style={styles.gridCell}>
-                  {actionId === m.id ? (
+          {pendingRows.map((row, ri) => (
+            <View key={`pending-row-${ri}`} style={styles.gridRow}>
+              {row.map((item) => (
+                <View
+                  key={item.kind === "phone" ? item.invite.id : item.member.id}
+                  style={styles.gridCell}
+                >
+                  {actionId === (item.kind === "phone" ? item.invite.id : item.member.id) ? (
                     <View style={[styles.gridCell, styles.busyCard]}>
                       <LoadingIndicator color={Theme.loaderAccent} />
                     </View>
+                  ) : item.kind === "phone" ? (
+                    <PendingPhoneInviteCard
+                      invite={item.invite}
+                      canManage={canManage}
+                      onCancel={handleCancelPhoneInvite}
+                    />
                   ) : (
                     <MemberCard
-                      member={m}
-                      isCurrentUser={m.user_id === currentUserId}
+                      member={item.member}
+                      isCurrentUser={item.member.user_id === currentUserId}
                       canManage={canManage}
                       onRoleChange={handleRoleChange}
                       onRemove={handleRemove}
@@ -639,7 +826,7 @@ export function TeamMembersView({
               ))}
               {row.length < numColumns
                 ? Array.from({ length: numColumns - row.length }).map((_, i) => (
-                    <View key={`spacer-${ri}-${i}`} style={styles.gridCell} />
+                    <View key={`pending-spacer-${ri}-${i}`} style={styles.gridCell} />
                   ))
                 : null}
             </View>
@@ -647,17 +834,17 @@ export function TeamMembersView({
         </View>
       )}
 
-      {all.length > 0 ? (
+      {all.length > 0 || pendingPhoneInvites.length > 0 ? (
         <View style={[styles.statsRow, embedded && styles.statsRowEmbedded]}>
           <View style={styles.statChip}>
             <UserCheck size={11} color={Theme.darkGreen} strokeWidth={2.2} />
             <Text style={styles.statText}>{activeMembers.length} active</Text>
           </View>
-          {pendingMembers.length > 0 ? (
+          {pendingCount > 0 ? (
             <View style={styles.statChip}>
               <UserMinus size={11} color={Theme.warning} strokeWidth={2.2} />
               <Text style={[styles.statText, { color: Theme.warning }]}>
-                {pendingMembers.length} pending
+                {pendingCount} pending
               </Text>
             </View>
           ) : null}
