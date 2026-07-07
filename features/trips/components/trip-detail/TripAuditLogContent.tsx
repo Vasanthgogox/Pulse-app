@@ -16,6 +16,7 @@ import type {
   TripAuditLogEntry,
   TripAuditLogPerson,
 } from "@/lib/trips/tripAuditLog.types";
+import Feather from "@expo/vector-icons/Feather";
 import { X } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -250,6 +251,31 @@ function ActivityDetailCard({ entry }: { entry: TripAuditLogEntry }) {
   );
 }
 
+function ActivityActorHeadline({ entry }: { entry: TripAuditLogEntry }) {
+  const phrase = actionPhrase(entry);
+
+  return (
+    <View style={styles.headlineRow}>
+      <PartyAvatar
+        name={entry.actorAvatar.name}
+        entityType={entry.actorAvatar.entityType ?? "client"}
+        avatarUrl={entry.actorAvatar.avatarUrl ?? undefined}
+        avatarSeed={entry.actorAvatar.avatarSeed ?? undefined}
+        initialsColorSeed={entry.actorAvatar.initialsColorSeed ?? undefined}
+        size={22}
+        shape="circle"
+      />
+      <Text style={styles.headline} numberOfLines={4}>
+        <Text style={styles.actorName}>{entry.recordedBy}</Text>
+        <Text style={styles.actionText}> {phrase}</Text>
+        {entry.headlineTarget ? (
+          <Text style={styles.targetName}> {entry.headlineTarget}</Text>
+        ) : null}
+      </Text>
+    </View>
+  );
+}
+
 function TimelineEntryRow({
   entry,
   showLine,
@@ -261,7 +287,6 @@ function TimelineEntryRow({
 }) {
   const entrance = useRef(new Animated.Value(0)).current;
   const relativeTime = formatTripActivityRelativeTime(entry.at);
-  const phrase = actionPhrase(entry);
   const showDetailCard =
     entry.category === "payment" ||
     entry.category === "assignment" ||
@@ -305,13 +330,7 @@ function TimelineEntryRow({
       </View>
 
       <View style={styles.entryBody}>
-        <Text style={styles.headline} numberOfLines={4}>
-          <Text style={styles.actorName}>{entry.recordedBy}</Text>
-          <Text style={styles.actionText}> {phrase}</Text>
-          {entry.headlineTarget ? (
-            <Text style={styles.targetName}> {entry.headlineTarget}</Text>
-          ) : null}
-        </Text>
+        <ActivityActorHeadline entry={entry} />
 
         <View style={styles.metaRow}>
           <View style={styles.metaDot} />
@@ -552,11 +571,9 @@ export function TripAuditLogContent({
             </View>
           ) : !loading ? (
             <View style={styles.emptyWrap}>
-              <TinyEmptyLottie
-                source={TRIP_ACTIVITY_LOTTIE.empty}
-                size={72}
-                speed={0.85}
-              />
+              <View style={styles.emptyIconWrap}>
+                <Feather name="inbox" size={22} color={METRONIC.sub} />
+              </View>
               <Text style={styles.emptyTitle}>No activity yet</Text>
               <Text style={styles.emptyBody}>
                 Payments, assignments, and trip updates by your team will appear
@@ -712,21 +729,28 @@ const styles = StyleSheet.create({
   journeyHero: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
+    gap: 10,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   journeyHeroIcon: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    borderRadius: 8,
+    backgroundColor: METRONIC.quoteBg,
   },
   journeyHeroBody: {
     flex: 1,
@@ -777,8 +801,8 @@ const styles = StyleSheet.create({
   entryRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    marginBottom: 12,
-    minHeight: 40,
+    marginBottom: 14,
+    minHeight: 44,
   },
   trackCol: {
     width: TRACK_WIDTH,
@@ -794,19 +818,26 @@ const styles = StyleSheet.create({
   entryBody: {
     flex: 1,
     minWidth: 0,
-    paddingLeft: 8,
-    paddingTop: 2,
-    paddingBottom: 1,
+    paddingLeft: 10,
+    paddingTop: 1,
+    paddingBottom: 2,
+  },
+  headlineRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
   },
   headline: {
-    fontSize: 11,
-    lineHeight: 15,
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    lineHeight: 17,
     color: METRONIC.ink,
     fontWeight: "400",
   },
   actorName: {
-    fontWeight: "500",
-    color: METRONIC.link,
+    fontWeight: "600",
+    color: METRONIC.ink,
   },
   actionText: {
     fontWeight: "400",
@@ -848,14 +879,19 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   detailCard: {
-    marginTop: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    borderRadius: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-    gap: 3,
+    gap: 4,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
   detailCardHead: {
     flexDirection: "row",
@@ -956,13 +992,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 40,
     paddingHorizontal: 20,
-    gap: 6,
+    gap: 8,
+  },
+  emptyIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: METRONIC.border,
   },
   emptyTitle: {
-    fontSize: 12,
-    fontWeight: "500",
+    fontSize: 13,
+    fontWeight: "600",
     color: METRONIC.ink,
-    marginTop: 2,
   },
   emptyBody: {
     fontSize: 10,

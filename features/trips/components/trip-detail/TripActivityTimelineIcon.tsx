@@ -1,46 +1,123 @@
-import { TinyEmptyLottie } from "@/components/TinyEmptyLottie";
+import Feather from "@expo/vector-icons/Feather";
 import type { TripAuditLogCategory } from "@/lib/trips/tripAuditLog.types";
-import { TRIP_ACTIVITY_LOTTIE } from "@/lib/trips/tripActivityLottieAssets";
+import type { ComponentProps } from "react";
 import { StyleSheet, View } from "react-native";
 
-function lottieForCategory(
+type IconSpec = {
+  name: ComponentProps<typeof Feather>["name"];
+  color: string;
+  bg: string;
+  border: string;
+};
+
+function iconForEntry(
   category: TripAuditLogCategory,
   title: string,
   amountLabel?: string,
-): object {
+): IconSpec {
   const lower = title.toLowerCase();
+
   if (category === "payment") {
-    return amountLabel?.startsWith("+")
-      ? TRIP_ACTIVITY_LOTTIE.paymentIn
-      : TRIP_ACTIVITY_LOTTIE.payment;
+    const isIn = amountLabel?.startsWith("+");
+    return isIn
+      ? {
+          name: "arrow-down-left",
+          color: "#047857",
+          bg: "rgba(16,185,129,0.12)",
+          border: "rgba(16,185,129,0.24)",
+        }
+      : {
+          name: "arrow-up-right",
+          color: "#b91c1c",
+          bg: "rgba(239,68,68,0.1)",
+          border: "rgba(239,68,68,0.22)",
+        };
   }
+
   if (category === "assignment") {
     if (lower.includes("reject") || lower.includes("declin")) {
-      return TRIP_ACTIVITY_LOTTIE.rejected;
+      return {
+        name: "user-x",
+        color: "#b45309",
+        bg: "rgba(245,158,11,0.12)",
+        border: "rgba(245,158,11,0.24)",
+      };
     }
     if (lower.includes("reassign")) {
-      return TRIP_ACTIVITY_LOTTIE.reassignment;
+      return {
+        name: "repeat",
+        color: "#1d4ed8",
+        bg: "rgba(59,130,246,0.1)",
+        border: "rgba(59,130,246,0.22)",
+      };
     }
-    return TRIP_ACTIVITY_LOTTIE.assignment;
+    return {
+      name: "user-check",
+      color: "#1d4ed8",
+      bg: "rgba(59,130,246,0.1)",
+      border: "rgba(59,130,246,0.22)",
+    };
   }
-  if (category === "trip") return TRIP_ACTIVITY_LOTTIE.created;
-  if (lower.includes("accept")) return TRIP_ACTIVITY_LOTTIE.accepted;
+
+  if (category === "trip") {
+    return {
+      name: "flag",
+      color: "#4f46e5",
+      bg: "rgba(99,102,241,0.1)",
+      border: "rgba(99,102,241,0.22)",
+    };
+  }
+
+  if (lower.includes("accept")) {
+    return {
+      name: "check-circle",
+      color: "#047857",
+      bg: "rgba(16,185,129,0.12)",
+      border: "rgba(16,185,129,0.24)",
+    };
+  }
   if (lower.includes("pickup") || lower.includes("picked")) {
-    return TRIP_ACTIVITY_LOTTIE.statusPickup;
+    return {
+      name: "package",
+      color: "#475569",
+      bg: "rgba(148,163,184,0.14)",
+      border: "rgba(148,163,184,0.24)",
+    };
   }
   if (lower.includes("drop") || lower.includes("destination")) {
-    return TRIP_ACTIVITY_LOTTIE.statusDrop;
+    return {
+      name: "map-pin",
+      color: "#475569",
+      bg: "rgba(148,163,184,0.14)",
+      border: "rgba(148,163,184,0.24)",
+    };
   }
   if (lower.includes("transit") || lower.includes("started") || lower.includes("depart")) {
-    return TRIP_ACTIVITY_LOTTIE.statusTransit;
+    return {
+      name: "truck",
+      color: "#475569",
+      bg: "rgba(148,163,184,0.14)",
+      border: "rgba(148,163,184,0.24)",
+    };
   }
   if (lower.includes("complete") || lower.includes("deliver")) {
-    return TRIP_ACTIVITY_LOTTIE.status;
+    return {
+      name: "check",
+      color: "#047857",
+      bg: "rgba(16,185,129,0.12)",
+      border: "rgba(16,185,129,0.24)",
+    };
   }
-  return TRIP_ACTIVITY_LOTTIE.status;
+
+  return {
+    name: "activity",
+    color: "#475569",
+    bg: "rgba(148,163,184,0.14)",
+    border: "rgba(148,163,184,0.24)",
+  };
 }
 
-/** Minimal Metronic timeline node — white circle, gray rim, tiny Lottie. */
+/** Metronic timeline node — standard icon in a soft tinted circle. */
 export function TripActivityTimelineIcon({
   category,
   title,
@@ -52,7 +129,8 @@ export function TripActivityTimelineIcon({
   amountLabel?: string;
   size?: number;
 }) {
-  const lottieSize = Math.round(size * 0.52);
+  const spec = iconForEntry(category, title, amountLabel);
+  const iconSize = Math.max(12, Math.round(size * 0.46));
 
   return (
     <View
@@ -62,15 +140,12 @@ export function TripActivityTimelineIcon({
           width: size,
           height: size,
           borderRadius: size / 2,
+          backgroundColor: spec.bg,
+          borderColor: spec.border,
         },
       ]}
     >
-      <TinyEmptyLottie
-        source={lottieForCategory(category, title, amountLabel)}
-        size={lottieSize}
-        speed={0.82}
-        renderScale={1.35}
-      />
+      <Feather name={spec.name} size={iconSize} color={spec.color} />
     </View>
   );
 }
@@ -79,10 +154,7 @@ const styles = StyleSheet.create({
   node: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#E4E6EF",
     zIndex: 2,
-    overflow: "hidden",
   },
 });

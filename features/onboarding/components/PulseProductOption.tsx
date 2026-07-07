@@ -19,7 +19,7 @@ export const PulseProductOption = memo(function PulseProductOption({
   compact = false,
 }: PulseProductOptionProps) {
   const visual = PULSE_PRODUCT_VISUALS[product.id];
-  const iconSize = compact ? 28 : 38;
+  const iconSize = compact ? 28 : 36;
 
   return (
     <Pressable
@@ -57,9 +57,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
     backgroundColor: Theme.cardWhite,
     borderRadius: 10,
     borderWidth: 1,
@@ -85,15 +85,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   name: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '600',
     color: ONBOARDING_BRAND.ink,
     textAlign: 'center',
   },
   nameCompact: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '600',
   },
 });

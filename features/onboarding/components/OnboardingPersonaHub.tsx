@@ -17,7 +17,7 @@ import {
   DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
   DESKTOP_SIGNUP_SPLIT_PAD,
 } from '@/features/auth/signup/signUpConstants';
-import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO } from '@/features/auth/signup/signUpTypography';
+import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO, PULSE_SIGNUP_TYPO_MOBILE } from '@/features/auth/signup/signUpTypography';
 import { PULSE_SIGNUP } from '@/features/auth/signup/signUpPulseTheme';
 import {
   PULSE_PRODUCTS,
@@ -105,13 +105,15 @@ export function OnboardingPersonaHub() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>{WORKSPACE_SETUP_COPY.sectionProducts}</Text>
+        <Text style={[styles.sectionLabel, !isDesktop && styles.sectionLabelMobile]}>
+          {WORKSPACE_SETUP_COPY.sectionProducts}
+        </Text>
         <View style={styles.productList}>
           {PULSE_PRODUCTS.map((product) => (
             <PulseProductOption
               key={product.id}
               product={product}
-              compact
+              compact={isDesktop}
               onPress={() => navigateProduct(product.route)}
             />
           ))}
@@ -121,14 +123,18 @@ export function OnboardingPersonaHub() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.invitedEyebrow}>{WORKSPACE_SETUP_COPY.invitedEyebrow}</Text>
-        <Text style={styles.sectionLabel}>{WORKSPACE_SETUP_COPY.sectionWorkspaceAccess}</Text>
+        <Text style={[styles.invitedEyebrow, !isDesktop && styles.invitedEyebrowMobile]}>
+          {WORKSPACE_SETUP_COPY.invitedEyebrow}
+        </Text>
+        <Text style={[styles.sectionLabel, !isDesktop && styles.sectionLabelMobile]}>
+          {WORKSPACE_SETUP_COPY.sectionWorkspaceAccess}
+        </Text>
         <View style={styles.accessList}>
           {WORKSPACE_ACCESS_ACTIONS.map((action) => (
             <PulseAccessOption
               key={action.id}
               action={action}
-              compact
+              compact={isDesktop}
               onPress={() => navigateAccess(action.route, action.params)}
             />
           ))}
@@ -143,15 +149,22 @@ export function OnboardingPersonaHub() {
       style={({ pressed }) => [styles.signInBtn, pressed && { opacity: 0.75 }]}
       accessibilityRole="button"
     >
-      <Text style={styles.signInMuted}>{WORKSPACE_SETUP_COPY.signInPrompt}</Text>
-      <Text style={styles.signInLink}> {WORKSPACE_SETUP_COPY.signInLink}</Text>
+      <Text style={[styles.signInMuted, !isDesktop && styles.signInMutedMobile]}>
+        {WORKSPACE_SETUP_COPY.signInPrompt}
+      </Text>
+      <Text style={[styles.signInLink, !isDesktop && styles.signInLinkMobile]}>
+        {' '}
+        {WORKSPACE_SETUP_COPY.signInLink}
+      </Text>
     </Pressable>
   );
 
   const renderComingSoonStrip = () => (
     <View style={styles.comingSoonStrip}>
       <View style={styles.comingSoonHeader}>
-        <Text style={styles.sectionLabel}>{WORKSPACE_SETUP_COPY.sectionMoreProducts}</Text>
+        <Text style={[styles.sectionLabel, !isDesktop && styles.sectionLabelMobile]}>
+          {WORKSPACE_SETUP_COPY.sectionMoreProducts}
+        </Text>
         <View style={styles.comingSoonPill}>
           <Text style={styles.comingSoonPillText}>{WORKSPACE_SETUP_COPY.sectionComingSoon}</Text>
         </View>
@@ -285,11 +298,11 @@ const styles = StyleSheet.create({
   },
 
   hub: {
-    gap: 12,
+    gap: 16,
   },
   hubHeader: {
-    gap: 3,
-    marginBottom: 2,
+    gap: 6,
+    marginBottom: 4,
   },
   hubTitle: {
     color: ONBOARDING_BRAND.ink,
@@ -299,7 +312,7 @@ const styles = StyleSheet.create({
     ...PULSE_SIGNUP_TYPO.titleDesktop,
   },
   hubTitleMobile: {
-    ...PULSE_SIGNUP_TYPO.titleCompact,
+    ...PULSE_SIGNUP_TYPO_MOBILE.title,
   },
   hubSubtitle: {
     color: Theme.textMuted,
@@ -308,18 +321,27 @@ const styles = StyleSheet.create({
     ...PULSE_SIGNUP_TYPO.subtitle,
   },
   hubSubtitleMobile: {
-    ...PULSE_SIGNUP_TYPO.subtitleCompact,
+    ...PULSE_SIGNUP_TYPO_MOBILE.subtitle,
   },
 
   section: {
-    gap: 6,
+    gap: 8,
   },
   sectionLabel: {
     ...PULSE_SIGNUP_TYPO.label,
     color: Theme.textMuted,
   },
+  sectionLabelMobile: {
+    ...PULSE_SIGNUP_TYPO_MOBILE.label,
+    color: Theme.textMuted,
+  },
   invitedEyebrow: {
     ...PULSE_SIGNUP_TYPO.caption,
+    color: Theme.textSecondary,
+    marginBottom: -2,
+  },
+  invitedEyebrowMobile: {
+    ...PULSE_SIGNUP_TYPO_MOBILE.caption,
     color: Theme.textSecondary,
     marginBottom: -2,
   },
@@ -391,8 +413,17 @@ const styles = StyleSheet.create({
     ...signupText.linkSmall,
     color: Theme.textMuted,
   },
+  signInMutedMobile: {
+    ...signupText.linkSmallMobile,
+    color: Theme.textMuted,
+  },
   signInLink: {
     ...signupText.linkSmall,
+    color: ONBOARDING_BRAND.ink,
+    fontWeight: '600',
+  },
+  signInLinkMobile: {
+    ...signupText.linkSmallMobile,
     color: ONBOARDING_BRAND.ink,
     fontWeight: '600',
   },
@@ -410,8 +441,8 @@ const styles = StyleSheet.create({
   mobileScrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingTop: 20,
+    paddingBottom: 16,
   },
   mobileHubFooter: {
     borderTopWidth: StyleSheet.hairlineWidth,

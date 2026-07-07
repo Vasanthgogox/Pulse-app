@@ -1,7 +1,9 @@
 import { memo, type ReactNode } from "react";
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { ChevronRight } from "lucide-react-native";
 
 import { PartyAvatar, type PartyEntityType } from "@/components/PartyAvatar";
+import Theme from "@/constants/Theme";
 import { fullPageWizardStyles as styles, WIZARD_PARTY_AVATAR_SIZE } from "./fullPageWizardStyles";
 
 export type WizardEntityPartyCellProps = {
@@ -16,6 +18,8 @@ export type WizardEntityPartyCellProps = {
   avatarSize?: number;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
+  /** Show chevron when pressable (default true). */
+  showChevron?: boolean;
   /** Optional custom avatar (e.g. Avatar party blob). */
   avatar?: ReactNode;
 };
@@ -33,10 +37,17 @@ export const WizardEntityPartyCell = memo(function WizardEntityPartyCell({
   avatarSize = WIZARD_PARTY_AVATAR_SIZE,
   onPress,
   style,
+  showChevron = true,
   avatar,
 }: WizardEntityPartyCellProps) {
   const content = (
-    <View style={[styles.partyCard, style]}>
+    <View
+      style={[
+        styles.partyCard,
+        onPress && styles.partyCardPressable,
+        style,
+      ]}
+    >
       {avatar ?? (
         <PartyAvatar
           name={name}
@@ -60,12 +71,20 @@ export const WizardEntityPartyCell = memo(function WizardEntityPartyCell({
           </Text>
         ) : null}
       </View>
+      {onPress && showChevron ? (
+        <ChevronRight size={14} color={Theme.textMuted} style={styles.partyChangeIcon} />
+      ) : null}
     </View>
   );
 
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={{ flex: 1, minWidth: 0 }}>
+      <Pressable
+        onPress={onPress}
+        style={{ flex: 1, minWidth: 0 }}
+        accessibilityRole="button"
+        accessibilityLabel={`Change ${label.toLowerCase()}`}
+      >
         {content}
       </Pressable>
     );

@@ -5,7 +5,7 @@ import Theme from '@/constants/Theme';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
 import { DESKTOP_BREAKPOINT } from '../signUpConstants';
-import { PULSE_SIGNUP_TYPO } from '../signUpTypography';
+import { PULSE_SIGNUP_TYPO, PULSE_SIGNUP_TYPO_MOBILE } from '../signUpTypography';
 import { WORKSPACE_INTRO_COPY } from '@/lib/onboarding/workspaceSetupContent';
 
 import { ONBOARDING_BRAND } from '@/features/onboarding/components/onboardingPersonaAssets';
@@ -23,8 +23,12 @@ export function WorkspaceIntroStep({ flow }: { flow: SignUpFlow }) {
             {WORKSPACE_INTRO_COPY.subtitle}
           </Text>
           <View style={styles.timeRow}>
-            <Text style={styles.timeLabel}>{WORKSPACE_INTRO_COPY.timeLabel}</Text>
-            <Text style={styles.timeValue}>{WORKSPACE_INTRO_COPY.timeValue}</Text>
+            <Text style={[styles.timeLabel, !isDesktop && styles.timeLabelMobile]}>
+              {WORKSPACE_INTRO_COPY.timeLabel}
+            </Text>
+            <Text style={[styles.timeValue, !isDesktop && styles.timeValueMobile]}>
+              {WORKSPACE_INTRO_COPY.timeValue}
+            </Text>
           </View>
         </View>
       }
@@ -35,12 +39,14 @@ export function WorkspaceIntroStep({ flow }: { flow: SignUpFlow }) {
       inlinePrimary
     >
       <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
-        <Text style={styles.configureTitle}>{WORKSPACE_INTRO_COPY.configureTitle}</Text>
+        <Text style={[styles.configureTitle, !isDesktop && styles.configureTitleMobile]}>
+          {WORKSPACE_INTRO_COPY.configureTitle}
+        </Text>
         <View style={styles.checklist}>
           {WORKSPACE_INTRO_COPY.items.map((item) => (
             <View key={item} style={styles.checkRow}>
-              <Check size={14} color={ONBOARDING_BRAND.ink} strokeWidth={2.25} />
-              <Text style={styles.checkLabel}>{item}</Text>
+              <Check size={isDesktop ? 14 : 16} color={ONBOARDING_BRAND.ink} strokeWidth={2.25} />
+              <Text style={[styles.checkLabel, !isDesktop && styles.checkLabelMobile]}>{item}</Text>
             </View>
           ))}
         </View>
@@ -64,9 +70,9 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   subtitleMobile: {
-    fontSize: PULSE_SIGNUP_TYPO.subtitleCompact.fontSize,
-    lineHeight: PULSE_SIGNUP_TYPO.subtitleCompact.lineHeight,
-    marginTop: PULSE_SIGNUP_TYPO.subtitleCompact.marginTop,
+    fontSize: PULSE_SIGNUP_TYPO_MOBILE.subtitle.fontSize,
+    lineHeight: PULSE_SIGNUP_TYPO_MOBILE.subtitle.lineHeight,
+    marginTop: PULSE_SIGNUP_TYPO_MOBILE.subtitle.marginTop,
   },
   timeRow: {
     flexDirection: 'row',
@@ -80,11 +86,19 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     color: Theme.textSecondary,
   },
+  timeLabelMobile: {
+    fontSize: PULSE_SIGNUP_TYPO_MOBILE.caption.fontSize,
+    lineHeight: PULSE_SIGNUP_TYPO_MOBILE.caption.lineHeight,
+  },
   timeValue: {
     fontSize: PULSE_SIGNUP_TYPO.caption.fontSize,
     lineHeight: PULSE_SIGNUP_TYPO.caption.lineHeight,
     fontWeight: '400',
     color: Theme.textSecondary,
+  },
+  timeValueMobile: {
+    fontSize: PULSE_SIGNUP_TYPO_MOBILE.caption.fontSize,
+    lineHeight: PULSE_SIGNUP_TYPO_MOBILE.caption.lineHeight,
   },
   body: {
     width: '100%',
@@ -103,6 +117,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: PULSE_SIGNUP_TYPO.label.letterSpacing,
   },
+  configureTitleMobile: {
+    fontSize: PULSE_SIGNUP_TYPO_MOBILE.label.fontSize,
+    lineHeight: PULSE_SIGNUP_TYPO_MOBILE.label.lineHeight,
+    letterSpacing: PULSE_SIGNUP_TYPO_MOBILE.label.letterSpacing,
+    marginBottom: 10,
+  },
   checklist: {
     gap: 7,
     marginBottom: 16,
@@ -117,5 +137,9 @@ const styles = StyleSheet.create({
     lineHeight: PULSE_SIGNUP_TYPO.body.lineHeight,
     fontWeight: '400',
     color: ONBOARDING_BRAND.ink,
+  },
+  checkLabelMobile: {
+    fontSize: PULSE_SIGNUP_TYPO_MOBILE.body.fontSize,
+    lineHeight: PULSE_SIGNUP_TYPO_MOBILE.body.lineHeight,
   },
 });

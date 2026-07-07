@@ -37,14 +37,14 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
-const ALLOCATION_AVATAR_SIZE = 24;
+import {
+  HUB_MOBILE_TICKET_REF,
+  HubMobileListCanvas,
+  hubMobileListCanvasStyles,
+} from "@/components/hub";
 
-const REF = {
-  ink: "#1c1c1e",
-  inkMid: "#3d4650",
-  muted: "#9aa3ad",
-  hairline: "#e8ecf0",
-} as const;
+const REF = HUB_MOBILE_TICKET_REF;
+const ALLOCATION_AVATAR_SIZE = 24;
 
 /** @deprecated Use `HUB_GRID_CARD_MIN_HEIGHT` from `@/components/hub/hubGridCardLayout`. */
 export const LOAD_CENTER_GRID_CARD_MIN_HEIGHT = HUB_GRID_CARD_MIN_HEIGHT;
@@ -103,6 +103,7 @@ export type LoadCenterHubMobileIndentCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
+/** @deprecated Use `HubMobileListCanvas` from `@/components/hub`. */
 export function LoadCenterHubMobileListCanvas({
   children,
   style,
@@ -110,7 +111,7 @@ export function LoadCenterHubMobileListCanvas({
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  return <View style={[styles.list, style]}>{children}</View>;
+  return <HubMobileListCanvas style={style}>{children}</HubMobileListCanvas>;
 }
 
 export function LoadCenterHubMobileIndentCard({
@@ -473,8 +474,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
   },
   cardWrap: {
-    width: "100%",
-    marginBottom: 12,
+    ...hubMobileListCanvasStyles.cardWrap,
   },
   cardWrapGrid: {
     flex: 1,

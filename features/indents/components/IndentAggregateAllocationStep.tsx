@@ -1,22 +1,21 @@
 /**
  * Single-step UI for aggregate (partner supply) indent deploy wizard.
  */
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { User } from "lucide-react-native";
 
 import { IndianVehicleRegistrationKeypadFlow } from "@/components/indianVehicle/IndianVehicleRegistrationKeypadFlow";
 import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeypadFlow";
 import { PartnerRatesKeypadFlow } from "@/features/trips/components/allocation/PartnerRatesKeypadFlow";
+import { TripPartnerPickerSection } from "@/features/trips/components/add-trip/TripPartnerPickerSection";
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/supplierNumericPartyPreview.util";
 import Theme from "@/constants/Theme";
 import { formatMobileNumber } from "@/lib/format";
 import { normalizeIndianMobileLast10 } from "@/features/trips/utils/driverPhoneLookup.util";
 import type { StaffHandshakeResult } from "@/features/network/hooks/useStaffHandshake";
-import { AssignmentEntityAvatarGrid } from "@/features/trips/components/AssignmentEntityAvatarGrid";
 import { DriverPhoneRecommendations } from "@/features/trips/components/add-trip/DriverPhoneRecommendations";
-import { suppliersToAvatarGridItems } from "@/features/suppliers/utils/supplierAvatarGridItems.util";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import type { IndentAggregateStep } from "@/features/indents/components/indentAllocationWizardSteps";
 
@@ -53,6 +52,26 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
     [aggregateDriverPhone],
   );
   const phoneComplete = phoneLast10.length >= 10;
+
+  const [partnerListExpanded, setPartnerListExpanded] = useState(
+    () => !subcontractSupplierId,
+  );
+
+  useEffect(() => {
+    if (!subcontractSupplierId) setPartnerListExpanded(true);
+  }, [subcontractSupplierId]);
+
+  const handleSelectPartner = useCallback(
+    (supplier: SupplierRow) => {
+      set.subcontractSupplierId(supplier.id);
+      setPartnerListExpanded(false);
+    },
+    [set],
+  );
+
+  const handleClearPartner = useCallback(() => {
+    set.subcontractSupplierId(null);
+  }, [set]);
 
   const handlePhoneChange = useCallback(
     (value: string) => {
@@ -92,25 +111,18 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
 
   if (step === "partner") {
     return (
-      <>
-        <AssignmentEntityAvatarGrid
-          title="Select Transport Partner"
-          variant="wizard"
-          embedded
-          totalCount={suppliers.length}
-          selectedId={subcontractSupplierId}
-          onSelect={(id) =>
-            set.subcontractSupplierId(subcontractSupplierId === id ? null : id)
-          }
-          items={suppliersToAvatarGridItems(suppliers)}
-          emptyMessage="No partners yet. Add a transport partner to continue."
-          emptyActionLabel="Add partner"
-          onEmptyAction={onAddPartner}
-          headerActionLabel="Add partner"
-          onHeaderAction={onAddPartner}
-          footerHint="Select the sub-supplier (transport partner) for this trip."
-        />
-      </>
+      <TripPartnerPickerSection
+        suppliers={suppliers}
+        suppliersLoading={false}
+        supplierId={subcontractSupplierId}
+        partnerListExpanded={partnerListExpanded}
+        setPartnerListExpanded={setPartnerListExpanded}
+        onSelectPartner={handleSelectPartner}
+        onClearPartner={handleClearPartner}
+        onAddPartner={onAddPartner}
+        wizardMode
+        listMaxHeight={420}
+      />
     );
   }
 

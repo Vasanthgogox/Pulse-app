@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
   },
   stepInner: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 420,
     alignSelf: 'center',
   },
   scrollContentDesktop: {

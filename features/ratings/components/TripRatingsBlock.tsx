@@ -1016,7 +1016,7 @@ export function TripRatingsBlock({
   const isWorkspace = layoutVariant === 'workspace';
   const isRegistry = layoutVariant === 'registry';
   const isRegistrySidebar = isRegistry && embeddedSidebar;
-  const ratingsHeroIconSize = isRegistrySidebar ? 56 : 44;
+  const ratingsHeroIconSize = isRegistrySidebar ? 44 : 36;
   const isWidePanel = isWorkspace || isRegistry;
   const isCompactWorkspace = isWidePanel && width < 1100;
   const operationalTripLabel = getTripOperationalDisplay({
@@ -2727,26 +2727,23 @@ const styles = StyleSheet.create({
   },
   regHeaderIllusWrap: {
     width: '100%',
-    minHeight: 56,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 0,
     marginBottom: 2,
+    paddingVertical: 8,
   },
   regHeaderIllusWrapSidebar: {
-    minHeight: 68,
     marginBottom: 4,
+    paddingVertical: 10,
   },
   regHeaderIllusViewport: {
-    width: '100%',
-    minHeight: 52,
-    overflow: 'visible',
+    alignSelf: 'center',
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  regHeaderIllusViewportSidebar: {
-    minHeight: 64,
-  },
+  regHeaderIllusViewportSidebar: {},
   regStack: { gap: 5 },
   regStackSidebar: { gap: 12 },
   regCard: {

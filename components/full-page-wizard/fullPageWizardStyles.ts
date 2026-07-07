@@ -40,12 +40,21 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 0,
   },
+  /** Mobile / narrow stepped wizard — full-width, compact chrome. */
+  pageRootMobileFull: {
+    maxWidth: "100%",
+    width: "100%",
+    alignSelf: "stretch",
+    paddingHorizontal: 12,
+    gap: 10,
+  },
   pageRootKeypad: {
     gap: 8,
   },
   pageHeaderBlock: {
     gap: 4,
     flexShrink: 0,
+    marginTop: 2,
   },
   pageHeaderBlockKeypad: {
     gap: 2,
@@ -53,8 +62,10 @@ export const fullPageWizardStyles = StyleSheet.create({
   headerBar: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    minHeight: 28,
+    justifyContent: "flex-start",
+    gap: 10,
+    minHeight: 32,
+    width: "100%",
   },
   headerBackBtn: {
     borderRadius: 8,
@@ -63,6 +74,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 10,
     paddingVertical: 6,
+    flexShrink: 0,
   },
   headerBackBtnText: {
     color: Theme.textPrimaryDark,
@@ -73,6 +85,23 @@ export const fullPageWizardStyles = StyleSheet.create({
     color: Theme.textMuted,
     fontSize: 11,
     fontWeight: "700",
+    flexShrink: 0,
+    marginLeft: "auto",
+  },
+  headerTitleCluster: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  titleInline: {
+    color: Theme.textPrimaryDark,
+    fontSize: 17,
+    fontWeight: "800",
+    lineHeight: 22,
+  },
+  titleInlineKeypad: {
+    fontSize: 16,
+    lineHeight: 20,
   },
   title: {
     color: Theme.textPrimaryDark,
@@ -185,6 +214,14 @@ export const fullPageWizardStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     padding: 10,
   },
+  partyCardPressable: {
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+  },
+  partyChangeIcon: {
+    flexShrink: 0,
+    marginLeft: 2,
+  },
   /** Full-width selectable party tile inside 2-col wizard grids. */
   partyCardSelectable: {
     width: "100%",
@@ -242,6 +279,8 @@ export const fullPageWizardStyles = StyleSheet.create({
   modeRow: {
     flexDirection: "row",
     gap: 8,
+    width: "100%",
+    alignSelf: "stretch",
   },
   modeChip: {
     flex: 1,
@@ -653,11 +692,28 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 12,
     paddingBottom: 4,
   },
-  /** Prior-step summary cards stacked above the active field (attribution-style). */
+  /** Prior-step summary cards in one row above the active field. */
   wizardPriorSelectionsStack: {
     width: "100%",
     gap: 8,
     marginBottom: 4,
+  },
+  wizardPriorSelectionsRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    width: "100%",
+  },
+  wizardPriorSelectionCell: {
+    flex: 1,
+    minWidth: 0,
+    alignSelf: "stretch",
+  },
+  wizardPriorSelectionCard: {
+    width: "100%",
+    alignSelf: "stretch",
+    padding: 8,
+    gap: 8,
   },
   wizardFieldBlock: {
     width: "100%",
@@ -829,11 +885,14 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 4,
   },
-  /** Full-width desktop wizard with optional marketing side rails. */
+  /** Full-width desktop wizard (no insight rails). */
   desktopFrameSingle: {
     flex: 1,
     width: "100%",
-    alignItems: "center",
+    maxWidth: 1680,
+    alignSelf: "center",
+    alignItems: "stretch",
+    paddingHorizontal: 24,
   },
   desktopFrameRow: {
     flex: 1,

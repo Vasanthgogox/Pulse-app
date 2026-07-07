@@ -1,6 +1,7 @@
 import { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
+import { DESKTOP_BREAKPOINT } from './signUpConstants';
 import { PULSE_SIGNUP } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles } from './signUpTypography';
 
@@ -11,19 +12,25 @@ export interface SignUpOtpBoxesProps {
   centered?: boolean;
 }
 
-const text = createPulseSignUpTextStyles(PULSE_SIGNUP);
-const BOX_SIZE = 36;
-const BOX_GAP = 5;
+const BOX_SIZE_DESKTOP = 36;
+const BOX_SIZE_MOBILE = 42;
+const BOX_GAP_DESKTOP = 5;
+const BOX_GAP_MOBILE = 6;
 
 export const SignUpOtpBoxes = memo(function SignUpOtpBoxes({
   digits,
   length,
   centered = false,
 }: SignUpOtpBoxesProps) {
+  const { width } = useWindowDimensions();
+  const isMobile = width < DESKTOP_BREAKPOINT;
+  const text = createPulseSignUpTextStyles(PULSE_SIGNUP);
+  const boxSize = isMobile ? BOX_SIZE_MOBILE : BOX_SIZE_DESKTOP;
+  const boxGap = isMobile ? BOX_GAP_MOBILE : BOX_GAP_DESKTOP;
   const chars = digits.padEnd(length, ' ').split('').slice(0, length);
 
   return (
-    <View style={[styles.row, centered && styles.rowCentered]}>
+    <View style={[styles.row, centered && [styles.rowCentered, { gap: boxGap }]]}>
       {chars.map((c, i) => {
         const filled = c.trim() !== '';
         const active = i === digits.length && digits.length < length;
@@ -32,12 +39,19 @@ export const SignUpOtpBoxes = memo(function SignUpOtpBoxes({
             key={i}
             style={[
               styles.box,
-              centered && styles.boxCentered,
+              centered && { width: boxSize, maxWidth: boxSize, height: boxSize + 4 },
+              !centered && isMobile && styles.boxMobile,
               filled && styles.boxFilled,
               active && styles.boxActive,
             ]}
           >
-            <Text style={[text.otpDigit, { color: 'transparent' }, filled && text.otpDigitFilled]}>
+            <Text
+              style={[
+                isMobile ? text.otpDigitMobile : text.otpDigit,
+                { color: 'transparent' },
+                filled && text.otpDigitFilled,
+              ]}
+            >
               {filled ? c : ''}
             </Text>
           </View>
@@ -59,7 +73,6 @@ const styles = StyleSheet.create({
   rowCentered: {
     alignSelf: 'center',
     justifyContent: 'center',
-    gap: BOX_GAP,
     width: 'auto',
     maxWidth: '100%',
   },
@@ -74,11 +87,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  boxCentered: {
-    flex: 0,
-    width: BOX_SIZE,
-    maxWidth: BOX_SIZE,
-    height: 40,
+  boxMobile: {
+    maxWidth: 44,
+    height: 44,
   },
   boxFilled: {
     borderColor: PULSE_SIGNUP.primaryDark,

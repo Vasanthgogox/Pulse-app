@@ -4,7 +4,7 @@
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
 import { useEffect, useMemo, useState } from "react";
-import { WIZARD_FULL_PAGE_STEPPED } from "@/lib/wizardLayout.util";
+import { WIZARD_FULL_PAGE_STEPPED, isDesktopWizardForm } from "@/lib/wizardLayout.util";
 import {
   Alert,
   Platform,
@@ -23,7 +23,15 @@ import type {
   AddTripOtpScreenContext,
 } from "./types";
 import { buildAddTripPrefillFromIndent } from "./prefillFromIndent.util";
-import { computeCommodityStepIssues, useAddTripForm } from "./useAddTripForm";
+import {
+  ADD_TRIP_WIZARD_STEPS,
+  addTripWizardStepFields,
+  addTripWizardStepLabel,
+  addTripWizardStepSubtitle,
+  computeCommodityClientStepIssues,
+  type AddTripWizardStep,
+} from "./addTripWizardSteps";
+import { useAddTripForm } from "./useAddTripForm";
 import { useClientsForTrip } from "./useClientsForTrip";
 import {
   allocationSubStepFields,
@@ -60,7 +68,7 @@ function buildOtpScreenContext(state: AddTripFormState): AddTripOtpScreenContext
   };
 }
 
-type WizardStep = "route" | "commodity" | "client" | "sale" | "allocation";
+type WizardStep = AddTripWizardStep;
 
 export function AddTripModal({
   organizationId,
@@ -70,12 +78,15 @@ export function AddTripModal({
 }: AddTripModalProps) {
   const { width: winW } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
+  /** Indent-style: wide desktop = enterprise grid; narrow = stepped wizard. */
+  const isDesktopEnterprise = isDesktopWizardForm(winW);
+  const isMobileWizard = !isDesktopEnterprise && WIZARD_FULL_PAGE_STEPPED;
   const form = useAddTripForm();
   const [wizardStep, setWizardStep] = useState<WizardStep>("route");
   const [allocationSubStep, setAllocationSubStep] =
     useState<AllocationSubStep>("supply");
-  /** Full-page modal: stepped wizard on native + web (mobile app parity). */
-  const wizardEnabled = WIZARD_FULL_PAGE_STEPPED;
+  /** Stepped wizard only on narrow viewports (matches Create Load / indent). */
+  const wizardEnabled = isMobileWizard;
   /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
   const webAllocSubSteps = false;
   const allocationFlowActive =
@@ -122,22 +133,10 @@ export function AddTripModal({
 
   const stepFieldSet = useMemo(() => {
     if (wizardEnabled) {
-      if (wizardStep === "route") {
-        return new Set(["pickup", "drop", "tripDate"]);
-      }
-      if (wizardStep === "commodity") {
-        return new Set(["vehicleType", "loadType", "tons"]);
-      }
-      if (wizardStep === "client") {
-        return new Set(["client"]);
-      }
-      if (wizardStep === "sale") {
-        return new Set(["clientPrice"]);
-      }
       if (wizardStep === "allocation") {
         return allocationSubStepFields(allocationSubStep, form.state);
       }
-      return null;
+      return addTripWizardStepFields(wizardStep);
     }
     if (webAllocSubSteps) {
       return allocationSubStepFields(allocationSubStep, form.state);
@@ -154,8 +153,11 @@ export function AddTripModal({
 
   const stepIssues = useMemo(() => {
     if (!stepFieldSet) return form.validationIssues;
-    if (wizardEnabled && wizardStep === "commodity") {
-      return computeCommodityStepIssues(form.state);
+    if (wizardEnabled && wizardStep === "commodityClient") {
+      return computeCommodityClientStepIssues(
+        form.state,
+        form.validationIssues,
+      );
     }
     return form.validationIssues.filter((i) => stepFieldSet.has(i.field));
   }, [wizardEnabled, stepFieldSet, wizardStep, form.state, form.validationIssues]);
@@ -179,8 +181,7 @@ export function AddTripModal({
   const wizardSubmitLabel = steppedFormActive
     ? wizardEnabled && wizardStep !== "allocation"
       ? wizardStep === "route" ||
-        wizardStep === "commodity" ||
-        wizardStep === "client" ||
+        wizardStep === "commodityClient" ||
         wizardStep === "sale"
         ? "Continue"
         : "Create Trip"
@@ -191,13 +192,10 @@ export function AddTripModal({
 
   const wizardStepMeta = useMemo(() => {
     if (!wizardEnabled) return null;
-    const topSteps = [
-      { id: "route", label: "Route" },
-      { id: "commodity", label: "Commodity" },
-      { id: "client", label: "Client" },
-      { id: "sale", label: "Sale" },
-      { id: "allocation", label: "Allocation" },
-    ] as const;
+    const topSteps = ADD_TRIP_WIZARD_STEPS.map((id) => ({
+      id,
+      label: addTripWizardStepLabel(id),
+    }));
     const topIndex = topSteps.findIndex((s) => s.id === wizardStep);
     if (wizardStep !== "allocation") {
       return {
@@ -206,16 +204,7 @@ export function AddTripModal({
         stepIndex: topIndex >= 0 ? topIndex + 1 : 1,
         stepTotal: topSteps.length,
         title: "Create Trip",
-        subtitle:
-          wizardStep === "route"
-            ? "Enter pickup, drop and trip date."
-            : wizardStep === "commodity"
-              ? "Vehicle type, load and weight."
-              : wizardStep === "client"
-                ? "Select the billing client."
-                : wizardStep === "sale"
-                  ? "Enter the client sale value."
-                  : "Assign supply for this trip.",
+        subtitle: addTripWizardStepSubtitle(wizardStep),
       };
     }
     const allocSteps = allocationSteps.map((id) => ({
@@ -320,22 +309,12 @@ export function AddTripModal({
         showAppAlert("Missing details", msg);
         return;
       }
-      setWizardStep("commodity");
+      setWizardStep("commodityClient");
       return;
     }
-    if (wizardStep === "commodity") {
+    if (wizardStep === "commodityClient") {
       if (stepIssues.length > 0) {
         Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
-        return;
-      }
-      setWizardStep("client");
-      return;
-    }
-    if (wizardStep === "client") {
-      if (stepIssues.length > 0) {
-        const msg = stepIssues[0]?.message ?? "Fill required fields.";
-        setSubmitError(msg);
-        showAppAlert("Missing details", msg);
         return;
       }
       setWizardStep("sale");
@@ -380,14 +359,10 @@ export function AddTripModal({
       return;
     }
     if (wizardStep === "sale") {
-      setWizardStep("client");
+      setWizardStep("commodityClient");
       return;
     }
-    if (wizardStep === "client") {
-      setWizardStep("commodity");
-      return;
-    }
-    if (wizardStep === "commodity") {
+    if (wizardStep === "commodityClient") {
       setWizardStep("route");
       return;
     }
@@ -438,11 +413,12 @@ export function AddTripModal({
   return (
     <AddTripModalLayout
       title={wizardStepMeta?.title ?? "Create Trip"}
+      insightPreset="trip"
       subtitle={
         wizardStepMeta?.subtitle ??
-        (webAllocSubSteps
-          ? `Allocation · ${allocationSubStepLabel(allocationSubStep)}`
-          : "Route · commodity · client · allocation")
+        (isDesktopEnterprise
+          ? "Route · commodity & client · sale · allocation"
+          : "Route · commodity & client · sale · allocation")
       }
       stepIndex={wizardStepMeta?.stepIndex}
       stepTotal={wizardStepMeta?.stepTotal}
@@ -454,7 +430,7 @@ export function AddTripModal({
       onClose={handleWizardBackOrClose}
       onSubmit={handleWizardPrimary}
       fillBody={wizardFillBody}
-      scrollBody={wizardEnabled && !wizardFillBody}
+      scrollBody={(wizardEnabled && !wizardFillBody) || isDesktopEnterprise}
       progress={
         wizardEnabled && wizardStepMeta ? (
           <AddTripWizardProgress
@@ -478,8 +454,11 @@ export function AddTripModal({
         validationIssues={visibleIssues}
         validationMessage={visibleValidationMessage}
         wizardSection={wizardEnabled ? wizardStep : undefined}
+        enterpriseFormGrid={isDesktopEnterprise}
+        mobileWizardMode={wizardEnabled}
         sourceIndent={sourceIndent ?? null}
         allocationSubStep={allocationFlowActive ? allocationSubStep : undefined}
+        onAllocationSubStepChange={setAllocationSubStep}
         showInlineCta={false}
         submitting={submitting}
       />

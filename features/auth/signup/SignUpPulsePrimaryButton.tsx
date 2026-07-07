@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -19,6 +20,7 @@ import {
   pulsePillButtonPressed,
 } from '@/constants/PulsePillButtonChrome';
 import Theme from '@/constants/Theme';
+import { DESKTOP_BREAKPOINT } from './signUpConstants';
 import { PULSE_SIGNUP, type SignUpTheme } from './signUpPulseTheme';
 
 export interface SignUpPulsePrimaryButtonProps {
@@ -42,6 +44,8 @@ export const SignUpPulsePrimaryButton = memo(function SignUpPulsePrimaryButton({
   theme = PULSE_SIGNUP,
   testID,
 }: SignUpPulsePrimaryButtonProps) {
+  const { width } = useWindowDimensions();
+  const isMobile = width < DESKTOP_BREAKPOINT;
   const inactive = disabled || loading;
 
   return (
@@ -51,6 +55,7 @@ export const SignUpPulsePrimaryButton = memo(function SignUpPulsePrimaryButton({
       disabled={inactive}
       style={({ pressed }) => [
         styles.btn,
+        isMobile && styles.btnMobile,
         pulsePillButtonContainerDefault,
         pulsePillButtonContainerFullWidth,
         inactive
@@ -78,6 +83,7 @@ export const SignUpPulsePrimaryButton = memo(function SignUpPulsePrimaryButton({
         <Text
           style={[
             pulsePillButtonLabelLarge,
+            isMobile && styles.labelMobile,
             inactive && { color: theme.disabledText },
           ]}
         >
@@ -99,5 +105,13 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: { boxSizing: 'border-box' } as object,
     }),
+  },
+  btnMobile: {
+    minHeight: 48,
+    paddingVertical: 12,
+  },
+  labelMobile: {
+    fontSize: 15,
+    letterSpacing: 0.2,
   },
 });

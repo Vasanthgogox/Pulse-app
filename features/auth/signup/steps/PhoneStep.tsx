@@ -1,14 +1,19 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions } from 'react-native';
 
 import { ROUTES } from '@/lib/routes';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { SignUpPulseKeypadStep } from '../SignUpPulseKeypadStep';
 import { formatSignupPhoneDisplay } from '../signUpKeypad.util';
-import { SIGNUP_TEXT } from '../signUpTypography';
+import { DESKTOP_BREAKPOINT } from '../signUpConstants';
+import { createPulseSignUpTextStyles } from '../signUpTypography';
+import { PULSE_SIGNUP } from '../signUpPulseTheme';
 
 export function PhoneStep({ flow }: { flow: SignUpFlow }) {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isMobile = width < DESKTOP_BREAKPOINT;
+  const text = createPulseSignUpTextStyles(PULSE_SIGNUP);
 
   const hint = flow.phoneExistsCheck?.loading
     ? 'Checking number…'
@@ -45,8 +50,8 @@ export function PhoneStep({ flow }: { flow: SignUpFlow }) {
       googleLoading={flow.googleLoading}
       footerAccessory={
         <Pressable onPress={() => router.replace(ROUTES.SIGN_IN)} style={styles.signIn}>
-          <Text style={SIGNUP_TEXT.linkSmall}>
-            Already activated? <Text style={SIGNUP_TEXT.linkEmphasis}>Sign in</Text>
+          <Text style={isMobile ? text.linkSmallMobile : text.linkSmall}>
+            Already activated? <Text style={text.linkEmphasis}>Sign in</Text>
           </Text>
         </Pressable>
       }

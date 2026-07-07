@@ -3,17 +3,15 @@ import { StyleSheet, View } from "react-native";
 
 const BADGE_LOTTIE = require("@/assets/Animated folder/medal.json");
 
-const GLYPH_SCALE = 1.18;
-
 export function RatingsRegistryHeroLottie({
-  iconSize = 48,
+  iconSize = 36,
 }: {
   iconSize?: number;
 }) {
-  const dim = Math.round(iconSize * GLYPH_SCALE);
+  const dim = Math.round(iconSize);
 
   return (
-    <View style={styles.slot}>
+    <View style={[styles.slot, { width: dim, height: dim }]}>
       <LottieView
         source={BADGE_LOTTIE}
         autoPlay
@@ -30,7 +28,7 @@ const styles = StyleSheet.create({
   slot: {
     alignItems: "center",
     justifyContent: "center",
-    overflow: "visible",
+    overflow: "hidden",
     flexShrink: 0,
   },
 });

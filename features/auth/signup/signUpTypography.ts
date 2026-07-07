@@ -166,6 +166,111 @@ export const PULSE_SIGNUP_TYPO = {
   },
 } as const;
 
+/**
+ * Mobile activation flow — standard readable scale for phones.
+ * Desktop keeps PULSE_SIGNUP_TYPO compact density.
+ */
+export const PULSE_SIGNUP_TYPO_MOBILE = {
+  title: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '600' as const,
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '400' as const,
+    marginTop: 6,
+  },
+  brand: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '700' as const,
+    fontStyle: 'italic' as const,
+    letterSpacing: -0.4,
+  },
+  back: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '500' as const,
+  },
+  label: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600' as const,
+    letterSpacing: 0.42,
+    textTransform: 'uppercase' as const,
+  },
+  input: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '400' as const,
+  },
+  display: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '500' as const,
+    letterSpacing: 0.4,
+  },
+  displayPrefix: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600' as const,
+  },
+  body: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '400' as const,
+  },
+  caption: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '400' as const,
+  },
+  hint: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '400' as const,
+  },
+  error: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500' as const,
+  },
+  link: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600' as const,
+  },
+  linkSmall: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500' as const,
+  },
+  google: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500' as const,
+  },
+  or: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500' as const,
+  },
+  otpDigit: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  progressLabel: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '600' as const,
+    letterSpacing: 0.35,
+    textTransform: 'uppercase' as const,
+  },
+} as const;
+
 export const SIGNUP_ERROR_COLOR = '#ef4444';
 
 /** Theme-aware text styles for signup screens. */
@@ -178,6 +283,11 @@ export function createPulseSignUpTextStyles(theme: SignUpTheme = PULSE_SIGNUP) {
     },
     titleDesktop: PULSE_SIGNUP_TYPO.titleDesktop,
     titleCompact: PULSE_SIGNUP_TYPO.titleCompact,
+    titleMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.title,
+      color: theme.text,
+      textAlign: 'center',
+    },
     subtitle: {
       ...PULSE_SIGNUP_TYPO.subtitle,
       color: theme.muted,
@@ -189,6 +299,13 @@ export function createPulseSignUpTextStyles(theme: SignUpTheme = PULSE_SIGNUP) {
       maxWidth: 380,
     },
     subtitleCompact: PULSE_SIGNUP_TYPO.subtitleCompact,
+    subtitleMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.subtitle,
+      color: theme.muted,
+      textAlign: 'center',
+      maxWidth: 340,
+      alignSelf: 'center',
+    },
     subtitleCentered: {
       ...PULSE_SIGNUP_TYPO.subtitle,
       color: theme.muted,
@@ -205,8 +322,16 @@ export function createPulseSignUpTextStyles(theme: SignUpTheme = PULSE_SIGNUP) {
       ...PULSE_SIGNUP_TYPO.brand,
       color: theme.primaryDark,
     },
+    brandMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.brand,
+      color: theme.primaryDark,
+    },
     back: {
       ...PULSE_SIGNUP_TYPO.back,
+      color: theme.muted,
+    },
+    backMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.back,
       color: theme.muted,
     },
     fieldLabel: {
@@ -215,16 +340,34 @@ export function createPulseSignUpTextStyles(theme: SignUpTheme = PULSE_SIGNUP) {
       marginBottom: 5,
       paddingLeft: 2,
     },
+    fieldLabelMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.label,
+      color: theme.muted,
+      marginBottom: 8,
+      paddingLeft: 2,
+    },
     input: {
       ...PULSE_SIGNUP_TYPO.input,
+      color: theme.text,
+    },
+    inputMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.input,
       color: theme.text,
     },
     display: {
       ...PULSE_SIGNUP_TYPO.display,
       color: theme.text,
     },
+    displayMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.display,
+      color: theme.text,
+    },
     displayPrefix: {
       ...PULSE_SIGNUP_TYPO.displayPrefix,
+      color: theme.text,
+    },
+    displayPrefixMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.displayPrefix,
       color: theme.text,
     },
     placeholder: {
@@ -251,16 +394,32 @@ export function createPulseSignUpTextStyles(theme: SignUpTheme = PULSE_SIGNUP) {
       ...PULSE_SIGNUP_TYPO.hint,
       color: theme.muted,
     },
+    hintMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.hint,
+      color: theme.muted,
+    },
     error: {
       ...PULSE_SIGNUP_TYPO.error,
+      color: SIGNUP_ERROR_COLOR,
+    },
+    errorMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.error,
       color: SIGNUP_ERROR_COLOR,
     },
     link: {
       ...PULSE_SIGNUP_TYPO.link,
       color: theme.primaryDark,
     },
+    linkMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.link,
+      color: theme.primaryDark,
+    },
     linkSmall: {
       ...PULSE_SIGNUP_TYPO.linkSmall,
+      color: theme.muted,
+    },
+    linkSmallMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.linkSmall,
       color: theme.muted,
     },
     linkEmphasis: {
@@ -271,11 +430,20 @@ export function createPulseSignUpTextStyles(theme: SignUpTheme = PULSE_SIGNUP) {
       ...PULSE_SIGNUP_TYPO.or,
       color: theme.muted,
     },
+    orMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.or,
+      color: theme.muted,
+    },
     google: {
       ...PULSE_SIGNUP_TYPO.google,
       color: theme.text,
     },
+    googleMobile: {
+      ...PULSE_SIGNUP_TYPO_MOBILE.google,
+      color: theme.text,
+    },
     otpDigit: PULSE_SIGNUP_TYPO.otpDigit,
+    otpDigitMobile: PULSE_SIGNUP_TYPO_MOBILE.otpDigit,
     otpDigitFilled: {
       ...PULSE_SIGNUP_TYPO.otpDigit,
       color: theme.primaryDark,

@@ -52,7 +52,7 @@ import {
 import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import {
     getTripDisplayNumber,
-    getTripsByOrganization,
+    getTripsForOrg,
     type TripRow,
 } from "@/features/trips/services/trips.service";
 import {
@@ -430,7 +430,7 @@ export default function ClientDetailScreen({
     const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
     const tripsPromise = cachedTrips !== undefined
       ? Promise.resolve({ error: null, trips: cachedTrips })
-      : getTripsByOrganization(orgId);
+      : getTripsForOrg(orgId);
 
     Promise.all([
       getClientDetailBundle(orgId, clientId),

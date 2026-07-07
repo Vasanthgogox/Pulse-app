@@ -1203,7 +1203,6 @@ export default function TripDetailScreen({
   const handleLRUpload = useCallback(async () => {
     const tripIdForUpload = detail.trip?.id;
     const uploaderId = detail.currentUserId;
-    const currentStatus = detail.trip?.status ?? '';
     if (!tripIdForUpload || !uploaderId || uploadingDocId) return;
 
     let uri: string | null = null;
@@ -1240,14 +1239,8 @@ export default function TripDetailScreen({
         return;
       }
 
-      // LR upload marks goods as in transit — advance status when trip is underway but not yet in_transit
-      const advanceable = ['started', 'assigned', 'in_progress', 'picked_up', 's_out', 'source_out'].includes(
-        currentStatus.toLowerCase(),
-      );
-      if (advanceable) {
-        await updateTripStatus(tripIdForUpload, { status: 'in_transit' });
-      }
-
+      // LR can be uploaded by anyone at any stage — it must not change trip status.
+      // Only the driver app's own flow (DriverTripFlowCard) may transition to in_transit.
       detail.handleRefresh();
     } catch (e) {
       Alert.alert('Upload failed', e instanceof Error ? e.message : 'Something went wrong.');
@@ -1256,7 +1249,6 @@ export default function TripDetailScreen({
     }
   }, [
     detail.trip?.id,
-    detail.trip?.status,
     detail.currentUserId,
     detail.handleRefresh,
     uploadingDocId,
@@ -2622,6 +2614,15 @@ export default function TripDetailScreen({
               </View>
             </View>
             <View style={styles.navMobileRightActions}>
+              <TouchableOpacity
+                style={styles.navCircleBtn}
+                activeOpacity={0.85}
+                onPress={() => setShowTripAuditLog(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Open trip activity log"
+              >
+                <Feather name="clock" size={16} color="#64748b" />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.navCircleBtn, styles.navChatCircle]}
                 activeOpacity={0.85}
