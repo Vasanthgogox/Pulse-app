@@ -1,10 +1,11 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Theme from "@/constants/Theme";
+import { PULSE_SIGNUP_TYPO, SIGNUP_TEXT } from "@/features/auth/signup/signUpTypography";
 import type { SignUpFlow } from "@/features/auth/signup/hooks/useBusinessSignUpFlow";
 import { SignUpPulseField } from "@/features/auth/signup/SignUpPulseField";
 import { SignUpPulseFormStep } from "@/features/auth/signup/SignUpPulseFormStep";
-import { SIGNUP_ACCOUNT_SCROLL_PAD } from "@/features/auth/signup/signUpConstants";
+import { SIGNUP_ACCOUNT_MOBILE_SCROLL_PAD, SIGNUP_ACCOUNT_SCROLL_PAD } from "@/features/auth/signup/signUpConstants";
 import { Eye, EyeOff } from "lucide-react-native";
 
 export function InviteAcceptanceStep({ flow }: { flow: SignUpFlow }) {
@@ -26,10 +27,12 @@ export function InviteAcceptanceStep({ flow }: { flow: SignUpFlow }) {
       onPrimary={flow.acceptTeamInvitation}
       primaryDisabled={!canAccept}
       primaryLoading={flow.loading}
-      inlinePrimary
+      inlinePrimary={flow.isDesktop}
       keyboardAware
       scrollRef={flow.accountScrollRef}
-      scrollPaddingBottom={SIGNUP_ACCOUNT_SCROLL_PAD}
+      scrollPaddingBottom={
+        flow.isDesktop ? SIGNUP_ACCOUNT_SCROLL_PAD : SIGNUP_ACCOUNT_MOBILE_SCROLL_PAD
+      }
     >
       <View style={styles.summary}>
         <SummaryRow label="Organization" value={invite.organizationName} />
@@ -132,13 +135,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   label: {
-    fontSize: 12,
-    color: Theme.textMuted,
+    ...SIGNUP_TEXT.caption,
     flex: 1,
   },
   value: {
-    fontSize: 12,
-    fontWeight: "600",
+    ...SIGNUP_TEXT.captionMedium,
     color: Theme.textPrimaryDark,
     flex: 1.2,
     textAlign: "right",

@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Theme from "@/constants/Theme";
+import { PULSE_SIGNUP_TYPO, SIGNUP_TEXT } from "@/features/auth/signup/signUpTypography";
 import type { SignUpFlow } from "@/features/auth/signup/hooks/useBusinessSignUpFlow";
 import { SignUpPulseFormStep } from "@/features/auth/signup/SignUpPulseFormStep";
 import { Check } from "lucide-react-native";
@@ -63,14 +64,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   orgName: {
-    fontSize: 15,
-    fontWeight: "700",
+    ...PULSE_SIGNUP_TYPO.bodyMedium,
+    fontWeight: '700',
     color: Theme.textPrimaryDark,
     flex: 1,
   },
   meta: {
-    fontSize: 12,
-    color: Theme.textMuted,
-    marginTop: 4,
+    ...SIGNUP_TEXT.caption,
+    marginTop: 3,
   },
 });

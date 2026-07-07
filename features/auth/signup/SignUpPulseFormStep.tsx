@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, type ReactNode, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,6 +8,7 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type View as RNView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,11 +16,12 @@ import {
   effectiveKeyboardInset,
   useKeyboardVisible,
 } from '@/lib/hooks/useKeyboardVisible';
+import { scrollFocusedFieldIntoView } from '@/lib/scrollFocusedFieldIntoView.util';
 
-import { SignUpPulseFormStepProvider } from './SignUpPulseFormStepContext';
+import { SignUpPulseFormStepProvider, type ScrollFieldIntoViewOptions } from './SignUpPulseFormStepContext';
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
-import { DESKTOP_BREAKPOINT, DESKTOP_SIGNUP_FORM_WIDTH, SIGNUP_FORM_FOOTER_CLEARANCE, SIGNUP_MOBILE_PROGRESS_CLEARANCE } from './signUpConstants';
+import { DESKTOP_BREAKPOINT, SIGNUP_FORM_FOOTER_CLEARANCE, SIGNUP_MOBILE_PROGRESS_CLEARANCE, SIGNUP_STICKY_FOOTER_CLEARANCE } from './signUpConstants';
 import { PULSE_SIGNUP, type SignUpTheme } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles } from './signUpTypography';
 
@@ -35,6 +37,8 @@ export interface SignUpPulseFormStepProps {
   inlinePrimary?: boolean;
   /** Vertically center scroll content (success / celebration steps). */
   centerContent?: boolean;
+  /** Title alignment — desktop defaults to left. */
+  titleCentered?: boolean;
   /** Extra bottom padding (e.g. clear fixed progress rail on Account step). */
   scrollPaddingBottom?: number;
   /** Adds keyboard height to scroll padding and KeyboardAvoidingView on native. */
@@ -60,6 +64,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   footerAccessory,
   inlinePrimary = false,
   centerContent = false,
+  titleCentered = false,
   scrollPaddingBottom = 0,
   keyboardAware = false,
   scrollRef,
@@ -77,20 +82,44 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   const keyboardInset = keyboardAware
     ? effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280)
     : 0;
-  const mobileProgressPad = !isDesktop && inlinePrimary ? SIGNUP_MOBILE_PROGRESS_CLEARANCE : 0;
+  const mobileProgressPad =
+    !isDesktop && inlinePrimary ? SIGNUP_MOBILE_PROGRESS_CLEARANCE : 0;
+  const footerClearance = inlinePrimary
+    ? SIGNUP_FORM_FOOTER_CLEARANCE
+    : SIGNUP_STICKY_FOOTER_CLEARANCE;
   const bottomPad =
-    scrollPaddingBottom + keyboardInset + SIGNUP_FORM_FOOTER_CLEARANCE + mobileProgressPad;
+    scrollPaddingBottom + keyboardInset + footerClearance + mobileProgressPad;
+
+  const lastFocusedFieldRef = useRef<RefObject<RNView | null> | null>(null);
+  const lastScrollPadRef = useRef<number | undefined>(undefined);
+
+  const scrollFieldIntoView = useCallback(
+    (fieldRef: RefObject<RNView | null>, options?: ScrollFieldIntoViewOptions) => {
+      if (!keyboardAware || !scrollRef) return;
+      lastFocusedFieldRef.current = fieldRef;
+      const extraBottomPad = options?.extraBottomPad ?? (isDesktop ? 16 : 48);
+      lastScrollPadRef.current = extraBottomPad;
+      scrollFocusedFieldIntoView(scrollRef, fieldRef, {
+        keyboardHeight: keyboardInset,
+        headerOffset: isDesktop ? 20 : 72,
+        extraBottomPad,
+        animated: true,
+      });
+    },
+    [keyboardAware, scrollRef, keyboardInset, isDesktop],
+  );
 
   useEffect(() => {
-    if (!keyboardAware || Platform.OS !== 'web' || !keyboardVisible || !scrollRef) {
+    if (!keyboardAware || !keyboardVisible || !scrollRef || !lastFocusedFieldRef.current) {
       return;
     }
-    // Only fire on keyboard open, not on every height adjustment (avoids double-scroll jank).
-    const timer = setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 380);
-    return () => clearTimeout(timer);
-  }, [keyboardAware, keyboardVisible, scrollRef]);
+    scrollFocusedFieldIntoView(scrollRef, lastFocusedFieldRef.current, {
+      keyboardHeight: keyboardInset,
+      headerOffset: isDesktop ? 20 : 72,
+      extraBottomPad: lastScrollPadRef.current ?? (isDesktop ? 16 : 48),
+      animated: true,
+    });
+  }, [keyboardAware, keyboardVisible, keyboardInset, scrollRef, isDesktop]);
 
   const cta = customFooter ?? (
     <View style={styles.ctaBlock}>
@@ -116,6 +145,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       style={styles.scroll}
       contentContainerStyle={[
         styles.scrollContent,
+        !isDesktop && styles.scrollContentMobile,
         isDesktop && styles.scrollContentDesktop,
         { paddingBottom: 16 + bottomPad },
         centerContent && styles.scrollContentCentered,
@@ -124,10 +154,38 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       showsVerticalScrollIndicator={false}
       keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
     >
-      <SignUpPulseTitle title={title} subtitle={subtitle} />
-      {children}
-      {inlinePrimary ? cta : null}
+      <View style={!isDesktop ? styles.stepInner : undefined}>
+        <SignUpPulseTitle title={title} subtitle={subtitle} centered={titleCentered} />
+        {children}
+        {inlinePrimary ? cta : null}
+      </View>
     </ScrollView>
+  );
+
+  const footer = !inlinePrimary ? (
+    <View
+      style={[
+        styles.footer,
+        isDesktop && styles.footerDesktop,
+        !isDesktop && styles.footerMobile,
+        {
+          borderTopColor: theme.border,
+          backgroundColor: theme.bg,
+          paddingBottom:
+            Math.max(insets.bottom, !isDesktop ? 4 : 8) +
+            (keyboardAware && Platform.OS === 'web' ? keyboardInset : 0),
+        },
+      ]}
+    >
+      {cta}
+    </View>
+  ) : null;
+
+  const body = (
+    <>
+      {scroll}
+      {footer}
+    </>
   );
 
   return (
@@ -135,35 +193,20 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       onPrimary={onPrimary}
       primaryDisabled={primaryDisabled}
       primaryLoading={primaryLoading}
+      scrollFieldIntoView={keyboardAware ? scrollFieldIntoView : undefined}
     >
       <View style={styles.root}>
         {keyboardAware && Platform.OS !== 'web' ? (
           <KeyboardAvoidingView
             style={styles.keyboardAvoid}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 72 : 0}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 52 : 0}
           >
-            {scroll}
+            {body}
           </KeyboardAvoidingView>
         ) : (
-          scroll
+          body
         )}
-        {!inlinePrimary ? (
-          <View
-            style={[
-              styles.footer,
-              isDesktop && styles.footerDesktop,
-              !isDesktop && styles.footerMobile,
-              {
-                borderTopColor: theme.border,
-                backgroundColor: theme.bg,
-                paddingBottom: Math.max(insets.bottom, !isDesktop ? 4 : 8),
-              },
-            ]}
-          >
-            {cta}
-          </View>
-        ) : null}
       </View>
     </SignUpPulseFormStepProvider>
   );
@@ -184,14 +227,27 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'web' ? 12 : 8,
+    paddingTop: Platform.OS === 'web' ? 4 : 2,
+  },
+  scrollContentMobile: {
+    alignItems: 'center',
+  },
+  stepInner: {
+    width: '100%',
+    maxWidth: 360,
+    alignSelf: 'center',
   },
   scrollContentDesktop: {
-    paddingHorizontal: 36,
-    paddingTop: 12,
-    maxWidth: DESKTOP_SIGNUP_FORM_WIDTH,
-    alignSelf: 'center',
+    paddingHorizontal: 0,
+    paddingTop: 10,
     width: '100%',
+    alignSelf: 'stretch',
+    flexGrow: 1,
+  },
+  footerDesktop: {
+    paddingHorizontal: 0,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   scrollContentCentered: {
     flexGrow: 1,
@@ -199,21 +255,19 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  footerDesktop: {
-    paddingHorizontal: 36,
-    maxWidth: DESKTOP_SIGNUP_FORM_WIDTH,
-    alignSelf: 'center',
-    width: '100%',
   },
   footerMobile: {
     paddingHorizontal: 20,
+    alignItems: 'center',
   },
   ctaBlock: {
-    gap: 12,
+    gap: 8,
     width: '100%',
+    maxWidth: 360,
+    minWidth: 0,
+    alignSelf: 'center',
   },
   secondaryLink: {
     alignItems: 'center',

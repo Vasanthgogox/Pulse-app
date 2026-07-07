@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Theme from "@/constants/Theme";
+import { SIGNUP_TEXT } from "@/features/auth/signup/signUpTypography";
 import type { SignUpFlow } from "@/features/auth/signup/hooks/useBusinessSignUpFlow";
 import { SignUpPulseFormStep } from "@/features/auth/signup/SignUpPulseFormStep";
 import { ROUTES } from "@/lib/routes";
@@ -51,8 +52,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   item: { gap: 2 },
-  org: { fontSize: 14, fontWeight: "700", color: Theme.textPrimaryDark },
-  meta: { fontSize: 12, color: Theme.textMuted },
+  org: { ...SIGNUP_TEXT.bodyMedium, fontWeight: "700", color: Theme.textPrimaryDark },
+  meta: { ...SIGNUP_TEXT.caption },
   secondary: {
     marginTop: 12,
     borderWidth: 1,
@@ -63,10 +64,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   secondaryText: {
-    fontSize: 14,
-    fontWeight: "600",
+    ...SIGNUP_TEXT.link,
     color: Theme.textPrimaryDark,
   },
-  link: { marginTop: 16, alignItems: "center" },
-  linkText: { fontSize: 13, fontWeight: "600", color: Theme.primary },
+  link: { marginTop: 14, alignItems: "center" },
+  linkText: { ...SIGNUP_TEXT.link },
 });

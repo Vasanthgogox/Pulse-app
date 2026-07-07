@@ -107,11 +107,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   phone: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: '600',
     color: PULSE_SIGNUP.text,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   card: {
     borderWidth: 1,

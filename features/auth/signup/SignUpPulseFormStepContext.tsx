@@ -7,12 +7,16 @@ import {
   useState,
   type RefObject,
 } from 'react';
-import type { TextInput } from 'react-native';
+import type { TextInput, View } from 'react-native';
 
 interface RegisteredField {
   id: number;
   inputRef: RefObject<TextInput | null>;
   multiline: boolean;
+}
+
+export interface ScrollFieldIntoViewOptions {
+  extraBottomPad?: number;
 }
 
 export interface SignUpPulseFormStepContextValue {
@@ -21,6 +25,10 @@ export interface SignUpPulseFormStepContextValue {
   unregisterField: (id: number) => void;
   handleFieldSubmit: (id: number) => void;
   isLastSingleLineField: (id: number) => boolean;
+  scrollFieldIntoView?: (
+    fieldRef: RefObject<View | null>,
+    options?: ScrollFieldIntoViewOptions,
+  ) => void;
 }
 
 const SignUpPulseFormStepContext = createContext<SignUpPulseFormStepContextValue | null>(
@@ -35,6 +43,10 @@ export interface SignUpPulseFormStepProviderProps {
   onPrimary: () => void;
   primaryDisabled: boolean;
   primaryLoading: boolean;
+  scrollFieldIntoView?: (
+    fieldRef: RefObject<View | null>,
+    options?: ScrollFieldIntoViewOptions,
+  ) => void;
   children: React.ReactNode;
 }
 
@@ -42,6 +54,7 @@ export function SignUpPulseFormStepProvider({
   onPrimary,
   primaryDisabled,
   primaryLoading,
+  scrollFieldIntoView,
   children,
 }: SignUpPulseFormStepProviderProps) {
   const fieldsRef = useRef<RegisteredField[]>([]);
@@ -110,8 +123,9 @@ export function SignUpPulseFormStepProvider({
       unregisterField,
       handleFieldSubmit,
       isLastSingleLineField,
+      scrollFieldIntoView,
     }),
-    [revision, registerField, unregisterField, handleFieldSubmit, isLastSingleLineField],
+    [revision, registerField, unregisterField, handleFieldSubmit, isLastSingleLineField, scrollFieldIntoView],
   );
 
   return (

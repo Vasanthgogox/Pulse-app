@@ -3,6 +3,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 
 import { C } from '../businessSignUp.styles';
 import { OTP_LENGTH } from '../signUpConstants';
+import { SIGNUP_TEXT } from '../signUpTypography';
 
 export function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const digits = value.padEnd(OTP_LENGTH, ' ').split('').slice(0, OTP_LENGTH);
@@ -49,16 +50,15 @@ export function OtpInput({ value, onChange }: { value: string; onChange: (v: str
 }
 
 const otpStyles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 10, justifyContent: 'center', marginVertical: 8 },
+  row: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginVertical: 6 },
   box: {
-    width: 46,
-    height: 56,
-    borderRadius: 12,
+    width: 40,
+    height: 48,
+    borderRadius: 10,
     borderWidth: 1.5,
     borderColor: C.border,
     textAlign: 'center',
-    fontSize: 22,
-    fontWeight: '700',
+    ...SIGNUP_TEXT.otpDigit,
     color: C.text,
     backgroundColor: C.surface,
   },

@@ -24,7 +24,8 @@ export function OtpStep({ flow }: { flow: SignUpFlow }) {
       formatDisplay={(d) => d}
       fieldLabel="Verification Code"
       emptyPlaceholder=""
-      customDisplay={<SignUpOtpBoxes digits={cleanOtp} length={OTP_LENGTH} />}
+      customDisplay={<SignUpOtpBoxes digits={cleanOtp} length={OTP_LENGTH} centered />}
+      centeredLayout
       onPrimary={flow.verifyOtp}
       primaryDisabled={cleanOtp.length < OTP_LENGTH}
       primaryLoading={flow.loading}

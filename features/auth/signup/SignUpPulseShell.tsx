@@ -14,9 +14,10 @@ import { ChevronLeft } from 'lucide-react-native';
 import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
 
+import { PulseActivationDesktopSplit } from './components/PulseActivationDesktopSplit';
 import { DRIVER_SIGNUP } from './signUpDriverTheme';
-import { DESKTOP_SIGNUP_CARD_WIDTH } from './signUpConstants';
-import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
+import { DESKTOP_SIGNUP_SPLIT_FLOW_MAX, DESKTOP_SIGNUP_SPLIT_PAD } from './signUpConstants';
+import { PULSE_SIGNUP, type SignUpTheme } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO } from './signUpTypography';
 
 /** Min width per progress segment when the rail scrolls horizontally. */
@@ -33,6 +34,9 @@ export interface SignUpPulseShellProps {
   isDesktop?: boolean;
   theme?: SignUpShellTheme;
   children: ReactNode;
+  /** Left marketing panel copy (desktop split layout). */
+  marketingTag?: string;
+  marketingTitle?: string;
 }
 
 export const SignUpPulseShell = memo(function SignUpPulseShell({
@@ -44,6 +48,8 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
   isDesktop = false,
   theme = PULSE_SIGNUP,
   children,
+  marketingTag,
+  marketingTitle,
 }: SignUpPulseShellProps) {
   const insets = useSafeAreaInsets();
   const stepIndex = Math.min(Math.max(currentStepIndex, 0), stepLabels.length - 1);
@@ -63,11 +69,15 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
     <View
       style={[
         styles.device,
-        isDesktop && styles.deviceDesktopCard,
+        isDesktop && {
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+        },
         !isDesktop && { paddingTop: insets.top },
       ]}
     >
-      <View style={styles.header}>
+      <View style={[styles.flowColumn, isDesktop && styles.flowColumnDesktop]}>
+        <View style={styles.header}>
         {backLabel ? (
           <Pressable
             onPress={onBack}
@@ -76,7 +86,7 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
             accessibilityRole="button"
             accessibilityLabel={backLabel}
           >
-            <ChevronLeft size={22} color={theme.muted} strokeWidth={2.5} />
+            <ChevronLeft size={20} color={theme.muted} strokeWidth={2.5} />
             <Text style={styles.backText}>{backLabel}</Text>
           </Pressable>
         ) : (
@@ -142,6 +152,7 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
           )}
         </View>
       ) : null}
+      </View>
     </View>
   );
 
@@ -149,12 +160,16 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
     return (
       <View
         style={[
-          styles.outerDesktop,
+          styles.desktopSplitRoot,
           Platform.OS === 'web' ? (WEB_APP_VIEWPORT_STYLE as object) : null,
-          { paddingTop: insets.top, paddingBottom: insets.bottom },
         ]}
       >
-        {device}
+        <PulseActivationDesktopSplit
+          marketingTag={marketingTag}
+          marketingTitle={marketingTitle}
+        >
+          {device}
+        </PulseActivationDesktopSplit>
       </View>
     );
   }
@@ -177,19 +192,28 @@ function createStyles(theme: SignUpShellTheme, isDesktop: boolean) {
   const text = createPulseSignUpTextStyles(theme);
 
   return StyleSheet.create({
-    outerDesktop: {
+    desktopSplitRoot: {
       flex: 1,
-      backgroundColor: theme.canvas,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 32,
-      paddingVertical: 28,
+      minHeight: 0,
     },
     device: {
       flex: 1,
       width: '100%',
       backgroundColor: theme.bg,
       overflow: 'hidden',
+      minHeight: 0,
+    },
+    flowColumn: {
+      flex: 1,
+      minHeight: 0,
+      width: '100%',
+    },
+    flowColumnDesktop: {
+      flex: 1,
+      width: '100%',
+      maxWidth: DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
+      alignSelf: 'center',
+      minHeight: 0,
     },
     webFill: {
       flex: 1,
@@ -205,40 +229,13 @@ function createStyles(theme: SignUpShellTheme, isDesktop: boolean) {
     nativeFill: {
       flex: 1,
     },
-    deviceDesktopCard: {
-      flex: 0,
-      flexGrow: 0,
-      flexShrink: 1,
-      flexDirection: 'column',
-      width: DESKTOP_SIGNUP_CARD_WIDTH,
-      maxWidth: '100%',
-      minHeight: 660,
-      maxHeight: '94%',
-      borderRadius: PULSE_SIGNUP_RADIUS.card,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.border,
-      backgroundColor: theme.bg,
-      ...Platform.select({
-        web: {
-          boxShadow:
-            '0 24px 48px rgba(15, 23, 42, 0.08), 0 8px 16px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.04)',
-        } as object,
-        ios: {
-          shadowColor: '#0f172a',
-          shadowOffset: { width: 0, height: 12 },
-          shadowOpacity: 0.1,
-          shadowRadius: 28,
-        },
-        android: { elevation: 8 },
-      }),
-    },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: isDesktop ? 28 : 20,
-      paddingTop: isDesktop ? 16 : 4,
-      paddingBottom: isDesktop ? 12 : 6,
+      paddingHorizontal: isDesktop ? 0 : 20,
+      paddingTop: isDesktop ? 16 : 2,
+      paddingBottom: isDesktop ? 12 : 4,
       backgroundColor: theme.bg,
       borderBottomWidth: isDesktop ? StyleSheet.hairlineWidth : 0,
       borderBottomColor: theme.border,
@@ -264,8 +261,8 @@ function createStyles(theme: SignUpShellTheme, isDesktop: boolean) {
       minHeight: 0,
     },
     progressFooter: {
-      paddingTop: isDesktop ? 14 : 10,
-      paddingHorizontal: isDesktop ? 24 : 16,
+      paddingTop: isDesktop ? 12 : 10,
+      paddingHorizontal: isDesktop ? 0 : 16,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border,
       backgroundColor: theme.bg,

@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { SignUpPulseField } from '../SignUpPulseField';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
-import { SIGNUP_ACCOUNT_SCROLL_PAD } from '../signUpConstants';
+import { SIGNUP_ACCOUNT_MOBILE_SCROLL_PAD, SIGNUP_ACCOUNT_SCROLL_PAD } from '../signUpConstants';
 import { PULSE_SIGNUP } from '../signUpPulseTheme';
 import { SIGNUP_TEXT } from '../signUpTypography';
 
@@ -26,10 +26,24 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
       onPrimary={flow.createAccount}
       primaryDisabled={!canSubmit}
       primaryLoading={flow.loading}
-      inlinePrimary
+      inlinePrimary={flow.isDesktop}
       keyboardAware
       scrollRef={flow.accountScrollRef}
-      scrollPaddingBottom={SIGNUP_ACCOUNT_SCROLL_PAD}
+      scrollPaddingBottom={
+        flow.isDesktop ? SIGNUP_ACCOUNT_SCROLL_PAD : SIGNUP_ACCOUNT_MOBILE_SCROLL_PAD
+      }
+      footerAccessory={
+        flow.isDesktop ? undefined : (
+          <Pressable
+            onPress={flow.continueWithGoogle}
+            disabled={flow.loading || flow.googleLoading}
+            style={({ pressed }) => [styles.googleBtn, pressed && styles.googlePressed]}
+          >
+            <GoogleBrandIcon size={18} />
+            <Text style={SIGNUP_TEXT.google}>Continue with Google</Text>
+          </Pressable>
+        )
+      }
     >
       <SignUpPulseField
         label="Full Name"
@@ -68,7 +82,6 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         maxLength={128}
         editable={!flow.loading}
         errorMessage={flow.step5Attempted ? flow.step5Errors.password : null}
-        onFocus={flow.scrollAccountFieldIntoView}
         trailing={
           <Pressable onPress={flow.toggleShowPassword} style={styles.eyeBtn} hitSlop={8}>
             {flow.showPassword ? (
@@ -93,7 +106,6 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         spellCheck={false}
         maxLength={128}
         editable={!flow.loading}
-        onFocus={flow.scrollAccountFieldIntoView}
         errorMessage={
           flow.confirmMismatch
             ? 'Passwords do not match.'
@@ -125,14 +137,16 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         />
       ) : null}
 
-      <Pressable
-        onPress={flow.continueWithGoogle}
-        disabled={flow.loading || flow.googleLoading}
-        style={({ pressed }) => [styles.googleBtn, pressed && styles.googlePressed]}
-      >
-        <GoogleBrandIcon size={18} />
-        <Text style={SIGNUP_TEXT.google}>Continue with Google</Text>
-      </Pressable>
+      {flow.isDesktop ? (
+        <Pressable
+          onPress={flow.continueWithGoogle}
+          disabled={flow.loading || flow.googleLoading}
+          style={({ pressed }) => [styles.googleBtn, pressed && styles.googlePressed]}
+        >
+          <GoogleBrandIcon size={18} />
+          <Text style={SIGNUP_TEXT.google}>Continue with Google</Text>
+        </Pressable>
+      ) : null}
     </SignUpPulseFormStep>
   );
 }
@@ -147,12 +161,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: PULSE_SIGNUP.border,
     backgroundColor: PULSE_SIGNUP.bg,
-    marginBottom: 8,
   },
   googlePressed: {
     backgroundColor: PULSE_SIGNUP.surface,

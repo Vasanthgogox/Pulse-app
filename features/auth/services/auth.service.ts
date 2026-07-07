@@ -5,6 +5,7 @@
  * Service-layer validation: single pass over inputs before Supabase calls.
  */
 import { validateEmail } from "@/lib/emailValidation";
+import { PHONE_LOOKUP_TIMEOUT_MS } from "@/features/auth/signup/signUpConstants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { OnboardingType } from '@/lib/onboarding/onboardingTypes';
 import { createsOrganization, onboardingTypeToMetadata } from '@/lib/onboarding/onboardingTypes';
@@ -954,6 +955,19 @@ export async function checkExistingUserByPhone(
   if (!normalized || normalized.length !== 10) {
     return { error: null, exists: false };
   }
+
+  const lookup = lookupExistingUserByPhone(normalized);
+  const timed = withPhoneLookupTimeout(lookup);
+  try {
+    return await timed;
+  } catch {
+    return { error: null, exists: false };
+  }
+}
+
+async function lookupExistingUserByPhone(
+  normalized: string,
+): Promise<CheckExistingUserByPhoneResult> {
   try {
     const { data, error } = await supabase().rpc("get_email_by_phone", {
       p_phone: normalized,
@@ -1012,6 +1026,24 @@ export async function checkExistingUserByPhone(
       exists: false,
     };
   }
+}
+
+function withPhoneLookupTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("phone_lookup_timeout")),
+      PHONE_LOOKUP_TIMEOUT_MS,
+    );
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
 }
 
 export interface CheckEmailRegisteredResult {

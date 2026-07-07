@@ -19,6 +19,7 @@ import { OtpStep } from './steps/OtpStep';
 import { PhoneStep } from './steps/PhoneStep';
 import { ProfilePhotoStep } from './steps/ProfilePhotoStep';
 import { SuccessStep } from './steps/SuccessStep';
+import { WorkspaceIntroStep } from './steps/WorkspaceIntroStep';
 
 function BusinessStepContent({
   flow,
@@ -29,6 +30,7 @@ function BusinessStepContent({
 }) {
   switch (step) {
     case 0:
+      if (flow.showIntro) return <WorkspaceIntroStep flow={flow} />;
       return <PhoneStep flow={flow} />;
     case 1:
       return <OtpStep flow={flow} />;
@@ -70,11 +72,14 @@ export default function BusinessSignUpScreen() {
         stepLabels={STEP_LABELS}
         currentStepIndex={Math.min(flow.step, STEP_LABELS.length - 1)}
         hideProgress={
+          flow.showIntro ||
           flow.step >= 8 ||
           flow.signupTrack === 'invite' ||
-          (flow.useMobileLayout && (flow.step === 0 || flow.step === 1))
+          (flow.useMobileLayout && !flow.showIntro && (flow.step === 0 || flow.step === 1))
         }
         isDesktop={flow.isDesktop}
+        marketingTag="Business activation"
+        marketingTitle="One workspace for your entire transport business."
       >
         <View style={styles.mobileStepFlex}>
           <BusinessStepContent flow={flow} step={flow.step} />

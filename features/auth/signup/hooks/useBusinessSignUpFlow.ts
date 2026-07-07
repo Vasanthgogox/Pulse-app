@@ -69,13 +69,13 @@ import { Alert, Platform, ScrollView, useWindowDimensions } from 'react-native';
 
 import type { IndiaLocation } from '../components/CityPicker';
 import {
-  CONFIRM_SCROLL_DELAY_MS,
   DEBOUNCE_MS,
   DESKTOP_BREAKPOINT,
   DESKTOP_MAX_PANEL_WIDTH,
   EMAIL_RESEND_SECS,
   OTP_LENGTH,
   OTP_RESEND_SECS,
+  PHONE_CHECK_DEBOUNCE_MS,
   STEP_LABELS,
   type BusinessType,
   type EmployeeCount,
@@ -119,6 +119,7 @@ export function useBusinessSignUpFlow() {
   const pageWidth = isDesktop ? Math.min(DESKTOP_MAX_PANEL_WIDTH, width - 120) : width;
 
   const [step, setStep] = useState(0);
+  const [introDismissed, setIntroDismissed] = useState(() => isTeamInviteEntry);
 
   // Step 0
   const [phone, setPhoneRaw] = useState('');
@@ -126,6 +127,7 @@ export function useBusinessSignUpFlow() {
     loading: boolean; exists: boolean; email?: string; masked_email?: string;
   } | null>(null);
   const phoneCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const phoneCheckGenRef = useRef(0);
 
   // Step 1
   const [otp, setOtp] = useState('');
@@ -272,17 +274,32 @@ export function useBusinessSignUpFlow() {
   useEffect(() => {
     if (!phone.trim() || !isPhoneValid(phone)) {
       setPhoneExistsCheck(null);
+      phoneCheckGenRef.current += 1;
       if (phoneCheckRef.current) clearTimeout(phoneCheckRef.current);
       return;
     }
     if (!isOnline) return;
     if (phoneCheckRef.current) clearTimeout(phoneCheckRef.current);
-    setPhoneExistsCheck(p => (p ? { ...p, loading: true } : { loading: true, exists: false }));
+
+    const generation = ++phoneCheckGenRef.current;
     phoneCheckRef.current = setTimeout(async () => {
+      if (generation !== phoneCheckGenRef.current) return;
+      setPhoneExistsCheck((prev) =>
+        prev ? { ...prev, loading: true } : { loading: true, exists: false },
+      );
       const r = await checkExistingUserByPhone(phone);
-      setPhoneExistsCheck({ loading: false, exists: r.exists, email: r.email, masked_email: r.masked_email });
-    }, DEBOUNCE_MS);
-    return () => { if (phoneCheckRef.current) clearTimeout(phoneCheckRef.current); };
+      if (generation !== phoneCheckGenRef.current) return;
+      setPhoneExistsCheck({
+        loading: false,
+        exists: r.exists,
+        email: r.email,
+        masked_email: r.masked_email,
+      });
+    }, PHONE_CHECK_DEBOUNCE_MS);
+
+    return () => {
+      if (phoneCheckRef.current) clearTimeout(phoneCheckRef.current);
+    };
   }, [phone, isOnline]);
 
   useEffect(() => {
@@ -310,6 +327,7 @@ export function useBusinessSignUpFlow() {
       if (cancelled || !active) return;
       const savedStep = await readBusinessSignupBrandingStep();
       if (cancelled || savedStep == null) return;
+      setIntroDismissed(true);
       setStep(savedStep);
     })();
     return () => {
@@ -324,6 +342,7 @@ export function useBusinessSignUpFlow() {
     const storedPhone = pendingOnboarding.phone.trim();
     if (!storedPhone) return;
 
+    setIntroDismissed(true);
     setPhoneRaw(formatMobileNumber(storedPhone));
     setSignupTrack('invite');
     setInvitePhase(pendingOnboarding.phase);
@@ -1340,21 +1359,7 @@ export function useBusinessSignUpFlow() {
     if (ok) goToPage(8);
   };
 
-  const scrollAccountFieldIntoView = () => {
-    // Mobile web: body overflow is hidden; only this ScrollView can move content above
-    // the overlay keyboard (Android Chrome interactive-widget=overlays-content).
-    const delay = Platform.OS === 'web' ? 400 : CONFIRM_SCROLL_DELAY_MS;
-    setTimeout(() => {
-      accountScrollRef.current?.scrollToEnd({ animated: true });
-    }, delay);
-  };
-
-  const scrollLocationFieldIntoView = () => {
-    const delay = Platform.OS === 'web' ? 400 : CONFIRM_SCROLL_DELAY_MS;
-    setTimeout(() => {
-      locationScrollRef.current?.scrollToEnd({ animated: true });
-    }, delay);
-  };
+  const showIntro = !introDismissed && signupTrack === 'owner' && step === 0;
 
   return {
     // layout
@@ -1368,6 +1373,8 @@ export function useBusinessSignUpFlow() {
 
     // step
     step,
+    showIntro,
+    dismissIntro: () => setIntroDismissed(true),
     goToPage,
     handleBack,
     entryIntent,
@@ -1452,8 +1459,6 @@ export function useBusinessSignUpFlow() {
     accountOrgConflictMessage,
     passwordStrength,
     confirmMismatch,
-    scrollAccountFieldIntoView,
-    scrollLocationFieldIntoView,
 
     // step 6 — logo
     provisionedOrgId,

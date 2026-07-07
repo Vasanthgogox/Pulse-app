@@ -3,7 +3,7 @@ import { PULSE_SIGNUP_TYPO } from './signUpTypography';
 /** Shared sizing for business + driver mobile signup — aligned with PULSE_SIGNUP_TYPO. */
 export const SIGNUP_MOBILE_TOKENS = {
   padH: 20,
-  contentMaxWidth: 400,
+  contentMaxWidth: 360,
   brandSize: PULSE_SIGNUP_TYPO.brand.fontSize,
   backFontSize: PULSE_SIGNUP_TYPO.back.fontSize,
   titleSize: PULSE_SIGNUP_TYPO.title.fontSize,
@@ -16,8 +16,8 @@ export const SIGNUP_MOBILE_TOKENS = {
   displayMinHeight: 48,
   inputFontSize: PULSE_SIGNUP_TYPO.input.fontSize,
   inputMinHeight: 48,
-  btnFontSize: 15,
-  btnPaddingV: 12,
+  btnFontSize: 12,
+  btnPaddingV: 10,
   btnRadius: 12,
   inputRadius: 12,
   googleBtnPaddingV: 11,

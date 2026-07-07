@@ -44,13 +44,19 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { SignUpMobileShell } from '@/features/auth/signup/SignUpMobileShell';
+import { PHONE_CHECK_DEBOUNCE_MS } from '@/features/auth/signup/signUpConstants';
 import { SignUpPhotoPickerBody } from '@/features/auth/signup/components/SignUpPhotoPickerStep';
 import { DriverSignupSuccessStep } from '@/features/auth/signup/steps/DriverSignupSuccessStep';
+import { SignUpPulseField } from '@/features/auth/signup/SignUpPulseField';
 import { SignUpPulseKeypadStep } from '@/features/auth/signup/SignUpPulseKeypadStep';
+import { SignUpPulsePrimaryButton } from '@/features/auth/signup/SignUpPulsePrimaryButton';
+import { SignUpPulseTitle } from '@/features/auth/signup/SignUpPulseTitle';
 import { SignUpOtpBoxes } from '@/features/auth/signup/SignUpOtpBoxes';
 import { formatSignupPhoneDisplay } from '@/features/auth/signup/signUpKeypad.util';
 import { DRIVER_SIGNUP } from '@/features/auth/signup/signUpDriverTheme';
+import { createPulseSignUpTextStyles } from '@/features/auth/signup/signUpTypography';
 import { updateProfile } from '@/features/auth';
 import { pickLocalAvatar, uploadAvatarFromLocal } from '@/lib/avatarUpload';
 import {
@@ -88,20 +94,15 @@ const STEP_CONTENT = [
 
 const OTP_LENGTH = 4;
 
+const driverText = createPulseSignUpTextStyles(DRIVER_SIGNUP);
+
 const keypadFooterStyles = StyleSheet.create({
   signIn: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
-  signInText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: DRIVER_SIGNUP.muted,
-  },
-  signInLink: {
-    color: DRIVER_SIGNUP.primary,
-    fontWeight: '800',
-  },
+  signInText: driverText.linkSmall,
+  signInLink: driverText.linkEmphasis,
 });
 
 const INDIA_DIAL_CODE = '91';
@@ -270,6 +271,7 @@ export default function DriverSignUpScreen() {
     masked_email?: string;
   } | null>(null);
   const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const phoneCheckGenRef = useRef(0);
   const otpInputRef = useRef<TextInput>(null);
   /** Step index 2: approximate Y from top of scroll content for keyboard scroll. */
   const PROFILE_FIELD_SCROLL_Y = { callsign: 0, email: 112, password: 224, confirmPassword: 336 } as const;
@@ -360,6 +362,7 @@ export default function DriverSignUpScreen() {
   useEffect(() => {
     if (!fullPhoneForApi) {
       setPhoneExistsCheck(null);
+      phoneCheckGenRef.current += 1;
       if (phoneCheckTimeoutRef.current) {
         clearTimeout(phoneCheckTimeoutRef.current);
         phoneCheckTimeoutRef.current = null;
@@ -371,17 +374,24 @@ export default function DriverSignUpScreen() {
       return;
     }
     if (phoneCheckTimeoutRef.current) clearTimeout(phoneCheckTimeoutRef.current);
-    setPhoneExistsCheck((prev) => (prev ? { ...prev, loading: true } : { loading: true, exists: false }));
+
+    const generation = ++phoneCheckGenRef.current;
     phoneCheckTimeoutRef.current = setTimeout(async () => {
       phoneCheckTimeoutRef.current = null;
+      if (generation !== phoneCheckGenRef.current) return;
+      setPhoneExistsCheck((prev) =>
+        prev ? { ...prev, loading: true } : { loading: true, exists: false },
+      );
       const result = await checkExistingUserByPhone(fullPhoneForApi);
+      if (generation !== phoneCheckGenRef.current) return;
       setPhoneExistsCheck({
         loading: false,
         exists: result.exists,
         email: result.email,
         masked_email: result.masked_email,
       });
-    }, 600);
+    }, PHONE_CHECK_DEBOUNCE_MS);
+
     return () => {
       if (phoneCheckTimeoutRef.current) {
         clearTimeout(phoneCheckTimeoutRef.current);
@@ -840,10 +850,9 @@ export default function DriverSignUpScreen() {
             onPrimary={validatePhoneStep}
             primaryDisabled={
               !isPhoneStepValid(phone) ||
-              !!phoneExistsCheck?.loading ||
               !!(phoneExistsCheck?.exists && phoneExistsCheck.email)
             }
-            primaryLoading={loading || !!phoneExistsCheck?.loading}
+            primaryLoading={loading}
             primaryLabel="Send OTP"
             errorMessage={phoneInlineError}
             hintMessage={
@@ -1001,14 +1010,97 @@ export default function DriverSignUpScreen() {
         ))}
 
         {/* Step 3: Your details */}
-        {pageBody(2, (
+        {pageBody(2, useMobileLayout ? (
           <>
-            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
-              {STEP_CONTENT[2].title}
-            </Text>
-            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
-              {STEP_CONTENT[2].subtitle}
-            </Text>
+            <SignUpPulseTitle
+              title={STEP_CONTENT[2].title}
+              subtitle={STEP_CONTENT[2].subtitle}
+              compact
+            />
+            <SignUpPulseField
+              theme={DRIVER_SIGNUP}
+              label="Full name"
+              required
+              value={callsign}
+              onChangeText={setCallsign}
+              placeholder="Your name"
+              maxLength={NAME_MAX_LENGTH}
+              autoCapitalize="words"
+              editable={!loading}
+              onFocus={() => scrollToField('callsign')}
+            />
+            <SignUpPulseField
+              theme={DRIVER_SIGNUP}
+              label="Email"
+              required
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              keyboardType="email-address"
+              maxLength={EMAIL_MAX_LENGTH}
+              autoCapitalize="none"
+              editable={!loading}
+              onFocus={() => scrollToField('email')}
+            />
+            <SignUpPulseField
+              theme={DRIVER_SIGNUP}
+              label="Password"
+              required
+              dense
+              passwordField="new"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="At least 6 characters"
+              maxLength={VALIDATION.PASSWORD_MAX_LENGTH}
+              secureTextEntry={!showPassword}
+              editable={!loading}
+              onFocus={() => scrollToField('password')}
+              trailing={
+                <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8} style={styles.eyeBtn}>
+                  {showPassword ? (
+                    <EyeOff size={18} color={DRIVER_SIGNUP.muted} />
+                  ) : (
+                    <Eye size={18} color={DRIVER_SIGNUP.muted} />
+                  )}
+                </Pressable>
+              }
+            />
+            <SignUpPulseField
+              theme={DRIVER_SIGNUP}
+              label="Confirm password"
+              required
+              dense
+              passwordField="confirm"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Re-enter your password"
+              maxLength={VALIDATION.PASSWORD_MAX_LENGTH}
+              secureTextEntry={!showConfirmPassword}
+              editable={!loading}
+              onFocus={() => scrollToField('confirmPassword')}
+              trailing={
+                <Pressable onPress={() => setShowConfirmPassword((v) => !v)} hitSlop={8} style={styles.eyeBtn}>
+                  {showConfirmPassword ? (
+                    <EyeOff size={18} color={DRIVER_SIGNUP.muted} />
+                  ) : (
+                    <Eye size={18} color={DRIVER_SIGNUP.muted} />
+                  )}
+                </Pressable>
+              }
+            />
+            <SignUpPulsePrimaryButton
+              theme={DRIVER_SIGNUP}
+              label="Next"
+              onPress={confirmRegistry}
+              disabled={!isStep2Valid(callsign, email, password, confirmPassword) || loading}
+              loading={loading}
+              style={styles.mobilePrimaryBtn}
+            />
+          </>
+        ) : (
+          <>
+            <Text style={styles.mainTitle}>{STEP_CONTENT[2].title}</Text>
+            <Text style={styles.subTitle}>{STEP_CONTENT[2].subtitle}</Text>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Full name</Text>
               <View style={styles.inputWrap}>
@@ -1130,49 +1222,74 @@ export default function DriverSignUpScreen() {
         {/* Step 4: Driving license */}
         {pageBody(3, (
           <>
-            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
-              {STEP_CONTENT[3].title}
-            </Text>
-            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
-              {STEP_CONTENT[3].subtitle}
-            </Text>
-            <View style={styles.docActionsWrap}>
+            {useMobileLayout ? (
+              <SignUpPulseTitle
+                title={STEP_CONTENT[3].title}
+                subtitle={STEP_CONTENT[3].subtitle}
+                compact
+              />
+            ) : (
+              <>
+                <Text style={styles.mainTitle}>{STEP_CONTENT[3].title}</Text>
+                <Text style={styles.subTitle}>{STEP_CONTENT[3].subtitle}</Text>
+              </>
+            )}
+            <View style={useMobileLayout ? mobileSignup.docActionsRow : styles.docActionsWrap}>
               <TouchableOpacity
-                style={styles.docActionBtn}
+                style={useMobileLayout ? mobileSignup.docActionBtn : styles.docActionBtn}
                 onPress={() => void pickDocument('license', 'gallery')}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="image" size={18} color={LIGHT.text} />
-                <Text style={styles.docActionText}>Upload from gallery</Text>
+                <FontAwesome name="image" size={16} color={LIGHT.text} />
+                <Text style={useMobileLayout ? mobileSignup.docActionText : styles.docActionText}>
+                  Upload from gallery
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.docActionBtn}
+                style={useMobileLayout ? mobileSignup.docActionBtn : styles.docActionBtn}
                 onPress={() => void pickDocument('license', 'camera')}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="camera" size={18} color={LIGHT.text} />
-                <Text style={styles.docActionText}>Open camera</Text>
+                <FontAwesome name="camera" size={16} color={LIGHT.text} />
+                <Text style={useMobileLayout ? mobileSignup.docActionText : styles.docActionText}>
+                  Open camera
+                </Text>
               </TouchableOpacity>
             </View>
-            <Text style={[styles.docStatus, licenseUploaded ? styles.docStatusDone : styles.docStatusPending]}>
+            <Text
+              style={[
+                useMobileLayout ? mobileSignup.docStatus : styles.docStatus,
+                licenseUploaded ? (useMobileLayout ? mobileSignup.docStatusDone : styles.docStatusDone) : (useMobileLayout ? mobileSignup.docStatusPending : styles.docStatusPending),
+              ]}
+            >
               {licenseUploaded
                 ? `Uploaded${licenseUploadMethod ? ` via ${licenseUploadMethod === 'gallery' ? 'gallery' : 'camera'}` : ''}`
                 : licenseSkipped
                   ? 'Skipped for now'
                 : 'Not uploaded'}
             </Text>
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                ((!licenseUploaded && !licenseSkipped) || loading) &&
-                  styles.primaryBtnDisabled,
-              ]}
-              onPress={() => goToPage(4)}
-              disabled={(!licenseUploaded && !licenseSkipped) || loading}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.primaryBtnText}>Continue</Text>
-            </TouchableOpacity>
+            {useMobileLayout ? (
+              <SignUpPulsePrimaryButton
+                theme={DRIVER_SIGNUP}
+                label="Continue"
+                onPress={() => goToPage(4)}
+                disabled={(!licenseUploaded && !licenseSkipped) || loading}
+                style={styles.mobilePrimaryBtn}
+              />
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  ((!licenseUploaded && !licenseSkipped) || loading) &&
+                    styles.primaryBtnDisabled,
+                ]}
+                onPress={() => goToPage(4)}
+                disabled={(!licenseUploaded && !licenseSkipped) || loading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.primaryBtnText}>Continue</Text>
+              </TouchableOpacity>
+            )}
             {pendingDocs.license?.uri ? (
               <TouchableOpacity
                 style={styles.tryAgainLink}
@@ -1193,49 +1310,70 @@ export default function DriverSignUpScreen() {
         {/* Step 5: Aadhaar */}
         {pageBody(4, (
           <>
-            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
-              {STEP_CONTENT[4].title}
-            </Text>
-            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
-              {STEP_CONTENT[4].subtitle}
-            </Text>
-            <View style={styles.docActionsWrap}>
+            {useMobileLayout ? (
+              <SignUpPulseTitle title={STEP_CONTENT[4].title} subtitle={STEP_CONTENT[4].subtitle} compact />
+            ) : (
+              <>
+                <Text style={styles.mainTitle}>{STEP_CONTENT[4].title}</Text>
+                <Text style={styles.subTitle}>{STEP_CONTENT[4].subtitle}</Text>
+              </>
+            )}
+            <View style={useMobileLayout ? mobileSignup.docActionsRow : styles.docActionsWrap}>
               <TouchableOpacity
-                style={styles.docActionBtn}
+                style={useMobileLayout ? mobileSignup.docActionBtn : styles.docActionBtn}
                 onPress={() => void pickDocument('aadhaar', 'gallery')}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="image" size={18} color={LIGHT.text} />
-                <Text style={styles.docActionText}>Upload from gallery</Text>
+                <FontAwesome name="image" size={16} color={LIGHT.text} />
+                <Text style={useMobileLayout ? mobileSignup.docActionText : styles.docActionText}>
+                  Upload from gallery
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.docActionBtn}
+                style={useMobileLayout ? mobileSignup.docActionBtn : styles.docActionBtn}
                 onPress={() => void pickDocument('aadhaar', 'camera')}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="camera" size={18} color={LIGHT.text} />
-                <Text style={styles.docActionText}>Open camera</Text>
+                <FontAwesome name="camera" size={16} color={LIGHT.text} />
+                <Text style={useMobileLayout ? mobileSignup.docActionText : styles.docActionText}>
+                  Open camera
+                </Text>
               </TouchableOpacity>
             </View>
-            <Text style={[styles.docStatus, aadhaarUploaded ? styles.docStatusDone : styles.docStatusPending]}>
+            <Text
+              style={[
+                useMobileLayout ? mobileSignup.docStatus : styles.docStatus,
+                aadhaarUploaded ? (useMobileLayout ? mobileSignup.docStatusDone : styles.docStatusDone) : (useMobileLayout ? mobileSignup.docStatusPending : styles.docStatusPending),
+              ]}
+            >
               {aadhaarUploaded
                 ? `Uploaded${aadhaarUploadMethod ? ` via ${aadhaarUploadMethod === 'gallery' ? 'gallery' : 'camera'}` : ''}`
                 : aadhaarSkipped
                   ? 'Skipped for now'
                 : 'Not uploaded'}
             </Text>
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                ((!aadhaarUploaded && !aadhaarSkipped) || loading) &&
-                  styles.primaryBtnDisabled,
-              ]}
-              onPress={() => goToPage(5)}
-              disabled={(!aadhaarUploaded && !aadhaarSkipped) || loading}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.primaryBtnText}>Continue</Text>
-            </TouchableOpacity>
+            {useMobileLayout ? (
+              <SignUpPulsePrimaryButton
+                theme={DRIVER_SIGNUP}
+                label="Continue"
+                onPress={() => goToPage(5)}
+                disabled={(!aadhaarUploaded && !aadhaarSkipped) || loading}
+                style={styles.mobilePrimaryBtn}
+              />
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  ((!aadhaarUploaded && !aadhaarSkipped) || loading) &&
+                    styles.primaryBtnDisabled,
+                ]}
+                onPress={() => goToPage(5)}
+                disabled={(!aadhaarUploaded && !aadhaarSkipped) || loading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.primaryBtnText}>Continue</Text>
+              </TouchableOpacity>
+            )}
             {pendingDocs.aadhaar?.uri ? (
               <TouchableOpacity
                 style={styles.tryAgainLink}
@@ -1256,49 +1394,70 @@ export default function DriverSignUpScreen() {
         {/* Step 6: PAN */}
         {pageBody(5, (
           <>
-            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
-              {STEP_CONTENT[5].title}
-            </Text>
-            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
-              {STEP_CONTENT[5].subtitle}
-            </Text>
-            <View style={styles.docActionsWrap}>
+            {useMobileLayout ? (
+              <SignUpPulseTitle title={STEP_CONTENT[5].title} subtitle={STEP_CONTENT[5].subtitle} compact />
+            ) : (
+              <>
+                <Text style={styles.mainTitle}>{STEP_CONTENT[5].title}</Text>
+                <Text style={styles.subTitle}>{STEP_CONTENT[5].subtitle}</Text>
+              </>
+            )}
+            <View style={useMobileLayout ? mobileSignup.docActionsRow : styles.docActionsWrap}>
               <TouchableOpacity
-                style={styles.docActionBtn}
+                style={useMobileLayout ? mobileSignup.docActionBtn : styles.docActionBtn}
                 onPress={() => void pickDocument('pan', 'gallery')}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="image" size={18} color={LIGHT.text} />
-                <Text style={styles.docActionText}>Upload from gallery</Text>
+                <FontAwesome name="image" size={16} color={LIGHT.text} />
+                <Text style={useMobileLayout ? mobileSignup.docActionText : styles.docActionText}>
+                  Upload from gallery
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.docActionBtn}
+                style={useMobileLayout ? mobileSignup.docActionBtn : styles.docActionBtn}
                 onPress={() => void pickDocument('pan', 'camera')}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="camera" size={18} color={LIGHT.text} />
-                <Text style={styles.docActionText}>Open camera</Text>
+                <FontAwesome name="camera" size={16} color={LIGHT.text} />
+                <Text style={useMobileLayout ? mobileSignup.docActionText : styles.docActionText}>
+                  Open camera
+                </Text>
               </TouchableOpacity>
             </View>
-            <Text style={[styles.docStatus, panUploaded ? styles.docStatusDone : styles.docStatusPending]}>
+            <Text
+              style={[
+                useMobileLayout ? mobileSignup.docStatus : styles.docStatus,
+                panUploaded ? (useMobileLayout ? mobileSignup.docStatusDone : styles.docStatusDone) : (useMobileLayout ? mobileSignup.docStatusPending : styles.docStatusPending),
+              ]}
+            >
               {panUploaded
                 ? `Uploaded${panUploadMethod ? ` via ${panUploadMethod === 'gallery' ? 'gallery' : 'camera'}` : ''}`
                 : panSkipped
                   ? 'Skipped for now'
                 : 'Not uploaded'}
             </Text>
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                ((!panUploaded && !panSkipped) || loading) &&
-                  styles.primaryBtnDisabled,
-              ]}
-              onPress={() => goToPage(6)}
-              disabled={(!panUploaded && !panSkipped) || loading}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.primaryBtnText}>Continue</Text>
-            </TouchableOpacity>
+            {useMobileLayout ? (
+              <SignUpPulsePrimaryButton
+                theme={DRIVER_SIGNUP}
+                label="Continue"
+                onPress={() => goToPage(6)}
+                disabled={(!panUploaded && !panSkipped) || loading}
+                style={styles.mobilePrimaryBtn}
+              />
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  ((!panUploaded && !panSkipped) || loading) &&
+                    styles.primaryBtnDisabled,
+                ]}
+                onPress={() => goToPage(6)}
+                disabled={(!panUploaded && !panSkipped) || loading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.primaryBtnText}>Continue</Text>
+              </TouchableOpacity>
+            )}
             {pendingDocs.pan?.uri ? (
               <TouchableOpacity
                 style={styles.tryAgainLink}
@@ -1336,18 +1495,29 @@ export default function DriverSignUpScreen() {
               uploadLabel="Upload profile photo"
               theme={DRIVER_SIGNUP}
             />
-            <TouchableOpacity
-              style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
-              onPress={establishLink}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <LoadingIndicator color={Theme.textOnPrimary} />
-              ) : (
-                <Text style={styles.primaryBtnText}>Create account</Text>
-              )}
-            </TouchableOpacity>
+            {useMobileLayout ? (
+              <SignUpPulsePrimaryButton
+                theme={DRIVER_SIGNUP}
+                label="Create account"
+                onPress={establishLink}
+                disabled={loading}
+                loading={loading}
+                style={styles.mobilePrimaryBtn}
+              />
+            ) : (
+              <TouchableOpacity
+                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+                onPress={establishLink}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <LoadingIndicator color={Theme.textOnPrimary} />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Create account</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </>
         ))}
 
@@ -1382,7 +1552,7 @@ export default function DriverSignUpScreen() {
           onBack={handleBack}
           stepLabels={DRIVER_STEP_LABELS.slice(0, 7)}
           currentStepIndex={Math.min(step, 6)}
-          hideProgress={step >= 7}
+          hideProgress={step >= 7 || step <= 1}
           bodyMode={usesKeypadBody ? 'keypad' : 'scroll'}
           scrollBottomPad={insets.bottom + 24}
           scrollRef={mobileScrollRef}
@@ -1490,6 +1660,14 @@ export default function DriverSignUpScreen() {
 }
 
 const styles = StyleSheet.create({
+  mobilePrimaryBtn: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  eyeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   mobileStepFlex: {
     flex: 1,
     minHeight: 0,

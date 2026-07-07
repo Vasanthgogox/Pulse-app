@@ -99,7 +99,6 @@ export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
         inputMode="numeric"
         maxLength={VALIDATION.PINCODE_LENGTH}
         errorMessage={showPincodeError}
-        onFocus={flow.scrollLocationFieldIntoView}
         dense
       />
 
