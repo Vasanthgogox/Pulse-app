@@ -3758,7 +3758,7 @@ export const networkDesktopHubStyles = StyleSheet.create({
   teamInviteBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.buttonPrimaryText,
+    color: Theme.textOnPrimary,
   },
   teamInviteCancelBtn: {
     flexDirection: "row",

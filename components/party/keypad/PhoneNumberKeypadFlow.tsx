@@ -220,14 +220,19 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceLight,
   },
   desktopCaptureInput: {
+    // Invisible capture field: holds focus so the physical keyboard types into
+    // it, while the visible <Text> above renders the value. Fully transparent so
+    // the input's own value never paints over the keypad (opacity:0 inputs stay
+    // focusable in modern browsers).
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.02,
+    opacity: 0,
     color: "transparent",
     fontSize: 1,
     ...Platform.select({
       web: {
         caretColor: "transparent",
         outlineStyle: "none",
+        WebkitTextFillColor: "transparent",
       } as object,
       default: {},
     }),

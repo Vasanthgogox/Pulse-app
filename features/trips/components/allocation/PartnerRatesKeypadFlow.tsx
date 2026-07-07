@@ -2,8 +2,8 @@
  * GPay-style partner rate + optional advance (custom keypad, no system keyboard).
  * Shared by Create Trip allocation and indent aggregate deploy.
  */
-import { memo, useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { WizardNumericKeypadFlow } from "@/components/full-page-wizard/WizardNumericKeypadFlow";
 
@@ -74,6 +74,24 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
     },
     [active, advanceRaw, onAdvancePaidChange, onPartnerRateChange, rateRaw],
   );
+
+  // Web: mirror the on-screen keypad with the physical keyboard (there is no
+  // focusable TextInput here, so keydown must be routed through handleKey).
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      let mapped: KeypadKey | null = null;
+      if (e.key >= "0" && e.key <= "9") mapped = e.key as KeypadKey;
+      else if (e.key === "." || e.key === ",") mapped = ".";
+      else if (e.key === "Backspace" || e.key === "Delete") mapped = "⌫";
+      if (!mapped) return;
+      e.preventDefault();
+      handleKey(mapped);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleKey]);
 
   const useInset = keypadInset || wizardShell;
 

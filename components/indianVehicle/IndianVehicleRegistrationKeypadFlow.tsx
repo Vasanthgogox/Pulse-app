@@ -137,14 +137,18 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
           </Pressable>
         </View>
 
-        <View style={[styles.keypadDock, (wizardShell || groupTop) && flow.keypadDockWizard]}>
-          <IndianVehicleRegistrationKeypad
-            kind={keyboardKind}
-            onKey={handleKey}
-            normalizedLength={normLen}
-            compact={groupTop}
-          />
-        </View>
+        {/* On desktop web the physical keyboard drives entry (useIndianVehiclePhysicalKeypad),
+            so the on-screen QWERTY is hidden — it only dominates the layout on laptops/PCs. */}
+        {isDesktopWeb ? null : (
+          <View style={[styles.keypadDock, (wizardShell || groupTop) && flow.keypadDockWizard]}>
+            <IndianVehicleRegistrationKeypad
+              kind={keyboardKind}
+              onKey={handleKey}
+              normalizedLength={normLen}
+              compact={groupTop}
+            />
+          </View>
+        )}
       </View>
     );
   },

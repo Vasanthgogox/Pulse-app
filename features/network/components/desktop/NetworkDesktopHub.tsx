@@ -38,6 +38,8 @@ import { NetworkDesktopChatIntroPanel } from "@/features/network/components/desk
 import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
+import { useOrgMembersData } from "@/lib/queries/useOrgMembersQuery";
+import { platformRoleFromMember } from "@/features/organization/utils/teamInviteRoles.util";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { ChevronLeft, MessageSquare, MoreHorizontal, UserPlus } from "lucide-react-native";
 import { useRouter } from "expo-router";
@@ -188,7 +190,17 @@ export function NetworkDesktopHub({
   const email = profile?.email?.trim() || "—";
   const modelLabel =
     organization?.operatingModel?.replace(/_/g, " ") ?? "Logistics workspace";
-  const canManageTeam = profile?.role !== "driver";
+  const orgMembersQ = useOrgMembersData(orgId);
+  // Team management is gated on the current user's ORG membership role (owner/admin),
+  // not their platform role. profile.role is only "user" | "driver" and would let any
+  // non-driver (e.g. an operator) manage the team.
+  const canManageTeam = useMemo(() => {
+    const me = (orgMembersQ.data?.members ?? []).find(
+      (m) => m.user_id === user?.uid,
+    );
+    if (!me) return false;
+    return me.role === "owner" || platformRoleFromMember(me) === "admin";
+  }, [orgMembersQ.data, user?.uid]);
 
   useEffect(() => {
     const parsed = parseHubTab(initialTab);

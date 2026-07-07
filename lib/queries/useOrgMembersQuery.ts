@@ -40,6 +40,25 @@ export function useOrgMembersQuery(orgId: string | null) {
   return query;
 }
 
+/**
+ * Read-only variant: shares the same query cache as useOrgMembersQuery but does
+ * NOT open a realtime channel. Use when another mounted component already owns
+ * the org-team subscription (Supabase rejects a second postgres_changes callback
+ * on the same channel name).
+ */
+export function useOrgMembersData(orgId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.orgMembers.all(orgId ?? ''),
+    queryFn: async () => {
+      const res = await getOrgTeamRoster(orgId!);
+      if (res.error) throw res.error;
+      return res.roster;
+    },
+    enabled: !!orgId,
+    staleTime: STALE.slow,
+  });
+}
+
 export function useMyTeamInvitesQuery() {
   return useQuery({
     queryKey: queryKeys.teamInvites.mine(),
