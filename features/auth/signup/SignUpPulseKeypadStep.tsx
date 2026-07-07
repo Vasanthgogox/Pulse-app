@@ -15,7 +15,7 @@ import { GoogleBrandIcon } from '@/features/auth/components/GoogleBrandIcon';
 
 import { DecimalKeypad } from '@/components/mobile-input/DecimalKeypad';
 import { applyKeypadPress, type KeypadKey } from '@/components/mobile-input/keypad';
-import { effectiveKeyboardInset, useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
+import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
 import { useSignupKeypadInput } from '@/lib/onboarding/useSignupKeypadInput';
 
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
@@ -80,7 +80,7 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
   const useKeypad = useSignupKeypadInput();
-  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
+  const layout = useMobileWebStepLayout();
   const inputRef = useRef<TextInput>(null);
   const blink = useRef(new Animated.Value(1)).current;
   const digits = value.replace(/\D/g, '').slice(0, maxDigits);
@@ -252,7 +252,7 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
     </>
   );
 
-  const formBody = (
+  const scrollBody = (
     <>
       <SignUpPulseTitle title={title} subtitle={subtitle} compact={useKeypad} />
       <Text style={styles.fieldLabel}>{fieldLabel}</Text>
@@ -264,22 +264,19 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
       ) : hintMessage ? (
         <Text style={styles.hint}>{hintMessage}</Text>
       ) : null}
-      {actionBlock}
+      {!layout.useDockedFooter ? actionBlock : null}
     </>
   );
-
-  const webKeyboardPad = !useKeypad
-    ? effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280)
-    : 0;
 
   const contentScrollInner = [
     styles.contentScrollInner,
     isDesktop && styles.contentScrollInnerDesktop,
-    { paddingBottom: 24 + webKeyboardPad },
+    layout.useDockedFooter && { paddingBottom: layout.scrollPaddingBottom },
+    !layout.useDockedFooter && { paddingBottom: 24 },
   ];
 
   return (
-    <View style={[styles.root, !useKeypad && styles.rootWeb]}>
+    <View style={[styles.root, layout.rootStyle, !useKeypad && styles.rootWeb]}>
       <View style={[styles.main, !useKeypad && styles.mainWeb]}>
         {useKeypad ? (
           <ScrollView
@@ -289,7 +286,8 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
             showsVerticalScrollIndicator={false}
             bounces={false}
           >
-            {formBody}
+            {scrollBody}
+            {actionBlock}
           </ScrollView>
         ) : (
           <ScrollView
@@ -298,11 +296,23 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {formBody}
+            {scrollBody}
             {footerAccessory}
           </ScrollView>
         )}
       </View>
+
+      {!useKeypad && layout.useDockedFooter ? (
+        <View
+          style={[
+            styles.webFooterDock,
+            layout.footerStyle,
+            { borderTopColor: theme.border, backgroundColor: theme.bg },
+          ]}
+        >
+          {actionBlock}
+        </View>
+      ) : null}
 
       {useKeypad && footerAccessory ? (
         <View style={styles.accessoryDock}>{footerAccessory}</View>
@@ -566,6 +576,11 @@ function createStyles(theme: SignUpTheme) {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border,
       backgroundColor: theme.bg,
+    },
+    webFooterDock: {
+      paddingHorizontal: 24,
+      paddingTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
     },
     keypadDock: {
       flexShrink: 0,

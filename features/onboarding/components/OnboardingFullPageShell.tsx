@@ -1,7 +1,9 @@
 import { memo, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
+
+import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 
 import { colors } from '@/design-system/colors';
 import { layout } from '@/design-system/layout';
@@ -30,10 +32,12 @@ export const OnboardingFullPageShell = memo(function OnboardingFullPageShell({
   children,
 }: OnboardingFullPageShellProps) {
   const insets = useSafeAreaInsets();
+  const { keyboardVisible } = useKeyboardVisible();
   const total = stepLabels.length;
   const index = Math.min(Math.max(currentStepIndex, 0), Math.max(total - 1, 0));
   const currentLabel = stepLabels[index] ?? '';
   const progress = total > 0 ? (index + 1) / total : 0;
+  const showProgress = !hideProgress && total > 0 && !keyboardVisible;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -52,7 +56,7 @@ export const OnboardingFullPageShell = memo(function OnboardingFullPageShell({
         <View style={styles.topSpacer} />
       </View>
 
-      {!hideProgress && total > 0 ? (
+      {!showProgress ? null : (
         <View style={styles.progressBlock}>
           <Text style={styles.stepMeta}>
             Step {index + 1} of {total}

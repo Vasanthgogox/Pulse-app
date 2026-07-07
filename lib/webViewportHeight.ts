@@ -1,24 +1,17 @@
-import { isIOSWebSafari } from "./webKeyboard";
+import {
+  applyIOSWebSafariViewportPin,
+  isIOSWebSafari,
+  readWebVisualViewportMetrics,
+  WEB_KEYBOARD_INSET_THRESHOLD_PX,
+} from "./webKeyboard";
 
-/** Match `useKeyboardVisible` — keyboard open when visual viewport inset exceeds this. */
-export const WEB_KEYBOARD_INSET_THRESHOLD_PX = 48;
-
-function readVisualViewportKeyboardInset(): number {
-  if (typeof window === "undefined") return 0;
-  const vv = window.visualViewport;
-  if (!vv) return 0;
-  return Math.max(
-    0,
-    Math.round(window.innerHeight - vv.height - (vv.offsetTop ?? 0)),
-  );
-}
+export { WEB_KEYBOARD_INSET_THRESHOLD_PX };
 
 /**
  * Mobile web: `100vh` is taller than the visible viewport when browser chrome is shown.
  *
- * - iOS Safari: shrink `--app-vh` to `visualViewport.height` so shells fit the visible
- *   area when the keyboard resizes the viewport (no overlays-content).
- * - Android Chrome (overlays-content): freeze layout height while the keyboard is open;
+ * - iOS Safari: pin `#root` to `visualViewport` (height + offsetTop) via CSS vars.
+ * - Android Chrome (overlays-content): freeze layout height while keyboard is open;
  *   occlusion is handled via `--keyboard-height` in `useKeyboardVisible`.
  */
 export function installWebViewportHeight(): () => void {
@@ -32,21 +25,13 @@ export function installWebViewportHeight(): () => void {
   let stableLayoutHeight = Math.round(window.innerHeight);
 
   const setAppVh = () => {
-    const vv = window.visualViewport;
-    const inner = window.innerHeight;
-    const visible = Math.round(vv?.height ?? inner);
-
     if (isIOSWebSafari()) {
-      document.documentElement.style.setProperty("--app-vh", `${visible}px`);
-      // Safari scrolls the document when focusing inputs; reset drift that jumps content up.
-      if (vv && (vv.offsetTop ?? 0) > 0) {
-        window.scrollTo(0, 0);
-      }
+      applyIOSWebSafariViewportPin();
       return;
     }
 
-    const keyboardOpen =
-      readVisualViewportKeyboardInset() >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
+    const { height: visible, keyboardOpen } = readWebVisualViewportMetrics();
+    const inner = window.innerHeight;
 
     if (!keyboardOpen) {
       stableLayoutHeight = Math.max(visible, inner);
@@ -56,6 +41,7 @@ export function installWebViewportHeight(): () => void {
       "--app-vh",
       `${stableLayoutHeight}px`,
     );
+    document.documentElement.style.setProperty("--app-vt", "0px");
   };
 
   setAppVh();

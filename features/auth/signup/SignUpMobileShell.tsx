@@ -1,10 +1,7 @@
 import { memo, type ReactNode, type RefObject } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
-import {
-  effectiveKeyboardInset,
-  useKeyboardVisible,
-} from '@/lib/hooks/useKeyboardVisible';
+import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
 
 import { SignUpPulseShell } from './SignUpPulseShell';
 import { DRIVER_SIGNUP } from './signUpDriverTheme';
@@ -44,11 +41,9 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
   scrollBottomPad = 24,
 }: SignUpMobileShellProps) {
   const theme = trustMode === 'driver' ? DRIVER_SIGNUP : PULSE_SIGNUP;
-  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
-  const keyboardInset =
-    bodyMode === 'scroll'
-      ? effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280)
-      : 0;
+  const layout = useMobileWebStepLayout({
+    extraScrollPadding: bodyMode === 'scroll' ? scrollBottomPad : 0,
+  });
 
   const body =
     bodyMode === 'scroll' ? (
@@ -57,7 +52,7 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: scrollBottomPad + keyboardInset },
+          { paddingBottom: layout.scrollPaddingBottom },
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}

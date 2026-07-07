@@ -59,12 +59,34 @@ export function setupAndroidInteractiveWidgetViewport() {
  * Must stay self-contained (no closures) — inlined into static HTML via toString().
  */
 export function setupViewportHeightBootstrap() {
+  function isIOSWebSafari() {
+    var ua = navigator.userAgent || '';
+    var isIOS =
+      /iPad|iPhone|iPod/i.test(ua) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    return isIOS && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|Chrome/i.test(ua);
+  }
+
   function setAppVh() {
     // Once installWebViewportHeight (React runtime) takes over, stop writing.
     if ((window as any).__appVhOwned) return;
     var vv = window.visualViewport;
-    var h = Math.round(vv && vv.height ? vv.height : window.innerHeight);
+    var inner = window.innerHeight;
+    if (isIOSWebSafari() && vv) {
+      document.documentElement.style.setProperty(
+        '--app-vh',
+        Math.round(vv.height) + 'px',
+      );
+      document.documentElement.style.setProperty(
+        '--app-vt',
+        Math.round(vv.offsetTop || 0) + 'px',
+      );
+      window.scrollTo(0, 0);
+      return;
+    }
+    var h = Math.round(vv && vv.height ? vv.height : inner);
     document.documentElement.style.setProperty('--app-vh', h + 'px');
+    document.documentElement.style.setProperty('--app-vt', '0px');
   }
   setAppVh();
   window.addEventListener('resize', setAppVh);
@@ -105,6 +127,31 @@ body {
   /* Prevent iOS from enlarging small text (e.g. inside cards) */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+}
+
+/*
+  iOS Safari: when the keyboard opens the layout document scrolls. Pin html/body/#root
+  to visualViewport (top + height) so the app stays aligned with the visible area.
+*/
+@supports (-webkit-touch-callout: none) {
+  html, body {
+    position: fixed;
+    width: 100%;
+    left: 0;
+    right: 0;
+    overflow: hidden;
+  }
+
+  #root {
+    position: fixed;
+    left: 0;
+    right: 0;
+    width: 100%;
+    top: var(--app-vt, 0px);
+    height: var(--app-vh, 100dvh);
+    max-height: var(--app-vh, 100dvh);
+    overflow: hidden;
+  }
 }
 
 /* Remove the gray/blue tap flash on tappable elements (iOS/Android) */

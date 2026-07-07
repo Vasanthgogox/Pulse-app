@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { signUpPasswordInputProps, type SignUpPasswordFieldRole } from '@/lib/signupPasswordInput.util';
+import { scrollFocusedWebInputIntoView } from '@/lib/webKeyboard';
 
 import { useSignUpPulseFormStepContext } from './SignUpPulseFormStepContext';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
@@ -41,6 +42,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   returnKeyType,
   blurOnSubmit,
   multiline = false,
+  onFocus,
   ...inputProps
 }: SignUpPulseFieldProps) {
   const hasError = !!errorMessage;
@@ -89,6 +91,13 @@ export const SignUpPulseField = memo(function SignUpPulseField({
     }
   };
 
+  const handleFocus: TextInputProps['onFocus'] = (event) => {
+    onFocus?.(event);
+    if (Platform.OS === 'web') {
+      scrollFocusedWebInputIntoView();
+    }
+  };
+
   return (
     <View style={fieldStyles.wrap}>
       <Text style={fieldStyles.label}>
@@ -110,6 +119,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
           returnKeyType={resolvedReturnKeyType}
           blurOnSubmit={resolvedBlurOnSubmit}
           onSubmitEditing={handleSubmitEditing}
+          onFocus={handleFocus}
           style={[
             fieldStyles.input,
             inputProps.multiline && fieldStyles.inputMultiline,

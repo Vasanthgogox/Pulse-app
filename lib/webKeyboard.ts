@@ -1,10 +1,13 @@
 /**
  * Mobile web keyboard / viewport platform detection.
  *
- * - iOS Safari: resizes `visualViewport` when the keyboard opens (no overlays-content).
- * - Android Chrome: `interactive-widget=overlays-content` keeps layout height; keyboard
- *   occludes from below — handled via `--keyboard-height` scroll/footer padding.
+ * - iOS Safari: resizes `visualViewport` and scrolls the layout document via
+ *   `offsetTop` — pin `#root` with `--app-vh` + `--app-vt` (see htmlShell).
+ * - Android Chrome: `interactive-widget=overlays-content` keeps layout height;
+ *   keyboard occludes from below — handled via `--keyboard-height` padding.
  */
+
+export const WEB_KEYBOARD_INSET_THRESHOLD_PX = 48;
 
 export function isIOSWeb(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -33,8 +36,58 @@ export function isAndroidChromeOverlayKeyboard(): boolean {
   return content.includes('interactive-widget=overlays-content');
 }
 
+export interface WebVisualViewportMetrics {
+  height: number;
+  offsetTop: number;
+  keyboardInset: number;
+  keyboardOpen: boolean;
+}
+
+/** Read visual viewport geometry for keyboard + shell pinning. */
+export function readWebVisualViewportMetrics(): WebVisualViewportMetrics {
+  if (typeof window === 'undefined') {
+    return { height: 0, offsetTop: 0, keyboardInset: 0, keyboardOpen: false };
+  }
+
+  const vv = window.visualViewport;
+  const inner = window.innerHeight;
+  const height = Math.round(vv?.height ?? inner);
+  const offsetTop = Math.round(vv?.offsetTop ?? 0);
+  const heightShrink = Math.max(0, inner - height);
+
+  if (isIOSWebSafari()) {
+    // Do not subtract offsetTop — Safari moves the layout viewport instead of reporting
+    // occlusion in (inner - height - offsetTop), which reads 0 and breaks detection.
+    const keyboardOpen =
+      heightShrink >= WEB_KEYBOARD_INSET_THRESHOLD_PX ||
+      offsetTop >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
+    return {
+      height,
+      offsetTop,
+      keyboardInset: heightShrink,
+      keyboardOpen,
+    };
+  }
+
+  const keyboardInset = Math.max(0, Math.round(inner - height - offsetTop));
+  const keyboardOpen = keyboardInset >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
+  return { height, offsetTop, keyboardInset, keyboardOpen };
+}
+
 /**
- * When false, the app shell shrinks with visualViewport (iOS Safari) and scroll
+ * Pin the React root to the visible viewport on iOS Safari.
+ * Called from installWebViewportHeight on every visualViewport change.
+ */
+export function applyIOSWebSafariViewportPin(): void {
+  if (!isIOSWebSafari() || typeof document === 'undefined') return;
+  const { height, offsetTop } = readWebVisualViewportMetrics();
+  document.documentElement.style.setProperty('--app-vh', `${height}px`);
+  document.documentElement.style.setProperty('--app-vt', `${offsetTop}px`);
+  window.scrollTo(0, 0);
+}
+
+/**
+ * When false, `#root` is pinned to visualViewport height (iOS Safari) and scroll
  * padding for keyboard height would double-count occlusion.
  */
 export function shouldApplyWebKeyboardScrollInset(): boolean {
@@ -44,22 +97,22 @@ export function shouldApplyWebKeyboardScrollInset(): boolean {
 
 /**
  * Scroll the focused editable into view after the virtual keyboard animates.
- * Skipped on iOS Safari — shell shrink + native focus scroll are sufficient.
  */
 export function scrollFocusedWebInputIntoView(): void {
   if (typeof document === 'undefined') return;
-  if (isIOSWebSafari()) return;
 
   const el = document.activeElement;
   if (!(el instanceof HTMLElement)) return;
   const tag = el.tagName;
   if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !el.isContentEditable) return;
 
+  const block: ScrollLogicalPosition = isIOSWebSafari() ? 'nearest' : 'center';
+
   const run = () => {
     try {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.scrollIntoView({ block, behavior: 'smooth' });
     } catch {
-      el.scrollIntoView({ block: 'center' });
+      el.scrollIntoView({ block });
     }
   };
 

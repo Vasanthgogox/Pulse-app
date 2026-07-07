@@ -68,7 +68,6 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         maxLength={128}
         editable={!flow.loading}
         errorMessage={flow.step5Attempted ? flow.step5Errors.password : null}
-        onFocus={flow.scrollAccountFieldIntoView}
         trailing={
           <Pressable onPress={flow.toggleShowPassword} style={styles.eyeBtn} hitSlop={8}>
             {flow.showPassword ? (
@@ -93,7 +92,6 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         spellCheck={false}
         maxLength={128}
         editable={!flow.loading}
-        onFocus={flow.scrollAccountFieldIntoView}
         errorMessage={
           flow.confirmMismatch
             ? 'Passwords do not match.'

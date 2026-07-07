@@ -160,9 +160,7 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
   }
 
   const shellRootStyle: ViewStyle | ViewStyle[] =
-    Platform.OS === 'web'
-      ? [styles.webFill, WEB_APP_VIEWPORT_STYLE as object as ViewStyle]
-      : styles.nativeFill;
+    Platform.OS === 'web' ? styles.webFill : styles.nativeFill;
 
   return (
     <View style={shellRootStyle}>
@@ -190,17 +188,20 @@ function createStyles(theme: SignUpShellTheme, isDesktop: boolean) {
       width: '100%',
       backgroundColor: theme.bg,
       overflow: 'hidden',
+      minHeight: 0,
     },
     webFill: {
       flex: 1,
       width: '100%',
       alignItems: 'center',
       backgroundColor: theme.canvas,
+      minHeight: 0,
     },
     webCenterWrap: {
       flex: 1,
       width: '100%',
       maxWidth: 480,
+      minHeight: 0,
     },
     nativeFill: {
       flex: 1,

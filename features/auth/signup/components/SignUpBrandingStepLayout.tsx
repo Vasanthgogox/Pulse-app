@@ -1,6 +1,8 @@
 import { memo, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
+
 import { SignUpPulsePrimaryButton } from '../SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from '../SignUpPulseTitle';
 import { PULSE_SIGNUP, type SignUpTheme } from '../signUpPulseTheme';
@@ -19,7 +21,7 @@ export interface SignUpBrandingStepLayoutProps {
   theme?: SignUpTheme;
 }
 
-/** Full-page branding step — scroll body + sticky footer (logo / profile photo). */
+/** Full-page branding step — scroll body + docked footer (logo / profile photo). */
 export const SignUpBrandingStepLayout = memo(function SignUpBrandingStepLayout({
   title,
   subtitle,
@@ -32,19 +34,31 @@ export const SignUpBrandingStepLayout = memo(function SignUpBrandingStepLayout({
   onSkip,
   theme = PULSE_SIGNUP,
 }: SignUpBrandingStepLayoutProps) {
+  const layout = useMobileWebStepLayout();
+
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, layout.rootStyle]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: layout.scrollPaddingBottom },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
       >
         <SignUpPulseTitle title={title} subtitle={subtitle} />
         {children}
       </ScrollView>
 
-      <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.bg }]}>
+      <View
+        style={[
+          styles.footer,
+          layout.footerStyle,
+          { borderTopColor: theme.border, backgroundColor: theme.bg },
+        ]}
+      >
         <SignUpPulsePrimaryButton
           label={primaryLabel}
           onPress={onPrimary}
@@ -74,12 +88,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: Platform.OS === 'web' ? 20 : 24,
     paddingTop: Platform.OS === 'web' ? 4 : 8,
-    paddingBottom: Platform.OS === 'web' ? 16 : 24,
   },
   footer: {
     paddingHorizontal: Platform.OS === 'web' ? 20 : 24,
     paddingTop: Platform.OS === 'web' ? 10 : 12,
-    paddingBottom: Platform.OS === 'web' ? 10 : 12,
     gap: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },

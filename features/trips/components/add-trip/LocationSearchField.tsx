@@ -6,6 +6,7 @@ import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchIn
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { addToPlacesCache, getPopularPlacesInIndia, searchPlacesInIndia, type PlaceResult } from "@/lib/placesService";
+import { scrollFocusedWebInputIntoView } from "@/lib/webKeyboard";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { MapPin, Search, X } from "lucide-react-native";
 import { type ReactNode, forwardRef, useCallback, useEffect, useRef, useState } from "react";
@@ -975,7 +976,10 @@ const SignupSheetSearchInput = forwardRef<TextInput, SignupSheetSearchInputProps
           autoCorrect={false}
           spellCheck={false}
           autoComplete="off"
-          onFocus={() => setFocused(true)}
+          onFocus={() => {
+            setFocused(true);
+            if (Platform.OS === "web") scrollFocusedWebInputIntoView();
+          }}
           onBlur={() => setFocused(false)}
           returnKeyType="search"
           accessibilityLabel="Search places"

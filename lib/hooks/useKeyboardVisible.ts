@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Keyboard, Platform } from "react-native";
 
-import { shouldApplyWebKeyboardScrollInset } from "@/lib/webKeyboard";
+import { shouldApplyWebKeyboardScrollInset, readWebVisualViewportMetrics } from "@/lib/webKeyboard";
 
 /** Ignore visualViewport jitter from mobile browser chrome (URL bar). */
 const WEB_KEYBOARD_INSET_THRESHOLD_PX = 48;
@@ -29,13 +29,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
   const tag = target.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return true;
   return target.isContentEditable;
-}
-
-function readVisualViewportInset(): number {
-  const vv = window.visualViewport;
-  if (!vv) return 0;
-  const layoutH = window.innerHeight;
-  return Math.max(0, Math.round(layoutH - vv.height - (vv.offsetTop ?? 0)));
 }
 
 /** Chrome overlays-content: keyboard geometry via Virtual Keyboard API. */
@@ -76,11 +69,16 @@ export function useKeyboardVisible() {
       };
 
       const readInset = (): number => {
-        const measured = Math.max(
-          readVisualViewportInset(),
-          readVirtualKeyboardInset(),
-        );
-        return measured >= WEB_KEYBOARD_INSET_THRESHOLD_PX ? measured : 0;
+        const metrics = readWebVisualViewportMetrics();
+        const measured = Math.max(metrics.keyboardInset, readVirtualKeyboardInset());
+        if (!metrics.keyboardOpen && measured < WEB_KEYBOARD_INSET_THRESHOLD_PX) {
+          return 0;
+        }
+        return measured >= WEB_KEYBOARD_INSET_THRESHOLD_PX
+          ? measured
+          : metrics.keyboardOpen
+            ? Math.max(metrics.keyboardInset, WEB_KEYBOARD_INSET_THRESHOLD_PX)
+            : 0;
       };
 
       const sync = () => {

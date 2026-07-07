@@ -9,17 +9,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  effectiveKeyboardInset,
-  useKeyboardVisible,
-} from '@/lib/hooks/useKeyboardVisible';
+import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
 
 import { SignUpPulseFormStepProvider } from './SignUpPulseFormStepContext';
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
-import { DESKTOP_BREAKPOINT, DESKTOP_SIGNUP_FORM_WIDTH, SIGNUP_FORM_FOOTER_CLEARANCE, SIGNUP_MOBILE_PROGRESS_CLEARANCE } from './signUpConstants';
+import { DESKTOP_BREAKPOINT, DESKTOP_SIGNUP_FORM_WIDTH } from './signUpConstants';
 import { PULSE_SIGNUP, type SignUpTheme } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles } from './signUpTypography';
 
@@ -37,7 +33,9 @@ export interface SignUpPulseFormStepProps {
   centerContent?: boolean;
   /** Extra bottom padding (e.g. clear fixed progress rail on Account step). */
   scrollPaddingBottom?: number;
-  /** Adds keyboard height to scroll padding and KeyboardAvoidingView on native. */
+  /**
+   * @deprecated All form steps are keyboard-aware by default on mobile web and native.
+   */
   keyboardAware?: boolean;
   scrollRef?: RefObject<ScrollView | null>;
   theme?: SignUpTheme;
@@ -45,7 +43,6 @@ export interface SignUpPulseFormStepProps {
     label: string;
     onPress: () => void;
   };
-  /** Replaces the default primary + accessory footer (compact bespoke layouts). */
   customFooter?: ReactNode;
 }
 
@@ -61,27 +58,19 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   inlinePrimary = false,
   centerContent = false,
   scrollPaddingBottom = 0,
-  keyboardAware = false,
   scrollRef,
   theme = PULSE_SIGNUP,
   secondaryAction,
   customFooter,
 }: SignUpPulseFormStepProps) {
-  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
   const textStyles = useMemo(() => createPulseSignUpTextStyles(theme), [theme]);
-  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
-  // On web, --app-vh is frozen while the keyboard overlays content (Android Chrome).
-  // Use a fallback inset when focus opens the keyboard before visualViewport reports height.
-  const keyboardInset = keyboardAware
-    ? effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280)
-    : 0;
-  const mobileProgressPad = !isDesktop && inlinePrimary ? SIGNUP_MOBILE_PROGRESS_CLEARANCE : 0;
-  const bottomPad =
-    scrollPaddingBottom + keyboardInset + SIGNUP_FORM_FOOTER_CLEARANCE + mobileProgressPad;
-  const footerKeyboardPad =
-    Platform.OS === 'web' && keyboardAware ? keyboardInset : 0;
+
+  const layout = useMobileWebStepLayout({
+    extraScrollPadding: scrollPaddingBottom,
+    inlinePrimary,
+  });
 
   const cta = customFooter ?? (
     <View style={styles.ctaBlock}>
@@ -108,7 +97,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       contentContainerStyle={[
         styles.scrollContent,
         isDesktop && styles.scrollContentDesktop,
-        { paddingBottom: 16 + bottomPad },
+        { paddingBottom: layout.scrollPaddingBottom },
         centerContent && styles.scrollContentCentered,
       ]}
       keyboardShouldPersistTaps="handled"
@@ -117,9 +106,11 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
     >
       <SignUpPulseTitle title={title} subtitle={subtitle} />
       {children}
-      {inlinePrimary ? cta : null}
+      {layout.showCtaInScroll ? cta : null}
     </ScrollView>
   );
+
+  const useNativeKeyboardAvoid = Platform.OS !== 'web';
 
   return (
     <SignUpPulseFormStepProvider
@@ -127,11 +118,11 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       primaryDisabled={primaryDisabled}
       primaryLoading={primaryLoading}
     >
-      <View style={styles.root}>
-        {keyboardAware && Platform.OS !== 'web' ? (
+      <View style={[styles.root, layout.rootStyle]}>
+        {useNativeKeyboardAvoid ? (
           <KeyboardAvoidingView
             style={styles.keyboardAvoid}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 72 : 0}
           >
             {scroll}
@@ -139,17 +130,16 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
         ) : (
           scroll
         )}
-        {!inlinePrimary ? (
+        {!layout.showCtaInScroll ? (
           <View
             style={[
               styles.footer,
               isDesktop && styles.footerDesktop,
               !isDesktop && styles.footerMobile,
+              layout.footerStyle,
               {
                 borderTopColor: theme.border,
                 backgroundColor: theme.bg,
-                paddingBottom:
-                  Math.max(insets.bottom, !isDesktop ? 4 : 8) + footerKeyboardPad,
               },
             ]}
           >

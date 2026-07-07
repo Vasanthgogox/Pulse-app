@@ -1,10 +1,7 @@
 import { memo, type ReactNode } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
-import {
-  effectiveKeyboardInset,
-  useKeyboardVisible,
-} from '@/lib/hooks/useKeyboardVisible';
+import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
 import { OperationalButton } from '@/components/operational';
 import { OnboardingFullPageFooter } from './OnboardingFullPageFooter';
 import { OnboardingFullPageTitle } from './OnboardingFullPageTitle';
@@ -40,15 +37,16 @@ export const OnboardingFullPageFormStep = memo(function OnboardingFullPageFormSt
   footerAccessory,
   secondaryAction,
 }: OnboardingFullPageFormStepProps) {
-  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
-  const keyboardInset = effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280);
-  const footerKeyboardPad = Platform.OS === 'web' ? keyboardInset : 0;
+  const layout = useMobileWebStepLayout();
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, layout.rootStyle]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: space[4] + keyboardInset }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: layout.scrollPaddingBottom },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
@@ -57,25 +55,25 @@ export const OnboardingFullPageFormStep = memo(function OnboardingFullPageFormSt
         {children}
       </ScrollView>
 
-      <View style={{ paddingBottom: footerKeyboardPad }}>
+      <View style={layout.footerStyle}>
         <OnboardingFullPageFooter accessory={footerAccessory}>
-        <OperationalButton
-          intent="bottomSticky"
-          label={primaryLabel}
-          onPress={onPrimary}
-          disabled={primaryDisabled}
-          loading={primaryLoading}
-          fullWidth
-        />
-        {secondaryAction ? (
           <OperationalButton
-            intent="utility"
-            label={secondaryAction.label}
-            onPress={secondaryAction.onPress}
+            intent="bottomSticky"
+            label={primaryLabel}
+            onPress={onPrimary}
+            disabled={primaryDisabled}
+            loading={primaryLoading}
             fullWidth
           />
-        ) : null}
-      </OnboardingFullPageFooter>
+          {secondaryAction ? (
+            <OperationalButton
+              intent="utility"
+              label={secondaryAction.label}
+              onPress={secondaryAction.onPress}
+              fullWidth
+            />
+          ) : null}
+        </OnboardingFullPageFooter>
       </View>
     </View>
   );
