@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -11,8 +12,8 @@ import {
 import {
   PULSE_PILL_BUTTON_BORDER_WIDTH,
   PULSE_PILL_BUTTON_RADIUS,
+  pulsePillButtonContainerDefault,
   pulsePillButtonContainerFullWidth,
-  pulsePillButtonContainerLarge,
   pulsePillButtonDisabled,
   pulsePillButtonLabelLarge,
   pulsePillButtonPressed,
@@ -50,7 +51,7 @@ export const SignUpPulsePrimaryButton = memo(function SignUpPulsePrimaryButton({
       disabled={inactive}
       style={({ pressed }) => [
         styles.btn,
-        pulsePillButtonContainerLarge,
+        pulsePillButtonContainerDefault,
         pulsePillButtonContainerFullWidth,
         inactive
           ? { backgroundColor: theme.disabledBg, borderColor: theme.disabledText }
@@ -93,6 +94,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: PULSE_PILL_BUTTON_RADIUS,
     borderWidth: PULSE_PILL_BUTTON_BORDER_WIDTH,
-    minHeight: 52,
+    minHeight: 40,
+    maxWidth: '100%',
+    ...Platform.select({
+      web: { boxSizing: 'border-box' } as object,
+    }),
   },
 });

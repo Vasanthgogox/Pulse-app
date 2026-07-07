@@ -38,15 +38,19 @@ export const pulsePillButtonContainerDefault: ViewStyle = {
 
 export const pulsePillButtonContainerLarge: ViewStyle = {
   ...pulsePillButtonContainer,
-  gap: 8,
-  minHeight: 44,
-  paddingVertical: 12,
-  paddingHorizontal: 20,
+  gap: 7,
+  minHeight: 40,
+  paddingVertical: 10,
+  paddingHorizontal: 18,
 };
 
 export const pulsePillButtonContainerFullWidth: ViewStyle = {
-  alignSelf: "stretch",
-  width: "100%",
+  alignSelf: 'stretch',
+  maxWidth: '100%',
+  ...Platform.select({
+    web: { boxSizing: 'border-box', width: '100%' } as object,
+    default: { width: '100%' },
+  }),
 };
 
 export const pulsePillButtonContainerIconOnly: ViewStyle = {
@@ -78,8 +82,8 @@ export const pulsePillButtonLabelDefault: TextStyle = {
 
 export const pulsePillButtonLabelLarge: TextStyle = {
   ...pulsePillButtonLabelBase,
-  fontSize: 13,
-  letterSpacing: 0.3,
+  fontSize: 12,
+  letterSpacing: 0.25,
 };
 
 export const pulsePillButtonPressed: ViewStyle = {

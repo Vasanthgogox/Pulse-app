@@ -34,8 +34,8 @@ export function PhoneStep({ flow }: { flow: SignUpFlow }) {
       displayPrefix="+91"
       emptyPlaceholder="000 000 0000"
       onPrimary={flow.continuePhone}
-      primaryDisabled={!flow.phoneValid || !!flow.phoneExistsCheck?.loading}
-      primaryLoading={flow.loading || !!flow.phoneExistsCheck?.loading}
+      primaryDisabled={!flow.phoneValid || flow.loading}
+      primaryLoading={flow.loading}
       primaryLabel="Send OTP"
       errorMessage={flow.phoneInlineError}
       hintMessage={hint}

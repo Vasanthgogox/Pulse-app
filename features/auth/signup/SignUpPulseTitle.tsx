@@ -21,15 +21,16 @@ export const SignUpPulseTitle = memo(function SignUpPulseTitle({
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
   const text = createPulseSignUpTextStyles(PULSE_SIGNUP);
+  const compactType = compact || !isDesktop;
 
   return (
-    <View style={[styles.wrap, centered && styles.centered, compact && styles.wrapCompact]}>
+    <View style={[styles.wrap, centered && styles.centered, compactType && styles.wrapCompact]}>
       <Text
         style={[
           text.title,
           isDesktop && text.titleDesktop,
-          compact && text.titleCompact,
-          !centered && styles.titleLeft,
+          compactType && text.titleCompact,
+          centered ? styles.titleCenter : styles.titleLeft,
         ]}
       >
         {title}
@@ -40,14 +41,16 @@ export const SignUpPulseTitle = memo(function SignUpPulseTitle({
             style={[
               text.subtitle,
               isDesktop && text.subtitleDesktop,
-              compact && text.subtitleCompact,
-              !centered && styles.subtitleLeft,
+              compactType && text.subtitleCompact,
+              centered ? styles.subtitleCenter : styles.subtitleLeft,
             ]}
           >
             {subtitle}
           </Text>
         ) : (
-          subtitle
+          <View style={centered ? styles.subtitleSlotCenter : styles.subtitleSlotLeft}>
+            {subtitle}
+          </View>
         )
       ) : null}
     </View>
@@ -56,10 +59,10 @@ export const SignUpPulseTitle = memo(function SignUpPulseTitle({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: Platform.OS === 'web' ? 14 : 20,
+    marginBottom: Platform.OS === 'web' ? 8 : 10,
   },
   wrapCompact: {
-    marginBottom: Platform.OS === 'web' ? 12 : 16,
+    marginBottom: Platform.OS === 'web' ? 6 : 8,
   },
   centered: {
     alignItems: 'center',
@@ -68,9 +71,28 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     alignSelf: 'stretch',
   },
+  titleCenter: {
+    textAlign: 'center',
+    alignSelf: 'center',
+  },
   subtitleLeft: {
     textAlign: 'left',
     alignSelf: 'stretch',
     maxWidth: undefined,
+  },
+  subtitleCenter: {
+    textAlign: 'center',
+    alignSelf: 'center',
+    maxWidth: 320,
+  },
+  subtitleSlotLeft: {
+    alignSelf: 'stretch',
+    width: '100%',
+  },
+  subtitleSlotCenter: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'center',
   },
 });

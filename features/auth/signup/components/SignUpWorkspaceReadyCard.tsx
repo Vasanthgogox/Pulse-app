@@ -695,14 +695,14 @@ function createStyles(theme: SignUpTheme, entityPillBorderColor: string) {
       paddingRight: 8,
     },
     timelineLabel: {
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: '800',
-      lineHeight: 20,
+      lineHeight: 18,
     },
     timelineDetail: {
-      marginTop: 4,
-      fontSize: 12,
-      lineHeight: 17,
+      marginTop: 3,
+      fontSize: 11,
+      lineHeight: 15,
       fontWeight: '500',
     },
     timelineStatus: {

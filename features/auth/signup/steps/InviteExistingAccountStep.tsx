@@ -1,10 +1,11 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Theme from "@/constants/Theme";
+import { SIGNUP_TEXT } from "@/features/auth/signup/signUpTypography";
 import type { SignUpFlow } from "@/features/auth/signup/hooks/useBusinessSignUpFlow";
 import { SignUpPulseField } from "@/features/auth/signup/SignUpPulseField";
 import { SignUpPulseFormStep } from "@/features/auth/signup/SignUpPulseFormStep";
-import { SIGNUP_ACCOUNT_SCROLL_PAD } from "@/features/auth/signup/signUpConstants";
+import { SIGNUP_ACCOUNT_MOBILE_SCROLL_PAD, SIGNUP_ACCOUNT_SCROLL_PAD } from "@/features/auth/signup/signUpConstants";
 import { Eye, EyeOff } from "lucide-react-native";
 
 export function InviteExistingAccountStep({ flow }: { flow: SignUpFlow }) {
@@ -26,10 +27,12 @@ export function InviteExistingAccountStep({ flow }: { flow: SignUpFlow }) {
       onPrimary={flow.signInToAcceptInvitation}
       primaryDisabled={!canSignIn}
       primaryLoading={flow.loading}
-      inlinePrimary
+      inlinePrimary={flow.isDesktop}
       keyboardAware
       scrollRef={flow.accountScrollRef}
-      scrollPaddingBottom={SIGNUP_ACCOUNT_SCROLL_PAD}
+      scrollPaddingBottom={
+        flow.isDesktop ? SIGNUP_ACCOUNT_SCROLL_PAD : SIGNUP_ACCOUNT_MOBILE_SCROLL_PAD
+      }
       footerAccessory={
         <>
           <Pressable onPress={flow.useAlternateEmailForInvite} style={styles.secondary}>
@@ -125,16 +128,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   warnTitle: {
-    fontSize: 11,
-    fontWeight: "800",
+    ...SIGNUP_TEXT.fieldLabel,
     color: Theme.warning,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+    fontWeight: '800',
   },
   warnBody: {
-    fontSize: 12,
+    ...SIGNUP_TEXT.caption,
     color: Theme.textSecondary,
-    lineHeight: 17,
+    lineHeight: 15,
   },
   row: {
     flexDirection: "row",
@@ -142,13 +143,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   label: {
-    fontSize: 12,
-    color: Theme.textMuted,
+    ...SIGNUP_TEXT.caption,
     flex: 1,
   },
   value: {
-    fontSize: 12,
-    fontWeight: "600",
+    ...SIGNUP_TEXT.captionMedium,
     color: Theme.textPrimaryDark,
     flex: 1.2,
     textAlign: "right",
@@ -163,10 +162,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   secondaryText: {
-    fontSize: 14,
-    fontWeight: "600",
+    ...SIGNUP_TEXT.link,
     color: Theme.textPrimaryDark,
   },
-  link: { marginTop: 16, alignItems: "center" },
-  linkText: { fontSize: 13, fontWeight: "600", color: Theme.primary },
+  link: { marginTop: 14, alignItems: "center" },
+  linkText: { ...SIGNUP_TEXT.link },
 });

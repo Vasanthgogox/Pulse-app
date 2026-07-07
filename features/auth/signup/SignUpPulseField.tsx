@@ -5,6 +5,8 @@ import {
   Text,
   TextInput,
   View,
+  type NativeSyntheticEvent,
+  type TextInputFocusEventData,
   type TextInputProps,
 } from 'react-native';
 
@@ -12,6 +14,10 @@ import { signUpPasswordInputProps, type SignUpPasswordFieldRole } from '@/lib/si
 import { scrollFocusedWebInputIntoView } from '@/lib/webKeyboard';
 
 import { useSignUpPulseFormStepContext } from './SignUpPulseFormStepContext';
+import {
+  SIGNUP_CONFIRM_PASSWORD_SCROLL_PAD,
+  SIGNUP_PASSWORD_SCROLL_PAD,
+} from './signUpConstants';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles, SIGNUP_ERROR_COLOR } from './signUpTypography';
 
@@ -26,6 +32,8 @@ export interface SignUpPulseFieldProps extends TextInputProps {
   passwordField?: SignUpPasswordFieldRole;
   /** Tighter vertical spacing (Account step with keyboard). */
   dense?: boolean;
+  /** Sentence-case labels with extra vertical rhythm (sign-in). */
+  comfortable?: boolean;
 }
 
 export const SignUpPulseField = memo(function SignUpPulseField({
@@ -37,6 +45,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   theme = PULSE_SIGNUP,
   passwordField,
   dense = false,
+  comfortable = false,
   style,
   onSubmitEditing,
   returnKeyType,
@@ -46,7 +55,10 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   ...inputProps
 }: SignUpPulseFieldProps) {
   const hasError = !!errorMessage;
-  const fieldStyles = useMemo(() => createFieldStyles(theme, dense), [theme, dense]);
+  const fieldStyles = useMemo(
+    () => createFieldStyles(theme, dense, comfortable),
+    [theme, dense, comfortable],
+  );
   const passwordAutofillProps = passwordField
     ? signUpPasswordInputProps(passwordField)
     : {};
@@ -55,8 +67,10 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   const unregisterField = formStep?.unregisterField;
   const isLastSingleLineFieldFn = formStep?.isLastSingleLineField;
   const handleFieldSubmitFn = formStep?.handleFieldSubmit;
+  const scrollFieldIntoView = formStep?.scrollFieldIntoView;
   const fieldRevision = formStep?.revision ?? 0;
   const inputRef = useRef<TextInput>(null);
+  const wrapRef = useRef<View>(null);
   const fieldIdRef = useRef<number | null>(null);
 
   useLayoutEffect(() => {
@@ -91,15 +105,26 @@ export const SignUpPulseField = memo(function SignUpPulseField({
     }
   };
 
-  const handleFocus: TextInputProps['onFocus'] = (event) => {
+  const handleFocus = (event: NativeSyntheticEvent<TextInputFocusEventData>) => {
     onFocus?.(event);
-    if (Platform.OS === 'web') {
+    if (scrollFieldIntoView) {
+      const extraBottomPad =
+        passwordField === 'confirm'
+          ? SIGNUP_CONFIRM_PASSWORD_SCROLL_PAD
+          : passwordField === 'new'
+            ? SIGNUP_PASSWORD_SCROLL_PAD
+            : undefined;
+      scrollFieldIntoView(
+        wrapRef,
+        extraBottomPad != null ? { extraBottomPad } : undefined,
+      );
+    } else if (Platform.OS === 'web') {
       scrollFocusedWebInputIntoView();
     }
   };
 
   return (
-    <View style={fieldStyles.wrap}>
+    <View ref={wrapRef} style={fieldStyles.wrap} collapsable={false}>
       <Text style={fieldStyles.label}>
         {label}
         {required ? <Text style={fieldStyles.req}> *</Text> : null}
@@ -139,14 +164,22 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   );
 });
 
-function createFieldStyles(theme: SignUpTheme, dense: boolean) {
+function createFieldStyles(theme: SignUpTheme, dense: boolean, comfortable: boolean) {
   const text = createPulseSignUpTextStyles(theme);
 
   return StyleSheet.create({
     wrap: {
-      marginBottom: dense ? 10 : 16,
+      marginBottom: comfortable ? 16 : dense ? 8 : 14,
     },
-    label: text.fieldLabel,
+    label: comfortable
+      ? {
+          fontSize: 13,
+          lineHeight: 18,
+          fontWeight: '500',
+          color: theme.text,
+          marginBottom: 6,
+        }
+      : text.fieldLabel,
     req: {
       color: SIGNUP_ERROR_COLOR,
     },
@@ -158,10 +191,13 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean) {
       flexDirection: 'row',
       alignItems: 'center',
       position: 'relative',
-      // iOS Safari (mobile web): overflow:hidden on a container of <input> can
-      // silently block the virtual keyboard. Use visible on web; border-radius
-      // still renders correctly without needing to clip child backgrounds here.
-      overflow: Platform.OS === 'web' ? 'visible' : 'hidden',
+      width: '100%',
+      maxWidth: '100%',
+      alignSelf: 'stretch',
+      ...Platform.select({
+        web: { boxSizing: 'border-box', overflow: 'visible' } as object,
+        default: { overflow: 'hidden' as const },
+      }),
     },
     inputShellMultiline: {
       alignItems: 'flex-start',
@@ -172,10 +208,10 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean) {
     },
     input: {
       flex: 1,
-      paddingHorizontal: 16,
-      paddingVertical: Platform.OS === 'web' ? 12 : 14,
+      paddingHorizontal: 12,
+      paddingVertical: Platform.OS === 'web' ? 9 : 10,
       ...text.input,
-      minHeight: Platform.OS === 'web' ? 48 : 52,
+      minHeight: Platform.OS === 'web' ? 40 : 44,
       ...Platform.select({
         web: { outlineStyle: 'none', cursor: 'text' } as object,
       }),

@@ -1,14 +1,23 @@
+import {
+  PULSE_PILL_BUTTON_BORDER_WIDTH,
+  PULSE_PILL_BUTTON_RADIUS,
+  pulsePillButtonLabelDefault,
+} from '@/constants/PulsePillButtonChrome';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { GoogleBrandIcon } from '@/features/auth/components/GoogleBrandIcon';
+import { SignInBrandPanel } from '@/features/auth/components/SignInBrandPanel';
 import { SignUpPulseField } from '@/features/auth/signup/SignUpPulseField';
-import { SignUpPulsePrimaryButton } from '@/features/auth/signup/SignUpPulsePrimaryButton';
-import { SignUpPulseTitle } from '@/features/auth/signup/SignUpPulseTitle';
-import { DRIVER_SIGNUP } from '@/features/auth/signup/signUpDriverTheme';
-import { PULSE_SIGNUP_RADIUS } from '@/features/auth/signup/signUpPulseTheme';
+import {
+  DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
+  DESKTOP_SIGNUP_SPLIT_PAD,
+} from '@/features/auth/signup/signUpConstants';
+import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS } from '@/features/auth/signup/signUpPulseTheme';
 import { signUpMobileContentInner } from '@/features/auth/signup/signUpMobile.styles';
+import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO } from '@/features/auth/signup/signUpTypography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
+import { SIGN_IN_BRAND, SIGN_IN_COPY } from '@/lib/auth/signInContent';
 import { validateEmailRequired } from '@/lib/emailValidation';
 import { getKeepSignedIn, setKeepSignedIn } from '@/lib/keepSignedInPreference';
 import { ROUTES } from '@/lib/routes';
@@ -16,16 +25,18 @@ import { containsNullByte, validatePasswordForSignIn } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -77,6 +88,8 @@ export default function SignIn() {
   const [waitingForAuthState, setWaitingForAuthState] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
   const [passwordResetBanner, setPasswordResetBanner] = useState(false);
+  const formFade = useRef(new Animated.Value(0)).current;
+  const formSlide = useRef(new Animated.Value(10)).current;
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const updatePointerMode = () => {
@@ -102,6 +115,23 @@ export default function SignIn() {
 
   // Keep mobile browsers in stacked mode even when they report wider CSS widths.
   const isDesktop = Platform.OS === 'web' ? webViewportWidth >= 1024 && webHasFinePointer : false;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(formFade, {
+        toValue: 1,
+        duration: 420,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(formSlide, {
+        toValue: 0,
+        duration: 420,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [formFade, formSlide]);
 
   useEffect(() => {
     let mounted = true;
@@ -205,85 +235,63 @@ export default function SignIn() {
   const formDisabled = loading || waitingForAuthState || !isOnline;
 
   const renderSignInForm = () => (
-  <>
-    <SignUpPulseTitle
-      title="Sign in"
-      subtitle="Access your Pulse account dashboard."
-      centered={isDesktop}
-      compact
-    />
-
-    <SignUpPulseField
-      label="Email Address"
-      theme={DRIVER_SIGNUP}
-      value={email}
-      onChangeText={(t) => {
-        setSignInError(null);
-        setPasswordResetBanner(false);
-        setEmail(t);
-      }}
-      placeholder="you@example.com"
-      autoCapitalize="none"
-      autoCorrect={false}
-      keyboardType="email-address"
-      textContentType="username"
-      autoComplete="email"
-      maxLength={255}
-      editable={!formDisabled}
-    />
-
-    <SignUpPulseField
-      label="Password"
-      theme={DRIVER_SIGNUP}
-      value={password}
-      onChangeText={(t) => {
-        setSignInError(null);
-        setPassword(t);
-      }}
-      placeholder="Your password"
-      secureTextEntry={!showPass}
-      autoCapitalize="none"
-      autoCorrect={false}
-      textContentType="password"
-      autoComplete="password"
-      maxLength={128}
-      editable={!formDisabled}
-      trailing={
-        <Pressable onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
-          {showPass ? (
-            <EyeOff size={18} color={DRIVER_SIGNUP.muted} />
-          ) : (
-            <Eye size={18} color={DRIVER_SIGNUP.muted} />
-          )}
-        </Pressable>
-      }
-    />
-
-    {passwordResetBanner ? (
-      <Text style={styles.successBanner}>Password updated. Sign in with your new password.</Text>
-    ) : null}
-    {signInError || restoreError ? (
-      <Text style={styles.errorText}>
-        {signInError ?? restoreError?.message ?? 'Could not restore your session. Sign in again.'}
+  <View style={styles.formUnit}>
+    <View style={[styles.formHeader, isDesktop && styles.formHeaderDesktop]}>
+      <Text style={[styles.formTitle, isDesktop && styles.formTitleDesktop]}>
+        {SIGN_IN_COPY.formTitle}
       </Text>
-    ) : null}
+      <Text style={styles.formSubtitle}>{SIGN_IN_COPY.formSubtitle}</Text>
+    </View>
 
-    <View style={styles.rowBetween}>
-      <Pressable
-        style={styles.keepRow}
-        onPress={() => {
-          const next = !keepSignedIn;
-          setKeepSignedInState(next);
-          void setKeepSignedIn(next);
+    <View style={styles.formFields}>
+      <SignUpPulseField
+        label="Email"
+        theme={PULSE_SIGNUP}
+        comfortable={!isDesktop}
+        value={email}
+        onChangeText={(t) => {
+          setSignInError(null);
+          setPasswordResetBanner(false);
+          setEmail(t);
         }}
-      >
-        <FontAwesome
-          name={keepSignedIn ? 'check-square' : 'square-o'}
-          size={16}
-          color={keepSignedIn ? DRIVER_SIGNUP.primary : DRIVER_SIGNUP.muted}
-        />
-        <Text style={styles.keepText}>Remember me</Text>
-      </Pressable>
+        placeholder="you@example.com"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        textContentType="username"
+        autoComplete="email"
+        maxLength={255}
+        editable={!formDisabled}
+      />
+
+      <SignUpPulseField
+        label="Password"
+        theme={PULSE_SIGNUP}
+        comfortable={!isDesktop}
+        value={password}
+        onChangeText={(t) => {
+          setSignInError(null);
+          setPassword(t);
+        }}
+        placeholder="Your password"
+        secureTextEntry={!showPass}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="password"
+        autoComplete="password"
+        maxLength={128}
+        editable={!formDisabled}
+        trailing={
+          <Pressable onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
+            {showPass ? (
+              <EyeOff size={18} color={PULSE_SIGNUP.muted} />
+            ) : (
+              <Eye size={18} color={PULSE_SIGNUP.muted} />
+            )}
+          </Pressable>
+        }
+      />
+
       <Pressable
         onPress={() =>
           router.push(
@@ -291,80 +299,104 @@ export default function SignIn() {
           )
         }
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        style={styles.forgotRow}
       >
-        <Text style={styles.forgotText}>Forgot password?</Text>
+        <Text style={styles.forgotText}>{SIGN_IN_COPY.forgotPassword}</Text>
       </Pressable>
+
+      {passwordResetBanner ? (
+        <Text style={styles.successBanner}>Password updated. Sign in with your new password.</Text>
+      ) : null}
+      {signInError || restoreError ? (
+        <Text style={styles.errorText}>
+          {signInError ?? restoreError?.message ?? 'Could not restore your session. Sign in again.'}
+        </Text>
+      ) : null}
     </View>
 
-    <SignUpPulsePrimaryButton
-      testID="signin-submit-btn"
-      label="Enter dashboard"
-      onPress={handleSignIn}
-      disabled={formDisabled}
-      loading={loading || waitingForAuthState}
-      theme={DRIVER_SIGNUP}
-      style={styles.primaryBtn}
-    />
+    <View style={styles.formActions}>
+      <Pressable
+        testID="signin-submit-btn"
+        onPress={handleSignIn}
+        disabled={formDisabled}
+        style={({ pressed }) => [
+          styles.signInBtn,
+          formDisabled && styles.signInBtnDisabled,
+          pressed && !formDisabled && styles.signInBtnPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={SIGN_IN_COPY.primaryCta}
+        accessibilityState={{ disabled: formDisabled, busy: loading || waitingForAuthState }}
+      >
+        {loading || waitingForAuthState ? (
+          <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
+        ) : (
+          <Text style={styles.signInBtnText}>{SIGN_IN_COPY.primaryCta}</Text>
+        )}
+      </Pressable>
 
-    <View style={styles.orRow}>
-      <View style={styles.orLine} />
-      <Text style={styles.orText}>or</Text>
-      <View style={styles.orLine} />
+      <View style={styles.sectionDivider} />
+
+      <Pressable
+        onPress={handleGoogleSignIn}
+        disabled={googleLoading || formDisabled}
+        style={({ pressed }) => [
+          styles.googleBtn,
+          (googleLoading || formDisabled) && styles.googleBtnDisabled,
+          pressed && !googleLoading && !formDisabled && styles.googleBtnPressed,
+        ]}
+      >
+        {googleLoading ? (
+          <Text style={styles.googleBtnText}>Signing in…</Text>
+        ) : (
+          <>
+            <GoogleBrandIcon size={16} />
+            <Text style={styles.googleBtnText}>{SIGN_IN_COPY.googleCta}</Text>
+          </>
+        )}
+      </Pressable>
+
+      <View style={styles.sectionDivider} />
+
+      <View style={styles.signUpRow}>
+        <Text style={styles.signUpMuted}>{SIGN_IN_COPY.footerPrompt} </Text>
+        <Pressable
+          onPress={() => {
+            const returnTo = typeof params.returnTo === 'string' ? params.returnTo : null;
+            const dest = returnTo ? `${ROUTES.ONBOARDING.HUB}?returnTo=${returnTo}` : ROUTES.ONBOARDING.HUB;
+            router.push(dest as '/');
+          }}
+        >
+          <Text style={styles.signUpLink}>{SIGN_IN_COPY.footerLink}</Text>
+        </Pressable>
+      </View>
     </View>
+  </View>
+  );
 
-    <Pressable
-      onPress={handleGoogleSignIn}
-      disabled={googleLoading || formDisabled}
-      style={({ pressed }) => [
-        styles.googleBtn,
-        (googleLoading || formDisabled) && styles.googleBtnDisabled,
-        pressed && !googleLoading && !formDisabled && styles.googleBtnPressed,
-      ]}
+  const renderAnimatedForm = () => (
+    <Animated.View
+      style={{
+        opacity: formFade,
+        transform: [{ translateY: formSlide }],
+        width: '100%',
+      }}
     >
-      {googleLoading ? (
-        <Text style={styles.googleBtnText}>Signing in…</Text>
-      ) : (
-        <>
-          <GoogleBrandIcon size={18} />
-          <Text style={styles.googleBtnText}>Continue with Google</Text>
-        </>
-      )}
-    </Pressable>
-
-    <View style={styles.signUpRow}>
-      <Text style={styles.signUpMuted}>New to Pulse? </Text>
-      <Pressable onPress={() => {
-        const returnTo = typeof params.returnTo === 'string' ? params.returnTo : null;
-        const dest = returnTo ? `${ROUTES.ONBOARDING.HUB}?returnTo=${returnTo}` : ROUTES.ONBOARDING.HUB;
-        router.push(dest as '/');
-      }}>
-        <Text style={styles.signUpLink}>Create account</Text>
-      </Pressable>
-    </View>
-  </>
+      {renderSignInForm()}
+    </Animated.View>
   );
 
   const renderSignIn = () => (
     <View style={[styles.panelShell, isDesktop && styles.panelShellDesktop]}>
       {isDesktop ? (
-        <View style={styles.leftPanel}>
-          <Text style={styles.leftLogo}>PULSE<Text style={styles.logoDot}>.</Text></Text>
-          <Text style={styles.leftTag}>System Access</Text>
-          <Text style={styles.leftTitle}>Welcome back.</Text>
-          <Text style={styles.leftSubtitle}>
-            Your fleet is waiting. Log in to synchronize your logs and check earnings.
-          </Text>
-        </View>
+        <>
+          <SignInBrandPanel />
+          <View style={styles.panelDivider} />
+        </>
       ) : null}
       <View style={[styles.rightPanel, isDesktop && styles.rightPanelDesktop]}>
         {isDesktop ? (
-          <>
-            <View style={styles.rightPanelOrbA} />
-            <View style={styles.rightPanelOrbB} />
-          </>
-        ) : null}
-        {isDesktop ? (
-          <View style={styles.formColumn}>{renderSignInForm()}</View>
+          <View style={styles.formColumn}>{renderAnimatedForm()}</View>
         ) : (
           <ScrollView
             style={styles.scroll}
@@ -372,7 +404,7 @@ export default function SignIn() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {renderSignInForm()}
+            {renderAnimatedForm()}
           </ScrollView>
         )}
       </View>
@@ -401,21 +433,23 @@ export default function SignIn() {
         onPress={() => router.replace(ROUTES.ONBOARDING.HUB)}
         style={[styles.backFloating, { bottom: insets.bottom + 12 }]}
       >
-        <FontAwesome name="chevron-left" size={14} color={DRIVER_SIGNUP.muted} />
+        <FontAwesome name="chevron-left" size={14} color={PULSE_SIGNUP.muted} />
         <Text style={styles.backFloatingText}>Back</Text>
       </Pressable>
     </KeyboardAvoidingView>
   );
 }
 
+const pulseText = createPulseSignUpTextStyles(PULSE_SIGNUP);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: DRIVER_SIGNUP.bg,
+    backgroundColor: PULSE_SIGNUP.bg,
     paddingHorizontal: Layout.screenPaddingHorizontal,
   },
   containerDesktop: {
-    backgroundColor: '#020617',
+    backgroundColor: Theme.screenBackground,
     paddingHorizontal: 0,
   },
   offlineBanner: {
@@ -437,61 +471,35 @@ const styles = StyleSheet.create({
   panelShell: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: DRIVER_SIGNUP.bg,
+    backgroundColor: PULSE_SIGNUP.bg,
   },
   panelShellDesktop: {
-    backgroundColor: '#020617',
+    backgroundColor: Theme.screenBackground,
   },
-  leftPanel: {
-    flex: 1,
-    backgroundColor: '#000000',
-    paddingHorizontal: 52,
-    paddingVertical: 48,
-    justifyContent: 'center',
-  },
-  leftLogo: {
-    fontSize: 36,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: -1,
-    color: Theme.textOnDark,
-    marginBottom: 12,
-  },
-  leftTag: {
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    fontWeight: '700',
-    color: 'rgba(148,163,184,0.75)',
-    marginBottom: 14,
-  },
-  leftTitle: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: Theme.textOnDark,
-    letterSpacing: -0.6,
-    marginBottom: 10,
-  },
-  leftSubtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: 'rgba(148,163,184,0.75)',
-    maxWidth: 420,
+  panelDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(77, 54, 54, 0.1)',
+    alignSelf: 'stretch',
+    flexShrink: 0,
   },
   rightPanel: {
     flex: 1,
-    backgroundColor: DRIVER_SIGNUP.bg,
+    backgroundColor: PULSE_SIGNUP.bg,
   },
   rightPanelDesktop: {
-    paddingHorizontal: 48,
-    paddingVertical: 48,
-    backgroundColor: '#ffffff',
-    overflow: 'hidden',
+    flex: 1,
+    minWidth: 0,
+    maxWidth: '50%',
+    paddingHorizontal: DESKTOP_SIGNUP_SPLIT_PAD,
+    paddingVertical: 36,
+    backgroundColor: Theme.screenBackground,
     justifyContent: 'center',
+    alignItems: 'stretch',
   },
   formColumn: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
+    minWidth: 0,
     alignSelf: 'center',
   },
   scroll: {
@@ -500,113 +508,137 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingVertical: 24,
+    paddingVertical: 20,
     ...signUpMobileContentInner,
   },
-  rightPanelOrbA: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    top: -70,
-    right: -50,
-    backgroundColor: 'rgba(16,185,129,0.12)',
+  formUnit: {
+    width: '100%',
+    maxWidth: DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
+    alignSelf: 'center',
   },
-  rightPanelOrbB: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    bottom: -90,
-    left: -70,
-    backgroundColor: 'rgba(15,23,42,0.06)',
+  formHeader: {
+    marginBottom: 20,
+  },
+  formHeaderDesktop: {
+    marginBottom: 14,
+  },
+  formTitle: {
+    ...PULSE_SIGNUP_TYPO.title,
+    color: SIGN_IN_BRAND.ink,
+  },
+  formTitleDesktop: {
+    ...PULSE_SIGNUP_TYPO.titleDesktop,
+    color: SIGN_IN_BRAND.ink,
+  },
+  formSubtitle: {
+    ...PULSE_SIGNUP_TYPO.subtitle,
+    color: PULSE_SIGNUP.muted,
+    marginTop: 4,
+  },
+  formFields: {
+    width: '100%',
+  },
+  formActions: {
+    width: '100%',
+    marginTop: 12,
   },
   eyeBtn: {
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   errorText: {
-    color: Theme.negative,
-    marginTop: -8,
+    ...pulseText.error,
+    marginTop: -4,
     marginBottom: 12,
-    fontSize: 12,
-    fontWeight: '600',
   },
   successBanner: {
+    ...pulseText.captionMedium,
     color: Theme.positive,
-    marginTop: -8,
-    marginBottom: 12,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
     marginTop: -4,
+    marginBottom: 12,
   },
-  keepRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  keepText: {
-    fontSize: 12,
-    color: DRIVER_SIGNUP.muted,
-    fontWeight: '600',
+  forgotRow: {
+    alignSelf: 'flex-end',
+    marginTop: -4,
+    marginBottom: 0,
   },
   forgotText: {
-    fontSize: 12,
-    color: DRIVER_SIGNUP.primary,
-    fontWeight: '700',
-  },
-  primaryBtn: {
-    marginTop: 0,
-    marginBottom: 4,
-  },
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 14,
-    gap: 12,
-  },
-  orLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: DRIVER_SIGNUP.border,
-  },
-  orText: {
-    fontSize: 12,
+    ...pulseText.captionMedium,
+    color: SIGN_IN_BRAND.ink,
     fontWeight: '600',
-    color: DRIVER_SIGNUP.muted,
+  },
+  signInBtn: {
+    minHeight: 40,
+    borderRadius: PULSE_PILL_BUTTON_RADIUS,
+    borderWidth: PULSE_PILL_BUTTON_BORDER_WIDTH,
+    borderColor: Theme.buttonPrimaryBorder,
+    backgroundColor: Theme.buttonPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+    width: '100%',
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    ...(Platform.OS === 'web'
+      ? ({
+          boxSizing: 'border-box',
+          cursor: 'pointer',
+          transitionProperty: 'background-color, opacity',
+          transitionDuration: '160ms',
+        } as object)
+      : null),
+  },
+  signInBtnDisabled: {
+    opacity: 0.45,
+    ...(Platform.OS === 'web' ? ({ cursor: 'not-allowed' } as object) : null),
+  },
+  signInBtnPressed: {
+    backgroundColor: Theme.buttonPrimaryPressed,
+    ...(Platform.OS === 'web' ? ({ opacity: 0.92 } as object) : null),
+  },
+  signInBtnText: {
+    ...pulsePillButtonLabelDefault,
+    color: Theme.buttonPrimaryText,
+  },
+  sectionDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: PULSE_SIGNUP.border,
+    marginVertical: 14,
+    alignSelf: 'stretch',
   },
   googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    borderRadius: PULSE_SIGNUP_RADIUS.button,
+    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: '100%',
+    gap: 8,
+    minHeight: 40,
+    borderRadius: PULSE_PILL_BUTTON_RADIUS,
     borderWidth: 1,
-    borderColor: DRIVER_SIGNUP.border,
-    backgroundColor: DRIVER_SIGNUP.bg,
-    marginBottom: 4,
-    minHeight: 48,
+    borderColor: PULSE_SIGNUP.border,
+    backgroundColor: '#ffffff',
+    ...(Platform.OS === 'web'
+      ? ({
+          boxSizing: 'border-box',
+          transitionProperty: 'background-color, border-color',
+          transitionDuration: '160ms',
+          transitionTimingFunction: 'ease-out',
+        } as object)
+      : null),
   },
   googleBtnDisabled: {
     opacity: 0.5,
   },
   googleBtnPressed: {
-    backgroundColor: DRIVER_SIGNUP.surface,
+    backgroundColor: PULSE_SIGNUP.surface,
+    borderColor: PULSE_SIGNUP.borderFocus,
+    ...(Platform.OS === 'web' ? ({ transform: [{ scale: 0.99 }] } as object) : null),
   },
   googleBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: DRIVER_SIGNUP.text,
-  },
-  logoDot: {
-    color: Theme.driverPrimary,
+    ...pulseText.google,
+    color: PULSE_SIGNUP.text,
   },
   backFloating: {
     position: 'absolute',
@@ -617,26 +649,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 4,
   },
-  backFloatingText: {
-    color: DRIVER_SIGNUP.muted,
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  backFloatingText: pulseText.back,
   signUpRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    paddingBottom: 8,
+    marginTop: 0,
+    paddingBottom: 4,
   },
-  signUpMuted: {
-    fontSize: 13,
-    color: DRIVER_SIGNUP.muted,
-    fontWeight: '500',
-  },
+  signUpMuted: pulseText.linkSmall,
   signUpLink: {
-    fontSize: 13,
-    color: DRIVER_SIGNUP.primary,
-    fontWeight: '700',
+    ...pulseText.linkSmall,
+    color: SIGN_IN_BRAND.ink,
+    fontWeight: '600',
   },
 });

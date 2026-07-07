@@ -1,17 +1,20 @@
 import Theme from '@/constants/Theme';
 import { Platform, StyleSheet } from 'react-native';
 
+import { DRIVER_SIGNUP } from './signUpDriverTheme';
 import { SIGNUP_MOBILE_TOKENS as T } from './signUpMobileTokens';
+import { PULSE_SIGNUP_TYPO } from './signUpTypography';
 
+/** Driver mobile shell palette — aligned with DRIVER_SIGNUP theme tokens. */
 export const SIGNUP_MOBILE = {
-  accent: Theme.driverEmerald,
-  bg: '#ffffff',
-  text: '#0f172a',
-  muted: '#64748b',
-  border: '#e2e8f0',
-  placeholder: '#94a3b8',
-  surface: '#f8fafc',
-  keypadTray: '#f1f5f9',
+  accent: DRIVER_SIGNUP.primary,
+  bg: DRIVER_SIGNUP.bg,
+  text: DRIVER_SIGNUP.text,
+  muted: DRIVER_SIGNUP.muted,
+  border: DRIVER_SIGNUP.border,
+  placeholder: DRIVER_SIGNUP.placeholder,
+  surface: DRIVER_SIGNUP.surface,
+  keypadTray: DRIVER_SIGNUP.keypadTray,
 } as const;
 
 /** Centered column used in keypad + scroll steps. */
@@ -43,16 +46,12 @@ export const signUpMobileStyles = StyleSheet.create({
     paddingVertical: 4,
   },
   backBtnText: {
-    fontSize: T.backFontSize,
-    fontWeight: '600',
+    ...PULSE_SIGNUP_TYPO.back,
     color: SIGNUP_MOBILE.muted,
   },
   brandText: {
-    fontSize: T.brandSize,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: -0.5,
-    color: Theme.driverPrimary,
+    ...PULSE_SIGNUP_TYPO.brand,
+    color: DRIVER_SIGNUP.primaryDark,
   },
   topBarSpacer: {
     minWidth: 68,
@@ -96,7 +95,7 @@ export const signUpMobileStyles = StyleSheet.create({
     width: 6,
     height: 3,
     borderRadius: 2,
-    backgroundColor: '#e2e8f0',
+    backgroundColor: SIGNUP_MOBILE.border,
   },
   progressBarActive: {
     width: 22,
@@ -109,7 +108,7 @@ export const signUpMobileStyles = StyleSheet.create({
     opacity: 0.45,
   },
   progressLabel: {
-    fontSize: T.progressLabelSize,
+    ...PULSE_SIGNUP_TYPO.progressLabelMobile,
     fontWeight: '600',
     color: SIGNUP_MOBILE.muted,
     letterSpacing: 0.15,
@@ -117,49 +116,40 @@ export const signUpMobileStyles = StyleSheet.create({
   },
   progressLabelActive: {
     color: SIGNUP_MOBILE.accent,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   mobileTitle: {
-    fontSize: T.titleSize,
-    fontWeight: '700',
+    ...PULSE_SIGNUP_TYPO.title,
     color: SIGNUP_MOBILE.text,
     textAlign: 'center',
-    letterSpacing: -0.3,
-    lineHeight: T.titleLineHeight,
     marginBottom: 6,
   },
   mobileSubtitle: {
-    fontSize: T.subtitleSize,
+    ...PULSE_SIGNUP_TYPO.subtitle,
     color: SIGNUP_MOBILE.muted,
     textAlign: 'center',
-    lineHeight: T.subtitleLineHeight,
     maxWidth: 300,
+    alignSelf: 'center',
   },
   heroBlock: {
     alignItems: 'center',
     paddingBottom: T.heroPadBottom,
   },
   stepTitle: {
-    fontSize: T.titleSize,
-    fontWeight: '700',
+    ...PULSE_SIGNUP_TYPO.title,
     color: SIGNUP_MOBILE.text,
-    letterSpacing: -0.3,
-    lineHeight: T.titleLineHeight,
     marginBottom: 6,
   },
   stepSub: {
-    fontSize: T.subtitleSize,
+    ...PULSE_SIGNUP_TYPO.subtitle,
     color: SIGNUP_MOBILE.muted,
-    lineHeight: T.subtitleLineHeight,
-    marginBottom: 18,
+    marginBottom: 16,
   },
   fieldLabel: {
-    fontSize: T.fieldLabelSize,
-    fontWeight: '700',
+    ...PULSE_SIGNUP_TYPO.label,
     color: SIGNUP_MOBILE.muted,
-    marginBottom: 6,
-    letterSpacing: T.fieldLabelSpacing,
-    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingLeft: 2,
   },
   displayRow: {
     flexDirection: 'row',
@@ -170,7 +160,7 @@ export const signUpMobileStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: T.displayMinHeight,
-    backgroundColor: SIGNUP_MOBILE.surface,
+    backgroundColor: SIGNUP_MOBILE.bg,
   },
   displayRowError: {
     borderColor: Theme.destructive,
@@ -181,22 +171,18 @@ export const signUpMobileStyles = StyleSheet.create({
     marginRight: 6,
   },
   dialCode: {
-    fontSize: T.dialCodeSize,
-    fontWeight: '700',
-    color: SIGNUP_MOBILE.text,
+    ...PULSE_SIGNUP_TYPO.displayPrefix,
+    color: SIGNUP_MOBILE.muted,
     marginRight: 6,
   },
   displayValue: {
     flex: 1,
-    fontSize: T.displayFontSize,
-    fontWeight: '600',
-    color: SIGNUP_MOBILE.text,
-    letterSpacing: 0.8,
+    ...PULSE_SIGNUP_TYPO.display,
     minWidth: 0,
   },
   displayPlaceholder: {
     color: SIGNUP_MOBILE.placeholder,
-    fontWeight: '500',
+    fontWeight: '400',
   },
   input: {
     borderWidth: 1,
@@ -204,10 +190,8 @@ export const signUpMobileStyles = StyleSheet.create({
     borderRadius: T.inputRadius,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'web' ? 11 : 12,
-    fontSize: T.inputFontSize,
-    fontWeight: '500',
-    color: SIGNUP_MOBILE.text,
-    backgroundColor: SIGNUP_MOBILE.surface,
+    ...PULSE_SIGNUP_TYPO.input,
+    backgroundColor: SIGNUP_MOBILE.bg,
     minHeight: T.inputMinHeight,
     ...Platform.select({
       web: { outlineStyle: 'none' } as object,
@@ -220,18 +204,19 @@ export const signUpMobileStyles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: SIGNUP_MOBILE.accent,
     borderRadius: T.btnRadius,
-    paddingVertical: T.btnPaddingV,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 44,
+    marginTop: 8,
   },
   primaryBtnDisabled: {
     opacity: 0.5,
   },
   primaryBtnText: {
-    fontSize: T.btnFontSize,
-    fontWeight: '600',
+    ...PULSE_SIGNUP_TYPO.link,
     color: Theme.buttonPrimaryText,
+    fontWeight: '600',
   },
   orRow: {
     flexDirection: 'row',
@@ -245,9 +230,8 @@ export const signUpMobileStyles = StyleSheet.create({
     backgroundColor: SIGNUP_MOBILE.border,
   },
   orText: {
-    fontSize: 12,
+    ...PULSE_SIGNUP_TYPO.or,
     color: SIGNUP_MOBILE.muted,
-    fontWeight: '500',
   },
   googleBtn: {
     borderRadius: T.btnRadius,
@@ -262,8 +246,7 @@ export const signUpMobileStyles = StyleSheet.create({
     minHeight: 44,
   },
   googleBtnText: {
-    fontSize: T.btnFontSize,
-    fontWeight: '600',
+    ...PULSE_SIGNUP_TYPO.google,
     color: SIGNUP_MOBILE.text,
   },
   altRow: {
@@ -274,24 +257,64 @@ export const signUpMobileStyles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   altText: {
-    fontSize: T.altFontSize,
+    ...PULSE_SIGNUP_TYPO.linkSmall,
     color: SIGNUP_MOBILE.muted,
   },
   altLink: {
-    fontSize: T.linkFontSize,
-    color: SIGNUP_MOBILE.accent,
+    ...PULSE_SIGNUP_TYPO.linkSmall,
+    color: DRIVER_SIGNUP.primaryDark,
     fontWeight: '600',
   },
   fieldError: {
-    fontSize: 11,
-    color: Theme.destructive,
+    ...PULSE_SIGNUP_TYPO.error,
     marginTop: 6,
-    fontWeight: '500',
   },
   fieldHint: {
-    fontSize: 11,
-    color: SIGNUP_MOBILE.muted,
+    ...PULSE_SIGNUP_TYPO.hint,
     marginTop: 6,
+  },
+  docActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: T.btnRadius,
+    borderWidth: 1,
+    borderColor: SIGNUP_MOBILE.border,
+    backgroundColor: SIGNUP_MOBILE.bg,
+    flex: 1,
+    minHeight: 40,
+  },
+  docActionText: {
+    ...PULSE_SIGNUP_TYPO.captionMedium,
+    color: SIGNUP_MOBILE.text,
+    fontWeight: '500',
+  },
+  docActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  docStatus: {
+    ...PULSE_SIGNUP_TYPO.caption,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  docStatusDone: {
+    color: DRIVER_SIGNUP.primaryDark,
+    fontWeight: '500',
+  },
+  docStatusPending: {
+    color: SIGNUP_MOBILE.muted,
+  },
+  linkText: {
+    ...PULSE_SIGNUP_TYPO.linkSmall,
+    color: DRIVER_SIGNUP.primaryDark,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingVertical: 8,
   },
   keypadDock: {
     width: '100%',

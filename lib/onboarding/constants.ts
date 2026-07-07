@@ -1,4 +1,7 @@
-/** Onboarding personas — operational workspace entry points. */
+/**
+ * @deprecated Use {@link PULSE_PRODUCTS} and {@link WORKSPACE_ACCESS_ACTIONS} from productCatalog.
+ * Kept for onboarding persona assets and legacy references.
+ */
 export type OnboardingPersonaId =
   | 'business_owner'
   | 'driver'
@@ -13,38 +16,3 @@ export type OnboardingPersonaCard = {
   icon: 'building' | 'truck' | 'users' | 'link';
   eyebrow: string;
 };
-
-export const ONBOARDING_PERSONAS: OnboardingPersonaCard[] = [
-  {
-    id: 'business_owner',
-    title: 'Transport business',
-    subtitle: 'Create your workspace — fleet, dispatch, and finance in one place.',
-    eyebrow: 'Workspace owner',
-    route: '/onboarding/business',
-    icon: 'building',
-  },
-  {
-    id: 'driver',
-    title: 'Driver',
-    subtitle: 'Join a fleet, complete verification, and run trips on Pulse.',
-    eyebrow: 'Workforce',
-    route: '/onboarding/driver',
-    icon: 'truck',
-  },
-  {
-    id: 'join_team',
-    title: 'Join your company',
-    subtitle: 'Verify your phone, accept your admin invite — one flow, no duplicate workspace.',
-    eyebrow: 'Team member',
-    route: '/onboarding/join-team',
-    icon: 'users',
-  },
-  {
-    id: 'join_fleet',
-    title: 'Fleet invite',
-    subtitle: 'Accept a dispatcher invite and link to your operator.',
-    eyebrow: 'Fleet link',
-    route: '/driver-signup',
-    icon: 'link',
-  },
-];

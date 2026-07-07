@@ -1,14 +1,5 @@
 import { useRouter } from 'expo-router';
-import {
-  Building2,
-  CheckCircle2,
-  ChevronRight,
-  Link as LinkIcon,
-  Truck,
-  Users,
-  Zap,
-} from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -17,41 +8,33 @@ import {
   StyleSheet,
   Text,
   View,
+  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ONBOARDING_PERSONAS } from '@/lib/onboarding/constants';
-import { ROUTES } from '@/lib/routes';
-import { PULSE_SIGNUP } from '@/features/auth/signup/signUpPulseTheme';
-import { DRIVER_SIGNUP } from '@/features/auth/signup/signUpDriverTheme';
-import { PULSE_SIGNUP_RADIUS } from '@/features/auth/signup/signUpPulseTheme';
 import Theme from '@/constants/Theme';
+import {
+  DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
+  DESKTOP_SIGNUP_SPLIT_PAD,
+} from '@/features/auth/signup/signUpConstants';
+import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO } from '@/features/auth/signup/signUpTypography';
+import { PULSE_SIGNUP } from '@/features/auth/signup/signUpPulseTheme';
+import {
+  PULSE_PRODUCTS,
+  PULSE_PRODUCTS_COMING_SOON,
+  WORKSPACE_ACCESS_ACTIONS,
+} from '@/lib/onboarding/productCatalog';
+import { WORKSPACE_SETUP_COPY } from '@/lib/onboarding/workspaceSetupContent';
+import { ROUTES } from '@/lib/routes';
+import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
 
-const PERSONA_ICONS = {
-  building: Building2,
-  truck: Truck,
-  users: Users,
-  link: LinkIcon,
-} as const;
+import { ONBOARDING_BRAND } from './onboardingPersonaAssets';
+import { PulseAccessOption } from './PulseAccessOption';
+import { PulseComingSoonProduct } from './PulseComingSoonProduct';
+import { PulseProductOption } from './PulseProductOption';
+import { WorkspaceSetupHeroPanel } from './WorkspaceSetupHeroPanel';
 
-const PERSONA_THEMES = {
-  business_owner: PULSE_SIGNUP,
-  driver: DRIVER_SIGNUP,
-  join_team: PULSE_SIGNUP,
-  join_fleet: DRIVER_SIGNUP,
-} as const;
-
-/** Text/icons on white cards — pastel `primary` is fill-only; use ink accent. */
-function personaAccentInk(theme: (typeof PERSONA_THEMES)[keyof typeof PERSONA_THEMES]): string {
-  return theme.primaryDark;
-}
-
-const FEATURES = [
-  'Trip management & real-time GPS',
-  'GST-compliant invoicing & payments',
-  'Driver payroll & fleet compliance',
-  'Marketplace — post and bid on loads',
-] as const;
+const signupText = createPulseSignUpTextStyles(PULSE_SIGNUP);
 
 export function OnboardingPersonaHub() {
   const router = useRouter();
@@ -87,433 +70,353 @@ export function OnboardingPersonaHub() {
 
   const isDesktop = Platform.OS === 'web' ? webViewportWidth >= 1024 && webHasFinePointer : false;
 
-  const renderPersonaCards = () => (
-    <View style={[styles.cards, isDesktop && styles.cardsDesktop]}>
-      {ONBOARDING_PERSONAS.map((persona) => {
-        const Icon = PERSONA_ICONS[persona.icon];
-        const theme = PERSONA_THEMES[persona.id];
-        return (
-          <Pressable
-            key={persona.id}
-            onPress={() => {
-              if (persona.id === 'join_team') {
-                router.push({
-                  pathname: ROUTES.ONBOARDING.BUSINESS,
-                  params: { intent: 'team' },
-                });
-                return;
-              }
-              router.push(persona.route as never);
-            }}
-            style={({ pressed }) => [
-              styles.card,
-              isDesktop && styles.cardDesktop,
-              pressed && {
-                borderColor: personaAccentInk(theme),
-                backgroundColor: theme.primaryTint,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={persona.title}
-          >
-            <View style={[styles.iconWrap, { backgroundColor: theme.primaryTint }]}>
-              <Icon size={20} color={personaAccentInk(theme)} strokeWidth={2.5} />
-            </View>
-            <View style={styles.cardBody}>
-              <Text style={[styles.cardEyebrow, { color: personaAccentInk(theme) }]}>
-                {persona.eyebrow}
-              </Text>
-              <Text style={styles.cardTitle}>{persona.title}</Text>
-              <Text style={styles.cardSub}>{persona.subtitle}</Text>
-            </View>
-            <ChevronRight size={18} color="#d1d5db" strokeWidth={2} />
-          </Pressable>
-        );
-      })}
+  const navigateProduct = useCallback(
+    (route: string) => {
+      router.push(route as never);
+    },
+    [router],
+  );
+
+  const navigateAccess = useCallback(
+    (route: string, params?: Record<string, string>) => {
+      if (params) {
+        router.push({ pathname: route, params } as never);
+        return;
+      }
+      router.push(route as never);
+    },
+    [router],
+  );
+
+  const renderProductHubMain = () => (
+    <View style={styles.hub}>
+      <View style={styles.hubHeader}>
+        <Text style={[styles.hubTitle, isDesktop ? styles.hubTitleDesktop : styles.hubTitleMobile]}>
+          {WORKSPACE_SETUP_COPY.personaTitle}
+        </Text>
+        <Text
+          style={[
+            styles.hubSubtitle,
+            isDesktop ? styles.hubSubtitleDesktop : styles.hubSubtitleMobile,
+          ]}
+        >
+          {WORKSPACE_SETUP_COPY.personaSubtitle}
+        </Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>{WORKSPACE_SETUP_COPY.sectionProducts}</Text>
+        <View style={styles.productList}>
+          {PULSE_PRODUCTS.map((product) => (
+            <PulseProductOption
+              key={product.id}
+              product={product}
+              compact
+              onPress={() => navigateProduct(product.route)}
+            />
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.section}>
+        <Text style={styles.invitedEyebrow}>{WORKSPACE_SETUP_COPY.invitedEyebrow}</Text>
+        <Text style={styles.sectionLabel}>{WORKSPACE_SETUP_COPY.sectionWorkspaceAccess}</Text>
+        <View style={styles.accessList}>
+          {WORKSPACE_ACCESS_ACTIONS.map((action) => (
+            <PulseAccessOption
+              key={action.id}
+              action={action}
+              compact
+              onPress={() => navigateAccess(action.route, action.params)}
+            />
+          ))}
+        </View>
+      </View>
     </View>
   );
 
-  // ── Desktop: split-screen layout ──────────────────────────────────────────
+  const renderSignInFooter = () => (
+    <Pressable
+      onPress={() => router.push(ROUTES.SIGN_IN)}
+      style={({ pressed }) => [styles.signInBtn, pressed && { opacity: 0.75 }]}
+      accessibilityRole="button"
+    >
+      <Text style={styles.signInMuted}>{WORKSPACE_SETUP_COPY.signInPrompt}</Text>
+      <Text style={styles.signInLink}> {WORKSPACE_SETUP_COPY.signInLink}</Text>
+    </Pressable>
+  );
+
+  const renderComingSoonStrip = () => (
+    <View style={styles.comingSoonStrip}>
+      <View style={styles.comingSoonHeader}>
+        <Text style={styles.sectionLabel}>{WORKSPACE_SETUP_COPY.sectionMoreProducts}</Text>
+        <View style={styles.comingSoonPill}>
+          <Text style={styles.comingSoonPillText}>{WORKSPACE_SETUP_COPY.sectionComingSoon}</Text>
+        </View>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.comingSoonScroll}
+        keyboardShouldPersistTaps="handled"
+      >
+        {PULSE_PRODUCTS_COMING_SOON.map((product) => (
+          <PulseComingSoonProduct key={product.id} product={product} variant="chip" />
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const renderHubFooter = (bottomInset = 0) => (
+    <View style={[styles.hubFooter, { paddingBottom: Math.max(bottomInset, 12) }]}>
+      {renderSignInFooter()}
+      <View style={styles.footerDivider} />
+      {renderComingSoonStrip()}
+    </View>
+  );
+
   if (isDesktop) {
     return (
-      <View style={styles.desktopShell}>
-        {/* Left — brand/marketing panel */}
-        <View style={styles.leftPanel}>
-          <View style={styles.leftContent}>
-            <View style={styles.leftLogoRow}>
-              <Zap size={14} color={Theme.driverPrimary} strokeWidth={3} />
-            </View>
-            <Text style={styles.leftLogo}>
-              PULSE<Text style={styles.logoDot}>.</Text>
-            </Text>
-            <Text style={styles.leftTag}>Workspace setup</Text>
-            <Text style={styles.leftTitle}>Build your logistics business OS.</Text>
-            <Text style={styles.leftSubtitle}>
-              Everything your transport company needs — trips, drivers, finance, fleet, and
-              marketplace — in one unified platform.
-            </Text>
-
-            <View style={styles.featureList}>
-              {FEATURES.map((feature) => (
-                <View key={feature} style={styles.featureRow}>
-                  <CheckCircle2 size={14} color={Theme.driverPrimary} strokeWidth={2.5} />
-                  <Text style={styles.featureText}>{feature}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
+      <View
+        style={[
+          styles.desktopShell,
+          Platform.OS === 'web' ? (WEB_APP_VIEWPORT_STYLE as ViewStyle) : null,
+        ]}
+      >
+        <View style={[styles.desktopCol, styles.desktopLeftCol]}>
+          <WorkspaceSetupHeroPanel />
         </View>
 
-        {/* Right — persona selection */}
-        <View style={styles.rightPanel}>
-          {/* Decorative orbs */}
-          <View style={styles.orbA} />
-          <View style={styles.orbB} />
+        <View style={styles.panelDivider} />
 
+        <View style={[styles.desktopCol, styles.rightPanel]}>
           <ScrollView
             style={styles.rightScroll}
             contentContainerStyle={styles.rightScrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.rightForm}>
-              <View style={styles.rightHeader}>
-                <Text style={styles.rightTitle}>Get started on Pulse</Text>
-                <Text style={styles.rightSubtitle}>
-                  Choose how you use the platform. We'll guide you through the rest.
-                </Text>
-              </View>
-
-              {renderPersonaCards()}
-
-              <Pressable
-                onPress={() => router.push(ROUTES.SIGN_IN)}
-                style={({ pressed }) => [styles.signInBtn, pressed && { opacity: 0.8 }]}
-                accessibilityRole="button"
-              >
-                <Text style={styles.signInMuted}>Already activated?</Text>
-                <Text style={styles.signInLink}> Sign in</Text>
-              </Pressable>
-            </View>
+            <View style={styles.panelInner}>{renderProductHubMain()}</View>
           </ScrollView>
+          <View style={styles.panelInnerFooter}>{renderHubFooter()}</View>
         </View>
       </View>
     );
   }
 
-  // ── Mobile: stacked layout (unchanged) ────────────────────────────────────
   return (
     <KeyboardAvoidingView
       style={[styles.mobileRoot, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.mobileHeader}>
-        <View style={styles.headerSpacer} />
-        <Text style={styles.mobileBrand}>
-          PULSE<Text style={styles.mobileBrandDot}>.</Text>
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
       <ScrollView
-        contentContainerStyle={[styles.mobileContent, { paddingBottom: insets.bottom + 24 }]}
+        style={styles.mobileScroll}
+        contentContainerStyle={styles.mobileScrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.mobileHero}>
-          <Text style={styles.mobileTitle}>Get started on Pulse</Text>
-          <Text style={styles.mobileSubtitle}>
-            Choose how you use the platform. We'll guide you through identity, verification, and
-            workspace setup.
-          </Text>
-        </View>
-
-        {renderPersonaCards()}
-
-        <Pressable
-          onPress={() => router.push(ROUTES.SIGN_IN)}
-          style={styles.mobileSignInBtn}
-          accessibilityRole="button"
-        >
-          <Text style={styles.mobileSignInText}>
-            <Text style={styles.mobileSignInMuted}>Already activated? </Text>
-            <Text style={styles.mobileSignInLink}>Sign in</Text>
-          </Text>
-        </Pressable>
+        {renderProductHubMain()}
       </ScrollView>
+      <View style={styles.mobileHubFooter}>{renderHubFooter(insets.bottom)}</View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  // ── Desktop split-screen ─────────────────────────────────────────────────
   desktopShell: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#000000',
-  },
-
-  // Left panel
-  leftPanel: {
-    flex: 1,
-    backgroundColor: '#000000',
-    paddingHorizontal: 52,
-    paddingVertical: 48,
-    justifyContent: 'center',
-  },
-  leftContent: {
-    maxWidth: 480,
-  },
-  leftLogoRow: {
-    marginBottom: 8,
-  },
-  leftLogo: {
-    fontSize: 36,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: -1,
-    color: '#ffffff',
-    marginBottom: 10,
-  },
-  logoDot: {
-    color: Theme.driverPrimary,
-  },
-  leftTag: {
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    fontWeight: '700',
-    color: 'rgba(148,163,184,0.65)',
-    marginBottom: 14,
-  },
-  leftTitle: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#ffffff',
-    letterSpacing: -0.5,
-    lineHeight: 38,
-    marginBottom: 12,
-  },
-  leftSubtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: 'rgba(148,163,184,0.75)',
-    marginBottom: 28,
-    maxWidth: 400,
-  },
-  featureList: {
-    gap: 10,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  featureText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(226,232,240,0.85)',
-  },
-
-  // Right panel
-  rightPanel: {
-    flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: Theme.screenBackground,
+    position: 'relative',
     overflow: 'hidden',
-    justifyContent: 'center',
+    minHeight: 0,
   },
-  orbA: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    top: -70,
-    right: -50,
-    backgroundColor: 'rgba(16,185,129,0.10)',
+
+  desktopCol: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: '50%',
+    minHeight: 0,
+    alignSelf: 'stretch',
+    zIndex: 1,
   },
-  orbB: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    bottom: -90,
-    left: -70,
-    backgroundColor: 'rgba(15,23,42,0.05)',
+
+  desktopLeftCol: {
+    backgroundColor: Theme.screenBackground,
+  },
+
+  panelInner: {
+    width: '100%',
+    maxWidth: DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
+    alignSelf: 'center',
+    paddingHorizontal: DESKTOP_SIGNUP_SPLIT_PAD,
+    paddingTop: 36,
+    paddingBottom: 12,
+  },
+
+  panelInnerFooter: {
+    width: '100%',
+    maxWidth: DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
+    alignSelf: 'center',
+    paddingHorizontal: DESKTOP_SIGNUP_SPLIT_PAD,
+  },
+
+  panelDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(77, 54, 54, 0.1)',
+    alignSelf: 'stretch',
+    zIndex: 2,
+  },
+
+  rightPanel: {
+    backgroundColor: Theme.screenBackground,
+    flex: 1,
+    minHeight: 0,
+    justifyContent: 'flex-start',
   },
   rightScroll: {
     flex: 1,
+    minHeight: 0,
   },
   rightScrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 48,
-    paddingVertical: 48,
-  },
-  rightForm: {
-    width: '100%',
-    maxWidth: 440,
-    alignSelf: 'center',
-    gap: 24,
-  },
-  rightHeader: {
-    gap: 6,
-  },
-  rightTitle: {
-    fontSize: 26,
-    fontWeight: '900',
-    letterSpacing: -0.4,
-    color: '#0f172a',
-  },
-  rightSubtitle: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#64748b',
-    fontWeight: '500',
   },
 
-  // Cards (shared mobile + desktop)
-  cards: {
+  hub: {
     gap: 12,
   },
-  cardsDesktop: {
-    gap: 10,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 16,
-    backgroundColor: '#ffffff',
-    borderRadius: PULSE_SIGNUP_RADIUS.card,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  cardDesktop: {
-    padding: 14,
-    borderRadius: 12,
-  },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  cardBody: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  cardEyebrow: {
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
+  hubHeader: {
+    gap: 3,
     marginBottom: 2,
   },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0f172a',
-    lineHeight: 19,
+  hubTitle: {
+    color: ONBOARDING_BRAND.ink,
+    fontWeight: '600',
   },
-  cardSub: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#475569',
-    lineHeight: 17,
+  hubTitleDesktop: {
+    ...PULSE_SIGNUP_TYPO.titleDesktop,
+  },
+  hubTitleMobile: {
+    ...PULSE_SIGNUP_TYPO.titleCompact,
+  },
+  hubSubtitle: {
+    color: Theme.textMuted,
+  },
+  hubSubtitleDesktop: {
+    ...PULSE_SIGNUP_TYPO.subtitle,
+  },
+  hubSubtitleMobile: {
+    ...PULSE_SIGNUP_TYPO.subtitleCompact,
   },
 
-  // Sign-in link (desktop)
+  section: {
+    gap: 6,
+  },
+  sectionLabel: {
+    ...PULSE_SIGNUP_TYPO.label,
+    color: Theme.textMuted,
+  },
+  invitedEyebrow: {
+    ...PULSE_SIGNUP_TYPO.caption,
+    color: Theme.textSecondary,
+    marginBottom: -2,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(77, 54, 54, 0.1)',
+    alignSelf: 'stretch',
+  },
+
+  productList: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  accessList: {
+    gap: 5,
+  },
+
+  hubFooter: {
+    gap: 0,
+    paddingTop: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(77, 54, 54, 0.1)',
+    backgroundColor: Theme.screenBackground,
+  },
+  footerDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(77, 54, 54, 0.08)',
+    marginVertical: 8,
+  },
+  comingSoonStrip: {
+    gap: 6,
+    paddingBottom: 2,
+  },
+  comingSoonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  comingSoonPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(77, 54, 54, 0.1)',
+    backgroundColor: Theme.analyticsCanvas,
+  },
+  comingSoonPillText: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '500',
+    color: Theme.textMuted,
+  },
+  comingSoonScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 8,
+  },
+
   signInBtn: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 6,
   },
   signInMuted: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '500',
+    ...signupText.linkSmall,
+    color: Theme.textMuted,
   },
   signInLink: {
-    fontSize: 13,
-    color: PULSE_SIGNUP.primaryDark,
-    fontWeight: '800',
-  },
-
-  // ── Mobile layout ──────────────────────────────────────────────────────────
-  mobileRoot: {
-    flex: 1,
-    backgroundColor: PULSE_SIGNUP.bg,
-  },
-  mobileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  headerSpacer: {
-    minWidth: 64,
-  },
-  mobileBrand: {
-    fontSize: 22,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: -0.6,
-    color: PULSE_SIGNUP.primaryDark,
-  },
-  mobileBrandDot: {
-    color: Theme.driverPrimary,
-  },
-  mobileContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 8,
-  },
-  mobileHero: {
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-  mobileTitle: {
-    fontSize: 26,
-    fontWeight: '900',
-    letterSpacing: -0.4,
-    lineHeight: 32,
-    color: PULSE_SIGNUP.text,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  mobileSubtitle: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: PULSE_SIGNUP.muted,
-    fontWeight: '500',
-    textAlign: 'center',
-    paddingHorizontal: 8,
-  },
-  mobileSignInBtn: {
-    marginTop: 28,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderRadius: PULSE_SIGNUP_RADIUS.button,
-    borderWidth: 1,
-    borderColor: PULSE_SIGNUP.border,
-    backgroundColor: PULSE_SIGNUP.surface,
-  },
-  mobileSignInText: {
-    fontSize: 13,
+    ...signupText.linkSmall,
+    color: ONBOARDING_BRAND.ink,
     fontWeight: '600',
   },
-  mobileSignInMuted: {
-    color: '#64748b',
-    fontWeight: '500',
+
+  mobileRoot: {
+    flex: 1,
+    backgroundColor: Theme.screenBackground,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  mobileSignInLink: {
-    color: PULSE_SIGNUP.primaryDark,
-    fontWeight: '800',
+  mobileScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  mobileScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
+  mobileHubFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(77, 54, 54, 0.1)',
+    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 20,
   },
 });

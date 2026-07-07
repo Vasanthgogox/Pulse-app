@@ -107,7 +107,7 @@ export function SignUpPillSelect<T extends string>({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   req: {
     color: SIGNUP_ERROR_COLOR,
@@ -123,22 +123,22 @@ const styles = StyleSheet.create({
   },
   pill: {
     paddingHorizontal: 6,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: PULSE_SIGNUP_RADIUS.pill,
     borderWidth: 1,
     borderColor: PULSE_SIGNUP.border,
     backgroundColor: PULSE_SIGNUP.bg,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 36,
+    minHeight: 34,
   },
   pillLabel: {
     textAlign: 'center',
   },
   pillCard: {
     paddingHorizontal: 4,
-    paddingVertical: 10,
-    minHeight: 54,
+    paddingVertical: 8,
+    minHeight: 46,
   },
   pillLabelCard: {
     textAlign: 'center',

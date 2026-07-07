@@ -7,6 +7,10 @@ export type MonthlyVolume = '<50' | '50-200' | '200-500' | '500-1000' | '1000+';
 
 export const OTP_LENGTH = 6;
 export const DEBOUNCE_MS = 600;
+/** Background phone-exists lookup while typing — shorter than org-name debounce. */
+export const PHONE_CHECK_DEBOUNCE_MS = 280;
+/** Fail open if phone lookup hangs (RPC + edge fallback). */
+export const PHONE_LOOKUP_TIMEOUT_MS = 3500;
 export const OTP_RESEND_SECS = 30;
 export const EMAIL_RESEND_SECS = 60;
 export const DESKTOP_BREAKPOINT = 1024;
@@ -15,13 +19,23 @@ export const DESKTOP_MAX_PANEL_WIDTH = 560;
 export const DESKTOP_SIGNUP_CARD_WIDTH = 560;
 /** Inner form column max width inside desktop card. */
 export const DESKTOP_SIGNUP_FORM_WIDTH = 480;
+/** Desktop split — flow column max width (right panel). Use full pane width; cap for very wide screens. */
+export const DESKTOP_SIGNUP_SPLIT_FLOW_MAX = 560;
+/** Horizontal inset inside the right split pane (keep modest — pane is already half viewport). */
+export const DESKTOP_SIGNUP_SPLIT_PAD = 28;
 /** Scroll end padding so fields clear the sticky footer. */
 export const SIGNUP_FORM_FOOTER_CLEARANCE = 24;
+/** Room above the in-step sticky footer (mobile account step). */
+export const SIGNUP_STICKY_FOOTER_CLEARANCE = 68;
 /** Mobile shell progress rail — inline-primary scroll clearance. */
 export const SIGNUP_MOBILE_PROGRESS_CLEARANCE = 52;
 /** Account step: room below confirm password for progress rail + mobile keyboard. */
 export const SCROLL_BOTTOM_PAD = 24;
-export const SIGNUP_ACCOUNT_SCROLL_PAD = 88;
+export const SIGNUP_ACCOUNT_SCROLL_PAD = 140;
+export const SIGNUP_ACCOUNT_MOBILE_SCROLL_PAD = 40;
+/** Extra scroll margin when a password field is focused (keyboard + iOS accessory). */
+export const SIGNUP_PASSWORD_SCROLL_PAD = 64;
+export const SIGNUP_CONFIRM_PASSWORD_SCROLL_PAD = 104;
 export const CONFIRM_SCROLL_DELAY_MS = 150;
 
 /** Short labels — 8 steps on ~390px web; longer names overlap in the progress rail. */

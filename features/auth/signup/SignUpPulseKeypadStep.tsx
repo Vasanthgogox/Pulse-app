@@ -20,7 +20,7 @@ import { useSignupKeypadInput } from '@/lib/onboarding/useSignupKeypadInput';
 
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
-import { DESKTOP_BREAKPOINT, DESKTOP_SIGNUP_FORM_WIDTH } from './signUpConstants';
+import { DESKTOP_BREAKPOINT } from './signUpConstants';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles, SIGNUP_ERROR_COLOR } from './signUpTypography';
 
@@ -48,6 +48,8 @@ export interface SignUpPulseKeypadStepProps {
   googleLoading?: boolean;
   googleDisabled?: boolean;
   theme?: SignUpTheme;
+  /** Center title, OTP row, and actions — used on verification step. */
+  centeredLayout?: boolean;
 }
 
 export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
@@ -74,6 +76,7 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   googleLoading = false,
   googleDisabled = false,
   theme = PULSE_SIGNUP,
+  centeredLayout = false,
 }: SignUpPulseKeypadStepProps) {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
@@ -218,7 +221,7 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   );
 
   const actionBlock = (
-    <>
+    <View style={styles.actionsWrap}>
       <SignUpPulsePrimaryButton
         label={primaryLabel}
         onPress={onPrimary}
@@ -244,33 +247,43 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
               pressed && styles.googleBtnPressed,
             ]}
           >
-            <GoogleBrandIcon size={18} />
+            <GoogleBrandIcon size={16} />
             <Text style={styles.googleText}>Continue with Google</Text>
           </Pressable>
         </>
       ) : null}
-    </>
+    </View>
   );
 
-  const scrollBody = (
-    <>
-      <SignUpPulseTitle title={title} subtitle={subtitle} compact={useKeypad} />
-      <Text style={styles.fieldLabel}>{fieldLabel}</Text>
-      {fieldInput}
-      {errorMessage ? (
-        <Text style={styles.error} accessibilityRole="alert">
-          {errorMessage}
-        </Text>
-      ) : hintMessage ? (
-        <Text style={styles.hint}>{hintMessage}</Text>
-      ) : null}
+  const formBody = (
+    <View style={[styles.formBody, centeredLayout && styles.centeredStack]}>
+      <SignUpPulseTitle
+        title={title}
+        subtitle={subtitle}
+        compact={useKeypad}
+        centered={centeredLayout}
+      />
+      <Text style={[styles.fieldLabel, centeredLayout && styles.fieldLabelCenter]}>
+        {fieldLabel}
+      </Text>
+      <View style={styles.fieldBlock}>
+        {fieldInput}
+        {errorMessage ? (
+          <Text style={styles.error} accessibilityRole="alert">
+            {errorMessage}
+          </Text>
+        ) : hintMessage ? (
+          <Text style={styles.hint}>{hintMessage}</Text>
+        ) : null}
+      </View>
       {!layout.useDockedFooter ? actionBlock : null}
-    </>
+    </View>
   );
 
   const contentScrollInner = [
     styles.contentScrollInner,
     isDesktop && styles.contentScrollInnerDesktop,
+    centeredLayout && styles.contentScrollInnerCentered,
     layout.useDockedFooter && { paddingBottom: layout.scrollPaddingBottom },
     !layout.useDockedFooter && { paddingBottom: 24 },
   ];
@@ -286,7 +299,7 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
             showsVerticalScrollIndicator={false}
             bounces={false}
           >
-            {scrollBody}
+            {formBody}
             {actionBlock}
           </ScrollView>
         ) : (
@@ -296,8 +309,12 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {scrollBody}
-            {footerAccessory}
+            {formBody}
+            {footerAccessory ? (
+              <View style={centeredLayout ? styles.footerAccessoryCentered : undefined}>
+                {footerAccessory}
+              </View>
+            ) : null}
           </ScrollView>
         )}
       </View>
@@ -367,40 +384,82 @@ function createStyles(theme: SignUpTheme) {
       flex: 1,
     },
     contentScrollInner: {
-      paddingHorizontal: 24,
+      paddingHorizontal: 20,
       paddingTop: 8,
+      width: '100%',
+      maxWidth: '100%',
+      alignSelf: 'center',
     },
     contentScrollInnerKeypad: {
       paddingHorizontal: 20,
       paddingTop: 4,
       paddingBottom: 4,
       flexGrow: 1,
+      width: '100%',
+      maxWidth: '100%',
+      alignSelf: 'center',
     },
     contentScrollInnerDesktop: {
-      paddingHorizontal: 36,
+      paddingHorizontal: 0,
       paddingTop: 10,
-      maxWidth: DESKTOP_SIGNUP_FORM_WIDTH,
-      alignSelf: 'center',
       width: '100%',
+      alignSelf: 'stretch',
+      flexGrow: 1,
+    },
+    contentScrollInnerCentered: {
+      alignItems: 'center',
+    },
+    centeredStack: {
+      width: '100%',
+      maxWidth: 360,
+      alignSelf: 'center',
+      alignItems: 'stretch',
+    },
+    formBody: {
+      width: '100%',
+      maxWidth: 360,
+      alignSelf: 'center',
+      minWidth: 0,
+    },
+    fieldLabelCenter: {
+      textAlign: 'center',
     },
     fieldLabel: {
       ...text.fieldLabel,
       marginBottom: 8,
     },
+    fieldBlock: {
+      width: '100%',
+      alignSelf: 'stretch',
+      marginBottom: 12,
+    },
+    footerAccessoryCentered: {
+      width: '100%',
+      maxWidth: 360,
+      alignSelf: 'center',
+      alignItems: 'center',
+    },
     customDisplay: {
       width: '100%',
-      marginBottom: 12,
+      marginBottom: 0,
+      overflow: 'hidden',
     },
     displayRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      minHeight: 56,
+      width: '100%',
+      maxWidth: '100%',
+      alignSelf: 'stretch',
+      paddingHorizontal: 14,
+      minHeight: 44,
       backgroundColor: theme.bg,
       borderRadius: PULSE_SIGNUP_RADIUS.input,
       borderWidth: 1,
       borderColor: theme.border,
-      marginBottom: 16,
+      marginBottom: 0,
+      ...Platform.select({
+        web: { boxSizing: 'border-box' } as object,
+      }),
     },
     displayError: {
       borderColor: SIGNUP_ERROR_COLOR,
@@ -413,22 +472,20 @@ function createStyles(theme: SignUpTheme) {
       flexShrink: 0,
     },
     flagWrap: {
-      width: 24,
-      height: 24,
+      width: 20,
+      height: 20,
       alignItems: 'center',
       justifyContent: 'center',
     },
     flag: {
-      fontSize: 18,
-      lineHeight: 22,
+      fontSize: 14,
+      lineHeight: 18,
       ...Platform.select({
         android: { includeFontPadding: false, textAlignVertical: 'center' },
       }),
     },
     prefix: {
-      fontSize: 17,
-      lineHeight: 24,
-      fontWeight: '500',
+      ...text.displayPrefix,
       color: theme.muted,
       letterSpacing: 0,
       ...Platform.select({
@@ -440,8 +497,8 @@ function createStyles(theme: SignUpTheme) {
     phoneSep: {
       width: StyleSheet.hairlineWidth,
       alignSelf: 'stretch',
-      marginVertical: 14,
-      marginHorizontal: 12,
+      marginVertical: 12,
+      marginHorizontal: 10,
       backgroundColor: theme.border,
       flexShrink: 0,
     },
@@ -453,11 +510,7 @@ function createStyles(theme: SignUpTheme) {
       minHeight: 24,
     },
     displayValue: {
-      fontSize: 17,
-      lineHeight: 24,
-      fontWeight: '500',
-      letterSpacing: 2,
-      color: theme.text,
+      ...text.display,
       ...Platform.select({
         android: { includeFontPadding: false, textAlignVertical: 'center' },
         ios: { fontVariant: ['tabular-nums'] as const },
@@ -471,11 +524,11 @@ function createStyles(theme: SignUpTheme) {
       flex: 1,
       color: theme.placeholder,
       fontWeight: '400',
-      letterSpacing: 2,
+      letterSpacing: 1,
     },
     cursor: {
       width: 2,
-      height: 22,
+      height: 18,
       borderRadius: 1,
       backgroundColor: theme.primaryDark,
       marginLeft: 2,
@@ -488,10 +541,7 @@ function createStyles(theme: SignUpTheme) {
     },
     webInput: {
       flex: 1,
-      fontSize: 17,
-      lineHeight: 24,
-      fontWeight: '500',
-      letterSpacing: 2,
+      ...text.display,
       color: theme.text,
       minWidth: 0,
       paddingVertical: 0,
@@ -514,26 +564,43 @@ function createStyles(theme: SignUpTheme) {
       opacity: 0,
       fontSize: 1,
       color: 'transparent',
+      borderWidth: 0,
+      backgroundColor: 'transparent',
       ...Platform.select({
         web: {
           caretColor: 'transparent',
           WebkitTextFillColor: 'transparent',
+          outlineStyle: 'none',
         } as object,
         default: {},
       }),
     },
     error: {
       ...text.error,
-      marginTop: -16,
-      marginBottom: 16,
+      marginTop: 6,
+      marginBottom: 0,
+      paddingLeft: 2,
+      alignSelf: 'stretch',
     },
     hint: {
       ...text.hint,
-      marginTop: -16,
-      marginBottom: 16,
+      marginTop: 6,
+      marginBottom: 0,
+      paddingLeft: 2,
+      alignSelf: 'stretch',
     },
     primaryBtn: {
-      marginBottom: 8,
+      marginBottom: 0,
+      alignSelf: 'stretch',
+      maxWidth: '100%',
+    },
+    actionsWrap: {
+      width: '100%',
+      maxWidth: '100%',
+      minWidth: 0,
+      alignSelf: 'stretch',
+      marginTop: 4,
+      gap: 0,
     },
     orRow: {
       flexDirection: 'row',
@@ -553,13 +620,20 @@ function createStyles(theme: SignUpTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 10,
-      paddingVertical: 14,
+      alignSelf: 'stretch',
+      width: '100%',
+      maxWidth: '100%',
+      gap: 8,
+      paddingVertical: 10,
       borderRadius: PULSE_SIGNUP_RADIUS.button,
       borderWidth: 1,
       borderColor: theme.border,
       backgroundColor: theme.bg,
       marginBottom: 4,
+      minHeight: 40,
+      ...Platform.select({
+        web: { boxSizing: 'border-box' } as object,
+      }),
     },
     googleBtnDisabled: {
       opacity: 0.5,

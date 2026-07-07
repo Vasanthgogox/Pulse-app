@@ -1,4 +1,4 @@
-import { memo, useMemo, type ReactNode, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,11 +8,13 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type View as RNView,
 } from 'react-native';
 
 import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
+import { scrollFocusedFieldIntoView } from '@/lib/scrollFocusedFieldIntoView.util';
 
-import { SignUpPulseFormStepProvider } from './SignUpPulseFormStepContext';
+import { SignUpPulseFormStepProvider, type ScrollFieldIntoViewOptions } from './SignUpPulseFormStepContext';
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
 import { DESKTOP_BREAKPOINT, DESKTOP_SIGNUP_FORM_WIDTH } from './signUpConstants';
@@ -31,6 +33,8 @@ export interface SignUpPulseFormStepProps {
   inlinePrimary?: boolean;
   /** Vertically center scroll content (success / celebration steps). */
   centerContent?: boolean;
+  /** Title alignment — desktop defaults to left. */
+  titleCentered?: boolean;
   /** Extra bottom padding (e.g. clear fixed progress rail on Account step). */
   scrollPaddingBottom?: number;
   /**
@@ -57,6 +61,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   footerAccessory,
   inlinePrimary = false,
   centerContent = false,
+  titleCentered = false,
   scrollPaddingBottom = 0,
   scrollRef,
   theme = PULSE_SIGNUP,
@@ -71,6 +76,37 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
     extraScrollPadding: scrollPaddingBottom,
     inlinePrimary,
   });
+
+  const lastFocusedFieldRef = useRef<RefObject<RNView | null> | null>(null);
+  const lastScrollPadRef = useRef<number | undefined>(undefined);
+
+  const scrollFieldIntoView = useCallback(
+    (fieldRef: RefObject<RNView | null>, options?: ScrollFieldIntoViewOptions) => {
+      if (!scrollRef) return;
+      lastFocusedFieldRef.current = fieldRef;
+      const extraBottomPad = options?.extraBottomPad ?? (isDesktop ? 16 : 48);
+      lastScrollPadRef.current = extraBottomPad;
+      scrollFocusedFieldIntoView(scrollRef, fieldRef, {
+        keyboardHeight: layout.keyboardInset,
+        headerOffset: isDesktop ? 20 : 72,
+        extraBottomPad,
+        animated: true,
+      });
+    },
+    [scrollRef, layout.keyboardInset, isDesktop],
+  );
+
+  useEffect(() => {
+    if (!layout.keyboardVisible || !scrollRef || !lastFocusedFieldRef.current) {
+      return;
+    }
+    scrollFocusedFieldIntoView(scrollRef, lastFocusedFieldRef.current, {
+      keyboardHeight: layout.keyboardInset,
+      headerOffset: isDesktop ? 20 : 72,
+      extraBottomPad: lastScrollPadRef.current ?? (isDesktop ? 16 : 48),
+      animated: true,
+    });
+  }, [layout.keyboardVisible, layout.keyboardInset, scrollRef, isDesktop]);
 
   const cta = customFooter ?? (
     <View style={styles.ctaBlock}>
@@ -96,6 +132,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       style={styles.scroll}
       contentContainerStyle={[
         styles.scrollContent,
+        !isDesktop && styles.scrollContentMobile,
         isDesktop && styles.scrollContentDesktop,
         { paddingBottom: layout.scrollPaddingBottom },
         centerContent && styles.scrollContentCentered,
@@ -104,7 +141,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       showsVerticalScrollIndicator={false}
       keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
     >
-      <SignUpPulseTitle title={title} subtitle={subtitle} />
+      <SignUpPulseTitle title={title} subtitle={subtitle} centered={titleCentered} />
       {children}
       {layout.showCtaInScroll ? cta : null}
     </ScrollView>
@@ -117,13 +154,14 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       onPrimary={onPrimary}
       primaryDisabled={primaryDisabled}
       primaryLoading={primaryLoading}
+      scrollFieldIntoView={scrollFieldIntoView}
     >
       <View style={[styles.root, layout.rootStyle]}>
         {useNativeKeyboardAvoid ? (
           <KeyboardAvoidingView
             style={styles.keyboardAvoid}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 72 : 0}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? layout.insets.top + 52 : 0}
           >
             {scroll}
           </KeyboardAvoidingView>
@@ -166,14 +204,22 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'web' ? 12 : 8,
+    paddingTop: Platform.OS === 'web' ? 4 : 2,
+  },
+  scrollContentMobile: {
+    alignItems: 'center',
   },
   scrollContentDesktop: {
-    paddingHorizontal: 36,
-    paddingTop: 12,
-    maxWidth: DESKTOP_SIGNUP_FORM_WIDTH,
-    alignSelf: 'center',
+    paddingHorizontal: 0,
+    paddingTop: 10,
     width: '100%',
+    alignSelf: 'stretch',
+    flexGrow: 1,
+  },
+  footerDesktop: {
+    paddingHorizontal: 0,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   scrollContentCentered: {
     flexGrow: 1,
@@ -181,21 +227,19 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  footerDesktop: {
-    paddingHorizontal: 36,
-    maxWidth: DESKTOP_SIGNUP_FORM_WIDTH,
-    alignSelf: 'center',
-    width: '100%',
   },
   footerMobile: {
     paddingHorizontal: 20,
+    alignItems: 'center',
   },
   ctaBlock: {
-    gap: 12,
+    gap: 8,
     width: '100%',
+    maxWidth: 360,
+    minWidth: 0,
+    alignSelf: 'center',
   },
   secondaryLink: {
     alignItems: 'center',

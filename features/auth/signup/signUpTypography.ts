@@ -2,105 +2,107 @@ import { StyleSheet } from 'react-native';
 
 import { PULSE_SIGNUP, type SignUpTheme } from './signUpPulseTheme';
 
-/** Single typography scale for business signup — weights stay moderate for a professional look. */
+/** Single typography scale for business signup — compact enterprise density. */
 export const PULSE_SIGNUP_TYPO = {
   title: {
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '600' as const,
-    letterSpacing: -0.3,
+    letterSpacing: -0.22,
   },
   titleDesktop: {
-    fontSize: 22,
-    lineHeight: 30,
+    fontSize: 18,
+    lineHeight: 24,
   },
   titleCompact: {
-    fontSize: 19,
-    lineHeight: 26,
-    letterSpacing: -0.25,
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: -0.18,
   },
   subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '400' as const,
-    marginTop: 6,
+    marginTop: 4,
   },
   subtitleCompact: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 5,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 3,
   },
   brand: {
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '700' as const,
     fontStyle: 'italic' as const,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
   back: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '500' as const,
   },
   label: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: '600' as const,
-    letterSpacing: 0.55,
+    letterSpacing: 0.45,
     textTransform: 'uppercase' as const,
   },
   input: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: '400' as const,
   },
   display: {
-    fontSize: 17,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: '500' as const,
-    letterSpacing: 1.5,
+    letterSpacing: 0.8,
   },
   displayPrefix: {
-    fontSize: 15,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: '600' as const,
   },
   body: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '400' as const,
   },
   bodyMedium: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '500' as const,
   },
   caption: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: '400' as const,
   },
   captionMedium: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: '500' as const,
   },
   hint: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: '400' as const,
   },
   error: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: '500' as const,
   },
   link: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '600' as const,
   },
   linkSmall: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: '500' as const,
   },
   linkEmphasis: {
@@ -110,17 +112,17 @@ export const PULSE_SIGNUP_TYPO = {
     fontWeight: '600' as const,
   },
   or: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '500' as const,
+  },
+  google: {
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '500' as const,
   },
-  google: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500' as const,
-  },
   otpDigit: {
-    fontSize: 20,
+    fontSize: 14,
     fontWeight: '600' as const,
   },
   progressLabel: {
@@ -135,8 +137,8 @@ export const PULSE_SIGNUP_TYPO = {
     lineHeight: 11,
   },
   pillLabel: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: '500' as const,
   },
   pillLabelSelected: {
@@ -148,18 +150,18 @@ export const PULSE_SIGNUP_TYPO = {
     fontWeight: '400' as const,
   },
   avatarInitials: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '600' as const,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
   bannerTitle: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '600' as const,
   },
   bannerBody: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: '400' as const,
   },
 } as const;
@@ -180,11 +182,11 @@ export function createPulseSignUpTextStyles(theme: SignUpTheme = PULSE_SIGNUP) {
       ...PULSE_SIGNUP_TYPO.subtitle,
       color: theme.muted,
       textAlign: 'center',
-      maxWidth: 360,
+      maxWidth: 300,
       alignSelf: 'center',
     },
     subtitleDesktop: {
-      maxWidth: 400,
+      maxWidth: 380,
     },
     subtitleCompact: PULSE_SIGNUP_TYPO.subtitleCompact,
     subtitleCentered: {
@@ -210,7 +212,7 @@ export function createPulseSignUpTextStyles(theme: SignUpTheme = PULSE_SIGNUP) {
     fieldLabel: {
       ...PULSE_SIGNUP_TYPO.label,
       color: theme.muted,
-      marginBottom: 8,
+      marginBottom: 5,
       paddingLeft: 2,
     },
     input: {
