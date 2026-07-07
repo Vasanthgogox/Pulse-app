@@ -133,7 +133,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
         style={[
           fieldStyles.inputShell,
           hasError && fieldStyles.inputShellError,
-          inputProps.multiline && fieldStyles.inputShellMultiline,
+          multiline && fieldStyles.inputShellMultiline,
         ]}
       >
         <TextInput
@@ -147,7 +147,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
           onFocus={handleFocus}
           style={[
             fieldStyles.input,
-            inputProps.multiline && fieldStyles.inputMultiline,
+            multiline && fieldStyles.inputMultiline,
             trailing ? fieldStyles.inputWithTrailing : null,
             style,
           ]}

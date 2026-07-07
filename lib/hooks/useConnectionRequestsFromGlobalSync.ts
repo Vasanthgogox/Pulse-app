@@ -9,6 +9,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 type Options = {
   enabled?: boolean;
@@ -31,9 +32,14 @@ function useConnectionRequestsQuery(
     kind === 'received' ? s.connectionRequestsReceived : s.connectionRequestsSent,
   );
   const refreshInboundProtocol = useGlobalSyncStore((s) => s.refreshInboundProtocol);
+  const { status: authStatus } = useAuth();
 
   const shouldFetch =
-    !!orgId && options?.enabled !== false && !bootstrapReady && bootstrapStatus !== 'loading';
+    !!orgId &&
+    options?.enabled !== false &&
+    !bootstrapReady &&
+    bootstrapStatus !== 'loading' &&
+    authStatus !== 'restoring';
 
   const queryKey =
     kind === 'received'

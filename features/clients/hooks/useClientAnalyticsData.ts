@@ -11,10 +11,12 @@ import {
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function useClientAnalyticsData(clientId: string) {
   const { t } = useLanguage();
   const { currentOrganization } = useOrganization();
+  const { status } = useAuth();
   const [client, setClient] = useState<ClientRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
@@ -25,7 +27,7 @@ export function useClientAnalyticsData(clientId: string) {
   const initialLoadDoneRef = useRef(false);
 
   const load = useCallback(() => {
-    if (!clientId || !currentOrganization?.id) {
+    if (!clientId || !currentOrganization?.id || status === "restoring") {
       setLoading(false);
       return;
     }
@@ -110,7 +112,7 @@ export function useClientAnalyticsData(clientId: string) {
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
-  }, [clientId, currentOrganization?.id]);
+  }, [clientId, currentOrganization?.id, status]);
 
   useEffect(() => {
     load();

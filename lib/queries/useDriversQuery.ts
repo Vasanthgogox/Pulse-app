@@ -11,9 +11,11 @@ import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFa
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useDriversQuery(orgId: string | null) {
   const qc = useQueryClient();
+  const { status } = useAuth();
   return useQuery<DriverRow[], Error>({
     queryKey: queryKeys.drivers.finite(orgId ?? ''),
     queryFn: async () => {
@@ -35,7 +37,7 @@ export function useDriversQuery(orgId: string | null) {
         },
       });
     },
-    enabled: !!orgId,
+    enabled: !!orgId && status !== 'restoring',
     staleTime: STALE.moderate,
     refetchOnMount: refetchOnMountIfEntityListEmpty<DriverRow[]>(),
   });

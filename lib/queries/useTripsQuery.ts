@@ -16,9 +16,11 @@ import { STALE } from '@/lib/queryClient';
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 import { isStartupComplete, markStartupPhase } from '@/lib/startupMetrics';
+import { useAuth } from '@/contexts/AuthContext';
 
 /** Full list (no pagination). Use for Trips tab. Includes trips where org is owner or supplier on a shared load trip. */
 export function useTripsQuery(orgId: string | null) {
+  const { status } = useAuth();
   return useQuery<TripRow[], Error>({
     queryKey: queryKeys.trips.finite(orgId ?? ''),
     queryFn: async () => {
@@ -27,7 +29,7 @@ export function useTripsQuery(orgId: string | null) {
       if (!isStartupComplete()) markStartupPhase('trips_query_done');
       return (data ?? []) as TripRow[];
     },
-    enabled: !!orgId,
+    enabled: !!orgId && status !== 'restoring',
     staleTime: STALE.realtime,
     refetchOnMount: refetchOnMountIfEntityListEmpty<TripRow[]>(),
   });

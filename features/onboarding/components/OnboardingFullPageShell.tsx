@@ -66,7 +66,7 @@ export const OnboardingFullPageShell = memo(function OnboardingFullPageShell({
             <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
         </View>
-      ) : null}
+      )}
 
       <View style={[styles.body, { paddingBottom: Math.max(insets.bottom, space[2]) }]}>
         {children}
