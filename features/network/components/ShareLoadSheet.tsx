@@ -4,6 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
+import { useAuth } from "@/contexts/AuthContext";
 import { type IndentRow, getIndentDisplayNumber, resolveSupplierTargetDisplayRate } from "@/features/indents";
 import { createPost } from "@/features/network/services/posts.service";
 import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
@@ -241,6 +242,7 @@ export function ShareLoadSheet({
   onSuccess,
 }: ShareLoadSheetProps) {
   const insets = useSafeAreaInsets();
+  const { status: authStatus } = useAuth();
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -310,7 +312,7 @@ export function ShareLoadSheet({
   }, [indent, successPostId, orgId]);
 
   const handleBroadcast = async () => {
-    if (!indent || loading) return;
+    if (!indent || loading || authStatus === "restoring") return;
     setLoading(true);
     setError(null);
 

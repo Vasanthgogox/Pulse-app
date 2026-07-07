@@ -71,7 +71,7 @@ export default function CreatePostScreen() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { currentOrganization: organization } = useOrganization();
-  const { profile } = useAuth();
+  const { profile, status: authStatus } = useAuth();
   const orgId = organization?.id ?? null;
   const invalidatePosts = useInvalidatePosts(orgId);
   const invalidateIndents = useInvalidateIndents();
@@ -377,7 +377,7 @@ export default function CreatePostScreen() {
   );
 
   const handleSubmit = async () => {
-    if (!orgId || !canSubmit) return;
+    if (!orgId || !canSubmit || authStatus === "restoring") return;
     if (!STORY_TYPES.includes(type)) {
       Alert.alert("Invalid type", "Only load and vehicle availability stories are allowed.");
       return;
