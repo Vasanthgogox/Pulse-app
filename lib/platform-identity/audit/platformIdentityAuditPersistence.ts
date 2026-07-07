@@ -16,6 +16,16 @@ export async function persistPlatformIdentityAuditEvent(
   event: PlatformIdentityAuditEvent,
 ): Promise<{ error: Error | null }> {
   try {
+    // RLS requires an authenticated session (person_id = auth.uid()); skip persistence
+    // for events that fire pre-session (e.g. phone OTP verify before signup completes).
+    const { data: { session } } = await supabase().auth.getSession();
+    if (!session) {
+      if (__DEV__) {
+        console.warn('[platform-identity:audit] persist skipped: no session yet', event.type);
+      }
+      return { error: null };
+    }
+
     const row: PlatformIdentityAuditRow = {
       event_type: event.type,
       person_id: event.personId ?? null,
