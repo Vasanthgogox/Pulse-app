@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   effectiveKeyboardInset,
@@ -42,6 +42,7 @@ export const OnboardingFullPageFormStep = memo(function OnboardingFullPageFormSt
 }: OnboardingFullPageFormStepProps) {
   const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
   const keyboardInset = effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280);
+  const footerKeyboardPad = Platform.OS === 'web' ? keyboardInset : 0;
 
   return (
     <View style={styles.root}>
@@ -50,13 +51,14 @@ export const OnboardingFullPageFormStep = memo(function OnboardingFullPageFormSt
         contentContainerStyle={[styles.scrollContent, { paddingBottom: space[4] + keyboardInset }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        keyboardDismissMode="on-drag"
+        keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
       >
         <OnboardingFullPageTitle title={title} subtitle={subtitle} eyebrow={eyebrow} />
         {children}
       </ScrollView>
 
-      <OnboardingFullPageFooter accessory={footerAccessory}>
+      <View style={{ paddingBottom: footerKeyboardPad }}>
+        <OnboardingFullPageFooter accessory={footerAccessory}>
         <OperationalButton
           intent="bottomSticky"
           label={primaryLabel}
@@ -74,6 +76,7 @@ export const OnboardingFullPageFormStep = memo(function OnboardingFullPageFormSt
           />
         ) : null}
       </OnboardingFullPageFooter>
+      </View>
     </View>
   );
 });

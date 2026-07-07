@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Keyboard, Platform } from "react-native";
 
+import { shouldApplyWebKeyboardScrollInset } from "@/lib/webKeyboard";
+
 /** Ignore visualViewport jitter from mobile browser chrome (URL bar). */
 const WEB_KEYBOARD_INSET_THRESHOLD_PX = 48;
 
@@ -173,6 +175,9 @@ export function effectiveKeyboardInset(
   fallbackWhenVisible = 240,
 ): number {
   if (!keyboardVisible) return 0;
+  if (Platform.OS === "web" && !shouldApplyWebKeyboardScrollInset()) {
+    return 0;
+  }
   return keyboardHeight >= WEB_KEYBOARD_INSET_THRESHOLD_PX
     ? keyboardHeight
     : fallbackWhenVisible;

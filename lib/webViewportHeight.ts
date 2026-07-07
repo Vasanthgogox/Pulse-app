@@ -1,3 +1,5 @@
+import { isIOSWebSafari } from "./webKeyboard";
+
 /** Match `useKeyboardVisible` — keyboard open when visual viewport inset exceeds this. */
 export const WEB_KEYBOARD_INSET_THRESHOLD_PX = 48;
 
@@ -13,9 +15,11 @@ function readVisualViewportKeyboardInset(): number {
 
 /**
  * Mobile web: `100vh` is taller than the visible viewport when browser chrome is shown.
- * Sets `--app-vh` from the layout viewport and freezes it while the keyboard is open so
- * shells do not collapse when `visualViewport.height` shrinks (iOS Safari / some Android).
- * Keyboard occlusion is handled separately via `--keyboard-height` in `useKeyboardVisible`.
+ *
+ * - iOS Safari: shrink `--app-vh` to `visualViewport.height` so shells fit the visible
+ *   area when the keyboard resizes the viewport (no overlays-content).
+ * - Android Chrome (overlays-content): freeze layout height while the keyboard is open;
+ *   occlusion is handled via `--keyboard-height` in `useKeyboardVisible`.
  */
 export function installWebViewportHeight(): () => void {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -31,6 +35,16 @@ export function installWebViewportHeight(): () => void {
     const vv = window.visualViewport;
     const inner = window.innerHeight;
     const visible = Math.round(vv?.height ?? inner);
+
+    if (isIOSWebSafari()) {
+      document.documentElement.style.setProperty("--app-vh", `${visible}px`);
+      // Safari scrolls the document when focusing inputs; reset drift that jumps content up.
+      if (vv && (vv.offsetTop ?? 0) > 0) {
+        window.scrollTo(0, 0);
+      }
+      return;
+    }
+
     const keyboardOpen =
       readVisualViewportKeyboardInset() >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
 

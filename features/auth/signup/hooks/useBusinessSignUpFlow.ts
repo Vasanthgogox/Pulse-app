@@ -17,7 +17,7 @@ import {
   type ResolvedTeamInvitation,
 } from '@/features/organization/services/teamInvitationResolver.service';
 import { shadowCheckPlatformIdentity } from '@/features/organization/utils/platformIdentityShadowCheck.util';
-import { legacyTeamInviteToIdentityInvitation } from '@/lib/onboarding/invitationModel.util';
+import { scrollFocusedWebInputIntoView } from '@/lib/webKeyboard';
 import { validateEmail } from '@/lib/emailValidation';
 import { formatMobileNumber } from '@/lib/format';
 import { ROUTES } from '@/lib/routes';
@@ -1341,19 +1341,23 @@ export function useBusinessSignUpFlow() {
   };
 
   const scrollAccountFieldIntoView = () => {
-    // Mobile web: body overflow is hidden; only this ScrollView can move content above
-    // the overlay keyboard (Android Chrome interactive-widget=overlays-content).
-    const delay = Platform.OS === 'web' ? 400 : CONFIRM_SCROLL_DELAY_MS;
+    if (Platform.OS === 'web') {
+      scrollFocusedWebInputIntoView();
+      return;
+    }
     setTimeout(() => {
       accountScrollRef.current?.scrollToEnd({ animated: true });
-    }, delay);
+    }, CONFIRM_SCROLL_DELAY_MS);
   };
 
   const scrollLocationFieldIntoView = () => {
-    const delay = Platform.OS === 'web' ? 400 : CONFIRM_SCROLL_DELAY_MS;
+    if (Platform.OS === 'web') {
+      scrollFocusedWebInputIntoView();
+      return;
+    }
     setTimeout(() => {
       locationScrollRef.current?.scrollToEnd({ animated: true });
-    }, delay);
+    }, CONFIRM_SCROLL_DELAY_MS);
   };
 
   return {

@@ -82,7 +82,6 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   const useKeypad = useSignupKeypadInput();
   const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
   const inputRef = useRef<TextInput>(null);
-  const scrollRef = useRef<ScrollView>(null);
   const blink = useRef(new Animated.Value(1)).current;
   const digits = value.replace(/\D/g, '').slice(0, maxDigits);
   const isEmpty = digits.length === 0;
@@ -97,11 +96,6 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
     }
     return undefined;
   }, [useKeypad]);
-
-  useEffect(() => {
-    if (useKeypad || !keyboardVisible) return;
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-  }, [keyboardVisible, useKeypad]);
 
   useEffect(() => {
     if (!useKeypad) return undefined;
@@ -299,7 +293,6 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
           </ScrollView>
         ) : (
           <ScrollView
-            ref={scrollRef}
             style={styles.contentScroll}
             contentContainerStyle={contentScrollInner}
             keyboardShouldPersistTaps="handled"

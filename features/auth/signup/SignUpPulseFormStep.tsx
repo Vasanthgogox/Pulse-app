@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, type ReactNode, type RefObject } from 'react';
+import { memo, useMemo, type ReactNode, type RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -80,17 +80,8 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   const mobileProgressPad = !isDesktop && inlinePrimary ? SIGNUP_MOBILE_PROGRESS_CLEARANCE : 0;
   const bottomPad =
     scrollPaddingBottom + keyboardInset + SIGNUP_FORM_FOOTER_CLEARANCE + mobileProgressPad;
-
-  useEffect(() => {
-    if (!keyboardAware || Platform.OS !== 'web' || !keyboardVisible || !scrollRef) {
-      return;
-    }
-    // Only fire on keyboard open, not on every height adjustment (avoids double-scroll jank).
-    const timer = setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 380);
-    return () => clearTimeout(timer);
-  }, [keyboardAware, keyboardVisible, scrollRef]);
+  const footerKeyboardPad =
+    Platform.OS === 'web' && keyboardAware ? keyboardInset : 0;
 
   const cta = customFooter ?? (
     <View style={styles.ctaBlock}>
@@ -157,7 +148,8 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
               {
                 borderTopColor: theme.border,
                 backgroundColor: theme.bg,
-                paddingBottom: Math.max(insets.bottom, !isDesktop ? 4 : 8),
+                paddingBottom:
+                  Math.max(insets.bottom, !isDesktop ? 4 : 8) + footerKeyboardPad,
               },
             ]}
           >
