@@ -5,7 +5,7 @@ import { ROUTES } from '@/lib/routes';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { SignUpPulseKeypadStep } from '../SignUpPulseKeypadStep';
 import { formatSignupPhoneDisplay } from '../signUpKeypad.util';
-import { PULSE_SIGNUP } from '../signUpPulseTheme';
+import { SIGNUP_TEXT } from '../signUpTypography';
 
 export function PhoneStep({ flow }: { flow: SignUpFlow }) {
   const router = useRouter();
@@ -45,8 +45,8 @@ export function PhoneStep({ flow }: { flow: SignUpFlow }) {
       googleLoading={flow.googleLoading}
       footerAccessory={
         <Pressable onPress={() => router.replace(ROUTES.SIGN_IN)} style={styles.signIn}>
-          <Text style={styles.signInText}>
-            Already activated? <Text style={styles.signInLink}>Sign in</Text>
+          <Text style={SIGNUP_TEXT.linkSmall}>
+            Already activated? <Text style={SIGNUP_TEXT.linkEmphasis}>Sign in</Text>
           </Text>
         </Pressable>
       }
@@ -57,15 +57,6 @@ export function PhoneStep({ flow }: { flow: SignUpFlow }) {
 const styles = StyleSheet.create({
   signIn: {
     alignItems: 'center',
-    paddingVertical: 12,
-  },
-  signInText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: PULSE_SIGNUP.muted,
-  },
-  signInLink: {
-    color: PULSE_SIGNUP.primary,
-    fontWeight: '800',
+    paddingVertical: 8,
   },
 });

@@ -5,7 +5,7 @@ import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { SignUpOtpBoxes } from '../SignUpOtpBoxes';
 import { SignUpPulseKeypadStep } from '../SignUpPulseKeypadStep';
 import { OTP_LENGTH } from '../signUpConstants';
-import { PULSE_SIGNUP } from '../signUpPulseTheme';
+import { SIGNUP_TEXT } from '../signUpTypography';
 
 export function OtpStep({ flow }: { flow: SignUpFlow }) {
   const cleanOtp = flow.otp.replace(/\s/g, '');
@@ -32,7 +32,7 @@ export function OtpStep({ flow }: { flow: SignUpFlow }) {
       footerAccessory={
         <View style={styles.footer}>
           <MockOtpNotice />
-          <Text style={styles.resend}>
+          <Text style={SIGNUP_TEXT.captionMedium}>
             {flow.otpResendSecs > 0
               ? `Resend in ${flow.otpResendSecs}s`
               : 'Tap resend on the previous screen if needed'}
@@ -45,13 +45,8 @@ export function OtpStep({ flow }: { flow: SignUpFlow }) {
 
 const styles = StyleSheet.create({
   footer: {
-    marginTop: 8,
-    gap: 12,
-  },
-  resend: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: PULSE_SIGNUP.muted,
-    textAlign: 'center',
+    marginTop: 4,
+    gap: 8,
+    alignItems: 'center',
   },
 });

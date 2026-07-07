@@ -346,15 +346,15 @@ function SignUpWorkspaceReadyCardInner({
 
           <View style={cardStyles.entityRow}>
             <View style={cardStyles.entityPill}>
-              <EntityIcon size={14} color={theme.primary} strokeWidth={2.5} />
-              <Text style={[cardStyles.entityPillText, { color: theme.primary }]} numberOfLines={1}>
+              <EntityIcon size={14} color={theme.primaryDark} strokeWidth={2.5} />
+              <Text style={[cardStyles.entityPillText, { color: theme.primaryDark }]} numberOfLines={1}>
                 {name}
               </Text>
             </View>
             {!verifying ? (
-              <View style={[cardStyles.liveTag, { backgroundColor: `${theme.primary}1a` }]}>
-                <Sparkles size={11} color={theme.primary} strokeWidth={2.5} />
-                <Text style={[cardStyles.liveTagText, { color: theme.primary }]}>{liveLabel}</Text>
+              <View style={[cardStyles.liveTag, { backgroundColor: `${theme.primaryDark}14` }]}>
+                <Sparkles size={11} color={theme.primaryDark} strokeWidth={2.5} />
+                <Text style={[cardStyles.liveTagText, { color: theme.primaryDark }]}>{liveLabel}</Text>
               </View>
             ) : null}
           </View>

@@ -1,4 +1,4 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { GoogleBrandIcon } from '@/features/auth/components/GoogleBrandIcon';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
@@ -7,6 +7,7 @@ import { SignUpPulseField } from '../SignUpPulseField';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
 import { SIGNUP_ACCOUNT_SCROLL_PAD } from '../signUpConstants';
 import { PULSE_SIGNUP } from '../signUpPulseTheme';
+import { SIGNUP_TEXT } from '../signUpTypography';
 
 export function AccountStep({ flow }: { flow: SignUpFlow }) {
   const canSubmit =
@@ -129,8 +130,8 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         disabled={flow.loading || flow.googleLoading}
         style={({ pressed }) => [styles.googleBtn, pressed && styles.googlePressed]}
       >
-        <FontAwesome name="google" size={18} color="#4285F4" />
-        <Text style={styles.googleText}>Continue with Google</Text>
+        <GoogleBrandIcon size={18} />
+        <Text style={SIGNUP_TEXT.google}>Continue with Google</Text>
       </Pressable>
     </SignUpPulseFormStep>
   );
@@ -155,10 +156,5 @@ const styles = StyleSheet.create({
   },
   googlePressed: {
     backgroundColor: PULSE_SIGNUP.surface,
-  },
-  googleText: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#374151',
   },
 });

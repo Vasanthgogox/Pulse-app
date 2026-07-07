@@ -2,11 +2,14 @@ import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { PULSE_SIGNUP } from './signUpPulseTheme';
+import { createPulseSignUpTextStyles } from './signUpTypography';
 
 export interface SignUpOtpBoxesProps {
   digits: string;
   length: number;
 }
+
+const text = createPulseSignUpTextStyles(PULSE_SIGNUP);
 
 export const SignUpOtpBoxes = memo(function SignUpOtpBoxes({
   digits,
@@ -28,7 +31,9 @@ export const SignUpOtpBoxes = memo(function SignUpOtpBoxes({
               active && styles.boxActive,
             ]}
           >
-            <Text style={[styles.digit, filled && styles.digitFilled]}>{filled ? c : ''}</Text>
+            <Text style={[text.otpDigit, { color: 'transparent' }, filled && text.otpDigitFilled]}>
+              {filled ? c : ''}
+            </Text>
           </View>
         );
       })}
@@ -56,22 +61,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   boxFilled: {
-    borderColor: PULSE_SIGNUP.primary,
+    borderColor: PULSE_SIGNUP.primaryDark,
   },
   boxActive: {
-    borderColor: PULSE_SIGNUP.primary,
-    opacity: 0.65,
-    shadowColor: PULSE_SIGNUP.primary,
+    borderColor: PULSE_SIGNUP.primaryDark,
+    opacity: 0.85,
+    shadowColor: PULSE_SIGNUP.primaryDark,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
-  },
-  digit: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: 'transparent',
-  },
-  digitFilled: {
-    color: PULSE_SIGNUP.primary,
   },
 });

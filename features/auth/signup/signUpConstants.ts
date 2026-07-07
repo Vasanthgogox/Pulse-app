@@ -11,6 +11,14 @@ export const OTP_RESEND_SECS = 30;
 export const EMAIL_RESEND_SECS = 60;
 export const DESKTOP_BREAKPOINT = 1024;
 export const DESKTOP_MAX_PANEL_WIDTH = 560;
+/** Centered signup card width on desktop web. */
+export const DESKTOP_SIGNUP_CARD_WIDTH = 560;
+/** Inner form column max width inside desktop card. */
+export const DESKTOP_SIGNUP_FORM_WIDTH = 480;
+/** Scroll end padding so fields clear the sticky footer. */
+export const SIGNUP_FORM_FOOTER_CLEARANCE = 24;
+/** Mobile shell progress rail — inline-primary scroll clearance. */
+export const SIGNUP_MOBILE_PROGRESS_CLEARANCE = 52;
 /** Account step: room below confirm password for progress rail + mobile keyboard. */
 export const SCROLL_BOTTOM_PAD = 24;
 export const SIGNUP_ACCOUNT_SCROLL_PAD = 88;

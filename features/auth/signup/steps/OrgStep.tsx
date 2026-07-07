@@ -6,6 +6,7 @@ import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { SignUpPulseField } from '../SignUpPulseField';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
 import { PULSE_SIGNUP } from '../signUpPulseTheme';
+import { PULSE_SIGNUP_TYPO, SIGNUP_TEXT } from '../signUpTypography';
 
 export function OrgStep({ flow }: { flow: SignUpFlow }) {
   const orgError =
@@ -52,7 +53,7 @@ export function OrgStep({ flow }: { flow: SignUpFlow }) {
       {flow.orgCheck?.loading ? (
         <View style={stylesStatus.row}>
           <LoadingIndicator size="small" color={PULSE_SIGNUP.muted} />
-          <Text style={stylesStatus.hint}>Checking availability…</Text>
+          <Text style={SIGNUP_TEXT.captionMedium}>Checking availability…</Text>
         </View>
       ) : flow.orgCheck?.taken ? (
         <View style={stylesStatus.banner}>
@@ -78,11 +79,7 @@ const stylesStatus = StyleSheet.create({
     marginTop: -8,
     marginBottom: 16,
   },
-  hint: {
-    fontSize: 12,
-    color: PULSE_SIGNUP.muted,
-    fontWeight: '600',
-  },
+  hint: SIGNUP_TEXT.captionMedium,
   banner: {
     flexDirection: 'row',
     gap: 12,
@@ -99,15 +96,12 @@ const stylesStatus = StyleSheet.create({
     minWidth: 0,
   },
   bannerTitle: {
-    fontSize: 13,
-    fontWeight: '800',
+    ...PULSE_SIGNUP_TYPO.bannerTitle,
     color: '#92400e',
     marginBottom: 4,
   },
   bannerSub: {
-    fontSize: 12,
-    lineHeight: 18,
+    ...PULSE_SIGNUP_TYPO.bannerBody,
     color: '#78350f',
-    fontWeight: '600',
   },
 });

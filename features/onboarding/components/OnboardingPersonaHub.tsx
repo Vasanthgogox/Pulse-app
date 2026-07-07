@@ -41,6 +41,11 @@ const PERSONA_THEMES = {
   join_fleet: DRIVER_SIGNUP,
 } as const;
 
+/** Text/icons on white cards — pastel `primary` is fill-only; use ink accent. */
+function personaAccentInk(theme: (typeof PERSONA_THEMES)[keyof typeof PERSONA_THEMES]): string {
+  return theme.primaryDark;
+}
+
 const FEATURES = [
   'Trip management & real-time GPS',
   'GST-compliant invoicing & payments',
@@ -103,16 +108,19 @@ export function OnboardingPersonaHub() {
             style={({ pressed }) => [
               styles.card,
               isDesktop && styles.cardDesktop,
-              pressed && { borderColor: theme.primary, backgroundColor: theme.primaryTint },
+              pressed && {
+                borderColor: personaAccentInk(theme),
+                backgroundColor: theme.primaryTint,
+              },
             ]}
             accessibilityRole="button"
             accessibilityLabel={persona.title}
           >
             <View style={[styles.iconWrap, { backgroundColor: theme.primaryTint }]}>
-              <Icon size={20} color={theme.primary} strokeWidth={2.5} />
+              <Icon size={20} color={personaAccentInk(theme)} strokeWidth={2.5} />
             </View>
             <View style={styles.cardBody}>
-              <Text style={[styles.cardEyebrow, { color: theme.primary }]}>
+              <Text style={[styles.cardEyebrow, { color: personaAccentInk(theme) }]}>
                 {persona.eyebrow}
               </Text>
               <Text style={styles.cardTitle}>{persona.title}</Text>
@@ -227,7 +235,10 @@ export function OnboardingPersonaHub() {
           style={styles.mobileSignInBtn}
           accessibilityRole="button"
         >
-          <Text style={styles.mobileSignInText}>Already activated? Sign in</Text>
+          <Text style={styles.mobileSignInText}>
+            <Text style={styles.mobileSignInMuted}>Already activated? </Text>
+            <Text style={styles.mobileSignInLink}>Sign in</Text>
+          </Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -395,11 +406,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   cardEyebrow: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 1,
+    letterSpacing: 0.7,
+    marginBottom: 2,
   },
   cardTitle: {
     fontSize: 14,
@@ -408,10 +419,10 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   cardSub: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
-    color: '#64748b',
-    lineHeight: 15,
+    color: '#475569',
+    lineHeight: 17,
   },
 
   // Sign-in link (desktop)
@@ -428,8 +439,8 @@ const styles = StyleSheet.create({
   },
   signInLink: {
     fontSize: 13,
-    color: PULSE_SIGNUP.primary,
-    fontWeight: '700',
+    color: PULSE_SIGNUP.primaryDark,
+    fontWeight: '800',
   },
 
   // ── Mobile layout ──────────────────────────────────────────────────────────
@@ -453,7 +464,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontStyle: 'italic',
     letterSpacing: -0.6,
-    color: PULSE_SIGNUP.primary,
+    color: PULSE_SIGNUP.primaryDark,
   },
   mobileBrandDot: {
     color: Theme.driverPrimary,
@@ -495,7 +506,14 @@ const styles = StyleSheet.create({
   },
   mobileSignInText: {
     fontSize: 13,
+    fontWeight: '600',
+  },
+  mobileSignInMuted: {
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  mobileSignInLink: {
+    color: PULSE_SIGNUP.primaryDark,
     fontWeight: '800',
-    color: '#374151',
   },
 });

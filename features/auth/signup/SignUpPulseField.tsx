@@ -12,6 +12,7 @@ import { signUpPasswordInputProps, type SignUpPasswordFieldRole } from '@/lib/si
 
 import { useSignUpPulseFormStepContext } from './SignUpPulseFormStepContext';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
+import { createPulseSignUpTextStyles, SIGNUP_ERROR_COLOR } from './signUpTypography';
 
 export interface SignUpPulseFieldProps extends TextInputProps {
   label: string;
@@ -129,21 +130,15 @@ export const SignUpPulseField = memo(function SignUpPulseField({
 });
 
 function createFieldStyles(theme: SignUpTheme, dense: boolean) {
+  const text = createPulseSignUpTextStyles(theme);
+
   return StyleSheet.create({
     wrap: {
       marginBottom: dense ? 10 : 16,
     },
-    label: {
-      fontSize: 10,
-      fontWeight: '900',
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-      color: theme.muted,
-      marginBottom: 8,
-      paddingLeft: 4,
-    },
+    label: text.fieldLabel,
     req: {
-      color: '#ef4444',
+      color: SIGNUP_ERROR_COLOR,
     },
     inputShell: {
       borderWidth: 1,
@@ -162,16 +157,14 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean) {
       alignItems: 'flex-start',
     },
     inputShellError: {
-      borderColor: '#ef4444',
+      borderColor: SIGNUP_ERROR_COLOR,
       backgroundColor: '#fef2f2',
     },
     input: {
       flex: 1,
       paddingHorizontal: 16,
       paddingVertical: Platform.OS === 'web' ? 12 : 14,
-      fontSize: 14,
-      fontWeight: '600',
-      color: theme.text,
+      ...text.input,
       minHeight: Platform.OS === 'web' ? 48 : 52,
       ...Platform.select({
         web: { outlineStyle: 'none', cursor: 'text' } as object,
@@ -186,16 +179,12 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean) {
       paddingRight: 4,
     },
     error: {
-      fontSize: 12,
-      color: '#ef4444',
+      ...text.error,
       marginTop: 6,
-      fontWeight: '600',
     },
     hint: {
-      fontSize: 12,
-      color: theme.muted,
+      ...text.hint,
       marginTop: 6,
-      fontWeight: '600',
     },
   });
 }

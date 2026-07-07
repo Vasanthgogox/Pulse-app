@@ -15,11 +15,10 @@ import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
 
 import { DRIVER_SIGNUP } from './signUpDriverTheme';
+import { DESKTOP_SIGNUP_CARD_WIDTH } from './signUpConstants';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
+import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO } from './signUpTypography';
 
-const DEVICE_WIDTH = 430;
-const DEVICE_HEIGHT = 900;
-const DEVICE_BORDER = 12;
 /** Min width per progress segment when the rail scrolls horizontally. */
 const PROGRESS_ITEM_MIN_WIDTH = 52;
 
@@ -48,7 +47,7 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
 }: SignUpPulseShellProps) {
   const insets = useSafeAreaInsets();
   const stepIndex = Math.min(Math.max(currentStepIndex, 0), stepLabels.length - 1);
-  const styles = createStyles(theme);
+  const styles = createStyles(theme, isDesktop);
   const useScrollableProgress = stepLabels.length > 5;
   const progressScrollRef = useRef<ScrollView>(null);
   const { keyboardVisible } = useKeyboardVisible();
@@ -64,7 +63,7 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
     <View
       style={[
         styles.device,
-        isDesktop && styles.deviceFramed,
+        isDesktop && styles.deviceDesktopCard,
         !isDesktop && { paddingTop: insets.top },
       ]}
     >
@@ -95,7 +94,7 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
         <View
           style={[
             styles.progressFooter,
-            { paddingBottom: Math.max(insets.bottom, isDesktop ? 24 : 12) },
+            { paddingBottom: Math.max(insets.bottom, isDesktop ? 20 : 12) },
           ]}
         >
           {useScrollableProgress ? (
@@ -150,7 +149,7 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
     return (
       <View
         style={[
-          styles.outer,
+          styles.outerDesktop,
           Platform.OS === 'web' ? (WEB_APP_VIEWPORT_STYLE as object) : null,
           { paddingTop: insets.top, paddingBottom: insets.bottom },
         ]}
@@ -174,14 +173,17 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
   );
 });
 
-function createStyles(theme: SignUpShellTheme) {
+function createStyles(theme: SignUpShellTheme, isDesktop: boolean) {
+  const text = createPulseSignUpTextStyles(theme);
+
   return StyleSheet.create({
-    outer: {
+    outerDesktop: {
       flex: 1,
       backgroundColor: theme.canvas,
       alignItems: 'center',
       justifyContent: 'center',
-      padding: Platform.OS === 'web' ? 32 : 0,
+      paddingHorizontal: 32,
+      paddingVertical: 28,
     },
     device: {
       flex: 1,
@@ -203,37 +205,43 @@ function createStyles(theme: SignUpShellTheme) {
     nativeFill: {
       flex: 1,
     },
-    deviceFramed: {
+    deviceDesktopCard: {
       flex: 0,
+      flexGrow: 0,
+      flexShrink: 1,
       flexDirection: 'column',
-      width: DEVICE_WIDTH,
+      width: DESKTOP_SIGNUP_CARD_WIDTH,
       maxWidth: '100%',
-      height: DEVICE_HEIGHT,
-      maxHeight: '100%',
-      borderRadius: PULSE_SIGNUP_RADIUS.device,
-      borderWidth: DEVICE_BORDER,
-      borderColor: theme.deviceBorder,
+      minHeight: 660,
+      maxHeight: '94%',
+      borderRadius: PULSE_SIGNUP_RADIUS.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+      backgroundColor: theme.bg,
       ...Platform.select({
         web: {
-          boxShadow: '0 25px 50px rgba(0,0,0,0.15)',
+          boxShadow:
+            '0 24px 48px rgba(15, 23, 42, 0.08), 0 8px 16px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.04)',
         } as object,
         ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 16 },
-          shadowOpacity: 0.18,
-          shadowRadius: 32,
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 12 },
+          shadowOpacity: 0.1,
+          shadowRadius: 28,
         },
-        android: { elevation: 12 },
+        android: { elevation: 8 },
       }),
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingTop: 8,
-      paddingBottom: 8,
+      paddingHorizontal: isDesktop ? 28 : 20,
+      paddingTop: isDesktop ? 16 : 4,
+      paddingBottom: isDesktop ? 12 : 6,
       backgroundColor: theme.bg,
+      borderBottomWidth: isDesktop ? StyleSheet.hairlineWidth : 0,
+      borderBottomColor: theme.border,
     },
     backBtn: {
       flexDirection: 'row',
@@ -243,17 +251,9 @@ function createStyles(theme: SignUpShellTheme) {
       paddingVertical: 8,
       marginLeft: -8,
     },
-    backText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: theme.muted,
-    },
+    backText: text.back,
     brand: {
-      fontSize: 22,
-      fontWeight: '900',
-      fontStyle: 'italic',
-      letterSpacing: -0.6,
-      color: theme.primary,
+      ...text.brand,
       flexShrink: 0,
     },
     headerSpacer: {
@@ -264,8 +264,8 @@ function createStyles(theme: SignUpShellTheme) {
       minHeight: 0,
     },
     progressFooter: {
-      paddingTop: 10,
-      paddingHorizontal: 16,
+      paddingTop: isDesktop ? 14 : 10,
+      paddingHorizontal: isDesktop ? 24 : 16,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border,
       backgroundColor: theme.bg,
@@ -274,6 +274,7 @@ function createStyles(theme: SignUpShellTheme) {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-end',
+      gap: 4,
     },
     progressScrollContent: {
       flexDirection: 'row',
@@ -284,7 +285,7 @@ function createStyles(theme: SignUpShellTheme) {
     progressItem: {
       flex: 1,
       alignItems: 'center',
-      gap: 6,
+      gap: isDesktop ? 8 : 6,
       minWidth: 0,
       paddingHorizontal: 2,
     },
@@ -298,25 +299,20 @@ function createStyles(theme: SignUpShellTheme) {
     },
     progressBar: {
       width: '100%',
-      height: 4,
+      height: isDesktop ? 3 : 4,
       borderRadius: 999,
       backgroundColor: '#e5e7eb',
     },
     progressBarActive: {
-      backgroundColor: theme.primary,
+      backgroundColor: theme.primaryDark,
     },
     progressLabel: {
-      fontSize: 7,
-      fontWeight: '800',
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
-      color: theme.placeholder,
+      ...text.progressLabel,
+      ...(isDesktop ? {} : PULSE_SIGNUP_TYPO.progressLabelMobile),
       textAlign: 'center',
       width: '100%',
     },
-    progressLabelActive: {
-      color: theme.primary,
-    },
+    progressLabelActive: text.progressLabelActive,
   });
 }
 

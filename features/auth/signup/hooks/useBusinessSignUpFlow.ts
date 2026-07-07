@@ -88,6 +88,11 @@ import { parseSignupEntryIntent, signupEntrySource } from '../signupEntryIntent'
 import { useCompleteInvitationJoin } from './useCompleteInvitationJoin';
 import type { InvitePhase, SignupTrack } from '../signupInviteTypes';
 import { usePendingOnboarding } from '@/contexts/PendingOnboardingContext';
+import { reverseGeocodePlaceInIndia, resolveIndiaPincode } from '@/lib/placesService';
+import {
+  matchIndiaLocation,
+  parsePlaceDisplayName,
+} from '../utils/matchIndiaLocation.util';
 
 export { STEP_LABELS };
 export type { InvitePhase, SignupTrack } from '../signupInviteTypes';
@@ -141,6 +146,10 @@ export function useBusinessSignUpFlow() {
   const [fleetSize, setFleetSize] = useState<FleetSize | null>(null);
   const [monthlyVolume, setMonthlyVolume] = useState<MonthlyVolume | null>(null);
   const [streetAddress, setStreetAddress] = useState('');
+  const [officePlaceLabel, setOfficePlaceLabel] = useState('');
+  const [officeLatitude, setOfficeLatitude] = useState<number | null>(null);
+  const [officeLongitude, setOfficeLongitude] = useState<number | null>(null);
+  const [officePlaceResolving, setOfficePlaceResolving] = useState(false);
   const [locality, setLocality] = useState('');
   const [pincode, setPincode] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<IndiaLocation | null>(null);
@@ -950,6 +959,69 @@ export function useBusinessSignUpFlow() {
     goToPage(5);
   };
 
+  const clearOfficePlace = () => {
+    setOfficePlaceLabel('');
+    setOfficeLatitude(null);
+    setOfficeLongitude(null);
+    setPincode('');
+    setSelectedLocation(null);
+  };
+
+  const applyOfficePlaceFromMap = async (
+    displayName: string,
+    lat: number,
+    lon: number,
+    hints?: { pincode?: string | null; city?: string | null; state?: string | null },
+  ) => {
+    setOfficePlaceLabel(displayName);
+    setPincode('');
+
+    if (lat === 0 && lon === 0) {
+      setOfficeLatitude(null);
+      setOfficeLongitude(null);
+      const fromName = parsePlaceDisplayName(displayName);
+      const matched = matchIndiaLocation(fromName.city, fromName.state);
+      if (matched) setSelectedLocation(matched);
+      const pin = await resolveIndiaPincode({
+        lat: 0,
+        lon: 0,
+        displayName,
+        hintPincode: hints?.pincode,
+        city: hints?.city || fromName.city,
+        state: hints?.state || fromName.state,
+      });
+      setPincode(pin ?? '');
+      return;
+    }
+
+    setOfficeLatitude(lat);
+    setOfficeLongitude(lon);
+    setOfficePlaceResolving(true);
+
+    try {
+      const fromName = parsePlaceDisplayName(displayName);
+      const geo = await reverseGeocodePlaceInIndia(lat, lon);
+      const city = geo.city || hints?.city || fromName.city || null;
+      const state = geo.state || hints?.state || fromName.state || null;
+      const pin = await resolveIndiaPincode({
+        lat,
+        lon,
+        displayName,
+        hintPincode: hints?.pincode,
+        city,
+        state,
+        reverseGeo: geo,
+      });
+
+      setPincode(pin ?? '');
+
+      const matched = matchIndiaLocation(city, state);
+      if (matched) setSelectedLocation(matched);
+    } finally {
+      setOfficePlaceResolving(false);
+    }
+  };
+
   /**
    * Validate org name before submit only when cache is stale (> 10s old would
    * require a timestamp — here we trust the debounced result is fresh enough
@@ -1027,6 +1099,8 @@ export function useBusinessSignUpFlow() {
       city: selectedLocation?.city,
       state: selectedLocation?.state,
       zone: selectedLocation?.zone,
+      officeLatitude: officeLatitude ?? undefined,
+      officeLongitude: officeLongitude ?? undefined,
       businessType: businessType ?? undefined,
       employeeCount: employeeCount ?? undefined,
       fleetSizeBand: fleetSize ?? undefined,
@@ -1069,6 +1143,8 @@ export function useBusinessSignUpFlow() {
       city: selectedLocation?.city,
       state: selectedLocation?.state,
       zone: selectedLocation?.zone,
+      officeLatitude: officeLatitude ?? undefined,
+      officeLongitude: officeLongitude ?? undefined,
       businessType: businessType ?? undefined,
       employeeCount: employeeCount ?? undefined,
       fleetSizeBand: fleetSize ?? undefined,
@@ -1335,6 +1411,17 @@ export function useBusinessSignUpFlow() {
     // step 4 (location)
     streetAddress,
     setStreetAddress,
+    officePlaceLabel,
+    setOfficePlaceLabel,
+    officeLatitude,
+    officeLongitude,
+    officePlaceResolving,
+    setOfficeCoordinates: (lat: number | null, lon: number | null) => {
+      setOfficeLatitude(lat);
+      setOfficeLongitude(lon);
+    },
+    clearOfficePlace,
+    applyOfficePlaceFromMap,
     locality,
     setLocality,
     pincode,

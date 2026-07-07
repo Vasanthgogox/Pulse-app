@@ -156,6 +156,9 @@ export interface SignUpOptions {
   city?: string;
   state?: string;
   zone?: string;
+  /** Office HQ from places search (create-trip LocationSearchField). */
+  officeLatitude?: number;
+  officeLongitude?: number;
   /** Legal structure of the business: Sole Proprietor, Partnership, Pvt Ltd, LLP, OPC, or Other. */
   businessType?: string;
   /** Number of employees band, e.g. "1-10", "11-50", "51-200", "201-500", "500+". */
@@ -185,6 +188,8 @@ export interface PendingOAuthOnboardingMetadata {
   city?: string;
   state?: string;
   zone?: string;
+  officeLatitude?: number;
+  officeLongitude?: number;
   businessType?: string;
   employeeCount?: string;
   fleetSizeBand?: string;
@@ -210,6 +215,8 @@ export async function signUp({
   city,
   state,
   zone,
+  officeLatitude,
+  officeLongitude,
   businessType,
   employeeCount,
   fleetSizeBand,
@@ -260,6 +267,12 @@ export async function signUp({
     if (city?.trim()) metadata.city = city.trim();
     if (state?.trim()) metadata.state = state.trim();
     if (zone?.trim()) metadata.zone = zone.trim();
+    if (officeLatitude != null && Number.isFinite(officeLatitude)) {
+      metadata.office_latitude = officeLatitude;
+    }
+    if (officeLongitude != null && Number.isFinite(officeLongitude)) {
+      metadata.office_longitude = officeLongitude;
+    }
     if (businessType?.trim()) metadata.business_type = businessType.trim();
     if (employeeCount?.trim()) metadata.employee_count = employeeCount.trim();
     if (fleetSizeBand?.trim()) metadata.fleet_size_band = fleetSizeBand.trim();
@@ -661,6 +674,12 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
   if (pending.city?.trim()) authData.city = pending.city.trim();
   if (pending.state?.trim()) authData.state = pending.state.trim();
   if (pending.zone?.trim()) authData.zone = pending.zone.trim();
+  if (pending.officeLatitude != null && Number.isFinite(pending.officeLatitude)) {
+    authData.office_latitude = pending.officeLatitude;
+  }
+  if (pending.officeLongitude != null && Number.isFinite(pending.officeLongitude)) {
+    authData.office_longitude = pending.officeLongitude;
+  }
   if (pending.businessType?.trim()) authData.business_type = pending.businessType.trim();
   if (pending.employeeCount?.trim()) authData.employee_count = pending.employeeCount.trim();
   if (pending.fleetSizeBand?.trim()) authData.fleet_size_band = pending.fleetSizeBand.trim();

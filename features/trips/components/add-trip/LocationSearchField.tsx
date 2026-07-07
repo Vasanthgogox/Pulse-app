@@ -3,13 +3,12 @@
  * Location modal matches Create Trip pickers (FleetEntityPickerModal — centered sheet, search, rich rows).
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
-import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { addToPlacesCache, getPopularPlacesInIndia, searchPlacesInIndia, type PlaceResult } from "@/lib/placesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { MapPin, X } from "lucide-react-native";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { MapPin, Search, X } from "lucide-react-native";
+import { type ReactNode, forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -29,6 +28,9 @@ import {
 export interface PlaceCoords {
   lat: number;
   lon: number;
+  pincode?: string | null;
+  city?: string | null;
+  state?: string | null;
 }
 
 export interface LocationSearchFieldProps {
@@ -45,6 +47,10 @@ export interface LocationSearchFieldProps {
   onDropdownOpenChange?: (open: boolean) => void;
   /** Tighter field height and typography for native / narrow create-trip forms. */
   compact?: boolean;
+  /** Signup/office flows — lighter typography aligned with Pulse onboarding. */
+  sheetVariant?: "default" | "signup";
+  sheetTitle?: string;
+  sheetSubtitle?: string;
 }
 
 const DEBOUNCE_MS = 300;
@@ -61,7 +67,11 @@ export function LocationSearchField({
   labelStyle,
   onDropdownOpenChange,
   compact = false,
+  sheetVariant = "default",
+  sheetTitle,
+  sheetSubtitle,
 }: LocationSearchFieldProps) {
+  const isSignupSheet = sheetVariant === "signup";
   const { width: winW } = useWindowDimensions();
   const horizontalPad = Layout.screenPaddingHorizontal * 2;
   /** Explicit width avoids RN Web % layout quirks so the sheet stays visually centered on mobile. */
@@ -136,7 +146,13 @@ export function LocationSearchField({
     (place: PlaceResult) => {
       setDraft(place.displayName);
       onChangeText(place.displayName);
-      onSelectPlace?.(place.displayName, { lat: place.lat, lon: place.lon });
+      onSelectPlace?.(place.displayName, {
+        lat: place.lat,
+        lon: place.lon,
+        pincode: place.pincode ?? null,
+        city: place.city ?? null,
+        state: place.state ?? null,
+      });
       addToPlacesCache(place).catch(() => {});
       closeDropdown();
     },
@@ -162,22 +178,42 @@ export function LocationSearchField({
   const hasApiResults = results.length > 0;
   const showPopular = !loading && (query.length < MIN_QUERY_LENGTH || !hasApiResults);
   const listToShow = hasApiResults ? results : showPopular ? popularForDisplay : [];
-  const isPopularList = showPopular && !hasApiResults;
   const showNoMatchMessage = !loading && query.length >= MIN_QUERY_LENGTH && listToShow.length === 0;
 
-  const sheetType = compact ? sheetTypography.compact : sheetTypography.default;
-  const rowIconSize = compact ? 15 : 16;
+  const sheetType = isSignupSheet
+    ? signupSheetTypography
+    : compact
+      ? sheetTypography.compact
+      : sheetTypography.default;
+  const rowIconSize = isSignupSheet ? 14 : compact ? 15 : 16;
+  const resolvedSheetTitle =
+    sheetTitle ?? (isSignupSheet ? "Pick area on map" : "Pick a place in India");
+  const resolvedSheetSubtitle =
+    sheetSubtitle ??
+    (isSignupSheet
+      ? "Search neighbourhoods, landmarks, or cities"
+      : "Search cities, areas, or landmarks");
+  const popularSectionLabel = isSignupSheet
+    ? query
+      ? "Suggestions"
+      : "Popular areas"
+    : query
+      ? "Suggestions"
+      : "Popular places — tap or type to search";
 
   const dropdownListContent = (
     <>
       {loading && (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="small" color={Theme.primary} />
+        <View style={[styles.loadingWrap, isSignupSheet && signupSheetStyles.loadingWrap]}>
+          <ActivityIndicator
+            size="small"
+            color={isSignupSheet ? SIGNUP_SHEET.muted : Theme.primary}
+          />
           <Text style={sheetType.loadingText}>Searching…</Text>
         </View>
       )}
       {showNoMatchMessage && (
-        <View style={styles.emptyListWrap}>
+        <View style={[styles.emptyListWrap, isSignupSheet && signupSheetStyles.emptyListWrap]}>
           <Text style={sheetType.emptyListSubtext}>
             No suggestions for "{query}". You can use your text as a custom address below.
           </Text>
@@ -185,13 +221,7 @@ export function LocationSearchField({
       )}
       {!loading && listToShow.length > 0 && (
         <>
-          <Text style={sheetType.sectionLabel}>
-            {isPopularList
-              ? query
-                ? "Suggestions"
-                : "Popular places — tap or type to search"
-              : "Suggestions"}
-          </Text>
+          <Text style={sheetType.sectionLabel}>{popularSectionLabel}</Text>
           {listToShow.map((place) => {
             const selected = draft === place.displayName;
             return (
@@ -199,15 +229,27 @@ export function LocationSearchField({
                 key={place.placeId}
                 style={[
                   styles.placeRow,
-                  compact && styles.placeRowCompact,
-                  selected && styles.placeRowSelected,
+                  compact && !isSignupSheet && styles.placeRowCompact,
+                  isSignupSheet && signupSheetStyles.placeRow,
+                  selected &&
+                    (isSignupSheet ? signupSheetStyles.placeRowSelected : styles.placeRowSelected),
                   webCursor,
                 ]}
                 onPress={() => handleSelect(place)}
                 activeOpacity={0.75}
               >
-                <View style={[styles.rowIconCircle, compact && styles.rowIconCircleCompact]}>
-                  <MapPin size={rowIconSize} color={Theme.iconPrimary} />
+                <View
+                  style={[
+                    styles.rowIconCircle,
+                    compact && !isSignupSheet && styles.rowIconCircleCompact,
+                    isSignupSheet && signupSheetStyles.rowIconCircle,
+                  ]}
+                >
+                  <MapPin
+                    size={rowIconSize}
+                    color={isSignupSheet ? SIGNUP_SHEET.muted : Theme.iconPrimary}
+                    strokeWidth={isSignupSheet ? 2 : 2.5}
+                  />
                 </View>
                 <Text style={sheetType.placeRowText} numberOfLines={3}>
                   {place.displayName}
@@ -219,18 +261,28 @@ export function LocationSearchField({
       )}
       {showCustomOption && (
         <TouchableOpacity
-          style={[styles.customAddressRow, compact && styles.customAddressRowCompact, webCursor]}
+          style={[
+            styles.customAddressRow,
+            compact && !isSignupSheet && styles.customAddressRowCompact,
+            isSignupSheet && signupSheetStyles.customAddressRow,
+            webCursor,
+          ]}
           onPress={handleUseCustom}
           activeOpacity={0.75}
         >
           <View
             style={[
               styles.rowIconCircle,
-              compact && styles.rowIconCircleCompact,
-              styles.customIconCircle,
+              compact && !isSignupSheet && styles.rowIconCircleCompact,
+              isSignupSheet && signupSheetStyles.rowIconCircle,
+              !isSignupSheet && styles.customIconCircle,
             ]}
           >
-            <MapPin size={rowIconSize} color={Theme.primary} />
+            <MapPin
+              size={rowIconSize}
+              color={isSignupSheet ? SIGNUP_SHEET.ink : Theme.primary}
+              strokeWidth={isSignupSheet ? 2 : 2.5}
+            />
           </View>
           <Text style={sheetType.customAddressText}>
             Use "{draft.trim()}" as custom address
@@ -268,7 +320,15 @@ export function LocationSearchField({
             style={[
               styles.inputValueText,
               compact && styles.inputValueTextCompact,
-              { color: value.trim() ? Theme.textPrimary : Theme.placeholder },
+              {
+                color: value.trim()
+                  ? isSignupSheet
+                    ? SIGNUP_SHEET.title
+                    : Theme.textPrimary
+                  : isSignupSheet
+                    ? SIGNUP_SHEET.faint
+                    : Theme.placeholder,
+              },
             ]}
             numberOfLines={1}
           >
@@ -281,7 +341,11 @@ export function LocationSearchField({
             onPress={handleClear}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <FontAwesome name="times-circle" size={20} color={Theme.textMuted} />
+            <FontAwesome
+              name="times-circle"
+              size={20}
+              color={isSignupSheet ? SIGNUP_SHEET.faint : Theme.textMuted}
+            />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -292,7 +356,7 @@ export function LocationSearchField({
             <FontAwesome
               name={dropdownOpen ? "chevron-up" : "chevron-down"}
               size={14}
-              color={Theme.textMuted}
+              color={isSignupSheet ? SIGNUP_SHEET.faint : Theme.textMuted}
             />
           </TouchableOpacity>
         )}
@@ -313,44 +377,72 @@ export function LocationSearchField({
               <View
                 style={[
                   styles.sheet,
+                  isSignupSheet && signupSheetStyles.sheet,
                   { width: sheetWidth, maxWidth: sheetWidth, alignSelf: "center" },
                 ]}
               >
-                <View style={[styles.sheetHead, compact && styles.sheetHeadCompact]}>
+                <View
+                  style={[
+                    styles.sheetHead,
+                    compact && !isSignupSheet && styles.sheetHeadCompact,
+                    isSignupSheet && signupSheetStyles.sheetHead,
+                  ]}
+                >
                   <View style={styles.sheetTitles}>
-                    <Text style={sheetType.sheetTitle}>Pick a place in India</Text>
-                    <Text style={sheetType.sheetSubtitle}>
-                      Search cities, areas, or landmarks
-                    </Text>
+                    <Text style={sheetType.sheetTitle}>{resolvedSheetTitle}</Text>
+                    <Text style={sheetType.sheetSubtitle}>{resolvedSheetSubtitle}</Text>
                   </View>
                   <TouchableOpacity
                     onPress={closeDropdown}
-                    style={[styles.closeBtn, compact && styles.closeBtnCompact, webCursor]}
+                    style={[
+                      styles.closeBtn,
+                      compact && !isSignupSheet && styles.closeBtnCompact,
+                      isSignupSheet && signupSheetStyles.closeBtn,
+                      webCursor,
+                    ]}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     accessibilityRole="button"
                     accessibilityLabel="Close"
                   >
-                    <X size={compact ? 16 : 17} color={Theme.primary} strokeWidth={2.5} />
+                    <X
+                      size={isSignupSheet ? 16 : compact ? 16 : 17}
+                      color={isSignupSheet ? SIGNUP_SHEET.muted : Theme.primary}
+                      strokeWidth={isSignupSheet ? 2 : 2.5}
+                    />
                   </TouchableOpacity>
                 </View>
 
-                <CreateTripSheetSearchInput
-                  ref={modalInputRef}
-                  value={draft}
-                  onChangeText={(t) => {
-                    setDraft(t);
-                    onChangeText(t);
-                  }}
-                  placeholder={placeholder}
-                  autoCapitalize="words"
-                  spellCheck={false}
-                  autoComplete="off"
-                  autoFocus
-                  compactChat
-                  compactChatSize={compact ? "sm" : "md"}
-                  shellStyle={styles.searchShell}
-                  accessibilityLabel="Search places"
-                />
+                {isSignupSheet ? (
+                  <SignupSheetSearchInput
+                    ref={modalInputRef}
+                    value={draft}
+                    onChangeText={(t) => {
+                      setDraft(t);
+                      onChangeText(t);
+                    }}
+                    placeholder={placeholder}
+                    shellStyle={signupSheetStyles.searchShell}
+                    autoFocus
+                  />
+                ) : (
+                  <CreateTripSheetSearchInput
+                    ref={modalInputRef}
+                    value={draft}
+                    onChangeText={(t) => {
+                      setDraft(t);
+                      onChangeText(t);
+                    }}
+                    placeholder={placeholder}
+                    autoCapitalize="words"
+                    spellCheck={false}
+                    autoComplete="off"
+                    autoFocus
+                    compactChat
+                    compactChatSize={compact ? "sm" : "md"}
+                    shellStyle={styles.searchShell}
+                    accessibilityLabel="Search places"
+                  />
+                )}
 
                 <ScrollView
                   style={styles.sheetScroll}
@@ -718,3 +810,223 @@ const sheetTypography = {
     },
   }),
 };
+
+/** Pulse signup palette — mirrors PULSE_SIGNUP without cross-feature import. */
+const SIGNUP_SHEET = {
+  ink: "#4D3636",
+  title: "#1f2937",
+  body: "#4b5563",
+  muted: "#6b7280",
+  faint: "#9ca3af",
+  border: "#e5e7eb",
+  surface: "#f9fafb",
+  wash: "#f3f4f6",
+  white: "#ffffff",
+} as const;
+
+const signupSheetStyles = StyleSheet.create({
+  sheet: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: SIGNUP_SHEET.border,
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  sheetHead: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 10,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderColor: SIGNUP_SHEET.border,
+    backgroundColor: SIGNUP_SHEET.white,
+  },
+  searchShell: {
+    marginHorizontal: 20,
+    marginBottom: 10,
+  },
+  placeRow: {
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    gap: 12,
+    borderBottomColor: SIGNUP_SHEET.border,
+  },
+  placeRowSelected: {
+    backgroundColor: SIGNUP_SHEET.surface,
+  },
+  rowIconCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: SIGNUP_SHEET.wash,
+  },
+  customAddressRow: {
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    gap: 12,
+    marginTop: 0,
+    borderTopColor: SIGNUP_SHEET.border,
+    backgroundColor: SIGNUP_SHEET.surface,
+  },
+  loadingWrap: {
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+  },
+  emptyListWrap: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+});
+
+const signupSheetTypography = StyleSheet.create({
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    letterSpacing: -0.2,
+    color: SIGNUP_SHEET.title,
+  },
+  sheetSubtitle: {
+    fontSize: 13,
+    fontWeight: "400",
+    marginTop: 4,
+    color: SIGNUP_SHEET.muted,
+    lineHeight: 18,
+  },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: "500",
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
+    color: SIGNUP_SHEET.faint,
+    paddingHorizontal: 20,
+    paddingTop: 6,
+    paddingBottom: 8,
+    backgroundColor: SIGNUP_SHEET.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: SIGNUP_SHEET.border,
+  },
+  placeRowText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "400",
+    color: SIGNUP_SHEET.body,
+  },
+  customAddressText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "500",
+    color: SIGNUP_SHEET.ink,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontWeight: "400",
+    color: SIGNUP_SHEET.muted,
+  },
+  emptyListSubtext: {
+    fontSize: 12,
+    fontWeight: "400",
+    color: SIGNUP_SHEET.muted,
+    lineHeight: 17,
+    marginBottom: 0,
+  },
+});
+
+type SignupSheetSearchInputProps = {
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder: string;
+  shellStyle?: ViewStyle;
+  autoFocus?: boolean;
+};
+
+const SignupSheetSearchInput = forwardRef<TextInput, SignupSheetSearchInputProps>(
+  function SignupSheetSearchInput(
+    { value, onChangeText, placeholder, shellStyle, autoFocus },
+    ref,
+  ) {
+    const [focused, setFocused] = useState(false);
+    const webCursor =
+      Platform.OS === "web" ? ({ cursor: "text" } as TextStyle) : undefined;
+
+    return (
+      <View
+        style={[
+          signupSearchStyles.shell,
+          focused && signupSearchStyles.shellFocused,
+          shellStyle,
+        ]}
+      >
+        <Search size={15} color={SIGNUP_SHEET.faint} strokeWidth={2} />
+        <TextInput
+          ref={ref}
+          style={[signupSearchStyles.input, webCursor]}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={SIGNUP_SHEET.faint}
+          autoFocus={autoFocus}
+          autoCapitalize="words"
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="off"
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          returnKeyType="search"
+          accessibilityLabel="Search places"
+        />
+        {value.trim().length > 0 ? (
+          <TouchableOpacity
+            onPress={() => onChangeText("")}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
+            <X size={14} color={SIGNUP_SHEET.faint} strokeWidth={2} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  },
+);
+
+const signupSearchStyles = StyleSheet.create({
+  shell: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: SIGNUP_SHEET.border,
+    backgroundColor: SIGNUP_SHEET.white,
+    gap: 10,
+  },
+  shellFocused: {
+    borderColor: "#d1d5db",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 1px 3px rgba(15,23,42,0.05)",
+      } as object,
+      default: {},
+    }),
+  },
+  input: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "400",
+    color: SIGNUP_SHEET.title,
+    paddingVertical: Platform.OS === "android" ? 2 : 0,
+    borderWidth: 0,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as unknown as TextStyle,
+    }),
+  },
+});

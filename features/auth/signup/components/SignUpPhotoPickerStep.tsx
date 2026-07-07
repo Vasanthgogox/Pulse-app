@@ -15,6 +15,7 @@ import type { PresetAvatar } from '@/constants/DriverLevels';
 import { SignUpBrandingStepLayout } from './SignUpBrandingStepLayout';
 import { PULSE_SIGNUP_RADIUS, type SignUpTheme } from '../signUpPulseTheme';
 import { PULSE_SIGNUP } from '../signUpPulseTheme';
+import { createPulseSignUpTextStyles } from '../signUpTypography';
 
 export interface SignUpPhotoPickerStepProps {
   title: string;
@@ -207,6 +208,8 @@ export const SignUpPhotoPickerBody = memo(function SignUpPhotoPickerBody({
 });
 
 function createStyles(theme: SignUpTheme) {
+  const text = createPulseSignUpTextStyles(theme);
+
   return StyleSheet.create({
     body: {
       width: '100%',
@@ -249,18 +252,13 @@ function createStyles(theme: SignUpTheme) {
       backgroundColor: theme.surface,
     },
     uploadText: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: theme.primary,
+      ...text.linkSmall,
+      color: theme.primaryDark,
+      fontWeight: '600',
     },
     gridLabel: {
-      fontSize: 10,
-      fontWeight: '900',
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-      color: theme.muted,
+      ...text.fieldLabel,
       marginBottom: 12,
-      paddingLeft: 4,
     },
     gridWrap: {
       flexDirection: 'row',
@@ -277,7 +275,7 @@ function createStyles(theme: SignUpTheme) {
       borderColor: theme.border,
     },
     gridItemSelected: {
-      borderColor: theme.primary,
+      borderColor: theme.primaryDark,
     },
     gridImage: {
       width: '100%',
