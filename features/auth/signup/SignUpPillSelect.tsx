@@ -1,6 +1,9 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS } from './signUpPulseTheme';
+import { createPulseSignUpTextStyles, SIGNUP_ERROR_COLOR } from './signUpTypography';
+
+const GRID_GAP = 6;
 
 export type SignUpPillOption<T extends string = string> = {
   value: T;
@@ -15,6 +18,10 @@ export interface SignUpPillSelectProps<T extends string = string> {
   value: T | null;
   onChange: (value: T) => void;
   error?: string | null;
+  /** Equal-width grid columns (default: 3). */
+  columns?: number;
+  /** Card = stacked title + subtitle, centered (operating model). */
+  layout?: 'chip' | 'card';
 }
 
 function normalizeOptions<T extends string>(
@@ -25,6 +32,12 @@ function normalizeOptions<T extends string>(
   );
 }
 
+function gridCellWidth(columns: number): `${number}%` {
+  return `${100 / columns}%` as `${number}%`;
+}
+
+const text = createPulseSignUpTextStyles(PULSE_SIGNUP);
+
 export function SignUpPillSelect<T extends string>({
   label,
   required,
@@ -32,39 +45,58 @@ export function SignUpPillSelect<T extends string>({
   value,
   onChange,
   error,
+  columns = 3,
+  layout = 'chip',
 }: SignUpPillSelectProps<T>) {
   const items = normalizeOptions(options);
+  const cellWidth = gridCellWidth(columns);
+  const isCard = layout === 'card';
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>
+      <Text style={text.fieldLabel}>
         {label}
         {required ? <Text style={styles.req}> *</Text> : null}
       </Text>
-      <View style={styles.row} accessibilityRole="radiogroup">
+      <View style={styles.grid} accessibilityRole="radiogroup">
         {items.map((opt) => {
           const selected = value === opt.value;
           return (
-            <Pressable
-              key={opt.value}
-              onPress={() => onChange(opt.value)}
-              style={({ pressed }) => [
-                styles.pill,
-                selected && styles.pillSelected,
-                pressed && styles.pillPressed,
-              ]}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
-            >
-              <Text style={[styles.pillLabel, selected && styles.pillLabelSelected]}>
-                {opt.label}
-              </Text>
-              {opt.sub ? (
-                <Text style={[styles.pillSub, selected && styles.pillSubSelected]}>
-                  {opt.sub}
+            <View key={opt.value} style={[styles.cell, { width: cellWidth }]}>
+              <Pressable
+                onPress={() => onChange(opt.value)}
+                style={({ pressed }) => [
+                  styles.pill,
+                  isCard && styles.pillCard,
+                  selected && styles.pillSelected,
+                  pressed && styles.pillPressed,
+                ]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+              >
+                <Text
+                  style={[
+                    text.pillLabel,
+                    styles.pillLabel,
+                    isCard && styles.pillLabelCard,
+                    selected && text.pillLabelSelected,
+                  ]}
+                  numberOfLines={isCard ? 1 : 2}
+                  adjustsFontSizeToFit={!isCard}
+                  minimumFontScale={0.85}
+                >
+                  {opt.label}
                 </Text>
-              ) : null}
-            </Pressable>
+                {opt.sub ? (
+                  <Text
+                    style={[text.pillSub, styles.pillSub, selected && text.pillSubSelected]}
+                    numberOfLines={1}
+                  >
+                    {opt.sub}
+                  </Text>
+                ) : null}
+              </Pressable>
+            </View>
           );
         })}
       </View>
@@ -75,62 +107,55 @@ export function SignUpPillSelect<T extends string>({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: PULSE_SIGNUP.muted,
-    marginBottom: 12,
-    paddingLeft: 4,
+    marginBottom: 16,
   },
   req: {
-    color: '#ef4444',
+    color: SIGNUP_ERROR_COLOR,
   },
-  row: {
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    marginHorizontal: -GRID_GAP / 2,
+  },
+  cell: {
+    paddingHorizontal: GRID_GAP / 2,
+    paddingBottom: GRID_GAP,
   },
   pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 8,
     borderRadius: PULSE_SIGNUP_RADIUS.pill,
     borderWidth: 1,
     borderColor: PULSE_SIGNUP.border,
     backgroundColor: PULSE_SIGNUP.bg,
-    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
+  },
+  pillLabel: {
+    textAlign: 'center',
+  },
+  pillCard: {
+    paddingHorizontal: 4,
+    paddingVertical: 10,
+    minHeight: 54,
+  },
+  pillLabelCard: {
+    textAlign: 'center',
+  },
+  pillSub: {
+    textAlign: 'center',
+    marginTop: 2,
   },
   pillSelected: {
-    borderColor: PULSE_SIGNUP.primary,
+    borderColor: PULSE_SIGNUP.primaryDark,
     backgroundColor: PULSE_SIGNUP.primaryTint,
   },
   pillPressed: {
-    opacity: 0.9,
-  },
-  pillLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#374151',
-  },
-  pillLabelSelected: {
-    color: PULSE_SIGNUP.primary,
-  },
-  pillSub: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: PULSE_SIGNUP.muted,
-    marginTop: 2,
-  },
-  pillSubSelected: {
-    color: PULSE_SIGNUP.primaryDark,
+    opacity: 0.92,
   },
   error: {
-    fontSize: 12,
-    color: '#ef4444',
-    marginTop: 8,
-    fontWeight: '600',
+    ...createPulseSignUpTextStyles(PULSE_SIGNUP).error,
+    marginTop: 4,
   },
 });

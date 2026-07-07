@@ -4,6 +4,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { SignUpPulsePrimaryButton } from '../SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from '../SignUpPulseTitle';
 import { PULSE_SIGNUP, type SignUpTheme } from '../signUpPulseTheme';
+import { SIGNUP_TEXT } from '../signUpTypography';
 
 export interface SignUpBrandingStepLayoutProps {
   title: string;
@@ -83,9 +84,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   skip: {
+    ...SIGNUP_TEXT.linkSmall,
     textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '700',
     paddingVertical: 8,
   },
 });

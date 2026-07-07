@@ -35,7 +35,7 @@ export const PULSE_SIGNUP: SignUpTheme = {
   surface: Theme.analyticsCanvas,
   keypadTray: Theme.analyticsCanvas,
   disabledBg: '#f3f4f6',
-  disabledText: '#9ca3af',
+  disabledText: '#6b7280',
   deviceBorder: '#111111',
 };
 

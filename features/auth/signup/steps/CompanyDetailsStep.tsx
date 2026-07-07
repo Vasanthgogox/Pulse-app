@@ -1,5 +1,3 @@
-import { StyleSheet, Text } from 'react-native';
-
 import type { OperatingModel } from '@/features/auth/services/auth.service';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import type { BusinessType, EmployeeCount, FleetSize, MonthlyVolume } from '../signUpConstants';
@@ -10,19 +8,19 @@ import {
   MONTHLY_VOLUMES,
   OPERATING_MODELS,
 } from '../signUpConstants';
+import { SignUpPulseSubtitle } from '../SignUpPulseSubtitle';
 import { SignUpPillSelect } from '../SignUpPillSelect';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
-import { PULSE_SIGNUP } from '../signUpPulseTheme';
 
 export function CompanyDetailsStep({ flow }: { flow: SignUpFlow }) {
   return (
     <SignUpPulseFormStep
       title="Company details"
       subtitle={
-        <Text style={styles.subtitle}>
-          Tell us about{' '}
-          <Text style={styles.orgHighlight}>{flow.orgName || 'your company'}</Text>
-        </Text>
+        <SignUpPulseSubtitle
+          beforeHighlight="Tell us about "
+          highlight={flow.orgName || 'your company'}
+        />
       }
       primaryLabel="Continue"
       onPrimary={flow.continueCompanyDetails}
@@ -41,6 +39,8 @@ export function CompanyDetailsStep({ flow }: { flow: SignUpFlow }) {
       <SignUpPillSelect<OperatingModel>
         label="How do you operate?"
         required
+        layout="card"
+        columns={3}
         options={OPERATING_MODELS.map((m) => ({
           value: m.value,
           label: m.label,
@@ -53,6 +53,7 @@ export function CompanyDetailsStep({ flow }: { flow: SignUpFlow }) {
       <SignUpPillSelect<BusinessType>
         label="Business Structure"
         required
+        columns={3}
         options={BUSINESS_TYPES.map((b) => ({ value: b.value, label: b.label }))}
         value={flow.businessType}
         onChange={flow.setBusinessType}
@@ -67,6 +68,7 @@ export function CompanyDetailsStep({ flow }: { flow: SignUpFlow }) {
               : 'Own Fleet Size (Trucks)'
           }
           required
+          columns={5}
           options={FLEET_SIZES}
           value={flow.fleetSize}
           onChange={flow.setFleetSize}
@@ -78,6 +80,7 @@ export function CompanyDetailsStep({ flow }: { flow: SignUpFlow }) {
         <SignUpPillSelect<MonthlyVolume>
           label="Shipments Arranged Per Month"
           required
+          columns={3}
           options={MONTHLY_VOLUMES.map((v) => ({ value: v.value, label: v.label }))}
           value={flow.monthlyVolume}
           onChange={flow.setMonthlyVolume}
@@ -88,6 +91,7 @@ export function CompanyDetailsStep({ flow }: { flow: SignUpFlow }) {
       <SignUpPillSelect<EmployeeCount>
         label="Number of Employees"
         required
+        columns={5}
         options={EMPLOYEE_COUNTS}
         value={flow.employeeCount}
         onChange={flow.setEmployeeCount}
@@ -96,19 +100,3 @@ export function CompanyDetailsStep({ flow }: { flow: SignUpFlow }) {
     </SignUpPulseFormStep>
   );
 }
-
-const styles = StyleSheet.create({
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: PULSE_SIGNUP.muted,
-    fontWeight: '500',
-    marginTop: 8,
-    textAlign: 'center',
-    maxWidth: 320,
-  },
-  orgHighlight: {
-    fontWeight: '900',
-    color: PULSE_SIGNUP.primary,
-  },
-});

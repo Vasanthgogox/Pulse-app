@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 
 import { styles } from './businessSignUp.styles';
 import { useBusinessSignUpFlow } from './hooks/useBusinessSignUpFlow';
@@ -69,8 +69,12 @@ export default function BusinessSignUpScreen() {
         onBack={flow.handleBack}
         stepLabels={STEP_LABELS}
         currentStepIndex={Math.min(flow.step, STEP_LABELS.length - 1)}
-        hideProgress={flow.step >= 8 || flow.signupTrack === 'invite'}
-        isDesktop={flow.isDesktop && Platform.OS !== 'web'}
+        hideProgress={
+          flow.step >= 8 ||
+          flow.signupTrack === 'invite' ||
+          (flow.useMobileLayout && (flow.step === 0 || flow.step === 1))
+        }
+        isDesktop={flow.isDesktop}
       >
         <View style={styles.mobileStepFlex}>
           <BusinessStepContent flow={flow} step={flow.step} />

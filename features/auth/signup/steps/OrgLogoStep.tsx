@@ -2,7 +2,9 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { SignUpPhotoPickerStep } from '../components/SignUpPhotoPickerStep';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
+import { SignUpPulseSubtitle } from '../SignUpPulseSubtitle';
 import { PULSE_SIGNUP } from '../signUpPulseTheme';
+import { SIGNUP_TEXT } from '../signUpTypography';
 
 function orgInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -22,21 +24,23 @@ export function OrgLogoStep({ flow }: { flow: SignUpFlow }) {
       title={isProvisioning ? 'Preparing your workspace' : 'Workspace logo'}
       subtitle={
         isProvisioning ? (
-          <Text style={styles.subtitle}>
-            Setting up <Text style={styles.highlight}>{flow.orgName}</Text>. This usually takes a
-            few seconds.
-          </Text>
+          <SignUpPulseSubtitle
+            beforeHighlight="Setting up "
+            highlight={flow.orgName}
+            afterHighlight=". This usually takes a few seconds."
+          />
         ) : (
-          <Text style={styles.subtitle}>
-            Add a logo for <Text style={styles.highlight}>{flow.orgName}</Text>. You can change
-            this later in workspace settings.
-          </Text>
+          <SignUpPulseSubtitle
+            beforeHighlight="Add a logo for "
+            highlight={flow.orgName}
+            afterHighlight=". You can change this later in workspace settings."
+          />
         )
       }
       previewUri={flow.logoPreviewUri}
       previewFallback={
         <View style={styles.initialsWrap}>
-          <Text style={styles.initials}>{initials}</Text>
+          <Text style={SIGNUP_TEXT.avatarInitials}>{initials}</Text>
         </View>
       }
       onUpload={flow.uploadOrgLogo}
@@ -52,29 +56,10 @@ export function OrgLogoStep({ flow }: { flow: SignUpFlow }) {
 }
 
 const styles = StyleSheet.create({
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: PULSE_SIGNUP.muted,
-    fontWeight: '500',
-    marginTop: 8,
-    textAlign: 'center',
-    maxWidth: 320,
-  },
-  highlight: {
-    fontWeight: '900',
-    color: PULSE_SIGNUP.primary,
-  },
   initialsWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: PULSE_SIGNUP.primaryTint,
-  },
-  initials: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: PULSE_SIGNUP.primary,
-    letterSpacing: -1,
   },
 });

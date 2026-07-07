@@ -1,5 +1,5 @@
 import INDIA_LOCATIONS from '@/lib/data/indiaLocations.json';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { ChevronDown, MapPin, Search, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import {
   Platform,
@@ -9,9 +9,12 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  type StyleProp,
+  type TextStyle,
 } from 'react-native';
-import type { StyleProp, TextStyle } from 'react-native';
-import { C, styles } from '../businessSignUp.styles';
+
+import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS } from '../signUpPulseTheme';
+import { PULSE_SIGNUP_TYPO, SIGNUP_TEXT } from '../signUpTypography';
 
 type Zone = 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' | 'NORTHEAST';
 export type IndiaLocation = { city: string; state: string; zone: Zone };
@@ -20,19 +23,11 @@ const ALL_LOCATIONS = INDIA_LOCATIONS as IndiaLocation[];
 const MAX_SEARCH_RESULTS = 80;
 
 const ZONE_LABELS: Record<Zone, string> = {
-  NORTH: 'North Zone',
-  SOUTH: 'South Zone',
-  EAST: 'East Zone',
-  WEST: 'West Zone',
-  NORTHEAST: 'Northeast Zone',
-};
-
-const ZONE_COLORS: Record<Zone, { bg: string; text: string; border: string; bar: string }> = {
-  NORTH: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', bar: '#3b82f6' },
-  SOUTH: { bg: '#f0fdf4', text: '#166534', border: '#bbf7d0', bar: '#22c55e' },
-  EAST: { bg: '#faf5ff', text: '#6b21a8', border: '#e9d5ff', bar: '#a855f7' },
-  WEST: { bg: '#fffbeb', text: '#92400e', border: '#fde68a', bar: '#f59e0b' },
-  NORTHEAST: { bg: '#f0fdfa', text: '#134e4a', border: '#99f6e4', bar: '#14b8a6' },
+  NORTH: 'North zone',
+  SOUTH: 'South zone',
+  EAST: 'East zone',
+  WEST: 'West zone',
+  NORTHEAST: 'Northeast zone',
 };
 
 const POPULAR_CITY_NAMES = [
@@ -93,30 +88,26 @@ function CityResultRow({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const zc = ZONE_COLORS[item.zone];
   return (
     <TouchableOpacity
-      style={[styles.cityResultItem, selected && styles.cityResultItemActive]}
+      style={[styles.resultRow, selected && styles.resultRowSelected]}
       onPress={onSelect}
+      activeOpacity={0.75}
     >
-      <View style={[styles.cityResultBar, { backgroundColor: zc.bar }]} />
-      <View style={styles.cityResultBody}>
+      <View style={styles.resultIconWrap}>
+        <MapPin size={14} color={PULSE_SIGNUP.muted} strokeWidth={2} />
+      </View>
+      <View style={styles.resultBody}>
         <HighlightText
           text={item.city}
           query={query}
-          baseStyle={[styles.cityResultName, selected && { color: C.accent }]}
-          matchStyle={styles.cityResultNameMatch}
+          baseStyle={styles.resultCity}
+          matchStyle={styles.resultCityMatch}
         />
-        <Text style={styles.cityResultState}>{item.state}</Text>
+        <Text style={styles.resultMeta}>
+          {item.state} · {ZONE_LABELS[item.zone]}
+        </Text>
       </View>
-      <View
-        style={[styles.cityResultZonePill, { backgroundColor: zc.bg, borderColor: zc.border }]}
-      >
-        <Text style={[styles.cityResultZoneText, { color: zc.text }]}>{item.zone}</Text>
-      </View>
-      {selected ? (
-        <FontAwesome name="check-circle" size={16} color={C.accent} style={localStyles.checkIcon} />
-      ) : null}
     </TouchableOpacity>
   );
 }
@@ -134,9 +125,11 @@ export function CityPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
+  const hasError = attempted && !!error;
 
   const filteredLocations = useMemo(() => {
     if (!hasQuery) return [];
@@ -161,106 +154,101 @@ export function CityPicker({
   };
 
   return (
-    <View>
+    <View style={styles.wrap}>
       {!open ? (
         value ? (
-          <TouchableOpacity
-            style={[styles.citySelectedCard, { borderLeftColor: ZONE_COLORS[value.zone].bar }]}
-            onPress={() => {
-              setOpen(true);
-              setQuery('');
-            }}
-            activeOpacity={0.82}
-          >
-            <View style={styles.citySelectedInfo}>
-              <Text style={styles.citySelectedName}>{value.city}</Text>
-              <View style={styles.citySelectedMeta}>
-                <Text style={styles.citySelectedState}>{value.state}</Text>
-                <View
-                  style={[
-                    styles.cityZonePill,
-                    {
-                      backgroundColor: ZONE_COLORS[value.zone].bg,
-                      borderColor: ZONE_COLORS[value.zone].border,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.cityZonePillText, { color: ZONE_COLORS[value.zone].text }]}>
-                    {ZONE_LABELS[value.zone]}
-                  </Text>
-                </View>
-              </View>
-            </View>
+          <View style={[styles.selectedCard, hasError && styles.fieldShellError]}>
             <TouchableOpacity
-              style={styles.cityClearBtn}
+              style={styles.selectedBody}
+              onPress={() => {
+                setOpen(true);
+                setQuery('');
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.selectedCity}>{value.city}</Text>
+              <Text style={styles.selectedMeta}>
+                {value.state} · {ZONE_LABELS[value.zone]}
+              </Text>
+              <Text style={styles.changeHint}>Tap to change</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.clearBtn}
               onPress={() => {
                 onChange(null);
                 setQuery('');
               }}
               hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Clear city"
             >
-              <FontAwesome name="times-circle" size={20} color="#cbd5e1" />
+              <X size={16} color={PULSE_SIGNUP.placeholder} strokeWidth={2} />
             </TouchableOpacity>
-          </TouchableOpacity>
+          </View>
         ) : (
           <TouchableOpacity
-            style={[styles.cityTrigger, attempted && error ? styles.cityTriggerError : null]}
+            style={[styles.trigger, hasError && styles.fieldShellError]}
             onPress={() => setOpen(true)}
-            activeOpacity={0.7}
+            activeOpacity={0.85}
           >
-            <FontAwesome name="map-marker" size={15} color={C.muted} />
-            <Text style={styles.cityTriggerText}>Search & select city</Text>
-            <FontAwesome name="chevron-down" size={12} color={C.muted} />
+            <MapPin size={15} color={PULSE_SIGNUP.muted} strokeWidth={2} />
+            <Text style={styles.triggerText}>Select city or district</Text>
+            <ChevronDown size={15} color={PULSE_SIGNUP.placeholder} strokeWidth={2} />
           </TouchableOpacity>
         )
       ) : (
-        <View style={styles.cityPickerPanel}>
-          <View style={styles.citySearchRow}>
-            <FontAwesome name="search" size={14} color={C.muted} />
+        <View style={styles.panel}>
+          <View
+            style={[
+              styles.searchShell,
+              searchFocused && styles.searchShellFocused,
+            ]}
+          >
+            <Search size={15} color={PULSE_SIGNUP.placeholder} strokeWidth={2} />
             <TextInput
-              style={styles.citySearchInput}
-              placeholder="Search city or district..."
-              placeholderTextColor={C.placeholder}
+              style={styles.searchInput}
+              placeholder="Search city or district…"
+              placeholderTextColor={PULSE_SIGNUP.placeholder}
               value={query}
               onChangeText={setQuery}
               autoCapitalize="words"
               autoFocus={Platform.OS !== 'web'}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
             />
             {query.length > 0 ? (
               <TouchableOpacity onPress={() => setQuery('')} hitSlop={10}>
-                <FontAwesome name="times-circle" size={16} color={C.muted} />
+                <X size={14} color={PULSE_SIGNUP.placeholder} strokeWidth={2} />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity onPress={closePicker} hitSlop={10}>
-                <FontAwesome name="times" size={16} color={C.muted} />
+                <X size={14} color={PULSE_SIGNUP.placeholder} strokeWidth={2} />
               </TouchableOpacity>
             )}
           </View>
 
           {!hasQuery ? (
             <View style={styles.popularSection}>
-              <Text style={styles.pickerSectionLabel}>Popular freight hubs</Text>
+              <Text style={styles.sectionLabel}>Popular cities</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.popularScrollContent}
+                contentContainerStyle={styles.popularScroll}
                 keyboardShouldPersistTaps="handled"
               >
                 {POPULAR_CITIES_DATA.map((loc) => (
                   <TouchableOpacity
                     key={loc.city}
-                    style={[styles.popularChip, { borderColor: ZONE_COLORS[loc.zone].border }]}
+                    style={styles.popularChip}
                     onPress={() => selectLocation(loc)}
+                    activeOpacity={0.8}
                   >
-                    <View
-                      style={[styles.popularChipDot, { backgroundColor: ZONE_COLORS[loc.zone].bar }]}
-                    />
                     <Text style={styles.popularChipText}>{loc.city}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              <Text style={localStyles.searchHint}>
-                Type in the search box to find your city or district.
+              <Text style={styles.popularHint}>
+                Type above to search any city or district in India.
               </Text>
             </View>
           ) : (
@@ -268,12 +256,12 @@ export function CityPicker({
               {filteredLocations.length > 0 ? (
                 <Text style={styles.resultCount}>
                   {filteredLocations.length} result{filteredLocations.length !== 1 ? 's' : ''}
-                  {hasMoreResults ? ` — showing first ${MAX_SEARCH_RESULTS}` : ''}
+                  {hasMoreResults ? ` · showing first ${MAX_SEARCH_RESULTS}` : ''}
                 </Text>
               ) : null}
 
               <ScrollView
-                style={styles.cityResultsList}
+                style={styles.resultsList}
                 nestedScrollEnabled
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator
@@ -284,7 +272,7 @@ export function CityPicker({
                       value?.city === item.city && value?.state === item.state;
                     return (
                       <View key={`${item.city}-${item.state}-${index}`}>
-                        {index > 0 ? <View style={styles.cityResultSep} /> : null}
+                        {index > 0 ? <View style={styles.resultSep} /> : null}
                         <CityResultRow
                           item={item}
                           query={query}
@@ -295,11 +283,11 @@ export function CityPicker({
                     );
                   })
                 ) : (
-                  <View style={styles.cityEmptyState}>
-                    <FontAwesome name="map-o" size={28} color={C.border} />
-                    <Text style={styles.cityEmptyTitle}>No cities found</Text>
-                    <Text style={styles.cityEmptyHint}>
-                      Try a different spelling or district name.
+                  <View style={styles.emptyState}>
+                    <MapPin size={22} color={PULSE_SIGNUP.border} strokeWidth={1.75} />
+                    <Text style={styles.emptyTitle}>No cities found</Text>
+                    <Text style={styles.emptyHint}>
+                      Try a different spelling or nearby district name.
                     </Text>
                   </View>
                 )}
@@ -309,18 +297,212 @@ export function CityPicker({
         </View>
       )}
 
-      {attempted && error ? <Text style={styles.fieldError}>{error}</Text> : null}
+      {hasError ? (
+        <Text style={styles.fieldError} accessibilityRole="alert">
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
-const localStyles = StyleSheet.create({
-  checkIcon: { marginLeft: 8 },
-  searchHint: {
-    fontSize: 12,
-    color: C.muted,
-    lineHeight: 17,
+const styles = StyleSheet.create({
+  wrap: {
+    marginBottom: 10,
+  },
+  trigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: PULSE_SIGNUP_RADIUS.input,
+    borderWidth: 1,
+    borderColor: PULSE_SIGNUP.border,
+    backgroundColor: PULSE_SIGNUP.bg,
+  },
+  triggerText: {
+    ...SIGNUP_TEXT.body,
+    flex: 1,
+    color: PULSE_SIGNUP.placeholder,
+  },
+  selectedCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderRadius: PULSE_SIGNUP_RADIUS.input,
+    borderWidth: 1,
+    borderColor: PULSE_SIGNUP.border,
+    backgroundColor: PULSE_SIGNUP.bg,
+    paddingLeft: 16,
+    paddingRight: 12,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  selectedBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  selectedCity: {
+    ...SIGNUP_TEXT.input,
+    letterSpacing: -0.15,
+  },
+  selectedMeta: {
+    ...SIGNUP_TEXT.caption,
+    marginTop: 3,
+  },
+  changeHint: {
+    ...PULSE_SIGNUP_TYPO.pillSub,
+    marginTop: 6,
+    color: PULSE_SIGNUP.placeholder,
+  },
+  clearBtn: {
+    paddingTop: 2,
+    paddingLeft: 4,
+  },
+  fieldShellError: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+  },
+  panel: {
+    borderRadius: PULSE_SIGNUP_RADIUS.input,
+    borderWidth: 1,
+    borderColor: PULSE_SIGNUP.border,
+    backgroundColor: PULSE_SIGNUP.bg,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: { elevation: 3 },
+      web: {
+        boxShadow: '0 4px 16px rgba(15,23,42,0.06)',
+      } as object,
+    }),
+  },
+  searchShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 8,
+    minHeight: 46,
     paddingHorizontal: 14,
-    paddingBottom: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: PULSE_SIGNUP.border,
+    backgroundColor: PULSE_SIGNUP.bg,
+  },
+  searchShellFocused: {
+    borderColor: '#d1d5db',
+  },
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    ...SIGNUP_TEXT.body,
+    paddingVertical: Platform.OS === 'android' ? 2 : 0,
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as object,
+    }),
+  },
+  popularSection: {
+    paddingBottom: 12,
+  },
+  sectionLabel: {
+    ...PULSE_SIGNUP_TYPO.label,
+    color: PULSE_SIGNUP.placeholder,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  popularScroll: {
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 4,
+  },
+  popularChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: PULSE_SIGNUP.border,
+    backgroundColor: PULSE_SIGNUP.surface,
+  },
+  popularChipText: {
+    ...SIGNUP_TEXT.captionMedium,
+    color: PULSE_SIGNUP.text,
+  },
+  popularHint: {
+    ...SIGNUP_TEXT.caption,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  resultCount: {
+    ...PULSE_SIGNUP_TYPO.pillSub,
+    color: PULSE_SIGNUP.muted,
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
+  resultsList: {
+    maxHeight: 240,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+  },
+  resultRowSelected: {
+    backgroundColor: PULSE_SIGNUP.surface,
+  },
+  resultIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  resultCity: {
+    ...SIGNUP_TEXT.body,
+  },
+  resultCityMatch: {
+    fontWeight: '500',
+    color: PULSE_SIGNUP.primaryDark,
+  },
+  resultMeta: {
+    ...SIGNUP_TEXT.caption,
+    marginTop: 2,
+  },
+  resultSep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: PULSE_SIGNUP.border,
+    marginHorizontal: 16,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  emptyTitle: SIGNUP_TEXT.bodyMedium,
+  emptyHint: {
+    ...SIGNUP_TEXT.caption,
+    color: PULSE_SIGNUP.placeholder,
+    textAlign: 'center',
+    maxWidth: 220,
+  },
+  fieldError: {
+    ...SIGNUP_TEXT.error,
+    marginTop: 6,
   },
 });
