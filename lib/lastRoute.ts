@@ -88,8 +88,3 @@ export async function getLastTabRoute(): Promise<string> {
   }
   return DEFAULT_DISPATCHER_ROUTE;
 }
-
-/** True when route is the org network hub (any hub tab). */
-export function isStoredNetworkHubRoute(route: string): boolean {
-  return isNetworkHubRoute(route);
-}

@@ -133,16 +133,9 @@ function AnimatedPress({
 
 export type DemoTabId = "finance" | "trips" | "network" | "loadCenter" | "resources";
 
-/** Desktop web: PULSE opens hub layout; NETWORK pill opens classic scroll layout. */
-export type NetworkTabLayout = "hub" | "classic";
-
-export type DemoTabChangeOptions = {
-  networkLayout?: NetworkTabLayout;
-};
-
 interface DemoTabBarProps {
   activeTab: DemoTabId;
-  onTabChange: (tab: DemoTabId, options?: DemoTabChangeOptions) => void;
+  onTabChange: (tab: DemoTabId) => void;
   onProfilePress?: () => void;
   onNotificationsPress?: () => void;
 }
@@ -659,7 +652,7 @@ export function DemoTabBar({
       <View style={[styles.webTopShell, Platform.OS === "web" && ({ backdropFilter: "blur(24px)" } as unknown as ViewStyle)]}>
         <View style={styles.webHeaderRow}>
           <Pressable
-            onPress={() => onTabChange("network", { networkLayout: "hub" })}
+            onPress={() => onTabChange("network")}
             style={({ pressed }) => [
               styles.webBrandWrap,
               pressed && { opacity: 0.88 },

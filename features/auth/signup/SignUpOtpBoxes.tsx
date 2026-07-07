@@ -76,7 +76,11 @@ const styles = StyleSheet.create({
   },
   boxCentered: {
     flex: 0,
+    flexShrink: 0,
+    flexGrow: 0,
+    flexBasis: BOX_SIZE,
     width: BOX_SIZE,
+    minWidth: BOX_SIZE,
     maxWidth: BOX_SIZE,
     height: 40,
   },

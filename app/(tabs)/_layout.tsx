@@ -8,11 +8,10 @@ import { markStartupPhase, isStartupComplete } from '@/lib/startupMetrics';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
-import { DemoTabBar, type DemoTabId, type DemoTabChangeOptions } from '@/components/demo';
+import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import { DemoTabBarAutoHideShell } from '@/contexts/DemoTabBarScrollContext';
 import {
   getLastTabRoute,
-  isStoredNetworkHubRoute,
   resolveRestorableDispatcherRoute,
   saveLastTabRoute,
 } from '@/lib/lastRoute';
@@ -47,7 +46,6 @@ function DemoCustomTabBar(
   const orgId = org?.currentOrganization?.id ?? null;
   const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
-  const lastNetworkRouteRef = useRef(ROUTES.TABS.NETWORK);
   const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
@@ -61,25 +59,15 @@ function DemoCustomTabBar(
     : 'trips';
 
   const onTabChange = useCallback(
-    (tab: DemoTabId, options?: DemoTabChangeOptions) => {
+    (tab: DemoTabId) => {
       if (tab === 'loadCenter') {
         router.push(ROUTES.PULSE_LOADS);
         return;
       }
       if (tab === 'network') {
-        const hub = options?.networkLayout === 'hub';
-        if (hub) {
-          router.replace(
-            ROUTES.networkOrgHub('details') as Parameters<typeof router.replace>[0],
-          );
-          return;
-        }
         // Re-tapping NETWORK while already on hub must not downgrade to the feed.
         if (pathname.includes('/hub')) return;
-        const target = isStoredNetworkHubRoute(lastNetworkRouteRef.current)
-          ? lastNetworkRouteRef.current
-          : ROUTES.TABS.NETWORK;
-        router.replace(target as Parameters<typeof router.replace>[0]);
+        router.replace(ROUTES.TABS.NETWORK as Parameters<typeof router.replace>[0]);
         return;
       }
       navigation.navigate(tab);
@@ -94,9 +82,6 @@ function DemoCustomTabBar(
   useEffect(() => {
     const restorable = resolveRestorableDispatcherRoute(pathname);
     if (!restorable) return;
-    if (restorable.includes('/network')) {
-      lastNetworkRouteRef.current = restorable;
-    }
     void saveLastTabRoute(restorable);
     // Do not resetBarVisible() here — it runs a spring on every tab swap and feels laggy.
   }, [pathname]);
