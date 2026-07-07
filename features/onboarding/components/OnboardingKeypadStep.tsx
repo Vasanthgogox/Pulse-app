@@ -4,6 +4,7 @@
 import { memo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import {
   Animated,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -11,6 +12,7 @@ import {
 
 import { DecimalKeypad } from '@/components/mobile-input/DecimalKeypad';
 import { applyKeypadPress, type KeypadKey } from '@/components/mobile-input/keypad';
+import { useInputPlatform } from '@/components/mobile-input/useInputPlatform';
 import { OperationalButton } from '@/components/operational';
 import { colors } from '@/design-system/colors';
 import { layout } from '@/design-system/layout';
@@ -97,6 +99,31 @@ export const OnboardingKeypadStep = memo(function OnboardingKeypadStep({
     [digits, maxDigits, onChange],
   );
 
+  const inputPlatform = useInputPlatform();
+  const isDesktopWeb = Platform.OS === 'web' && inputPlatform === 'desktop';
+
+  // Desktop web: type with the physical keyboard instead of the on-screen keypad.
+  useEffect(() => {
+    if (!isDesktopWeb) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      let mapped: KeypadKey | null = null;
+      if (e.key >= '0' && e.key <= '9') mapped = e.key as KeypadKey;
+      else if (showDecimal && (e.key === '.' || e.key === ',')) mapped = '.';
+      else if (e.key === 'Backspace' || e.key === 'Delete') mapped = '⌫';
+      else if (e.key === 'Enter' && canSubmit) {
+        e.preventDefault();
+        onPrimary();
+        return;
+      }
+      if (!mapped) return;
+      e.preventDefault();
+      handleKey(mapped);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isDesktopWeb, showDecimal, handleKey, canSubmit, onPrimary]);
+
   return (
     <View style={styles.root}>
       <View style={styles.main}>
@@ -144,14 +171,16 @@ export const OnboardingKeypadStep = memo(function OnboardingKeypadStep({
         </OnboardingFullPageFooter>
       </View>
 
-      <View style={styles.keypadDock}>
-        <DecimalKeypad
-          onKey={handleKey}
-          showDecimal={showDecimal}
-          variant="pay"
-          size="compact"
-        />
-      </View>
+      {isDesktopWeb ? null : (
+        <View style={styles.keypadDock}>
+          <DecimalKeypad
+            onKey={handleKey}
+            showDecimal={showDecimal}
+            variant="pay"
+            size="compact"
+          />
+        </View>
+      )}
     </View>
   );
 });

@@ -439,10 +439,20 @@ function createStyles(theme: SignUpTheme) {
       width: '100%',
     },
     otpWebOverlay: {
+      // Invisible OTP capture field: holds focus for the physical keyboard while
+      // the visible boxes show the digits. Fully transparent so its own value
+      // never paints over the boxes (opacity:0 inputs stay focusable on web).
       ...StyleSheet.absoluteFillObject,
-      opacity: 0.02,
+      opacity: 0,
       fontSize: 1,
       color: 'transparent',
+      ...Platform.select({
+        web: {
+          caretColor: 'transparent',
+          WebkitTextFillColor: 'transparent',
+        } as object,
+        default: {},
+      }),
     },
     error: {
       fontSize: 12,

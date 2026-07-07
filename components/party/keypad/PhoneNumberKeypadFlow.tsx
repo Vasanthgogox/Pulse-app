@@ -156,23 +156,25 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
         {footerExtras ? <View style={flow.extras}>{footerExtras}</View> : null}
       </View>
 
-      <View
-        style={
-          wizardShell || groupTop
-            ? flow.keypadDockWizard
-            : useAppleKeypad
-              ? flow.keypadDockApple
-              : flow.keypadDock
-        }
-      >
-        <DecimalKeypad
-          onKey={handleKey}
-          showDecimal={false}
-          layout="phone"
-          variant={wizardShell ? "pay" : useAppleKeypad ? "apple" : "pay"}
-          size={wizardShell || !useAppleKeypad ? "compact" : "default"}
-        />
-      </View>
+      {isDesktopWeb ? null : (
+        <View
+          style={
+            wizardShell || groupTop
+              ? flow.keypadDockWizard
+              : useAppleKeypad
+                ? flow.keypadDockApple
+                : flow.keypadDock
+          }
+        >
+          <DecimalKeypad
+            onKey={handleKey}
+            showDecimal={false}
+            layout="phone"
+            variant={wizardShell ? "pay" : useAppleKeypad ? "apple" : "pay"}
+            size={wizardShell || !useAppleKeypad ? "compact" : "default"}
+          />
+        </View>
+      )}
     </View>
   );
 });

@@ -11,6 +11,7 @@ import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
 import { NumericDisplay } from "@/components/mobile-input/NumericDisplay";
 import { NumericEntryRecipientHero } from "@/components/mobile-input/NumericEntryRecipientHero";
+import { useInputPlatform } from "@/components/mobile-input/useInputPlatform";
 import {
   applyKeypadPress,
   parseRawToNumber,
@@ -58,6 +59,8 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
   suppressPartyPreview = false,
 }: PartnerRatesKeypadFlowProps) {
   const [active, setActive] = useState<ActiveField>("rate");
+  const inputPlatform = useInputPlatform();
+  const isDesktopWeb = Platform.OS === "web" && inputPlatform === "desktop";
 
   const rateRaw = fieldToRaw(partnerRate);
   const advanceRaw = fieldToRaw(advancePaid);
@@ -173,14 +176,16 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
     <View style={[flow.root, styles.root]}>
       <View style={[flow.main, styles.main]}>{mainContent}</View>
 
-      <View style={[flow.keypadDock, useInset && styles.keypadDockInset]}>
-        <DecimalKeypad
-          onKey={handleKey}
-          showDecimal
-          variant="pay"
-          size="compact"
-        />
-      </View>
+      {isDesktopWeb ? null : (
+        <View style={[flow.keypadDock, useInset && styles.keypadDockInset]}>
+          <DecimalKeypad
+            onKey={handleKey}
+            showDecimal
+            variant="pay"
+            size="compact"
+          />
+        </View>
+      )}
     </View>
   );
 });
