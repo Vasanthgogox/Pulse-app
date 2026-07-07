@@ -34,6 +34,8 @@
     "test:web": "playwright test",
     "test:web:ui": "playwright test --ui",
     "test:web:headed": "playwright test --headed",
+    "signin": "node nihas-tests/signin-flow.mjs",
+    "tw:headless": "node nihas-tests/test-terminal-website.mjs",
     "test:web:report": "playwright show-report",
     "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/seed-test-data.ts",
     "build:audit": "node scripts/netlify-build-audit.js",
