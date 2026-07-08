@@ -12,11 +12,23 @@ import { ONBOARDING_STEPS } from '@/types/onboarding';
 import type { Customer, Product, Warehouse } from '@/types/commerce';
 import { cn } from '@/lib/utils';
 
+function OnboardingLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+      Loading workspace…
+    </div>
+  );
+}
+
 export function OnboardingPage() {
   const navigate = useNavigate();
   const org = useOrganization();
 
-  if (org.onboardingDone) {
+  if (!org.organizationHydrated) {
+    return <OnboardingLoading />;
+  }
+
+  if (org.hasPlatformOrganization || org.commerceSetupComplete) {
     return <Navigate to="/dashboard" replace />;
   }
   const [companyName, setCompanyName] = useState(org.profile?.name ?? '');

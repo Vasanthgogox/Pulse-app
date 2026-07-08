@@ -217,7 +217,7 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
       products: org.products,
       customers: org.customers,
       warehouses: org.warehouses,
-      stats: org.onboardingDone ? stats : EMPTY_STATS,
+      stats: org.hasPlatformOrganization ? stats : EMPTY_STATS,
       mergeRecommendations,
       selectedOrderIds,
       setSelectedOrderIds,

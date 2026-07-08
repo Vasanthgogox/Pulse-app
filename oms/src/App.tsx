@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from '@/context/AuthProvider';
 import { OrganizationProvider } from '@/context/OrganizationProvider';
 import { CommerceProvider } from '@/context/CommerceProvider';
 import { ExecutionProvider } from '@/context/ExecutionProvider';
 import { LayoutProvider } from '@/layout/LayoutContext';
+import { AuthGuard } from '@/layout/AuthGuard';
 import { OnboardingGuard } from '@/layout/OnboardingGuard';
 import { Main } from '@/layout/Main';
 import { DashboardPage } from '@/pages/dashboard';
@@ -21,13 +23,29 @@ import { DriverTripPage } from '@/pages/execution/driver';
 
 export default function App() {
   return (
-    <OrganizationProvider>
-      <CommerceProvider>
-        <ExecutionProvider>
-          <LayoutProvider>
-            <Routes>
-              <Route path="/onboarding" element={<OnboardingPage />} />
-              <Route element={<OnboardingGuard><Main /></OnboardingGuard>}>
+    <AuthProvider>
+      <OrganizationProvider>
+        <CommerceProvider>
+          <ExecutionProvider>
+            <LayoutProvider>
+              <Routes>
+                <Route
+                  path="/onboarding"
+                  element={
+                    <AuthGuard>
+                      <OnboardingPage />
+                    </AuthGuard>
+                  }
+                />
+                <Route
+                  element={
+                    <AuthGuard>
+                      <OnboardingGuard>
+                        <Main />
+                      </OnboardingGuard>
+                    </AuthGuard>
+                  }
+                >
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/orders" element={<OrdersPage />} />
@@ -47,9 +65,10 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Routes>
-          </LayoutProvider>
-        </ExecutionProvider>
-      </CommerceProvider>
-    </OrganizationProvider>
+            </LayoutProvider>
+          </ExecutionProvider>
+        </CommerceProvider>
+      </OrganizationProvider>
+    </AuthProvider>
   );
 }

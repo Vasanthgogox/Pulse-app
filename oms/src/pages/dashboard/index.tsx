@@ -1,22 +1,26 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { CommerceSetupChecklist } from '@/components/commerce/CommerceSetupChecklist';
 import { PageToolbar } from '@/components/commerce/PageToolbar';
 import {
   AiInsightCard, CapabilityGrid, EntityCard, KpiCard, LottieIcon, MilestoneProgress, StatusBadge,
 } from '@/components/pulse-ui';
 import { useCommerce } from '@/context/CommerceProvider';
+import { useOrganization } from '@/context/OrganizationProvider';
 import { COMMERCE_CAPABILITIES } from '@/types/capabilities';
 import { formatCurrency } from '@/lib/utils';
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { stats, orders, plans, mergeRecommendations, tenant, identity } = useCommerce();
+  const { stats, orders, plans, mergeRecommendations, tenant, identity, products, customers, warehouses } = useCommerce();
+  const org = useOrganization();
   const pending = orders.filter(o => o.status === 'Pending Consolidation');
   const topRec = mergeRecommendations[0];
   const m1Fulfilled = plans.some(p => p.status === 'fulfilled' && p.correlation_id);
   const m2Rec = mergeRecommendations.find(r => r.id === 'rec-m2-multistop');
-  const hasProducts = true;
-  const hasCustomers = true;
+  const hasProducts = products.length > 0;
+  const hasCustomers = customers.length > 0;
+  const hasWarehouses = warehouses.length > 0;
   const hasPendingOrders = pending.length > 0;
   const hasPublishedPlan = plans.some(p => p.status === 'published' || p.status === 'fulfilled');
 
@@ -30,15 +34,17 @@ export function DashboardPage() {
 
       <div className="rounded-lg border border-border bg-card px-3 py-1.5 mb-4 flex flex-wrap gap-x-4 gap-y-0.5 text-3xs text-muted-foreground font-mono">
         <span>tenant: {tenant.tenantId}</span>
-        <span>org: {tenant.organizationId}</span>
+        <span>org: {org.platformOrganization?.id ?? tenant.organizationId}</span>
         <span>bu: {tenant.businessUnitId}</span>
       </div>
+
+      <CommerceSetupChecklist />
 
       <div className="grid gap-3 pulse-stat-grid commerce-section">
         <KpiCard label="Pending orders" value={String(stats.pending_orders)} href="/orders" lottie="delivery" trend="+12%" />
         <KpiCard label="Published plans" value={String(stats.published_plans)} href="/execution-plans" lottie="logistics" />
         <KpiCard label="Revenue (MTD)" value={formatCurrency(stats.revenue_this_month)} lottie="finance" />
-        <KpiCard label="Warehouses" value="3 active" href="/warehouses" lottie="warehouse" />
+        <KpiCard label="Warehouses" value={`${warehouses.length} active`} href="/warehouses" lottie="warehouse" />
       </div>
 
       <div className="pulse-two-col commerce-section">
@@ -46,8 +52,9 @@ export function DashboardPage() {
           title="Milestone 1 — First Complete Execution"
           description="One order from merchant to settlement with full correlation trace."
           steps={[
+            { id: 'm1-warehouses', label: 'Warehouse configured', done: hasWarehouses, href: '/warehouses' },
             { id: 'm1-products', label: 'Products in catalog', done: hasProducts, href: '/products' },
-            { id: 'm1-customers', label: 'Customer created', done: hasCustomers, href: '/customers' },
+            { id: 'm1-customers', label: 'Consignee created', done: hasCustomers, href: '/customers' },
             { id: 'm1-orders', label: 'Orders pending consolidation', done: hasPendingOrders, href: '/orders' },
             { id: 'm1-plan', label: 'Execution plan built', done: plans.length > 1, href: '/execution-plans/build' },
             { id: 'm1-publish', label: 'Published via Gateway', done: hasPublishedPlan, href: '/execution-plans' },

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Customer, Product, Warehouse } from '@/types/commerce';
 import type {
@@ -6,9 +6,19 @@ import type {
 } from '@/types/onboarding';
 import { ONBOARDING_STEPS } from '@/types/onboarding';
 import { loadOrganizationState, saveOrganizationState } from '@/lib/organization-store';
+import { isCommerceSetupComplete } from '@/lib/commerce-setup';
+import {
+  getPrimaryOrganizationForUser,
+  type PlatformOrganization,
+} from '@/lib/services/identity-organization.service';
+import { useAuth } from '@/context/AuthProvider';
 import { DEFAULT_TENANT } from '@/types/platform';
 
 interface OrganizationContextValue extends OrganizationState {
+  organizationHydrated: boolean;
+  platformOrganization: PlatformOrganization | null;
+  hasPlatformOrganization: boolean;
+  commerceSetupComplete: boolean;
   setProfile: (profile: OrganizationProfile) => void;
   addWarehouse: (warehouse: Warehouse) => void;
   updateWarehouse: (id: string, patch: Partial<Warehouse>) => void;
@@ -31,7 +41,10 @@ interface OrganizationContextValue extends OrganizationState {
 const OrganizationContext = createContext<OrganizationContextValue | undefined>(undefined);
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
   const [state, setState] = useState<OrganizationState>(() => loadOrganizationState());
+  const [organizationHydrated, setOrganizationHydrated] = useState(false);
+  const [platformOrganization, setPlatformOrganization] = useState<PlatformOrganization | null>(null);
 
   const persist = useCallback((updater: (prev: OrganizationState) => OrganizationState) => {
     setState(prev => {
@@ -40,6 +53,44 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      setPlatformOrganization(null);
+      setOrganizationHydrated(true);
+      return;
+    }
+
+    let cancelled = false;
+    setOrganizationHydrated(false);
+
+    void (async () => {
+      const resolvedOrg = await getPrimaryOrganizationForUser(user.id);
+      if (cancelled) return;
+
+      setPlatformOrganization(resolvedOrg);
+
+      if (resolvedOrg) {
+        persist(prev => ({
+          ...prev,
+          profile: {
+            id: resolvedOrg.id,
+            name: resolvedOrg.name,
+            tenantId: prev.profile?.tenantId ?? DEFAULT_TENANT.tenantId,
+            createdAt: prev.profile?.createdAt ?? new Date().toISOString(),
+          },
+        }));
+      }
+
+      setOrganizationHydrated(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, persist, user?.id]);
 
   const setProfile = useCallback((profile: OrganizationProfile) => {
     persist(prev => ({ ...prev, profile, onboardingStep: 'warehouse' }));
@@ -119,10 +170,16 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const currentStepIndex = ONBOARDING_STEPS.findIndex(s => s.id === state.onboardingStep);
-  const canAccessCommerce = state.onboardingDone;
+  const hasPlatformOrganization = platformOrganization != null;
+  const commerceSetupComplete = isCommerceSetupComplete(state);
+  const canAccessCommerce = hasPlatformOrganization;
 
   const value = useMemo(() => ({
     ...state,
+    organizationHydrated,
+    platformOrganization,
+    hasPlatformOrganization,
+    commerceSetupComplete,
     setProfile,
     addWarehouse,
     updateWarehouse,
@@ -141,7 +198,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     currentStepIndex,
     canAccessCommerce,
   }), [
-    state, setProfile, addWarehouse, updateWarehouse, deleteWarehouse,
+    state, organizationHydrated, platformOrganization, hasPlatformOrganization, commerceSetupComplete,
+    setProfile, addWarehouse, updateWarehouse, deleteWarehouse,
     addProduct, updateProduct, deleteProduct, setProductStock,
     addCustomer, updateCustomer, deleteCustomer, addDriver, addVehicle, advanceOnboarding, completeOnboarding,
     currentStepIndex, canAccessCommerce,
