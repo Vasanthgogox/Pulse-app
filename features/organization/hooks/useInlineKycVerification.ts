@@ -176,11 +176,16 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
 
         // OCR auto-fill: only backfill an empty field, never overwrite a
         // value the user already typed in the Tax & compliance IDs section.
+        // Errors here must not be swallowed — a failed autofill previously
+        // looked identical to a successful upload (doc "Ready for review"
+        // but the tax ID field silently stayed empty).
         if (docType === 'pan_card' && picked.extractedPan && !kyc?.business_pan) {
-          await saveKycField('business_pan', picked.extractedPan);
+          const { error: panErr } = await saveKycField('business_pan', picked.extractedPan);
+          if (panErr) console.error('[KYC] auto-fill business_pan failed:', panErr.message);
         }
         if (docType === 'gst_certificate' && picked.extractedGstin && !kyc?.gstin) {
-          await saveKycField('gstin', picked.extractedGstin);
+          const { error: gstinErr } = await saveKycField('gstin', picked.extractedGstin);
+          if (gstinErr) console.error('[KYC] auto-fill gstin failed:', gstinErr.message);
         }
 
         if (document) {
