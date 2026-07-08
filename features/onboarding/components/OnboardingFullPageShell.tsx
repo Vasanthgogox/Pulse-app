@@ -3,8 +3,8 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
-
 import { colors } from '@/design-system/colors';
 import { layout } from '@/design-system/layout';
 import { space } from '@/design-system/spacing';
@@ -52,7 +52,7 @@ export const OnboardingFullPageShell = memo(function OnboardingFullPageShell({
           <ChevronLeft size={20} color={colors.textPrimary} strokeWidth={2.5} />
           <Text style={styles.backText}>{backLabel}</Text>
         </Pressable>
-        <Text style={styles.brand}>PULSE.</Text>
+        <PulseBrandMark size="md" />
         <View style={styles.topSpacer} />
       </View>
 
@@ -98,13 +98,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.textSecondary,
-  },
-  brand: {
-    fontSize: 18,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: -0.4,
-    color: colors.brand,
   },
   topSpacer: {
     minWidth: 72,

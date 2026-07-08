@@ -1,7 +1,8 @@
 import { memo } from 'react';
-import { Platform, Pressable, StyleSheet, Text } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 
+import { WEB_TOP_NAV_ICON } from '@/components/demo/webTopNavIcon.tokens';
 import Theme from '@/constants/Theme';
 import type { WorkspaceAccessAction } from '@/lib/onboarding/productCatalog';
 
@@ -29,49 +30,68 @@ export const PulseAccessOption = memo(function PulseAccessOption({
       accessibilityRole="button"
       accessibilityLabel={action.title}
     >
-      <Text style={[styles.title, compact && styles.titleCompact]}>{action.title}</Text>
-      <ChevronRight size={compact ? 14 : 16} color={Theme.textMuted} strokeWidth={2} />
+      <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={2}>
+        {action.title}
+      </Text>
+      <View style={styles.chevronSlot}>
+        <ChevronRight
+          size={12}
+          color={Theme.textSecondary}
+          strokeWidth={WEB_TOP_NAV_ICON.stroke}
+        />
+      </View>
     </Pressable>
   );
 });
 
 const styles = StyleSheet.create({
   row: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    backgroundColor: Theme.cardWhite,
+    minHeight: 40,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 206, 68, 0.28)',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(77, 54, 54, 0.08)',
+    borderColor: Theme.accentGoldBorder,
     ...Platform.select({
       web: {
-        transition: 'border-color 0.15s ease, background-color 0.15s ease',
+        transition: 'background-color 0.15s ease, border-color 0.15s ease',
       } as object,
       default: {},
     }),
   },
   rowPressed: {
-    borderColor: 'rgba(77, 54, 54, 0.18)',
-    backgroundColor: Theme.analyticsCanvas,
+    backgroundColor: 'rgba(255, 206, 68, 0.38)',
+    borderColor: 'rgba(255, 206, 68, 0.5)',
   },
   rowCompact: {
-    paddingVertical: 9,
-    paddingHorizontal: 12,
+    minHeight: 36,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
   },
   title: {
     flex: 1,
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '500',
+    minWidth: 0,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '400',
     color: ONBOARDING_BRAND.ink,
   },
   titleCompact: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '500',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '400',
+  },
+  chevronSlot: {
+    width: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 1,
   },
 });

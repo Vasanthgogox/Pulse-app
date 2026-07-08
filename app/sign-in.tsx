@@ -1,43 +1,44 @@
-import {
-  PULSE_PILL_BUTTON_BORDER_WIDTH,
-  PULSE_PILL_BUTTON_RADIUS,
-  pulsePillButtonLabelDefault,
-} from '@/constants/PulsePillButtonChrome';
 import Layout from '@/constants/Layout';
+import {
+    PULSE_PILL_BUTTON_BORDER_WIDTH,
+    PULSE_PILL_BUTTON_RADIUS,
+    pulsePillButtonLabelDefault,
+} from '@/constants/PulsePillButtonChrome';
 import Theme from '@/constants/Theme';
+import { useAuth } from '@/contexts/AuthContext';
+import { useIsOnline } from '@/contexts/NetworkContext';
 import { GoogleBrandIcon } from '@/features/auth/components/GoogleBrandIcon';
 import { SignInBrandPanel } from '@/features/auth/components/SignInBrandPanel';
 import { SignUpPulseField } from '@/features/auth/signup/SignUpPulseField';
 import {
   DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
   DESKTOP_SIGNUP_SPLIT_PAD,
+  DESKTOP_SIGNUP_SPLIT_FLOW_PAD_Y,
 } from '@/features/auth/signup/signUpConstants';
-import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS } from '@/features/auth/signup/signUpPulseTheme';
 import { signUpMobileContentInner } from '@/features/auth/signup/signUpMobile.styles';
+import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS } from '@/features/auth/signup/signUpPulseTheme';
 import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO } from '@/features/auth/signup/signUpTypography';
-import { useAuth } from '@/contexts/AuthContext';
-import { useIsOnline } from '@/contexts/NetworkContext';
 import { SIGN_IN_BRAND, SIGN_IN_COPY } from '@/lib/auth/signInContent';
 import { validateEmailRequired } from '@/lib/emailValidation';
-import { getKeepSignedIn, setKeepSignedIn } from '@/lib/keepSignedInPreference';
+import { getKeepSignedIn } from '@/lib/keepSignedInPreference';
 import { ROUTES } from '@/lib/routes';
 import { containsNullByte, validatePasswordForSignIn } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Eye, EyeOff } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Easing,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Easing,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -491,7 +492,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: '50%',
     paddingHorizontal: DESKTOP_SIGNUP_SPLIT_PAD,
-    paddingVertical: 36,
+    paddingVertical: DESKTOP_SIGNUP_SPLIT_FLOW_PAD_Y,
     backgroundColor: Theme.screenBackground,
     justifyContent: 'center',
     alignItems: 'stretch',

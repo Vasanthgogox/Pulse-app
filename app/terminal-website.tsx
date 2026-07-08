@@ -1,4 +1,5 @@
 import { ROUTES } from '@/lib/routes';
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -11,7 +12,7 @@ const WEBSITE_HTML = `<!doctype html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PULSE</title>
+  <title>pulse.</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
@@ -22,7 +23,7 @@ const WEBSITE_HTML = `<!doctype html>
       .page-pad { padding-left: 20px; padding-right: 20px; }
       .wide-shell { max-width: 1180px; margin-left: auto; margin-right: auto; }
     }
-    .brand-dot { color: #10b981; }
+    .brand-dot { color: #FFCE44; }
     .dot-light { color: #10b981; }
     .dot-on-green { color: #ffffff; }
     .glass-nav { background: rgba(255,255,255,0.88); backdrop-filter: blur(12px); border-bottom: 1px solid #e2e8f0; }
@@ -139,7 +140,7 @@ const WEBSITE_HTML = `<!doctype html>
     <div class="wide-shell max-w-6xl mx-auto flex items-center justify-between gap-4">
       <div class="flex items-center gap-2.5">
         <div class="brand-mark w-8 h-8 rounded-xl bg-slate-950 flex items-center justify-center text-[11px] font-black text-emerald-500 shadow-lg ring-1 ring-emerald-500/10">P.</div>
-        <span class="brand-wordmark font-black text-lg tracking-tighter italic text-slate-950 uppercase">Pulse<span class="brand-dot">.</span></span>
+        <span class="brand-wordmark font-bold text-lg tracking-tighter italic text-[#4D3636]">pulse<span class="brand-dot">.</span></span>
       </div>
       <div class="hidden lg:flex items-center gap-8">
         <a href="#network" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Network</a>
@@ -353,7 +354,7 @@ const WEBSITE_HTML = `<!doctype html>
       </h2>
       <a href="/sign-in" target="_top" class="inline-block px-10 py-4 bg-emerald-600 text-white rounded-full font-black text-sm uppercase tracking-[0.18em] shadow-[0_20px_48px_rgba(16,185,129,0.35)] hover-float">Initialize Now</a>
     </div>
-    <div class="absolute inset-0 opacity-[0.02] pointer-events-none text-white font-black italic text-[28vw] select-none leading-none top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">PULSE.</div>
+    <div class="absolute inset-0 opacity-[0.02] pointer-events-none text-white font-bold italic text-[28vw] select-none leading-none top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">pulse<span style="color:#FFCE44">.</span></div>
   </section>
 
   <footer class="site-footer py-10 page-pad text-center">
@@ -460,7 +461,7 @@ export default function TerminalWebsitePage() {
     const handler = (event: MessageEvent) => {
       if (event.data?.type !== PULSE_SIGN_IN_NAV || event.data?.v !== 1) return;
       if (iframeRef.current?.contentWindow !== event.source) return;
-      router.push(ROUTES.ONBOARDING.HUB);
+      router.push(ROUTES.SIGN_IN);
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
@@ -469,11 +470,12 @@ export default function TerminalWebsitePage() {
   if (Platform.OS !== 'web') {
     return (
       <View style={styles.nativeWrap}>
-        <Text style={styles.nativeTitle}>
-          Pulse<Text style={styles.nativeTitleDot}>.</Text> Website
-        </Text>
+        <View style={styles.nativeTitleRow}>
+          <PulseBrandMark size="lg" />
+          <Text style={styles.nativeTitleSuffix}> Website</Text>
+        </View>
         <Text style={styles.nativeBody}>This page is designed for web. Continue to sign in.</Text>
-        <Pressable onPress={() => router.push(ROUTES.ONBOARDING.HUB)} style={styles.nativeBtn}>
+        <Pressable onPress={() => router.push(ROUTES.SIGN_IN)} style={styles.nativeBtn}>
           <Text style={styles.nativeBtnText}>Go to Sign In</Text>
         </Pressable>
       </View>
@@ -499,8 +501,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: 24,
   },
-  nativeTitle: { fontSize: 22, fontWeight: '900', color: '#020617', fontStyle: 'italic' },
-  nativeTitleDot: { color: '#10b981' },
+  nativeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  nativeTitleSuffix: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#020617',
+    fontStyle: 'italic',
+  },
   nativeBody: { marginTop: 8, fontSize: 13, lineHeight: 18, color: '#64748b', textAlign: 'center' },
   nativeBtn: {
     marginTop: 14,

@@ -109,10 +109,10 @@ export const PULSE_PRODUCT_VISUALS = {
   pilot: {
     type: 'lottie',
     asset: {
-      // Same as chat trip-driver empty state (`ChatScreen` NEW_TRIP_DRIVER_EMPTY_ANIMATION).
-      source: require('@/assets/Animated folder/drunk-driver.json'),
-      glyphScale: 1.9,
-      speed: 0.8,
+      source: require('@/assets/Animated folder/person-driving-car.json'),
+      // Wide 1920×1080 canvas with more padding than Core — scale up to match visual mass.
+      glyphScale: 2.2,
+      speed: 0.9,
     },
   },
 } as const satisfies Record<'core' | 'pilot', PulseProductVisual>;

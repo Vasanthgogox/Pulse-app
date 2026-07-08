@@ -1,10 +1,11 @@
 import { memo } from 'react';
-import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import Theme from '@/constants/Theme';
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import type { PulseProduct } from '@/lib/onboarding/productCatalog';
 
-import { ONBOARDING_BRAND, PULSE_PRODUCT_VISUALS } from './onboardingPersonaAssets';
+import { PULSE_PRODUCT_VISUALS } from './onboardingPersonaAssets';
 import { OnboardingPersonaLottieIcon } from './OnboardingPersonaLottieIcon';
 
 export interface PulseProductOptionProps {
@@ -44,9 +45,12 @@ export const PulseProductOption = memo(function PulseProductOption({
           />
         )}
       </View>
-      <Text style={[styles.name, compact && styles.nameCompact]} numberOfLines={2}>
-        {product.name}
-      </Text>
+      <PulseBrandMark
+        word={product.brandWord}
+        size="sm"
+        textStyle={compact ? styles.nameCompactBrand : undefined}
+        numberOfLines={2}
+      />
     </Pressable>
   );
 });
@@ -84,16 +88,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '600',
-    color: ONBOARDING_BRAND.ink,
-    textAlign: 'center',
-  },
-  nameCompact: {
+  nameCompactBrand: {
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '600',
+    textAlign: 'center',
   },
 });

@@ -5,6 +5,7 @@
  */
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { BidSheet } from "@/features/network/components/bidding/BidSheet";
 import { StoryBroadcastPreview } from "@/features/network/components/StoryBroadcastPreview";
@@ -599,7 +600,7 @@ export default function StoryDetailScreen() {
       </View>
 
       <View style={[styles.watermark, isDesktopPreview && styles.watermarkDesktop]} pointerEvents="none">
-        <Text style={styles.watermarkText}>PULSE</Text>
+        <PulseBrandMark wordColor={INK} dotColor={INK} textStyle={styles.watermarkText} />
       </View>
 
       {/* Footer */}

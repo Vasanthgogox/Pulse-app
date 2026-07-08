@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
   chipName: {
     fontSize: 11,
     lineHeight: 15,
-    fontWeight: '500',
+    fontWeight: '400',
     color: ONBOARDING_BRAND.ink,
   },
   row: {
@@ -56,9 +56,9 @@ const styles = StyleSheet.create({
     opacity: 0.42,
   },
   name: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '400',
     color: ONBOARDING_BRAND.ink,
   },
 });

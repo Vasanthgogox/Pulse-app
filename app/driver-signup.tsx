@@ -7,6 +7,8 @@
  * Step 5: Success, go to app
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
+import { PULSE_PILOT_BRAND_WORD } from '@/lib/brand/pulseBrandMark.tokens';
 import { ALL_PRESET_AVATARS } from '@/constants/DriverLevels';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -1604,7 +1606,7 @@ export default function DriverSignUpScreen() {
         <Text style={styles.backLinkText}>{step === 0 ? 'Back to sign up' : 'Back'}</Text>
       </TouchableOpacity>
       <View style={[styles.brandRow, isDesktop && styles.brandRowDesktop]}>
-        <Text style={styles.brandText}>PULSE.</Text>
+        <PulseBrandMark word={PULSE_PILOT_BRAND_WORD} size="display" style={styles.brandRowInner} />
       </View>
       <ScrollView
         ref={scrollRef}
@@ -1702,12 +1704,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 560,
   },
-  brandText: {
-    fontSize: 28,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: -0.8,
-    color: Theme.driverEmerald,
+  brandRowInner: {
+    alignSelf: 'flex-start',
   },
   pagesWrap: {
     flexGrow: 1,

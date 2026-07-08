@@ -19,6 +19,7 @@ export const WORKSPACE_SETUP_COPY = {
   invitedEyebrow: 'Already invited?',
   signInPrompt: 'Already have an account?',
   signInLink: 'Sign in',
+  pulseWebsiteLink: 'Pulse website',
 } as const;
 
 /** First step inside business signup — sets expectations before phone verification. */
