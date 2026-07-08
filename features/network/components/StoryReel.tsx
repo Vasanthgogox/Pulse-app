@@ -2,6 +2,7 @@
  * Network stories row — circular avatars with gradient rings (unseen / seen).
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -406,9 +407,10 @@ export function StoryReel({
             style={[styles.pulseStoryWatermark, embedded && styles.pulseStoryWatermarkEmbedded]}
             pointerEvents="none"
           >
-            <Text style={[styles.watermarkPulse, embedded && styles.watermarkPulseEmbedded]}>
-              Pulse.
-            </Text>
+            <PulseBrandMark
+              size="lg"
+              textStyle={[styles.watermarkPulse, embedded && styles.watermarkPulseEmbedded]}
+            />
             <Text style={[styles.watermarkStory, embedded && styles.watermarkStoryEmbedded]}>
               story
             </Text>
@@ -491,12 +493,7 @@ const styles = StyleSheet.create({
     minWidth: 64,
   },
   watermarkPulse: {
-    fontSize: 22,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.8,
-    lineHeight: 24,
+    fontWeight: '700',
   },
   watermarkPulseEmbedded: {
     fontSize: 28,

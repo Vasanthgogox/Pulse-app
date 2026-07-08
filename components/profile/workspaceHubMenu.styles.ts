@@ -4,6 +4,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { WEB_TOP_NAV_ICON } from "@/components/demo/webTopNavIcon.tokens";
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { Platform, StyleSheet } from "react-native";
@@ -19,7 +20,11 @@ export const HUB_PURPLE_VIVID = Theme.brandBluePressed;
 export const HUB_PURPLE_LIGHT = Theme.primaryLight;
 export const HUB_PURPLE_TINT = Theme.pulseIndigoWash;
 export const HUB_PURPLE_BORDER = Theme.pulseIndigoRing;
-export const HUB_MENU_ICON = METRONIC.subtle;
+/** Hub list / grid glyphs — match web top-nav outline utility icons. */
+export const HUB_MENU_ICON = WEB_TOP_NAV_ICON.muted;
+export const HUB_MENU_ICON_SIZE = WEB_TOP_NAV_ICON.size;
+export const HUB_MENU_ICON_STROKE = WEB_TOP_NAV_ICON.stroke;
+export const HUB_ROW_CHEVRON_SIZE = 13;
 
 /** Tinted wells behind hub menu glyphs (aligned with workspace detail panels). */
 export const HUB_ICON_WELL = {
@@ -196,7 +201,7 @@ export const hubStyles = StyleSheet.create({
   // Quick actions (Metronic symbol cards)
   quickRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "center",
     gap: 24,
     paddingHorizontal: 4,
@@ -226,12 +231,12 @@ export const hubStyles = StyleSheet.create({
     }),
   },
   quickCircleBrand: {
-    backgroundColor: HUB_ICON_WELL.brand,
-    borderColor: HUB_ICON_WELL.brandBorder,
+    backgroundColor: METRONIC.heroBg,
+    borderColor: METRONIC.border,
   },
   quickCircleEmerald: {
-    backgroundColor: HUB_ICON_WELL.emerald,
-    borderColor: HUB_ICON_WELL.emeraldBorder,
+    backgroundColor: METRONIC.heroBg,
+    borderColor: METRONIC.border,
   },
   quickAvatar: { width: "100%", height: "100%" },
   quickAvatarInitials: { fontSize: 16, fontWeight: "700", color: HUB_PURPLE },
@@ -258,9 +263,6 @@ export const hubStyles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: Theme.brandBlueSoft,
-    borderWidth: 1,
-    borderColor: HUB_ICON_WELL.brandBorder,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -325,13 +327,11 @@ export const hubStyles = StyleSheet.create({
   menuRowPressed: { backgroundColor: METRONIC.bodyBg },
   menuRowSelected: { backgroundColor: Theme.brandBlueWashSubtle },
   menuRowIconWell: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
+    width: HUB_MENU_ICON_SIZE,
+    height: HUB_MENU_ICON_SIZE,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   menuRowPngIcon: {
     width: 22,
@@ -342,6 +342,12 @@ export const hubStyles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.text,
+  },
+  menuRowChevronSlot: {
+    width: HUB_ROW_CHEVRON_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
 
   // Party — single row (scrolls horizontally when narrow)
@@ -357,11 +363,11 @@ export const hubStyles = StyleSheet.create({
   partyRowCell: {
     flex: 1,
     minWidth: 72,
-    alignItems: "center",
+    alignItems: "stretch",
   },
   partyRowChip: {
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     gap: 8,
     paddingVertical: 8,
     paddingHorizontal: 4,
@@ -371,19 +377,18 @@ export const hubStyles = StyleSheet.create({
     opacity: 0.85,
   },
   partyRowIconSlot: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: HUB_MENU_ICON_SIZE,
+    height: HUB_MENU_ICON_SIZE,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "transparent",
   },
   partyGridLabel: {
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.muted,
     textAlign: "center",
+    minHeight: 28,
+    lineHeight: 14,
   },
   valuePill: {
     maxWidth: 112,

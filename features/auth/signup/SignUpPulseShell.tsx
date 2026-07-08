@@ -11,6 +11,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
+import {
+  PULSE_CORE_BRAND_WORD,
+  PULSE_PILOT_BRAND_WORD,
+} from '@/lib/brand/pulseBrandMark.tokens';
 import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
 
@@ -65,6 +70,8 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
     progressScrollRef.current?.scrollTo({ x, animated: true });
   }, [stepIndex, useScrollableProgress]);
 
+  const brandWord = theme === DRIVER_SIGNUP ? PULSE_PILOT_BRAND_WORD : PULSE_CORE_BRAND_WORD;
+
   const device = (
     <View
       style={[
@@ -92,7 +99,11 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
         ) : (
           <View style={styles.headerSpacer} />
         )}
-        <Text style={[styles.brand, !isDesktop && styles.brandMobile]}>PULSE.</Text>
+        <PulseBrandMark
+          word={brandWord}
+          size={isDesktop ? 'sm' : 'smMobile'}
+          style={styles.brand}
+        />
         <View style={styles.headerSpacer} />
       </View>
 
@@ -251,11 +262,6 @@ function createStyles(theme: SignUpShellTheme, isDesktop: boolean) {
     backText: text.back,
     backTextMobile: text.backMobile,
     brand: {
-      ...text.brand,
-      flexShrink: 0,
-    },
-    brandMobile: {
-      ...text.brandMobile,
       flexShrink: 0,
     },
     headerSpacer: {

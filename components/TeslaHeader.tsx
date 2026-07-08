@@ -5,6 +5,7 @@
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import Layout from "@/constants/Layout";
+import { PulseBrandMark } from "@/components/brand/PulseBrandMark";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { StyleSheet, Text, TouchableOpacity, View, Image, type TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -143,9 +144,11 @@ export function TeslaHeader({
           </View>
         )}
         <View style={styles.titleBlock}>
-          <Text style={[styles.brandText, isDark && styles.brandTextDark]} numberOfLines={1}>
-            PULSE
-          </Text>
+          <PulseBrandMark
+            size="xs"
+            variant={isDark ? 'onDark' : 'ink'}
+            numberOfLines={1}
+          />
           <Text
             style={[styles.title, isDark && styles.titleDark, titleTextStyle]}
             numberOfLines={1}

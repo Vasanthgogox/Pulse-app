@@ -5,6 +5,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useEffect } from 'react';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
@@ -77,7 +78,7 @@ export function TeslaHeader({
           <FontAwesome name="terminal" size={11} color={Theme.textPrimaryDark} />
         </View>
         <View style={styles.titleBlock}>
-          <Text style={styles.brandText} numberOfLines={1}>PULSE</Text>
+          <PulseBrandMark size="xs" numberOfLines={1} />
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
           {subtitle != null && subtitle !== '' && (
             <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>

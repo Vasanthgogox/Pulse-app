@@ -23,6 +23,14 @@ export const DESKTOP_SIGNUP_FORM_WIDTH = 480;
 export const DESKTOP_SIGNUP_SPLIT_FLOW_MAX = 560;
 /** Horizontal inset inside the right split pane (keep modest — pane is already half viewport). */
 export const DESKTOP_SIGNUP_SPLIT_PAD = 28;
+/** Vertical inset for split-pane flow columns (left marketing + right form). */
+export const DESKTOP_SIGNUP_SPLIT_FLOW_PAD_Y = 36;
+/** Left marketing rail — logo + copy share this gutter for alignment. */
+export const DESKTOP_SPLIT_MARKETING_GUTTER = 40;
+/** Brand mark inset from top of split pane. */
+export const DESKTOP_SPLIT_BRAND_TOP = 32;
+/** Reserved space below logo before marketing copy (prevents overlap on short panes). */
+export const DESKTOP_SPLIT_BRAND_CLEARANCE = 16;
 /** Scroll end padding so fields clear the sticky footer. */
 export const SIGNUP_FORM_FOOTER_CLEARANCE = 24;
 /** Room above the in-step sticky footer (mobile account step). */

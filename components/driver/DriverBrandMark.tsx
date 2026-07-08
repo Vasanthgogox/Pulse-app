@@ -1,25 +1,21 @@
-import { DRIVER_BRAND_MARK } from '@/constants/DriverBrand';
-import Typography from '@/constants/Typography';
-import React from 'react';
-import { StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native';
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
+import { PULSE_PILOT_BRAND_WORD } from '@/lib/brand/pulseBrandMark.tokens';
+import type { StyleProp, TextStyle } from 'react-native';
 
 type Props = {
   color?: string;
   style?: StyleProp<TextStyle>;
 };
 
-/** Global driver shell brand label — same typography as legacy Pulse PILOT header. */
+/** Driver shell brand label — pulsepilot. wordmark. */
 export function DriverBrandMark({ color, style }: Props) {
   return (
-    <Text style={[styles.brand, color != null ? { color } : null, style]}>
-      {DRIVER_BRAND_MARK}
-    </Text>
+    <PulseBrandMark
+      word={PULSE_PILOT_BRAND_WORD}
+      size="xs"
+      wordColor={color}
+      textStyle={[{ marginBottom: 1 }, style]}
+      numberOfLines={1}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  brand: {
-    ...Typography.headerSubtitle,
-    marginBottom: 1,
-  },
-});

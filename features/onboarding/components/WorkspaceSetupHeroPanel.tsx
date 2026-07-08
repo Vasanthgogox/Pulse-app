@@ -1,31 +1,51 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import Theme from '@/constants/Theme';
+import { DESKTOP_SIGNUP_SPLIT_FLOW_PAD_Y } from '@/features/auth/signup/signUpConstants';
 import { PULSE_SIGNUP_TYPO } from '@/features/auth/signup/signUpTypography';
+import Illustration3 from '@/assets/illustrations/3.svg';
 import { WORKSPACE_SETUP_COPY } from '@/lib/onboarding/workspaceSetupContent';
+import { ROUTES } from '@/lib/routes';
 
 import { ONBOARDING_BRAND } from './onboardingPersonaAssets';
+import { PulseSplitBrandLogo } from './PulseSplitBrandLogo';
 import { WorkspaceOutcomeTypewriter } from './WorkspaceOutcomeTypewriter';
 
 const PANEL_CONTENT_MAX = 400;
+const FOOTER_CONTENT_MAX = 460;
+const ILLUSTRATION_SIZE = 220;
+const WORKSPACE_SETUP_ILLUSTRATION_ASPECT = 600 / 587;
+
+const Illustration = Illustration3;
+const illustrationHeight = ILLUSTRATION_SIZE / WORKSPACE_SETUP_ILLUSTRATION_ASPECT;
 
 /** Desktop hub left panel — aligned with signup / sign-in marketing rail. */
 export function WorkspaceSetupHeroPanel() {
+  const router = useRouter();
+
   return (
     <View style={styles.panel}>
-      <View style={styles.inner}>
-        <Text style={styles.logo}>
-          PULSE<Text style={styles.logoDot}>.</Text>
-        </Text>
-        <Text style={styles.tag}>{WORKSPACE_SETUP_COPY.tag}</Text>
-        <Text style={styles.headline}>{WORKSPACE_SETUP_COPY.headline}</Text>
+      <PulseSplitBrandLogo onPress={() => router.push(ROUTES.TERMINAL_WEBSITE)} />
 
-        <WorkspaceOutcomeTypewriter />
+      <View style={styles.main}>
+        <View style={styles.inner}>
+          <View style={styles.copy}>
+            <Text style={styles.tag}>{WORKSPACE_SETUP_COPY.tag}</Text>
+            <Text style={styles.headline}>{WORKSPACE_SETUP_COPY.headline}</Text>
 
-        <View style={styles.footerCopy}>
-          <Text style={styles.closing}>{WORKSPACE_SETUP_COPY.closing}</Text>
-          <Text style={styles.trust}>{WORKSPACE_SETUP_COPY.trust}</Text>
+            <WorkspaceOutcomeTypewriter />
+          </View>
+
+          <View style={styles.illustrationWrap}>
+            <Illustration width={ILLUSTRATION_SIZE} height={illustrationHeight} />
+          </View>
         </View>
+      </View>
+
+      <View style={styles.footerRail}>
+        <Text style={styles.closing}>{WORKSPACE_SETUP_COPY.closing}</Text>
+        <Text style={styles.trust}>{WORKSPACE_SETUP_COPY.trust}</Text>
       </View>
     </View>
   );
@@ -34,29 +54,30 @@ export function WorkspaceSetupHeroPanel() {
 const styles = StyleSheet.create({
   panel: {
     flex: 1,
-    width: '100%',
+    position: 'relative',
+    backgroundColor: Theme.screenBackground,
     minWidth: 0,
     minHeight: 0,
-    backgroundColor: Theme.screenBackground,
+    justifyContent: 'space-between',
+  },
+  main: {
+    flex: 1,
+    minHeight: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
+    paddingVertical: DESKTOP_SIGNUP_SPLIT_FLOW_PAD_Y,
   },
   inner: {
     width: '100%',
     maxWidth: PANEL_CONTENT_MAX,
+    alignSelf: 'center',
     paddingHorizontal: 40,
-    paddingVertical: 36,
+    paddingBottom: 16,
+    gap: 22,
   },
-  logo: {
-    ...PULSE_SIGNUP_TYPO.brand,
-    fontSize: 22,
-    lineHeight: 28,
-    color: ONBOARDING_BRAND.ink,
-    letterSpacing: -0.6,
-    marginBottom: 12,
-  },
-  logoDot: {
-    color: ONBOARDING_BRAND.yellow,
+  copy: {
+    width: '100%',
   },
   tag: {
     ...PULSE_SIGNUP_TYPO.label,
@@ -72,22 +93,30 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     maxWidth: 340,
   },
-  closing: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '400',
-    color: Theme.textSecondary,
-    marginBottom: 8,
+  illustrationWrap: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: 8,
   },
-  footerCopy: {
-    marginTop: 12,
+  footerRail: {
+    width: '100%',
+    maxWidth: FOOTER_CONTENT_MAX,
+    alignSelf: 'center',
+    paddingHorizontal: 40,
+    paddingTop: 12,
+    paddingBottom: 28,
+    gap: 4,
+  },
+  closing: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '400',
+    color: ONBOARDING_BRAND.ink,
   },
   trust: {
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '400',
-    color: Theme.textSecondary,
-    maxWidth: 320,
-    opacity: 0.92,
+    color: ONBOARDING_BRAND.ink,
   },
 });

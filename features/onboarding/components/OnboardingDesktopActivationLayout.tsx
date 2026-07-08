@@ -2,6 +2,7 @@ import { memo, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import { colors } from '@/design-system/colors';
 import { layout } from '@/design-system/layout';
 import { space } from '@/design-system/spacing';
@@ -41,9 +42,7 @@ export const OnboardingDesktopActivationLayout = memo(function OnboardingDesktop
     <View style={[styles.shell, { paddingTop: insets.top }]}>
       <View style={styles.panelShell}>
         <View style={styles.contextPanel}>
-          <Text style={styles.brand}>
-            PULSE<Text style={styles.dot}>.</Text>
-          </Text>
+          <PulseBrandMark size="xl" variant="onDark" style={styles.brand} />
           <Text style={styles.tag}>{contextTag}</Text>
           <Text style={styles.contextTitle}>{contextTitle}</Text>
           <Text style={styles.contextSub}>{contextSubtitle}</Text>
@@ -122,15 +121,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brand: {
-    fontSize: 26,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: -0.5,
-    color: '#fff',
     marginBottom: space[5],
-  },
-  dot: {
-    color: colors.brand,
   },
   tag: {
     ...typography.label,

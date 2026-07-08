@@ -218,13 +218,16 @@ const SCREEN_CSS = `
     left: 50%;
     transform: translate(-50%, -50%) rotate(-24deg);
     font-size: 52px;
-    font-weight: 900;
+    font-weight: 700;
     font-style: italic;
-    letter-spacing: 0.35em;
+    letter-spacing: -0.04em;
     color: #475569;
     opacity: 0.06;
     pointer-events: none;
     z-index: 0;
+  }
+  .wm-dot {
+    color: #FFCE44;
   }
   .ticket-outer {
     position: relative;
@@ -278,9 +281,9 @@ const PRINT_CSS = `
     left: 50%;
     transform: translate(-50%, -50%) rotate(-24deg);
     font-size: 48px;
-    font-weight: 900;
+    font-weight: 700;
     font-style: italic;
-    letter-spacing: 0.32em;
+    letter-spacing: -0.04em;
     color: #94a3b8;
     opacity: 0.08;
     z-index: 0;
@@ -336,7 +339,7 @@ function wrapDocument(
   <style>${css}</style>
 </head>
 <body>
-  <div class="wm" aria-hidden="true">PULSE</div>
+  <div class="wm" aria-hidden="true">pulse<span class="wm-dot">.</span></div>
   <div class="ticket-outer">
     ${voidStamp}
     ${ticketTable}

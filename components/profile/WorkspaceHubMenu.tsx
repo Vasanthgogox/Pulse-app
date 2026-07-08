@@ -8,7 +8,11 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
   HUB_HEADER_GRADIENT,
   HUB_ICON_WELL,
+  HUB_MENU_ICON,
+  HUB_MENU_ICON_SIZE,
+  HUB_MENU_ICON_STROKE,
   HUB_PURPLE,
+  HUB_ROW_CHEVRON_SIZE,
   hubStyles,
 } from "@/components/profile/workspaceHubMenu.styles";
 import { LinearGradient } from "expo-linear-gradient";
@@ -66,23 +70,14 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const MENU_ICON_SIZE = 14;
-const MENU_ICON_STROKE = 2.1;
-
-const GRID_ICON_SIZE = 20;
-
-function hubLucideIcon(
-  Icon: typeof Shield,
-  color: string,
-) {
+function hubLucideIcon(Icon: typeof Shield) {
   return (
-    <Icon size={MENU_ICON_SIZE} color={color} strokeWidth={MENU_ICON_STROKE} />
+    <Icon
+      size={HUB_MENU_ICON_SIZE}
+      color={HUB_MENU_ICON}
+      strokeWidth={HUB_MENU_ICON_STROKE}
+    />
   );
-}
-
-/** Party grid glyph — same lucide format as the rest of the hub, sized for the grid slot. */
-function hubGridIcon(Icon: typeof Shield, color: string) {
-  return <Icon size={GRID_ICON_SIZE} color={color} strokeWidth={2.1} />;
 }
 
 function orgInitials(name: string): string {
@@ -96,8 +91,6 @@ type HubRow = {
   id: string;
   label: string;
   icon: React.ReactNode;
-  iconBg?: string;
-  iconBorder?: string;
   panelId?: WorkspacePanelId;
   route?: string;
   valuePill?: string;
@@ -222,18 +215,14 @@ export function WorkspaceHubMenu({
     {
       id: "language",
       label: "Language",
-      icon: hubLucideIcon(Globe, "#2563eb"),
-      iconBg: HUB_ICON_WELL.sky,
-      iconBorder: HUB_ICON_WELL.skyBorder,
+      icon: hubLucideIcon(Globe),
       panelId: "language",
       valuePill: languageLabel,
     },
     {
       id: "region",
       label: "Region",
-      icon: hubLucideIcon(MapPin, "#d97706"),
-      iconBg: HUB_ICON_WELL.amber,
-      iconBorder: HUB_ICON_WELL.amberBorder,
+      icon: hubLucideIcon(MapPin),
       panelId: "region",
       valuePill: regionLabel,
     },
@@ -243,17 +232,13 @@ export function WorkspaceHubMenu({
     {
       id: "ws-kyc",
       label: "Org Identity & KYC",
-      icon: hubLucideIcon(Shield, "#0f766e"),
-      iconBg: HUB_ICON_WELL.teal,
-      iconBorder: HUB_ICON_WELL.tealBorder,
+      icon: hubLucideIcon(Shield),
       panelId: "kyc",
     },
     {
       id: "ws-settings",
       label: "Settings",
-      icon: hubLucideIcon(Settings, HUB_PURPLE),
-      iconBg: HUB_ICON_WELL.slate,
-      iconBorder: HUB_ICON_WELL.slateBorder,
+      icon: hubLucideIcon(Settings),
       panelId: "settings",
     },
   ];
@@ -262,33 +247,25 @@ export function WorkspaceHubMenu({
     {
       id: "party-customers",
       label: "Customer",
-      icon: hubGridIcon(Building2, "#2563eb"),
-      iconBg: HUB_ICON_WELL.sky,
-      iconBorder: HUB_ICON_WELL.skyBorder,
+      icon: hubLucideIcon(Building2),
       route: ROUTES.partyDirectory("customers"),
     },
     {
       id: "party-suppliers",
       label: "Supplier",
-      icon: hubGridIcon(Truck, "#d97706"),
-      iconBg: HUB_ICON_WELL.amber,
-      iconBorder: HUB_ICON_WELL.amberBorder,
+      icon: hubLucideIcon(Truck),
       route: ROUTES.partyDirectory("suppliers"),
     },
     {
       id: "party-drivers",
       label: "Driver",
-      icon: hubGridIcon(User, "#059669"),
-      iconBg: HUB_ICON_WELL.emerald,
-      iconBorder: HUB_ICON_WELL.emeraldBorder,
+      icon: hubLucideIcon(User),
       route: ROUTES.partyDirectory("drivers"),
     },
     {
       id: "party-vehicles",
       label: "Vehicle",
-      icon: hubGridIcon(Car, HUB_PURPLE),
-      iconBg: HUB_ICON_WELL.slate,
-      iconBorder: HUB_ICON_WELL.slateBorder,
+      icon: hubLucideIcon(Car),
       route: ROUTES.partyDirectory("vehicles"),
     },
   ];
@@ -332,19 +309,7 @@ export function WorkspaceHubMenu({
             accessibilityRole="button"
             accessibilityState={{ selected }}
           >
-            <View
-              style={[
-                hubStyles.menuRowIconWell,
-                row.iconBg
-                  ? {
-                      backgroundColor: row.iconBg,
-                      borderColor: row.iconBorder,
-                    }
-                  : null,
-              ]}
-            >
-              {row.icon}
-            </View>
+            <View style={hubStyles.menuRowIconWell}>{row.icon}</View>
             <Text style={hubStyles.menuRowLabel} numberOfLines={1}>
               {row.label}
             </Text>
@@ -355,11 +320,13 @@ export function WorkspaceHubMenu({
                 </Text>
               </View>
             ) : (
-              <ChevronRight
-                size={13}
-                color={selected ? HUB_PURPLE : Theme.textMuted}
-                strokeWidth={1.8}
-              />
+              <View style={hubStyles.menuRowChevronSlot}>
+                <ChevronRight
+                  size={HUB_ROW_CHEVRON_SIZE}
+                  color={selected ? HUB_PURPLE : HUB_MENU_ICON}
+                  strokeWidth={HUB_MENU_ICON_STROKE}
+                />
+              </View>
             )}
           </Pressable>
         );
@@ -403,19 +370,7 @@ export function WorkspaceHubMenu({
               accessibilityRole="button"
               accessibilityLabel={row.label}
             >
-              <View
-                style={[
-                  hubStyles.partyRowIconSlot,
-                  row.iconBg
-                    ? {
-                        backgroundColor: row.iconBg,
-                        borderColor: row.iconBorder,
-                      }
-                    : null,
-                ]}
-              >
-                {row.icon}
-              </View>
+              <View style={hubStyles.partyRowIconSlot}>{row.icon}</View>
               <Text style={hubStyles.partyGridLabel} numberOfLines={1}>
                 {row.label}
               </Text>
@@ -515,8 +470,12 @@ export function WorkspaceHubMenu({
               accessibilityRole="button"
               accessibilityLabel="Open documents center"
             >
-              <View style={[hubStyles.quickCircle, hubStyles.quickCircleBrand]}>
-                <FolderOpen size={20} color={HUB_PURPLE} strokeWidth={2.2} />
+              <View style={hubStyles.quickCircle}>
+                <FolderOpen
+                  size={HUB_MENU_ICON_SIZE}
+                  color={HUB_MENU_ICON}
+                  strokeWidth={HUB_MENU_ICON_STROKE}
+                />
               </View>
               <Text style={hubStyles.quickLabel}>Documents</Text>
             </Pressable>
@@ -529,8 +488,12 @@ export function WorkspaceHubMenu({
               accessibilityRole="button"
               accessibilityLabel="Support"
             >
-              <View style={[hubStyles.quickCircle, hubStyles.quickCircleEmerald]}>
-                <HelpCircle size={20} color={Theme.driverEmerald} strokeWidth={2.2} />
+              <View style={hubStyles.quickCircle}>
+                <HelpCircle
+                  size={HUB_MENU_ICON_SIZE}
+                  color={HUB_MENU_ICON}
+                  strokeWidth={HUB_MENU_ICON_STROKE}
+                />
               </View>
               <Text style={hubStyles.quickLabel}>Support</Text>
             </Pressable>
@@ -538,7 +501,11 @@ export function WorkspaceHubMenu({
 
           <View style={hubStyles.insightBanner}>
             <View style={hubStyles.insightIconWrap}>
-              <Sparkles size={15} color={HUB_PURPLE} strokeWidth={2.2} />
+              <Sparkles
+                size={HUB_MENU_ICON_SIZE}
+                color={HUB_MENU_ICON}
+                strokeWidth={HUB_MENU_ICON_STROKE}
+              />
             </View>
             <View style={hubStyles.insightTextWrap}>
               <Text style={hubStyles.insightTitle}>Pulse Business OS</Text>

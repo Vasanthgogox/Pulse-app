@@ -1,10 +1,13 @@
 import { ROUTES } from '@/lib/routes';
+import { PULSE_CORE_BRAND_WORD, PULSE_PILOT_BRAND_WORD } from '@/lib/brand/pulseBrandMark.tokens';
 
 /** Active Pulse products — first-class software offerings. */
 export type PulseProductId = 'core' | 'pilot';
 
 export type PulseProduct = {
   id: PulseProductId;
+  /** Styled wordmark text — e.g. pulsecore */
+  brandWord: string;
   name: string;
   tagline: string;
   features: string;
@@ -26,6 +29,7 @@ export type WorkspaceAccessAction = {
 export const PULSE_PRODUCTS: readonly PulseProduct[] = [
   {
     id: 'core',
+    brandWord: PULSE_CORE_BRAND_WORD,
     name: 'Pulse Core',
     tagline: 'Transport operating system',
     features: 'Operations • Fleet • Finance',
@@ -33,6 +37,7 @@ export const PULSE_PRODUCTS: readonly PulseProduct[] = [
   },
   {
     id: 'pilot',
+    brandWord: PULSE_PILOT_BRAND_WORD,
     name: 'Pulse Pilot',
     tagline: 'Driver app',
     features: 'Trips • Navigation • Earnings',

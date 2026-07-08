@@ -10,15 +10,18 @@ export const PULSE_WATERMARK_PRINT_CSS = `
     left: 50%;
     transform: translate(-50%, -50%) rotate(-24deg);
     font-size: 68px;
-    font-weight: 900;
+    font-weight: 700;
     font-style: italic;
-    letter-spacing: 0.42em;
+    letter-spacing: -0.04em;
     color: #4D3636;
     opacity: 0.07;
     z-index: 0;
     pointer-events: none;
     white-space: nowrap;
     user-select: none;
+  }
+  .pulse-watermark-dot {
+    color: #FFCE44;
   }
   .pulse-report-body {
     position: relative;
@@ -34,7 +37,7 @@ export const PULSE_WATERMARK_PRINT_CSS = `
 `;
 
 export function pulseWatermarkHtmlFragment(): string {
-  return `<div class="pulse-watermark" aria-hidden="true">PULSE</div>`;
+  return `<div class="pulse-watermark" aria-hidden="true">pulse<span class="pulse-watermark-dot">.</span></div>`;
 }
 
 export type WrapPrintableReportHtmlOptions = {

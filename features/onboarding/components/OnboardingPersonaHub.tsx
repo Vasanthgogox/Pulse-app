@@ -32,6 +32,7 @@ import { ONBOARDING_BRAND } from './onboardingPersonaAssets';
 import { PulseAccessOption } from './PulseAccessOption';
 import { PulseComingSoonProduct } from './PulseComingSoonProduct';
 import { PulseProductOption } from './PulseProductOption';
+import { PulseBrandMarkLink } from './PulseSplitBrandLogo';
 import { WorkspaceSetupHeroPanel } from './WorkspaceSetupHeroPanel';
 
 const signupText = createPulseSignUpTextStyles(PULSE_SIGNUP);
@@ -105,7 +106,7 @@ export function OnboardingPersonaHub() {
       </View>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionLabel, !isDesktop && styles.sectionLabelMobile]}>
+        <Text style={[styles.sectionLabel, !isDesktop && styles.sectionLabelMobile, isDesktop && styles.sectionLabelDesktop]}>
           {WORKSPACE_SETUP_COPY.sectionProducts}
         </Text>
         <View style={styles.productList}>
@@ -113,7 +114,7 @@ export function OnboardingPersonaHub() {
             <PulseProductOption
               key={product.id}
               product={product}
-              compact={isDesktop}
+              compact={false}
               onPress={() => navigateProduct(product.route)}
             />
           ))}
@@ -123,20 +124,21 @@ export function OnboardingPersonaHub() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={[styles.invitedEyebrow, !isDesktop && styles.invitedEyebrowMobile]}>
+        <Text style={[styles.invitedEyebrow, !isDesktop && styles.invitedEyebrowMobile, isDesktop && styles.invitedEyebrowDesktop]}>
           {WORKSPACE_SETUP_COPY.invitedEyebrow}
         </Text>
-        <Text style={[styles.sectionLabel, !isDesktop && styles.sectionLabelMobile]}>
+        <Text style={[styles.sectionLabel, !isDesktop && styles.sectionLabelMobile, isDesktop && styles.sectionLabelDesktop]}>
           {WORKSPACE_SETUP_COPY.sectionWorkspaceAccess}
         </Text>
         <View style={styles.accessList}>
           {WORKSPACE_ACCESS_ACTIONS.map((action) => (
-            <PulseAccessOption
-              key={action.id}
-              action={action}
-              compact={isDesktop}
-              onPress={() => navigateAccess(action.route, action.params)}
-            />
+            <View key={action.id} style={styles.accessOptionCell}>
+              <PulseAccessOption
+                action={action}
+                compact={false}
+                onPress={() => navigateAccess(action.route, action.params)}
+              />
+            </View>
           ))}
         </View>
       </View>
@@ -205,14 +207,9 @@ export function OnboardingPersonaHub() {
         <View style={styles.panelDivider} />
 
         <View style={[styles.desktopCol, styles.rightPanel]}>
-          <ScrollView
-            style={styles.rightScroll}
-            contentContainerStyle={styles.rightScrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
+          <View style={styles.rightFlowPane}>
             <View style={styles.panelInner}>{renderProductHubMain()}</View>
-          </ScrollView>
+          </View>
           <View style={styles.panelInnerFooter}>{renderHubFooter()}</View>
         </View>
       </View>
@@ -230,6 +227,11 @@ export function OnboardingPersonaHub() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        <PulseBrandMarkLink
+          onPress={() => router.push(ROUTES.TERMINAL_WEBSITE)}
+          accessibilityLabel={WORKSPACE_SETUP_COPY.pulseWebsiteLink}
+          style={styles.mobileBrandLink}
+        />
         {renderProductHubMain()}
       </ScrollView>
       <View style={styles.mobileHubFooter}>{renderHubFooter(insets.bottom)}</View>
@@ -265,8 +267,7 @@ const styles = StyleSheet.create({
     maxWidth: DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
     alignSelf: 'center',
     paddingHorizontal: DESKTOP_SIGNUP_SPLIT_PAD,
-    paddingTop: 36,
-    paddingBottom: 12,
+    paddingVertical: 20,
   },
 
   panelInnerFooter: {
@@ -287,22 +288,22 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     flex: 1,
     minHeight: 0,
-    justifyContent: 'flex-start',
   },
-  rightScroll: {
+  rightFlowPane: {
     flex: 1,
     minHeight: 0,
-  },
-  rightScrollContent: {
-    flexGrow: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   hub: {
-    gap: 16,
+    gap: 18,
+    width: '100%',
   },
   hubHeader: {
-    gap: 6,
-    marginBottom: 4,
+    gap: 8,
+    marginBottom: 6,
   },
   hubTitle: {
     color: ONBOARDING_BRAND.ink,
@@ -310,6 +311,9 @@ const styles = StyleSheet.create({
   },
   hubTitleDesktop: {
     ...PULSE_SIGNUP_TYPO.titleDesktop,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.3,
   },
   hubTitleMobile: {
     ...PULSE_SIGNUP_TYPO_MOBILE.title,
@@ -319,17 +323,25 @@ const styles = StyleSheet.create({
   },
   hubSubtitleDesktop: {
     ...PULSE_SIGNUP_TYPO.subtitle,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 0,
   },
   hubSubtitleMobile: {
     ...PULSE_SIGNUP_TYPO_MOBILE.subtitle,
   },
 
   section: {
-    gap: 8,
+    gap: 10,
   },
   sectionLabel: {
     ...PULSE_SIGNUP_TYPO.label,
     color: Theme.textMuted,
+  },
+  sectionLabelDesktop: {
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 0.5,
   },
   sectionLabelMobile: {
     ...PULSE_SIGNUP_TYPO_MOBILE.label,
@@ -339,6 +351,10 @@ const styles = StyleSheet.create({
     ...PULSE_SIGNUP_TYPO.caption,
     color: Theme.textSecondary,
     marginBottom: -2,
+  },
+  invitedEyebrowDesktop: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   invitedEyebrowMobile: {
     ...PULSE_SIGNUP_TYPO_MOBILE.caption,
@@ -354,10 +370,16 @@ const styles = StyleSheet.create({
   productList: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: 8,
+    gap: 10,
   },
   accessList: {
-    gap: 5,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+  },
+  accessOptionCell: {
+    flex: 1,
+    minWidth: 0,
   },
 
   hubFooter: {
@@ -411,19 +433,27 @@ const styles = StyleSheet.create({
   },
   signInMuted: {
     ...signupText.linkSmall,
+    fontSize: 13,
+    lineHeight: 18,
     color: Theme.textMuted,
   },
   signInMutedMobile: {
     ...signupText.linkSmallMobile,
+    fontSize: 14,
+    lineHeight: 20,
     color: Theme.textMuted,
   },
   signInLink: {
     ...signupText.linkSmall,
+    fontSize: 13,
+    lineHeight: 18,
     color: ONBOARDING_BRAND.ink,
     fontWeight: '600',
   },
   signInLinkMobile: {
     ...signupText.linkSmallMobile,
+    fontSize: 14,
+    lineHeight: 20,
     color: ONBOARDING_BRAND.ink,
     fontWeight: '600',
   },
@@ -441,8 +471,11 @@ const styles = StyleSheet.create({
   mobileScrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 12,
     paddingBottom: 16,
+  },
+  mobileBrandLink: {
+    marginBottom: 8,
   },
   mobileHubFooter: {
     borderTopWidth: StyleSheet.hairlineWidth,
