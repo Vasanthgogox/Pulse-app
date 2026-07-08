@@ -3,6 +3,7 @@ import { Bell, Search, Menu, Moon, Sun, Store } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useCommerce } from '@/context/CommerceProvider';
+import { UserMenu } from '@/components/layout/UserMenu';
 import { Badge } from '@/components/ui/badge';
 
 const PAGE_TITLES: Record<string, string> = {
@@ -14,6 +15,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/customers': 'Consignees',
   '/warehouses': 'Warehouses',
   '/settings': 'Settings',
+  '/profile': 'Profile',
 };
 
 const STORE_NAV = [
@@ -69,7 +71,7 @@ export function Header({ dark, setDark, onMobileMenuOpen }: HeaderProps) {
           <button type="button" onClick={() => setDark(!dark)} className="p-2 rounded-lg hover:bg-accent">
             {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </button>
-          <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">CM</div>
+          <UserMenu />
         </div>
       </div>
 

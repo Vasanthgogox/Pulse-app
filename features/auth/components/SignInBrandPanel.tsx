@@ -3,16 +3,28 @@ import { StyleSheet, View } from 'react-native';
 
 import Theme from '@/constants/Theme';
 import { PulseActivationMarketingPanel } from '@/features/auth/signup/components/PulseActivationMarketingPanel';
-import { SIGN_IN_COPY } from '@/lib/auth/signInContent';
+import { suiteSignInCopy } from '@/lib/suite/suiteAuthContent';
+import type { SuiteProductId } from '@/lib/suite/suiteProducts';
+import { resolveSuiteProduct } from '@/lib/suite/suiteProducts';
 
-/** Desktop sign-in left rail — matches create-account marketing panel. */
-export const SignInBrandPanel = memo(function SignInBrandPanel() {
+export type SignInBrandPanelProps = {
+  productId?: SuiteProductId | null;
+};
+
+/** Desktop sign-in left rail — product-aware marketing panel. */
+export const SignInBrandPanel = memo(function SignInBrandPanel({
+  productId = null,
+}: SignInBrandPanelProps) {
+  const product = resolveSuiteProduct(productId);
+  const copy = suiteSignInCopy(productId);
+
   return (
     <View style={styles.leftCol}>
       <PulseActivationMarketingPanel
-        tag={SIGN_IN_COPY.brandLabel}
-        title={SIGN_IN_COPY.heroHeadline}
-        outcomeLines={SIGN_IN_COPY.principles}
+        brandWord={product.brandWord}
+        tag={copy.brandLabel}
+        title={copy.heroHeadline}
+        outcomeLines={copy.principles}
       />
     </View>
   );

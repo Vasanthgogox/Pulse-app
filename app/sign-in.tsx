@@ -1,3 +1,4 @@
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import Layout from '@/constants/Layout';
 import {
     PULSE_PILL_BUTTON_BORDER_WIDTH,
@@ -9,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { GoogleBrandIcon } from '@/features/auth/components/GoogleBrandIcon';
 import { SignInBrandPanel } from '@/features/auth/components/SignInBrandPanel';
+import { useSuiteAuthContext } from '@/features/auth/hooks/useSuiteAuthContext';
 import { SignUpPulseField } from '@/features/auth/signup/SignUpPulseField';
 import {
   DESKTOP_SIGNUP_SPLIT_FLOW_MAX,
@@ -18,7 +20,9 @@ import {
 import { signUpMobileContentInner } from '@/features/auth/signup/signUpMobile.styles';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS } from '@/features/auth/signup/signUpPulseTheme';
 import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO } from '@/features/auth/signup/signUpTypography';
-import { SIGN_IN_BRAND, SIGN_IN_COPY } from '@/lib/auth/signInContent';
+import { SIGN_IN_BRAND } from '@/lib/auth/signInContent';
+import { buildSuiteSignUpHref, navigateAfterSuiteAuth } from '@/lib/suite/suiteAuth';
+import { suiteSignInCopy } from '@/lib/suite/suiteAuthContent';
 import { validateEmailRequired } from '@/lib/emailValidation';
 import { getKeepSignedIn } from '@/lib/keepSignedInPreference';
 import { ROUTES } from '@/lib/routes';
@@ -67,6 +71,8 @@ export default function SignIn() {
     password_reset?: string | string[];
     returnTo?: string | string[];
   }>();
+  const { productId, product, returnTo } = useSuiteAuthContext();
+  const signInCopy = suiteSignInCopy(productId);
   const isOnline = useIsOnline();
   const { user, signIn, signInWithGoogle, restoreError, clearRestoreError } = useAuth();
   const [webViewportWidth, setWebViewportWidth] = useState<number>(() => {
@@ -145,11 +151,9 @@ export default function SignIn() {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      const returnTo = typeof params.returnTo === 'string' ? decodeURIComponent(params.returnTo) : null;
-      router.replace((returnTo ?? ROUTES.INDEX) as Href);
-    }
-  }, [user, router, params.returnTo]);
+    if (!user) return;
+    navigateAfterSuiteAuth(returnTo, (href) => router.replace(href as Href));
+  }, [user, router, returnTo]);
 
   useEffect(() => {
     const next = getEmailFromParams(params);
@@ -168,6 +172,7 @@ export default function SignIn() {
   }, [params.password_reset]);
 
   const handleSignIn = async () => {
+    if (loading) return;
     setSignInError(null);
     clearRestoreError();
     setWaitingForAuthState(false);
@@ -209,6 +214,7 @@ export default function SignIn() {
   };
 
   const handleGoogleSignIn = async () => {
+    if (googleLoading) return;
     setSignInError(null);
     clearRestoreError();
     setWaitingForAuthState(false);
@@ -239,9 +245,9 @@ export default function SignIn() {
   <View style={styles.formUnit}>
     <View style={[styles.formHeader, isDesktop && styles.formHeaderDesktop]}>
       <Text style={[styles.formTitle, isDesktop && styles.formTitleDesktop]}>
-        {SIGN_IN_COPY.formTitle}
+        {signInCopy.formTitle}
       </Text>
-      <Text style={styles.formSubtitle}>{SIGN_IN_COPY.formSubtitle}</Text>
+      <Text style={styles.formSubtitle}>{signInCopy.formSubtitle}</Text>
     </View>
 
     <View style={styles.formFields}>
@@ -302,7 +308,7 @@ export default function SignIn() {
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         style={styles.forgotRow}
       >
-        <Text style={styles.forgotText}>{SIGN_IN_COPY.forgotPassword}</Text>
+        <Text style={styles.forgotText}>{signInCopy.forgotPassword}</Text>
       </Pressable>
 
       {passwordResetBanner ? (
@@ -326,13 +332,13 @@ export default function SignIn() {
           pressed && !formDisabled && styles.signInBtnPressed,
         ]}
         accessibilityRole="button"
-        accessibilityLabel={SIGN_IN_COPY.primaryCta}
+        accessibilityLabel={signInCopy.primaryCta}
         accessibilityState={{ disabled: formDisabled, busy: loading || waitingForAuthState }}
       >
         {loading || waitingForAuthState ? (
           <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
         ) : (
-          <Text style={styles.signInBtnText}>{SIGN_IN_COPY.primaryCta}</Text>
+          <Text style={styles.signInBtnText}>{signInCopy.primaryCta}</Text>
         )}
       </Pressable>
 
@@ -352,7 +358,7 @@ export default function SignIn() {
         ) : (
           <>
             <GoogleBrandIcon size={16} />
-            <Text style={styles.googleBtnText}>{SIGN_IN_COPY.googleCta}</Text>
+            <Text style={styles.googleBtnText}>{signInCopy.googleCta}</Text>
           </>
         )}
       </Pressable>
@@ -360,15 +366,13 @@ export default function SignIn() {
       <View style={styles.sectionDivider} />
 
       <View style={styles.signUpRow}>
-        <Text style={styles.signUpMuted}>{SIGN_IN_COPY.footerPrompt} </Text>
+        <Text style={styles.signUpMuted}>{signInCopy.footerPrompt} </Text>
         <Pressable
           onPress={() => {
-            const returnTo = typeof params.returnTo === 'string' ? params.returnTo : null;
-            const dest = returnTo ? `${ROUTES.ONBOARDING.HUB}?returnTo=${returnTo}` : ROUTES.ONBOARDING.HUB;
-            router.push(dest as '/');
+            router.push(buildSuiteSignUpHref({ productId, returnTo: product.activationPath }) as Href);
           }}
         >
-          <Text style={styles.signUpLink}>{SIGN_IN_COPY.footerLink}</Text>
+          <Text style={styles.signUpLink}>{signInCopy.footerLink}</Text>
         </Pressable>
       </View>
     </View>
@@ -391,7 +395,7 @@ export default function SignIn() {
     <View style={[styles.panelShell, isDesktop && styles.panelShellDesktop]}>
       {isDesktop ? (
         <>
-          <SignInBrandPanel />
+          <SignInBrandPanel productId={productId} />
           <View style={styles.panelDivider} />
         </>
       ) : null}

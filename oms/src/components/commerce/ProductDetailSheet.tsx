@@ -37,6 +37,7 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
   const [dimL, setDimL] = useState('');
   const [dimW, setDimW] = useState('');
   const [dimH, setDimH] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!product || editing) return;
@@ -91,27 +92,32 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
     return { dimensions, volume_m3: volumeFromDimensionsCm(dimensions) };
   }
 
-  function handleSave() {
-    if (!canSave) return;
-    const { dimensions, volume_m3 } = buildDimensions();
-    org.updateProduct(product!.id, {
-      name:        name.trim(),
-      sku:         sku.trim().toUpperCase(),
-      category,
-      description: description.trim(),
-      unit_price:  parseFloat(unitPrice) || 0,
-      weight_kg:   parseFloat(weight) || 0,
-      stock:       Math.max(0, parseInt(stock, 10) || 0),
-      reserved:    Math.max(0, parseInt(reserved, 10) || 0),
-      threshold:   Math.max(0, parseInt(threshold, 10) || 0),
-      dimensions,
-      volume_m3,
-    });
-    setEditing(false);
+  async function handleSave() {
+    if (!canSave || saving) return;
+    setSaving(true);
+    try {
+      const { dimensions, volume_m3 } = buildDimensions();
+      await org.updateProduct(product!.id, {
+        name:        name.trim(),
+        sku:         sku.trim().toUpperCase(),
+        category,
+        description: description.trim(),
+        unit_price:  parseFloat(unitPrice) || 0,
+        weight_kg:   parseFloat(weight) || 0,
+        stock:       Math.max(0, parseInt(stock, 10) || 0),
+        reserved:    Math.max(0, parseInt(reserved, 10) || 0),
+        threshold:   Math.max(0, parseInt(threshold, 10) || 0),
+        dimensions,
+        volume_m3,
+      });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleDelete() {
-    org.deleteProduct(product!.id);
+  async function handleDelete() {
+    await org.deleteProduct(product!.id);
     setDeleteConfirm(false);
     onClose();
   }
@@ -127,9 +133,9 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
       onClose={onClose}
       onEdit={() => setEditing(true)}
       onCancelEdit={() => { resetDraft(); setEditing(false); }}
-      onSave={handleSave}
+      onSave={() => void handleSave()}
       onDelete={() => setDeleteConfirm(true)}
-      onDeleteConfirm={handleDelete}
+      onDeleteConfirm={() => void handleDelete()}
       onDeleteCancel={() => setDeleteConfirm(false)}
     >
       <EntityHero>

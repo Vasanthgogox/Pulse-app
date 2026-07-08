@@ -72,7 +72,13 @@ export function OnboardingPersonaHub() {
   const isDesktop = Platform.OS === 'web' ? webViewportWidth >= 1024 && webHasFinePointer : false;
 
   const navigateProduct = useCallback(
-    (route: string) => {
+    (route: string, productId?: string) => {
+      if (productId === 'commerce' || route.startsWith('/sign-in')) {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          window.location.assign(route);
+          return;
+        }
+      }
       router.push(route as never);
     },
     [router],
@@ -115,7 +121,7 @@ export function OnboardingPersonaHub() {
               key={product.id}
               product={product}
               compact={false}
-              onPress={() => navigateProduct(product.route)}
+              onPress={() => navigateProduct(product.route, product.id)}
             />
           ))}
         </View>

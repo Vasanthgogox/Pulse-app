@@ -12,7 +12,7 @@ import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Linking from "expo-linking";
 import * as Sharing from "expo-sharing";
-import { ArrowRight, CheckCircle2, X, Zap } from "lucide-react-native";
+import { ArrowRight, CheckCircle2, Clock, Copy, X, Zap } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -28,6 +28,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Clipboard from "expo-clipboard";
 
 const IS_WEB = Platform.OS === "web";
 const SHEET_MAX_WIDTH = 440;
@@ -177,59 +178,113 @@ function SuccessView({
   orgId,
   postId,
   onShareWhatsApp,
+  onDone,
 }: {
   indent: IndentRow;
   orgId: string;
   postId: string;
   onShareWhatsApp: () => void;
+  onDone: () => void;
 }) {
   const scale = useRef(new Animated.Value(0.7)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
       Animated.spring(scale, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
       Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [opacity, scale]);
 
   const storyUrl = buildPulseStoryPublicUrl(postId, orgId, "LOAD");
   const hasWebBase =
     (process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, "") || "") !== "";
 
+  const handleCopyLink = useCallback(async () => {
+    try {
+      await Clipboard.setStringAsync(storyUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  }, [storyUrl]);
+
   return (
     <Animated.View style={[styles.successView, { opacity, transform: [{ scale }] }]}>
-      <View style={styles.successIcon}>
-        <CheckCircle2 size={32} color={Theme.darkGreen} strokeWidth={2} />
+      <View style={styles.successRouteCard}>
+        <BroadcastRoutePreview
+          origin={indent.pickup_area || "—"}
+          destination={indent.drop_location || "—"}
+        />
+        <View style={styles.successRouteMeta}>
+          <Text style={styles.successRouteId} numberOfLines={1}>
+            {getIndentDisplayNumber(indent)}
+          </Text>
+          <View style={styles.expiryPill}>
+            <Clock size={10} color={Theme.brandBlueInk} strokeWidth={2.4} />
+            <Text style={styles.expiryPillText}>24h story</Text>
+          </View>
+        </View>
       </View>
-      <Text style={styles.successTitle}>Story live</Text>
-      <Text style={styles.successSub}>
-        Your load is in the story reel and expires in 24 hours. Partners can bid and message.
-      </Text>
-      {!hasWebBase ? (
-        <Text style={styles.successHintMuted}>
-          Set EXPO_PUBLIC_WEB_BASE_URL for a public https link (e.g. Netlify) when sharing outside
-          the app.
+
+      <View style={styles.successHero}>
+        <View style={styles.successIcon}>
+          <CheckCircle2 size={30} color={Theme.darkGreen} strokeWidth={2.2} />
+        </View>
+        <Text style={styles.successTitle}>Story live</Text>
+        <Text style={styles.successSub}>
+          Your load is in the story reel. Partners in your network can bid and message until it
+          expires.
         </Text>
+      </View>
+
+      {!hasWebBase ? (
+        <View style={styles.devHintBanner}>
+          <Text style={styles.devHintText}>
+            Set EXPO_PUBLIC_WEB_BASE_URL for a public https link when sharing outside the app.
+          </Text>
+        </View>
       ) : null}
+
       <Pressable
-        style={({ pressed }) => [styles.waBtn, pressed && { opacity: 0.9 }]}
+        style={({ pressed }) => [styles.waBtn, pressed && styles.waBtnPressed]}
         onPress={onShareWhatsApp}
         accessibilityRole="button"
         accessibilityLabel="Share story bidding link on WhatsApp"
       >
-        <FontAwesome name="whatsapp" size={18} color="#fff" />
+        <FontAwesome name="whatsapp" size={18} color={Theme.textOnPrimary} />
         <Text style={styles.waBtnText}>Share link on WhatsApp</Text>
       </Pressable>
       <Text style={styles.waHint}>
         Opens WhatsApp with your bidding page link — paste to Status or send to a chat.
       </Text>
-      <Text style={styles.linkPreview} numberOfLines={2} selectable>
-        {storyUrl}
-      </Text>
-      <Text style={styles.routeMini} numberOfLines={1}>
-        {(indent.pickup_area || "—").toUpperCase()} → {(indent.drop_location || "—").toUpperCase()}
-      </Text>
+
+      <View style={styles.linkCard}>
+        <Text style={styles.linkCardLabel}>Bidding page</Text>
+        <Text style={styles.linkPreview} numberOfLines={2} selectable>
+          {storyUrl}
+        </Text>
+        <Pressable
+          style={({ pressed }) => [styles.copyBtn, pressed && styles.copyBtnPressed]}
+          onPress={handleCopyLink}
+          accessibilityRole="button"
+          accessibilityLabel="Copy bidding link"
+        >
+          <Copy size={13} color={Theme.brandBlueInk} strokeWidth={2.2} />
+          <Text style={styles.copyBtnText}>{copied ? "Copied" : "Copy link"}</Text>
+        </Pressable>
+      </View>
+
+      <Pressable
+        style={({ pressed }) => [styles.doneBtn, pressed && styles.doneBtnPressed]}
+        onPress={onDone}
+        accessibilityRole="button"
+        accessibilityLabel="Done"
+      >
+        <Text style={styles.doneBtnText}>Done</Text>
+      </Pressable>
     </Animated.View>
   );
 }
@@ -361,10 +416,10 @@ export function ShareLoadSheet({
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.headerIcon}>
-            <Zap size={16} color={Theme.warning} fill={Theme.warning} />
+            <Zap size={16} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} />
           </View>
           <View style={styles.headerTextCol}>
-            <Text style={styles.headerTitle}>Broadcast Load</Text>
+            <Text style={styles.headerTitle}>Broadcast load</Text>
             <Text style={styles.headerSub}>Share to your Pulse network</Text>
           </View>
         </View>
@@ -379,6 +434,7 @@ export function ShareLoadSheet({
           orgId={orgId}
           postId={successPostId}
           onShareWhatsApp={shareStoryLinkOnWhatsApp}
+          onDone={onClose}
         />
       ) : !success ? (
         <>
@@ -546,17 +602,17 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 36,
     height: 36,
-    backgroundColor: Theme.warningMuted,
+    borderRadius: 11,
+    backgroundColor: Theme.brandBlueInk,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   headerTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    fontStyle: "normal",
+    fontSize: 14,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
+    letterSpacing: 0.6,
     textTransform: "uppercase",
     lineHeight: 18,
   },
@@ -767,7 +823,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: Theme.buttonPrimary,
+    backgroundColor: Theme.brandBlueInk,
+    borderRadius: 12,
     paddingVertical: 14,
     minHeight: 48,
   },
@@ -775,50 +832,97 @@ const styles = StyleSheet.create({
   broadcastBtnText: {
     fontSize: 13,
     fontWeight: "700",
-    fontStyle: "normal",
-    color: Theme.buttonPrimaryText,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.3,
   },
 
   successView: {
-    alignItems: "center",
-    paddingVertical: 20,
+    alignItems: "stretch",
+    paddingVertical: 8,
+    gap: 12,
+  },
+  successRouteCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    padding: 14,
     gap: 10,
   },
+  successRouteMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  successRouteId: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.brandBlueInk,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  expiryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(77, 54, 54, 0.08)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexShrink: 0,
+  },
+  expiryPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.brandBlueInk,
+    letterSpacing: 0.2,
+  },
+  successHero: {
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 4,
+  },
   successIcon: {
-    width: 56,
-    height: 56,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.positiveMuted,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    marginBottom: 2,
+    borderColor: "rgba(21, 128, 61, 0.18)",
   },
   successTitle: {
-    fontSize: 17,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.1,
+    letterSpacing: -0.2,
   },
   successSub: {
     fontSize: 13,
     fontWeight: "400",
-    fontStyle: "normal",
     color: Theme.textSecondary,
     textAlign: "center",
-    lineHeight: 18,
-    paddingHorizontal: 12,
+    lineHeight: 19,
+    paddingHorizontal: 8,
   },
-  successHintMuted: {
+  devHintBanner: {
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  devHintText: {
     fontSize: 11,
     fontWeight: "500",
     color: Theme.textMuted,
     textAlign: "center",
     lineHeight: 16,
-    paddingHorizontal: 12,
-    marginTop: -4,
   },
   waBtn: {
     flexDirection: "row",
@@ -827,17 +931,17 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: "#25D366",
     borderRadius: 12,
-    paddingVertical: 11,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    marginTop: 4,
     width: "100%",
-    minHeight: 44,
+    minHeight: 46,
   },
+  waBtnPressed: { opacity: 0.9 },
   waBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
-    color: Theme.buttonPrimaryText,
-    letterSpacing: 0.3,
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.2,
   },
   waHint: {
     fontSize: 11,
@@ -845,20 +949,63 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textAlign: "center",
     lineHeight: 16,
-    paddingHorizontal: 10,
+    paddingHorizontal: 6,
+    marginTop: -4,
+  },
+  linkCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    padding: 12,
+    gap: 6,
+    alignItems: "stretch",
+  },
+  linkCardLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
   linkPreview: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    textAlign: "center",
-    marginTop: 4,
-    paddingHorizontal: 8,
-  },
-  routeMini: {
     fontSize: 11,
     fontWeight: "500",
-    color: Theme.textMuted,
+    color: Theme.textSecondary,
+    lineHeight: 16,
+  },
+  copyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    alignSelf: "center",
+    marginTop: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(77, 54, 54, 0.08)",
+  },
+  copyBtnPressed: { opacity: 0.85 },
+  copyBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.brandBlueInk,
+  },
+  doneBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
     marginTop: 2,
+  },
+  doneBtnPressed: { backgroundColor: Theme.surfaceGray },
+  doneBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
 });

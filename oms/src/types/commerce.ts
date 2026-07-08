@@ -248,4 +248,5 @@ export interface CommerceContextValue {
   updateOrder: (orderId: string, patch: Partial<Order>) => void;
   deleteOrder: (orderId: string) => void;
   addOrder: (order: Order) => void;
+  refreshOrders: () => Promise<void>;
 }

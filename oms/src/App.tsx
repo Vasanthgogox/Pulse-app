@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from '@/context/AuthProvider';
 import { OrganizationProvider } from '@/context/OrganizationProvider';
 import { CommerceProvider } from '@/context/CommerceProvider';
 import { ExecutionProvider } from '@/context/ExecutionProvider';
 import { LayoutProvider } from '@/layout/LayoutContext';
+import { AuthGuard } from '@/layout/AuthGuard';
 import { OnboardingGuard } from '@/layout/OnboardingGuard';
 import { Main } from '@/layout/Main';
 import { DashboardPage } from '@/pages/dashboard';
@@ -13,6 +15,7 @@ import { ProductsPage } from '@/pages/products';
 import { CustomersPage } from '@/pages/customers';
 import { WarehousesPage } from '@/pages/warehouses';
 import { SettingsPage } from '@/pages/settings';
+import { ProfilePage } from '@/pages/profile';
 import { ObservatoryPage } from '@/pages/observatory';
 import { OnboardingPage } from '@/pages/onboarding';
 import { ExecutionDashboardPage } from '@/pages/execution';
@@ -21,13 +24,29 @@ import { DriverTripPage } from '@/pages/execution/driver';
 
 export default function App() {
   return (
-    <OrganizationProvider>
-      <CommerceProvider>
-        <ExecutionProvider>
-          <LayoutProvider>
-            <Routes>
-              <Route path="/onboarding" element={<OnboardingPage />} />
-              <Route element={<OnboardingGuard><Main /></OnboardingGuard>}>
+    <AuthProvider>
+      <OrganizationProvider>
+        <CommerceProvider>
+          <ExecutionProvider>
+            <LayoutProvider>
+              <Routes>
+                <Route
+                  path="/onboarding"
+                  element={
+                    <AuthGuard>
+                      <OnboardingPage />
+                    </AuthGuard>
+                  }
+                />
+                <Route
+                  element={
+                    <AuthGuard>
+                      <OnboardingGuard>
+                        <Main />
+                      </OnboardingGuard>
+                    </AuthGuard>
+                  }
+                >
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/orders" element={<OrdersPage />} />
@@ -37,6 +56,7 @@ export default function App() {
                 <Route path="/customers" element={<CustomersPage />} />
                 <Route path="/warehouses" element={<WarehousesPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/observatory" element={<ObservatoryPage />} />
                 <Route path="/execution" element={<ExecutionDashboardPage />} />
                 <Route path="/execution/dispatch/:jobId" element={<DispatchPage />} />
@@ -47,9 +67,10 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Routes>
-          </LayoutProvider>
-        </ExecutionProvider>
-      </CommerceProvider>
-    </OrganizationProvider>
+            </LayoutProvider>
+          </ExecutionProvider>
+        </CommerceProvider>
+      </OrganizationProvider>
+    </AuthProvider>
   );
 }

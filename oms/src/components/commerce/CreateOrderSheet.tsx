@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { CreateCustomerSheet } from '@/components/commerce/CreateCustomerSheet';
 import { useCommerce } from '@/context/CommerceProvider';
-import type { Customer, Order, OrderLineItem, Product } from '@/types/commerce';
+import { useOrganization } from '@/context/OrganizationProvider';
+import { createOrder, updateOrderStatus } from '@/lib/services/orders.service';
+import type { Customer, OrderLineItem, Product } from '@/types/commerce';
 import { formatCurrency } from '@/lib/utils';
 import { getConsigneeDisplayName } from '@/lib/consignee';
 
@@ -28,10 +30,12 @@ function emptyLine(products: Product[]): LineDraft {
 }
 
 export function CreateOrderSheet({ open, onClose }: CreateOrderSheetProps) {
-  const { orders, customers, products, warehouses, addOrder } = useCommerce();
+  const { customers, products, warehouses, refreshOrders } = useCommerce();
+  const org = useOrganization();
   const [customerId, setCustomerId] = useState(customers[0]?.id ?? '');
   const [lines, setLines] = useState<LineDraft[]>(() => [emptyLine(products)]);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -93,34 +97,34 @@ export function CreateOrderSheet({ open, onClose }: CreateOrderSheetProps) {
     setCustomerId(customer.id);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const customer = customers.find(c => c.id === customerId);
     const warehouse = warehouses[0];
-    if (!customer || !warehouse || preview.items.length === 0) return;
+    const workspaceId = org.platformOrganization?.id;
+    if (!customer || !warehouse || preview.items.length === 0 || !workspaceId || saving) return;
 
-    const now = new Date().toISOString();
-    const order: Order = {
-      id:                  `ORD-${Date.now()}`,
-      order_number:        `SO-${String(orders.length + 1).padStart(4, '0')}`,
-      customer_id:         customer.id,
-      customer_name:       getConsigneeDisplayName(customer),
-      customer_email:      customer.email,
-      status:              'Pending Consolidation',
-      pickup_warehouse_id: warehouse.id,
-      pickup_address:      warehouse.address,
-      drop_address:        customer.shipping_address,
-      line_items:          preview.items,
-      total_amount:        preview.subtotal,
-      total_weight_kg:     preview.weight,
-      total_volume_m3:     preview.volume,
-      priority:            'standard',
-      source:              'Manual',
-      created_at:          now,
-      updated_at:          now,
-    };
-    addOrder(order);
-    resetForm();
-    onClose();
+    setSaving(true);
+    try {
+      const created = await createOrder({
+        organization_id: workspaceId,
+        customer_id: customer.id,
+        pickup_warehouse_id: warehouse.id,
+        drop_warehouse_id: warehouse.id,
+        lines: preview.items.map(item => ({
+          product_id: item.product_id,
+          quantity: item.qty,
+          unit_price: item.unit_price,
+          weight_kg: item.weight_kg / item.qty,
+          volume_m3: item.volume_m3 / item.qty,
+        })),
+      });
+      await updateOrderStatus(created.id, 'Pending Consolidation');
+      await refreshOrders();
+      resetForm();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -229,8 +233,8 @@ export function CreateOrderSheet({ open, onClose }: CreateOrderSheetProps) {
               </div>
             </div>
 
-            <Button className="w-full" disabled={!canSubmit} onClick={handleSubmit}>
-              Create sales order
+            <Button className="w-full" disabled={!canSubmit || saving} onClick={() => void handleSubmit()}>
+              {saving ? 'Creating…' : 'Create sales order'}
             </Button>
           </div>
         </SheetContent>

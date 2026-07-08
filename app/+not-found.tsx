@@ -1,12 +1,23 @@
-import { Link, Stack, useRouter } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Link, Stack, usePathname, useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Theme from '@/constants/Theme';
 import { ROUTES } from '@/lib/routes';
+import { isSuiteExternalAppPath, openSuiteProductApp } from '@/lib/suite/suiteAuth';
 
 export default function NotFoundScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const path = pathname || window.location.pathname;
+    if (path && isSuiteExternalAppPath(path)) {
+      openSuiteProductApp(path);
+    }
+  }, [pathname]);
 
   return (
     <>

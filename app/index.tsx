@@ -18,6 +18,13 @@ import {
   isDriverSignupSuccessActiveSync,
 } from '@/lib/onboarding/businessSignupBranding.util';
 import { DEFAULT_DRIVER_ROUTE, ROUTES } from '@/lib/routes';
+import {
+  finalizeSuiteNavigationIntent,
+  isSuiteExternalAppPath,
+  navigateAfterSuiteAuth,
+  normalizeSuiteReturnTo,
+  peekSuiteNavigationIntentSync,
+} from '@/lib/suite/suiteAuth';
 import { useLoadingStuck } from '@/lib/hooks/useLoadingStuck';
 import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams, usePathname, useRouter, type Href } from 'expo-router';
@@ -86,19 +93,38 @@ export default function Index() {
       return;
     }
 
+    // Suite/product redirects outrank the boot-path short-circuit below — an authenticated
+    // user with a pending Commerce (or other product) destination must reach it even if a
+    // background-mounted index.tsx races with /sign-in or /auth/callback for the boot claim.
+    const pendingSuite = peekSuiteNavigationIntentSync();
+    if (pendingSuite?.returnTo && isSuiteExternalAppPath(pendingSuite.returnTo)) {
+      if (!claimIndexBootRedirect(uid)) return;
+      void finalizeSuiteNavigationIntent();
+      logRouteDecision('redirect_pending_suite_product', {
+        uid,
+        returnTo: pendingSuite.returnTo,
+        productId: pendingSuite.productId,
+      });
+      navigateAfterSuiteAuth(pendingSuite.returnTo);
+      return;
+    }
+
+    if (returnTo) {
+      const decoded = normalizeSuiteReturnTo(
+        typeof returnTo === 'string' ? returnTo : String(returnTo),
+      );
+      if (!claimIndexBootRedirect(uid)) return;
+      logRouteDecision('redirect_return_to', { uid, returnTo: decoded });
+      navigateAfterSuiteAuth(decoded, (href) => router.replace(href as Href));
+      return;
+    }
+
     if (isPastIndexBootPath(pathname)) {
       claimIndexBootRedirect(uid);
       return;
     }
 
     if (!profile) return;
-
-    if (returnTo) {
-      if (!claimIndexBootRedirect(uid)) return;
-      logRouteDecision('redirect_return_to', { uid, returnTo });
-      router.replace(decodeURIComponent(returnTo) as Href);
-      return;
-    }
 
     if (profile.role === 'driver') {
       if (isDriverSignupSuccessActiveSync()) {
@@ -115,6 +141,7 @@ export default function Index() {
     }
 
     if (hasIndexBootRedirected(uid)) return;
+
     if (!claimIndexBootRedirect(uid)) return;
 
     void getLastTabRoute().then((route) => {

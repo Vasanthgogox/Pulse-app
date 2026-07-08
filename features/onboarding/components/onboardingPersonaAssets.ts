@@ -115,4 +115,11 @@ export const PULSE_PRODUCT_VISUALS = {
       speed: 0.9,
     },
   },
-} as const satisfies Record<'core' | 'pilot', PulseProductVisual>;
+  commerce: {
+    type: 'lottie',
+    asset: {
+      source: require('@/assets/Animated folder/warehouse-management.json'),
+      glyphScale: 1.15,
+    },
+  },
+} as const satisfies Record<'core' | 'pilot' | 'commerce', PulseProductVisual>;

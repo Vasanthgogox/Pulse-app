@@ -37,34 +37,35 @@ function CreateProductSheet({ open, onClose }: { open: boolean; onClose: () => v
   const [dimW, setDimW] = useState('');
   const [dimH, setDimH] = useState('');
   const [description, setDescription] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  function handleSubmit() {
-    if (!name.trim() || !sku.trim()) return;
-    const dimensions = {
-      l: parseDimension(dimL),
-      w: parseDimension(dimW),
-      h: parseDimension(dimH),
-    };
-    const p: Product = {
-      id:          `P-${Date.now()}`,
-      sku:         sku.trim().toUpperCase(),
-      name:        name.trim(),
-      category,
-      description: description.trim(),
-      unit_price:  parseFloat(price) || 0,
-      weight_kg:   parseFloat(weight) || 0,
-      volume_m3:   volumeFromDimensionsCm(dimensions),
-      dimensions,
-      stock:       0,
-      reserved:    0,
-      threshold:   10,
-      created_at:  new Date().toISOString().slice(0, 10),
-    };
-    org.addProduct(p);
-    setName(''); setSku(''); setPrice(''); setWeight('');
-    setDimL(''); setDimW(''); setDimH('');
-    setDescription('');
-    onClose();
+  async function handleSubmit() {
+    if (!name.trim() || !sku.trim() || saving) return;
+    setSaving(true);
+    try {
+      const dimensions = {
+        l: parseDimension(dimL),
+        w: parseDimension(dimW),
+        h: parseDimension(dimH),
+      };
+      await org.createProduct({
+        sku:         sku.trim().toUpperCase(),
+        name:        name.trim(),
+        category,
+        description: description.trim(),
+        unit_price:  parseFloat(price) || 0,
+        weight_kg:   parseFloat(weight) || 0,
+        volume_m3:   volumeFromDimensionsCm(dimensions),
+        dimensions,
+        threshold:   10,
+      });
+      setName(''); setSku(''); setPrice(''); setWeight('');
+      setDimL(''); setDimW(''); setDimH('');
+      setDescription('');
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -95,8 +96,8 @@ function CreateProductSheet({ open, onClose }: { open: boolean; onClose: () => v
             onHeight={setDimH}
           />
           <FormField label="Description" value={description} onChange={setDescription} placeholder="Optional description" />
-          <Button className="w-full mt-2" disabled={!name.trim() || !sku.trim()} onClick={handleSubmit}>
-            Add product
+          <Button className="w-full mt-2" disabled={!name.trim() || !sku.trim() || saving} onClick={() => void handleSubmit()}>
+            {saving ? 'Saving…' : 'Add product'}
           </Button>
         </div>
       </SheetContent>

@@ -1,5 +1,6 @@
 const path = require('path');
 const os = require('os');
+const http = require('http');
 require('./scripts/expo-env');
 const { FileStore } = require('metro-cache');
 const { getDefaultConfig } = require('expo/metro-config');
@@ -84,6 +85,18 @@ const framerMotionNativeShimPath = path.resolve(
   projectRoot,
   'polyfills/framer-motion-native.js',
 );
+const runtimeKindPolyfillPath = path.resolve(
+  projectRoot,
+  'polyfills/runtimeKind.js',
+);
+const metroRuntimePath = path.resolve(
+  projectRoot,
+  'node_modules/@expo/metro-runtime/src/index.ts',
+);
+const motiFramerShimPath = path.resolve(
+  projectRoot,
+  'node_modules/moti/build/framer-motion-shim.js',
+);
 const isFramerMotionRequest = (moduleName) =>
   moduleName === 'framer-motion' || moduleName.startsWith('framer-motion/');
 
@@ -107,6 +120,17 @@ config.transformer = {
   }),
 };
 
+const upstreamGetModulesRunBeforeMainModule =
+  config.serializer?.getModulesRunBeforeMainModule;
+
+config.serializer = {
+  ...config.serializer,
+  getModulesRunBeforeMainModule: () => {
+    const upstream = upstreamGetModulesRunBeforeMainModule?.() ?? [];
+    return [runtimeKindPolyfillPath, ...upstream];
+  },
+};
+
 config.resolver = {
   ...resolver,
   blockList,
@@ -114,6 +138,21 @@ config.resolver = {
   assetExts: resolver.assetExts.filter((ext) => ext !== 'svg'),
   sourceExts: [...resolver.sourceExts, 'svg'],
   resolveRequest(context, moduleName, platform) {
+    if (moduleName === '@expo/metro-runtime') {
+      return {
+        filePath: metroRuntimePath,
+        type: 'sourceFile',
+      };
+    }
+    if (
+      moduleName === '../framer-motion-shim' &&
+      context.originModulePath?.includes(`${path.sep}moti${path.sep}`)
+    ) {
+      return {
+        filePath: motiFramerShimPath,
+        type: 'sourceFile',
+      };
+    }
     if (moduleName === 'tslib' || moduleName.endsWith('/tslib')) {
       return {
         filePath: path.resolve(projectRoot, 'node_modules/tslib/tslib.js'),
@@ -152,6 +191,69 @@ config.watcher = {
   ...config.watcher,
   healthCheck: {
     enabled: false,
+  },
+};
+
+// ── Commerce (/oms) dev proxy ───────────────────────────────────────────────
+// Expo Router cannot host the Vite SPA. In dev, proxy /oms/* to the Commerce
+// Vite server (npm run oms:dev / scripts/dev-with-oms.js) on the same origin
+// so shared Supabase session + post-auth redirects work on localhost:8081.
+const OMS_DEV_PORT = Number(process.env.OMS_DEV_PORT || 3004);
+const OMS_DEV_HOST = process.env.OMS_DEV_HOST || '127.0.0.1';
+
+function isOmsDevRequest(url) {
+  if (!url) return false;
+  const pathOnly = url.split('?')[0];
+  return pathOnly === '/oms' || pathOnly.startsWith('/oms/');
+}
+
+config.server = {
+  ...config.server,
+  enhanceMiddleware: (middleware) => {
+    return (req, res, next) => {
+      if (!isOmsDevRequest(req.url)) {
+        return middleware(req, res, next);
+      }
+
+      const proxyReq = http.request(
+        {
+          hostname: OMS_DEV_HOST,
+          port: OMS_DEV_PORT,
+          path: req.url,
+          method: req.method,
+          headers: {
+            ...req.headers,
+            host: `${OMS_DEV_HOST}:${OMS_DEV_PORT}`,
+          },
+        },
+        (proxyRes) => {
+          res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+          proxyRes.pipe(res);
+        },
+      );
+
+      proxyReq.on('error', () => {
+        res.statusCode = 503;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(
+          '<!doctype html><html><body style="font-family:system-ui;padding:2rem;max-width:40rem">' +
+            '<h1>Commerce dev server is not running</h1>' +
+            '<p>The Pulse proxy could not reach Vite on ' +
+            `<code>${OMS_DEV_HOST}:${OMS_DEV_PORT}</code>.</p>` +
+            '<p>From the repo root, run <code>npm run dev</code> (starts Commerce, waits until it is ready, then Expo).</p>' +
+            '<p>Or in a second terminal: <code>npm run oms:dev</code>, then reload this page.</p>' +
+            `<p>Direct check: <a href="http://${OMS_DEV_HOST}:${OMS_DEV_PORT}/oms/">` +
+            `http://${OMS_DEV_HOST}:${OMS_DEV_PORT}/oms/</a></p>` +
+            '</body></html>',
+        );
+      });
+
+      if (req.method === 'GET' || req.method === 'HEAD') {
+        proxyReq.end();
+      } else {
+        req.pipe(proxyReq);
+      }
+    };
   },
 };
 

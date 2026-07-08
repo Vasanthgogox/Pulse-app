@@ -64,8 +64,6 @@ type Props = {
 };
 
 const PURPLE = Theme.pulseIndigo;
-const PURPLE_DARK = Theme.actionAccentBorder;
-const LAVENDER = 'rgba(199,210,254,0.95)';
 
 const DISMISS_DRAG_PX = 72;
 const DISMISS_VELOCITY = 0.65;
@@ -76,6 +74,7 @@ type InvitePalette = {
   accent: string;
   accentSoftBg: string;
   accentSoftBorder: string;
+  accentIconBg: string;
   textOnAccent: string;
   mutedOnAccent: string;
   inlinePillBg: string;
@@ -95,15 +94,17 @@ function invitePaletteForType(type: string): InvitePalette {
   const hasSupplier = upper.includes('SUPPLIER');
 
   if (hasSupplier && !hasClient) {
+    const brown = Theme.brandBlueInk;
     return {
-      gradientStart: Theme.loadDoneSubTabBgIdle,
-      gradientEnd: colorWithAlpha(Theme.loadDoneSubTabBg, 0.78),
-      accent: Theme.textPrimaryDark,
-      accentSoftBg: colorWithAlpha(Theme.loadDoneSubTabBg, 0.16),
-      accentSoftBorder: colorWithAlpha(Theme.loadDoneSubTabBg, 0.52),
-      textOnAccent: Theme.textPrimaryDark,
-      mutedOnAccent: colorWithAlpha(Theme.textPrimaryDark, 0.68),
-      inlinePillBg: colorWithAlpha(Theme.textOnPrimary, 0.62),
+      gradientStart: brown,
+      gradientEnd: brown,
+      accent: brown,
+      accentSoftBg: 'rgba(77, 54, 54, 0.06)',
+      accentSoftBorder: Theme.brandBlueRing,
+      accentIconBg: 'rgba(77, 54, 54, 0.12)',
+      textOnAccent: Theme.textOnDark,
+      mutedOnAccent: Theme.textOnDarkMuted,
+      inlinePillBg: 'rgba(255,255,255,0.16)',
     };
   }
 
@@ -114,6 +115,7 @@ function invitePaletteForType(type: string): InvitePalette {
       accent: Theme.textPrimaryDark,
       accentSoftBg: colorWithAlpha(Theme.loadMainTabBg, 0.2),
       accentSoftBorder: colorWithAlpha(Theme.loadMainTabBg, 0.56),
+      accentIconBg: colorWithAlpha(Theme.loadMainTabBg, 0.28),
       textOnAccent: Theme.textPrimaryDark,
       mutedOnAccent: colorWithAlpha(Theme.textPrimaryDark, 0.7),
       inlinePillBg: colorWithAlpha(Theme.textOnPrimary, 0.62),
@@ -126,6 +128,7 @@ function invitePaletteForType(type: string): InvitePalette {
     accent: Theme.darkGreen,
     accentSoftBg: colorWithAlpha(Theme.darkGreen, 0.12),
     accentSoftBorder: colorWithAlpha(Theme.darkGreen, 0.3),
+    accentIconBg: colorWithAlpha(Theme.darkGreen, 0.18),
     textOnAccent: Theme.textPrimaryDark,
     mutedOnAccent: colorWithAlpha(Theme.textPrimaryDark, 0.72),
     inlinePillBg: colorWithAlpha(Theme.textOnPrimary, 0.58),
@@ -336,6 +339,74 @@ export function BusinessConnectionRequestModal({
 
   if (!shellVisible && !visible) return null;
 
+  const heroContent = (
+    <>
+      <View style={styles.heroTopRow}>
+        <View style={styles.heroEyebrowRow}>
+          <Sparkles size={12} color={palette.mutedOnAccent} strokeWidth={2.5} />
+          <Text style={[styles.heroEyebrow, { color: palette.mutedOnAccent }]}>
+            BUSINESS CONNECTION
+          </Text>
+        </View>
+        <View style={styles.heroTopActions}>
+          {queueTotal > 1 ? (
+            <View style={styles.queueBadge}>
+              <Text style={styles.queueText}>
+                {queueIndex}/{queueTotal}
+              </Text>
+            </View>
+          ) : null}
+          <Pressable
+            onPress={requestDismiss}
+            style={styles.closeBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <X size={16} color={palette.textOnAccent} strokeWidth={2.5} />
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.heroBody}>
+        <View style={styles.heroOrgRow}>
+          <View style={styles.heroLogoWrap}>
+            {!logoLoadFailed ? (
+              <Image
+                source={{ uri: orgLogoUri }}
+                style={styles.heroLogo}
+                resizeMode="cover"
+                onError={() => setLogoLoadFailed(true)}
+              />
+            ) : (
+              <View style={[styles.heroLogoFallback, { backgroundColor: orgInitialsBg }]}>
+                <Text style={styles.heroLogoInitials}>{orgInitials}</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.heroTextBlock}>
+            <Text style={[styles.heroTitle, { color: palette.textOnAccent }]} numberOfLines={1}>
+              {orgName}
+            </Text>
+            <Text style={[styles.heroOrgKicker, { color: palette.mutedOnAccent }]} numberOfLines={1}>
+              Business connection invite
+            </Text>
+            <View style={styles.heroPillRow}>
+              <View style={[styles.heroPill, { backgroundColor: palette.inlinePillBg }]}>
+                <Text style={[styles.heroPillText, { color: palette.textOnAccent }]}>{yourRolePill}</Text>
+              </View>
+              {inviteDateLabel ? (
+                <Text style={[styles.heroDate, { color: palette.mutedOnAccent }]}>
+                  Sent {inviteDateLabel}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </View>
+    </>
+  );
+
   return (
     <Modal
       visible={shellVisible}
@@ -371,76 +442,20 @@ export function BusinessConnectionRequestModal({
             </View>
           ) : null}
 
-          <LinearGradient
-            colors={[palette.gradientStart, palette.gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.hero}
-          >
-            <View style={styles.heroTopRow}>
-              <View style={styles.heroEyebrowRow}>
-                <Sparkles size={12} color={palette.mutedOnAccent} strokeWidth={2.5} />
-                <Text style={[styles.heroEyebrow, { color: palette.mutedOnAccent }]}>
-                  BUSINESS CONNECTION
-                </Text>
-              </View>
-              <View style={styles.heroTopActions}>
-                {queueTotal > 1 ? (
-                  <View style={styles.queueBadge}>
-                    <Text style={styles.queueText}>
-                      {queueIndex}/{queueTotal}
-                    </Text>
-                  </View>
-                ) : null}
-                <Pressable
-                  onPress={requestDismiss}
-                  style={styles.closeBtn}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Close"
-                >
-                  <X size={16} color={palette.textOnAccent} strokeWidth={2.5} />
-                </Pressable>
-              </View>
+          {palette.gradientStart === palette.gradientEnd ? (
+            <View style={[styles.hero, { backgroundColor: palette.gradientStart }]}>
+              {heroContent}
             </View>
-
-            <View style={styles.heroBody}>
-              <View style={styles.heroOrgRow}>
-                <View style={styles.heroLogoWrap}>
-                  {!logoLoadFailed ? (
-                    <Image
-                      source={{ uri: orgLogoUri }}
-                      style={styles.heroLogo}
-                      resizeMode="cover"
-                      onError={() => setLogoLoadFailed(true)}
-                    />
-                  ) : (
-                    <View style={[styles.heroLogoFallback, { backgroundColor: orgInitialsBg }]}>
-                      <Text style={styles.heroLogoInitials}>{orgInitials}</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.heroTextBlock}>
-                  <Text style={[styles.heroTitle, { color: palette.textOnAccent }]} numberOfLines={1}>
-                    {orgName}
-                  </Text>
-                  <Text style={[styles.heroOrgKicker, { color: palette.mutedOnAccent }]} numberOfLines={1}>
-                    Business connection invite
-                  </Text>
-                  <View style={styles.heroPillRow}>
-                    <View style={[styles.heroPill, { backgroundColor: palette.inlinePillBg }]}>
-                      <Text style={[styles.heroPillText, { color: palette.textOnAccent }]}>{yourRolePill}</Text>
-                    </View>
-                    {inviteDateLabel ? (
-                      <Text style={[styles.heroDate, { color: palette.mutedOnAccent }]}>
-                        Sent {inviteDateLabel}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-              </View>
-            </View>
-          </LinearGradient>
+          ) : (
+            <LinearGradient
+              colors={[palette.gradientStart, palette.gradientEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.hero}
+            >
+              {heroContent}
+            </LinearGradient>
+          )}
 
           <ScrollView
             style={styles.body}
@@ -605,23 +620,43 @@ export function BusinessConnectionRequestModal({
                   disabled={busy}
                   activeOpacity={0.88}
                 >
-                  <LinearGradient
-                    colors={[palette.gradientStart, palette.gradientEnd]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.acceptGradient}
-                  >
-                    {busy ? (
-                      <ActivityIndicator size="small" color={palette.textOnAccent} />
-                    ) : (
-                      <>
-                        <Check size={15} color={palette.textOnAccent} strokeWidth={3} />
-                        <Text style={[styles.acceptText, { color: palette.textOnAccent }]}>
-                          Accept & connect
-                        </Text>
-                      </>
-                    )}
-                  </LinearGradient>
+                  {palette.gradientStart === palette.gradientEnd ? (
+                    <View
+                      style={[
+                        styles.acceptGradient,
+                        { backgroundColor: palette.gradientStart },
+                      ]}
+                    >
+                      {busy ? (
+                        <ActivityIndicator size="small" color={palette.textOnAccent} />
+                      ) : (
+                        <>
+                          <Check size={15} color={palette.textOnAccent} strokeWidth={3} />
+                          <Text style={[styles.acceptText, { color: palette.textOnAccent }]}>
+                            Accept & connect
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  ) : (
+                    <LinearGradient
+                      colors={[palette.gradientStart, palette.gradientEnd]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.acceptGradient}
+                    >
+                      {busy ? (
+                        <ActivityIndicator size="small" color={palette.textOnAccent} />
+                      ) : (
+                        <>
+                          <Check size={15} color={palette.textOnAccent} strokeWidth={3} />
+                          <Text style={[styles.acceptText, { color: palette.textOnAccent }]}>
+                            Accept & connect
+                          </Text>
+                        </>
+                      )}
+                    </LinearGradient>
+                  )}
                 </TouchableOpacity>
               </View>
 
@@ -757,7 +792,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.4,
-    color: LAVENDER,
+    color: Theme.textOnDarkMuted,
     textTransform: 'uppercase',
   },
   queueBadge: {
@@ -896,7 +931,7 @@ const styles = StyleSheet.create({
   heroOrgKicker: {
     fontSize: 11,
     fontWeight: '500',
-    color: LAVENDER,
+    color: Theme.textOnDarkMuted,
     lineHeight: 14,
   },
   heroPillRow: {
@@ -919,7 +954,7 @@ const styles = StyleSheet.create({
   heroDate: {
     fontSize: 11,
     fontWeight: '500',
-    color: LAVENDER,
+    color: Theme.textOnDarkMuted,
   },
   body: {
     flexGrow: 1,

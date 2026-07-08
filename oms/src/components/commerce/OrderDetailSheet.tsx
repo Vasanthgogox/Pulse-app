@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { EntityFlexSheet } from '@/components/commerce/EntityFlexSheet';
 import { FormField, SpecRow, selectClass } from '@/components/commerce/FormField';
 import { StatusDotBadge, type StatusDotTone } from '@/components/commerce/StatusDotBadge';
 import { useCommerce } from '@/context/CommerceProvider';
-import type { Order, OrderStatus } from '@/types/commerce';
+import { useOrganization } from '@/context/OrganizationProvider';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import { publishIndentForOrder } from '@/lib/orchestration/publish-indent';
+import type { OrderStatus } from '@/types/commerce';
 import { cn, formatCurrency } from '@/lib/utils';
 
 const ORDER_STATUS: Record<OrderStatus, { label: string; tone: StatusDotTone }> = {
@@ -23,13 +27,18 @@ interface OrderDetailSheetProps {
 }
 
 export function OrderDetailSheet({ orderId, open, onClose }: OrderDetailSheetProps) {
-  const { orders, updateOrder, deleteOrder } = useCommerce();
+  const { orders, updateOrder, deleteOrder, refreshOrders } = useCommerce();
+  const org = useOrganization();
+  const { user } = useUserProfile();
   const order = orders.find(o => o.id === orderId) ?? null;
 
   const [editing, setEditing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [status, setStatus] = useState<OrderStatus>('Pending Consolidation');
   const [notes, setNotes] = useState('');
+  const [publishing, setPublishing] = useState(false);
+  const publishingRef = useRef(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!order || editing) return;
@@ -60,6 +69,25 @@ export function OrderDetailSheet({ orderId, open, onClose }: OrderDetailSheetPro
     deleteOrder(order!.id);
     setDeleteConfirm(false);
     onClose();
+  }
+
+  async function handlePublishIndent() {
+    const workspaceId = org.platformOrganization?.id;
+    const requestedBy = user?.id;
+    if (!workspaceId || !requestedBy || publishingRef.current) return;
+
+    publishingRef.current = true;
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      await publishIndentForOrder(order!.id, { workspaceId, requestedBy });
+      await refreshOrders();
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : 'Failed to publish indent');
+    } finally {
+      publishingRef.current = false;
+      setPublishing(false);
+    }
   }
 
   return (
@@ -126,6 +154,21 @@ export function OrderDetailSheet({ orderId, open, onClose }: OrderDetailSheetPro
           <p className="text-xl font-bold text-right mt-4 tabular-nums text-[var(--pulse-hero-blue)]">
             {formatCurrency(order.total_amount)}
           </p>
+
+          {order.status === 'Pending Consolidation' && (
+            <div className="mt-4 space-y-2">
+              <Button
+                className="w-full"
+                disabled={publishing || !org.platformOrganization?.id || !user?.id}
+                onClick={() => void handlePublishIndent()}
+              >
+                {publishing ? 'Publishing…' : 'Publish to execution'}
+              </Button>
+              {publishError && (
+                <p className="text-2xs text-destructive">{publishError}</p>
+              )}
+            </div>
+          )}
         </>
       )}
     </EntityFlexSheet>

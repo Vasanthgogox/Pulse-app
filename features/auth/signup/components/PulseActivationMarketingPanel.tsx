@@ -17,6 +17,7 @@ const PANEL_CONTENT_MAX = 400;
 const ILLUSTRATION_WIDTH = 220;
 
 export type PulseActivationMarketingPanelProps = {
+  brandWord?: string;
   tag?: string;
   title?: string;
   /** Typewriter lines under the headline — defaults to workspace setup outcomes. */
@@ -28,6 +29,7 @@ const illustrationHeight = ILLUSTRATION_WIDTH / SIGNUP_MARKETING_ILLUSTRATION_AS
 
 /** Desktop signup split — mirrors hub left panel layout. */
 export function PulseActivationMarketingPanel({
+  brandWord,
   tag = 'Workspace setup',
   title = 'One workspace for your entire transport business.',
   outcomeLines,
@@ -36,7 +38,10 @@ export function PulseActivationMarketingPanel({
 
   return (
     <View style={styles.panel}>
-      <PulseSplitBrandLogo onPress={() => router.push(ROUTES.TERMINAL_WEBSITE)} />
+      <PulseSplitBrandLogo
+        word={brandWord}
+        onPress={() => router.push(ROUTES.TERMINAL_WEBSITE)}
+      />
 
       <View style={styles.body}>
         <View style={styles.inner}>

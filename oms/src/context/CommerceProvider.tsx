@@ -14,10 +14,13 @@ import type {
 } from '@/types/commerce';
 import { DEFAULT_TENANT } from '@/types/platform';
 import { useOrganization } from '@/context/OrganizationProvider';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { buildPublishExecutionPlanPayload, publishPlanToExecution } from '@/lib/execution-api';
 import { createEntityMetadata, bumpEntityVersion } from '@/lib/entity-metadata';
 import { findMergeRecommendations } from '@/lib/merge-engine';
 import { subscribePlatformEvents, type PlatformEventEnvelope } from '@/lib/domain-events';
+import { fetchOrders } from '@/lib/services/orders.service';
+import { getPlatformEventBus } from '@pulse-platform/index';
 import { loadOrders, loadPlans, saveOrders, savePlans } from '@/lib/order-store';
 
 const CommerceContext = createContext<CommerceContextValue | undefined>(undefined);
@@ -35,6 +38,7 @@ const EMPTY_STATS: DashboardStats = {
 
 export function CommerceProvider({ children }: { children: ReactNode }) {
   const org = useOrganization();
+  const { user, displayName, email, role } = useUserProfile();
   const [orders, setOrdersRaw] = useState<Order[]>(() => loadOrders());
   const [plans, setPlansRaw]   = useState<ExecutionPlan[]>(() => loadPlans());
 
@@ -55,10 +59,48 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
   }, []);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
+  const refreshOrders = useCallback(async () => {
+    const wsId = org.platformOrganization?.id;
+    if (!wsId) return;
+    try {
+      const rows = await fetchOrders(wsId);
+      setOrders(rows);
+    } catch {
+      // Keep local cache if remote fetch fails (e.g. migration not applied yet).
+    }
+  }, [org.platformOrganization?.id, setOrders]);
+
+  useEffect(() => {
+    if (!org.organizationHydrated || !org.platformOrganization?.id) return;
+    void refreshOrders();
+  }, [org.organizationHydrated, org.platformOrganization?.id, refreshOrders]);
+
+  useEffect(() => {
+    return getPlatformEventBus().subscribe('IndentCreated', (event) => {
+      const payload = event.payload as { orderId?: string };
+      if (!payload.orderId) return;
+      setOrders(prev => prev.map(o =>
+        o.id === payload.orderId
+          ? { ...o, status: 'Planned' as OrderStatus, updated_at: new Date().toISOString() }
+          : o,
+      ));
+    });
+  }, [setOrders]);
+
   const tenant = DEFAULT_TENANT;
   const identity = {
-    company: { id: org.profile?.id ?? tenant.organizationId, name: org.profile?.name ?? 'Your Organization', tenantId: tenant.tenantId, type: 'shipper' as const },
-    user: { id: 'user-001', email: 'admin@your-org.pulse.app', name: 'Admin', role: 'commerce_manager' as const },
+    company: {
+      id: org.platformOrganization?.id ?? org.profile?.id ?? tenant.organizationId,
+      name: org.platformOrganization?.name ?? org.profile?.name ?? 'Your Organization',
+      tenantId: tenant.tenantId,
+      type: 'shipper' as const,
+    },
+    user: {
+      id: user?.id ?? 'anonymous',
+      email: email || 'user@pulse.app',
+      name: displayName,
+      role: (role ?? 'commerce_manager') as 'commerce_manager',
+    },
     teams: [],
   };
 
@@ -217,7 +259,7 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
       products: org.products,
       customers: org.customers,
       warehouses: org.warehouses,
-      stats: org.onboardingDone ? stats : EMPTY_STATS,
+      stats: org.hasPlatformOrganization ? stats : EMPTY_STATS,
       mergeRecommendations,
       selectedOrderIds,
       setSelectedOrderIds,
@@ -231,6 +273,7 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
       updateOrder,
       deleteOrder,
       addOrder,
+      refreshOrders,
     }}>
       {children}
     </CommerceContext.Provider>

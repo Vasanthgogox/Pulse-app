@@ -1,6 +1,9 @@
 import React from 'react';
 import { View } from 'react-native';
 
+import { useSuiteAuthContext } from '@/features/auth/hooks/useSuiteAuthContext';
+import { suiteSignUpCopy } from '@/lib/suite/suiteAuthContent';
+
 import { styles } from './businessSignUp.styles';
 import { useBusinessSignUpFlow } from './hooks/useBusinessSignUpFlow';
 import { STEP_LABELS } from './signUpConstants';
@@ -62,6 +65,8 @@ function BusinessStepContent({
 
 export default function BusinessSignUpScreen() {
   const flow = useBusinessSignUpFlow();
+  const { productId, product } = useSuiteAuthContext();
+  const signUpCopy = suiteSignUpCopy(productId);
   const backLabel = flow.step === 0 ? 'Back' : flow.step === 8 ? '' : 'Back';
 
   return (
@@ -78,8 +83,10 @@ export default function BusinessSignUpScreen() {
           (flow.useMobileLayout && !flow.showIntro && (flow.step === 0 || flow.step === 1))
         }
         isDesktop={flow.isDesktop}
-        marketingTag="Business activation"
-        marketingTitle="One workspace for your entire transport business."
+        brandWord={product.brandWord}
+        marketingTag={signUpCopy.marketingTag}
+        marketingTitle={signUpCopy.marketingTitle}
+        marketingOutcomeLines={signUpCopy.principles}
       >
         <View style={styles.mobileStepFlex}>
           <BusinessStepContent flow={flow} step={flow.step} />

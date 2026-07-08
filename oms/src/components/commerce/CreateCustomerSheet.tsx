@@ -54,34 +54,33 @@ export function CreateCustomerSheet({ open, onClose, onCreated }: CreateCustomer
 
   const canSubmit = canSaveConsignee({ entityType, name, legalName, gstin });
   const gstError = entityType === 'business' && gstin.trim() && !isValidGstin(gstin);
+  const [saving, setSaving] = useState(false);
 
-  function handleSubmit() {
-    if (!canSubmit || gstError) return;
-    const payload = buildConsigneePayload({
-      entityType,
-      name,
-      legalName,
-      email,
-      phone,
-      contactPerson,
-      gstin,
-      pan,
-      line1,
-      city,
-      state,
-      pincode,
-    });
-    const customer: Customer = {
-      id:           `C-${Date.now()}`,
-      ...payload,
-      total_orders: 0,
-      total_spend:  0,
-      created_at:   new Date().toISOString().slice(0, 10),
-    };
-    org.addCustomer(customer);
-    reset();
-    onCreated?.(customer);
-    onClose();
+  async function handleSubmit() {
+    if (!canSubmit || gstError || saving) return;
+    setSaving(true);
+    try {
+      const payload = buildConsigneePayload({
+        entityType,
+        name,
+        legalName,
+        email,
+        phone,
+        contactPerson,
+        gstin,
+        pan,
+        line1,
+        city,
+        state,
+        pincode,
+      });
+      const customer = await org.createCustomer(payload);
+      reset();
+      if (customer) onCreated?.(customer);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -117,8 +116,8 @@ export function CreateCustomerSheet({ open, onClose, onCreated }: CreateCustomer
           </div>
           <FormField label="Pincode" value={pincode} onChange={setPincode} placeholder="400001" />
 
-          <Button className="w-full mt-2" disabled={!canSubmit || Boolean(gstError)} onClick={handleSubmit}>
-            Add consignee
+          <Button className="w-full mt-2" disabled={!canSubmit || Boolean(gstError) || saving} onClick={() => void handleSubmit()}>
+            {saving ? 'Saving…' : 'Add consignee'}
           </Button>
         </div>
       </SheetContent>

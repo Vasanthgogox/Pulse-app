@@ -1,15 +1,22 @@
-import { Webhook, KeyRound, Bell, Shield, Bot } from 'lucide-react';
+import { ExternalLink, LogOut, Webhook, KeyRound, Bell, Shield, Bot } from 'lucide-react';
 import { PageToolbar } from '@/components/commerce/PageToolbar';
+import { Button } from '@/components/ui/button';
+import { UserAvatar } from '@/components/layout/UserAvatar';
+import { useAuth } from '@/context/AuthProvider';
 import { useCommerce } from '@/context/CommerceProvider';
 import { useOrganization } from '@/context/OrganizationProvider';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { gatewayPath } from '@/lib/platform-gateway';
+import { buildPulseCoreUrl } from '@/lib/suite-auth';
 import { PULSE_AI_AGENTS } from '@/types/ai-agents';
 import { ORDER_SOURCE_CONNECTORS } from '@/types/order-sources';
 import { LottieIcon } from '@/components/pulse-ui';
 
 export function SettingsPage() {
+  const { signOut } = useAuth();
   const { tenant, identity } = useCommerce();
   const { profile } = useOrganization();
+  const { displayName, email, organizationName } = useUserProfile();
 
   const SECTIONS = [
     {
@@ -27,7 +34,7 @@ export function SettingsPage() {
       title: 'Pulse Identity',
       description: 'Organization → Branches → Warehouses → Users → Roles → Invite Team.',
       fields: [
-        { label: 'Organization', value: profile?.name ?? 'Not configured' },
+        { label: 'Organization', value: organizationName },
         { label: 'Organization ID', value: profile?.id ?? tenant.organizationId },
         { label: 'Identity service', value: gatewayPath('identity', '/me') },
       ],
@@ -53,14 +60,49 @@ export function SettingsPage() {
   ];
 
   return (
-    <div className="container-fluid">
+    <div className="container-fluid pb-8">
       <PageToolbar title="Settings" showDate={false} />
 
-      <div className="rounded-xl border border-border bg-muted/30 px-4 py-2 mb-5 text-2xs text-muted-foreground font-mono flex flex-wrap gap-x-6">
-        <span>tenant: {tenant.tenantId}</span>
-        <span>org: {profile?.id ?? tenant.organizationId}</span>
-        <span>user: {identity.user.email}</span>
-      </div>
+      <section className="rounded-xl border border-border bg-card overflow-hidden mb-4">
+        <div className="border-b border-border px-5 py-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <UserAvatar size="md" showRing />
+            <div className="min-w-0">
+              <h3 className="font-medium">{displayName}</h3>
+              <p className="text-sm text-muted-foreground truncate">{email}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                window.location.assign(buildPulseCoreUrl('/'));
+              }}
+            >
+              <ExternalLink className="size-3.5" />
+              Switch to Pulse Core
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                void signOut();
+              }}
+            >
+              <LogOut className="size-3.5" />
+              Sign out
+            </Button>
+          </div>
+        </div>
+        <div className="px-5 py-3 text-2xs text-muted-foreground font-mono flex flex-wrap gap-x-6 border-b border-border">
+          <span>tenant: {tenant.tenantId}</span>
+          <span>org: {profile?.id ?? tenant.organizationId}</span>
+          <span>user: {identity.user.email}</span>
+        </div>
+      </section>
 
       {SECTIONS.map(section => (
         <div key={section.title} className="rounded-xl border border-border bg-card overflow-hidden mb-4 shadow-none">

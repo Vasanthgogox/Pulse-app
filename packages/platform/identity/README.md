@@ -46,8 +46,11 @@ PORT=3101                  # optional
 # Apply migrations first (from repo root)
 supabase db push
 
-cd packages/platform/identity
+# Install from the repo root — this package is an npm workspace member,
+# the root package-lock.json is the only authoritative lockfile
 npm install
+
+cd packages/platform/identity
 npm run dev
 ```
 

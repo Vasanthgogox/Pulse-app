@@ -4,6 +4,15 @@ import * as authService from "@/features/auth/services/auth.service";
 import { supabase } from "@/lib/supabase";
 import { ROUTES } from "@/lib/routes";
 import {
+  buildSuiteSignInHrefWithOAuthError,
+  finalizeSuiteNavigationIntent,
+  isSuiteExternalAppPath,
+  navigateAfterSuiteAuth,
+  normalizeSuiteReturnTo,
+  peekSuiteNavigationIntent,
+  peekSuiteNavigationIntentSync,
+} from '@/lib/suite/suiteAuth';
+import {
   Redirect,
   type Href,
   useLocalSearchParams,
@@ -100,13 +109,27 @@ export default function AuthCallback() {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // Go directly to app entry; AuthGuard routes user without extra hop.
+        // Redirect to the product that initiated sign-in (Commerce, Core, etc.).
         if (mounted) {
           setMessage(
             metadataResult.status === 'partial_failure'
               ? authService.OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE
               : "Sign in successful. Redirecting to workspace…",
           );
+          const pending =
+            peekSuiteNavigationIntentSync() ?? (await peekSuiteNavigationIntent());
+          if (pending?.returnTo) {
+            const target = normalizeSuiteReturnTo(pending.returnTo);
+            if (!tryCompleteOAuthPopup(target)) {
+              if (isSuiteExternalAppPath(target)) {
+                navigateAfterSuiteAuth(target);
+              } else {
+                setRedirectTo(target as Href);
+              }
+            }
+            await finalizeSuiteNavigationIntent();
+            return;
+          }
           if (!tryCompleteOAuthPopup(ROUTES.INDEX)) {
             setRedirectTo(ROUTES.INDEX as Href);
           }
@@ -115,7 +138,11 @@ export default function AuthCallback() {
         const msg = e instanceof Error ? e.message : "Google sign in failed";
         if (mounted) {
           setMessage("Google sign in failed. Redirecting to sign in…");
-          const signInPath = `${ROUTES.SIGN_IN}?oauth_error=${encodeURIComponent(msg)}`;
+          const pending = await peekSuiteNavigationIntent();
+          const signInPath = buildSuiteSignInHrefWithOAuthError(msg, {
+            productId: pending?.productId,
+            returnTo: pending?.returnTo,
+          });
           if (!tryCompleteOAuthPopup(signInPath)) {
             setRedirectTo(signInPath as Href);
           }
