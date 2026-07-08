@@ -70,7 +70,15 @@ BEGIN
 END;
 $$;
 
-SELECT cron.alter_job(
-  job_id := 3,
-  command := 'SELECT public.dispatch_verification_workers();'
-);
+-- Guarded: job_id 3 only exists in environments where it was previously
+-- scheduled (production). A fresh local DB has no cron jobs at all, so
+-- this is a no-op locally and the real fix applies where the job exists.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobid = 3) THEN
+    PERFORM cron.alter_job(
+      job_id := 3,
+      command := 'SELECT public.dispatch_verification_workers();'
+    );
+  END IF;
+END $$;

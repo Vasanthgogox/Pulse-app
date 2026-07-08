@@ -36,6 +36,10 @@ CREATE INDEX IF NOT EXISTS idx_indents_org_deleted_locs
   WHERE deleted_at IS NULL;
 
 -- Optimized function
+-- DROP first: return signature drops avatar_url vs. the prior version, and
+-- Postgres disallows changing a function's return type via CREATE OR REPLACE.
+DROP FUNCTION IF EXISTS public.discover_organizations(uuid, text, integer, integer);
+
 CREATE OR REPLACE FUNCTION public.discover_organizations(
   p_org_id  uuid,
   p_search  text    DEFAULT '',

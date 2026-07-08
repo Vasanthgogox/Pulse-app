@@ -9,6 +9,7 @@ import {
 } from '@/features/organization/services/organization.service';
 import { updateOrganizationWorkspaceProfile } from '@/features/organization/services/organizationWorkspaceProfile.service';
 import {
+  removeVerificationDocumentFile,
   saveVerificationDraft,
   submitBusinessVerification,
   validateGstin,
@@ -156,6 +157,40 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
         const picked = await pickAndUploadVerificationDocument(orgId, docType, proofType);
         if (!picked) return { error: null };
 
+        // OCR auto-fill: only backfill an empty field, never overwrite a
+        // value the user already typed in the Tax & compliance IDs section.
+        // Checked BEFORE the document is registered — a PAN/GSTIN already
+        // claimed by another workspace (organizations_pan_unique /
+        // organizations_gstin_unique) means this document can't belong to
+        // this org either, so the whole upload is rejected, not just the
+        // field auto-fill.
+        if (docType === 'pan_card' && picked.extractedPan && !kyc?.business_pan) {
+          const { error: panErr } = await saveKycField('business_pan', picked.extractedPan);
+          if (panErr) {
+            await removeVerificationDocumentFile(picked.path);
+            return {
+              error: new Error(
+                panErr.message.includes('duplicate key')
+                  ? 'This PAN is already registered to another workspace.'
+                  : `Could not verify PAN: ${panErr.message}`,
+              ),
+            };
+          }
+        }
+        if (docType === 'gst_certificate' && picked.extractedGstin && !kyc?.gstin) {
+          const { error: gstinErr } = await saveKycField('gstin', picked.extractedGstin);
+          if (gstinErr) {
+            await removeVerificationDocumentFile(picked.path);
+            return {
+              error: new Error(
+                gstinErr.message.includes('duplicate key')
+                  ? 'This GSTIN is already registered to another workspace.'
+                  : `Could not verify GSTIN: ${gstinErr.message}`,
+              ),
+            };
+          }
+        }
+
         const { document, error: upsertErr } = await upsertOrganizationKycDocument(orgId, {
           doc_type: docType,
           storage_path: picked.path,
@@ -172,20 +207,6 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
             address_proof_type: proofType,
           });
           if (draftErr) return { error: draftErr };
-        }
-
-        // OCR auto-fill: only backfill an empty field, never overwrite a
-        // value the user already typed in the Tax & compliance IDs section.
-        // Errors here must not be swallowed — a failed autofill previously
-        // looked identical to a successful upload (doc "Ready for review"
-        // but the tax ID field silently stayed empty).
-        if (docType === 'pan_card' && picked.extractedPan && !kyc?.business_pan) {
-          const { error: panErr } = await saveKycField('business_pan', picked.extractedPan);
-          if (panErr) console.error('[KYC] auto-fill business_pan failed:', panErr.message);
-        }
-        if (docType === 'gst_certificate' && picked.extractedGstin && !kyc?.gstin) {
-          const { error: gstinErr } = await saveKycField('gstin', picked.extractedGstin);
-          if (gstinErr) console.error('[KYC] auto-fill gstin failed:', gstinErr.message);
         }
 
         if (document) {

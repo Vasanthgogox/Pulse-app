@@ -288,6 +288,10 @@ END;
 $$;
 
 -- ── Pending roster: flag email conflicts for admin UI ───────────────────────
+-- DROP first: adds email_conflict/conflict_org_names columns vs. the prior
+-- version, and Postgres disallows changing a function's return type via
+-- CREATE OR REPLACE.
+DROP FUNCTION IF EXISTS public.get_org_team_pending_invites(uuid);
 
 CREATE OR REPLACE FUNCTION public.get_org_team_pending_invites(p_org_id uuid)
   RETURNS TABLE(
@@ -346,6 +350,10 @@ AS $$
 $$;
 
 -- Resolver: include invitee_email for signup conflict detection
+-- DROP first: adds invitee_email column vs. the prior version, and Postgres
+-- disallows changing a function's return type via CREATE OR REPLACE.
+DROP FUNCTION IF EXISTS public.resolve_pending_team_invitations_by_phone(text);
+
 CREATE OR REPLACE FUNCTION public.resolve_pending_team_invitations_by_phone(p_phone text)
   RETURNS TABLE(
     invitee_name          text,

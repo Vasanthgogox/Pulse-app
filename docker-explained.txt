@@ -1,0 +1,174 @@
+========================================================================
+  HOW YOUR PULSE APP GETS FROM CODE -> USER'S BROWSER (explained simply)
+========================================================================
+
+-----------------------------------------------------
+1. WHAT YOU HAVE TODAY (local development)
+-----------------------------------------------------
+
+   Your Mac
+   ┌─────────────────────────────────────────┐
+   │  npm run web  (Metro dev server)         │
+   │  - reads your source code live           │
+   │  - no minification, dev warnings on      │
+   │  - slow-ish, but instant hot-reload      │
+   │  - runs on http://localhost:8081 (approx)│
+   └─────────────────────────────────────────┘
+                    │
+                    │ JS bundle loads in browser
+                    ▼
+   Browser  ───────────────────────────────►  Supabase (cloud)
+   (your app's UI)     API calls for data      (auth, database, storage)
+
+   Good for: writing code, instant feedback.
+   Bad for: testing real-world speed (dev mode is always slower).
+
+
+-----------------------------------------------------
+2. WHAT "dist/" IS
+-----------------------------------------------------
+
+   Command:  npm run build:web
+             (= expo export --platform web + compress-dist.js)
+
+   This takes ALL your screens/components and produces:
+
+   dist/
+     index.html                     <- the single entry page
+     favicon.ico
+     _expo/static/js/web/
+        index-xxxx.js                <- main app bundle
+        TripsScreen-xxxx.js          <- code-split per screen
+        NetworkScreen-xxxx.js
+        ... etc
+
+   This is a PRODUCTION build:
+     - minified, no dev warnings, smaller & faster
+     - just plain static files (HTML/JS/CSS/images)
+     - NO server code inside it
+     - NOT connected to Supabase yet -- Supabase keys are just
+       embedded as text inside the JS, used later at runtime
+
+   dist/ is regenerated every build. Never edited by hand.
+
+
+-----------------------------------------------------
+3. WHAT DOCKER DID FOR YOU (what you tested locally)
+-----------------------------------------------------
+
+   Docker image "pulse-web" = two stages:
+
+   STAGE 1 (builder)              STAGE 2 (runtime)
+   ┌─────────────────────┐        ┌───────────────────────┐
+   │ node:20-slim         │        │ nginx:alpine           │
+   │ - npm ci             │  --->  │ - just serves dist/    │
+   │ - npm run build:web  │ copies │   as static files      │
+   │ - produces dist/     │  dist/ │ - super fast, no       │
+   └─────────────────────┘        │   bundler overhead     │
+                                   └───────────────────────┘
+                                          │
+                                          ▼
+                              http://localhost:8080
+                              (you tested this - it worked!)
+
+   Why it felt "faster" than npm run web:
+     -> NOT because of Docker.
+     -> Because it's serving the PRODUCTION build (dist/),
+        which is always faster than dev mode.
+     -> You'd get the same speed running "npx serve dist"
+        with NO Docker at all.
+
+   The 404-on-reload bug you hit:
+     -> nginx was looking for a real file matching the URL
+        (e.g. /trips/123) and found nothing.
+     -> Fixed by nginx.conf: "if no file matches, just serve
+        index.html" -> then your app's JS router (Expo Router)
+        takes over and shows the right screen.
+
+   VERDICT: Docker is NOT needed for your local dev or testing.
+   It only becomes useful if you deploy to a container platform
+   (like AWS ECS/Fargate). For a pure static export like yours,
+   that's usually overkill.
+
+
+-----------------------------------------------------
+4. HOW REAL HOSTING WORKS (Netlify / AWS S3+CloudFront)
+-----------------------------------------------------
+
+   Instead of Docker+nginx, a static host does the same job,
+   but managed for you:
+
+   Your Git repo
+        │  (push code)
+        ▼
+   Netlify / AWS pipeline
+        │  runs: npm run build:web
+        ▼
+   dist/ folder produced
+        │  uploaded automatically
+        ▼
+   CDN (Content Delivery Network)
+   = many copies of dist/ stored on servers
+     all over the world (US, India, Europe, etc.)
+        │
+        │  user requests your site
+        ▼
+   Nearest CDN server responds INSTANTLY
+   with the cached static files
+   (this is why reloads feel instant - no rebuilding,
+    just handing over files that are already sitting there)
+
+
+-----------------------------------------------------
+5. WHERE YOUR ACTUAL DATA COMES FROM
+-----------------------------------------------------
+
+   IMPORTANT: the CDN / S3 / nginx / Docker ---
+   NONE of them ever touch your real data.
+   They ONLY hand out the static UI shell (HTML/JS/CSS).
+
+   Full picture:
+
+   ┌──────────────┐     loads UI shell      ┌──────────────┐
+   │   CDN / S3   │ ───────────────────────►│   Browser    │
+   │ (or Netlify, │                         │ (your app    │
+   │  or nginx)   │                         │  running)    │
+   └──────────────┘                         └──────┬───────┘
+    "delivers code"                                │
+                                                    │ direct API calls
+                                                    │ (using EXPO_PUBLIC_
+                                                    │  SUPABASE_URL + key
+                                                    │  baked into the JS)
+                                                    ▼
+                                          ┌───────────────────┐
+                                          │     Supabase        │
+                                          │ - Auth               │
+                                          │ - Postgres database  │
+                                          │ - Storage (files)     │
+                                          │ - Realtime            │
+                                          └───────────────────┘
+                                           "delivers/stores data"
+
+   So:
+     Static host (S3/CDN/nginx/Netlify) = only serves CODE.
+     Supabase                            = only serves/stores DATA.
+   These are two totally separate systems that never talk to
+   each other directly -- the browser is the middleman.
+
+
+-----------------------------------------------------
+6. SIMPLE SUMMARY / DECISION TABLE
+-----------------------------------------------------
+
+   Task                          | Best tool for YOUR app
+   -------------------------------|---------------------------
+   Writing code, daily dev work   | npm run web (Metro, hot reload)
+   Testing a production build     | npm run build:web + npx serve dist
+   Learning Docker                | what you already did - good!
+   Actually hosting on AWS        | S3 + CloudFront (no Docker needed)
+   Already have Netlify set up?   | Just use Netlify - it does the
+                                   | S3+CDN+build-pipeline for you
+   If you ever need a real backend| Docker/ECS would matter THEN,
+   server (not just Supabase)     | not for a pure static app like this
+
+========================================================================

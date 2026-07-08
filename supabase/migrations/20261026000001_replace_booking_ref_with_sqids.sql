@@ -315,7 +315,8 @@ SELECT setval(
       FROM pg_sequences
       WHERE schemaname = 'public'
         AND sequencename = 'booking_ref_seq'
-    ), 0)
+    ), 0),
+    1
   ),
   true
 );

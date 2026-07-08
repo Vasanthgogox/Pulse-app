@@ -1,0 +1,13 @@
+node_modules
+.expo
+.git
+dist
+ios
+android
+oms
+analytics
+*.log
+.env
+.env.local
+.playwright-mcp
+.tsc-checkpoint*.txt

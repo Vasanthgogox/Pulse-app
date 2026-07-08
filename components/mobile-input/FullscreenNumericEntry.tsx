@@ -83,6 +83,21 @@ export function FullscreenNumericEntry({
   const isTablet = platform === 'tablet';
   const isPayLayout = platform === 'mobile';
 
+  // iOS Safari: the visual viewport shifts when the toolbar collapses/expands
+  // mid-interaction, but this modal's fixed positioning (from RN Web's Modal)
+  // doesn't reflow with it — pin height to the live visual viewport instead.
+  const [webViewportHeight, setWebViewportHeight] = useState<number | undefined>(
+    Platform.OS === 'web' ? window.visualViewport?.height : undefined,
+  );
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !visible || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const update = () => setWebViewportHeight(vv.height);
+    update();
+    vv.addEventListener('resize', update);
+    return () => vv.removeEventListener('resize', update);
+  }, [visible]);
+
   const keypadOpts: KeypadOptions = {
     maxDecimalPlaces: allowDecimal === false ? 0 : (maxDecimalPlaces ?? 2),
   };
@@ -330,6 +345,9 @@ export function FullscreenNumericEntry({
         style={[
           styles.mobileContainer,
           Platform.OS === 'android' && { paddingTop: insets.top },
+          Platform.OS === 'web' && webViewportHeight
+            ? { height: webViewportHeight }
+            : null,
         ]}
       >
         {innerContent}

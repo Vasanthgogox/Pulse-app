@@ -89,7 +89,11 @@ COMMENT ON VIEW public.trips_supplier_view IS
   'Supplier-facing trip projection: hides trip_number, trip_code, trip_operational_code, organization_id.';
 
 -- Driver-safe columns only (no booking_ref, trip_number, organization_id, supplier_id, trip codes).
-CREATE OR REPLACE VIEW public.trips_driver_view
+-- DROP+CREATE (not CREATE OR REPLACE) because this narrows the column set vs. the
+-- prior definition (drops client_price, supplier_rate, driver_commission, distance),
+-- and Postgres disallows dropping columns via CREATE OR REPLACE VIEW.
+DROP VIEW IF EXISTS public.trips_driver_view;
+CREATE VIEW public.trips_driver_view
 WITH (security_invoker = true) AS
 SELECT
   t.id,

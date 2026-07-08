@@ -19,7 +19,19 @@ ALTER FUNCTION public.clients_warn_legacy_address() SET search_path = public, pg
 ALTER FUNCTION public.entity_bank_accounts_set_updated_at() SET search_path = public, pg_temp;
 ALTER FUNCTION public.profiles_block_deprecated_driver_fields() SET search_path = public, pg_temp;
 ALTER FUNCTION public.fill_driver_commission() SET search_path = public, pg_temp;
-ALTER FUNCTION public.check_cron_job_health(integer, integer) SET search_path = public, pg_temp;
+-- check_cron_job_health exists in production but was never captured in a
+-- tracked migration, so it's absent on a fresh local DB. Guarded so this
+-- migration still applies the fix in production while being a no-op locally.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'check_cron_job_health'
+  ) THEN
+    ALTER FUNCTION public.check_cron_job_health(integer, integer) SET search_path = public, pg_temp;
+  END IF;
+END $$;
 ALTER FUNCTION public.set_updated_at() SET search_path = public, pg_temp;
 ALTER FUNCTION public.discover_extract_city(text) SET search_path = public, pg_temp;
 ALTER FUNCTION public.fn_build_chat_lanes(jsonb) SET search_path = public, pg_temp;

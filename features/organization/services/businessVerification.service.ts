@@ -272,6 +272,13 @@ export async function uploadVerificationDocument(
   return { path, error: null, verify };
 }
 
+/** Remove an uploaded-but-not-registered document (e.g. the extracted
+ * PAN/GSTIN turned out to already belong to a different workspace). */
+export async function removeVerificationDocumentFile(path: string): Promise<{ error: Error | null }> {
+  const { error } = await supabase().storage.from(VERIFICATION_BUCKET).remove([path]);
+  return { error: error ? new Error(error.message) : null };
+}
+
 export interface VerificationDocumentRecord {
   id:             string;
   document_type:  VerificationDocumentType;

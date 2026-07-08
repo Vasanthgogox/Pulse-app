@@ -253,10 +253,8 @@ function getSupabase(): SupabaseClient {
   if (__DEV__) {
     try {
       const host = new URL(supabaseUrl).hostname;
-      console.log('[pulse] Supabase config marker:', '2026-05-08-extra-only-v2');
-      console.log('[pulse] Supabase URL source (env):', envSupabaseUrl ?? '(missing)');
-      console.log('[pulse] Supabase URL source (extra):', supabaseUrl);
-      console.log('[pulse] Supabase URL host:', host);
+      const isLocal = host === '127.0.0.1' || host === 'localhost';
+      console.log(`[pulse] Supabase DB: ${isLocal ? 'LOCAL (docker)' : 'CLOUD'} — ${host}`);
       if (envSupabaseUrl && extraSupabaseUrl && envSupabaseUrl !== extraSupabaseUrl) {
         console.warn('[pulse] Supabase source mismatch: preferring env over extra', {
           envSupabaseUrl,
