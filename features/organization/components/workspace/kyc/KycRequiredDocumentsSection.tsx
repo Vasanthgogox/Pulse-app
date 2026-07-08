@@ -1,4 +1,7 @@
-import { ORG_KYC_REQUIRED_DOCUMENTS } from '@/features/organization/types/organizationKycDocuments.types';
+import {
+  ORG_KYC_REQUIRED_DOCUMENTS,
+  ORG_KYC_OPTIONAL_DOCUMENTS,
+} from '@/features/organization/types/organizationKycDocuments.types';
 import type { OrganizationKycDocument } from '@/features/organization/types/organizationKycDocuments.types';
 import type { OrganizationKycDocType } from '@/features/organization/types/organizationKycDocuments.types';
 import type { AddressProofType, WorkspaceKyc } from '@/types/organization';
@@ -27,6 +30,19 @@ export function KycRequiredDocumentsSection({
   return (
     <>
       {ORG_KYC_REQUIRED_DOCUMENTS.map((def) => (
+        <KycRequiredDocumentRow
+          key={def.type}
+          definition={def}
+          documents={documents}
+          kyc={kyc}
+          canEdit={canEdit}
+          frozen={frozen}
+          uploading={uploadingDocType === def.type}
+          onUpload={(proofType) => onUpload(def.type, proofType)}
+          onRemove={() => onRemove(def.type)}
+        />
+      ))}
+      {ORG_KYC_OPTIONAL_DOCUMENTS.map((def) => (
         <KycRequiredDocumentRow
           key={def.type}
           definition={def}

@@ -16,7 +16,9 @@ export type VerificationDocumentType =
   | 'pan_card'
   | 'address_proof_lease'
   | 'address_proof_utility_bill'
-  | 'address_proof_other';
+  | 'address_proof_other'
+  | 'cin_certificate'
+  | 'msme_certificate';
 
 export function validateDocumentFile(file: {
   mimeType: string;

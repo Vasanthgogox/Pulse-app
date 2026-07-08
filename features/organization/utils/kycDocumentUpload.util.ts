@@ -5,8 +5,10 @@ import { Alert } from 'react-native';
 import {
   uploadVerificationDocument,
   type AddressProofFile,
+  type VerificationDocumentType,
 } from '@/features/organization/services/businessVerification.service';
 import type { OrganizationKycDocType } from '@/features/organization/types/organizationKycDocuments.types';
+import type { AddressProofType } from '@/types/organization';
 
 export type PickedVerificationDocument = {
   path: string;
@@ -15,11 +17,41 @@ export type PickedVerificationDocument = {
   sizeBytes?: number;
 };
 
+/** address_proof has no single enum member — it maps to one of three
+ * sub-types based on what the user picked in the document-type chips. */
+function resolveVerificationDocumentType(
+  docType: OrganizationKycDocType,
+  addressProofType?: AddressProofType,
+): VerificationDocumentType | null {
+  if (docType === 'address_proof') {
+    switch (addressProofType) {
+      case 'lease': return 'address_proof_lease';
+      case 'utility_bill': return 'address_proof_utility_bill';
+      default: return 'address_proof_other';
+    }
+  }
+  if (
+    docType === 'gst_certificate' ||
+    docType === 'pan_card' ||
+    docType === 'cin_certificate' ||
+    docType === 'msme_certificate'
+  ) {
+    return docType;
+  }
+  return null; // iec_certificate / incorporation_certificate / other: not yet supported by the verification pipeline
+}
+
 async function processAsset(
   orgId: string,
   docType: OrganizationKycDocType,
   asset: { uri: string; mimeType?: string | null; fileName?: string | null; base64?: string | null; fileSize?: number | null },
+  addressProofType?: AddressProofType,
 ): Promise<PickedVerificationDocument | null> {
+  const verificationDocType = resolveVerificationDocumentType(docType, addressProofType);
+  if (!verificationDocType) {
+    Alert.alert('Upload failed', 'This document type is not yet supported.');
+    return null;
+  }
   const mimeType = asset.mimeType ?? 'image/jpeg';
   const fileName = asset.fileName ?? `${docType}-${Date.now()}.jpg`;
   const file: AddressProofFile = {
@@ -28,7 +60,7 @@ async function processAsset(
     fileName,
     base64: asset.base64 ?? undefined,
   };
-  const { path, error } = await uploadVerificationDocument(orgId, docType, file);
+  const { path, error } = await uploadVerificationDocument(orgId, verificationDocType, file);
   if (error || !path) {
     Alert.alert('Upload failed', error?.message ?? 'Could not upload document.');
     return null;
@@ -41,10 +73,11 @@ async function processAsset(
   };
 }
 
-/** Document picker — camera, gallery, or PDF. */
+/** Document picker — camera, gallery, or PDF. `addressProofType` is required when docType === 'address_proof'. */
 export function pickAndUploadVerificationDocument(
   orgId: string,
   docType: OrganizationKycDocType,
+  addressProofType?: AddressProofType,
 ): Promise<PickedVerificationDocument | null> {
   return new Promise((resolve) => {
     Alert.alert('Upload document', 'Choose a source', [
@@ -67,7 +100,7 @@ export function pickAndUploadVerificationDocument(
               resolve(null);
               return;
             }
-            resolve(await processAsset(orgId, docType, res.assets[0]));
+            resolve(await processAsset(orgId, docType, res.assets[0], addressProofType));
           })();
         },
       },
@@ -90,7 +123,7 @@ export function pickAndUploadVerificationDocument(
               resolve(null);
               return;
             }
-            resolve(await processAsset(orgId, docType, res.assets[0]));
+            resolve(await processAsset(orgId, docType, res.assets[0], addressProofType));
           })();
         },
       },
@@ -108,12 +141,17 @@ export function pickAndUploadVerificationDocument(
             }
             const a = res.assets[0];
             resolve(
-              await processAsset(orgId, docType, {
-                uri: a.uri,
-                mimeType: a.mimeType ?? 'application/pdf',
-                fileName: a.name,
-                fileSize: a.size,
-              }),
+              await processAsset(
+                orgId,
+                docType,
+                {
+                  uri: a.uri,
+                  mimeType: a.mimeType ?? 'application/pdf',
+                  fileName: a.name,
+                  fileSize: a.size,
+                },
+                addressProofType,
+              ),
             );
           })();
         },

@@ -101,7 +101,14 @@ export function KycRequiredDocumentRow({
           )}
         </View>
         <View style={styles.main}>
-          <Text style={styles.label}>{definition.label}</Text>
+          <View style={styles.labelRow}>
+            <Text style={styles.label}>{definition.label}</Text>
+            {!definition.mandatory ? (
+              <View style={styles.optionalPill}>
+                <Text style={styles.optionalPillText}>Optional</Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={styles.hint}>{definition.hint}</Text>
         </View>
         <View style={styles.trailing}>
@@ -219,8 +226,22 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   main: { flex: 1, minWidth: 0, gap: 1 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   label: { fontSize: 12, fontWeight: '600', color: Theme.textPrimaryDark },
   hint: { fontSize: 10, color: Theme.textMuted, lineHeight: 13 },
+  optionalPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceGray,
+  },
+  optionalPillText: {
+    fontSize: 8.5,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
   trailing: {
     flexDirection: 'row',
     alignItems: 'center',

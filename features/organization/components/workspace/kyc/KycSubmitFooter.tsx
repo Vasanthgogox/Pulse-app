@@ -20,7 +20,7 @@ export function KycSubmitFooter({ canSubmit, submitting, onSubmit }: Props) {
         onPress={onSubmit}
       >
         {submitting ? (
-          <LoadingIndicator size="small" color="#fff" />
+          <LoadingIndicator size="small" color={Theme.buttonPrimaryText} />
         ) : (
           <Text style={styles.btnText}>Submit for verification</Text>
         )}
@@ -48,7 +48,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 6,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
     minWidth: 160,
     alignItems: 'center',
     minHeight: 34,

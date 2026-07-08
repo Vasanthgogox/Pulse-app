@@ -34,6 +34,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AwardedIndentDeployModalProvider } from '@/contexts/AwardedIndentDeployModalContext';
 import { BusinessConnectionRequestModalProvider } from '@/contexts/BusinessConnectionRequestModalContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
+import { OrgVerificationReminderBanner } from '@/features/organization/components/workspace/kyc/OrgVerificationReminderBanner';
 import { useQueryClient } from '@tanstack/react-query';
 
 function DemoCustomTabBar(
@@ -248,12 +249,15 @@ export default function TabLayout() {
 
 function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
   const router = useRouter();
+  const org = useOptionalOrganization();
   const openWorkspace = useCallback(() => {
     router.push(ROUTES.WORKSPACE as Parameters<typeof router.push>[0]);
   }, [router]);
 
   return (
-    <Tabs
+    <View style={styles.tabsWrap}>
+      <OrgVerificationReminderBanner orgId={org?.currentOrganization?.id ?? null} />
+      <Tabs
       backBehavior="history"
       tabBar={(props) => (
         <DemoCustomTabBar {...props} onOpenProfileDrawer={openWorkspace} />
@@ -296,7 +300,8 @@ function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
       />
       <Tabs.Screen name="indents" options={{ href: null }} />
       <Tabs.Screen name="resources" options={{ href: null }} />
-    </Tabs>
+      </Tabs>
+    </View>
   );
 }
 
@@ -310,5 +315,8 @@ const styles = StyleSheet.create({
   tabBarWrap: {
     width: '100%',
     paddingHorizontal: 0,
+  },
+  tabsWrap: {
+    flex: 1,
   },
 });

@@ -438,5 +438,7 @@ export const queryKeys = {
   workspace: {
     products: (orgId: string) => ["q", "workspace", "products", orgId] as const,
     waitlist: (orgId: string) => ["q", "workspace", "waitlist", orgId] as const,
+    verificationBanner: (orgId: string) =>
+      ["q", "workspace", "verificationBanner", orgId] as const,
   },
 } as const;

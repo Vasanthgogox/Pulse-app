@@ -338,6 +338,25 @@ export async function getOrgProfileFields(orgId: string): Promise<{
   return { error: null, profile: (data as OrgProfileFields) ?? null };
 }
 
+export type OrgVerificationBannerFields = {
+  verification_status: import('@/types/organization').KycVerificationStatus;
+  created_at: string;
+};
+
+/** Lightweight — for the post-signup/persistent verification reminder banner. Do not use for the KYC panel itself (use getWorkspaceKyc). */
+export async function getOrgVerificationBannerFields(orgId: string): Promise<{
+  error: Error | null;
+  fields: OrgVerificationBannerFields | null;
+}> {
+  const { data, error } = await supabase()
+    .from('organizations')
+    .select('verification_status, created_at')
+    .eq('id', orgId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), fields: null };
+  return { error: null, fields: (data as OrgVerificationBannerFields) ?? null };
+}
+
 // ─── Workspace KYC ────────────────────────────────────────────────────────────
 
 const WORKSPACE_KYC_SELECT =

@@ -64,9 +64,11 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
             { id: 'profile', label: 'Business profile complete', status: 'complete' },
             {
               id: 'verify',
-              label: verifying ? 'Email verification' : 'Identity verified',
-              status: verifying ? 'in_progress' : 'complete',
-              detail: verifying ? `Link sent to ${flow.email}` : undefined,
+              label: verifying ? 'Email verification' : 'Business verification',
+              status: verifying ? 'in_progress' : 'pending',
+              detail: verifying
+                ? `Link sent to ${flow.email}`
+                : 'Submit your business documents next',
             },
             {
               id: 'ops',

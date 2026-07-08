@@ -22,6 +22,7 @@ import { pickAndUploadVerificationDocument } from '@/features/organization/utils
 import { kycVerificationReady } from '@/features/organization/utils/kycVerification.util';
 import type { OrganizationKycDocType } from '@/features/organization/types/organizationKycDocuments.types';
 import type { OrganizationKycDocument } from '@/features/organization/types/organizationKycDocuments.types';
+import { ORG_KYC_REQUIRED_DOCUMENTS } from '@/features/organization/types/organizationKycDocuments.types';
 import type { KycField } from '@/features/organization/components/workspace/workspacePanelUi';
 import type { AddressProofType, RegistrationType, WorkspaceKyc } from '@/types/organization';
 import { isVerificationFrozen } from '@/types/organization';
@@ -152,7 +153,7 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
       }
       setUploadingDocType(docType);
       try {
-        const picked = await pickAndUploadVerificationDocument(orgId, docType);
+        const picked = await pickAndUploadVerificationDocument(orgId, docType, proofType);
         if (!picked) return { error: null };
 
         const { document, error: upsertErr } = await upsertOrganizationKycDocument(orgId, {
@@ -161,7 +162,7 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
           file_name: picked.fileName,
           mime_type: picked.mimeType,
           file_size_bytes: picked.sizeBytes,
-          is_mandatory: true,
+          is_mandatory: ORG_KYC_REQUIRED_DOCUMENTS.some((d) => d.type === docType),
         });
         if (upsertErr) return { error: upsertErr };
 
