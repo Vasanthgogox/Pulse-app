@@ -174,6 +174,15 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
           if (draftErr) return { error: draftErr };
         }
 
+        // OCR auto-fill: only backfill an empty field, never overwrite a
+        // value the user already typed in the Tax & compliance IDs section.
+        if (docType === 'pan_card' && picked.extractedPan && !kyc?.business_pan) {
+          await saveKycField('business_pan', picked.extractedPan);
+        }
+        if (docType === 'gst_certificate' && picked.extractedGstin && !kyc?.gstin) {
+          await saveKycField('gstin', picked.extractedGstin);
+        }
+
         if (document) {
           setDocuments((prev) => {
             const rest = prev.filter((d) => d.doc_type !== docType);
@@ -186,7 +195,7 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
         setUploadingDocType(null);
       }
     },
-    [orgId, uploadingDocType, reload],
+    [orgId, uploadingDocType, reload, kyc, saveKycField],
   );
 
   const removeKycDocument = useCallback(

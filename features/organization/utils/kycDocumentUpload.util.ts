@@ -16,6 +16,8 @@ export type PickedVerificationDocument = {
   fileName: string;
   mimeType: string;
   sizeBytes?: number;
+  extractedGstin?: string | null;
+  extractedPan?: string | null;
 };
 
 /** address_proof has no single enum member — it maps to one of three
@@ -88,7 +90,7 @@ async function processAsset(
     fileName,
     base64,
   };
-  const { path, error } = await uploadVerificationDocument(orgId, verificationDocType, file);
+  const { path, error, verify } = await uploadVerificationDocument(orgId, verificationDocType, file);
   if (error || !path) {
     Alert.alert('Upload failed', error?.message ?? 'Could not upload document.');
     return null;
@@ -98,7 +100,42 @@ async function processAsset(
     fileName,
     mimeType,
     sizeBytes: asset.fileSize ?? undefined,
+    extractedGstin: verify?.extracted?.gstin ?? null,
+    extractedPan: verify?.extracted?.pan ?? null,
   };
+}
+
+/** react-native-web's Alert.alert is a no-op (no dialog, no callbacks ever
+ * fire) — see react-native-web/dist/exports/Alert/index.js. A 3-way source
+ * chooser is therefore unreachable on web; go straight to the file picker,
+ * which already renders the OS/browser's native file dialog. */
+async function pickAndUploadVerificationDocumentWeb(
+  orgId: string,
+  docType: OrganizationKycDocType,
+  addressProofType?: AddressProofType,
+): Promise<PickedVerificationDocument | null> {
+  try {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'image/*'],
+      copyToCacheDirectory: true,
+    });
+    if (res.canceled || !res.assets[0]) return null;
+    const a = res.assets[0];
+    return await processAsset(
+      orgId,
+      docType,
+      {
+        uri: a.uri,
+        mimeType: a.mimeType ?? 'application/pdf',
+        fileName: a.name,
+        fileSize: a.size,
+      },
+      addressProofType,
+    );
+  } catch (err) {
+    Alert.alert('Upload failed', err instanceof Error ? err.message : 'File error.');
+    return null;
+  }
 }
 
 /** Document picker — camera, gallery, or PDF. `addressProofType` is required when docType === 'address_proof'. */
@@ -107,6 +144,9 @@ export function pickAndUploadVerificationDocument(
   docType: OrganizationKycDocType,
   addressProofType?: AddressProofType,
 ): Promise<PickedVerificationDocument | null> {
+  if (Platform.OS === 'web') {
+    return pickAndUploadVerificationDocumentWeb(orgId, docType, addressProofType);
+  }
   return new Promise((resolve) => {
     Alert.alert('Upload document', 'Choose a source', [
       {
@@ -200,7 +240,7 @@ export function pickAndUploadVerificationDocument(
         },
       },
       { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
-    ]);
+    ], { cancelable: true, onDismiss: () => resolve(null) });
   });
 }
 
