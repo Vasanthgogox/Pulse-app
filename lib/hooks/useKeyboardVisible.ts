@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { Keyboard, Platform } from "react-native";
 
-import { shouldApplyWebKeyboardScrollInset, readWebVisualViewportMetrics } from "@/lib/webKeyboard";
+import {
+  applyIOSWebSafariViewportPin,
+  shouldApplyWebKeyboardScrollInset,
+  readWebVisualViewportMetrics,
+} from "@/lib/webKeyboard";
 
 /** Ignore visualViewport jitter from mobile browser chrome (URL bar). */
 const WEB_KEYBOARD_INSET_THRESHOLD_PX = 48;
@@ -56,14 +60,16 @@ export function useKeyboardVisible() {
         return;
       }
 
-      let rafId = 0;
       let focusOutTimer: ReturnType<typeof setTimeout> | undefined;
 
       const applyInset = (inset: number) => {
         const open = inset >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
         const height = open ? inset : 0;
-        // Write CSS var synchronously — no React lag, layout adjusts this frame.
+        // Write CSS vars synchronously in one pass — keyboard-height and the iOS
+        // Safari viewport pin (--app-vh/--app-vt) must land in the same tick so
+        // React and the CSS pin never disagree about the current frame's geometry.
         setCssKeyboardHeight(height);
+        applyIOSWebSafariViewportPin();
         setKeyboardHeight(height);
         setKeyboardVisible(open);
       };
@@ -81,18 +87,19 @@ export function useKeyboardVisible() {
             : 0;
       };
 
+      // Called directly from listeners — no requestAnimationFrame defer. The old
+      // code scheduled this a frame after applyIOSWebSafariViewportPin (called
+      // independently by installWebViewportHeight's own listener set), so the
+      // CSS pin and the React-driven keyboard inset landed on different frames.
+      // Now this is the only place either is written, synchronously, on the
+      // same visualViewport event.
       const sync = () => {
         applyInset(readInset());
       };
 
-      const scheduleSync = () => {
-        cancelAnimationFrame(rafId);
-        rafId = requestAnimationFrame(sync);
-      };
-
       const onFocusIn = (e: FocusEvent) => {
         if (!isEditableTarget(e.target)) return;
-        scheduleSync();
+        sync();
         // Single delayed sync after keyboard has fully animated open (~350ms on Android Chrome).
         setTimeout(sync, 350);
       };
@@ -109,25 +116,24 @@ export function useKeyboardVisible() {
 
       sync();
       const vv = window.visualViewport;
-      vv?.addEventListener("resize", scheduleSync);
-      vv?.addEventListener("scroll", scheduleSync);
-      window.addEventListener("resize", scheduleSync);
+      vv?.addEventListener("resize", sync);
+      vv?.addEventListener("scroll", sync);
+      window.addEventListener("resize", sync);
 
       document.addEventListener("focusin", onFocusIn, true);
       document.addEventListener("focusout", onFocusOut, true);
 
       const vk = (navigator as NavigatorWithVK).virtualKeyboard;
-      vk?.addEventListener("geometrychange", scheduleSync);
+      vk?.addEventListener("geometrychange", sync);
 
       return () => {
-        cancelAnimationFrame(rafId);
         clearTimeout(focusOutTimer);
-        vv?.removeEventListener("resize", scheduleSync);
-        vv?.removeEventListener("scroll", scheduleSync);
-        window.removeEventListener("resize", scheduleSync);
+        vv?.removeEventListener("resize", sync);
+        vv?.removeEventListener("scroll", sync);
+        window.removeEventListener("resize", sync);
         document.removeEventListener("focusin", onFocusIn, true);
         document.removeEventListener("focusout", onFocusOut, true);
-        vk?.removeEventListener("geometrychange", scheduleSync);
+        vk?.removeEventListener("geometrychange", sync);
       };
     }
 

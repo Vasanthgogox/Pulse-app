@@ -14,6 +14,7 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { checkExistingUserByPhone, setPendingOAuthMetadata } from '@/features/auth';
+import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
 import { formatMobileNumber } from '@/lib/format';
@@ -337,26 +338,52 @@ export default function DriverSignUpScreen() {
     );
   };
 
-  /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
+  /** Extra scroll offset so focused field stays above keyboard. */
   const SCROLL_OFFSET_DEFAULT = 100;
-  const SCROLL_OFFSET_PASSWORD_IOS = 220;
+  const { keyboardVisible } = useKeyboardVisible();
+  const pendingScrollFieldRef = useRef<keyof typeof PROFILE_FIELD_SCROLL_Y | null>(null);
+
+  const runPendingFieldScroll = () => {
+    const name = pendingScrollFieldRef.current;
+    pendingScrollFieldRef.current = null;
+    if (!name) return;
+    if (useMobileLayout) {
+      mobileScrollRef.current?.scrollToEnd({ animated: true });
+      return;
+    }
+    const inner = pageVerticalScrollRefs.current[2];
+    const y = PROFILE_FIELD_SCROLL_Y[name];
+    inner?.scrollTo({
+      y: Math.max(0, y - SCROLL_OFFSET_DEFAULT),
+      animated: true,
+    });
+  };
+
+  // Web: scroll fires off the real keyboard-open transition (see effect below),
+  // not a guessed delay — the previous 400ms/220px constants were estimates of
+  // when the iOS Safari keyboard animation finished and drifted from reality
+  // (autofill/QuickType bars change the timing per field).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !keyboardVisible) return;
+    runPendingFieldScroll();
+  }, [keyboardVisible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scrollToField = (name: keyof typeof PROFILE_FIELD_SCROLL_Y) => {
-    const isPasswordOnIos = name === 'password' && Platform.OS === 'ios';
-    const offset = isPasswordOnIos ? SCROLL_OFFSET_PASSWORD_IOS : SCROLL_OFFSET_DEFAULT;
-    const delay = Platform.OS === 'web' ? 400 : 80;
-    setTimeout(() => {
-      if (useMobileLayout) {
-        mobileScrollRef.current?.scrollToEnd({ animated: true });
-        return;
-      }
-      const inner = pageVerticalScrollRefs.current[2];
-      const y = PROFILE_FIELD_SCROLL_Y[name];
-      inner?.scrollTo({
-        y: Math.max(0, y - offset),
-        animated: true,
-      });
-    }, delay);
+    if (Platform.OS !== 'web') {
+      const delay = 80;
+      setTimeout(() => {
+        pendingScrollFieldRef.current = name;
+        runPendingFieldScroll();
+      }, delay);
+      return;
+    }
+    pendingScrollFieldRef.current = name;
+    if (keyboardVisible) {
+      // Keyboard already open (focus moved between adjacent fields) — no open
+      // transition will fire, so scroll on the next frame instead of waiting.
+      requestAnimationFrame(runPendingFieldScroll);
+    }
+    // Otherwise the effect above runs this once keyboardVisible flips true.
   };
 
   const fullPhoneForApi = getFullPhoneIndia(phone);

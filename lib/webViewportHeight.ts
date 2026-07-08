@@ -13,6 +13,15 @@ export { WEB_KEYBOARD_INSET_THRESHOLD_PX };
  * - iOS Safari: pin `#root` to `visualViewport` (height + offsetTop) via CSS vars.
  * - Android Chrome (overlays-content): freeze layout height while keyboard is open;
  *   occlusion is handled via `--keyboard-height` in `useKeyboardVisible`.
+ *
+ * useKeyboardVisible's web sync() now owns all visualViewport listening and writes
+ * --app-vh/--app-vt/--keyboard-height together in one pass (see that file). This
+ * function used to run its own, separate visualViewport listener set for the same
+ * CSS vars — two listener sets on the same events meant the pin and the keyboard
+ * inset could land on different frames, which was the source of the iOS Safari
+ * signup layout jumps. It now only performs the one-time initial write (so the
+ * vars are correct before useKeyboardVisible's provider mounts) and claims
+ * ownership from the static HTML bootstrap; it does not attach any listeners.
  */
 export function installWebViewportHeight(): () => void {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -22,41 +31,20 @@ export function installWebViewportHeight(): () => void {
   // Claim ownership — suppresses setupViewportHeightBootstrap from the static HTML shell.
   (window as any).__appVhOwned = true;
 
-  let stableLayoutHeight = Math.round(window.innerHeight);
-
-  const setAppVh = () => {
-    if (isIOSWebSafari()) {
-      applyIOSWebSafariViewportPin();
-      return;
-    }
-
-    const { height: visible, keyboardOpen } = readWebVisualViewportMetrics();
+  if (isIOSWebSafari()) {
+    applyIOSWebSafariViewportPin();
+  } else {
+    const { height: visible } = readWebVisualViewportMetrics();
     const inner = window.innerHeight;
-
-    if (!keyboardOpen) {
-      stableLayoutHeight = Math.max(visible, inner);
-    }
-
     document.documentElement.style.setProperty(
       "--app-vh",
-      `${stableLayoutHeight}px`,
+      `${Math.max(visible, inner)}px`,
     );
     document.documentElement.style.setProperty("--app-vt", "0px");
-  };
-
-  setAppVh();
-  window.addEventListener("resize", setAppVh);
-  window.addEventListener("orientationchange", setAppVh);
-  const vv = window.visualViewport;
-  vv?.addEventListener("resize", setAppVh);
-  vv?.addEventListener("scroll", setAppVh);
+  }
 
   return () => {
     (window as any).__appVhOwned = false;
-    window.removeEventListener("resize", setAppVh);
-    window.removeEventListener("orientationchange", setAppVh);
-    vv?.removeEventListener("resize", setAppVh);
-    vv?.removeEventListener("scroll", setAppVh);
   };
 }
 

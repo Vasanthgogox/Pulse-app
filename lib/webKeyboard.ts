@@ -76,7 +76,10 @@ export function readWebVisualViewportMetrics(): WebVisualViewportMetrics {
 
 /**
  * Pin the React root to the visible viewport on iOS Safari.
- * Called from installWebViewportHeight on every visualViewport change.
+ * Called once by installWebViewportHeight (initial paint) and then from inside
+ * useKeyboardVisible's web sync() on every visualViewport/focus event — that is
+ * the single place this runs on an ongoing basis, so the pin and the React
+ * keyboard-inset state always update in the same synchronous pass.
  */
 export function applyIOSWebSafariViewportPin(): void {
   if (!isIOSWebSafari() || typeof document === 'undefined') return;
