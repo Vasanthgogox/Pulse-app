@@ -1,8 +1,16 @@
 /**
  * Mobile web keyboard / viewport platform detection.
  *
- * - iOS Safari: resizes `visualViewport` and scrolls the layout document via
- *   `offsetTop` — pin `#root` with `--app-vh` + `--app-vt` (see htmlShell).
+ * - Any iOS browser (Safari, Chrome/CriOS, Firefox/FxiOS, Edge/EdgiOS): all run
+ *   on WebKit — Apple requires it — so all of them resize `visualViewport` and
+ *   scroll the layout document via `offsetTop` the same way. htmlShell's
+ *   `@supports (-webkit-touch-callout: none)` CSS block (which pins html/body/
+ *   #root to `position: fixed`) is an engine-level feature query and applies to
+ *   all of them identically — it cannot distinguish Safari from Chrome. The JS
+ *   that keeps `--app-vh`/`--app-vt` in sync with that CSS must therefore also
+ *   run for all of them (gate on isIOSWeb, not isIOSWebSafari) or non-Safari
+ *   iOS browsers get the fixed-position cage with no compensating offset sync,
+ *   which is what allowed the page to still scroll on iOS Chrome.
  * - Android Chrome: `interactive-widget=overlays-content` keeps layout height;
  *   keyboard occludes from below — handled via `--keyboard-height` padding.
  */
@@ -55,9 +63,11 @@ export function readWebVisualViewportMetrics(): WebVisualViewportMetrics {
   const offsetTop = Math.round(vv?.offsetTop ?? 0);
   const heightShrink = Math.max(0, inner - height);
 
-  if (isIOSWebSafari()) {
-    // Do not subtract offsetTop — Safari moves the layout viewport instead of reporting
-    // occlusion in (inner - height - offsetTop), which reads 0 and breaks detection.
+  if (isIOSWeb()) {
+    // Do not subtract offsetTop — WebKit (Safari and every other iOS browser,
+    // since Apple mandates WebKit) moves the layout viewport instead of
+    // reporting occlusion in (inner - height - offsetTop), which reads 0 and
+    // breaks detection.
     const keyboardOpen =
       heightShrink >= WEB_KEYBOARD_INSET_THRESHOLD_PX ||
       offsetTop >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
@@ -75,14 +85,15 @@ export function readWebVisualViewportMetrics(): WebVisualViewportMetrics {
 }
 
 /**
- * Pin the React root to the visible viewport on iOS Safari.
+ * Pin the React root to the visible viewport on iOS (any browser — see the
+ * file-level comment on why this is isIOSWeb, not isIOSWebSafari).
  * Called once by installWebViewportHeight (initial paint) and then from inside
  * useKeyboardVisible's web sync() on every visualViewport/focus event — that is
  * the single place this runs on an ongoing basis, so the pin and the React
  * keyboard-inset state always update in the same synchronous pass.
  */
 export function applyIOSWebSafariViewportPin(): void {
-  if (!isIOSWebSafari() || typeof document === 'undefined') return;
+  if (!isIOSWeb() || typeof document === 'undefined') return;
   const { height, offsetTop } = readWebVisualViewportMetrics();
   document.documentElement.style.setProperty('--app-vh', `${height}px`);
   document.documentElement.style.setProperty('--app-vt', `${offsetTop}px`);
@@ -90,12 +101,13 @@ export function applyIOSWebSafariViewportPin(): void {
 }
 
 /**
- * When false, `#root` is pinned to visualViewport height (iOS Safari) and scroll
- * padding for keyboard height would double-count occlusion.
+ * When false, `#root` is pinned to visualViewport height (iOS — any browser,
+ * see file-level comment) and scroll padding for keyboard height would
+ * double-count occlusion.
  */
 export function shouldApplyWebKeyboardScrollInset(): boolean {
   if (typeof window === 'undefined') return true;
-  return !isIOSWebSafari();
+  return !isIOSWeb();
 }
 
 /**

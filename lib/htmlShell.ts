@@ -59,12 +59,18 @@ export function setupAndroidInteractiveWidgetViewport() {
  * Must stay self-contained (no closures) — inlined into static HTML via toString().
  */
 export function setupViewportHeightBootstrap() {
-  function isIOSWebSafari() {
+  // Any iOS browser (Safari, Chrome/CriOS, etc.) runs on WebKit — Apple
+  // requires it — so all of them get the same @supports (-webkit-touch-callout:
+  // none) fixed-position CSS in mobileWebReset below and need the same
+  // --app-vh/--app-vt sync. Gating this on Safari specifically left iOS Chrome
+  // with the fixed-position cage but no offset sync, which is what let the
+  // page still scroll on iOS Chrome — see lib/webKeyboard.ts's file comment.
+  function isIOSWeb() {
     var ua = navigator.userAgent || '';
-    var isIOS =
+    return (
       /iPad|iPhone|iPod/i.test(ua) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    return isIOS && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|Chrome/i.test(ua);
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    );
   }
 
   function setAppVh() {
@@ -72,7 +78,7 @@ export function setupViewportHeightBootstrap() {
     if ((window as any).__appVhOwned) return;
     var vv = window.visualViewport;
     var inner = window.innerHeight;
-    if (isIOSWebSafari() && vv) {
+    if (isIOSWeb() && vv) {
       document.documentElement.style.setProperty(
         '--app-vh',
         Math.round(vv.height) + 'px',

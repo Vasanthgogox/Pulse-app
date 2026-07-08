@@ -8,6 +8,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
   type StyleProp,
   type TextStyle,
@@ -126,6 +127,13 @@ export function CityPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const { height: windowHeight } = useWindowDimensions();
+  // Responsive cap instead of a fixed pixel height: a fixed 240px list left no
+  // room for the picker on short devices once the keyboard and the fields
+  // above it (locality search, street, area, PIN) are accounted for. 32% of
+  // the window height scales with the device; the min/max bounds keep it from
+  // becoming unusably short on small phones or absurdly tall on tablets.
+  const resultsListMaxHeight = Math.max(160, Math.min(320, Math.round(windowHeight * 0.32)));
 
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
@@ -261,7 +269,7 @@ export function CityPicker({
               ) : null}
 
               <ScrollView
-                style={styles.resultsList}
+                style={[styles.resultsList, { maxHeight: resultsListMaxHeight }]}
                 nestedScrollEnabled
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator
@@ -448,7 +456,9 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   resultsList: {
-    maxHeight: 240,
+    // maxHeight is set dynamically at the call site (resultsListMaxHeight) —
+    // see the comment there for why a fixed pixel value doesn't work across
+    // device sizes.
   },
   resultRow: {
     flexDirection: 'row',

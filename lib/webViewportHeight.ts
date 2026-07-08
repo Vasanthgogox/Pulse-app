@@ -1,6 +1,6 @@
 import {
   applyIOSWebSafariViewportPin,
-  isIOSWebSafari,
+  isIOSWeb,
   readWebVisualViewportMetrics,
   WEB_KEYBOARD_INSET_THRESHOLD_PX,
 } from "./webKeyboard";
@@ -10,7 +10,8 @@ export { WEB_KEYBOARD_INSET_THRESHOLD_PX };
 /**
  * Mobile web: `100vh` is taller than the visible viewport when browser chrome is shown.
  *
- * - iOS Safari: pin `#root` to `visualViewport` (height + offsetTop) via CSS vars.
+ * - Any iOS browser (WebKit-mandated — Safari, Chrome/CriOS, etc.): pin `#root`
+ *   to `visualViewport` (height + offsetTop) via CSS vars.
  * - Android Chrome (overlays-content): freeze layout height while keyboard is open;
  *   occlusion is handled via `--keyboard-height` in `useKeyboardVisible`.
  *
@@ -31,7 +32,7 @@ export function installWebViewportHeight(): () => void {
   // Claim ownership — suppresses setupViewportHeightBootstrap from the static HTML shell.
   (window as any).__appVhOwned = true;
 
-  if (isIOSWebSafari()) {
+  if (isIOSWeb()) {
     applyIOSWebSafariViewportPin();
   } else {
     const { height: visible } = readWebVisualViewportMetrics();
