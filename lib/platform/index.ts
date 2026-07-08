@@ -11,6 +11,7 @@ export { CustomerService } from './services/CustomerService';
 export { WarehouseService } from './services/WarehouseService';
 export { ProductService } from './services/ProductService';
 export { PlatformReadinessService } from './services/PlatformReadinessService';
+export { IndentService } from './services/IndentService';
 export type {
   PlatformCustomer,
   PlatformWarehouse,
@@ -33,6 +34,11 @@ export {
   setPlatformEventLogEnabled,
 } from './events/PlatformEventLog';
 export type { PlatformEventLogEntry } from './events/PlatformEventLog';
+export { verifyPublishIndentAcceptance } from './orchestration/verifyPublishAcceptance';
+export type {
+  PublishAcceptanceEventRow,
+  PublishAcceptanceVerification,
+} from './orchestration/verifyPublishAcceptance';
 export type { EventBus } from './events/EventBus.contract';
 export {
   createExecutionOrchestrator,

@@ -113,8 +113,8 @@ describe('ExecutionOrchestrator.publishIndent', () => {
   it('is idempotent when order is already Planned with a linked indent', async () => {
     const bus = new InProcessEventBus();
     const published: string[] = [];
-    bus.subscribe('OrderReadyForDispatch', () => published.push('OrderReadyForDispatch'));
-    bus.subscribe('IndentCreated', () => published.push('IndentCreated'));
+    bus.subscribe('OrderReadyForDispatch', () => { published.push('OrderReadyForDispatch'); });
+    bus.subscribe('IndentCreated', () => { published.push('IndentCreated'); });
 
     mockGetForPublish.mockResolvedValue({ ...pendingOrder, status: 'Planned' });
     mockFindBySalesOrderId.mockResolvedValue({ id: 'indent-existing', salesOrderId: orderId });
@@ -145,8 +145,8 @@ describe('ExecutionOrchestrator.publishIndent', () => {
 
     const bus = new InProcessEventBus();
     const published: string[] = [];
-    bus.subscribe('OrderReadyForDispatch', () => published.push('OrderReadyForDispatch'));
-    bus.subscribe('IndentCreated', () => published.push('IndentCreated'));
+    bus.subscribe('OrderReadyForDispatch', () => { published.push('OrderReadyForDispatch'); });
+    bus.subscribe('IndentCreated', () => { published.push('IndentCreated'); });
 
     const orchestrator = createExecutionOrchestrator(bus);
     await expect(orchestrator.publishIndent(command)).rejects.toThrow('insert failed');
@@ -161,8 +161,8 @@ describe('ExecutionOrchestrator.publishIndent', () => {
 
     const bus = new InProcessEventBus();
     const published: string[] = [];
-    bus.subscribe('OrderReadyForDispatch', () => published.push('OrderReadyForDispatch'));
-    bus.subscribe('IndentCreated', () => published.push('IndentCreated'));
+    bus.subscribe('OrderReadyForDispatch', () => { published.push('OrderReadyForDispatch'); });
+    bus.subscribe('IndentCreated', () => { published.push('IndentCreated'); });
 
     const orchestrator = createExecutionOrchestrator(bus);
     await expect(orchestrator.publishIndent(command)).rejects.toThrow('status update failed');

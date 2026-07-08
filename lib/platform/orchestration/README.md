@@ -1,20 +1,54 @@
-# Platform orchestration (planned)
+# Platform orchestration
 
-**Services** — CRUD-oriented operations on a single domain (`CustomerService`, `WarehouseService`, `ProductService`).
+Coordinates cross-product workflows. **Not** a domain service — validates prerequisites, invokes platform services, publishes events, returns correlation metadata.
 
-**Orchestration** — Coordinates multiple domains or products. Lives here, not inside individual services.
+## Command lifecycle
 
-Example (Phase 3):
+See [`LIFECYCLE.md`](./LIFECYCLE.md) for state definitions (Draft → Implementing → Accepted → Deprecated).
+
+**Current:** `publishIndent()` is **Implementing**. Freeze gate: signed [`ACCEPTANCE_RECORD.md`](./ACCEPTANCE_RECORD.md) (13 checks, linked DB).
+
+## Shipping a new command
+
+Ship all four together:
+
+| Artifact | Purpose |
+|----------|---------|
+| Contract | `*.contract.md` + command types |
+| Implementation | Thin orchestrator method |
+| Acceptance | Live DB record (signed when complete) |
+| Verification | SQL script + programmatic checks |
+
+## `publishIndent` (v1)
 
 ```
-ExecutionOrchestrator.publishIndent(orderId)
-    → OrderService.get(orderId)
-    → CustomerService.get(customerId)
-    → EventBus.publish(IndentRequested)
-    → Core creates Indent (order_id linked)
-    → AuditService / NotificationService
+Commerce → PublishIndentCommand → ExecutionOrchestrator.publishIndent()
+  → OrderService / CustomerService / WarehouseService / IndentService
+  → EventBus (OrderReadyForDispatch, IndentCreated)
+  → Core indent (sales_order_id)
 ```
 
-Commerce must not call Core tables directly. Orchestration publishes intent; Core owns indent/trip writes.
+| Artifact | File |
+|----------|------|
+| Contract | `EXECUTION_ORCHESTRATOR.contract.md` |
+| Implementation | `ExecutionOrchestrator.ts` |
+| Acceptance | `ACCEPTANCE_RECORD.md` |
+| Verification | `verifyPublishAcceptance.ts`, `npm run acceptance:verify` |
 
-See `docs/architecture/06-commerce-core-migration-roadmap.md` Phase 3 and `EXECUTION_ORCHESTRATOR.contract.md` for the full contract.
+```bash
+npm run acceptance:baseline   # reproducibility header for acceptance record
+npm run acceptance:verify -- <order_id> <org_id>
+```
+
+## Next commands (after v1 Accepted)
+
+`assignVehicle` → `assignDriver` → `dispatchTrip` → `startExecution` → `completeExecution` → `cancelExecution`
+
+Each follows the same four-artifact pattern. Do not expand `publishIndent()` semantically after Accepted.
+
+## References
+
+- [`EXECUTION_ORCHESTRATOR.contract.md`](./EXECUTION_ORCHESTRATOR.contract.md) — `publishIndent` behavior
+- [`LIFECYCLE.md`](./LIFECYCLE.md) — stability guarantees
+- [`ACCEPTANCE_RECORD.md`](./ACCEPTANCE_RECORD.md) — v1 release artifact (fill on live run)
+- `docs/architecture/06-commerce-core-migration-roadmap.md` — Phase 3 context

@@ -11,7 +11,8 @@ export type PlatformEventLogEntry = {
 };
 
 const entries: PlatformEventLogEntry[] = [];
-let enabled = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production';
+const rnDevFlag = (globalThis as { __DEV__?: boolean }).__DEV__;
+let enabled = typeof rnDevFlag !== 'undefined' ? rnDevFlag : process.env.NODE_ENV !== 'production';
 
 function aggregateFromEvent(event: PlatformDomainEvent): Pick<PlatformEventLogEntry, 'aggregateType' | 'aggregateId'> {
   const payload = event.payload as Record<string, unknown>;

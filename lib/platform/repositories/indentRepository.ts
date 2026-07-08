@@ -1,4 +1,5 @@
 import { requirePlatformDb } from '../db/platformDb';
+import { ensurePublicUserRecord } from './userRepository';
 import type { SalesOrderForPublish } from './orderRepository';
 import type { WorkspaceId } from '../types/master-data';
 
@@ -29,6 +30,7 @@ export const indentRepository = {
     order: SalesOrderForPublish;
     requestedBy: string;
   }): Promise<CreatedIndentRef> {
+    await ensurePublicUserRecord(input.requestedBy);
     const weightKg = Math.max(input.order.totalWeightKg, 1);
     const { data, error } = await requirePlatformDb()
       .from('indents')

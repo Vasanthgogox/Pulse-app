@@ -1,6 +1,16 @@
 # ExecutionOrchestrator — contract (Phase 3)
 
-**Status:** Implemented (minimal) — `InProcessEventBus`, `ExecutionOrchestrator.publishIndent`, Commerce `PublishIndentCommand` entry point.
+## Command: `publishIndent()`
+
+| Field | Value |
+|-------|-------|
+| **Lifecycle state** | **Implementing** |
+| **Freeze gate** | Signed [`ACCEPTANCE_RECORD.md`](./ACCEPTANCE_RECORD.md) — 13 linked-DB checks |
+| **After acceptance** | State → **Accepted**; record date, commit, migration version |
+
+See [`LIFECYCLE.md`](./LIFECYCLE.md) for state definitions and allowed changes.
+
+> Do not treat unit tests or builds as freeze criteria. The acceptance record is the release artifact.
 
 Orchestration **coordinates**, **validates prerequisites**, **invokes product/platform services**, **publishes events**, and **returns correlation metadata**. It is not another service layer.
 
@@ -140,5 +150,15 @@ type PublishIndentResult = {
 
 - `lib/platform/orchestration/types.ts` — command envelope, result, errors
 - `lib/platform/orchestration/ExecutionOrchestrator.contract.ts` — interface
+- `lib/platform/orchestration/ACCEPTANCE_RECORD.md` — live DB acceptance + v1 freeze artifact
 - `lib/platform/events/commands.ts` — command names
 - `lib/platform/events/types.ts` — event names
+
+## Stability (after v1 acceptance sign-off)
+
+When `publishIndent()` transitions to **Accepted** (see [`LIFECYCLE.md`](./LIFECYCLE.md)):
+
+- Bug fixes allowed; **no semantic changes** without a new major version and acceptance record.
+- New execution steps are **new commands** (`assignVehicle`, `assignDriver`, …), not additions to `publishIndent()`.
+
+Each command ships with: contract, implementation, acceptance record, verification script.

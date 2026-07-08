@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ export function CreateOrderSheet({ open, onClose }: CreateOrderSheetProps) {
   const { customers, products, warehouses, refreshOrders } = useCommerce();
   const org = useOrganization();
   const [customerId, setCustomerId] = useState(customers[0]?.id ?? '');
+  const [pickupWarehouseId, setPickupWarehouseId] = useState(warehouses[0]?.id ?? '');
   const [lines, setLines] = useState<LineDraft[]>(() => [emptyLine(products)]);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -40,8 +42,9 @@ export function CreateOrderSheet({ open, onClose }: CreateOrderSheetProps) {
   useEffect(() => {
     if (!open) return;
     if (!customerId && customers[0]) setCustomerId(customers[0].id);
+    if (!pickupWarehouseId && warehouses[0]) setPickupWarehouseId(warehouses[0].id);
     if (lines.length === 0 && products.length > 0) setLines([emptyLine(products)]);
-  }, [open, customers, customerId, lines.length, products]);
+  }, [open, customers, customerId, pickupWarehouseId, warehouses, lines.length, products]);
 
   const preview = useMemo(() => {
     const items: OrderLineItem[] = [];
@@ -74,10 +77,12 @@ export function CreateOrderSheet({ open, onClose }: CreateOrderSheetProps) {
     customers.length > 0 &&
     products.length > 0 &&
     warehouses.length > 0 &&
+    Boolean(pickupWarehouseId) &&
     preview.items.length > 0;
 
   function resetForm() {
     setCustomerId(customers[0]?.id ?? '');
+    setPickupWarehouseId(warehouses[0]?.id ?? '');
     setLines([emptyLine(products)]);
   }
 
@@ -99,7 +104,7 @@ export function CreateOrderSheet({ open, onClose }: CreateOrderSheetProps) {
 
   async function handleSubmit() {
     const customer = customers.find(c => c.id === customerId);
-    const warehouse = warehouses[0];
+    const warehouse = warehouses.find(w => w.id === pickupWarehouseId);
     const workspaceId = org.platformOrganization?.id;
     if (!customer || !warehouse || preview.items.length === 0 || !workspaceId || saving) return;
 
@@ -160,6 +165,32 @@ export function CreateOrderSheet({ open, onClose }: CreateOrderSheetProps) {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-2sm font-medium">Pickup warehouse</span>
+                <Link to="/warehouses" className="text-2xs text-[var(--pulse-hero-blue)] hover:underline">
+                  Manage warehouses
+                </Link>
+              </div>
+              {warehouses.length === 0 ? (
+                <p className="text-2xs text-muted-foreground rounded-md border border-dashed border-border px-3 py-2">
+                  Add a warehouse under Commerce → Warehouses before creating orders.
+                </p>
+              ) : (
+                <select
+                  value={pickupWarehouseId}
+                  onChange={e => setPickupWarehouseId(e.target.value)}
+                  className="w-full rounded-md border border-input px-3 py-2 text-2sm bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} · {w.address.city}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>
