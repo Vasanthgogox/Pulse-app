@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pulse/platform-workspace": "file:../packages/platform/workspace",
     "@remixicon/react": "^4.6.0",
     "@supabase/supabase-js": "^2.49.8",
     "@tanstack/react-table": "^8.21.3",

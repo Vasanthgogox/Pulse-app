@@ -1,7 +1,11 @@
 {
   "name": "pulse",
-  "main": "index.js",
+  "main": "expo-router/entry",
   "version": "1.0.0",
+  "workspaces": [
+    "packages/*",
+    "packages/platform/*"
+  ],
   "scripts": {
     "postinstall": "patch-package",
     "clean:metro": "node scripts/kill-metro-ports.js && node scripts/clear-metro-cache.js",
@@ -52,6 +56,7 @@
     "oms:build": "npm run build --prefix oms"
   },
   "dependencies": {
+    "@pulse/platform-workspace": "*",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.0.3",
