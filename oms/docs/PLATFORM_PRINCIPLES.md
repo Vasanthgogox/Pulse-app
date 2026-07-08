@@ -2,12 +2,15 @@
 
 Non-negotiable rules for every module. Treat these as architecture gates before merging.
 
+> This document defines the **technical implementation architecture** for the Pulse Platform. Business architecture, terminology, and platform boundaries are defined in [docs/architecture/platform/](../../docs/architecture/platform/01-platform-principles.md). **If a conflict exists, the business architecture is authoritative.** See [ADR-005](../../docs/decisions.md) for how the two reconcile.
 > **Authoritative definitions:** [PLATFORM_CANONICAL_MODEL.md](./PLATFORM_CANONICAL_MODEL.md) — entities, IDs, lifecycles, events, API ownership.  
 > **Phase order:** [ROADMAP.md](./ROADMAP.md)
 
-## Architecture v1.0 — Frozen
+## Architecture v1.0 — Frozen (Technical Architecture layer)
 
-The platform architecture is **stable**. New work must deliver customer value, enable production deployment, improve reliability/security/observability, or validate with a real customer.
+The technical/infrastructure architecture described in this document is **stable**: Gateway, Identity Service, Command Store, Timeline, Observatory. Business vocabulary (Workspace, Product, Experience) is governed by `docs/architecture/platform/01-platform-principles.md`, not by this document — see the note above.
+
+New work must deliver customer value, enable production deployment, improve reliability/security/observability, or validate with a real customer.
 
 See [ROADMAP.md](./ROADMAP.md) for phase priorities. Do not add speculative modules or infrastructure layers without meeting a gate criterion.
 
@@ -164,9 +167,11 @@ The planning engine stays independent of order origin.
 
 ---
 
-## Workspaces (customer mental model)
+## Products (customer mental model)
 
-| Workspace | Capabilities |
+Renamed from "Workspaces" per ADR-005 (`docs/decisions.md`) — **Workspace** is the tenant operating boundary in the governing business architecture (`docs/architecture/platform/03-workspace.md`); what this table lists are **Products** inside a Workspace (`docs/architecture/platform/04-products.md`).
+
+| Product | Capabilities |
 |-----------|--------------|
 | Pulse Commerce | Catalog, Inventory, Customers, Orders, Planning |
 | Pulse Operations | Dispatch, Control Tower, Exceptions, Live trips |
