@@ -2,13 +2,24 @@ import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { USER_2D_AVATARS } from '@/constants/UserAvatars';
+import { useSuiteAuthContext } from '@/features/auth/hooks/useSuiteAuthContext';
 import { ROUTES } from '@/lib/routes';
+import { openSuiteProductApp } from '@/lib/suite/suiteAuth';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
 import { SignUpWorkspaceReadyCard } from '../components/SignUpWorkspaceReadyCard';
 
 export function SuccessStep({ flow }: { flow: SignUpFlow }) {
   const router = useRouter();
+  const { productId, returnTo } = useSuiteAuthContext();
+  const enterOperations = () => {
+    flow.finishBusinessSignup();
+    if (productId === 'commerce') {
+      openSuiteProductApp(returnTo);
+      return;
+    }
+    router.replace(ROUTES.TABS.TRIPS);
+  };
   const verifying = flow.emailVerificationRequired;
   const enteringOps = !verifying && flow.loading;
   const hasChosenProfilePhoto =
@@ -37,8 +48,7 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
         verifying
           ? flow.resendVerification
           : () => {
-              router.replace(ROUTES.TABS.TRIPS);
-              flow.finishBusinessSignup();
+              enterOperations();
             }
       }
       primaryDisabled={verifying && flow.resendingSecs > 0}

@@ -12,6 +12,8 @@ type PulseSplitBrandLogoProps = {
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
   accessibilityLabel?: string;
+  /** Product wordmark — defaults to platform `pulse`. */
+  word?: string;
 };
 
 /** Top-left pulse. anchor for desktop split rails (onboarding + sign-in). */
@@ -19,11 +21,12 @@ export function PulseSplitBrandLogo({
   style,
   onPress,
   accessibilityLabel = 'Pulse website',
+  word,
 }: PulseSplitBrandLogoProps) {
   if (!onPress) {
     return (
       <View style={[styles.anchor, style]} pointerEvents="none">
-        <PulseBrandMark size="lg" />
+        <PulseBrandMark size="lg" word={word} />
       </View>
     );
   }
@@ -36,7 +39,7 @@ export function PulseSplitBrandLogo({
       accessibilityLabel={accessibilityLabel}
       hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}
     >
-      <PulseBrandMark size="lg" />
+      <PulseBrandMark size="lg" word={word} />
     </Pressable>
   );
 }

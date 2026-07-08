@@ -20,8 +20,10 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@pulse-assets/*": ["../assets/*"]
+      "@pulse-assets/*": ["../assets/*"],
+      "@pulse-suite/*": ["../lib/suite/*"],
+      "@pulse-platform/*": ["../lib/platform/*"]
     }
   },
-  "include": ["src"]
+    "include": ["src", "../lib/platform/**/*.ts", "../lib/suite/suiteProductModule.ts"]
 }

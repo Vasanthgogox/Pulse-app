@@ -1,3 +1,5 @@
+import type { SuiteProductId } from './suiteProductModule';
+import type { SuiteProductModule } from './suiteProductModule';
 import { ROUTES } from '@/lib/routes';
 import {
   PULSE_COMMERCE_BRAND_WORD,
@@ -5,8 +7,7 @@ import {
   PULSE_PILOT_BRAND_WORD,
 } from '@/lib/brand/pulseBrandMark.tokens';
 
-/** Suite products — shared Pulse Identity, separate apps (Zoho-style). */
-export type SuiteProductId = 'core' | 'pilot' | 'commerce';
+export type { SuiteProductId } from './suiteProductModule';
 
 export type SuiteProductDefinition = {
   id: SuiteProductId;
@@ -18,6 +19,11 @@ export type SuiteProductDefinition = {
   /** Post-signup activation path inside the product app. */
   activationPath: string;
   signUpRoute: string;
+  /**
+   * Product-owned module (readiness, routes, permissions).
+   * Registered by each product app when it ships — not required for routing metadata alone.
+   */
+  module?: SuiteProductModule;
 };
 
 export const SUITE_PRODUCTS: Record<SuiteProductId, SuiteProductDefinition> = {

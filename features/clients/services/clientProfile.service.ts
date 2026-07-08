@@ -1,4 +1,8 @@
-import { supabase } from '@/lib/supabase';
+/**
+ * Core client hub profile adapter — delegates to CustomerService.
+ */
+import { CustomerService } from '@/lib/platform';
+import type { UpdateClientHubProfileInput } from '@/lib/platform';
 
 export type UpdateClientHubProfileData = {
   legal_name?: string | null;
@@ -28,9 +32,34 @@ export type UpdateClientHubProfileData = {
   remarks?: string | null;
 };
 
-function trimOrNull(v: string | undefined | null): string | null {
-  const t = (v ?? '').trim();
-  return t || null;
+function toPlatformInput(patch: UpdateClientHubProfileData): UpdateClientHubProfileInput {
+  return {
+    legalName: patch.legal_name,
+    tradeName: patch.trade_name,
+    gstin: patch.gstin,
+    panNumber: patch.pan_number,
+    cin: patch.cin,
+    msmeNumber: patch.msme_number,
+    industry: patch.industry,
+    tanNumber: patch.tan_number,
+    kamName: patch.kam_name,
+    kamEmail: patch.kam_email,
+    kamPhone: patch.kam_phone,
+    billingContactName: patch.billing_contact_name,
+    billingContactEmail: patch.billing_contact_email,
+    billingContactPhone: patch.billing_contact_phone,
+    potentialVolume: patch.potential_volume,
+    projectedContractRevenue: patch.projected_contract_revenue,
+    paymentTermsLabel: patch.payment_terms_label,
+    invoiceFrequencyLabel: patch.invoice_frequency_label,
+    clientCode: patch.client_code,
+    iecNumber: patch.iec_number,
+    operatingRegions: patch.operating_regions,
+    registeredAddress: patch.registered_address,
+    billingAddress: patch.billing_address,
+    corporateAddress: patch.corporate_address,
+    remarks: patch.remarks,
+  };
 }
 
 export async function updateClientHubProfile(
@@ -38,60 +67,10 @@ export async function updateClientHubProfile(
   clientId: string,
   patch: UpdateClientHubProfileData,
 ): Promise<{ error: Error | null }> {
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-
-  if (patch.legal_name !== undefined) updates.legal_name = trimOrNull(patch.legal_name);
-  if (patch.trade_name !== undefined) updates.trade_name = trimOrNull(patch.trade_name);
-  if (patch.gstin !== undefined) updates.gstin = trimOrNull(patch.gstin);
-  if (patch.pan_number !== undefined) updates.pan_number = trimOrNull(patch.pan_number);
-  if (patch.cin !== undefined) updates.cin = trimOrNull(patch.cin);
-  if (patch.msme_number !== undefined) updates.msme_number = trimOrNull(patch.msme_number);
-  if (patch.industry !== undefined) updates.industry = trimOrNull(patch.industry);
-  if (patch.tan_number !== undefined) updates.tan_number = trimOrNull(patch.tan_number);
-  if (patch.kam_name !== undefined) updates.kam_name = trimOrNull(patch.kam_name);
-  if (patch.kam_email !== undefined) updates.kam_email = trimOrNull(patch.kam_email);
-  if (patch.kam_phone !== undefined) updates.kam_phone = trimOrNull(patch.kam_phone);
-  if (patch.billing_contact_name !== undefined) {
-    updates.billing_contact_name = trimOrNull(patch.billing_contact_name);
+  try {
+    await CustomerService.updateHubProfile(orgId, clientId, toPlatformInput(patch));
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
   }
-  if (patch.billing_contact_email !== undefined) {
-    updates.billing_contact_email = trimOrNull(patch.billing_contact_email);
-  }
-  if (patch.billing_contact_phone !== undefined) {
-    updates.billing_contact_phone = trimOrNull(patch.billing_contact_phone);
-  }
-  if (patch.potential_volume !== undefined) updates.potential_volume = patch.potential_volume;
-  if (patch.projected_contract_revenue !== undefined) {
-    updates.projected_contract_revenue = patch.projected_contract_revenue;
-  }
-  if (patch.payment_terms_label !== undefined) {
-    updates.payment_terms_label = trimOrNull(patch.payment_terms_label);
-  }
-  if (patch.invoice_frequency_label !== undefined) {
-    updates.invoice_frequency_label = trimOrNull(patch.invoice_frequency_label);
-  }
-  if (patch.client_code !== undefined) updates.client_code = trimOrNull(patch.client_code);
-  if (patch.iec_number !== undefined) updates.iec_number = trimOrNull(patch.iec_number);
-  if (patch.operating_regions !== undefined) updates.operating_regions = patch.operating_regions;
-  if (patch.registered_address !== undefined) {
-    updates.registered_address = trimOrNull(patch.registered_address);
-  }
-  if (patch.billing_address !== undefined) {
-    updates.billing_address = trimOrNull(patch.billing_address);
-  }
-  if (patch.corporate_address !== undefined) {
-    updates.corporate_address = trimOrNull(patch.corporate_address);
-  }
-  if (patch.remarks !== undefined) updates.notes = trimOrNull(patch.remarks);
-
-  if (Object.keys(updates).length <= 1) return { error: null };
-
-  const { error } = await supabase()
-    .from('clients')
-    .update(updates)
-    .eq('organization_id', orgId)
-    .eq('id', clientId);
-
-  if (error) return { error: new Error(error.message) };
-  return { error: null };
 }

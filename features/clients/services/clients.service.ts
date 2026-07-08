@@ -1,19 +1,15 @@
 /**
- * Clients service — Supabase only (mobile). Same DB as pulse-unified-base.
+ * Clients service — Core compatibility adapter over platform CustomerService.
+ * CRUD and list reads delegate to CustomerService → customerRepository → clients.
+ * Connection RPCs (detail bundle, linked org profiles) remain here until Phase 3.
  */
 import { enrichConnectionPartnerAvatars } from '@/lib/enrichConnectionPartnerAvatars';
+import { CustomerService } from '@/lib/platform';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { syncDomainRows } from '@/lib/cache/domainSync';
 import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
 import type { DeltaResponse } from '@/lib/cache/deltaTypes';
-
-const CLIENT_COLUMNS = [
-  "id", "organization_id", "name", "contact_person", "phone", "email",
-  "address", "gstin", "pan_number", "status", "created_at", "updated_at",
-  "display_id", "is_integrated", "linked_organization_id",
-  "contact_percent", "avatar_url", "avatar_seed", "owner_full_name",
-].join(",");
 
 export interface ClientRow {
   id: string;
@@ -44,71 +40,63 @@ export interface ClientRow {
   owner_full_name?: string | null;
 }
 
+function asClientRow(record: Record<string, unknown> | null): ClientRow | null {
+  return record as ClientRow | null;
+}
+
+function mapCreateClientError(e: unknown): Error {
+  const err = e as Error & { code?: string };
+  if (err.code === '23505') {
+    return new Error('A client with this phone number already exists.');
+  }
+  if (err.code === '42501' || err.message?.toLowerCase().includes('row-level security')) {
+    return new Error('You do not have permission to add clients to this organization.');
+  }
+  return new Error(err.message || 'Failed to create client');
+}
+
 export async function getClientsByOrganization(
   orgId: string,
   opts?: PageOpts
 ): Promise<{ error: Error | null; clients: ClientRow[]; hasMore?: boolean }> {
   try {
-    // Try optimized RPC first (SECURITY DEFINER, joins profiles for avatars)
-    const { data, error: rpcError } = await supabase().rpc('get_clients_with_profiles', {
-      p_org_id: orgId,
-    });
-
-    if (!rpcError && data) {
-      const raw = (data ?? []) as unknown as ClientRow[];
-      if (opts != null) {
-        const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
-        const offset = opts.offset ?? 0;
-        const hasMore = raw.length > offset + limit;
-        return { error: null, clients: raw.slice(offset, offset + limit), hasMore };
-      }
-      return { error: null, clients: raw };
+    const raw = (await CustomerService.listClientRecordsWithProfiles(orgId)) as unknown as ClientRow[];
+    if (opts != null) {
+      const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
+      const offset = opts.offset ?? 0;
+      const hasMore = raw.length > offset + limit;
+      return { error: null, clients: raw.slice(offset, offset + limit), hasMore };
     }
-    if (rpcError && __DEV__) {
-      console.warn('[getClientsByOrganization] RPC failed, falling back to select:', rpcError.message);
+    return { error: null, clients: raw };
+  } catch (rpcError) {
+    if (__DEV__) {
+      console.warn('[getClientsByOrganization] RPC failed, falling back to platform list:', rpcError);
     }
-  } catch (e) {
-    if (__DEV__) console.warn('[getClientsByOrganization] RPC exception:', e);
   }
 
-  // Fallback to standard select if RPC fails or is missing
-  const base = () =>
-    supabase()
-      .from('clients')
-      .select(CLIENT_COLUMNS)
-      .eq('organization_id', orgId)
-      .eq('status', 'active')
-      .order('name', { ascending: true });
-
-  if (opts != null) {
-    const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
-    const offset = opts.offset ?? 0;
-    const { data, error } = await base().range(offset, offset + limit);
-    if (error) return { error: new Error(error.message), clients: [] };
-    const raw = (data ?? []) as unknown as ClientRow[];
-    const hasMore = raw.length > limit;
-    const page = hasMore ? raw.slice(0, limit) : raw;
+  try {
+    const rows = (await CustomerService.listClientRecords(orgId)) as unknown as ClientRow[];
+    if (opts != null) {
+      const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
+      const offset = opts.offset ?? 0;
+      const hasMore = rows.length > offset + limit;
+      const page = rows.slice(offset, offset + limit);
+      return {
+        error: null,
+        clients: await enrichConnectionPartnerAvatars(orgId, page, 'get_clients_with_profiles'),
+        hasMore,
+      };
+    }
     return {
       error: null,
-      clients: await enrichConnectionPartnerAvatars(
-        orgId,
-        page,
-        'get_clients_with_profiles',
-      ),
-      hasMore,
+      clients: await enrichConnectionPartnerAvatars(orgId, rows, 'get_clients_with_profiles'),
+    };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      clients: [],
     };
   }
-  const { data, error } = await base();
-  if (error) return { error: new Error(error.message), clients: [] };
-  const rows = (data ?? []) as unknown as ClientRow[];
-  return {
-    error: null,
-    clients: await enrichConnectionPartnerAvatars(
-      orgId,
-      rows,
-      'get_clients_with_profiles',
-    ),
-  };
 }
 
 export async function getClientsDelta(
@@ -183,14 +171,12 @@ export async function getClientById(
   orgId: string,
   clientId: string
 ): Promise<{ error: Error | null; client: ClientRow | null }> {
-  const { data, error } = await supabase()
-    .from('clients')
-    .select(CLIENT_COLUMNS)
-    .eq('organization_id', orgId)
-    .eq('id', clientId)
-    .maybeSingle();
-  if (error) return { error: new Error(error.message), client: null };
-  return { error: null, client: data as ClientRow | null };
+  try {
+    const client = asClientRow(await CustomerService.findClientRecord(orgId, clientId));
+    return { error: null, client };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), client: null };
+  }
 }
 
 /**
@@ -355,17 +341,12 @@ export async function getClientByName(
   orgId: string,
   name: string
 ): Promise<{ error: Error | null; client: ClientRow | null }> {
-  const normalized = name.trim();
-  if (!normalized) return { error: null, client: null };
-  const { data, error } = await supabase()
-    .from('clients')
-    .select(CLIENT_COLUMNS)
-    .eq('organization_id', orgId)
-    .eq('status', 'active')
-    .eq('name', normalized)
-    .maybeSingle();
-  if (error) return { error: new Error(error.message), client: null };
-  return { error: null, client: data as ClientRow | null };
+  try {
+    const client = asClientRow(await CustomerService.findClientByName(orgId, name));
+    return { error: null, client };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), client: null };
+  }
 }
 
 /**
@@ -375,17 +356,12 @@ export async function getClientByPhone(
   orgId: string,
   phone: string
 ): Promise<{ error: Error | null; client: ClientRow | null }> {
-  const normalized = phone.trim();
-  if (!normalized) return { error: null, client: null };
-  const { data, error } = await supabase()
-    .from('clients')
-    .select(CLIENT_COLUMNS)
-    .eq('organization_id', orgId)
-    .eq('status', 'active')
-    .eq('phone', normalized)
-    .maybeSingle();
-  if (error) return { error: new Error(error.message), client: null };
-  return { error: null, client: data as ClientRow | null };
+  try {
+    const client = asClientRow(await CustomerService.findClientByPhone(orgId, phone));
+    return { error: null, client };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), client: null };
+  }
 }
 
 /**
@@ -436,36 +412,23 @@ export async function createClient(
     (clientData.organization_name ?? '').trim() ||
     (clientData.contact_person ?? '').trim() ||
     'Client';
-  const insertData = {
-    organization_id: orgId,
-    name,
-    contact_person: (clientData.contact_person ?? '').trim() || null,
-    phone: (clientData.phone ?? '').trim(),
-    email: (clientData.email ?? '').trim() || null,
-    address: (clientData.address ?? '').trim() || null,
-    gstin: (clientData.gstin ?? '').trim() || null,
-    pan_number: (clientData.pan_number ?? '').trim() || null,
-    notes: (clientData.notes ?? '').trim() || null,
-    is_integrated: clientData.is_integrated ?? false,
-    status: 'active',
-    created_by: sessionToUse.user.id,
-  };
-  const { data, error } = await sb
-    .from('clients')
-    .insert(insertData as Record<string, unknown>)
-    .select()
-    .single();
-
-  if (error) {
-    const message =
-      error.code === '23505'
-        ? 'A client with this phone number already exists.'
-        : error.code === '42501' || error.message?.toLowerCase().includes('row-level security')
-          ? 'You do not have permission to add clients to this organization.'
-          : error.message || 'Failed to create client';
-    return { error: new Error(message), client: null };
+  try {
+    const client = asClientRow(await CustomerService.createClientRecord(orgId, {
+      name,
+      phone: (clientData.phone ?? '').trim(),
+      email: (clientData.email ?? '').trim() || undefined,
+      address: (clientData.address ?? '').trim() || undefined,
+      gstin: (clientData.gstin ?? '').trim() || undefined,
+      contactPerson: (clientData.contact_person ?? '').trim() || undefined,
+      panNumber: (clientData.pan_number ?? '').trim() || undefined,
+      notes: (clientData.notes ?? '').trim() || undefined,
+      isIntegrated: clientData.is_integrated ?? false,
+      createdBy: sessionToUse.user.id,
+    }));
+    return { error: null, client };
+  } catch (e) {
+    return { error: mapCreateClientError(e), client: null };
   }
-  return { error: null, client: data as ClientRow };
 }
 
 /** Patch for updating a client (e.g. after create from Ops Agent). */
@@ -484,28 +447,34 @@ export async function updateClient(
   clientId: string,
   patch: UpdateClientData
 ): Promise<{ error: Error | null; client: ClientRow | null }> {
-  const updates: Record<string, unknown> = {};
-  if (patch.contact_person !== undefined) updates.contact_person = patch.contact_person.trim() || null;
-  if (patch.phone !== undefined) updates.phone = patch.phone.trim();
-  if (patch.email !== undefined) updates.email = patch.email.trim() || null;
-  if (patch.address !== undefined) updates.address = patch.address.trim() || null;
-  if (patch.gstin !== undefined) updates.gstin = patch.gstin.trim() || null;
-  if (patch.pan_number !== undefined) updates.pan_number = patch.pan_number.trim() || null;
+  const hasPatch =
+    patch.contact_person !== undefined ||
+    patch.phone !== undefined ||
+    patch.email !== undefined ||
+    patch.address !== undefined ||
+    patch.gstin !== undefined ||
+    patch.pan_number !== undefined ||
+    patch.organization_name !== undefined;
+  if (!hasPatch) return { error: null, client: null };
+
   const name =
     (patch.organization_name ?? '').trim() ||
     (patch.contact_person ?? '').trim() ||
     'Client';
-  if (patch.organization_name !== undefined || patch.contact_person !== undefined) updates.name = name;
-  if (Object.keys(updates).length === 0) return { error: null, client: null };
-  const { data, error } = await supabase()
-    .from('clients')
-    .update(updates)
-    .eq('organization_id', orgId)
-    .eq('id', clientId)
-    .select()
-    .single();
-  if (error) return { error: new Error(error.message), client: null };
-  return { error: null, client: data as ClientRow };
+  try {
+    const client = asClientRow(await CustomerService.updateClientRecord(orgId, clientId, {
+      name: patch.organization_name !== undefined || patch.contact_person !== undefined ? name : undefined,
+      phone: patch.phone !== undefined ? patch.phone.trim() : undefined,
+      email: patch.email !== undefined ? patch.email.trim() || undefined : undefined,
+      address: patch.address !== undefined ? patch.address.trim() || undefined : undefined,
+      gstin: patch.gstin !== undefined ? patch.gstin.trim() || undefined : undefined,
+      contactPerson: patch.contact_person !== undefined ? patch.contact_person.trim() || undefined : undefined,
+      panNumber: patch.pan_number !== undefined ? patch.pan_number.trim() || undefined : undefined,
+    }));
+    return { error: null, client };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), client: null };
+  }
 }
 
 /** Single round-trip bundle for ClientDetailScreen — replaces 4 parallel calls. */

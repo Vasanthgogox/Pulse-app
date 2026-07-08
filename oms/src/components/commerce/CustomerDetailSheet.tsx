@@ -42,6 +42,7 @@ export function CustomerDetailSheet({ customerId, open, onClose }: CustomerDetai
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [pincode, setPincode] = useState('');
+  const [saving, setSaving] = useState(false);
 
   function loadFromCustomer() {
     if (!customer) return;
@@ -75,27 +76,32 @@ export function CustomerDetailSheet({ customerId, open, onClose }: CustomerDetai
   const gstError = entityType === 'business' && gstin.trim() && !isValidGstin(gstin);
   const location = [customer.shipping_address.city, customer.shipping_address.state].filter(Boolean).join(', ');
 
-  function handleSave() {
-    if (!canSave || gstError) return;
-    org.updateCustomer(customer!.id, buildConsigneePayload({
-      entityType,
-      name,
-      legalName,
-      email,
-      phone,
-      contactPerson,
-      gstin,
-      pan,
-      line1,
-      city,
-      state,
-      pincode,
-    }));
-    setEditing(false);
+  async function handleSave() {
+    if (!canSave || gstError || saving) return;
+    setSaving(true);
+    try {
+      await org.updateCustomer(customer!.id, buildConsigneePayload({
+        entityType,
+        name,
+        legalName,
+        email,
+        phone,
+        contactPerson,
+        gstin,
+        pan,
+        line1,
+        city,
+        state,
+        pincode,
+      }));
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleDelete() {
-    org.deleteCustomer(customer!.id);
+  async function handleDelete() {
+    await org.deleteCustomer(customer!.id);
     setDeleteConfirm(false);
     onClose();
   }
@@ -111,9 +117,9 @@ export function CustomerDetailSheet({ customerId, open, onClose }: CustomerDetai
       onClose={onClose}
       onEdit={() => setEditing(true)}
       onCancelEdit={() => { loadFromCustomer(); setEditing(false); }}
-      onSave={handleSave}
+      onSave={() => void handleSave()}
       onDelete={() => setDeleteConfirm(true)}
-      onDeleteConfirm={handleDelete}
+      onDeleteConfirm={() => void handleDelete()}
       onDeleteCancel={() => setDeleteConfirm(false)}
     >
       <div className="flex items-center gap-3 mb-4">

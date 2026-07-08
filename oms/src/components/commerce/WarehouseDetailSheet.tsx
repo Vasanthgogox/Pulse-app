@@ -50,25 +50,32 @@ export function WarehouseDetailSheet({ warehouseId, open, onClose }: WarehouseDe
     setCapacity(String(warehouse!.capacity_m3));
   }
 
-  function handleSave() {
-    if (!canSave) return;
-    org.updateWarehouse(warehouse!.id, {
-      name:        name.trim(),
-      code:        name.trim().slice(0, 6).toUpperCase().replace(/\s+/g, ''),
-      capacity_m3: parseFloat(capacity) || 0,
-      address: {
-        ...warehouse!.address,
-        line1: name.trim(),
-        city:  city.trim(),
-        state: state.trim(),
-        pincode: pincode.trim(),
-      },
-    });
-    setEditing(false);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    if (!canSave || saving) return;
+    setSaving(true);
+    try {
+      await org.updateWarehouse(warehouse!.id, {
+        name:        name.trim(),
+        code:        name.trim().slice(0, 6).toUpperCase().replace(/\s+/g, ''),
+        capacity_m3: parseFloat(capacity) || 0,
+        address: {
+          ...warehouse!.address,
+          line1: name.trim(),
+          city:  city.trim(),
+          state: state.trim(),
+          pincode: pincode.trim(),
+        },
+      });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleDelete() {
-    org.deleteWarehouse(warehouse!.id);
+  async function handleDelete() {
+    await org.deleteWarehouse(warehouse!.id);
     setDeleteConfirm(false);
     onClose();
   }
@@ -86,9 +93,9 @@ export function WarehouseDetailSheet({ warehouseId, open, onClose }: WarehouseDe
       onClose={onClose}
       onEdit={() => setEditing(true)}
       onCancelEdit={() => { resetDraft(); setEditing(false); }}
-      onSave={handleSave}
+      onSave={() => void handleSave()}
       onDelete={() => setDeleteConfirm(true)}
-      onDeleteConfirm={handleDelete}
+      onDeleteConfirm={() => void handleDelete()}
       onDeleteCancel={() => setDeleteConfirm(false)}
     >
       <EntityHero>

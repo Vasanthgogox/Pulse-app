@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
         '@pulse-assets': fileURLToPath(new URL('../assets', import.meta.url)),
+        '@pulse-suite': fileURLToPath(new URL('../lib/suite', import.meta.url)),
+        '@pulse-platform': fileURLToPath(new URL('../lib/platform', import.meta.url)),
         react: reactRoot,
         'react-dom': reactDomRoot,
       },

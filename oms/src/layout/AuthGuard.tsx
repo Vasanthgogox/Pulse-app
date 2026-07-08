@@ -24,8 +24,6 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   if (!user) {
     const returnTo = `/oms${pathname === '/' ? '/dashboard' : pathname}`;
     const signInUrl = buildPlatformSignInUrl(returnTo);
-    // TEMP DIAGNOSTIC — remove once the Commerce login redirect bug is confirmed fixed.
-    console.log('[suite-auth-trace] AuthGuard:redirectToSignIn', { pathname, returnTo, signInUrl });
     window.location.assign(signInUrl);
     return null;
   }

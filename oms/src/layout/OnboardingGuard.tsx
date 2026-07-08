@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthProvider';
-import { useOrganization } from '@/context/OrganizationProvider';
+import { useCommerceReadiness } from '@/hooks/useCommerceReadiness';
 
 function WorkspaceLoading() {
   return (
@@ -11,23 +11,21 @@ function WorkspaceLoading() {
   );
 }
 
+/**
+ * Platform access gate — waits for auth + hydration before redirecting.
+ * Product setup (warehouses, catalog, …) is never checked here.
+ */
 export function OnboardingGuard({ children }: { children: ReactNode }) {
-  const { loading: authLoading, user } = useAuth();
-  const { organizationHydrated, hasPlatformOrganization } = useOrganization();
+  const { user } = useAuth();
+  const { readiness, evaluating, module } = useCommerceReadiness();
   const { pathname } = useLocation();
 
-  const authReady = !authLoading;
-  const userResolved = authReady;
-  const platformReady = organizationHydrated;
-
-  if (!authReady || !userResolved || !platformReady) {
+  if (evaluating) {
     return <WorkspaceLoading />;
   }
 
-  // Platform org is Supabase truth — only redirect when hydration confirms none exists.
-  // Commerce configuration (warehouses, products, consignees) is handled in-dashboard.
-  if (user && !hasPlatformOrganization && pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
+  if (user && readiness && !readiness.accessible && pathname !== module.onboardingRoute) {
+    return <Navigate to={module.onboardingRoute} replace />;
   }
 
   return <>{children}</>;

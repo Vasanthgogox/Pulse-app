@@ -19,6 +19,7 @@ import { createClient, processLock, type SupabaseClient } from '@supabase/supaba
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { configurePlatformDb } from '@/lib/platform';
 import { isRetryableHttpResponse } from '@/lib/supabaseHttp.util';
 
 // Lazy-load SecureStore so we can fall back to AsyncStorage if native module is missing (Expo Go, etc.)
@@ -306,6 +307,7 @@ let client: SupabaseClient | null = null;
 export function supabase(): SupabaseClient {
   if (!client) {
     client = getSupabase();
+    configurePlatformDb(() => client);
   }
   return client;
 }

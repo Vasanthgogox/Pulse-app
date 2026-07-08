@@ -21,3 +21,7 @@ A Product is a business capability operating on Workspace data — not an indepe
 ## Principle
 
 Products are business capabilities, not independent applications. Framework and UI differences are implementation details that do not change this architecture.
+
+## Product Ownership Rules
+
+Products own their business processes, not shared master data. Shared master data (customers, warehouses, members, assets, etc.) belongs to the Workspace domain and is accessed through shared services, per Law #1/#3. Cross-product workflows (e.g. Commerce Order → Core Indent) occur through platform services and events, not by products writing directly into each other's domain tables. The concrete assignment of which product owns which entity, and the migration from today's implementation to this model, lives in `docs/architecture/06-commerce-core-migration-roadmap.md` — a Layer 3 domain document, not a restatement of this one.

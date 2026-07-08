@@ -5,8 +5,31 @@ import type {
   FleetDriver, FleetVehicle, OnboardingStepId, OrganizationProfile, OrganizationState,
 } from '@/types/onboarding';
 import { ONBOARDING_STEPS } from '@/types/onboarding';
-import { loadOrganizationState, saveOrganizationState } from '@/lib/organization-store';
-import { isCommerceSetupComplete } from '@/lib/commerce-setup';
+import { EMPTY_ORGANIZATION } from '@/types/onboarding';
+import { loadOnboardingState, saveOnboardingState } from '@/lib/organization-store';
+import {
+  CustomerService,
+  ProductService,
+  WarehouseService,
+} from '@pulse-platform/index';
+import {
+  platformCustomerToCommerce,
+  platformProductToCommerce,
+  platformWarehouseToCommerce,
+} from '@/lib/platform-mappers';
+import {
+  createCustomer as createCustomerRecord,
+  createProduct as createProductRecord,
+  createWarehouse as createWarehouseRecord,
+  deleteCustomer as deleteCustomerRecord,
+  deleteProduct as deleteProductRecord,
+  deleteWarehouse as deleteWarehouseRecord,
+  ensureWarehouseClientId,
+  updateCustomer as updateCustomerRecord,
+  updateProduct as updateProductRecord,
+  updateWarehouse as updateWarehouseRecord,
+} from '@/lib/services/platform-master-data.service';
+import { upsertInventory, fetchInventory } from '@/lib/services/products.inventory';
 import {
   getPrimaryOrganizationForUser,
   type PlatformOrganization,
@@ -19,17 +42,22 @@ interface OrganizationContextValue extends OrganizationState {
   platformOrganization: PlatformOrganization | null;
   hasPlatformOrganization: boolean;
   commerceSetupComplete: boolean;
+  masterDataLoading: boolean;
+  masterDataMutating: boolean;
+  refreshMasterData: () => Promise<void>;
   setProfile: (profile: OrganizationProfile) => void;
-  addWarehouse: (warehouse: Warehouse) => void;
-  updateWarehouse: (id: string, patch: Partial<Warehouse>) => void;
-  deleteWarehouse: (id: string) => void;
-  addProduct: (product: Product) => void;
-  updateProduct: (id: string, patch: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
-  setProductStock: (productId: string, stock: number) => void;
-  addCustomer: (customer: Customer) => void;
-  updateCustomer: (id: string, patch: Partial<Customer>) => void;
-  deleteCustomer: (id: string) => void;
+  createWarehouse: (warehouse: Omit<Warehouse, 'id'>) => Promise<Warehouse | null>;
+  updateWarehouse: (id: string, patch: Partial<Warehouse>) => Promise<void>;
+  deleteWarehouse: (id: string) => Promise<void>;
+  createProduct: (product: Omit<Product, 'id' | 'stock' | 'reserved' | 'created_at'>) => Promise<Product | null>;
+  updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  setProductStock: (productId: string, stock: number) => Promise<void>;
+  createCustomer: (
+    customer: Omit<Customer, 'id' | 'total_orders' | 'total_spend' | 'created_at'>,
+  ) => Promise<Customer | null>;
+  updateCustomer: (id: string, patch: Partial<Customer>) => Promise<void>;
+  deleteCustomer: (id: string) => Promise<void>;
   addDriver: (driver: FleetDriver) => void;
   addVehicle: (vehicle: FleetVehicle) => void;
   advanceOnboarding: (step: OnboardingStepId) => void;
@@ -42,16 +70,77 @@ const OrganizationContext = createContext<OrganizationContextValue | undefined>(
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
-  const [state, setState] = useState<OrganizationState>(() => loadOrganizationState());
+  const [state, setState] = useState<OrganizationState>(() => ({
+    ...EMPTY_ORGANIZATION,
+    ...loadOnboardingState(),
+  }));
   const [organizationHydrated, setOrganizationHydrated] = useState(false);
+  const [masterDataLoading, setMasterDataLoading] = useState(false);
+  const [masterDataMutating, setMasterDataMutating] = useState(false);
   const [platformOrganization, setPlatformOrganization] = useState<PlatformOrganization | null>(null);
+  const [commerceSetupComplete, setCommerceSetupComplete] = useState(false);
 
-  const persist = useCallback((updater: (prev: OrganizationState) => OrganizationState) => {
-    setState(prev => {
+  const workspaceId = platformOrganization?.id;
+
+  const persistOnboarding = useCallback((updater: (prev: OrganizationState) => OrganizationState) => {
+    setState((prev) => {
       const next = updater(prev);
-      saveOrganizationState(next);
+      saveOnboardingState({
+        onboardingStep: next.onboardingStep,
+        onboardingDone: next.onboardingDone,
+      });
       return next;
     });
+  }, []);
+
+  const hydrateMasterData = useCallback(async (orgId: string) => {
+    setMasterDataLoading(true);
+    try {
+      const [customers, warehouses, products, inventory] = await Promise.all([
+        CustomerService.list(orgId),
+        WarehouseService.list(orgId),
+        ProductService.list(orgId),
+        fetchInventory(orgId),
+      ]);
+      const inventoryByProduct = new Map(
+        inventory.map((row) => [row.product_id, row]),
+      );
+      setState((prev) => ({
+        ...prev,
+        customers: customers.map(platformCustomerToCommerce),
+        warehouses: warehouses.map(platformWarehouseToCommerce),
+        products: products.map((product) => {
+          const commerce = platformProductToCommerce(product);
+          const stockRow = inventoryByProduct.get(product.id);
+          if (!stockRow) return commerce;
+          return {
+            ...commerce,
+            stock: stockRow.available_qty,
+            reserved: stockRow.reserved_qty,
+            threshold: stockRow.reorder_level,
+          };
+        }),
+      }));
+      setCommerceSetupComplete(
+        customers.length > 0 && warehouses.length > 0 && products.length > 0,
+      );
+    } finally {
+      setMasterDataLoading(false);
+    }
+  }, []);
+
+  const refreshMasterData = useCallback(async () => {
+    if (!workspaceId) return;
+    await hydrateMasterData(workspaceId);
+  }, [hydrateMasterData, workspaceId]);
+
+  const runMutation = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
+    setMasterDataMutating(true);
+    try {
+      return await fn();
+    } finally {
+      setMasterDataMutating(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -67,13 +156,18 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     setOrganizationHydrated(false);
 
     void (async () => {
+      const delayMs = Number(import.meta.env.VITE_OMS_DEV_HYDRATION_DELAY_MS || 0);
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
       const resolvedOrg = await getPrimaryOrganizationForUser(user.id);
       if (cancelled) return;
 
       setPlatformOrganization(resolvedOrg);
 
       if (resolvedOrg) {
-        persist(prev => ({
+        setState((prev) => ({
           ...prev,
           profile: {
             id: resolvedOrg.id,
@@ -82,6 +176,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
             createdAt: prev.profile?.createdAt ?? new Date().toISOString(),
           },
         }));
+        await hydrateMasterData(resolvedOrg.id);
       }
 
       setOrganizationHydrated(true);
@@ -90,88 +185,165 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, persist, user?.id]);
+  }, [authLoading, hydrateMasterData, user?.id]);
 
   const setProfile = useCallback((profile: OrganizationProfile) => {
-    persist(prev => ({ ...prev, profile, onboardingStep: 'warehouse' }));
-  }, [persist]);
+    persistOnboarding((prev) => ({ ...prev, profile, onboardingStep: 'warehouse' }));
+  }, [persistOnboarding]);
 
-  const addWarehouse = useCallback((warehouse: Warehouse) => {
-    persist(prev => ({
-      ...prev,
-      warehouses: [...prev.warehouses, warehouse],
-      onboardingStep: prev.products.length ? prev.onboardingStep : 'products',
-    }));
-  }, [persist]);
+  const createWarehouse = useCallback(async (warehouse: Omit<Warehouse, 'id'>): Promise<Warehouse | null> => {
+    if (!workspaceId) return null;
+    return runMutation(async () => {
+      const clientId = await ensureWarehouseClientId(
+        workspaceId,
+        state.customers,
+        state.profile?.name ?? 'Workspace',
+      );
+      const created = await createWarehouseRecord(workspaceId, clientId, {
+        name: warehouse.name,
+        address: warehouse.address.line1,
+        city: warehouse.address.city,
+        state: warehouse.address.state,
+        pincode: warehouse.address.pincode,
+        latitude: warehouse.address.lat,
+        longitude: warehouse.address.lng,
+        capacity_tons: warehouse.capacity_m3 / 1.2,
+        warehouse_code: warehouse.code,
+      });
+      await refreshMasterData();
+      persistOnboarding((prev) => ({
+        ...prev,
+        onboardingStep: prev.products.length ? prev.onboardingStep : 'products',
+      }));
+      return created;
+    });
+  }, [workspaceId, runMutation, state.customers, state.profile?.name, refreshMasterData, persistOnboarding]);
 
-  const updateWarehouse = useCallback((id: string, patch: Partial<Warehouse>) => {
-    persist(prev => ({
-      ...prev,
-      warehouses: prev.warehouses.map(w => w.id === id ? { ...w, ...patch } : w),
-    }));
-  }, [persist]);
+  const updateWarehouse = useCallback(async (id: string, patch: Partial<Warehouse>) => {
+    if (!workspaceId) return;
+    await runMutation(async () => {
+      await updateWarehouseRecord(workspaceId, id, patch);
+      await refreshMasterData();
+    });
+  }, [workspaceId, runMutation, refreshMasterData]);
 
-  const deleteWarehouse = useCallback((id: string) => {
-    persist(prev => ({ ...prev, warehouses: prev.warehouses.filter(w => w.id !== id) }));
-  }, [persist]);
+  const deleteWarehouse = useCallback(async (id: string) => {
+    if (!workspaceId) return;
+    await runMutation(async () => {
+      await deleteWarehouseRecord(workspaceId, id);
+      await refreshMasterData();
+    });
+  }, [workspaceId, runMutation, refreshMasterData]);
 
-  const addProduct = useCallback((product: Product) => {
-    persist(prev => ({ ...prev, products: [...prev.products, product], onboardingStep: 'inventory' }));
-  }, [persist]);
+  const createProduct = useCallback(async (
+    product: Omit<Product, 'id' | 'stock' | 'reserved' | 'created_at'>,
+  ): Promise<Product | null> => {
+    if (!workspaceId) return null;
+    return runMutation(async () => {
+      const created = await createProductRecord(workspaceId, product);
+      await refreshMasterData();
+      persistOnboarding((prev) => ({ ...prev, onboardingStep: 'inventory' }));
+      return created;
+    });
+  }, [workspaceId, runMutation, refreshMasterData, persistOnboarding]);
 
-  const updateProduct = useCallback((id: string, patch: Partial<Product>) => {
-    persist(prev => ({
-      ...prev,
-      products: prev.products.map(p => p.id === id ? { ...p, ...patch } : p),
-    }));
-  }, [persist]);
+  const updateProduct = useCallback(async (id: string, patch: Partial<Product>) => {
+    if (!workspaceId) return;
+    await runMutation(async () => {
+      const { stock, reserved, threshold, ...catalogPatch } = patch;
+      if (Object.keys(catalogPatch).length > 0) {
+        await updateProductRecord(workspaceId, id, catalogPatch);
+      }
+      const warehouseId = state.warehouses[0]?.id;
+      if (warehouseId && (stock !== undefined || reserved !== undefined || threshold !== undefined)) {
+        await upsertInventory(workspaceId, id, warehouseId, {
+          available_qty: stock,
+          reserved_qty: reserved,
+          reorder_level: threshold,
+        });
+      }
+      await refreshMasterData();
+    });
+  }, [workspaceId, state.warehouses, runMutation, refreshMasterData]);
 
-  const deleteProduct = useCallback((id: string) => {
-    persist(prev => ({ ...prev, products: prev.products.filter(p => p.id !== id) }));
-  }, [persist]);
+  const deleteProduct = useCallback(async (id: string) => {
+    if (!workspaceId) return;
+    await runMutation(async () => {
+      await deleteProductRecord(workspaceId, id);
+      await refreshMasterData();
+    });
+  }, [workspaceId, runMutation, refreshMasterData]);
 
-  const setProductStock = useCallback((productId: string, stock: number) => {
-    persist(prev => ({
-      ...prev,
-      products: prev.products.map(p => p.id === productId ? { ...p, stock } : p),
-      onboardingStep: prev.customers.length ? prev.onboardingStep : 'customer',
-    }));
-  }, [persist]);
+  const setProductStock = useCallback(async (productId: string, stock: number) => {
+    if (!workspaceId) return;
+    const warehouseId = state.warehouses[0]?.id;
+    await runMutation(async () => {
+      if (warehouseId) {
+        await upsertInventory(workspaceId, productId, warehouseId, { available_qty: stock });
+      }
+      await refreshMasterData();
+      persistOnboarding((prev) => ({
+        ...prev,
+        onboardingStep: prev.customers.length ? prev.onboardingStep : 'customer',
+      }));
+    });
+  }, [workspaceId, state.warehouses, runMutation, refreshMasterData, persistOnboarding]);
 
-  const addCustomer = useCallback((customer: Customer) => {
-    persist(prev => ({ ...prev, customers: [...prev.customers, customer], onboardingStep: 'first_order' }));
-  }, [persist]);
+  const createCustomer = useCallback(async (
+    customer: Omit<Customer, 'id' | 'total_orders' | 'total_spend' | 'created_at'>,
+  ): Promise<Customer | null> => {
+    if (!workspaceId) return null;
+    return runMutation(async () => {
+      const address = customer.shipping_address;
+      const created = await createCustomerRecord(workspaceId, {
+        name: customer.legal_name ?? customer.name,
+        phone: customer.phone || '9000000000',
+        email: customer.email,
+        gstin: customer.gstin,
+        trade_name: customer.company ?? customer.legal_name,
+        address: [address.line1, address.city, address.state, address.pincode].filter(Boolean).join(', '),
+        state: address.state,
+      });
+      await refreshMasterData();
+      persistOnboarding((prev) => ({ ...prev, onboardingStep: 'first_order' }));
+      return created;
+    });
+  }, [workspaceId, runMutation, refreshMasterData, persistOnboarding]);
 
-  const updateCustomer = useCallback((id: string, patch: Partial<Customer>) => {
-    persist(prev => ({
-      ...prev,
-      customers: prev.customers.map(c => c.id === id ? { ...c, ...patch } : c),
-    }));
-  }, [persist]);
+  const updateCustomer = useCallback(async (id: string, patch: Partial<Customer>) => {
+    if (!workspaceId) return;
+    await runMutation(async () => {
+      await updateCustomerRecord(workspaceId, id, patch);
+      await refreshMasterData();
+    });
+  }, [workspaceId, runMutation, refreshMasterData]);
 
-  const deleteCustomer = useCallback((id: string) => {
-    persist(prev => ({ ...prev, customers: prev.customers.filter(c => c.id !== id) }));
-  }, [persist]);
+  const deleteCustomer = useCallback(async (id: string) => {
+    if (!workspaceId) return;
+    await runMutation(async () => {
+      await deleteCustomerRecord(workspaceId, id);
+      await refreshMasterData();
+    });
+  }, [workspaceId, runMutation, refreshMasterData]);
 
   const addDriver = useCallback((driver: FleetDriver) => {
-    persist(prev => ({ ...prev, drivers: [...prev.drivers, driver] }));
-  }, [persist]);
+    setState((prev) => ({ ...prev, drivers: [...prev.drivers, driver] }));
+  }, []);
 
   const addVehicle = useCallback((vehicle: FleetVehicle) => {
-    persist(prev => ({ ...prev, vehicles: [...prev.vehicles, vehicle] }));
-  }, [persist]);
+    setState((prev) => ({ ...prev, vehicles: [...prev.vehicles, vehicle] }));
+  }, []);
 
   const advanceOnboarding = useCallback((step: OnboardingStepId) => {
-    persist(prev => ({ ...prev, onboardingStep: step }));
-  }, [persist]);
+    persistOnboarding((prev) => ({ ...prev, onboardingStep: step }));
+  }, [persistOnboarding]);
 
   const completeOnboarding = useCallback(() => {
-    persist(prev => ({ ...prev, onboardingDone: true, onboardingStep: 'complete' }));
-  }, [persist]);
+    persistOnboarding((prev) => ({ ...prev, onboardingDone: true, onboardingStep: 'complete' }));
+  }, [persistOnboarding]);
 
-  const currentStepIndex = ONBOARDING_STEPS.findIndex(s => s.id === state.onboardingStep);
+  const currentStepIndex = ONBOARDING_STEPS.findIndex((s) => s.id === state.onboardingStep);
   const hasPlatformOrganization = platformOrganization != null;
-  const commerceSetupComplete = isCommerceSetupComplete(state);
   const canAccessCommerce = hasPlatformOrganization;
 
   const value = useMemo(() => ({
@@ -180,15 +352,18 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     platformOrganization,
     hasPlatformOrganization,
     commerceSetupComplete,
+    masterDataLoading,
+    masterDataMutating,
+    refreshMasterData,
     setProfile,
-    addWarehouse,
+    createWarehouse,
     updateWarehouse,
     deleteWarehouse,
-    addProduct,
+    createProduct,
     updateProduct,
     deleteProduct,
     setProductStock,
-    addCustomer,
+    createCustomer,
     updateCustomer,
     deleteCustomer,
     addDriver,
@@ -199,9 +374,10 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     canAccessCommerce,
   }), [
     state, organizationHydrated, platformOrganization, hasPlatformOrganization, commerceSetupComplete,
-    setProfile, addWarehouse, updateWarehouse, deleteWarehouse,
-    addProduct, updateProduct, deleteProduct, setProductStock,
-    addCustomer, updateCustomer, deleteCustomer, addDriver, addVehicle, advanceOnboarding, completeOnboarding,
+    masterDataLoading, masterDataMutating, refreshMasterData,
+    setProfile, createWarehouse, updateWarehouse, deleteWarehouse,
+    createProduct, updateProduct, deleteProduct, setProductStock,
+    createCustomer, updateCustomer, deleteCustomer, addDriver, addVehicle, advanceOnboarding, completeOnboarding,
     currentStepIndex, canAccessCommerce,
   ]);
 

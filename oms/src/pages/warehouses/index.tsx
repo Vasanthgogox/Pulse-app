@@ -8,7 +8,6 @@ import { FormField } from '@/components/commerce/FormField';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useCommerce } from '@/context/CommerceProvider';
 import { useOrganization } from '@/context/OrganizationProvider';
-import type { Warehouse } from '@/types/commerce';
 
 function CreateWarehouseSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const org = useOrganization();
@@ -17,19 +16,23 @@ function CreateWarehouseSheet({ open, onClose }: { open: boolean; onClose: () =>
   const [state, setState] = useState('');
   const [pincode, setPincode] = useState('');
   const [capacity, setCapacity] = useState('1000');
+  const [saving, setSaving] = useState(false);
 
-  function handleSubmit() {
-    if (!name.trim() || !city.trim()) return;
-    const wh: Warehouse = {
-      id:          `WH-${Date.now()}`,
-      name:        name.trim(),
-      code:        name.trim().slice(0, 6).toUpperCase().replace(/\s+/g, ''),
-      address:     { line1: name.trim(), city: city.trim(), state: state.trim(), pincode: pincode.trim() },
-      capacity_m3: parseFloat(capacity) || 1000,
-    };
-    org.addWarehouse(wh);
-    setName(''); setCity(''); setState(''); setPincode(''); setCapacity('1000');
-    onClose();
+  async function handleSubmit() {
+    if (!name.trim() || !city.trim() || saving) return;
+    setSaving(true);
+    try {
+      await org.createWarehouse({
+        name:        name.trim(),
+        code:        name.trim().slice(0, 6).toUpperCase().replace(/\s+/g, ''),
+        address:     { line1: name.trim(), city: city.trim(), state: state.trim(), pincode: pincode.trim() },
+        capacity_m3: parseFloat(capacity) || 1000,
+      });
+      setName(''); setCity(''); setState(''); setPincode(''); setCapacity('1000');
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -44,8 +47,8 @@ function CreateWarehouseSheet({ open, onClose }: { open: boolean; onClose: () =>
             <FormField label="Pincode" value={pincode} onChange={setPincode} placeholder="400001" />
           </div>
           <FormField label="Capacity (m³)" value={capacity} onChange={setCapacity} placeholder="1000" type="number" />
-          <Button className="w-full mt-2" disabled={!name.trim() || !city.trim()} onClick={handleSubmit}>
-            Add warehouse
+          <Button className="w-full mt-2" disabled={!name.trim() || !city.trim() || saving} onClick={() => void handleSubmit()}>
+            {saving ? 'Saving…' : 'Add warehouse'}
           </Button>
         </div>
       </SheetContent>

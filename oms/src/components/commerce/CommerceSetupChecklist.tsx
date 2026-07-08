@@ -1,14 +1,20 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, Circle } from 'lucide-react';
 import { COMMERCE_SETUP_STEPS } from '@/lib/commerce-setup';
+import { useCommerceReadiness } from '@/hooks/useCommerceReadiness';
 import { useOrganization } from '@/context/OrganizationProvider';
 import { cn } from '@/lib/utils';
 
 /** In-dashboard Commerce configuration guide — not platform org onboarding. */
 export function CommerceSetupChecklist() {
   const org = useOrganization();
+  const { readiness } = useCommerceReadiness();
 
-  if (!org.hasPlatformOrganization || org.commerceSetupComplete) {
+  if (!org.hasPlatformOrganization) {
+    return null;
+  }
+
+  if (readiness?.setupComplete ?? org.commerceSetupComplete) {
     return null;
   }
 

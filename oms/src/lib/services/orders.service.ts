@@ -102,7 +102,7 @@ const ORDER_SELECT = `
   customer:clients!customer_id(id,name,legal_name,trade_name,email),
   pickup_warehouse:client_warehouses!pickup_warehouse_id(id,name,address,city,state,pincode,latitude,longitude),
   drop_warehouse:client_warehouses!drop_warehouse_id(id,name,address,city,state,pincode,latitude,longitude),
-  lines:sales_order_lines(id,product_id,quantity,allocated_quantity,unit_price,tax_rate,line_total,weight_kg,volume_m3,product:commerce_products!product_id(id,name,sku))
+  lines:sales_order_lines(id,product_id,quantity,allocated_quantity,unit_price,tax_rate,line_total,weight_kg,volume_m3,product:products!product_id(id,name,sku))
 `.trim();
 
 export async function fetchOrders(organizationId: string): Promise<Order[]> {

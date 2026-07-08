@@ -6,11 +6,14 @@ export const PULSE_BRAND_MARK_WORD = 'pulse';
 /** Product wordmarks — same typography, yellow dot on period. */
 export const PULSE_CORE_BRAND_WORD = 'pulsecore';
 export const PULSE_PILOT_BRAND_WORD = 'pulsepilot';
+export const PULSE_COMMERCE_BRAND_WORD = 'pulsecommerce';
 
-export type PulseProductBrandId = 'core' | 'pilot';
+export type PulseProductBrandId = 'core' | 'pilot' | 'commerce';
 
 export function pulseProductBrandWord(productId: PulseProductBrandId): string {
-  return productId === 'pilot' ? PULSE_PILOT_BRAND_WORD : PULSE_CORE_BRAND_WORD;
+  if (productId === 'pilot') return PULSE_PILOT_BRAND_WORD;
+  if (productId === 'commerce') return PULSE_COMMERCE_BRAND_WORD;
+  return PULSE_CORE_BRAND_WORD;
 }
 
 export const PULSE_BRAND_MARK_TYPO = {

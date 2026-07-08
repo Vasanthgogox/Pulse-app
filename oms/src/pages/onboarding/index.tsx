@@ -9,7 +9,6 @@ import {
   useOrganization,
 } from '@/context/OrganizationProvider';
 import { ONBOARDING_STEPS } from '@/types/onboarding';
-import type { Customer, Product, Warehouse } from '@/types/commerce';
 import { cn } from '@/lib/utils';
 
 function OnboardingLoading() {
@@ -91,19 +90,17 @@ export function OnboardingPage() {
           <Field label="City" value={whCity} onChange={setWhCity} placeholder="Mumbai" />
           <Button
             className="w-full mt-4"
-            disabled={!whName.trim() || !whCity.trim()}
+            disabled={!whName.trim() || !whCity.trim() || org.masterDataMutating}
             onClick={() => {
-              const wh: Warehouse = {
-                id: `WH-${Date.now()}`,
+              void org.createWarehouse({
                 name: whName.trim(),
                 code: whName.trim().slice(0, 6).toUpperCase(),
                 address: { line1: whName, city: whCity.trim(), state: '', pincode: '' },
                 capacity_m3: 1000,
-              };
-              org.addWarehouse(wh);
+              });
             }}
           >
-            Add warehouse
+            {org.masterDataMutating ? 'Saving…' : 'Add warehouse'}
           </Button>
         </WizardCard>
       )}
@@ -114,10 +111,9 @@ export function OnboardingPage() {
           <Field label="SKU" value={productSku} onChange={setProductSku} placeholder="WDG-001" />
           <Button
             className="w-full mt-4"
-            disabled={!productName.trim() || !productSku.trim()}
+            disabled={!productName.trim() || !productSku.trim() || org.masterDataMutating}
             onClick={() => {
-              const p: Product = {
-                id: `P-${Date.now()}`,
+              void org.createProduct({
                 sku: productSku.trim(),
                 name: productName.trim(),
                 category: 'Industrial',
@@ -126,15 +122,11 @@ export function OnboardingPage() {
                 weight_kg: 1,
                 volume_m3: 0.01,
                 dimensions: { l: 10, w: 10, h: 10 },
-                stock: 0,
-                reserved: 0,
                 threshold: 10,
-                created_at: new Date().toISOString().slice(0, 10),
-              };
-              org.addProduct(p);
+              });
             }}
           >
-            Add product
+            {org.masterDataMutating ? 'Saving…' : 'Add product'}
           </Button>
         </WizardCard>
       )}
@@ -144,11 +136,12 @@ export function OnboardingPage() {
           <Field label="Quantity on hand" value={stockQty} onChange={setStockQty} placeholder="100" />
           <Button
             className="w-full mt-4"
+            disabled={org.masterDataMutating}
             onClick={() => {
-              org.setProductStock(org.products[0].id, Number(stockQty) || 0);
+              void org.setProductStock(org.products[0].id, Number(stockQty) || 0);
             }}
           >
-            Save inventory
+            {org.masterDataMutating ? 'Saving…' : 'Save inventory'}
           </Button>
         </WizardCard>
       )}
@@ -159,10 +152,9 @@ export function OnboardingPage() {
           <Field label="Email" value={custEmail} onChange={setCustEmail} placeholder="orders@partner.com" />
           <Button
             className="w-full mt-4"
-            disabled={!custName.trim() || !custEmail.trim()}
+            disabled={!custName.trim() || !custEmail.trim() || org.masterDataMutating}
             onClick={() => {
-              const c: Customer = {
-                id: `C-${Date.now()}`,
+              void org.createCustomer({
                 name: custName.trim(),
                 email: custEmail.trim(),
                 phone: '',
@@ -171,14 +163,10 @@ export function OnboardingPage() {
                 company: custName.trim(),
                 billing_address: { line1: '', city: org.warehouses[0]?.address.city ?? '', state: '', pincode: '' },
                 shipping_address: { line1: '', city: org.warehouses[0]?.address.city ?? '', state: '', pincode: '' },
-                total_orders: 0,
-                total_spend: 0,
-                created_at: new Date().toISOString().slice(0, 10),
-              };
-              org.addCustomer(c);
+              });
             }}
           >
-            Add consignee
+            {org.masterDataMutating ? 'Saving…' : 'Add consignee'}
           </Button>
         </WizardCard>
       )}

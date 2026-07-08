@@ -378,9 +378,17 @@ body {
   flex-shrink: 0;
 }
 
+.oms-app .wrapper {
+  width: 100%;
+  min-width: 0;
+}
+
+.oms-app main[role='content'] {
+  width: 100%;
+}
+
 .container-fluid {
   width: 100%;
-  max-width: 1280px;
   margin-inline: auto;
   padding-inline: 0.875rem;
 }

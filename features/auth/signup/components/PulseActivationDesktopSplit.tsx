@@ -8,20 +8,29 @@ import { PulseActivationMarketingPanel } from './PulseActivationMarketingPanel';
 
 export type PulseActivationDesktopSplitProps = {
   children: ReactNode;
+  brandWord?: string;
   marketingTag?: string;
   marketingTitle?: string;
+  outcomeLines?: readonly string[];
 };
 
 /** Full-viewport desktop split — illustration left, activation flow right. */
 export function PulseActivationDesktopSplit({
   children,
+  brandWord,
   marketingTag,
   marketingTitle,
+  outcomeLines,
 }: PulseActivationDesktopSplitProps) {
   return (
     <View style={styles.shell}>
       <View style={styles.leftCol}>
-        <PulseActivationMarketingPanel tag={marketingTag} title={marketingTitle} />
+        <PulseActivationMarketingPanel
+          brandWord={brandWord}
+          tag={marketingTag}
+          title={marketingTitle}
+          outcomeLines={outcomeLines}
+        />
       </View>
 
       <View style={styles.divider} />

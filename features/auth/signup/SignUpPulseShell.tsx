@@ -38,10 +38,13 @@ export interface SignUpPulseShellProps {
   hideProgress?: boolean;
   isDesktop?: boolean;
   theme?: SignUpShellTheme;
+  /** Override header wordmark (suite products). */
+  brandWord?: string;
   children: ReactNode;
   /** Left marketing panel copy (desktop split layout). */
   marketingTag?: string;
   marketingTitle?: string;
+  marketingOutcomeLines?: readonly string[];
 }
 
 export const SignUpPulseShell = memo(function SignUpPulseShell({
@@ -52,9 +55,11 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
   hideProgress = false,
   isDesktop = false,
   theme = PULSE_SIGNUP,
+  brandWord: brandWordProp,
   children,
   marketingTag,
   marketingTitle,
+  marketingOutcomeLines,
 }: SignUpPulseShellProps) {
   const insets = useSafeAreaInsets();
   const stepIndex = Math.min(Math.max(currentStepIndex, 0), stepLabels.length - 1);
@@ -70,7 +75,9 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
     progressScrollRef.current?.scrollTo({ x, animated: true });
   }, [stepIndex, useScrollableProgress]);
 
-  const brandWord = theme === DRIVER_SIGNUP ? PULSE_PILOT_BRAND_WORD : PULSE_CORE_BRAND_WORD;
+  const brandWord =
+    brandWordProp ??
+    (theme === DRIVER_SIGNUP ? PULSE_PILOT_BRAND_WORD : PULSE_CORE_BRAND_WORD);
 
   const device = (
     <View
@@ -176,8 +183,10 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
         ]}
       >
         <PulseActivationDesktopSplit
+          brandWord={brandWord}
           marketingTag={marketingTag}
           marketingTitle={marketingTitle}
+          outcomeLines={marketingOutcomeLines}
         >
           {device}
         </PulseActivationDesktopSplit>

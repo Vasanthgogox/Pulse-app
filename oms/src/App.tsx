@@ -15,6 +15,7 @@ import { ProductsPage } from '@/pages/products';
 import { CustomersPage } from '@/pages/customers';
 import { WarehousesPage } from '@/pages/warehouses';
 import { SettingsPage } from '@/pages/settings';
+import { ProfilePage } from '@/pages/profile';
 import { ObservatoryPage } from '@/pages/observatory';
 import { OnboardingPage } from '@/pages/onboarding';
 import { ExecutionDashboardPage } from '@/pages/execution';
@@ -55,6 +56,7 @@ export default function App() {
                 <Route path="/customers" element={<CustomersPage />} />
                 <Route path="/warehouses" element={<WarehousesPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/observatory" element={<ObservatoryPage />} />
                 <Route path="/execution" element={<ExecutionDashboardPage />} />
                 <Route path="/execution/dispatch/:jobId" element={<DispatchPage />} />

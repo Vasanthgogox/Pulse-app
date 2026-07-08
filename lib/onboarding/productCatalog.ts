@@ -1,8 +1,13 @@
 import { ROUTES } from '@/lib/routes';
-import { PULSE_CORE_BRAND_WORD, PULSE_PILOT_BRAND_WORD } from '@/lib/brand/pulseBrandMark.tokens';
+import {
+  PULSE_COMMERCE_BRAND_WORD,
+  PULSE_CORE_BRAND_WORD,
+  PULSE_PILOT_BRAND_WORD,
+} from '@/lib/brand/pulseBrandMark.tokens';
+import { buildSuiteSignInHref } from '@/lib/suite/suiteAuth';
 
 /** Active Pulse products — first-class software offerings. */
-export type PulseProductId = 'core' | 'pilot';
+export type PulseProductId = 'core' | 'pilot' | 'commerce';
 
 export type PulseProduct = {
   id: PulseProductId;
@@ -43,10 +48,17 @@ export const PULSE_PRODUCTS: readonly PulseProduct[] = [
     features: 'Trips • Navigation • Earnings',
     route: ROUTES.ONBOARDING.DRIVER,
   },
+  {
+    id: 'commerce',
+    brandWord: PULSE_COMMERCE_BRAND_WORD,
+    name: 'Pulse Commerce',
+    tagline: 'Catalog & order management',
+    features: 'Products • Orders • Warehouses',
+    route: buildSuiteSignInHref({ productId: 'commerce' }),
+  },
 ] as const;
 
 export const PULSE_PRODUCTS_COMING_SOON: readonly PulseProductPreview[] = [
-  { id: 'commerce', name: 'Pulse Commerce' },
   { id: 'pod', name: 'Pulse Pod' },
   { id: 'invoice', name: 'Pulse Invoice' },
 ] as const;

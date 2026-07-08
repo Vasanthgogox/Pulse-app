@@ -15,3 +15,9 @@ export function buildPlatformSignUpUrl(returnTo: string): string {
   });
   return `/sign-up?${params.toString()}`;
 }
+
+/** Navigate to Pulse Core on the shared origin. */
+export function buildPulseCoreUrl(path = '/'): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return normalized;
+}

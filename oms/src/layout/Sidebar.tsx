@@ -3,14 +3,21 @@ import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useLayout } from './LayoutContext';
 import { SidebarMenu } from './SidebarMenu';
+import { SidebarAccount } from './SidebarAccount';
 
-export function Sidebar() {
+interface SidebarProps {
+  variant?: 'desktop' | 'drawer';
+}
+
+export function Sidebar({ variant = 'desktop' }: SidebarProps) {
   const { sidebarCollapse, setSidebarCollapse } = useLayout();
+  const isDrawer = variant === 'drawer';
 
   return (
     <aside
       className={cn(
-        'sidebar pulse-sidebar border-e border-border fixed top-0 bottom-0 z-20 hidden lg:flex flex-col shrink-0 overflow-hidden',
+        'sidebar pulse-sidebar border-e border-border flex flex-col shrink-0 overflow-hidden bg-[var(--pulse-sidebar)]',
+        isDrawer ? 'relative w-full h-full z-0' : 'fixed top-0 bottom-0 z-20 hidden lg:flex',
       )}
     >
       {/* Logo Header */}
@@ -30,7 +37,8 @@ export function Sidebar() {
           onClick={() => setSidebarCollapse(!sidebarCollapse)}
           className={cn(
             'size-7 flex items-center justify-center rounded-md border border-border hover:bg-accent text-muted-foreground transition-transform',
-            sidebarCollapse && 'rotate-180'
+            sidebarCollapse && 'rotate-180',
+            isDrawer && 'hidden',
           )}
         >
           <ChevronFirst className="size-3.5" />
@@ -46,15 +54,7 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="shrink-0 border-t border-border px-4 py-3">
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="size-7 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
-            VA
-          </div>
-          <div className="default-logo overflow-hidden">
-            <p className="text-xs font-semibold text-foreground truncate">Vasanth Admin</p>
-            <p className="text-[10px] text-muted-foreground truncate">vasanth@gogox.com</p>
-          </div>
-        </div>
+        <SidebarAccount />
       </div>
     </aside>
   );

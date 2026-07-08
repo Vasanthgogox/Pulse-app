@@ -60,3 +60,51 @@ Two independently-frozen "Architecture v1.0" documents existed simultaneously: `
 2. `oms/docs/PLATFORM_PRINCIPLES.md`'s "Workspaces (customer mental model)" table is renamed "Products (customer mental model)" — Pulse Commerce/Finance/Operations/Execution/Network/Intelligence/Admin are Products, not Workspaces.
 3. Existing platform infrastructure (`packages/contracts`, the `platform.*` Postgres schema and its migrations `202611060001`–`005`, the Sprint 1–5 roadmap in `oms/docs/ROADMAP.md`) is **reused and extended, not replaced** — see `docs/architecture/platform/00-platform-reconciliation.md` for the full asset-by-asset disposition. Shared Services (`docs/architecture/platform/11-shared-services.md`) sit parallel to Products under Platform, not beneath them — products consume Shared Services, they don't own or sit above them.
 **Reason:** Business vocabulary must be stable regardless of implementation progress or which team/document arrived first. The Workspace/Workspace collision was a language conflict, not a technical one, and left unresolved it would cause architecture drift as more engineers read one document or the other. Keeping the new definition (Workspace = tenant boundary) matches established SaaS platform convention; renaming the OMS side was lower-cost than renaming a concept already consistent with industry norms.
+
+## Shared platform master data — Core and Commerce (ADR-006)
+Core and Commerce are **two applications over the same Pulse Platform**, not two apps that sync copies of each other's data. Master data is **owned by the workspace** and accessed through **platform services** — products never own duplicate tables or localStorage copies.
+
+**Principle:** Workspace owns business data. Platform services own data access. Products own workflows.
+
+**Layering:**
+```
+Core UI / Commerce UI
+        │
+ CustomerService (WarehouseService, ProductService)
+        │
+   customerRepository
+        │
+      clients
+```
+Core keeps `features/clients/services/clients.service.ts` as a **compatibility adapter** that delegates CRUD to `CustomerService` — minimize UI churn; remove adapter when imports migrate.
+
+**Ownership:**
+
+| Layer | Owns |
+|-------|------|
+| **Platform** | Customers (`clients`), Warehouses (`client_warehouses`), **Products** (`products` — shared catalog), Contacts, Addresses |
+| **Commerce** | Sales orders, quotes, invoices, inventory (`commerce_inventory`), pricing, fulfillment workflow |
+| **Core** | Trips, drivers, vehicles, indents, tracking, load board |
+
+Products are **platform-owned catalog**, not Commerce-owned — reusable across Warehouse, CRM, Procurement, Analytics, and Core cargo references. Cross-product links use IDs only (`order_id`, `indent_id`, `trip_id`).
+
+**Platform layer:** `lib/platform/{db,repositories,services,events,orchestration,types}/` — Core and Commerce configure via `configurePlatformDb()`. Services perform single-domain CRUD; orchestration (Phase 3) coordinates cross-product workflows (`publishIndent`, domain events).
+
+**Commerce workflow data** (sales_orders, commerce_inventory, execution_plans) remains Commerce-scoped until event pipeline links orders → indents.
+
+**Reason:** Every Commerce-local master data entity increases migration cost and causes Core/Commerce drift. Platform services allow future Gateway/cache swaps without touching product UIs.
+
+## Platform master-data deletion semantics (ADR-007, backlog)
+
+**Current state (acceptable for Phase 2–3):**
+
+| Entity | Delete mechanism | Active filter |
+|--------|------------------|---------------|
+| Customer (`clients`) | `status = 'inactive'` | `status = 'active'` |
+| Warehouse (`client_warehouses`) | `deleted_at` | `deleted_at IS NULL` |
+| Product (`products`) | `deleted_at` + `status = 'archived'` | `deleted_at IS NULL` |
+
+**Decision:** Deletion semantics may diverge short-term. Platform deletion should **converge over time** — whether the eventual model is `deleted_at`, `status`, or status + lifecycle timestamps is TBD. This does **not** block orchestration (Phase 3).
+
+**Backlog:** Unify soft-delete representation across `CustomerService`, `WarehouseService`, and `ProductService` when schema migration is scheduled.
+
