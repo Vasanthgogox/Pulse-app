@@ -44,6 +44,7 @@ interface OrganizationContextValue extends OrganizationState {
   commerceSetupComplete: boolean;
   masterDataLoading: boolean;
   masterDataMutating: boolean;
+  masterDataError: string | null;
   refreshMasterData: () => Promise<void>;
   setProfile: (profile: OrganizationProfile) => void;
   createWarehouse: (warehouse: Omit<Warehouse, 'id'>) => Promise<Warehouse | null>;
@@ -79,6 +80,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [masterDataMutating, setMasterDataMutating] = useState(false);
   const [platformOrganization, setPlatformOrganization] = useState<PlatformOrganization | null>(null);
   const [commerceSetupComplete, setCommerceSetupComplete] = useState(false);
+  const [masterDataError, setMasterDataError] = useState<string | null>(null);
 
   const workspaceId = platformOrganization?.id;
 
@@ -95,6 +97,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
   const hydrateMasterData = useCallback(async (orgId: string) => {
     setMasterDataLoading(true);
+    setMasterDataError(null);
     try {
       const [customers, warehouses, products, inventory] = await Promise.all([
         CustomerService.list(orgId),
@@ -124,6 +127,10 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       setCommerceSetupComplete(
         customers.length > 0 && warehouses.length > 0 && products.length > 0,
       );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to load workspace master data';
+      setMasterDataError(message);
+      throw e;
     } finally {
       setMasterDataLoading(false);
     }
@@ -176,7 +183,11 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
             createdAt: prev.profile?.createdAt ?? new Date().toISOString(),
           },
         }));
-        await hydrateMasterData(resolvedOrg.id);
+        try {
+          await hydrateMasterData(resolvedOrg.id);
+        } catch {
+          // Error surfaced via masterDataError; still unblock the shell.
+        }
       }
 
       setOrganizationHydrated(true);
@@ -354,6 +365,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     commerceSetupComplete,
     masterDataLoading,
     masterDataMutating,
+    masterDataError,
     refreshMasterData,
     setProfile,
     createWarehouse,
@@ -374,7 +386,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     canAccessCommerce,
   }), [
     state, organizationHydrated, platformOrganization, hasPlatformOrganization, commerceSetupComplete,
-    masterDataLoading, masterDataMutating, refreshMasterData,
+    masterDataLoading, masterDataMutating, masterDataError, refreshMasterData,
     setProfile, createWarehouse, updateWarehouse, deleteWarehouse,
     createProduct, updateProduct, deleteProduct, setProductStock,
     createCustomer, updateCustomer, deleteCustomer, addDriver, addVehicle, advanceOnboarding, completeOnboarding,

@@ -17,6 +17,7 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { WorkspacePanelId } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { ROUTES } from "@/lib/routes";
+import { buildPulseCommerceUrl, openSuiteProductApp } from "@/lib/suite/suiteAuth";
 import {
   Building2,
   ChevronRight,
@@ -27,6 +28,7 @@ import {
   Settings2,
   Shield,
   Sparkles,
+  Store,
   Users,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -366,6 +368,17 @@ export function WorkspaceAccountPanel({
           </View>
         </View>
       </View>
+
+      {(onOpenPanel || onOpenRoute) ? (
+        <View style={styles.card}>
+          <SectionHeader label="Suite products" />
+          <ManagementRow
+            label="Switch to Pulse Commerce"
+            icon={<Store size={15} color={PURPLE} strokeWidth={1.8} />}
+            onPress={() => openSuiteProductApp(buildPulseCommerceUrl())}
+          />
+        </View>
+      ) : null}
 
       {(onOpenPanel || onOpenRoute) ? (
         <View style={styles.card}>

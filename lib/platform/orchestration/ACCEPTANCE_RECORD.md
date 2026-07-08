@@ -1,8 +1,52 @@
 # ExecutionOrchestrator v1 — Integration Acceptance Record
 
+> **Release artifact.** When signed, this file is the canonical reference for **Execution v1.0** — commit, migration state, environment, workspace, organization, tester, and results must be complete enough that any teammate can reproduce what was accepted.
+
 > **Freeze policy:** Do **not** freeze on unit tests or green builds alone.
 > Freeze **only** after one **completed** acceptance record from a **linked database** live publish.
-> This document becomes the reference artifact once signed off.
+
+## Project phase
+
+| Phase | Exit criterion | Status |
+|-------|----------------|--------|
+| Architecture | Defined and frozen for v1 | **Complete** |
+| Validation | One successful end-to-end acceptance on linked DB | **In progress** |
+| Product evolution | Versioned capabilities on accepted baseline | After sign-off |
+
+**Prioritization filter (until signed):** Does this help complete or validate the live acceptance run? If no → backlog.
+
+### Do now
+
+1. Populate shared master data (customer, warehouse, product)
+2. Create a real sales order
+3. Execute `publishIndent`
+4. Complete all acceptance checks (13 + four signals)
+5. Sign this record
+6. Tag commit (e.g. `execution-orchestrator-v1`)
+7. Update [`LIFECYCLE.md`](./LIFECYCLE.md) — `publishIndent()` → **Accepted**
+
+### Backlog (after acceptance)
+
+Business Object Registry · Finance orchestration · Marketplace · additional event infrastructure · `assignVehicle`, `assignDriver`, … (each: contract → implementation → verification → acceptance → freeze → version increment)
+
+## V1 completion (three outcomes)
+
+| # | Outcome | Proven by |
+|---|---------|-----------|
+| **1 — Shared workspace** | Customer + warehouse created once; visible in Commerce and Core; no sync; no duplicates | Stages 1–2 |
+| **2 — Cross-product execution** | One publish → one indent → Core; one lineage; no duplicate execution | Stages 3–6 |
+| **3 — Governance** | `publishIndent()` **Accepted**; record signed; git tag; additive commands only after | Sign-off |
+
+Architecture phase is complete for v1. Further design earns its place from real usage—not anticipation.
+
+## Live run — four signals (beyond the 13 checks)
+
+| Signal | What to confirm |
+|--------|-----------------|
+| **Identity continuity** | Same authenticated user + workspace context flows Commerce → orchestrator → Core without special handling |
+| **Master data fidelity** | Customer and warehouse on the order are exactly what Core resolves — DTO mapping only, no copying |
+| **Lineage completeness** | Navigate order ↔ indent via `sales_order_id`; full publish trace via `correlationId` — no ambiguity |
+| **Operational observability** | On failure, locate stage (validation, persistence, state transition, events) from logs + acceptance artifacts — no code stepping |
 
 ## Acceptance Run
 

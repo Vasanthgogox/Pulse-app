@@ -24,6 +24,7 @@ import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
+import { buildPulseCommerceUrl, openSuiteProductApp } from "@/lib/suite/suiteAuth";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
@@ -36,6 +37,7 @@ import {
     Crown,
     MapPin,
     MousePointer2,
+    ExternalLink,
     Star,
     Trophy,
     Truck,
@@ -963,21 +965,38 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
-              <Pressable
-                onPress={openSignOutConfirm}
-                style={({ pressed }) => [
-                  styles.signOutBtn,
-                  pressed && styles.signOutBtnPressed,
-                ]}
-                accessibilityRole="button"
-              >
-                <FontAwesome
-                  name="sign-out"
-                  size={16}
-                  color={Theme.textOnDark}
-                />
-                <Text style={styles.signOutText}>Sign out</Text>
-              </Pressable>
+              <View style={styles.suiteActionRow}>
+                <Pressable
+                  onPress={() => openSuiteProductApp(buildPulseCommerceUrl())}
+                  style={({ pressed }) => [
+                    styles.switchCommerceBtn,
+                    pressed && styles.switchCommerceBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Switch to Pulse Commerce"
+                >
+                  <ExternalLink size={15} color={Theme.textPrimaryDark} strokeWidth={2.2} />
+                  <Text style={styles.switchCommerceText}>Switch to Pulse Commerce</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={openSignOutConfirm}
+                  style={({ pressed }) => [
+                    styles.signOutBtn,
+                    styles.signOutBtnInline,
+                    pressed && styles.signOutBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Sign out"
+                >
+                  <FontAwesome
+                    name="sign-out"
+                    size={16}
+                    color={Theme.textOnDark}
+                  />
+                  <Text style={styles.signOutText}>Sign out</Text>
+                </Pressable>
+              </View>
             </View>
           </>
         ) : null}
@@ -1507,6 +1526,37 @@ const styles = StyleSheet.create({
   },
   profileItemRightSpacer: { width: 14, height: 14 },
 
+  suiteActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 4,
+  },
+  switchCommerceBtn: {
+    flex: 1,
+    minWidth: 140,
+    minHeight: Layout.minTouchTargetSize,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  switchCommerceBtnPressed: {
+    opacity: 0.88,
+    backgroundColor: Theme.surfaceGray,
+  },
+  switchCommerceText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+  },
+
   signOutBtn: {
     minHeight: Layout.minTouchTargetSize,
     backgroundColor: Theme.cinematicHeaderBg,
@@ -1522,6 +1572,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 22,
     elevation: 8,
+  },
+  signOutBtnInline: {
+    flex: 1,
+    minWidth: 120,
+    backgroundColor: Theme.negative,
+    borderColor: Theme.negative,
   },
   signOutBtnPressed: {
     backgroundColor: Theme.teslaRed,

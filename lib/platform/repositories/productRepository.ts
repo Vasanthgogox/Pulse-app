@@ -38,7 +38,7 @@ function mapRow(row: Record<string, unknown>): PlatformProduct {
 export const productRepository = {
   async list(workspaceId: WorkspaceId): Promise<PlatformProduct[]> {
     const { data, error } = await requirePlatformDb()
-      .from('commerce_products')
+      .from('products')
       .select(PRODUCT_COLUMNS)
       .eq('organization_id', workspaceId)
       .is('deleted_at', null)
@@ -49,7 +49,7 @@ export const productRepository = {
 
   async count(workspaceId: WorkspaceId): Promise<number> {
     const { count, error } = await requirePlatformDb()
-      .from('commerce_products')
+      .from('products')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', workspaceId)
       .is('deleted_at', null);
@@ -59,7 +59,7 @@ export const productRepository = {
 
   async create(workspaceId: WorkspaceId, input: CreatePlatformProductInput): Promise<PlatformProduct> {
     const { data, error } = await requirePlatformDb()
-      .from('commerce_products')
+      .from('products')
       .insert({
         organization_id: workspaceId,
         sku: input.sku,
@@ -110,7 +110,7 @@ export const productRepository = {
     if (input.taxRate !== undefined) patch.tax_rate = input.taxRate;
 
     const { data, error } = await requirePlatformDb()
-      .from('commerce_products')
+      .from('products')
       .update(patch)
       .eq('id', productId)
       .eq('organization_id', workspaceId)
@@ -123,7 +123,7 @@ export const productRepository = {
 
   async softDelete(workspaceId: WorkspaceId, productId: string): Promise<void> {
     const { error } = await requirePlatformDb()
-      .from('commerce_products')
+      .from('products')
       .update({ deleted_at: new Date().toISOString(), status: 'archived' })
       .eq('id', productId)
       .eq('organization_id', workspaceId);

@@ -20,6 +20,31 @@ When a command reaches **Accepted**, record in its acceptance file:
 - Database migration version (last applied on linked)
 - Organization / workspace exercised
 
+## Working rule: before vs after `publishIndent` Accepted
+
+| | Before Accepted | After Accepted |
+|---|-----------------|----------------|
+| Architecture | Allowed if acceptance uncovers a flaw | Only if acceptance or production exposes a real limitation |
+| Refactoring | Allowed | Bug fixes only |
+| Contracts | May evolve | Versioned; semantic freeze |
+| Acceptance record | In progress | Historical evidence |
+
+Subsequent commands (`assignVehicle`, `assignDriver`, …) follow the **same delivery pattern** — not a fresh architecture exercise.
+
+## Execution capability versions (after v1.0)
+
+Treat the platform as **versioned capabilities**, not ongoing architecture:
+
+| Version | Capability | State |
+|---------|------------|-------|
+| Execution v1.0 | `publishIndent()` | Implementing → Accepted (gate) |
+| Execution v1.1 | `assignVehicle()` | Draft |
+| Execution v1.2 | `assignDriver()` | Draft |
+| Execution v1.3 | `dispatchTrip()` | Draft |
+| … | (see registry) | Draft |
+
+Each version ships: contract + implementation + acceptance record + verification — then moves on.
+
 ---
 
 ## Command registry (governance dashboard)
@@ -51,6 +76,8 @@ Single source of truth for orchestrator command maturity. Update when a command 
 | `publishIndent()` | **Accepted** | YYYY-MM-DD | `<hash>` | `ACCEPTANCE_RECORD.md` (signed) |
 
 Then tag that commit (e.g. `execution-orchestrator-v1`). Do not begin `assignVehicle()` until this row is **Accepted**.
+
+**`assignVehicle()` scope (when started):** validate indent + vehicle → assign → `VehicleAssigned` event → return. No driver, ETA, notifications, routing, or capacity in v1 of that command.
 
 ### `publishIndent()` — four artifacts (v1)
 

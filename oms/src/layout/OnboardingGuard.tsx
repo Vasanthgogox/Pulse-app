@@ -1,12 +1,20 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthProvider';
+import { useOrganization } from '@/context/OrganizationProvider';
 import { useCommerceReadiness } from '@/hooks/useCommerceReadiness';
 
-function WorkspaceLoading() {
+function WorkspaceLoading({ error }: { error?: string | null }) {
   return (
-    <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
-      Loading workspace…
+    <div className="min-h-screen flex flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
+      {error ? (
+        <>
+          <p className="text-destructive font-medium">Workspace data failed to load</p>
+          <p className="text-2xs max-w-md">{error}</p>
+        </>
+      ) : (
+        <p>Loading workspace…</p>
+      )}
     </div>
   );
 }
@@ -18,10 +26,11 @@ function WorkspaceLoading() {
 export function OnboardingGuard({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { readiness, evaluating, module } = useCommerceReadiness();
+  const org = useOrganization();
   const { pathname } = useLocation();
 
   if (evaluating) {
-    return <WorkspaceLoading />;
+    return <WorkspaceLoading error={org.masterDataError} />;
   }
 
   if (user && readiness && !readiness.accessible && pathname !== module.onboardingRoute) {

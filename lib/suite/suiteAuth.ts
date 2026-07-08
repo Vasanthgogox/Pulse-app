@@ -98,7 +98,7 @@ export function buildSuiteSignUpHref(options: {
   return `${ROUTES.SIGN_UP}?${params.toString()}`;
 }
 
-export { isSuiteExternalAppPath, normalizeSuiteReturnTo, openSuiteProductApp };
+export { isSuiteExternalAppPath, normalizeSuiteReturnTo, openSuiteProductApp, buildPulseCommerceUrl };
 
 export function savePendingSuiteAuthRedirect(payload: {
   productId: SuiteProductId | null;

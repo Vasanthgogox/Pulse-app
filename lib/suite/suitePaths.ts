@@ -29,3 +29,10 @@ export function openSuiteProductApp(path: string): void {
   const normalized = path.startsWith('/') ? path : `/${path}`;
   window.location.assign(normalized);
 }
+
+/** Navigate to Pulse Commerce on the shared origin. */
+export function buildPulseCommerceUrl(path = '/dashboard'): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  if (normalized === '/' || normalized === '/dashboard') return '/oms/dashboard';
+  return `/oms${normalized}`;
+}
