@@ -352,7 +352,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   innerTablet: {
-    borderRadius: 16,
     overflow: 'hidden',
   },
   innerPay: {
@@ -419,7 +418,6 @@ const styles = StyleSheet.create({
   payFab: {
     width: 60,
     height: 60,
-    borderRadius: 16,
     backgroundColor: Theme.buttonPrimary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -456,7 +454,6 @@ const styles = StyleSheet.create({
   closeBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
     backgroundColor: Theme.surface,
     alignItems: 'center',
     justifyContent: 'center',
@@ -487,11 +484,9 @@ const styles = StyleSheet.create({
   applyBtn: {
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     minWidth: 68,
     alignItems: 'center',
     flexShrink: 0,

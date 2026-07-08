@@ -31,9 +31,6 @@ export const pulseTableStyles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: PULSE_CARD_BORDER,
     backgroundColor: Theme.cardWhite,
   },
   toolbarSearchText: {
@@ -70,9 +67,6 @@ export const pulseTableStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    borderWidth: 1,
-    borderColor: PULSE_CARD_BORDER,
-    borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
     backgroundColor: Theme.cardWhite,
@@ -200,9 +194,6 @@ export const pulseTableStyles = StyleSheet.create({
   footerNavBtn: {
     minWidth: 28,
     height: 28,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: PULSE_CARD_BORDER,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
@@ -211,7 +202,6 @@ export const pulseTableStyles = StyleSheet.create({
   footerNavBtnActive: {
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
     borderRadius: Theme.buttonPrimaryRadius,
     borderColor: Theme.primary,
   },

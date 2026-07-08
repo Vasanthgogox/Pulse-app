@@ -511,9 +511,6 @@ const styles = StyleSheet.create({
       ? {
           width: "100%",
           maxWidth: SHEET_MAX_WIDTH,
-          borderRadius: 20,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: Theme.borderLight,
           boxShadow: "0 16px 48px rgba(15, 23, 42, 0.14)",
         }
       : {}),
@@ -533,7 +530,6 @@ const styles = StyleSheet.create({
   handle: {
     width: 40,
     height: 4,
-    borderRadius: 2,
     backgroundColor: Theme.borderMedium,
     alignSelf: "center",
     marginBottom: 6,
@@ -550,10 +546,7 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 36,
     height: 36,
-    borderRadius: 11,
     backgroundColor: Theme.warningMuted,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -578,10 +571,7 @@ const styles = StyleSheet.create({
   closeBtn: {
     width: 34,
     height: 34,
-    borderRadius: 10,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -589,10 +579,7 @@ const styles = StyleSheet.create({
 
   previewCard: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
     padding: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     gap: 12,
   },
   routePreview: {
@@ -619,7 +606,6 @@ const styles = StyleSheet.create({
   routeDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
     marginTop: 6,
     flexShrink: 0,
   },
@@ -675,16 +661,12 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceLight,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
     overflow: "hidden",
   },
   previewSpecsPanel: {
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
   },
   specsGrid: {
     flexDirection: "row",
@@ -756,9 +738,6 @@ const styles = StyleSheet.create({
   },
   noteBox: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     minHeight: 72,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -789,10 +768,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 12,
     paddingVertical: 14,
     minHeight: 48,
   },
@@ -814,7 +789,6 @@ const styles = StyleSheet.create({
   successIcon: {
     width: 56,
     height: 56,
-    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.positiveMuted,

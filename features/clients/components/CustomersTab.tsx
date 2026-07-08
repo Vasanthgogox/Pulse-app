@@ -645,7 +645,6 @@ const detailStyles = StyleSheet.create({
   backBtn: {
     width: 44,
     height: 44,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -672,7 +671,6 @@ const detailStyles = StyleSheet.create({
     top: 2,
     width: 8,
     height: 8,
-    borderRadius: 4,
     backgroundColor: Theme.teslaRed,
   },
   title: {
@@ -717,7 +715,6 @@ const detailStyles = StyleSheet.create({
   section: { marginBottom: 20 },
   scorecard: {
     backgroundColor: Theme.darkBackground,
-    borderRadius: 24,
     padding: 28,
     marginBottom: 20,
     overflow: "hidden",
@@ -783,10 +780,7 @@ const detailStyles = StyleSheet.create({
   summaryCard: {
     flex: 1,
     backgroundColor: Theme.driverSurfaceElevated,
-    borderRadius: 16,
     padding: 14,
-    borderWidth: 1,
-    borderColor: Theme.driverBorder,
   },
   summaryCardHeader: {
     flexDirection: "row",
@@ -816,9 +810,6 @@ const detailStyles = StyleSheet.create({
     paddingLeft: 40,
     paddingRight: 44,
     backgroundColor: Theme.darkInputBg,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.driverBorder,
     justifyContent: "center",
     marginBottom: 16,
   },
@@ -830,7 +821,6 @@ const detailStyles = StyleSheet.create({
     top: 10,
     width: 28,
     height: 28,
-    borderRadius: 8,
     backgroundColor: Theme.driverSurfaceElevated,
     alignItems: "center",
     justifyContent: "center",
@@ -855,18 +845,12 @@ const detailStyles = StyleSheet.create({
   byTripBillingCard: {
     flex: 1,
     backgroundColor: Theme.darkSurface,
-    borderRadius: 16,
     padding: 14,
-    borderWidth: 1,
-    borderColor: Theme.driverBorder,
   },
   byTripBalanceCard: {
     flex: 1,
     backgroundColor: Theme.darkSurface,
-    borderRadius: 16,
     padding: 14,
-    borderWidth: 1,
-    borderColor: Theme.driverBorder,
   },
   byTripCardHeader: {
     flexDirection: "row",
@@ -892,11 +876,8 @@ const detailStyles = StyleSheet.create({
   },
   byTripContent: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
     padding: 16,
     marginTop: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   byTripSectionTitle: {
     fontSize: 12,
@@ -993,7 +974,6 @@ const detailStyles = StyleSheet.create({
   },
   fiscalDnaCard: {
     backgroundColor: Theme.darkBackground,
-    borderRadius: 32,
     padding: 28,
     marginBottom: 24,
     overflow: "hidden",
@@ -1031,10 +1011,7 @@ const detailStyles = StyleSheet.create({
     flexDirection: "row",
     gap: 1,
     backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 16,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
   },
   fiscalDnaGridCell: {
     flex: 1,
@@ -1073,7 +1050,6 @@ const detailStyles = StyleSheet.create({
   },
   pendingCard: {
     backgroundColor: Theme.darkBackground,
-    borderRadius: 48,
     padding: 32,
     marginBottom: 24,
     overflow: "hidden",
@@ -1101,9 +1077,6 @@ const detailStyles = StyleSheet.create({
   healthCircle: {
     width: 56,
     height: 56,
-    borderRadius: 28,
-    borderWidth: 4,
-    borderColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1114,7 +1087,6 @@ const detailStyles = StyleSheet.create({
   },
   progressBarBg: {
     height: 6,
-    borderRadius: 3,
     backgroundColor: "rgba(255,255,255,0.1)",
     overflow: "hidden",
     marginBottom: 12,
@@ -1122,7 +1094,6 @@ const detailStyles = StyleSheet.create({
   progressBarFill: {
     height: "100%",
     backgroundColor: Theme.darkGreen,
-    borderRadius: 3,
   },
   pendingCardHint: {
     fontSize: 8,
@@ -1139,7 +1110,6 @@ const detailStyles = StyleSheet.create({
     backgroundColor: Theme.darkBackground,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 999,
     marginBottom: 16,
   },
   sectionPillText: {
@@ -1151,9 +1121,6 @@ const detailStyles = StyleSheet.create({
   },
   ledgerCard: {
     backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 40,
     padding: 32,
   },
   ledgerCardRow: {
@@ -1183,9 +1150,6 @@ const detailStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 32,
     padding: 24,
     marginBottom: 12,
   },
@@ -1199,7 +1163,6 @@ const detailStyles = StyleSheet.create({
   missionCardIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     backgroundColor: "rgba(99,102,241,0.1)",
     alignItems: "center",
     justifyContent: "center",
@@ -1239,18 +1202,12 @@ const detailStyles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   receivablesSummaryBalance: {
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 14,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   receivablesSummaryBillingValue: {
     fontSize: 16,
@@ -1276,9 +1233,6 @@ const detailStyles = StyleSheet.create({
   },
   tableCard: {
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 16,
     overflow: "hidden",
   },
   tableHeader: {
@@ -1316,7 +1270,6 @@ const detailStyles = StyleSheet.create({
   missionIdDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
     backgroundColor: Theme.aggregatePillText,
   },
   tableCell: { flex: 1.8, minWidth: 0 },
@@ -1387,11 +1340,8 @@ const detailStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Theme.surface,
-    borderRadius: 20,
     padding: 18,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   cashCardLeft: {
     flexDirection: "row",
@@ -1404,19 +1354,14 @@ const detailStyles = StyleSheet.create({
   cashCardIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   cashCardIconIn: {
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
   },
   cashCardIconOut: {
     backgroundColor: "rgba(239,68,68,0.1)",
-    borderWidth: 1,
-    borderColor: Theme.teslaRed,
   },
   cashCardWhy: {
     fontSize: 11,
@@ -1434,9 +1379,6 @@ const detailStyles = StyleSheet.create({
   cashCardAmountOut: { color: Theme.teslaRed },
   sharedCard: {
     backgroundColor: Theme.driverSurfaceElevated,
-    borderWidth: 1,
-    borderColor: Theme.driverBorder,
-    borderRadius: 20,
     padding: 24,
     marginBottom: 16,
   },
@@ -1459,9 +1401,6 @@ const detailStyles = StyleSheet.create({
     backgroundColor: "#fff7ed",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#fed7aa",
   },
   sharedMismatchText: {
     fontSize: 8,
@@ -1472,7 +1411,6 @@ const detailStyles = StyleSheet.create({
   sharedPendingDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
     backgroundColor: "#f97316",
   },
   sharedPendingText: {
@@ -1486,11 +1424,8 @@ const detailStyles = StyleSheet.create({
     flexDirection: "row",
     gap: 1,
     backgroundColor: Theme.borderLight,
-    borderRadius: 16,
     overflow: "hidden",
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   sharedGridCell: {
     flex: 1,
@@ -1531,10 +1466,6 @@ const detailStyles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1549,9 +1480,6 @@ const detailStyles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: Theme.teslaRed,
-    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1564,17 +1492,13 @@ const detailStyles = StyleSheet.create({
   },
   inviteCard: {
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 2,
     borderStyle: "dashed",
-    borderColor: Theme.borderMedium,
-    borderRadius: 24,
     padding: 32,
     alignItems: "center",
   },
   inviteIconWrap: {
     width: 80,
     height: 80,
-    borderRadius: 24,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
@@ -1608,7 +1532,6 @@ const detailStyles = StyleSheet.create({
     width: "100%",
     paddingVertical: 16,
     backgroundColor: Theme.darkBackground,
-    borderRadius: 20,
     marginBottom: 16,
   },
   inviteCtaText: {

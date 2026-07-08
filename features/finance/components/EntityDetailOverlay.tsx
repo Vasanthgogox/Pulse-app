@@ -4700,9 +4700,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.financeHeroBg,
     marginHorizontal: 0,
     marginBottom: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.separatorDark,
     overflow: "hidden",
     padding: 12,
     paddingBottom: 10,
@@ -4791,9 +4788,6 @@ const styles = StyleSheet.create({
   },
   entityFabIslandRail: {
     backgroundColor: "rgba(15,23,42,0.92)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 999,
     paddingLeft: 10,
     paddingRight: 6,
     paddingVertical: 6,
@@ -4808,14 +4802,10 @@ const styles = StyleSheet.create({
     transform: [{ translateX: 44 }],
   },
   entityFabPressArea: {
-    borderRadius: 40,
   },
   entityActionHubMenu: {
     alignSelf: "flex-end",
     backgroundColor: "#0B1220",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    borderRadius: 22,
     padding: 10,
     marginBottom: 10,
     minWidth: 210,
@@ -4829,21 +4819,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderRadius: 14,
     paddingVertical: 11,
     paddingHorizontal: 12,
     backgroundColor: "rgba(255,255,255,0.03)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
     marginBottom: 6,
   },
   entityActionHubItemIconWrap: {
     width: 28,
     height: 28,
-    borderRadius: 10,
     backgroundColor: "rgba(255,255,255,0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4856,9 +4840,6 @@ const styles = StyleSheet.create({
   },
   entityFabLabelWrap: {
     backgroundColor: "transparent",
-    borderColor: "transparent",
-    borderWidth: 1,
-    borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
     alignItems: "center",
@@ -4941,9 +4922,6 @@ const styles = StyleSheet.create({
   ledgerSummaryRow: {
     flexDirection: "row",
     backgroundColor: Theme.surface,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingVertical: 12,
     paddingHorizontal: 0,
     marginBottom: 14,
@@ -4982,14 +4960,10 @@ const styles = StyleSheet.create({
   ledgerViewModePill: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 8,
     backgroundColor: Theme.surfaceLight ?? "rgba(0,0,0,0.06)",
-    borderWidth: 1,
-    borderColor: Theme.borderLight ?? "rgba(0,0,0,0.08)",
   },
   ledgerViewModePillActive: {
     backgroundColor: Theme.teslaRed,
-    borderColor: Theme.teslaRed,
   },
   ledgerViewModePillText: {
     fontSize: 12,
@@ -5007,7 +4981,6 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderTopWidth: 1,
-    borderColor: Theme.borderLight,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     shadowColor: "#000",
@@ -5139,11 +5112,8 @@ const styles = StyleSheet.create({
   },
   ledgerExpandedBlock: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 6,
     overflow: "hidden",
     marginBottom: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -5226,9 +5196,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderOnDark,
   },
   ledgerExpandedRowTriple: {
     flexDirection: "row",
@@ -5271,13 +5238,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.positiveMuted,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
   },
   ledgerExpandedAmountPillRed: {
     backgroundColor: Theme.negativeMuted,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
   },
   ledgerExpandedValueOnGreen: {
     color: Theme.darkGreen,
@@ -5306,10 +5271,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     paddingVertical: 8,
     paddingHorizontal: 10,
-    borderRadius: 6,
     marginBottom: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   ledgerExpandedTxCardLine1: {
     fontSize: 11,
@@ -5337,10 +5299,7 @@ const styles = StyleSheet.create({
   },
   ledgerExpandedTxHistoryList: {
     backgroundColor: Theme.darkSurface,
-    borderRadius: 6,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Theme.borderOnDark,
   },
   ledgerExpandedTxHistoryRow: {
     flexDirection: "row",
@@ -5357,11 +5316,9 @@ const styles = StyleSheet.create({
   ledgerExpandedTxHistoryIconWrap: {
     width: 22,
     height: 22,
-    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
-    borderWidth: 1.5,
   },
   ledgerExpandedTxHistoryIconIn: { borderColor: Theme.darkGreen },
   ledgerExpandedTxHistoryIconOut: { borderColor: Theme.teslaRed },
@@ -5514,14 +5471,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   table: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 2,
     overflow: "hidden",
   },
   spWebTable: {
-    borderRadius: 10,
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.surface,
   },
   spWebTableHeaderRow: {
@@ -5843,9 +5795,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 8,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   earningsSummaryRow: {
     flexDirection: "row",
@@ -5931,9 +5880,6 @@ const styles = StyleSheet.create({
   },
   monthDetailSectionCard: {
     marginTop: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
   },
@@ -5953,17 +5899,11 @@ const styles = StyleSheet.create({
   },
   monthDetailTripsBlock: {
     marginTop: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
   },
   monthDetailPaymentsBlock: {
     marginTop: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
   },
@@ -6003,14 +5943,9 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 8,
   },
   tripStatementActionBtnPrimary: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderWidth: 0,
   },
   tripStatementActionBtnPrimaryText: {
     fontSize: 11,
@@ -6019,8 +5954,6 @@ const styles = StyleSheet.create({
   },
   tripStatementActionBtnSecondary: {
     backgroundColor: Theme.surface,
-    borderWidth: 1.5,
-    borderColor: Theme.borderMedium,
   },
   tripStatementActionBtnSecondaryText: {
     fontSize: 11,
@@ -6034,9 +5967,6 @@ const styles = StyleSheet.create({
   },
   driverRequestCard: {
     backgroundColor: Theme.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     padding: 16,
   },
   driverRequestCardInner: {
@@ -6047,7 +5977,6 @@ const styles = StyleSheet.create({
   driverRequestIconWrap: {
     width: 40,
     height: 40,
-    borderRadius: 20,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -6081,15 +6010,11 @@ const styles = StyleSheet.create({
   driverRequestBtn: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   driverRequestBtnPay: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   driverRequestBtnPayText: {
     fontSize: 11,
@@ -6099,8 +6024,6 @@ const styles = StyleSheet.create({
   },
   driverRequestBtnReject: {
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
   },
   driverRequestBtnRejectText: {
     fontSize: 11,
@@ -6118,9 +6041,6 @@ const styles = StyleSheet.create({
   driverMetricCard: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 16,
     alignItems: "center",
   },
@@ -6140,9 +6060,6 @@ const styles = StyleSheet.create({
   driverMetricValueActive: { color: Theme.darkGreen },
   driverContactCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 16,
     marginHorizontal: Layout.screenPaddingHorizontal,
     marginBottom: 16,
@@ -6164,7 +6081,6 @@ const styles = StyleSheet.create({
   driverContactIconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 18,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -6187,9 +6103,6 @@ const styles = StyleSheet.create({
   },
   driverCompensationCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     marginHorizontal: Layout.screenPaddingHorizontal,
     marginBottom: 16,
     overflow: "hidden",
@@ -6244,11 +6157,7 @@ const styles = StyleSheet.create({
   driverAssignVehicleBtn: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 6,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   driverAssignVehicleBtnText: {
     fontSize: 11,
@@ -6303,9 +6212,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingVertical: 14,
     paddingHorizontal: 16,
     marginHorizontal: Layout.screenPaddingHorizontal,
@@ -6361,7 +6267,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 10,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     marginBottom: 0,
@@ -6377,7 +6282,6 @@ const styles = StyleSheet.create({
   driverRatingIconWrap: {
     width: 28,
     height: 28,
-    borderRadius: 14,
     backgroundColor: Theme.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
@@ -6422,7 +6326,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.financeHeroBg,
     paddingVertical: 24,
     paddingHorizontal: 32,
-    borderRadius: 24,
     alignItems: "center",
     minWidth: 160,
     shadowColor: "#000",

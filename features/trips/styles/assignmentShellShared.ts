@@ -35,7 +35,6 @@ export const assignmentShellStyles = StyleSheet.create({
     flex: Platform.OS === "web" ? 0 : 1,
     flexDirection: "column",
     backgroundColor: assignmentShellColors.cardSlateBody,
-    borderRadius: Platform.OS === "web" ? 14 : 0,
     overflow: "hidden",
     ...Platform.select({
       web: {
@@ -43,8 +42,6 @@ export const assignmentShellStyles = StyleSheet.create({
         maxWidth: 760,
         maxHeight: "86%",
         minHeight: 420,
-        borderWidth: 1,
-        borderColor: assignmentShellColors.borderSlate,
       } as any,
     }),
   },
@@ -54,10 +51,7 @@ export const assignmentShellStyles = StyleSheet.create({
     width: "100%",
     maxWidth: 760,
     backgroundColor: assignmentShellColors.cardWhite,
-    borderRadius: 20,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: assignmentShellColors.borderSlate,
     ...Platform.select({
       web: {
         boxShadow: "0 25px 50px -12px rgba(15, 23, 42, 0.2)",
@@ -103,7 +97,6 @@ export const assignmentShellStyles = StyleSheet.create({
   modalCloseBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
     backgroundColor: assignmentShellColors.closeBg,
     alignItems: "center",
     justifyContent: "center",
@@ -153,9 +146,6 @@ export const assignmentShellStyles = StyleSheet.create({
     minHeight: 64,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: assignmentShellColors.borderSlate,
     backgroundColor: assignmentShellColors.cardWhite,
     gap: 12,
     ...Platform.select({
@@ -174,7 +164,6 @@ export const assignmentShellStyles = StyleSheet.create({
   choiceIconWrap: {
     width: 40,
     height: 40,
-    borderRadius: 10,
     backgroundColor: assignmentShellColors.iconTileBg,
     alignItems: "center",
     justifyContent: "center",
@@ -216,9 +205,6 @@ export const assignmentShellStyles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: assignmentShellColors.borderSlate,
     backgroundColor: "#e0f2fe",
     marginBottom: 16,
   },
@@ -233,9 +219,6 @@ export const assignmentShellStyles = StyleSheet.create({
   /** Aggregate “Current node” outer card — white on white modal */
   tripAssignSurfaceCard: {
     backgroundColor: assignmentShellColors.cardWhite,
-    borderWidth: 1,
-    borderColor: assignmentShellColors.borderSlate,
-    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     ...Platform.select({
@@ -253,9 +236,6 @@ export const assignmentShellStyles = StyleSheet.create({
   },
   inputWell: {
     backgroundColor: "#f3f4f6",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: assignmentShellColors.borderSlate,
   },
 
   /** Asset | Aggregate mode bar (trip create + Staff Handshake). */
@@ -267,7 +247,6 @@ export const assignmentShellStyles = StyleSheet.create({
   supplySegmentPill: {
     flexDirection: "row",
     backgroundColor: assignmentShellColors.title,
-    borderRadius: 14,
     padding: 4,
     gap: 4,
     ...Platform.select({
@@ -287,7 +266,6 @@ export const assignmentShellStyles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     paddingHorizontal: 22,
-    borderRadius: 11,
   },
   supplySegBtnActive: {
     backgroundColor: "rgba(255,255,255,0.1)",
@@ -311,9 +289,6 @@ export const assignmentShellStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: assignmentShellColors.cardWhite,
-    borderWidth: 1,
-    borderColor: assignmentShellColors.borderSlate,
-    borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 14,
     marginBottom: 12,
@@ -332,7 +307,6 @@ export const assignmentShellStyles = StyleSheet.create({
   supplyAssignLaterOuterCompact: {
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 14,
     marginBottom: 12,
   },
   supplyAssignLaterLeft: {
@@ -345,7 +319,6 @@ export const assignmentShellStyles = StyleSheet.create({
   supplyAssignLaterIconWrap: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     backgroundColor: assignmentShellColors.iconTileBg,
     alignItems: "center",
     justifyContent: "center",
@@ -376,9 +349,6 @@ export const assignmentShellStyles = StyleSheet.create({
     minWidth: 0,
     alignSelf: "stretch",
     backgroundColor: assignmentShellColors.cardWhite,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: assignmentShellColors.borderSlate,
     paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 10,
@@ -395,7 +365,6 @@ export const assignmentShellStyles = StyleSheet.create({
     }),
   },
   assignPickerCardError: {
-    borderColor: "rgba(232, 33, 39, 0.45)",
     backgroundColor: "rgba(254, 242, 242, 0.35)",
   },
   assignPickerHeader: {
@@ -427,12 +396,9 @@ export const assignmentShellStyles = StyleSheet.create({
     minWidth: 28,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
     backgroundColor: assignmentShellColors.cardSlateBody,
-    borderWidth: 1,
-    borderColor: assignmentShellColors.borderSlate,
   },
   assignPickerCountText: {
     fontSize: 11,
@@ -447,9 +413,6 @@ export const assignmentShellStyles = StyleSheet.create({
     gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(79, 70, 229, 0.22)",
     backgroundColor: "rgba(79, 70, 229, 0.06)",
   },
   assignPickerHeaderActionPressed: {
@@ -471,9 +434,6 @@ export const assignmentShellStyles = StyleSheet.create({
   assignEntityRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: assignmentShellColors.borderSlate,
     backgroundColor: assignmentShellColors.cardWhite,
     paddingHorizontal: 12,
     paddingVertical: 11,
@@ -484,7 +444,6 @@ export const assignmentShellStyles = StyleSheet.create({
     position: "relative",
   },
   assignEntityRowActive: {
-    borderColor: "rgba(79, 70, 229, 0.35)",
     backgroundColor: "rgba(79, 70, 229, 0.04)",
   },
   assignEntityRowPressed: {
@@ -506,7 +465,6 @@ export const assignmentShellStyles = StyleSheet.create({
   assignEntityIconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 10,
     backgroundColor: assignmentShellColors.iconTileBg,
     alignItems: "center",
     justifyContent: "center",
@@ -550,7 +508,6 @@ export const assignmentShellStyles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingHorizontal: 14,
-    borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,

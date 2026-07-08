@@ -379,9 +379,6 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
 const styles = StyleSheet.create({
   card: {
     marginTop: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e6edf5",
     backgroundColor: "#fff",
     padding: 10,
     gap: 8,
@@ -390,7 +387,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     padding: 14,
     gap: 12,
-    borderRadius: 16,
   },
   header: {
     flexDirection: "row",
@@ -426,7 +422,6 @@ const styles = StyleSheet.create({
   badge: {
     minWidth: 22,
     height: 22,
-    borderRadius: 11,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
@@ -436,7 +431,6 @@ const styles = StyleSheet.create({
   badgeDesktop: {
     minWidth: 26,
     height: 26,
-    borderRadius: 13,
   },
   badgeText: {
     fontSize: 9,
@@ -480,9 +474,6 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(99,102,241,0.28)",
     backgroundColor: "rgba(99,102,241,0.06)",
   },
   addBtnSaleText: {
@@ -498,9 +489,6 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(15,118,110,0.28)",
     backgroundColor: "rgba(15,118,110,0.06)",
   },
   addBtnCostText: {
@@ -511,14 +499,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   table: {
-    borderWidth: 1,
-    borderColor: "#eef2f7",
-    borderRadius: 10,
     overflow: "hidden",
     backgroundColor: "#fafbfc",
   },
   tableDesktop: {
-    borderRadius: 12,
   },
   tableHead: {
     flexDirection: "row",
@@ -642,18 +626,11 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingVertical: 7,
     paddingHorizontal: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.cardWhite,
     minHeight: 32,
   },
   rowActionBtnPrimary: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   rowActionBtnPressed: {
     opacity: 0.88,
@@ -698,12 +675,10 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
   },
   laneChipSale: {
     backgroundColor: "rgba(99,102,241,0.08)",
-    borderColor: "rgba(99,102,241,0.22)",
   },
   laneChipCost: {
     backgroundColor: "rgba(15,118,110,0.08)",

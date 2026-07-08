@@ -261,9 +261,6 @@ const cardStyles = StyleSheet.create({
   card: {
     flex: 1,
     backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 12,
@@ -299,9 +296,7 @@ const cardStyles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 7,
-    borderRadius: 10,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
   },
   rolePillText: {
     fontSize: 8,
@@ -312,7 +307,6 @@ const cardStyles = StyleSheet.create({
     minHeight: 20,
     justifyContent: "center",
     paddingHorizontal: 7,
-    borderRadius: 10,
     backgroundColor: Theme.warningMuted,
   },
   pendingPillText: {
@@ -327,7 +321,6 @@ const cardStyles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 7,
-    borderRadius: 10,
     backgroundColor: Theme.positiveMuted,
   },
   activePillText: {
@@ -340,10 +333,7 @@ const cardStyles = StyleSheet.create({
     minHeight: 20,
     justifyContent: "center",
     paddingHorizontal: 7,
-    borderRadius: 10,
     backgroundColor: Theme.aggregatePillBg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.aggregatePillBorder,
   },
   youPillText: {
     fontSize: 8,
@@ -380,8 +370,6 @@ const cardStyles = StyleSheet.create({
     textAlign: "center",
   },
   avatarBorder: {
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
   },
   name: {
     fontSize: 12,

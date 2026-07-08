@@ -6881,8 +6881,6 @@ const styles = StyleSheet.create({
   ledgerMobSearchWrap: {
     paddingHorizontal: 12,
     marginBottom: 6,
-    borderRadius: 20,
-    borderWidth: 1.5,
   },
   ledgerMobSearchInput: { fontSize: 16, paddingVertical: 8 },
   ledgerMobFilterStrip: { marginBottom: 6 },
@@ -6904,8 +6902,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     gap: 4,
-    borderRadius: 16,
-    borderWidth: 1.5,
     flexGrow: 0,
   },
   ledgerMobTripIcon: { width: 28, height: 28, borderRadius: 10 },
@@ -6928,7 +6924,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 8,
     gap: 6,
-    borderRadius: 16,
     flexDirection: "row",
     alignItems: "flex-start",
   },
@@ -6937,12 +6932,10 @@ const styles = StyleSheet.create({
     minHeight: 32,
     paddingVertical: 5,
     paddingHorizontal: 8,
-    borderRadius: 10,
   },
   ledgerMobSelectorIcon: {
     width: 18,
     height: 18,
-    borderRadius: 0,
     backgroundColor: "transparent",
     overflow: "visible",
   },
@@ -6958,7 +6951,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 2,
     gap: 2,
-    borderRadius: 12,
   },
   ledgerMobProtocolTileText: { fontSize: 7, lineHeight: 9 },
   ledgerMobSyncAmount: { paddingVertical: 10, paddingHorizontal: 10, borderRadius: 18 },
@@ -6991,9 +6983,6 @@ const styles = StyleSheet.create({
   },
   flowCard: {
     backgroundColor: Theme.surface,
-    borderRadius: 28,
-    borderWidth: 1.2,
-    borderColor: Theme.borderLight,
     paddingVertical: 18,
     paddingHorizontal: 16,
     gap: 12,
@@ -7014,12 +7003,9 @@ const styles = StyleSheet.create({
   flowStepBadge: {
     width: 28,
     height: 28,
-    borderRadius: 10,
     backgroundColor: Theme.buttonMatteBlack,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
   },
   flowStepBadgeIn: {
     backgroundColor: Theme.darkGreen,
@@ -7068,9 +7054,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,
     padding: 5,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
@@ -7079,14 +7062,11 @@ const styles = StyleSheet.create({
   },
   toggleWrapLedger: {
     backgroundColor: Theme.liquidPillBg,
-    borderColor: Theme.liquidPillBorder,
     padding: 6,
-    borderRadius: 14,
   },
   toggleBtn: {
     paddingHorizontal: 24,
     paddingVertical: 11,
-    borderRadius: 12,
   },
   toggleBtnIn: {
     backgroundColor: Theme.darkGreen,
@@ -7120,9 +7100,6 @@ const styles = StyleSheet.create({
 
   amountBlock: {
     backgroundColor: Theme.surface,
-    borderWidth: 1.5,
-    borderColor: Theme.borderLight,
-    borderRadius: 26,
     paddingVertical: 26,
     paddingHorizontal: 22,
     minHeight: 110,
@@ -7158,7 +7135,6 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
     minWidth: 0,
-    borderWidth: 0,
     ...Platform.select({
       web: {
         outlineStyle: "none",
@@ -7176,9 +7152,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   tinyTagText: {
     fontSize: 11,
@@ -7190,9 +7163,6 @@ const styles = StyleSheet.create({
   fieldBlock: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 16,
     minHeight: Layout.minTouchTargetSize + 8,
@@ -7208,9 +7178,6 @@ const styles = StyleSheet.create({
   fieldBlockFull: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 16,
     minHeight: Layout.minTouchTargetSize + 8,
@@ -7245,7 +7212,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     paddingVertical: 6,
-    borderWidth: 0,
     ...Platform.select({
       web: {
         outlineStyle: "none",
@@ -7258,7 +7224,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
-    borderWidth: 0,
     ...Platform.select({
       web: {
         outlineStyle: "none",
@@ -7284,13 +7249,9 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "180deg" }],
   },
   fieldBlockOpen: {
-    borderColor: Theme.primary + "66",
     backgroundColor: Theme.primary + "0D",
   },
   paymentModeBlock: {
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 20,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -7301,9 +7262,6 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     gap: 0,
     width: "100%",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 20,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -7323,9 +7281,6 @@ const styles = StyleSheet.create({
   },
   /** Reference UI: elevated MODE / TYPE workbench card (Pulse-style). */
   ledgerProtocolWorkbenchElevated: {
-    borderColor: Theme.borderMedium,
-    borderWidth: 1.5,
-    borderRadius: 24,
     backgroundColor: Theme.screenBackground,
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 4 },
@@ -7414,9 +7369,6 @@ const styles = StyleSheet.create({
   },
   selectorChangeBtn: {
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
@@ -7429,9 +7381,6 @@ const styles = StyleSheet.create({
   },
   selectorSummaryCard: {
     minHeight: 42,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -7450,7 +7399,6 @@ const styles = StyleSheet.create({
   selectorSummaryIcon: {
     width: 22,
     height: 22,
-    borderRadius: 11,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -7477,9 +7425,6 @@ const styles = StyleSheet.create({
   },
   paymentModeChip: {
     minHeight: 54,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -7499,7 +7444,6 @@ const styles = StyleSheet.create({
   paymentModeIconWrap: {
     width: 24,
     height: 24,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -7511,9 +7455,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   categoryBlock: {
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 20,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -7525,9 +7466,6 @@ const styles = StyleSheet.create({
   },
   categoryChip: {
     minHeight: 54,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     paddingHorizontal: 9,
     paddingVertical: 8,
@@ -7544,11 +7482,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   categoryChipIn: {
-    borderColor: Theme.darkGreen,
     backgroundColor: `${Theme.darkGreen}12`,
   },
   categoryChipOut: {
-    borderColor: Theme.teslaRed,
     backgroundColor: `${Theme.teslaRed}12`,
   },
   categoryChipText: {
@@ -7566,7 +7502,6 @@ const styles = StyleSheet.create({
   categoryChipIconWrap: {
     width: 24,
     height: 24,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -7581,9 +7516,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 14,
     marginTop: 8,
@@ -7598,9 +7530,6 @@ const styles = StyleSheet.create({
 
   pickerList: {
     height: 240,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
     shadowColor: "#000",
@@ -7617,9 +7546,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: "rgba(0,0,0,0.08)",
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -2 },
@@ -7638,7 +7565,6 @@ const styles = StyleSheet.create({
   pickerModalHandle: {
     width: 44,
     height: 5,
-    borderRadius: 999,
     backgroundColor: Theme.borderLight,
     marginBottom: 8,
   },
@@ -7690,7 +7616,6 @@ const styles = StyleSheet.create({
 
   submitBtn: {
     paddingVertical: 19,
-    borderRadius: 20,
     minHeight: Layout.minTouchTargetSize + 28,
     justifyContent: "center",
     alignItems: "center",
@@ -7707,9 +7632,6 @@ const styles = StyleSheet.create({
   },
   submitBtnOut: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   submitBtnDisabled: { opacity: 0.5 },
   submitBtnText: {
@@ -7730,7 +7652,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 32,
     elevation: 8,
-    borderRadius: 28,
     paddingVertical: 18,
     minHeight: 56,
     width: "100%",
@@ -7793,7 +7714,6 @@ const styles = StyleSheet.create({
   },
   ledgerV2TripFirstBandCapture: {
     backgroundColor: "#f8fafc",
-    borderRadius: 20,
     paddingHorizontal: 6,
     paddingTop: 6,
     paddingBottom: 8,
@@ -7814,9 +7734,6 @@ const styles = StyleSheet.create({
     minHeight: 0,
     alignSelf: "stretch",
     backgroundColor: LedgerSyncPalette.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     padding: 14,
     overflow: "hidden",
   },
@@ -7843,9 +7760,7 @@ const styles = StyleSheet.create({
   },
   ledgerTripPaneCardTransparent: {
     backgroundColor: "transparent",
-    borderWidth: 0,
     padding: 0,
-    borderRadius: 0,
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -7872,7 +7787,6 @@ const styles = StyleSheet.create({
   ledgerV2BackBtn: {
     width: 44,
     height: 44,
-    borderRadius: 16,
     backgroundColor: LedgerSyncPalette.page,
     alignItems: "center",
     justifyContent: "center",
@@ -7903,16 +7817,12 @@ const styles = StyleSheet.create({
   },
   toggleWrapLedgerPulse: {
     backgroundColor: "#F1F5F9",
-    borderRadius: 24,
     padding: 4,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     gap: 4,
   },
   toggleBtnPulse: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 18,
     minWidth: 76,
     alignItems: "center",
   },
@@ -7944,9 +7854,6 @@ const styles = StyleSheet.create({
   },
   ledgerProvisionCard: {
     backgroundColor: LedgerSyncPalette.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     padding: 14,
     gap: 12,
     shadowColor: "#0f172a",
@@ -7992,9 +7899,6 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.page,
     maxWidth: "100%",
   },
@@ -8008,7 +7912,6 @@ const styles = StyleSheet.create({
     padding: 0,
     overflow: "hidden",
     backgroundColor: "transparent",
-    borderWidth: 0,
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -8064,9 +7967,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.page,
   },
   ledgerDesktopCategoryReminderMain: {
@@ -8079,12 +7979,9 @@ const styles = StyleSheet.create({
   ledgerDesktopCategoryReminderIcon: {
     width: 32,
     height: 32,
-    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
   },
   ledgerDesktopCategoryReminderTextCol: {
     flex: 1,
@@ -8106,9 +8003,6 @@ const styles = StyleSheet.create({
   ledgerDesktopCategoryChangeBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: Theme.cardWhite,
   },
   ledgerDesktopCategoryChangeText: {
@@ -8127,9 +8021,6 @@ const styles = StyleSheet.create({
   ledgerDesktopPaymentSectionCard: {
     width: "100%",
     alignSelf: "stretch",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e6edf5",
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -8153,30 +8044,23 @@ const styles = StyleSheet.create({
   ledgerDesktopSectionIcon: {
     width: 34,
     height: 34,
-    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
   },
   ledgerDesktopSectionIconMode: {
     backgroundColor: "rgba(16,185,129,0.08)",
-    borderColor: "rgba(16,185,129,0.2)",
   },
   ledgerDesktopSectionIconCategory: {
     backgroundColor: "rgba(99,102,241,0.08)",
-    borderColor: "rgba(99,102,241,0.2)",
   },
   ledgerDesktopSectionIconRef: {
     backgroundColor: "rgba(99,102,241,0.08)",
-    borderColor: "rgba(99,102,241,0.2)",
   },
   ledgerDesktopSectionIconDate: {
     backgroundColor: LedgerSyncPalette.page,
-    borderColor: LedgerSyncPalette.border,
   },
   ledgerDesktopSectionIconAmount: {
     backgroundColor: "rgba(16,185,129,0.08)",
-    borderColor: "rgba(16,185,129,0.2)",
   },
   ledgerDesktopSectionEyebrow: {
     fontSize: 12,
@@ -8191,9 +8075,6 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   ledgerDesktopReferenceInputWrap: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.page,
     paddingHorizontal: 12,
     paddingVertical: 4,
@@ -8206,7 +8087,6 @@ const styles = StyleSheet.create({
     ...Platform.select({ web: { outlineStyle: "none" } as object }),
   },
   ledgerDesktopDatePanelNested: {
-    borderWidth: 0,
     backgroundColor: "transparent",
     paddingHorizontal: 0,
     paddingVertical: 0,
@@ -8226,7 +8106,6 @@ const styles = StyleSheet.create({
   ledgerDesktopWizardDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
     backgroundColor: LedgerSyncPalette.border,
   },
   ledgerDesktopWizardDotActive: {
@@ -8235,7 +8114,6 @@ const styles = StyleSheet.create({
   ledgerDesktopWizardLine: {
     width: 28,
     height: 2,
-    borderRadius: 1,
     backgroundColor: LedgerSyncPalette.border,
   },
   ledgerDesktopWizardLineActive: {
@@ -8259,9 +8137,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     paddingHorizontal: 14,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.surface,
     minHeight: 56,
   },
@@ -8277,16 +8152,12 @@ const styles = StyleSheet.create({
   },
   ledgerSyncDateCard: {
     backgroundColor: LedgerSyncPalette.page,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     padding: 12,
     gap: 8,
     width: "100%",
     alignSelf: "stretch",
   },
   ledgerSyncDateCardError: {
-    borderColor: Theme.negative,
   },
   ledgerSyncDatePresetRow: {
     flexDirection: "row",
@@ -8314,13 +8185,9 @@ const styles = StyleSheet.create({
   ledgerSyncDatePresetPill: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.surface,
   },
   ledgerSyncDatePresetPillOn: {
-    borderColor: LedgerSyncPalette.ink,
     backgroundColor: LedgerSyncPalette.ink,
   },
   ledgerSyncDatePresetText: {
@@ -8349,13 +8216,9 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceForm,
   },
   ledgerSyncDateFieldPressed: {
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.surface,
   },
   ledgerSyncDateFieldText: {
@@ -8380,9 +8243,6 @@ const styles = StyleSheet.create({
   missionSearchIconBtn: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.surface,
     alignItems: "center",
     justifyContent: "center",
@@ -8391,7 +8251,6 @@ const styles = StyleSheet.create({
   missionSearchIconBtnMob: {
     width: 34,
     height: 34,
-    borderRadius: 10,
   },
   missionSearchExpandWrap: {
     flexDirection: "row",
@@ -8403,9 +8262,6 @@ const styles = StyleSheet.create({
     minWidth: 120,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.surface,
   },
   missionSearchExpandWrapMob: {
@@ -8446,9 +8302,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: LedgerSyncPalette.surface,
-    borderWidth: 2,
-    borderColor: LedgerSyncPalette.border,
-    borderRadius: 28,
     paddingHorizontal: 16,
     marginBottom: 10,
   },
@@ -8498,9 +8351,6 @@ const styles = StyleSheet.create({
   syncHeroBandCard: {
     paddingVertical: 12,
     paddingHorizontal: 10,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.screenBackground,
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 2 },
@@ -8539,7 +8389,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingVertical: 16,
     paddingHorizontal: 12,
-    borderRadius: 26,
   },
   syncRupeeSide: {
     fontSize: 20,
@@ -8552,11 +8401,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 24,
   },
   syncDateChipSide: {
     paddingVertical: 10,
-    borderRadius: 14,
   },
   syncDateFieldWrapSide: {
     paddingLeft: 12,
@@ -8569,9 +8416,6 @@ const styles = StyleSheet.create({
   },
   syncAmountCard: {
     backgroundColor: Theme.surface,
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingVertical: 22,
     paddingHorizontal: 18,
     alignItems: "center",
@@ -8612,9 +8456,6 @@ const styles = StyleSheet.create({
   },
   syncDateCard: {
     backgroundColor: Theme.surface,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingVertical: 18,
     paddingHorizontal: 16,
     shadowColor: "#000",
@@ -8645,16 +8486,12 @@ const styles = StyleSheet.create({
   syncDateChip: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 16,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
   },
   syncDateChipActive: {
     backgroundColor: LEDGER_SLATE,
-    borderColor: LEDGER_SLATE,
   },
   syncDateChipText: {
     fontSize: 10,
@@ -8671,15 +8508,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingLeft: 18,
     paddingRight: 14,
     paddingVertical: 12,
   },
   syncDateFieldWrapError: {
-    borderColor: Theme.teslaRed,
   },
   syncDateMatrixCard: {
     paddingVertical: 14,
@@ -8719,7 +8552,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
     overflow: "hidden",
   },
   ledgerDatePickerHeader: {
@@ -8754,12 +8586,9 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     zIndex: 1,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
   },
   ledgerWebDatePickerTitle: {
     fontSize: 16,
@@ -8780,10 +8609,7 @@ const styles = StyleSheet.create({
   ledgerWebDatePickerBtnGhost: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceForm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
   },
   ledgerWebDatePickerBtnGhostText: {
     fontSize: 15,
@@ -8793,11 +8619,7 @@ const styles = StyleSheet.create({
   ledgerWebDatePickerBtnPrimary: {
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 12,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   ledgerWebDatePickerBtnPrimaryText: {
     fontSize: 15,
@@ -8842,9 +8664,6 @@ const styles = StyleSheet.create({
   protocolTile: {
     minHeight: 68,
     flexShrink: 0,
-    borderRadius: 26,
-    borderWidth: 2,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
@@ -8859,7 +8678,6 @@ const styles = StyleSheet.create({
   },
   protocolTileSelected: {
     backgroundColor: LEDGER_SLATE,
-    borderColor: LEDGER_SLATE,
     transform: [{ scale: 1.02 }],
     shadowColor: "#000",
     shadowOpacity: 0.12,
@@ -8869,7 +8687,6 @@ const styles = StyleSheet.create({
   /** Ledger split strips: same active styling without scale (avoids horizontal clipping on narrow columns). */
   protocolTileSplitSelected: {
     backgroundColor: LEDGER_SLATE,
-    borderColor: LEDGER_SLATE,
     shadowColor: "#000",
     shadowOpacity: 0.12,
     shadowRadius: 10,
@@ -8891,8 +8708,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 3,
     gap: 3,
-    borderRadius: 14,
-    borderWidth: 1.5,
   },
   protocolTileTextSplit: {
     ...FinanceTxnTypography.chipLabel,
@@ -8901,9 +8716,6 @@ const styles = StyleSheet.create({
   },
   syncReferenceCard: {
     backgroundColor: Theme.surface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 8,
@@ -8933,10 +8745,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 28,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
   },
   syncReferenceInputPill: {
     flex: 1,
@@ -8959,9 +8768,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: Theme.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingVertical: 16,
     paddingHorizontal: 16,
   },
@@ -9077,9 +8883,6 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   missionSearchInline: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -9114,16 +8917,12 @@ const styles = StyleSheet.create({
   missionFilterChip: {
     paddingVertical: 7,
     paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e8ecf1",
     backgroundColor: Theme.screenBackground,
     minHeight: 30,
     alignItems: "center",
     justifyContent: "center",
   },
   missionFilterChipOn: {
-    borderColor: LedgerSyncPalette.slate,
     backgroundColor: LedgerSyncPalette.slate,
     shadowColor: LedgerSyncPalette.slate,
     shadowOpacity: 0.08,
@@ -9162,10 +8961,7 @@ const styles = StyleSheet.create({
   missionLocked: {
     paddingVertical: 20,
     paddingHorizontal: 12,
-    borderRadius: 18,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   missionLockedLabel: {
     fontSize: 9,
@@ -9188,16 +8984,12 @@ const styles = StyleSheet.create({
   missionTripProtocolCardCompact: {
     flexGrow: 0,
     alignSelf: "stretch",
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.surface,
     paddingVertical: 10,
     paddingHorizontal: 12,
     gap: 6,
   },
   missionTripProtocolCardCompactOn: {
-    borderColor: LedgerSyncPalette.ink,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,
@@ -9207,7 +8999,6 @@ const styles = StyleSheet.create({
   missionTripProtocolIconCompact: {
     width: 36,
     height: 36,
-    borderRadius: 14,
     backgroundColor: LedgerSyncPalette.indigoSoft,
     alignItems: "center",
     justifyContent: "center",
@@ -9236,16 +9027,12 @@ const styles = StyleSheet.create({
   missionTripDuePill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
   },
   missionTripDuePillGreen: {
     backgroundColor: LedgerSyncPalette.emeraldSoft,
-    borderColor: "#A7F3D0",
   },
   missionTripDuePillRed: {
     backgroundColor: "#FFF1F2",
-    borderColor: "#FECDD3",
   },
   missionTripDuePillText: {
     ...FinanceTxnTypography.tripId,
@@ -9260,9 +9047,6 @@ const styles = StyleSheet.create({
   ledgerFocusedTripCard: {
     width: "100%",
     alignSelf: "stretch",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.surface,
     padding: 16,
     overflow: "hidden",
@@ -9299,7 +9083,6 @@ const styles = StyleSheet.create({
   ledgerFocusedTripCheck: {
     width: 30,
     height: 30,
-    borderRadius: 15,
     backgroundColor: LedgerSyncPalette.emerald,
     alignItems: "center",
     justifyContent: "center",
@@ -9321,7 +9104,6 @@ const styles = StyleSheet.create({
   },
   ledgerFocusedTripChip: {
     backgroundColor: "#f8fafc",
-    borderColor: "#e2e8f0",
   },
   ledgerFocusedTripChipText: {
     color: LedgerSyncPalette.ink,
@@ -9359,7 +9141,6 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   ledgerModeIcon3D: {
-    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -9397,9 +9178,6 @@ const styles = StyleSheet.create({
   ledgerModeGridTile: {
     flex: 1,
     minWidth: 0,
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: "transparent",
     backgroundColor: LedgerSyncPalette.page,
     paddingVertical: 14,
     paddingHorizontal: 8,
@@ -9409,7 +9187,6 @@ const styles = StyleSheet.create({
   },
   ledgerModeGridTileOn: {
     backgroundColor: LedgerSyncPalette.surface,
-    borderColor: LedgerSyncPalette.indigo,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.1,
@@ -9434,7 +9211,6 @@ const styles = StyleSheet.create({
     right: 10,
     width: 8,
     height: 8,
-    borderRadius: 4,
     backgroundColor: LedgerSyncPalette.indigo,
   },
   ledgerModeExtraStrip: {
@@ -9444,13 +9220,9 @@ const styles = StyleSheet.create({
   ledgerModeExtraChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.page,
   },
   ledgerModeExtraChipOn: {
-    borderColor: LedgerSyncPalette.ink,
     backgroundColor: LedgerSyncPalette.ink,
   },
   ledgerModeExtraChipText: {
@@ -9487,9 +9259,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: LedgerSyncPalette.page,
-    borderWidth: 2,
-    borderColor: LedgerSyncPalette.border,
-    borderRadius: 24,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -9507,9 +9276,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     backgroundColor: LedgerSyncPalette.page,
-    borderWidth: 2,
-    borderColor: LedgerSyncPalette.border,
-    borderRadius: 24,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
@@ -9547,8 +9313,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   syncAmountCardNoDueHighlight: {
-    borderColor: "rgba(99, 102, 241, 0.35)",
-    borderWidth: 1.5,
     shadowColor: LedgerSyncPalette.indigo,
     shadowOpacity: 0.12,
     shadowRadius: 14,
@@ -9560,10 +9324,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 14,
     paddingVertical: 11,
-    borderRadius: 14,
     backgroundColor: "rgba(148, 163, 184, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.2)",
     borderLeftWidth: 3,
     borderLeftColor: LedgerSyncPalette.indigo,
   },
@@ -9622,9 +9383,6 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   missionTripProtocolCard: {
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: LedgerSyncPalette.border,
     backgroundColor: LedgerSyncPalette.surface,
     padding: 18,
     gap: 12,
@@ -9632,7 +9390,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   missionTripProtocolCardOn: {
-    borderColor: LedgerSyncPalette.ink,
     backgroundColor: LedgerSyncPalette.ink,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 16 },
@@ -9656,7 +9413,6 @@ const styles = StyleSheet.create({
   missionTripProtocolIcon: {
     width: 48,
     height: 48,
-    borderRadius: 18,
     backgroundColor: LedgerSyncPalette.indigoSoft,
     alignItems: "center",
     justifyContent: "center",
@@ -9691,14 +9447,10 @@ const styles = StyleSheet.create({
   missionTripDateBadge: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
     backgroundColor: LedgerSyncPalette.page,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
   },
   missionTripDateBadgeOn: {
     backgroundColor: "rgba(255,255,255,0.1)",
-    borderColor: "rgba(255,255,255,0.15)",
   },
   missionTripDateBadgeText: {
     ...FinanceTxnTypography.dateLine,
@@ -9728,16 +9480,12 @@ const styles = StyleSheet.create({
   missionTripDueBox: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 14,
     backgroundColor: LedgerSyncPalette.page,
-    borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
     minWidth: "46%",
     flexGrow: 1,
   },
   missionTripDueBoxOn: {
     backgroundColor: "rgba(255,255,255,0.06)",
-    borderColor: "rgba(255,255,255,0.12)",
   },
   missionTripDueLabel: {
     fontSize: 8,
@@ -9769,15 +9517,12 @@ const styles = StyleSheet.create({
     bottom: 16,
     width: 36,
     height: 36,
-    borderRadius: 18,
     backgroundColor: LedgerSyncPalette.indigo,
     alignItems: "center",
     justifyContent: "center",
   },
   syncAmountCardPulse: {
     backgroundColor: LedgerSyncPalette.ink,
-    borderColor: LedgerSyncPalette.ink,
-    borderRadius: 24,
     paddingVertical: 18,
     paddingHorizontal: 14,
     overflow: "hidden",
@@ -9785,9 +9530,6 @@ const styles = StyleSheet.create({
   },
   syncAmountCardLight: {
     backgroundColor: LedgerSyncPalette.page,
-    borderColor: "transparent",
-    borderWidth: 0,
-    borderRadius: 14,
     paddingVertical: 8,
     paddingHorizontal: 4,
     overflow: "visible",
@@ -9805,7 +9547,6 @@ const styles = StyleSheet.create({
     right: -40,
     width: 160,
     height: 160,
-    borderRadius: 80,
     backgroundColor: "rgba(99,102,241,0.15)",
   },
   syncAmountEyebrowPulse: {
@@ -9859,9 +9600,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 8,
     paddingHorizontal: 10,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
   },
   missionTripPendingChipsRow: {
@@ -9874,15 +9612,11 @@ const styles = StyleSheet.create({
   missionTripPendingChip: {
     paddingVertical: 5,
     paddingHorizontal: 10,
-    borderRadius: 999,
     backgroundColor: Theme.aggregatePillBg,
-    borderWidth: 1,
-    borderColor: Theme.primary,
     maxWidth: "100%",
   },
   missionTripPendingChipDisabled: {
     opacity: 0.5,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
   },
   missionTripPendingChipText: {
@@ -9896,10 +9630,7 @@ const styles = StyleSheet.create({
   missionTripNoDuePill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
     backgroundColor: LedgerSyncPalette.page,
-    borderColor: LedgerSyncPalette.border,
     maxWidth: "100%",
   },
   missionTripNoDuePillText: {
@@ -9908,25 +9639,20 @@ const styles = StyleSheet.create({
   },
   ledgerFocusedNoDuePill: {
     backgroundColor: "rgba(255,255,255,0.06)",
-    borderColor: "rgba(255,255,255,0.14)",
   },
   ledgerFocusedNoDuePillText: {
     ...FinanceTxnTypography.noDueChip,
     color: "rgba(255,255,255,0.52)",
   },
   missionTripRowCompactOn: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.aggregatePillBg,
   },
   missionTripIconPlaceholder: {
     width: 28,
     height: 28,
-    borderRadius: 14,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   missionTripTextCol: {
     flex: 1,
@@ -9939,7 +9665,6 @@ const styles = StyleSheet.create({
     textTransform: "none",
   },
   reconCard: {
-    borderRadius: 26,
     paddingVertical: 18,
     paddingHorizontal: 18,
     backgroundColor: LEDGER_SLATE,
@@ -10009,7 +9734,6 @@ const styles = StyleSheet.create({
   readyPill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
     backgroundColor: "rgba(16,185,129,0.22)",
   },
   readyPillText: {
@@ -10045,9 +9769,6 @@ const styles = StyleSheet.create({
   ledgerConfirmBtnGhost: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     alignItems: "center",
   },
@@ -10059,7 +9780,6 @@ const styles = StyleSheet.create({
   ledgerConfirmBtnPrimary: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 16,
     alignItems: "center",
   },
   ledgerConfirmBtnPrimaryIn: {

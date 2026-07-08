@@ -217,9 +217,6 @@ export function DiscoverCompactRow({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 12,
     paddingVertical: 11,
@@ -270,7 +267,6 @@ const styles = StyleSheet.create({
   avatar: {
     width: 42,
     height: 42,
-    borderRadius: 21,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -287,17 +283,13 @@ const styles = StyleSheet.create({
     bottom: -1,
     width: 16,
     height: 16,
-    borderRadius: 8,
     backgroundColor: Theme.positive,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
   },
   rolePill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
   },
   rolePillText: {
     fontSize: 9,
@@ -311,11 +303,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   discoverAvatarRound: {
-    borderRadius: 21,
     overflow: "hidden",
   },
   discoverAvatarPlain: {
-    borderWidth: 0,
   },
   rowActions: {
     flexDirection: "row",
@@ -334,10 +324,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 8,
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   pendingText: {
     fontSize: 10,
@@ -347,9 +334,6 @@ const styles = StyleSheet.create({
   iconAction: {
     width: 32,
     height: 32,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surface,
@@ -360,11 +344,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     minWidth: 88,
     justifyContent: "center",
   },

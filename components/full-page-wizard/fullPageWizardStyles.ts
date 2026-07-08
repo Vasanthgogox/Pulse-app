@@ -57,9 +57,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     minHeight: 28,
   },
   headerBackBtn: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -107,19 +104,14 @@ export const fullPageWizardStyles = StyleSheet.create({
   wizardStepCircle: {
     width: 24,
     height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
   },
   wizardStepCircleActive: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
   },
   wizardStepCircleDone: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
   },
   wizardStepCircleText: {
@@ -179,9 +171,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     padding: 10,
   },
@@ -191,7 +180,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     alignSelf: "stretch",
   },
   partyCardSelected: {
-    borderColor: WIZARD_ACCENT,
     backgroundColor: WIZARD_ACCENT_SOFT,
   },
   partyTextWrap: {
@@ -218,9 +206,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     marginTop: 1,
   },
   block: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     padding: 12,
     gap: 8,
@@ -246,16 +231,12 @@ export const fullPageWizardStyles = StyleSheet.create({
   modeChip: {
     flex: 1,
     minWidth: 0,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 10,
     paddingVertical: 8,
     alignItems: "center",
   },
   modeChipActive: {
-    borderColor: WIZARD_ACCENT,
     backgroundColor: WIZARD_ACCENT_SOFT,
   },
   modeChipText: {
@@ -284,9 +265,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     marginBottom: 4,
   },
   cancelBtn: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -300,13 +278,7 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   submitBtn: {
     flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 14,
     paddingVertical: 10,
     alignItems: "center",
@@ -322,9 +294,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     fontWeight: "800",
   },
   tertiaryBtn: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -349,9 +318,6 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   /** Form section card — matches wizard block styling inside step bodies. */
   formSectionCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -375,9 +341,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     textTransform: "uppercase",
   },
   formInput: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
     backgroundColor: Theme.screenBackground,
     color: Theme.textPrimaryDark,
     fontSize: 14,
@@ -385,9 +348,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingVertical: 10,
   },
   clientListWrap: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
   },
@@ -399,9 +359,6 @@ export const fullPageWizardStyles = StyleSheet.create({
   wizardPickerListShell: {
     width: "100%",
     alignSelf: "stretch",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
     padding: 0,
@@ -423,11 +380,8 @@ export const fullPageWizardStyles = StyleSheet.create({
     textTransform: "uppercase",
   },
   wizardPickerCountBadge: {
-    borderRadius: 999,
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: WIZARD_ACCENT_BORDER,
     backgroundColor: WIZARD_ACCENT_SOFT,
     flexShrink: 0,
   },
@@ -447,9 +401,6 @@ export const fullPageWizardStyles = StyleSheet.create({
   wizardPickerSecondaryBtn: {
     alignSelf: "stretch",
     minHeight: 44,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -489,16 +440,12 @@ export const fullPageWizardStyles = StyleSheet.create({
   selectionGridTile: {
     alignItems: "center",
     justifyContent: "flex-start",
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     paddingVertical: 10,
     paddingHorizontal: 6,
     minHeight: 108,
   },
   selectionGridTileSelected: {
-    borderColor: WIZARD_ACCENT,
     backgroundColor: WIZARD_ACCENT_SOFT,
   },
   selectionGridCheckParty: {
@@ -506,7 +453,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     bottom: -4,
     width: 16,
     height: 16,
-    borderRadius: 8,
   },
   selectionGridTileDisabled: {
     opacity: 0.55,
@@ -522,12 +468,9 @@ export const fullPageWizardStyles = StyleSheet.create({
     bottom: -2,
     width: 18,
     height: 18,
-    borderRadius: 9,
     backgroundColor: WIZARD_ACCENT,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Theme.cardWhite,
   },
   selectionGridName: {
     marginTop: 8,
@@ -585,16 +528,10 @@ export const fullPageWizardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     padding: 10,
   },
   shipperWarningCard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: WIZARD_ACCENT_BORDER,
     backgroundColor: WIZARD_ACCENT_MUTED,
     padding: 10,
     gap: 8,
@@ -608,9 +545,6 @@ export const fullPageWizardStyles = StyleSheet.create({
   addClientBtn: {
     alignSelf: "stretch",
     minHeight: 44,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -633,9 +567,6 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   /** Wizard step text input — 14px black body (not dense 9–10px form). */
   wizardFieldInput: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
     backgroundColor: Theme.screenBackground,
     color: Theme.textPrimaryDark,
     fontSize: 12,
@@ -674,9 +605,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -699,9 +627,6 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   wizardDateTouchable: {
     minHeight: 44,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 12,
     justifyContent: "center",
@@ -724,13 +649,9 @@ export const fullPageWizardStyles = StyleSheet.create({
   quickDateChip: {
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
   },
   quickDateChipActive: {
-    borderColor: WIZARD_ACCENT,
     backgroundColor: WIZARD_ACCENT_SOFT,
   },
   quickDateChipText: {
@@ -821,9 +742,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     justifyContent: "center",
   },
   wizardKeypadKeysCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     overflow: "hidden",
     paddingTop: 8,
@@ -877,9 +795,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     marginBottom: 2,
   },
   desktopInsightCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 12,
     paddingVertical: 12,

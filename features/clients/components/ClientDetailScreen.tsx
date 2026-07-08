@@ -2812,9 +2812,6 @@ const styles = StyleSheet.create({
   },
   profileCard: {
     backgroundColor: Theme.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
     padding: 18,
     marginBottom: 16,
   },
@@ -2827,17 +2824,13 @@ const styles = StyleSheet.create({
   profileAvatarWrap: {
     width: 74,
     height: 74,
-    borderRadius: 37,
     backgroundColor: Theme.avatarIndigo,
-    borderWidth: 2,
-    borderColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   profileAvatarImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 37,
   },
   profileCardTopText: { flex: 0, minWidth: 0, alignItems: "center" },
   profileEntityName: {
@@ -2876,10 +2869,7 @@ const styles = StyleSheet.create({
   profileBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
   },
   profileBadgeText: {
     fontSize: 7,
@@ -2889,7 +2879,6 @@ const styles = StyleSheet.create({
   },
   profileBadgeCore: {
     backgroundColor: Theme.fiscalTabActiveBg ?? "#e8eaf6",
-    borderColor: Theme.primary,
   },
   profileBadgeCoreText: {
     fontSize: 7,
@@ -2906,10 +2895,7 @@ const styles = StyleSheet.create({
   profileGridItem: {
     flex: 1,
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 12,
     padding: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     alignItems: "center",
   },
   profileGridLabel: {
@@ -2947,7 +2933,6 @@ const styles = StyleSheet.create({
   profileContactIcon: {
     width: 32,
     height: 32,
-    borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -2974,9 +2959,6 @@ const styles = StyleSheet.create({
   profileFiscalRow: {
     marginBottom: 12,
     padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
   },
   profileFiscalLabel: {
@@ -3006,10 +2988,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 14,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 14,
   },
   profileEditBtnText: {
     fontSize: 10,
@@ -3025,9 +3003,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 14,
     backgroundColor: Theme.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   profileSecondaryBtnText: {
     fontSize: 10,
@@ -3073,9 +3048,6 @@ const styles = StyleSheet.create({
   healthCircle: {
     width: 56,
     height: 56,
-    borderRadius: 28,
-    borderWidth: 4,
-    borderColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -3121,10 +3093,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     minHeight: 24,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingHorizontal: 8,
   },
   profilePreviewTopActionText: {
@@ -3147,7 +3116,6 @@ const styles = StyleSheet.create({
   profilePreviewIdentityName: ecc.identityName,
   profilePreviewIdentitySub: ecc.identitySub,
   profilePreviewIdentityTrigger: {
-    borderRadius: 12,
     paddingVertical: 2,
   },
   profilePreviewRatingRow: ecc.ratingRow,
@@ -3163,7 +3131,6 @@ const styles = StyleSheet.create({
   profilePreviewToggleDot: ecc.toggleDot,
   profilePreviewToggleDotActive: ecc.toggleDotActive,
   profilePreviewToggleDotPending: {
-    borderColor: Theme.financeCardBlueFrom,
     backgroundColor: "rgba(29,78,216,0.12)",
   },
   profilePreviewToggleTextWrap: ecc.toggleTextWrap,
@@ -3179,8 +3146,6 @@ const styles = StyleSheet.create({
   tabItemTextActive: edc.tabItemTextActive,
   tableCard: edc.tableCard,
   tableCardWebDesktop: {
-    borderRadius: 12,
-    borderColor: Theme.borderMedium,
     width: "100%",
     backgroundColor: Theme.surface,
     marginHorizontal: 0,
@@ -3338,28 +3303,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Theme.surface,
-    borderRadius: 20,
     padding: 18,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   cashCardIcon: {
     width: 36,
     height: 36,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   cashCardIconIn: {
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
   },
   cashCardIconOut: {
     backgroundColor: Theme.negativeMuted,
-    borderWidth: 1,
-    borderColor: Theme.teslaRed,
   },
   cashCardBody: {
     flex: 1,
@@ -3394,9 +3351,6 @@ const styles = StyleSheet.create({
   },
   sharedCard: {
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 20,
     padding: 24,
     marginBottom: 16,
   },
@@ -3419,9 +3373,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff7ed",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#fed7aa",
   },
   sharedMismatchText: {
     fontSize: 8,
@@ -3432,7 +3383,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 1,
     backgroundColor: Theme.borderLight,
-    borderRadius: 16,
     overflow: "hidden",
     marginBottom: 16,
   },
@@ -3464,10 +3414,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3481,9 +3427,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: Theme.teslaRed,
-    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3498,14 +3441,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderStyle: "dashed",
     borderColor: Theme.borderMedium,
-    borderRadius: 24,
     padding: 32,
     alignItems: "center",
   },
   inviteIconWrap: {
     width: 80,
     height: 80,
-    borderRadius: 24,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
@@ -3539,7 +3480,6 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingVertical: 16,
     backgroundColor: Theme.darkBackground,
-    borderRadius: 20,
     marginBottom: 16,
   },
   inviteCtaText: {
@@ -3571,7 +3511,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.darkBackground,
     paddingVertical: 24,
     paddingHorizontal: 32,
-    borderRadius: 24,
     alignItems: "center",
     minWidth: 160,
     shadowColor: "#000",

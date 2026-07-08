@@ -231,9 +231,6 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.networkCardBorder,
     backgroundColor: Theme.networkCardBackground,
     paddingTop: 12,
     paddingBottom: 4,
@@ -255,12 +252,9 @@ const styles = StyleSheet.create({
   iconRing: {
     width: 24,
     height: 24,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.networkCardBorder,
   },
   kicker: {
     fontSize: 9,
@@ -284,7 +278,6 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.networkCardBorder,
   },
   avatarBorder: {
-    borderColor: Theme.networkCardBorder,
   },
   itemBody: {
     flex: 1,
@@ -308,10 +301,7 @@ const styles = StyleSheet.create({
   rolePill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
     backgroundColor: Theme.networkPageBackground,
-    borderWidth: 1,
-    borderColor: Theme.networkCardBorder,
   },
   rolePillText: {
     fontSize: 8,
@@ -342,10 +332,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 6,
-    borderRadius: 8,
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.positive,
   },
   onQPillText: {
     fontSize: 10,
@@ -355,10 +342,7 @@ const styles = StyleSheet.create({
   mutedPill: {
     paddingHorizontal: 8,
     paddingVertical: 6,
-    borderRadius: 8,
     backgroundColor: Theme.surfaceForm,
-    borderWidth: 1,
-    borderColor: Theme.networkCardBorder,
   },
   mutedPillText: {
     fontSize: 9,
@@ -369,10 +353,7 @@ const styles = StyleSheet.create({
     minWidth: 86,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
     borderRadius: Theme.buttonPrimaryRadius,
     borderWidth: 1,
     borderColor: Theme.primary,

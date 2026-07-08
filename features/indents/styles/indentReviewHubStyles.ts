@@ -2,6 +2,7 @@
  * Shared typography + layout for indent detail (GIVE LOAD owner / GET LOAD supplier)
  * and Review Hub modals (Award, Bid). Compact txn-page rhythm, heavier weights.
  */
+import { createStyles, text, view } from "@/lib/styles/createStyles";
 import { Platform, StyleSheet } from "react-native";
 
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -134,7 +135,7 @@ export const indentReviewHubText = {
     fontWeight: "900" as const,
     color: Theme.textOnDark,
     letterSpacing: -0.35,
-    fontVariant: ["tabular-nums"] as const,
+    fontVariant: ["tabular-nums"],
   },
   heroKicker: {
     ...FinanceTxnTypography.fieldLabel,
@@ -164,7 +165,7 @@ export const indentReviewHubText = {
     fontSize: 10,
     fontWeight: "800" as const,
     color: Theme.textOnDark,
-    fontVariant: ["tabular-nums"] as const,
+    fontVariant: ["tabular-nums"],
   },
   modalSubtitle: {
     ...FinanceTxnTypography.fieldLabel,
@@ -184,7 +185,7 @@ export const indentReviewHubText = {
     fontSize: 10,
     fontWeight: "800" as const,
     color: Theme.textBody,
-    fontVariant: ["tabular-nums"] as const,
+    fontVariant: ["tabular-nums"],
   },
   quoteRowStatus: {
     ...FinanceTxnTypography.chipLabel,
@@ -220,8 +221,8 @@ export const indentHubCardShadow = Platform.select({
 });
 
 /** Dark hero + meta row (Award / Bid modals). */
-export const indentReviewHubStyles = StyleSheet.create({
-  reviewHubHero: {
+const indentReviewHubStylesDef = {
+  reviewHubHero: view({
     borderRadius: indentReviewHubLayout.summaryCardRadius,
     backgroundColor: Theme.textPrimaryDark,
     padding: indentReviewHubLayout.summaryCardPadding,
@@ -229,8 +230,8 @@ export const indentReviewHubStyles = StyleSheet.create({
     overflow: "hidden",
     minWidth: 0,
     alignSelf: "stretch",
-  },
-  reviewHubHeroGlow: {
+  }),
+  reviewHubHeroGlow: view({
     position: "absolute",
     top: -36,
     right: -36,
@@ -238,10 +239,10 @@ export const indentReviewHubStyles = StyleSheet.create({
     height: 110,
     borderRadius: 55,
     backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  reviewHubHeroKicker: indentReviewHubText.heroKicker,
-  reviewHubHeroRoute: indentReviewHubText.heroRoute,
-  reviewHubHeroMeta: {
+  }),
+  reviewHubHeroKicker: text({ ...indentReviewHubText.heroKicker }),
+  reviewHubHeroRoute: text({ ...indentReviewHubText.heroRoute }),
+  reviewHubHeroMeta: view({
     flexDirection: "row",
     marginTop: 10,
     paddingTop: 10,
@@ -251,24 +252,27 @@ export const indentReviewHubStyles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 8,
     minWidth: 0,
-  },
-  reviewHubHeroMetaCol: {
+  }),
+  reviewHubHeroMetaCol: view({
     flex: 1,
     minWidth: 0,
-  },
-  reviewHubHeroMetaColEnd: {
+  }),
+  reviewHubHeroMetaColEnd: view({
     flexShrink: 1,
     minWidth: 0,
     maxWidth: "58%",
     alignItems: "flex-end",
-  },
-  reviewHubHeroStatValueEnd: {
+  }),
+  reviewHubHeroStatValueEnd: text({
     textAlign: "right",
     alignSelf: "stretch",
-  },
-  reviewHubHeroStatLabel: indentReviewHubText.heroStatLabel,
-  reviewHubHeroStatValue: indentReviewHubText.heroStatValue,
-  bidHubHero: {
+  }),
+  reviewHubHeroStatLabel: text({ ...indentReviewHubText.heroStatLabel }),
+  reviewHubHeroStatValue: text({
+    ...indentReviewHubText.heroStatValue,
+    fontVariant: ["tabular-nums"],
+  }),
+  bidHubHero: view({
     borderRadius: indentReviewHubLayout.summaryCardRadius,
     backgroundColor: Theme.textPrimaryDark,
     padding: indentReviewHubLayout.summaryCardPadding,
@@ -276,8 +280,8 @@ export const indentReviewHubStyles = StyleSheet.create({
     overflow: "hidden",
     minWidth: 0,
     alignSelf: "stretch",
-  },
-  bidHubHeroGlow: {
+  }),
+  bidHubHeroGlow: view({
     position: "absolute",
     top: -36,
     right: -36,
@@ -285,30 +289,30 @@ export const indentReviewHubStyles = StyleSheet.create({
     height: 110,
     borderRadius: 55,
     backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  bidHubHeroKicker: indentReviewHubText.heroKicker,
-  bidHubHeroRoute: indentReviewHubText.heroRoute,
-  bidHubHeroChips: {
+  }),
+  bidHubHeroKicker: text({ ...indentReviewHubText.heroKicker }),
+  bidHubHeroRoute: text({ ...indentReviewHubText.heroRoute }),
+  bidHubHeroChips: view({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
     marginTop: 4,
-  },
-  bidHubChip: {
+  }),
+  bidHubChip: view({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.1)",
     borderWidth: 1,
     borderColor: Theme.borderOnDark,
-  },
-  bidHubChipText: {
+  }),
+  bidHubChipText: text({
     ...indentReviewHubText.chipLabel,
     color: Theme.textOnDarkMuted,
-  },
-  reviewHubModalSubtitle: indentReviewHubText.modalSubtitle,
-  summaryCard: {
-    position: "relative" as const,
+  }),
+  reviewHubModalSubtitle: text({ ...indentReviewHubText.modalSubtitle }),
+  summaryCard: view({
+    position: "relative",
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -316,42 +320,42 @@ export const indentReviewHubStyles = StyleSheet.create({
     padding: indentReviewHubLayout.summaryCardPadding,
     marginBottom: 10,
     overflow: "hidden",
-  },
-  summaryRoute: {
+  }),
+  summaryRoute: view({
     marginBottom: 6,
-  },
-  freightCard: {
+  }),
+  freightCard: view({
     borderRadius: indentReviewHubLayout.freightCardRadius,
     padding: indentReviewHubLayout.freightCardPadding,
     marginBottom: 10,
     overflow: "hidden",
-  },
+  }),
   /** Load Center list + Review Hub scroll sections */
-  hubTicketCard: {
+  hubTicketCard: view({
     backgroundColor: Theme.cardWhite,
     borderRadius: indentReviewHubLayout.summaryCardRadius,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-  },
-  hubTicketBody: {
+  }),
+  hubTicketBody: view({
     paddingHorizontal: indentReviewHubLayout.hubCardPaddingComfort,
     paddingTop: indentReviewHubLayout.hubCardPaddingComfort,
     paddingBottom: indentReviewHubLayout.hubCardPaddingComfort,
-  },
-  hubTicketBodyDense: {
+  }),
+  hubTicketBodyDense: view({
     paddingHorizontal: indentReviewHubLayout.hubCardPaddingDense,
     paddingTop: indentReviewHubLayout.hubCardPaddingDense,
     paddingBottom: indentReviewHubLayout.hubCardPaddingDense,
-  },
-  hubSectionHeader: {
+  }),
+  hubSectionHeader: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: indentReviewHubLayout.sectionGap,
     minWidth: 0,
-  },
-  hubEmptyCard: {
+  }),
+  hubEmptyCard: view({
     backgroundColor: Theme.screenBackground,
     borderRadius: indentReviewHubLayout.summaryCardRadius,
     paddingVertical: indentReviewHubLayout.hubCardPaddingComfort,
@@ -360,43 +364,45 @@ export const indentReviewHubStyles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignSelf: "stretch",
     gap: indentReviewHubLayout.sectionGap,
-  },
-  hubEmptyRow: {
+  }),
+  hubEmptyRow: view({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
     width: "100%",
-  },
-  hubEmptyCopy: {
+  }),
+  hubEmptyCopy: view({
     flex: 1,
     minWidth: 0,
     gap: 2,
-  },
-  hubPill: {
+  }),
+  hubPill: view({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
     backgroundColor: Theme.surfaceGray,
-  },
-  hubPillText: {
+  }),
+  hubPillText: text({
     ...indentReviewHubText.chipLabel,
     color: Theme.textPrimaryDark,
-  },
-  hubStatePill: {
+  }),
+  hubStatePill: view({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
     backgroundColor: Theme.positiveMuted,
     borderWidth: 1,
     borderColor: Theme.positiveMutedDarkBorder,
-  },
-  hubStatePillText: {
+  }),
+  hubStatePillText: text({
     ...indentReviewHubText.chipLabel,
     color: Theme.positive,
-  },
-});
+  }),
+};
+
+export const indentReviewHubStyles = createStyles(indentReviewHubStylesDef);
 
 /** Review Hub — summary left, bids / quote scroll pane right (give + get load). */
 export const indentReviewHubSplitLayout = StyleSheet.create({

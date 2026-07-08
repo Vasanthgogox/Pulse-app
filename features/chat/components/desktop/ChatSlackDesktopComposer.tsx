@@ -306,10 +306,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     paddingVertical: 8,
     paddingHorizontal: 2,
-    borderRadius: 8,
     backgroundColor: "#FAFAFA",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: SLACK_DESKTOP.border,
   },
   emojiGrid: {
     flexDirection: "row",
@@ -322,7 +319,6 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 6,
     ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : {}),
   },
   toolbar: {
@@ -351,7 +347,6 @@ const styles = StyleSheet.create({
     height: 28,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 4,
     ...(Platform.OS === "web" ? ({ display: "flex" } as object) : {}),
   },
   toolIconSlot: {
@@ -414,7 +409,6 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 28,
     height: 28,
-    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.buttonPrimary,

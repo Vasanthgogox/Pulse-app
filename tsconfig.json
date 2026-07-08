@@ -10,5 +10,13 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": ["node_modules", "**/__tests__/**", "supabase/functions/**"]
+  "exclude": [
+    "node_modules",
+    "**/__tests__/**",
+    "supabase/functions/**",
+    "oms/**",
+    "analytics/**",
+    "_reference/**",
+    "packages/**"
+  ]
 }

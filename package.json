@@ -28,6 +28,8 @@
   "build:admin": "cd analytics && npm install --prefer-offline && npm run build && cp -r dist ../dist/ops-9f3a2c",
     "build:oms": "cd oms && npm install --prefer-offline --legacy-peer-deps && npm run build && cp -r dist ../dist/oms",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:oms": "tsc --noEmit -p oms/tsconfig.app.json",
     "test": "jest",
     "test:e2e": "detox test -c ios.sim.debug",
     "test:e2e:build": "detox build -c ios.sim.debug",

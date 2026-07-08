@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { createStyles, text, view } from "@/lib/styles/createStyles";
 import { StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -137,8 +138,8 @@ export const IndentFreightCard = memo(function IndentFreightCard({
 
 const NOTCH = 10;
 
-const styles = StyleSheet.create({
-  card: {
+const stylesDef = {
+  card: view({
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
@@ -148,8 +149,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
-  },
-  glow: {
+  }),
+  glow: view({
     position: "absolute",
     top: -36,
     right: -36,
@@ -157,31 +158,34 @@ const styles = StyleSheet.create({
     height: 108,
     borderRadius: 54,
     backgroundColor: Theme.driverWhiteMuted,
-  },
-  content: {
+  }),
+  content: view({
     zIndex: 1,
     gap: 10,
-  },
-  heroRow: {
+  }),
+  heroRow: view({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-  },
-  heroText: {
+  }),
+  heroText: view({
     flex: 1,
     minWidth: 0,
     gap: 4,
-  },
-  heroLabel: indentReviewHubText.freightLabelDark,
-  heroAmountRow: {
+  }),
+  heroLabel: text(indentReviewHubText.freightLabelDark),
+  heroAmountRow: view({
     flexDirection: "row",
     alignItems: "baseline",
     gap: 4,
-  },
-  heroCurrency: indentReviewHubText.freightCurrency,
-  heroAmount: indentReviewHubText.freightAmount,
-  chartIcon: {
+  }),
+  heroCurrency: text(indentReviewHubText.freightCurrency),
+  heroAmount: text({
+    ...indentReviewHubText.freightAmount,
+    fontVariant: ["tabular-nums"],
+  }),
+  chartIcon: view({
     width: 36,
     height: 36,
     borderRadius: 10,
@@ -191,62 +195,62 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-  },
-  perforation: {
+  }),
+  perforation: view({
     flexDirection: "row",
     alignItems: "center",
     height: NOTCH,
     marginVertical: -2,
-  },
-  notchLeft: {
+  }),
+  notchLeft: view({
     width: NOTCH,
     height: NOTCH,
     borderRadius: NOTCH / 2,
     backgroundColor: Theme.screenBackground,
     marginLeft: -14 - NOTCH / 2,
-  },
-  notchRight: {
+  }),
+  notchRight: view({
     width: NOTCH,
     height: NOTCH,
     borderRadius: NOTCH / 2,
     backgroundColor: Theme.screenBackground,
     marginRight: -14 - NOTCH / 2,
-  },
-  dashLine: {
+  }),
+  dashLine: view({
     flex: 1,
     height: StyleSheet.hairlineWidth,
     borderStyle: "dashed",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.separatorDark,
     opacity: 0.85,
-  },
-  metricsRow: {
+  }),
+  metricsRow: view({
     flexDirection: "row",
     alignItems: "stretch",
     gap: 0,
-  },
-  metricCell: {
+  }),
+  metricCell: view({
     flex: 1,
     minWidth: 0,
     gap: 6,
-  },
-  metricCellClient: {
+  }),
+  metricCellClient: view({
     paddingLeft: 2,
-  },
-  metricDivider: {
+  }),
+  metricDivider: view({
     width: StyleSheet.hairlineWidth,
     backgroundColor: Theme.separatorDark,
     marginHorizontal: 10,
     alignSelf: "stretch",
     opacity: 0.9,
-  },
-  metricLabel: indentReviewHubText.freightGridLabelDark,
-  metricValue: {
+  }),
+  metricLabel: text(indentReviewHubText.freightGridLabelDark),
+  metricValue: text({
     ...indentReviewHubText.freightGridValueDark,
     fontSize: 11,
     lineHeight: 15,
-  },
-  marginChip: {
+  }),
+  marginChip: view({
     alignSelf: "flex-start",
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -254,28 +258,30 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(21,128,61,0.18)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(21,128,61,0.35)",
-  },
-  marginChipText: {
+  }),
+  marginChipText: text({
     fontSize: 8,
     fontWeight: "700",
     color: Theme.positive,
     letterSpacing: 0.3,
-  },
-  supplierStack: {
+  }),
+  supplierStack: view({
     gap: 10,
-  },
-  shipperPanel: {
+  }),
+  shipperPanel: view({
     gap: 6,
-  },
-  quotePanel: {
+  }),
+  quotePanel: view({
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.separatorDark,
     gap: 4,
-  },
-  quoteValue: {
+  }),
+  quoteValue: text({
     ...indentReviewHubText.freightGridValueDark,
     fontSize: 10,
     lineHeight: 14,
-  },
-});
+  }),
+};
+
+const styles = createStyles(stylesDef);

@@ -971,7 +971,6 @@ const styles = StyleSheet.create({
   driverHeaderBackRound: {
     width: 44,
     height: 44,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f1f5f9',
@@ -989,7 +988,6 @@ const styles = StyleSheet.create({
   driverHeaderSavePill: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 14,
     backgroundColor: 'rgba(167,243,208,0.35)',
     minWidth: 72,
     alignItems: 'center',
@@ -1018,7 +1016,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: DRIVER_AVATAR_SIZE + 36,
     height: DRIVER_AVATAR_SIZE + 36,
-    borderRadius: 999,
     opacity: 0.85,
   },
   driverAvatarRelative: {
@@ -1029,14 +1026,12 @@ const styles = StyleSheet.create({
   driverSquircleGradient: {
     width: DRIVER_AVATAR_SIZE + 10,
     height: DRIVER_AVATAR_SIZE + 10,
-    borderRadius: 36,
     padding: 5,
     overflow: 'hidden',
   },
   driverSquircleInner: {
     width: DRIVER_AVATAR_SIZE,
     height: DRIVER_AVATAR_SIZE,
-    borderRadius: 32,
     overflow: 'hidden',
     backgroundColor: '#fff',
     alignItems: 'center',
@@ -1078,9 +1073,6 @@ const styles = StyleSheet.create({
   },
   driverCardWhite: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.45)',
     paddingHorizontal: 20,
     paddingVertical: 18,
     marginBottom: 8,
@@ -1130,7 +1122,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 14,
     backgroundColor: 'rgba(167,243,208,0.35)',
   },
   driverGeneratePillText: {
@@ -1142,9 +1133,6 @@ const styles = StyleSheet.create({
   },
   driverCardWhiteBio: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.45)',
     paddingHorizontal: 22,
     paddingTop: 20,
     paddingBottom: 16,
@@ -1176,9 +1164,6 @@ const styles = StyleSheet.create({
   },
   driverContactCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.45)',
     overflow: 'hidden',
     marginBottom: 8,
     ...Platform.select({
@@ -1205,7 +1190,6 @@ const styles = StyleSheet.create({
   driverContactIconBg: {
     width: 48,
     height: 48,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(167,243,208,0.35)',
@@ -1213,7 +1197,6 @@ const styles = StyleSheet.create({
   driverContactIconBgBlue: {
     width: 48,
     height: 48,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(219,234,254,0.9)',
@@ -1248,7 +1231,6 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 10,
     backgroundColor: 'rgba(167,243,208,0.35)',
   },
   driverVerifiedChipText: {
@@ -1270,12 +1252,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: DRIVER_EDIT_FAB,
     height: DRIVER_EDIT_FAB,
-    borderRadius: DRIVER_EDIT_FAB / 2,
     backgroundColor: DRIVER_FOREST,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: DRIVER_SCREEN_BG,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1287,7 +1266,6 @@ const styles = StyleSheet.create({
     }),
   },
   driverEditFabElevated: {
-    borderRadius: 20,
     right: -6,
     bottom: -6,
   },
@@ -1343,16 +1321,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bioSuggestionCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 8,
   },
   bioSuggestionCardSelected: {
-    borderColor: Theme.darkGreen,
     backgroundColor: Theme.positiveMuted,
   },
   bioSuggestionText: {
@@ -1380,9 +1354,6 @@ const styles = StyleSheet.create({
   },
   driverInput: {
     backgroundColor: DRIVER_INPUT_BG,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingHorizontal: 20,
     paddingVertical: 16,
     fontSize: 16,
@@ -1413,9 +1384,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Theme.surfaceBorder,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingHorizontal: 20,
     paddingVertical: 16,
     minHeight: 52,
@@ -1431,9 +1399,6 @@ const styles = StyleSheet.create({
   },
   driverEmailEmptyCard: {
     backgroundColor: DRIVER_INPUT_BG,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingHorizontal: 18,
     paddingVertical: 14,
     marginBottom: 0,
@@ -1474,9 +1439,6 @@ const styles = StyleSheet.create({
   driverPhonePrefix: {
     width: 88,
     backgroundColor: DRIVER_INPUT_BG,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1495,7 +1457,6 @@ const styles = StyleSheet.create({
   driverSaveChangesBtn: {
     marginTop: 12,
     backgroundColor: Theme.driverEmerald,
-    borderRadius: 26,
     paddingVertical: 20,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1569,7 +1530,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
   },
   actionSheetTitle: {
     fontSize: 13,
@@ -1620,7 +1580,6 @@ const styles = StyleSheet.create({
   headerBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
     backgroundColor: Theme.surfaceBorder,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1657,8 +1616,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   input: {
-    borderWidth: 1,
-    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
@@ -1666,7 +1623,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   inputThemed: {
-    borderWidth: 1.5,
   },
   inputReadOnly: {
     backgroundColor: Theme.surfaceBorder,
@@ -1697,9 +1653,6 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   changePhotoOptionsCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     overflow: 'hidden',
   },
@@ -1717,7 +1670,6 @@ const styles = StyleSheet.create({
   changePhotoOptionAvatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
     marginRight: 12,
     backgroundColor: Theme.surface,
   },
@@ -1729,22 +1681,17 @@ const styles = StyleSheet.create({
   },
   avatarRingGreen: {
     padding: 4,
-    borderRadius: 50,
     alignSelf: 'center',
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 2,
-    borderColor: Theme.primary,
   },
   avatarPreview: {
     width: 88,
     height: 88,
-    borderRadius: 44,
     backgroundColor: Theme.surfaceLight,
   },
   avatarPreviewLoading: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.28)',
-    borderRadius: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1754,15 +1701,9 @@ const styles = StyleSheet.create({
     bottom: -4,
     width: 30,
     height: 30,
-    borderRadius: 15,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Theme.screenBackground,
   },
   photoRow: {
     flexDirection: 'row',
@@ -1770,13 +1711,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     backgroundColor: Theme.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   photoRowRemove: {
     marginTop: 8,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
   },
   dropdownWrap: {
@@ -1797,9 +1734,6 @@ const styles = StyleSheet.create({
   },
   dropdownList: {
     marginTop: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     maxHeight: 280,
   },
@@ -1816,9 +1750,7 @@ const styles = StyleSheet.create({
   avatarGridItem: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 999,
     borderWidth: 2,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     overflow: 'hidden',
   },
@@ -1835,7 +1767,6 @@ const styles = StyleSheet.create({
     bottom: 4,
     width: 18,
     height: 18,
-    borderRadius: 9,
     backgroundColor: Theme.positive,
     alignItems: 'center',
     justifyContent: 'center',

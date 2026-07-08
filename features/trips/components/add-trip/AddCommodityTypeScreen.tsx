@@ -185,9 +185,6 @@ export function AddCommodityTypeScreen({ kind, onClose }: AddCommodityTypeScreen
 const styles = StyleSheet.create({
   privacyCard: {
     backgroundColor: Theme.surfaceLight,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: Layout.screenPaddingHorizontal,
     marginBottom: 20,
   },
@@ -211,9 +208,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "web" ? 12 : 10,
@@ -228,10 +222,6 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 12,
     minHeight: 48,
     alignItems: "center",
     justifyContent: "center",

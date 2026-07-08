@@ -1309,10 +1309,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
     minHeight: 38,
-    borderRadius: 11,
     backgroundColor: Theme.darkSurface,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
     paddingHorizontal: 12,
     paddingVertical: 0,
     minWidth: 0,
@@ -1344,10 +1341,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: 38,
-    borderRadius: 11,
     backgroundColor: Theme.darkSurface,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
     paddingHorizontal: 12,
   },
   invHeaderDateInput: {
@@ -1479,7 +1473,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(79,70,229,0.1)",
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 12,
     textTransform: "uppercase",
   },
   sidebarSearch: {
@@ -1489,9 +1482,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 8,
   },
   sidebarInput: {
     flex: 1,
@@ -1539,7 +1529,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(5,150,105,0.1)",
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
     textTransform: "uppercase",
   },
   tagReceived: {
@@ -1549,7 +1538,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(37,99,235,0.1)",
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
     textTransform: "uppercase",
   },
   tagPending: {
@@ -1559,7 +1547,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(180,83,9,0.1)",
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
     textTransform: "uppercase",
   },
   tagSettled: {
@@ -1569,7 +1556,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceBorder,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
     textTransform: "uppercase",
   },
   clientRowBottom: {
@@ -1581,7 +1567,6 @@ const styles = StyleSheet.create({
   dot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
     backgroundColor: Theme.borderMedium,
   },
   clientBilledText: {
@@ -1616,9 +1601,6 @@ const styles = StyleSheet.create({
     minHeight: 38,
     paddingHorizontal: 12,
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 11,
   },
   invMobilePartnerSearchWrapWeb: {
     outlineStyle: "none",
@@ -1662,9 +1644,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     backgroundColor: Theme.cardWhite,
     marginBottom: 16,
   },
@@ -1723,7 +1702,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.textPrimaryDark,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
     alignSelf: "flex-start",
   },
   bulkActionText: {
@@ -1736,7 +1714,6 @@ const styles = StyleSheet.create({
   bulkActionBtnMobile: {
     width: 36,
     height: 36,
-    borderRadius: 8,
     backgroundColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
@@ -1759,8 +1736,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Theme.cardWhite,
-    borderWidth: 0,
-    borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -1811,9 +1786,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -1865,9 +1837,6 @@ const styles = StyleSheet.create({
   selectAllCheckbox: {
     width: 16,
     height: 16,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1886,14 +1855,10 @@ const styles = StyleSheet.create({
   tripRowDisabled: { opacity: 0.6 },
   tripCardMobile: {
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 14,
     padding: 12,
     marginBottom: 10,
   },
   tripCardMobileSelected: {
-    borderColor: Theme.primary,
     backgroundColor: "rgba(79,70,229,0.05)",
   },
   tripCardMobileTop: {
@@ -1919,16 +1884,12 @@ const styles = StyleSheet.create({
   checkBox: {
     width: 16,
     height: 16,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
   },
   checkBoxOn: { backgroundColor: Theme.buttonPrimary, borderColor: Theme.primary },
   checkBoxDisabled: {
     backgroundColor: Theme.surfaceBorder,
-    borderColor: Theme.borderLight,
   },
 
   tripDate: { fontSize: 11, fontWeight: "800", color: Theme.textPrimaryDark },
@@ -1980,10 +1941,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(180,83,9,0.1)",
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
     textTransform: "uppercase",
-    borderWidth: 1,
-    borderColor: "rgba(180,83,9,0.2)",
   },
   listTagApproved: {
     fontSize: 8,
@@ -1992,10 +1950,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(5,150,105,0.1)",
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
     textTransform: "uppercase",
-    borderWidth: 1,
-    borderColor: "rgba(5,150,105,0.2)",
   },
   listTagReceived: {
     fontSize: 8,
@@ -2004,10 +1959,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(37,99,235,0.1)",
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
     textTransform: "uppercase",
-    borderWidth: 1,
-    borderColor: "rgba(37,99,235,0.2)",
   },
   listTagSettled: {
     fontSize: 8,
@@ -2016,10 +1968,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceBorder,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
     textTransform: "uppercase",
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
   },
 
   empty: { alignItems: "center", paddingVertical: 48 },
@@ -2052,11 +2001,7 @@ const styles = StyleSheet.create({
   },
   footerBtn: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
-    borderRadius: 12,
     alignItems: "center",
   },
   footerBtnDisabled: { opacity: 0.5 },
@@ -2106,7 +2051,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,

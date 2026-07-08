@@ -39,9 +39,6 @@ export const reassignStyles = StyleSheet.create({
   },
   currentCard: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.border,
     padding: 14,
     marginBottom: 12,
   },
@@ -64,13 +61,9 @@ export const reassignStyles = StyleSheet.create({
   segmentPill: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.surface,
   },
   segmentPillActive: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
   },
   segmentText: {
@@ -83,9 +76,6 @@ export const reassignStyles = StyleSheet.create({
   },
   list: {
     maxHeight: 280,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.border,
     backgroundColor: Theme.cardWhite,
   },
   row: {
@@ -109,7 +99,6 @@ export const reassignStyles = StyleSheet.create({
   avatar: {
     width: 40,
     height: 40,
-    borderRadius: 20,
     backgroundColor: Theme.buttonPrimary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -144,7 +133,6 @@ export const reassignStyles = StyleSheet.create({
     marginTop: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
   },
   emptyCtaText: {
@@ -155,9 +143,6 @@ export const reassignStyles = StyleSheet.create({
   form: {
     gap: 12,
     padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.border,
     backgroundColor: Theme.cardWhite,
   },
   label: {
@@ -167,9 +152,6 @@ export const reassignStyles = StyleSheet.create({
     marginBottom: 4,
   },
   input: {
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === 'web' ? 10 : 12,
     fontSize: 15,
@@ -184,13 +166,9 @@ export const reassignStyles = StyleSheet.create({
   typeChip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.surface,
   },
   typeChipActive: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
   },
   typeChipText: {
@@ -204,10 +182,6 @@ export const reassignStyles = StyleSheet.create({
   primaryBtn: {
     marginTop: 8,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
   },
@@ -237,10 +211,6 @@ export const reassignStyles = StyleSheet.create({
   },
   confirmBtn: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
@@ -259,9 +229,6 @@ export const reassignStyles = StyleSheet.create({
   },
   warningBanner: {
     backgroundColor: Theme.warningMuted,
-    borderWidth: 1,
-    borderColor: Theme.warning,
-    borderRadius: 12,
     padding: 12,
     marginBottom: 12,
   },
@@ -272,9 +239,6 @@ export const reassignStyles = StyleSheet.create({
   },
   partialBanner: {
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    borderRadius: 12,
     padding: 12,
     marginBottom: 12,
     gap: 10,
@@ -288,11 +252,7 @@ export const reassignStyles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   retryBtnText: {
     color: Theme.buttonPrimaryText,

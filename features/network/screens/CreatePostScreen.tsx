@@ -1150,9 +1150,6 @@ const styles = StyleSheet.create({
   },
   previewCard: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
     padding: 16,
     paddingLeft: 20,
     gap: 14,
@@ -1185,7 +1182,6 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 999,
   },
   previewBadgeText: {
     fontSize: 10,
@@ -1227,10 +1223,7 @@ const styles = StyleSheet.create({
   previewChip: {
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 7,
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
   },
   previewChipText: {
     fontSize: 11,
@@ -1239,7 +1232,6 @@ const styles = StyleSheet.create({
   },
   previewChipRate: {
     backgroundColor: Theme.primary + "12",
-    borderColor: Theme.primary + "30",
   },
   previewChipRateText: {
     color: Theme.primary,
@@ -1262,7 +1254,6 @@ const styles = StyleSheet.create({
   previewOrgDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
   },
   previewFooterText: {
     flex: 1,
@@ -1272,9 +1263,6 @@ const styles = StyleSheet.create({
   },
   readinessCard: {
     backgroundColor: Theme.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
     padding: 14,
     gap: 9,
   },
@@ -1332,7 +1320,6 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
     backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
@@ -1348,7 +1335,6 @@ const styles = StyleSheet.create({
   },
   publishBtn: {
     backgroundColor: Theme.primary,
-    borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 8,
     minWidth: 64,
@@ -1374,10 +1360,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 8,
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
   },
   hintText: {
     fontSize: 10,
@@ -1401,21 +1384,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 11,
-    borderRadius: 12,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
   },
   typeBtnActiveLoad: {
     backgroundColor: "#f59e0b",
-    borderColor: "#f59e0b",
   },
   typeBtnActiveVehicle: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderColor: Theme.primary,
   },
   typeBtnText: {
     fontSize: 12,
@@ -1448,15 +1423,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     padding: 4,
-    borderRadius: 12,
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
   },
   segmentedBtn: {
     flex: 1,
     minHeight: 40,
-    borderRadius: 9,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1466,13 +1437,9 @@ const styles = StyleSheet.create({
   },
   segmentedBtnActive: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
   },
   segmentedBtnActiveManual: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
   },
   segmentedBtnText: {
     fontSize: 11,
@@ -1486,10 +1453,7 @@ const styles = StyleSheet.create({
   formSectionCard: {
     gap: 10,
     padding: 14,
-    borderRadius: 12,
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
   },
   formSectionCardTitle: {
     fontSize: 10,
@@ -1508,9 +1472,6 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     lineHeight: 20,
     backgroundColor: Theme.surface,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
@@ -1523,7 +1484,6 @@ const styles = StyleSheet.create({
   vehicleEmptyIconWrap: {
     width: 56,
     height: 56,
-    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.primary + "12",
@@ -1531,8 +1491,6 @@ const styles = StyleSheet.create({
   },
   vehicleEmptyIconWrapMuted: {
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
   },
   vehiclePickHint: {
     fontSize: 11,
@@ -1547,10 +1505,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 10,
     backgroundColor: Theme.primary + "08",
-    borderWidth: 1,
-    borderColor: Theme.primary + "22",
   },
   selectedVehicleSummaryText: {
     flex: 1,
@@ -1562,7 +1517,6 @@ const styles = StyleSheet.create({
   idleVehicleIdleDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
     backgroundColor: "#10b981",
   },
   notesTextarea: {
@@ -1571,16 +1525,12 @@ const styles = StyleSheet.create({
   vehicleModeBtn: {
     flex: 1,
     minHeight: 36,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
   },
   vehicleModeBtnActive: {
-    borderColor: Theme.textPrimaryDark,
     backgroundColor: Theme.screenBackground,
   },
   vehicleModeBtnText: {
@@ -1634,8 +1584,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: Theme.surface,
-    borderRadius: 10,
-    borderWidth: 0,
     paddingHorizontal: 12,
     paddingVertical: 9,
     marginBottom: 8,
@@ -1668,9 +1616,6 @@ const styles = StyleSheet.create({
   },
   idleVehicleCard: {
     width: "49%",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.surface,
     paddingHorizontal: 12,
     paddingVertical: 11,
@@ -1679,7 +1624,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   idleVehicleCardOn: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.primary + "10",
   },
   idleVehicleTop: {
@@ -1715,7 +1659,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.textPrimaryDark,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 999,
   },
   emptyCtaText: { fontSize: 13, fontWeight: "800", color: "#fff" },
   emptySecondary: { marginTop: 8, padding: 8 },
@@ -1726,11 +1669,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Theme.surface,
-    borderRadius: 12,
     padding: 12,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
   },
   modeBannerText: { fontSize: 12, fontWeight: "800", color: Theme.textPrimary },
   modeBannerAction: { paddingVertical: 4 },
@@ -1742,7 +1682,6 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: Theme.primary + "10",
     alignSelf: "flex-start",
-    borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
     marginBottom: 4,
@@ -1754,11 +1693,8 @@ const styles = StyleSheet.create({
   },
   routeSection: {
     backgroundColor: "#f7f8fb",
-    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
     gap: 0,
   },
   fieldGroup: {
@@ -1778,7 +1714,6 @@ const styles = StyleSheet.create({
   fieldDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
     marginTop: 28,
   },
   fieldContent: { flex: 1 },
@@ -1821,18 +1756,13 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 11,
     paddingVertical: 7,
-    borderRadius: 7,
     backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
   },
   chipActive: {
     backgroundColor: Theme.buttonPrimary,
-    borderColor: Theme.primary,
   },
   chipActiveVehicleType: {
     backgroundColor: Theme.buttonPrimary,
-    borderColor: Theme.primary,
   },
   chipDisabled: {
     opacity: 0.45,
@@ -1851,9 +1781,6 @@ const styles = StyleSheet.create({
   halfField: { flex: 1 },
   rateSection: {
     backgroundColor: Theme.primary + "08",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.primary + "30",
     padding: 14,
     gap: 8,
   },
@@ -1880,7 +1807,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     lineHeight: 20,
     backgroundColor: Theme.surface,
-    borderRadius: 10,
     padding: 12,
     textAlignVertical: "top",
     minHeight: 80,

@@ -16,6 +16,7 @@ import {
   registryTagStyle,
 } from "@/lib/alertRegistry/registryAlertPresentation.util";
 import type { RegistryNotificationAvatar } from "@/lib/alertRegistry/registryNotificationAvatar.util";
+import { createStyles, text, view, webView } from "@/lib/styles/createStyles";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /** Metronic demo2 tokens — notifications dropdown + privacy-settings buttons. */
@@ -298,14 +299,14 @@ export function AlertRegistrySignalCard({
   return content;
 }
 
-const styles = StyleSheet.create({
-  pressable: {
+const stylesDef = {
+  pressable: view({
     width: "100%",
-  },
-  pressablePressed: {
+  }),
+  pressablePressed: view({
     opacity: 0.92,
-  },
-  row: {
+  }),
+  row: view({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
@@ -314,175 +315,177 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  rowCompleted: {
+  }),
+  rowCompleted: view({
     backgroundColor: "#FCFCFD",
-  },
-  rowTile: {
+  }),
+  rowTile: view({
     borderBottomWidth: 0,
     flex: 1,
     minHeight: 0,
-  },
-  rowTileCompact: {
+  }),
+  rowTileCompact: view({
     gap: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
-  },
-  avatarWrap: {
+  }),
+  avatarWrap: view({
     flexShrink: 0,
     position: "relative",
-  },
-  avatarCore: {
+  }),
+  avatarCore: view({
     position: "absolute",
     left: 0,
     top: 0,
-  },
-  statusDot: {
+  }),
+  statusDot: view({
     position: "absolute",
     right: 0,
     bottom: 0,
     borderWidth: 2,
     borderColor: Theme.cardWhite,
-  },
-  statusDotUnread: {
+  }),
+  statusDotUnread: view({
     backgroundColor: METRONIC.unreadDot,
-  },
-  statusDotRead: {
+  }),
+  statusDotRead: view({
     backgroundColor: METRONIC.muted,
-  },
-  statusDotCompact: {
+  }),
+  statusDotCompact: view({
     width: 7,
     height: 7,
     borderRadius: 3.5,
     borderWidth: 1.5,
-  },
-  body: {
+  }),
+  body: view({
     flex: 1,
     minWidth: 0,
     gap: 4,
-  },
-  bodyCompact: {
+  }),
+  bodyCompact: view({
     gap: 3,
-  },
-  headline: {
+  }),
+  headline: text({
     fontSize: 13,
     lineHeight: 19,
     color: METRONIC.primaryBtn,
-  },
-  headlineCompact: {
+  }),
+  headlineCompact: text({
     fontSize: 12,
     lineHeight: 16,
-  },
-  actorName: {
+  }),
+  actorName: text({
     fontWeight: "600",
     color: METRONIC.primaryBtn,
-  },
-  actionText: {
+  }),
+  actionText: text({
     fontWeight: "400",
     color: METRONIC.primaryBtn,
-  },
-  highlightText: {
+  }),
+  highlightText: text({
     fontWeight: "600",
     color: METRONIC.link,
-  },
-  metaLine: {
+  }),
+  metaLine: text({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  metaLineCompact: {
+  }),
+  metaLineCompact: text({
     fontSize: 11,
     lineHeight: 15,
-  },
-  metaContext: {
+  }),
+  metaContext: text({
     color: "#78829D",
     fontWeight: "500",
-  },
-  detailCard: {
+  }),
+  detailCard: view({
     marginTop: 2,
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 6,
     backgroundColor: METRONIC.quoteBg,
     gap: 2,
-  },
-  detailCardCompact: {
+  }),
+  detailCardCompact: view({
     paddingHorizontal: 8,
     paddingVertical: 6,
     gap: 1,
-  },
-  detailTitle: {
+  }),
+  detailTitle: text({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
-  },
-  detailTitleCompact: {
+  }),
+  detailTitleCompact: text({
     fontSize: 11,
     lineHeight: 15,
-  },
-  detailSubtitle: {
+  }),
+  detailSubtitle: text({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "500",
     color: "#78829D",
-  },
-  detailSubtitleCompact: {
+  }),
+  detailSubtitleCompact: text({
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "600",
     color: METRONIC.link,
-  },
-  detailBody: {
+  }),
+  detailBody: text({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "500",
     color: "#78829D",
-  },
-  tagPill: {
+  }),
+  tagPill: view({
     ...TAG,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-  },
-  tagText: {
+  }),
+  tagText: text({
     fontSize: 9,
     lineHeight: 11,
     fontWeight: "600",
-  },
-  metaBlock: {
+  }),
+  metaBlock: view({
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 8,
     marginTop: 3,
     alignSelf: "stretch",
-  },
-  metaBlockCompact: {
+  }),
+  metaBlockCompact: view({
     flexDirection: "column",
     alignItems: "stretch",
     gap: 6,
     marginTop: 2,
-  },
-  metaLeft: {
+  }),
+  metaLeft: view({
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
     gap: 6,
     flex: 1,
     minWidth: 0,
-  },
-  metaActions: {
+  }),
+  metaActions: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
     flexShrink: 0,
     marginLeft: "auto",
-  },
-  metaActionsCompact: {
+  }),
+  metaActionsCompact: webView({
     width: "100%",
     marginLeft: 0,
     justifyContent: "stretch",
-  },
-});
+  }),
+};;
+
+const styles = createStyles(stylesDef);

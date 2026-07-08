@@ -912,9 +912,6 @@ export function OperationsHub({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 16,
     padding: 14,
     gap: 12,
   },
@@ -925,9 +922,6 @@ const styles = StyleSheet.create({
   sub: { color: Theme.textSecondary, fontSize: 12, marginTop: 2 },
   toggle: { color: Theme.textSecondary, fontSize: 11, fontWeight: "700" },
   healthStrip: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.border,
     backgroundColor: Theme.whiteMuted,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -949,9 +943,6 @@ const styles = StyleSheet.create({
   },
   execCell: {
     width: "31%",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    borderRadius: 8,
     paddingHorizontal: 6,
     paddingVertical: 5,
     backgroundColor: Theme.surface,
@@ -962,9 +953,6 @@ const styles = StyleSheet.create({
   healthMessage: { color: Theme.textSecondary, fontSize: 11 },
   healthChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   healthChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.border,
     paddingHorizontal: 8,
     paddingVertical: 3,
     backgroundColor: Theme.surface,
@@ -976,9 +964,6 @@ const styles = StyleSheet.create({
   healthChipText: { color: Theme.text, fontSize: 10, fontWeight: "700" },
   statusChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   statusChip: {
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
@@ -993,9 +978,6 @@ const styles = StyleSheet.create({
   compactGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 10,
     overflow: "hidden",
   },
   compactCell: {
@@ -1004,14 +986,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
   },
   compactLabel: { color: Theme.textSecondary, fontSize: 10, fontWeight: "700" },
   compactValue: { color: Theme.text, fontSize: 12, fontWeight: "700", marginTop: 1 },
   ledgerStateRow: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
     paddingVertical: 8,
     gap: 2,
   },
@@ -1019,31 +999,19 @@ const styles = StyleSheet.create({
   loading: { color: Theme.textSecondary, fontSize: 12 },
   sectionTitle: { color: Theme.textSecondary, fontSize: 11, fontWeight: "700" },
   metricsTable: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
     gap: 2,
   },
   expenseControlCard: {
     marginTop: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    borderRadius: 10,
     backgroundColor: Theme.whiteMuted,
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 6,
   },
   expenseControlBtn: {
-    borderWidth: 1,
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 7,
@@ -1059,9 +1027,6 @@ const styles = StyleSheet.create({
   latestEventWrap: {
     marginTop: 6,
     marginBottom: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
     backgroundColor: Theme.whiteMuted,
@@ -1079,7 +1044,6 @@ const styles = StyleSheet.create({
   timelineRow: {
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1088,7 +1052,6 @@ const styles = StyleSheet.create({
   timelineSeverityMarker: {
     width: 6,
     height: 6,
-    borderRadius: 99,
     marginTop: 2,
   },
   timelineSeverityNeutral: { backgroundColor: Theme.textSecondary },
@@ -1099,9 +1062,6 @@ const styles = StyleSheet.create({
   timelineMeta: { color: Theme.textSecondary, fontSize: 11 },
   queueWrap: { marginTop: 8, gap: 6 },
   queueItemCompact: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
     flexDirection: "row",
@@ -1111,9 +1071,6 @@ const styles = StyleSheet.create({
   },
   queueActions: { flexDirection: "row", gap: 8 },
   queueBtn: {
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
     backgroundColor: Theme.whiteMuted,
@@ -1124,9 +1081,6 @@ const styles = StyleSheet.create({
   actionBtn: {
     flex: 1,
     minWidth: 70,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 8,

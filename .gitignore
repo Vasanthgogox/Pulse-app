@@ -37,6 +37,7 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+.tsc-checkpoint*.txt
 
 # generated native folders
 /ios

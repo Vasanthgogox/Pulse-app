@@ -380,7 +380,6 @@ const styles = StyleSheet.create({
   headerBtn: {
     width: 44,
     height: 44,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
@@ -416,18 +415,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
   },
   typeBtnActive: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   typeBtnText: {
     fontSize: 11,
@@ -443,18 +435,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
     gap: 8,
   },
   impactBtnPlus: {
-    borderColor: Theme.darkGreen,
     backgroundColor: Theme.darkGreen,
   },
   impactBtnMinus: {
-    borderColor: Theme.teslaRed,
     backgroundColor: Theme.teslaRed,
   },
   impactIcon: { marginRight: 0 },
@@ -471,9 +458,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 28,
     paddingVertical: 20,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 16,
     backgroundColor: Theme.surface,
   },
   currencyPrefix: {
@@ -499,13 +483,9 @@ const styles = StyleSheet.create({
   chip: {
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
   },
   chipActive: {
-    borderColor: Theme.textPrimaryDark,
     backgroundColor: Theme.textPrimaryDark,
   },
   chipText: {
@@ -519,7 +499,6 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,

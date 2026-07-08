@@ -2169,14 +2169,9 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
     maxHeight: "100%",
     minHeight: 0,
-    borderRadius: 0,
-    borderWidth: 0,
   },
   aggregateRedirectCard: {
     padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
     backgroundColor: "#fff",
     gap: 8,
   },
@@ -2197,11 +2192,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     justifyContent: "center",
   },
   aggregateRedirectBtnText: {
@@ -2211,9 +2202,6 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 14,
     padding: 12,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -2242,8 +2230,6 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
   },
   statusPillText: {
     fontSize: 9,
@@ -2252,15 +2238,12 @@ const styles = StyleSheet.create({
   },
   statusPillUnassigned: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderLight,
   },
   statusPillPartial: {
     backgroundColor: (Theme as any).warningMuted ?? Theme.surfaceGray,
-    borderColor: (Theme as any).warning ?? Theme.borderLight,
   },
   statusPillAssigned: {
     backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.darkGreen,
   },
   statusPillTextUnassigned: { color: Theme.textMuted },
   statusPillTextPartial: {
@@ -2287,26 +2270,20 @@ const styles = StyleSheet.create({
   assignIcon: {
     width: 32,
     height: 32,
-    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
   },
   assignIconInactive: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: "transparent",
   },
   assignIconDriverActive: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: "transparent",
   },
   assignIconVehicleActive: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: "transparent",
   },
   assignIconVehicleInactive: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: "transparent",
   },
   assignRowText: { flex: 1, minWidth: 0 },
   assignRowLabel: {
@@ -2331,7 +2308,6 @@ const styles = StyleSheet.create({
   actionBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 7,
     minWidth: 70,
     alignItems: "center",
     justifyContent: "center",
@@ -2422,20 +2398,15 @@ const styles = StyleSheet.create({
   sourceBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
   },
   badgePrivate: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.surfaceGray,
   },
   badgeShared: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.surfaceGray,
   },
   badgeUnassigned: {
     backgroundColor: Theme.surfaceLight,
-    borderColor: Theme.borderInput,
   },
   sourceBadgeText: {
     fontSize: 8,
@@ -2568,9 +2539,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   input: {
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 4,
     paddingVertical: 8,
     paddingHorizontal: 10,
     fontSize: 12,
@@ -2585,12 +2553,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 4,
   },
   assignBtnTextCompact: {
     fontSize: 9,
@@ -2632,14 +2596,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 4,
     marginBottom: 8,
   },
   optionRowActive: {
     backgroundColor: Theme.surfaceLight,
-    borderColor: Theme.buttonPrimary,
   },
   optionText: {
     fontSize: 14,
@@ -2689,7 +2649,6 @@ const styles = StyleSheet.create({
   assignModalCloseBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -2721,9 +2680,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     backgroundColor: "#ffffff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
   },
   assignAdhocVehicleLabel: {
     fontSize: 10,
@@ -2744,9 +2700,6 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 10,
     backgroundColor: "#f8fafc",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
     marginBottom: 10,
     ...Platform.select({
       web: {
@@ -2759,11 +2712,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2780,11 +2729,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 10,
     paddingHorizontal: 10,
-    borderRadius: 12,
     marginBottom: 8,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: "transparent",
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
@@ -2792,13 +2738,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   assignCardSelected: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.fiscalTabActiveBg,
   },
   assignDriverAvatar: {
     width: 34,
     height: 34,
-    borderRadius: 17,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -2839,7 +2783,6 @@ const styles = StyleSheet.create({
   assignStatusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
   },
   assignStatusDotAvailable: { backgroundColor: Theme.darkGreen },
   assignStatusDotLeave: { backgroundColor: Theme.driverGold },
@@ -2849,20 +2792,15 @@ const styles = StyleSheet.create({
   assignCheckWrap: {
     width: 20,
     height: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     alignItems: "center",
     justifyContent: "center",
   },
   assignCheckWrapSelected: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
   },
   assignVehicleIconWrap: {
     width: 34,
     height: 34,
-    borderRadius: 10,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -2871,7 +2809,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
   },
   assignVehicleInput: {
-    borderRadius: 10,
     paddingVertical: 9,
     paddingHorizontal: 10,
     fontSize: 12,
@@ -2900,9 +2837,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   assignSearchIcon: {
     position: "absolute",
@@ -2927,11 +2861,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 10,
     paddingHorizontal: 10,
-    borderRadius: 12,
     marginBottom: 8,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
   },
   assignRegistryCardLeft: {
     flexDirection: "row",
@@ -2943,19 +2874,13 @@ const styles = StyleSheet.create({
   assignDriverAvatarRegistry: {
     width: 30,
     height: 30,
-    borderRadius: 15,
     backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
   },
   assignDriverAvatarImage: {
     width: 30,
     height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   assignDriverInitialRegistry: {
     fontSize: 11,
@@ -2965,10 +2890,7 @@ const styles = StyleSheet.create({
   assignSyncBadge: {
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 6,
     backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
   },
   assignSyncBadgeText: {
     fontSize: 7,
@@ -2982,7 +2904,6 @@ const styles = StyleSheet.create({
   },
   assignDriverAvatarBusy: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderLight,
   },
   assignDriverInitialBusy: {
     color: Theme.textMuted,
@@ -2996,10 +2917,7 @@ const styles = StyleSheet.create({
   assignBusyBadge: {
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 6,
     backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: (Theme as any).warning ?? "#D97706",
   },
   assignBusyBadgeText: {
     fontSize: 7,
@@ -3010,20 +2928,14 @@ const styles = StyleSheet.create({
   assignVehicleIconWrapRegistry: {
     width: 30,
     height: 30,
-    borderRadius: 15,
     backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
   },
   assignUpdateLinkBadge: {
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 6,
     backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
   },
   assignUpdateLinkBadgeText: {
     fontSize: 7,
@@ -3052,7 +2964,6 @@ const styles = StyleSheet.create({
   },
   assignCancelBtn: {
     paddingVertical: 10,
-    borderRadius: 9,
     backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
@@ -3071,7 +2982,6 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: "#ffffff",
     paddingVertical: 10,
-    borderRadius: 9,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
@@ -3087,9 +2997,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   phoneModalInput: {
-    borderWidth: 1,
-    borderColor: "#dbe4ef",
-    borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 14,
     fontSize: 13,
@@ -3126,7 +3033,6 @@ const styles = StyleSheet.create({
   phoneProtocolIconWrap: {
     width: 30,
     height: 30,
-    borderRadius: 8,
     backgroundColor: "#eef2ff",
     alignItems: "center",
     justifyContent: "center",
@@ -3150,21 +3056,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 20,
     paddingHorizontal: 16,
-    borderRadius: 16,
     backgroundColor: "rgba(79, 70, 229, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(79, 70, 229, 0.25)",
   },
   phoneOtpRevealIconWrap: {
     width: 48,
     height: 48,
-    borderRadius: 16,
     backgroundColor: "rgba(255,255,255,0.9)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.35)",
   },
   phoneOtpRevealTitle: {
     fontSize: 10,
@@ -3217,9 +3117,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   phoneInput: {
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 4,
     paddingVertical: 12,
     paddingHorizontal: 14,
     fontSize: 16,
@@ -3245,9 +3142,6 @@ const styles = StyleSheet.create({
 
   // Driver & vehicle summary card
   manifestCard: {
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: "#0f172a",
     backgroundColor: "#ffffff",
     padding: 20,
     gap: 16,
@@ -3271,10 +3165,7 @@ const styles = StyleSheet.create({
   },
   manifestStack: { gap: 14 },
   manifestNodeShell: {
-    borderRadius: 28,
     backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
     overflow: "hidden",
   },
   manifestNodeShellNonInteractive: {
@@ -3331,7 +3222,6 @@ const styles = StyleSheet.create({
   manifestNodeFab: {
     width: 44,
     height: 44,
-    borderRadius: 16,
     backgroundColor: "#0f172a",
     alignItems: "center",
     justifyContent: "center",
@@ -3369,7 +3259,6 @@ const styles = StyleSheet.create({
   allocModalCloseBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -3409,9 +3298,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     backgroundColor: "#f1f5f9",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
     gap: 10,
   },
   allocSearchIconInline: {
@@ -3440,10 +3326,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 32,
-    borderWidth: 2,
     borderStyle: "dashed",
-    borderColor: "#cbd5e1",
     backgroundColor: "rgba(248,250,252,0.9)",
     flexDirection: "row",
     alignItems: "center",
@@ -3460,7 +3343,6 @@ const styles = StyleSheet.create({
   allocRegisterPlus: {
     width: 48,
     height: 48,
-    borderRadius: 14,
     backgroundColor: "#e2e8f0",
     alignItems: "center",
     justifyContent: "center",
@@ -3480,7 +3362,6 @@ const styles = StyleSheet.create({
   allocRegisterProto: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 10,
     backgroundColor: "#f1f5f9",
   },
   allocRegisterProtoText: {
@@ -3546,15 +3427,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 18,
     paddingHorizontal: 18,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: "#e2e8f0",
     backgroundColor: "#ffffff",
     marginBottom: 4,
   },
   assignFlowCardSelected: {
     backgroundColor: "#0f172a",
-    borderColor: "#0f172a",
   },
   assignFlowCardBusy: {
     opacity: 0.55,
@@ -3569,7 +3446,6 @@ const styles = StyleSheet.create({
   assignFlowTile: {
     width: 72,
     height: 60,
-    borderRadius: 20,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
@@ -3607,18 +3483,13 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
     backgroundColor: "#f8fafc",
   },
   assignFlowStatusPillSel: {
-    borderColor: "rgba(255,255,255,0.2)",
     backgroundColor: "rgba(255,255,255,0.08)",
   },
   assignFlowStatusPillBusy: {
     backgroundColor: "#fef3c7",
-    borderColor: "#fcd34d",
   },
   assignFlowStatusText: {
     fontSize: 11,
@@ -3648,7 +3519,6 @@ const styles = StyleSheet.create({
   assignFlowCheck: {
     width: 48,
     height: 48,
-    borderRadius: 24,
     backgroundColor: Theme.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
@@ -3686,7 +3556,6 @@ const styles = StyleSheet.create({
   allocSidebarAvatar: {
     width: 120,
     height: 100,
-    borderRadius: 32,
     backgroundColor: "#0f172a",
     alignItems: "center",
     justifyContent: "center",
@@ -3707,7 +3576,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 10,
     backgroundColor: "#f1f5f9",
   },
   allocSidebarChipText: {
@@ -3734,19 +3602,16 @@ const styles = StyleSheet.create({
   },
   allocMetricTrack: {
     height: 6,
-    borderRadius: 3,
     backgroundColor: "#f1f5f9",
     overflow: "hidden",
   },
   allocMetricFillDark: {
     height: 6,
     backgroundColor: "#0f172a",
-    borderRadius: 3,
   },
   allocMetricFillBlue: {
     height: 6,
     backgroundColor: Theme.buttonPrimary,
-    borderRadius: 3,
   },
   allocMiniGrid: {
     flexDirection: "row",
@@ -3757,7 +3622,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 10,
-    borderRadius: 22,
     borderWidth: 1,
     borderColor: "#f1f5f9",
     backgroundColor: "#f8fafc",

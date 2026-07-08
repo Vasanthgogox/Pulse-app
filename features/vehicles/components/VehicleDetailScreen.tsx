@@ -1078,7 +1078,6 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -1118,11 +1117,7 @@ const styles = StyleSheet.create({
   downloadBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1147,9 +1142,6 @@ const styles = StyleSheet.create({
   healthCircle: {
     width: 56,
     height: 56,
-    borderRadius: 28,
-    borderWidth: 4,
-    borderColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -1198,10 +1190,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     minHeight: 24,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingHorizontal: 8,
   },
   profilePreviewTopActionText: {
@@ -1218,7 +1207,6 @@ const styles = StyleSheet.create({
   profilePreviewIdentityName: ecc.identityName,
   profilePreviewIdentitySub: ecc.identitySub,
   profilePreviewIdentityTrigger: {
-    borderRadius: 12,
     paddingVertical: 2,
   },
   profilePreviewRatingRow: ecc.ratingRow,
@@ -1247,14 +1235,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,
     padding: 4,
-    borderRadius: 16,
     marginBottom: 24,
     gap: 4,
   },
   tabItem: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     minHeight: 40,
@@ -1278,9 +1264,6 @@ const styles = StyleSheet.create({
   },
   tableCard: {
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 32,
     overflow: "hidden",
   },
   tableHeader: {
@@ -1376,9 +1359,6 @@ const styles = StyleSheet.create({
   },
   profileCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 20,
     marginBottom: 16,
   },
@@ -1395,10 +1375,7 @@ const styles = StyleSheet.create({
   profileAvatarWrap: {
     width: 64,
     height: 64,
-    borderRadius: 24,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1414,10 +1391,7 @@ const styles = StyleSheet.create({
   profileBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
   },
   profileBadgeText: {
     fontSize: 7,
@@ -1427,7 +1401,6 @@ const styles = StyleSheet.create({
   },
   profileBadgeCore: {
     backgroundColor: Theme.fiscalTabActiveBg ?? "#e8eaf6",
-    borderColor: Theme.primary,
   },
   profileBadgeCoreText: {
     fontSize: 7,

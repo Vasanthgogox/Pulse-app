@@ -1142,7 +1142,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primaryLight,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 8,
     marginBottom: 16,
     alignItems: "center",
   },
@@ -1167,10 +1166,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 8,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     borderTopWidth: 2,
     borderTopColor: Theme.darkBackground,
   },
@@ -1182,9 +1178,6 @@ const styles = StyleSheet.create({
   },
   totalBalanceDueValue: { fontSize: 13, fontWeight: "500", color: Theme.teslaRed },
   table: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 8,
     overflow: "hidden",
     marginBottom: 8,
     borderTopWidth: 2,
@@ -1273,14 +1266,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 10,
   },
   actionBtnPrimary: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderWidth: 0,
   },
   actionBtnPrimaryText: {
     fontSize: 13,
@@ -1289,8 +1277,6 @@ const styles = StyleSheet.create({
   },
   actionBtnSecondary: {
     backgroundColor: Theme.surface,
-    borderWidth: 1.5,
-    borderColor: Theme.borderMedium,
   },
   actionBtnSecondaryText: {
     fontSize: 13,
@@ -1325,11 +1311,8 @@ const styles = StyleSheet.create({
   },
   contactCard: {
     backgroundColor: Theme.surface,
-    borderRadius: 8,
     padding: 14,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     borderTopWidth: 2,
     borderTopColor: Theme.darkBackground,
   },
@@ -1345,10 +1328,7 @@ const styles = StyleSheet.create({
   taxCard: {
     flex: 1,
     backgroundColor: Theme.surface,
-    borderRadius: 8,
     padding: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     borderTopWidth: 2,
     borderTopColor: Theme.darkBackground,
   },
@@ -1361,10 +1341,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     backgroundColor: Theme.surface,
-    borderRadius: 8,
     marginBottom: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     borderTopWidth: 2,
     borderTopColor: Theme.darkBackground,
   },
@@ -1387,12 +1364,9 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 14, color: Theme.textSecondary, textAlign: "center" },
   entryCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 6,
     paddingVertical: 8,
     paddingHorizontal: 10,
     marginBottom: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   entryCardTitle: {
     fontSize: 11,
@@ -1417,11 +1391,8 @@ const styles = StyleSheet.create({
   entryCardAmountRed: { color: Theme.teslaRed },
   darkSection: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 6,
     marginBottom: 6,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     marginHorizontal: -Layout.screenPaddingHorizontal,
   },
   darkSectionTitle: {
@@ -1461,7 +1432,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.teslaRed,
     paddingVertical: 2,
     paddingHorizontal: 6,
-    borderRadius: 4,
     alignSelf: "flex-start",
   },
   amountPaidPillText: { fontSize: 10, fontWeight: "700", color: Theme.textOnDark },
@@ -1473,13 +1443,10 @@ const styles = StyleSheet.create({
   twoColItem: { flex: 1, minWidth: 0 },
   summaryCard: {
     backgroundColor: Theme.darkBackground,
-    borderRadius: 6,
     marginBottom: 8,
     marginHorizontal: -Layout.screenPaddingHorizontal,
     paddingVertical: 8,
     paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderOnDark,
   },
   summaryCardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   summaryCardItem: { flex: 1, alignItems: "center" },
@@ -1506,12 +1473,9 @@ const styles = StyleSheet.create({
   associatedEmpty: { fontSize: 11, color: Theme.textMuted, marginBottom: 6, fontStyle: "italic" },
   associatedCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 6,
     paddingVertical: 8,
     paddingHorizontal: 10,
     marginBottom: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   associatedCardLine1: { fontSize: 11, fontWeight: "600", color: Theme.textPrimaryDark, marginBottom: 2 },
   associatedCardLine2: { fontSize: 10, color: Theme.textMuted },
@@ -1524,7 +1488,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
   },
   compareLoadingHero: {
-    borderRadius: 28,
     backgroundColor: Theme.textPrimaryDark,
     paddingVertical: 32,
     alignItems: "center",
@@ -1540,7 +1503,6 @@ const styles = StyleSheet.create({
   // Premium dark hero card
   compareHero: {
     backgroundColor: Theme.textPrimaryDark,
-    borderRadius: 28,
     padding: 22,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 16 },
@@ -1599,9 +1561,6 @@ const styles = StyleSheet.create({
   // Glassy sub-card inside hero
   compareGlass: {
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 22,
     padding: 18,
     marginBottom: 14,
   },
@@ -1625,7 +1584,6 @@ const styles = StyleSheet.create({
   compareGlassDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
   },
   compareGlassDotGood: {
     backgroundColor: Theme.driverEmerald,
@@ -1691,14 +1649,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
   },
   compareLineItemChipWarn: {
     backgroundColor: "rgba(245,158,11,0.10)",
-    borderColor: "rgba(245,158,11,0.20)",
   },
   compareLineItemChipKicker: {
     fontSize: 8,
@@ -1762,10 +1716,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 14,
-    borderRadius: 18,
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
   },
   compareFooterIconRow: {
     flexDirection: "row",
@@ -1792,7 +1743,6 @@ const styles = StyleSheet.create({
   },
   // Offline empty state
   compareOfflineCard: {
-    borderRadius: 28,
     padding: 22,
     backgroundColor: Theme.textPrimaryDark,
     alignItems: "center",
@@ -1800,12 +1750,9 @@ const styles = StyleSheet.create({
   compareOfflineIconWrap: {
     width: 44,
     height: 44,
-    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
     marginBottom: 12,
   },
   compareOfflineTitle: {
@@ -1846,11 +1793,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   compareTxnCard: {
-    borderRadius: 22,
     padding: 14,
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
     shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.04,
@@ -1872,11 +1816,9 @@ const styles = StyleSheet.create({
   },
   compareTxnPillMatched: {
     backgroundColor: "#ECFDF5",
-    borderColor: "#A7F3D0",
   },
   compareTxnPillWarn: {
     backgroundColor: "#FFFBEB",
-    borderColor: "#FDE68A",
   },
   compareTxnPillInfo: {
     backgroundColor: Theme.surfaceGray,

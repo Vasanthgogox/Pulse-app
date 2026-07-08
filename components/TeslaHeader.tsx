@@ -274,17 +274,13 @@ const styles = StyleSheet.create({
   logoBadge: {
     width: 26,
     height: 26,
-    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceForm,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     marginRight: 8,
   },
   logoBadgeDark: {
     backgroundColor: Theme.darkBackground,
-    borderColor: Theme.separatorDark,
   },
   brandText: {
     fontSize: 11,
@@ -307,7 +303,6 @@ const styles = StyleSheet.create({
   dotDark: { borderColor: Theme.darkBackground },
   avatarDark: {
     backgroundColor: Theme.darkBackground,
-    borderColor: Theme.separatorDark,
   },
   left: {
     flexDirection: "row",
@@ -352,29 +347,21 @@ const styles = StyleSheet.create({
     right: 2,
     width: 6,
     height: 6,
-    borderRadius: 3,
     backgroundColor: Theme.teslaRed,
-    borderWidth: 1.5,
-    borderColor: Theme.screenBackground,
   },
   avatar: {
     width: 28,
     height: 28,
-    borderRadius: 10,
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarWithImage: {
-    borderWidth: 0,
     backgroundColor: "transparent",
   },
   avatarImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 10,
   },
   avatarInitials: {
     fontSize: 9,
@@ -389,10 +376,7 @@ const styles = StyleSheet.create({
   addBtn: {
     width: 44,
     height: 44,
-    borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
     borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",

@@ -1208,7 +1208,6 @@ const styles = StyleSheet.create({
   headerIconBtn: {
     width: 40,
     height: 40,
-    borderRadius: 10,
     backgroundColor: Theme.driverWhiteMutedStrong,
     alignItems: "center",
     justifyContent: "center",
@@ -1233,7 +1232,6 @@ const styles = StyleSheet.create({
   headerStatusDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
     backgroundColor: Theme.darkBackground,
   },
   headerSubtitle: {
@@ -1267,10 +1265,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 10,
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -1299,9 +1294,6 @@ const styles = StyleSheet.create({
   indentSummaryCard: {
     position: "relative" as const,
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: indentReviewHubLayout.summaryCardRadius,
     padding: indentReviewHubLayout.summaryCardPadding,
     marginBottom: 10,
     shadowColor: Theme.shadow,
@@ -1320,7 +1312,6 @@ const styles = StyleSheet.create({
     right: -48,
     width: 180,
     height: 180,
-    borderRadius: 90,
     backgroundColor: Theme.textPrimaryDark,
     opacity: 0.04,
   },
@@ -1344,9 +1335,6 @@ const styles = StyleSheet.create({
   indentSummaryTypePill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.surfaceGray,
   },
   indentSummaryTypePillText: {
@@ -1356,10 +1344,7 @@ const styles = StyleSheet.create({
   indentSummaryStatePill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.positiveMutedDarkBorder,
   },
   indentSummaryStatePillText: {
     ...indentReviewHubText.chipLabel,
@@ -1369,10 +1354,7 @@ const styles = StyleSheet.create({
   indentSummaryDirectPill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
   },
   indentSummaryDirectPillText: {
     ...indentReviewHubText.chipLabel,
@@ -1394,11 +1376,8 @@ const styles = StyleSheet.create({
   indentSummarySpecsTitle: indentReviewHubText.fieldLabel,
   indentSummarySpecsPanel: {
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     zIndex: 1,
   },
   indentSummarySpecsGrid: {
@@ -1458,10 +1437,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     marginBottom: 8,
   },
   supplierReadOnlyText: {
@@ -1487,7 +1463,6 @@ const styles = StyleSheet.create({
     minWidth: 20,
     height: 20,
     paddingHorizontal: 6,
-    borderRadius: 10,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -1499,12 +1474,9 @@ const styles = StyleSheet.create({
   },
   bidsEmptyCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 12,
     alignItems: "stretch",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     marginBottom: 12,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
@@ -1518,7 +1490,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginBottom: 6,
     gap: 8,
-    borderRadius: 10,
   },
   bidsEmptyTop: {
     flexDirection: "row",
@@ -1567,10 +1538,7 @@ const styles = StyleSheet.create({
   bidsEmptyIconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 10,
     backgroundColor: "rgba(99,102,241,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(99,102,241,0.18)",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1578,7 +1546,6 @@ const styles = StyleSheet.create({
   bidsEmptyIconWrapCompact: {
     width: 32,
     height: 32,
-    borderRadius: 8,
   },
   bidsEmptyTitle: {
     ...indentReviewHubText.partyTitle,
@@ -1615,12 +1582,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 9,
     paddingHorizontal: 14,
-    borderRadius: 10,
     minHeight: 38,
     alignSelf: "stretch",
   },
@@ -1641,10 +1604,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 8,
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     alignSelf: "stretch",
   },
   broadcastLockedPillCompact: {
@@ -1662,10 +1622,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 8,
     backgroundColor: Theme.pulseIndigoWash,
-    borderWidth: 1,
-    borderColor: Theme.pulseIndigoRing,
   },
   allocateHintText: {
     ...indentReviewHubText.bodyMuted,
@@ -1680,10 +1637,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 8,
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.positiveMutedDarkBorder,
   },
   completedStatusText: {
     ...indentReviewHubText.bodyMuted,
@@ -1709,9 +1663,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
     marginBottom: 6,
   },
   quoteRowSelected: {
@@ -1754,10 +1705,7 @@ const styles = StyleSheet.create({
   footerEditBtn: {
     width: 44,
     height: 44,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
@@ -1765,11 +1713,7 @@ const styles = StyleSheet.create({
   footerAwardBtn: {
     flex: 1,
     height: 44,
-    borderRadius: 12,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: Theme.shadow,
@@ -1794,11 +1738,7 @@ const styles = StyleSheet.create({
   footerBidBtn: {
     flex: 1,
     height: 42,
-    borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1817,10 +1757,7 @@ const styles = StyleSheet.create({
   footerLockedPill: {
     flex: 1,
     height: 44,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1834,10 +1771,7 @@ const styles = StyleSheet.create({
   footerListeningPill: {
     flex: 1,
     height: 44,
-    borderRadius: 12,
     backgroundColor: Theme.pulseIndigoWash,
-    borderWidth: 1,
-    borderColor: Theme.pulseIndigoRing,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1846,7 +1780,6 @@ const styles = StyleSheet.create({
   footerListeningDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
     backgroundColor: Theme.positive,
   },
   footerListeningText: {
@@ -1864,10 +1797,7 @@ const styles = StyleSheet.create({
   },
   shareConfirmCard: {
     marginHorizontal: 16,
-    borderRadius: 14,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 14,
   },
   shareConfirmTitle: {
@@ -1889,9 +1819,6 @@ const styles = StyleSheet.create({
   shareConfirmCancelBtn: {
     flex: 1,
     minHeight: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1903,11 +1830,7 @@ const styles = StyleSheet.create({
   shareConfirmShareBtn: {
     flex: 1,
     minHeight: 40,
-    borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1927,7 +1850,6 @@ const styles = StyleSheet.create({
   modalHandle: {
     width: 36,
     height: 4,
-    borderRadius: 2,
     backgroundColor: Theme.borderMedium,
     alignSelf: "center",
     marginTop: 10,
@@ -1939,10 +1861,7 @@ const styles = StyleSheet.create({
   modalIconWrap: {
     width: 52,
     height: 52,
-    borderRadius: 16,
     backgroundColor: Theme.aggregatePillBg,
-    borderWidth: 1,
-    borderColor: Theme.aggregatePillBorder,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
@@ -1968,10 +1887,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     marginBottom: 10,
-    borderRadius: 14,
     backgroundColor: Theme.pulseIndigoWash,
-    borderWidth: 1,
-    borderColor: Theme.pulseIndigoRing,
   },
   modalStoryBtnText: {
     fontSize: 14,
@@ -1984,7 +1900,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",

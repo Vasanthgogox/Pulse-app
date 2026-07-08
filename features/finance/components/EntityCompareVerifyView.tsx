@@ -2124,7 +2124,6 @@ const styles = StyleSheet.create({
   notIntegratedIconWrap: {
     width: 64,
     height: 64,
-    borderRadius: 32,
     backgroundColor: Theme.surfaceLight,
     justifyContent: "center",
     alignItems: "center",
@@ -2161,12 +2160,8 @@ const styles = StyleSheet.create({
   },
   notIntegratedBtn: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 4,
   },
   notIntegratedBtnText: {
     fontSize: 12,
@@ -2175,8 +2170,6 @@ const styles = StyleSheet.create({
   },
   notIntegratedBtnSecondary: {
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
   },
   notIntegratedBtnSecondaryText: {
     color: Theme.textPrimaryDark,
@@ -2187,10 +2180,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 4,
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.positive,
   },
   notIntegratedSentText: {
     fontSize: 12,
@@ -2257,7 +2247,6 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: Theme.borderLight,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     shadowColor: Theme.shadow,
@@ -2304,9 +2293,6 @@ const styles = StyleSheet.create({
   },
   expandedWrapV2: {
     backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 16,
     marginHorizontal: 16,
     marginBottom: 16,
     marginTop: 8,
@@ -2337,9 +2323,6 @@ const styles = StyleSheet.create({
   },
   valueCardV2: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 16,
   },
   valueCardTitleV2: {
@@ -2401,9 +2384,6 @@ const styles = StyleSheet.create({
   },
   netDueCardV2: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 16,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2549,11 +2529,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.darkGreen,
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
     paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 3,
     overflow: "hidden",
   },
   badgePending: {
@@ -2561,11 +2538,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.driverGold,
     backgroundColor: "rgba(245,158,11,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(245,158,11,0.45)",
     paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 3,
     overflow: "hidden",
   },
   badgeVariance: {
@@ -2573,11 +2547,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.teslaRed,
     backgroundColor: Theme.negativeMuted,
-    borderWidth: 1,
-    borderColor: "rgba(232,33,39,0.5)",
     paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 3,
     overflow: "hidden",
   },
   badgeGhost: {
@@ -2585,11 +2556,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textSecondary,
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 3,
     overflow: "hidden",
   },
   badgeSent: {
@@ -2597,11 +2565,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.primary,
     backgroundColor: "rgba(79,70,229,0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(79,70,229,0.4)",
     paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 3,
     overflow: "hidden",
   },
   badgeReceived: {
@@ -2609,11 +2574,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.driverGold,
     backgroundColor: "rgba(245,158,11,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(245,158,11,0.45)",
     paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 3,
     overflow: "hidden",
   },
   /** Amount column: lighter to match Ledger */
@@ -2640,9 +2602,6 @@ const styles = StyleSheet.create({
   cellPending: { color: Theme.driverGold, fontStyle: "italic" },
   expandedWrap: {
     backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 16,
     marginHorizontal: 16,
     marginBottom: 16,
     marginTop: 8,
@@ -2673,9 +2632,6 @@ const styles = StyleSheet.create({
   },
   valueCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 16,
   },
   valueCardTitle: {
@@ -2738,9 +2694,6 @@ const styles = StyleSheet.create({
   },
   netDueCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 16,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2838,9 +2791,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 10,
     backgroundColor: Theme.negativeMuted,
-    borderRadius: 2,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
   },
   varianceBar: {
     marginTop: 10,
@@ -2848,9 +2798,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   varianceBarLabel: {
     fontSize: 13,
@@ -2878,12 +2825,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     backgroundColor: "#FFFFFF",
-    borderColor: Theme.financeHeroBg,
-    borderWidth: 1,
     minHeight: 48,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
   },
   raiseDisputeBtnText: {
     fontSize: 12,
@@ -2894,9 +2838,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
     backgroundColor: Theme.surfaceLight,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.driverGold,
   },
   receivedLabel: {
     fontSize: 10,
@@ -2915,16 +2856,12 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
   },
   acceptBtnText: { fontSize: 12, fontWeight: "800", color: Theme.textOnDark },
   declineBtn: {
     minHeight: 44,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     justifyContent: "center",
   },
   declineBtnText: {
@@ -2939,9 +2876,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     padding: 10,
     backgroundColor: Theme.positiveMuted,
-    borderRadius: 2,
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
   },
   updateMyBookBtn: {
     flex: 1,
@@ -2950,12 +2884,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     backgroundColor: "#FFFFFF",
-    borderColor: "#16A34A",
-    borderWidth: 1,
     minHeight: 48,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
   },
   updateMyBookBtnText: {
     fontSize: 12,
@@ -2983,9 +2914,6 @@ const styles = StyleSheet.create({
   modalClose: { padding: 8 },
   modalVariance: {
     backgroundColor: Theme.negativeMuted,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 4,
     padding: 12,
     marginBottom: 20,
   },
@@ -3013,14 +2941,10 @@ const styles = StyleSheet.create({
   resolutionChip: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     backgroundColor: Theme.surfaceLight,
     marginRight: 8,
   },
   resolutionChipActive: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.surfaceLight,
   },
   resolutionChipText: {
@@ -3030,9 +2954,6 @@ const styles = StyleSheet.create({
   },
   resolutionChipTextActive: { color: Theme.primary },
   modalTextArea: {
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 4,
     padding: 12,
     fontSize: 12,
     color: Theme.textPrimaryDark,
@@ -3055,9 +2976,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
   },
   modalBtnSecondaryText: {
     fontSize: 12,
@@ -3067,11 +2985,7 @@ const styles = StyleSheet.create({
   modalBtnPrimary: {
     flex: 1,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
-    borderRadius: 4,
     alignItems: "center",
   },
   modalBtnPrimaryText: {
@@ -3090,9 +3004,6 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 420,
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    borderRadius: 10,
     padding: 16,
     gap: 10,
   },
@@ -3114,9 +3025,6 @@ const styles = StyleSheet.create({
   confirmModalCancelBtn: {
     flex: 1,
     minHeight: 44,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 12,
@@ -3132,7 +3040,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",

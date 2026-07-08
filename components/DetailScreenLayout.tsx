@@ -226,7 +226,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
   },
   dateIcon: {
     marginRight: 8,
@@ -251,9 +250,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Theme.cardWhite,
-    borderRadius: 8,
     paddingHorizontal: 12,
-    borderWidth: 0,
   },
   searchIcon: {
     marginRight: 8,
@@ -270,7 +267,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 8,
     gap: 6,
   },
   filterText: {
@@ -383,9 +379,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
-    borderRadius: 8,
     gap: 8,
   },
   shareButton: {

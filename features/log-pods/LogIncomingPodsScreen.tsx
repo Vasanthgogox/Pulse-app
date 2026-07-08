@@ -1456,12 +1456,8 @@ const styles = StyleSheet.create({
   cancelText: { fontSize: 14, fontWeight: "600", color: Theme.textMuted },
   headerLogBtn: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 8,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -1508,9 +1504,6 @@ const styles = StyleSheet.create({
   selectAllCheckbox: {
     width: 16,
     height: 16,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1558,9 +1551,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     backgroundColor: Theme.cardWhite,
     marginBottom: 10,
   },
@@ -1571,9 +1561,6 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   input: {
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
@@ -1594,10 +1581,7 @@ const styles = StyleSheet.create({
   },
   summary: {
     padding: 20,
-    borderRadius: 12,
     backgroundColor: "rgba(79,70,229,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(79,70,229,0.12)",
   },
   summaryTitle: {
     fontSize: 13,
@@ -1615,8 +1599,6 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 0,
-    borderRadius: 10,
     paddingHorizontal: 10,
     marginBottom: 10,
     backgroundColor: Theme.cardWhite,
@@ -1635,9 +1617,6 @@ const styles = StyleSheet.create({
   },
   viewModeWrap: {
     flexDirection: "row",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     overflow: "hidden",
     backgroundColor: Theme.cardWhite,
   },
@@ -1650,9 +1629,6 @@ const styles = StyleSheet.create({
   },
   viewModeBtnActive: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   viewModeText: {
     fontSize: 12,
@@ -1663,9 +1639,6 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   tableWrap: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
   },
@@ -1701,9 +1674,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tableToolbarBtn: {
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
     backgroundColor: Theme.cardWhite,
@@ -1714,7 +1684,6 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   tableToolbarBtnDanger: {
-    borderColor: "rgba(176,0,32,0.3)",
     backgroundColor: "rgba(176,0,32,0.06)",
   },
   tableToolbarBtnDangerText: {
@@ -1782,21 +1751,14 @@ const styles = StyleSheet.create({
   tableCheckBox: {
     width: 18,
     height: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
   },
   tableCheckBoxOn: {
     backgroundColor: Theme.buttonPrimary,
-    borderColor: Theme.primary,
   },
   tableActionBtn: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(79,70,229,0.25)",
     backgroundColor: "rgba(79,70,229,0.06)",
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -1819,7 +1781,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
     overflow: "hidden",
     backgroundColor: Theme.surfaceGray,
     color: Theme.textMuted,
@@ -1829,7 +1790,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
     backgroundColor: "rgba(79,70,229,0.1)",
     color: Theme.primary,
   },
@@ -1840,9 +1800,6 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 16,
     marginBottom: 10,
     backgroundColor: Theme.cardWhite,
@@ -1853,7 +1810,6 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardSelected: {
-    borderColor: Theme.primary,
     backgroundColor: "rgba(79,70,229,0.03)",
   },
   cardTop: {
@@ -1866,9 +1822,6 @@ const styles = StyleSheet.create({
   checkBox: {
     width: 22,
     height: 22,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
@@ -1876,7 +1829,6 @@ const styles = StyleSheet.create({
   checkBoxOn: { backgroundColor: Theme.buttonPrimary, borderColor: Theme.primary },
   checkBoxPartial: {
     backgroundColor: Theme.buttonPrimary,
-    borderColor: Theme.primary,
   },
   dash: { color: "#fff", fontSize: 12, fontWeight: "800" },
   tripId: {
@@ -1953,9 +1905,6 @@ const styles = StyleSheet.create({
   lrCheck: {
     width: 18,
     height: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1999,11 +1948,7 @@ const styles = StyleSheet.create({
   },
   logBtn: {
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 16,
-    borderRadius: 12,
     alignItems: "center",
   },
   logBtnDisabled: { opacity: 0.45 },
@@ -2073,7 +2018,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,

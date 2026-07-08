@@ -90,19 +90,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   iconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 10,
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -125,18 +119,14 @@ const styles = StyleSheet.create({
     flexWrap: "nowrap",
   },
   typePill: {
-    borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderWidth: 1,
   },
   typePillSupplier: {
     backgroundColor: Theme.networkHubListCardPrimaryTintBg,
-    borderColor: Theme.networkHubListCardPrimaryTintBorder,
   },
   typePillClient: {
     backgroundColor: Theme.networkClientTintBg,
-    borderColor: "rgba(79,70,229,0.2)",
   },
   typePillText: {
     fontSize: 8,
@@ -166,7 +156,6 @@ const styles = StyleSheet.create({
   },
   connectBtn: {
     minHeight: 30,
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,

@@ -229,7 +229,6 @@ const styles = StyleSheet.create({
   avatar: {
     width: 40,
     height: 40,
-    borderRadius: 20,
     backgroundColor: Theme.positive,
     justifyContent: 'center',
     alignItems: 'center',
@@ -274,7 +273,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 16,
     padding: 20,
-    borderRadius: 12,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -313,7 +311,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Theme.positiveMuted,
     padding: 12,
-    borderRadius: 8,
     marginTop: 8,
   },
   youWillGiveLabel: {
@@ -344,10 +341,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 6,
   },
   addButtonText: {
     fontSize: 14,
@@ -410,7 +405,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.negative,
     paddingVertical: 16,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },

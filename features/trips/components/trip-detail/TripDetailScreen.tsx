@@ -6315,7 +6315,6 @@ function FeedbackPlaceholder() {
 const fbStyles = StyleSheet.create({
   card: {
     backgroundColor: Theme.surface,
-    borderRadius: 24,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",

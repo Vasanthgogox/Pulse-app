@@ -3248,15 +3248,11 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: SECTION_GAP,
     padding: 3,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   detailTabBtn: {
     flex: 1,
     paddingVertical: 8,
-    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3279,9 +3275,6 @@ const styles = StyleSheet.create({
   },
   manifestCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: HUB_CARD_RADIUS,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: CARD_PADDING,
     marginBottom: SECTION_GAP,
   },
@@ -3294,7 +3287,6 @@ const styles = StyleSheet.create({
   sectionKickerBar: {
     width: 3,
     height: 14,
-    borderRadius: 3,
     backgroundColor: Theme.buttonPrimary,
   },
   sectionKicker: {
@@ -3317,7 +3309,6 @@ const styles = StyleSheet.create({
   manifestDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
   },
   manifestDotStart: {
     backgroundColor: Theme.positive,
@@ -3383,9 +3374,6 @@ const styles = StyleSheet.create({
   },
   operatorCardModern: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: HUB_CARD_RADIUS,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: CARD_PADDING,
     marginBottom: SECTION_GAP,
   },
@@ -3394,9 +3382,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
@@ -3426,9 +3411,6 @@ const styles = StyleSheet.create({
   },
   assignmentCardModern: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: HUB_CARD_RADIUS,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: CARD_PADDING,
     marginBottom: SECTION_GAP,
   },
@@ -3449,12 +3431,9 @@ const styles = StyleSheet.create({
   assignmentIconBox: {
     width: 28,
     height: 28,
-    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   assignmentTextWrap: {
     flex: 1,
@@ -3493,11 +3472,7 @@ const styles = StyleSheet.create({
   assignmentActionBtn: {
     paddingHorizontal: 10,
     paddingVertical: 7,
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   assignmentActionBtnText: {
     fontSize: 9,
@@ -3511,9 +3486,6 @@ const styles = StyleSheet.create({
   },
   trackingCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: HUB_CARD_RADIUS,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: CARD_PADDING,
     marginBottom: SECTION_GAP,
     shadowColor: Theme.shadow,
@@ -3538,7 +3510,6 @@ const styles = StyleSheet.create({
   trackingStatusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
     backgroundColor: Theme.positive,
   },
   trackingStatusDotOffline: {
@@ -3561,14 +3532,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.positiveMuted,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
   },
   liveDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
     backgroundColor: Theme.darkGreen,
   },
   livePillText: {
@@ -3584,9 +3551,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   trackingLiveMapText: {
     fontSize: 7,
@@ -3603,7 +3567,6 @@ const styles = StyleSheet.create({
   progressSegment: {
     flex: 1,
     height: 6,
-    borderRadius: 3,
     backgroundColor: Theme.surfaceGray,
   },
   progressSegmentActive: {
@@ -3683,9 +3646,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     minHeight: 116,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingVertical: 10,
     paddingHorizontal: 8,
     alignItems: "center",
@@ -3694,7 +3654,6 @@ const styles = StyleSheet.create({
   docCardIconWrap: {
     width: 42,
     height: 42,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
@@ -3726,9 +3685,6 @@ const styles = StyleSheet.create({
   },
   financeCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: CARD_PADDING,
     marginBottom: SECTION_GAP,
     shadowColor: Theme.shadow,
@@ -3768,16 +3724,12 @@ const styles = StyleSheet.create({
   partnerIntegrationPill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
-    borderWidth: 1,
   },
   partnerIntegrationPillOn: {
     backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
   },
   partnerIntegrationPillOff: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderLight,
   },
   partnerIntegrationPillText: {
     fontSize: 9,
@@ -3810,7 +3762,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 14,
     backgroundColor: Theme.textPrimaryDark,
-    borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 18,
     shadowColor: "#000",
@@ -3824,9 +3775,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    borderRadius: 16,
     padding: 6,
   },
   partyTab: {
@@ -3837,14 +3785,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "transparent",
     backgroundColor: "transparent",
   },
   partyTabActive: {
     backgroundColor: Theme.textOnDark,
-    borderColor: Theme.textOnDark,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -3854,7 +3798,6 @@ const styles = StyleSheet.create({
   partyTabIcon: {
     width: 26,
     height: 26,
-    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.08)",
@@ -3869,9 +3812,6 @@ const styles = StyleSheet.create({
     right: -2,
     width: 8,
     height: 8,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: Theme.textPrimaryDark,
   },
   partyTabRole: {
     fontSize: 8,
@@ -3895,13 +3835,11 @@ const styles = StyleSheet.create({
   },
   driverProgressTrack: {
     height: 8,
-    borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.08)",
     overflow: "hidden",
   },
   driverProgressFill: {
     height: "100%",
-    borderRadius: 999,
   },
   driverProgressFillSettled: {
     backgroundColor: Theme.driverEmerald,
@@ -3913,9 +3851,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 10,
   },
@@ -3986,15 +3921,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
   },
   reconStatusDot: {
     width: 7,
     height: 7,
-    borderRadius: 999,
   },
   reconStatusDotGood: {
     backgroundColor: Theme.driverEmerald,
@@ -4027,9 +3958,6 @@ const styles = StyleSheet.create({
   },
   reconOfflineBody: {
     backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
     paddingHorizontal: 14,
     paddingVertical: 16,
     alignItems: "flex-start",
@@ -4038,7 +3966,6 @@ const styles = StyleSheet.create({
   reconOfflineIcon: {
     width: 32,
     height: 32,
-    borderRadius: 10,
     backgroundColor: "rgba(239,68,68,0.18)",
     alignItems: "center",
     justifyContent: "center",
@@ -4060,9 +3987,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
@@ -4075,9 +3999,6 @@ const styles = StyleSheet.create({
   },
   reconGlass: {
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
     paddingHorizontal: 14,
     paddingVertical: 16,
     gap: 12,
@@ -4104,16 +4025,12 @@ const styles = StyleSheet.create({
   driverRequiredPill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 999,
-    borderWidth: 1,
   },
   driverRequiredPillOpen: {
     backgroundColor: "rgba(245,158,11,0.14)",
-    borderColor: "rgba(245,158,11,0.4)",
   },
   driverRequiredPillDone: {
     backgroundColor: "rgba(16,185,129,0.12)",
-    borderColor: "rgba(16,185,129,0.35)",
   },
   driverRequiredPillText: {
     fontSize: 8,
@@ -4152,9 +4069,6 @@ const styles = StyleSheet.create({
   },
   reconLineItemChip: {
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -4194,9 +4108,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
@@ -4244,9 +4155,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -4267,15 +4175,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     backgroundColor: "rgba(239,68,68,0.14)",
-    borderColor: "rgba(239,68,68,0.28)",
-    borderWidth: 1,
-    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   reconDisputeChipResolved: {
     backgroundColor: "rgba(16,185,129,0.14)",
-    borderColor: "rgba(16,185,129,0.28)",
   },
   reconDisputeChipText: {
     flex: 1,
@@ -4297,13 +4201,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    borderRadius: 14,
     paddingVertical: 13,
-    borderWidth: 1,
   },
   reconActionBtnAccept: {
     backgroundColor: Theme.textOnDark,
-    borderColor: Theme.textOnDark,
   },
   reconActionBtnAcceptText: {
     fontSize: 11,
@@ -4313,7 +4214,6 @@ const styles = StyleSheet.create({
   },
   reconActionBtnDispute: {
     backgroundColor: "rgba(239,68,68,0.12)",
-    borderColor: "rgba(239,68,68,0.35)",
   },
   reconActionBtnDisputeText: {
     fontSize: 11,
@@ -4330,10 +4230,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 14,
     paddingVertical: 13,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
   },
   reconCtaButtonText: {
     fontSize: 11,
@@ -4348,9 +4245,6 @@ const styles = StyleSheet.create({
   reconFooterCard: {
     flex: 1,
     backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 6,
@@ -4385,9 +4279,6 @@ const styles = StyleSheet.create({
   },
   entryPreviewCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 14,
   },
   entryPreviewHeader: {
@@ -4404,7 +4295,6 @@ const styles = StyleSheet.create({
   entryPreviewCloseBtn: {
     width: 28,
     height: 28,
-    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
@@ -4436,11 +4326,7 @@ const styles = StyleSheet.create({
   entryPreviewPrimaryBtn: {
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 10,
   },
   entryPreviewPrimaryBtnText: {
@@ -4484,7 +4370,6 @@ const styles = StyleSheet.create({
   },
   financeAdjustmentsWrap: {
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 12,
     padding: 10,
     marginBottom: 10,
   },
@@ -4536,10 +4421,7 @@ const styles = StyleSheet.create({
   },
   voidPromptCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 18,
     padding: 18,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     maxWidth: 400,
     alignSelf: "center",
     width: "100%",
@@ -4565,9 +4447,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   voidPromptInput: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
@@ -4584,7 +4463,6 @@ const styles = StyleSheet.create({
   voidPromptCancelBtn: {
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
   },
   voidPromptCancelTxt: {
@@ -4595,7 +4473,6 @@ const styles = StyleSheet.create({
   voidPromptConfirmBtn: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 12,
     backgroundColor: Theme.teslaRed,
   },
   voidPromptConfirmBtnDisabled: {
@@ -4628,9 +4505,6 @@ const styles = StyleSheet.create({
   financeStatusBox: {
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 12,
   },
   financeStatusCol: {
@@ -4680,9 +4554,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   provisionToggleBtn: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -4697,9 +4568,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   provisionPanel: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 14,
     backgroundColor: Theme.surface,
     padding: 12,
     gap: 10,
@@ -4712,20 +4580,15 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 6,
-    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   provisionCnBtn: {
-    borderColor: Theme.darkGreen,
     backgroundColor: Theme.positiveMuted,
   },
   provisionDnBtnDebit: {
-    borderColor: Theme.teslaRed,
     backgroundColor: Theme.negativeMuted,
   },
   provisionDnLabel: {
@@ -4746,9 +4609,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   provisionChip: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -4780,9 +4640,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   provisionConfirm: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
     paddingHorizontal: 12,
     paddingVertical: 9,
@@ -4795,9 +4652,6 @@ const styles = StyleSheet.create({
   },
   inlineAdjustmentWrap: {
     marginTop: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 14,
     backgroundColor: Theme.screenBackground,
     padding: 12,
     gap: 10,
@@ -4824,7 +4678,6 @@ const styles = StyleSheet.create({
   inlineAdjustmentClose: {
     width: 30,
     height: 30,
-    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
@@ -4845,20 +4698,13 @@ const styles = StyleSheet.create({
   },
   inlineTypeBtn: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
     backgroundColor: Theme.surface,
     paddingVertical: 11,
     paddingHorizontal: 10,
     alignItems: "center",
   },
   inlineTypeBtnActive: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   inlineTypeBtnText: {
     fontSize: 10,
@@ -4870,25 +4716,18 @@ const styles = StyleSheet.create({
     color: Theme.buttonPrimaryText,
   },
   inlineImpactPlus: {
-    borderColor: Theme.borderLight,
   },
   inlineImpactPlusActive: {
-    borderColor: Theme.darkGreen,
     backgroundColor: Theme.darkGreen,
   },
   inlineImpactMinus: {
-    borderColor: Theme.borderLight,
   },
   inlineImpactMinusActive: {
-    borderColor: Theme.teslaRed,
     backgroundColor: Theme.teslaRed,
   },
   inlineAmountRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
     backgroundColor: Theme.surface,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -4915,15 +4754,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   inlineReasonChip: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
     backgroundColor: Theme.surface,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   inlineReasonChipActive: {
-    borderColor: Theme.textPrimaryDark,
     backgroundColor: Theme.textPrimaryDark,
   },
   inlineReasonChipText: {
@@ -4936,9 +4771,6 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   inlineOtherInput: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
     backgroundColor: Theme.surface,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -4950,11 +4782,7 @@ const styles = StyleSheet.create({
   },
   inlineSaveBtn: {
     marginTop: 4,
-    borderRadius: 12,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
@@ -4978,9 +4806,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
     paddingVertical: 10,
   },
   financeAddBtnText: {
@@ -4993,7 +4818,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     backgroundColor: Theme.surfaceGray,
     padding: 10,
-    borderRadius: 10,
   },
   financeCommissionText: {
     fontSize: 10,
@@ -5061,16 +4885,12 @@ const styles = StyleSheet.create({
   activityDot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
     backgroundColor: Theme.borderLight,
     marginTop: 10,
   },
   activityCard: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 12,
     shadowColor: Theme.shadow,
@@ -5100,9 +4920,6 @@ const styles = StyleSheet.create({
   },
   handshakesWrap: {
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 12,
   },
   handshakesEmpty: {
@@ -5120,7 +4937,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
     padding: 14,
     borderWidth: 1,
     borderColor: Theme.borderLight,

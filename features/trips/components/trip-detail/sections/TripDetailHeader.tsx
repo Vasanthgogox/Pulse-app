@@ -108,7 +108,6 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -141,16 +140,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
   },
   kindPillAsset: {
     backgroundColor: "rgba(21,128,61,0.10)",
-    borderColor: "rgba(21,128,61,0.35)",
   },
   kindPillAggregate: {
     backgroundColor: Theme.aggregatePillBg,
-    borderColor: Theme.aggregatePillBorder,
   },
   kindPillText: {
     fontSize: 9,
@@ -166,7 +161,6 @@ const styles = StyleSheet.create({
   actionBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.buttonPrimary,

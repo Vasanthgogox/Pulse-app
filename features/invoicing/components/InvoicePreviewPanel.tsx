@@ -779,9 +779,6 @@ const styles = StyleSheet.create({
 
   infoCard: {
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 8,
     padding: 12,
     minHeight: 80,
   },
@@ -813,9 +810,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 8,
     padding: 12,
     marginBottom: 8,
   },
@@ -840,7 +834,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     backgroundColor: "rgba(79,70,229,0.05)",
-    borderRadius: 4,
   },
   addChargeText: {
     fontSize: 10,
@@ -852,9 +845,6 @@ const styles = StyleSheet.create({
   chargeRow: {
     flexDirection: "row",
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    borderRadius: 8,
     padding: 8,
     marginBottom: 8,
     alignItems: "center",
@@ -893,9 +883,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,
     padding: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   chargeTypeBtn: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
   chargeTypeBtnAdd: {
@@ -927,7 +914,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 4,
     paddingHorizontal: 4,
     paddingVertical: 2,
     width: 72,
@@ -951,7 +937,6 @@ const styles = StyleSheet.create({
   removeChargeBtn: {
     width: 20,
     height: 20,
-    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(220,38,38,0.08)",
@@ -963,9 +948,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 8,
   },
   emptyTripsText: {
     fontSize: 12,
@@ -977,9 +959,6 @@ const styles = StyleSheet.create({
   tripItemWrapper: { marginBottom: 12 },
   tripItem: {
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 8,
     padding: 12,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1013,9 +992,6 @@ const styles = StyleSheet.create({
   tripChargeRow: {
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    borderRadius: 8,
     padding: 8,
     marginTop: 4,
     marginLeft: 24,
@@ -1025,9 +1001,6 @@ const styles = StyleSheet.create({
 
   calcBlock: {
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
     padding: 16,
     marginBottom: 24,
   },
@@ -1046,7 +1019,6 @@ const styles = StyleSheet.create({
   calcSubtotal: {
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: Theme.borderLight,
     paddingVertical: 8,
     marginVertical: 8,
   },
@@ -1092,7 +1064,6 @@ const styles = StyleSheet.create({
 
   annexureBlock: {
     backgroundColor: "#0f172a",
-    borderRadius: 12,
     padding: 16,
     marginBottom: 24,
     shadowColor: "#000",
@@ -1137,9 +1108,6 @@ const styles = StyleSheet.create({
 
   settingsBlock: {
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
     padding: 16,
     marginBottom: 24,
     position: "relative",
@@ -1172,9 +1140,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     width: 120,
@@ -1191,9 +1156,6 @@ const styles = StyleSheet.create({
   },
   notesInput: {
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 12,
@@ -1217,15 +1179,11 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 16,
     height: 16,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
   },
   checkboxActive: {
     backgroundColor: Theme.buttonPrimary,
-    borderColor: Theme.primary,
   },
   checkboxLabel: {
     fontSize: 10,
@@ -1238,9 +1196,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
@@ -1274,9 +1229,6 @@ const styles = StyleSheet.create({
   footerBtnOutline: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     alignItems: "center",
   },
   footerBtnOutlineText: {
@@ -1287,11 +1239,7 @@ const styles = StyleSheet.create({
   footerBtnPrimary: {
     flex: 2,
     paddingVertical: 14,
-    borderRadius: 12,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
@@ -1313,15 +1261,12 @@ const styles = StyleSheet.create({
   },
   termsModalContent: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
     padding: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   termOption: {
     flexDirection: "row",
@@ -1329,7 +1274,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
   },
   termOptionText: {
     fontSize: 14,

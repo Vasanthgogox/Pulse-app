@@ -1133,9 +1133,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   hubShell: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e6edf5",
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
     ...Platform.select({
@@ -1150,7 +1147,6 @@ const styles = StyleSheet.create({
     }),
   },
   hubShellEmbedded: {
-    borderRadius: 14,
   },
   ledgerHero: {
     position: "relative",
@@ -1194,10 +1190,7 @@ const styles = StyleSheet.create({
   ledgerHeroIcon: {
     width: 24,
     height: 24,
-    borderRadius: 8,
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.pulseIndigoRing,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 2,
@@ -1209,15 +1202,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   summaryCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e6edf5",
     backgroundColor: Theme.cardWhite,
     padding: 10,
     gap: 8,
   },
   summaryCardEmbedded: {
-    borderRadius: 14,
     padding: 8,
     gap: 6,
   },
@@ -1267,10 +1256,7 @@ const styles = StyleSheet.create({
     maxWidth: 118,
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 999,
     backgroundColor: "#eef2ff",
-    borderWidth: 1,
-    borderColor: "#c7d2fe",
   },
   vehiclePillText: {
     fontSize: 8,
@@ -1289,10 +1275,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 999,
     backgroundColor: "#fffbeb",
-    borderWidth: 1,
-    borderColor: "#fde68a",
   },
   alertPillText: {
     fontSize: 8,
@@ -1301,7 +1284,6 @@ const styles = StyleSheet.create({
   },
   alertPillDue: {
     backgroundColor: "#f5f3ff",
-    borderColor: "#ddd6fe",
   },
   alertPillDueText: {
     color: "#6d28d9",
@@ -1313,16 +1295,12 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 10,
     paddingLeft: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.pulseIndigoRing,
     backgroundColor: "#faf5ff",
     overflow: "hidden",
   },
   driverPayBannerEmbedded: {
     gap: 8,
     paddingVertical: 9,
-    borderColor: "#e6edf5",
     backgroundColor: Theme.cardWhite,
   },
   driverPayBannerPressed: {
@@ -1342,10 +1320,7 @@ const styles = StyleSheet.create({
   driverPayIconWrap: {
     width: 28,
     height: 28,
-    borderRadius: 9,
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.pulseIndigoRing,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1369,9 +1344,6 @@ const styles = StyleSheet.create({
   payoutSection: {
     marginTop: 4,
     padding: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e6edf5",
     backgroundColor: Theme.surface,
     gap: 6,
   },
@@ -1449,7 +1421,6 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingVertical: 6,
     paddingHorizontal: 4,
-    borderRadius: 12,
     minHeight: 58,
   },
   quickTilePressed: {
@@ -1459,8 +1430,6 @@ const styles = StyleSheet.create({
   quickTileIcon: {
     width: 32,
     height: 32,
-    borderRadius: 10,
-    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1477,9 +1446,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    borderWidth: 1,
-    borderColor: "#e6edf5",
-    borderRadius: 10,
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 6,
     paddingVertical: 6,
@@ -1494,15 +1460,10 @@ const styles = StyleSheet.create({
   segmentTrack: {
     flexDirection: "row",
     padding: 3,
-    borderRadius: 10,
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     gap: 3,
   },
   segmentTrackEmbedded: {
-    borderColor: "#e6edf5",
-    borderRadius: 10,
     padding: 2,
   },
   segmentBtn: {
@@ -1512,13 +1473,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     paddingVertical: 6,
-    borderRadius: 8,
     minHeight: 28,
   },
   segmentBtnActive: {
     backgroundColor: Theme.cardWhite,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.pulseIndigoRing,
     ...Platform.select({
       ios: {
         shadowColor: Theme.pulseIndigo,
@@ -1547,7 +1505,6 @@ const styles = StyleSheet.create({
     minWidth: 18,
     paddingHorizontal: 5,
     paddingVertical: 1,
-    borderRadius: 999,
     backgroundColor: Theme.borderLight,
     alignItems: "center",
   },
@@ -1592,7 +1549,6 @@ const styles = StyleSheet.create({
     minWidth: 20,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 999,
     backgroundColor: "#eef2ff",
     alignItems: "center",
   },
@@ -1602,9 +1558,6 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   row: {
-    borderWidth: 1,
-    borderColor: "#e6edf5",
-    borderRadius: 12,
     backgroundColor: Theme.cardWhite,
     padding: 10,
     paddingLeft: 8,
@@ -1614,10 +1567,8 @@ const styles = StyleSheet.create({
   rowEmbedded: {
     padding: 8,
     gap: 6,
-    borderRadius: 14,
   },
   rowNeedsAction: {
-    borderColor: Theme.pulseIndigoRing,
     backgroundColor: "#fafbff",
   },
   rowMain: {
@@ -1628,7 +1579,6 @@ const styles = StyleSheet.create({
   rowAvatar: {
     width: 28,
     height: 28,
-    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1694,8 +1644,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    borderWidth: 1,
-    borderRadius: 999,
     paddingHorizontal: 5,
     paddingVertical: 2,
     maxWidth: 100,
@@ -1703,7 +1651,6 @@ const styles = StyleSheet.create({
   chipDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
   },
   chipDotGood: { backgroundColor: "#16a34a" },
   chipDotPending: { backgroundColor: "#d97706" },
@@ -1723,7 +1670,6 @@ const styles = StyleSheet.create({
   chipPending: { borderColor: "#fcd34d", backgroundColor: "#fffbeb" },
   chipBad: { borderColor: "#fecaca", backgroundColor: "#fef2f2" },
   chipSettled: {
-    borderColor: "#16a34a",
     backgroundColor: "#16a34a",
   },
   actions: {
@@ -1737,9 +1683,6 @@ const styles = StyleSheet.create({
   actionBtn: {
     flex: 1,
     minWidth: 100,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
     minHeight: 30,
@@ -1752,11 +1695,7 @@ const styles = StyleSheet.create({
     minWidth: "100%",
   },
   actionBtnPrimary: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     ...Platform.select({
       ios: {
         shadowColor: Theme.pulseIndigo,

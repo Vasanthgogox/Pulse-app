@@ -494,7 +494,6 @@ const webDesktopStyles = StyleSheet.create({
     letterSpacing: 0.45,
   },
   pendingCard: {
-    borderRadius: 7,
     padding: 6,
   },
   pendingHeroAmount: {
@@ -507,12 +506,10 @@ const webDesktopStyles = StyleSheet.create({
     minWidth: 0,
   },
   compareToggle: {
-    borderRadius: 14,
     padding: 3,
   },
   compareBtn: {
     paddingVertical: 9,
-    borderRadius: 12,
   },
   compareBtnTxt: {
     fontSize: 10,
@@ -522,7 +519,6 @@ const webDesktopStyles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   missionCard: {
-    borderRadius: 32,
     marginBottom: 10,
   },
   missionCardGrid: {

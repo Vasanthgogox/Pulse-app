@@ -686,10 +686,7 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e8ecf1',
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-start',
@@ -704,7 +701,6 @@ const styles = StyleSheet.create({
   liveDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
     backgroundColor: '#22c55e',
   },
   formHeaderTitle: {
@@ -719,11 +715,8 @@ const styles = StyleSheet.create({
   },
   errorBar: {
     backgroundColor: '#fee2e2',
-    borderRadius: 12,
     padding: 12,
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#fecaca',
   },
   errorBarText: {
     fontSize: 12,
@@ -734,9 +727,6 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
     overflow: 'hidden',
     marginTop: 12,
     marginBottom: 12,
@@ -772,14 +762,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#eef2f7',
     marginBottom: 10,
     overflow: 'hidden',
   },
   summaryDetailRowEmphasis: {
-    borderColor: '#cbd5f5',
     backgroundColor: '#fafbff',
   },
   summaryDetailAccent: {
@@ -830,7 +816,6 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#0f172a',
     paddingVertical: 14,
-    borderRadius: 14,
   },
   primaryBtnDisabled: {
     opacity: 0.45,
@@ -856,9 +841,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
-    borderRadius: 14,
   },
   confirmBtnText: {
     ...FinanceTxnTypography.buttonLabel,
@@ -898,7 +881,6 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 340,
     backgroundColor: '#fff',
-    borderRadius: 20,
     padding: 24,
     alignItems: 'center',
     gap: 10,

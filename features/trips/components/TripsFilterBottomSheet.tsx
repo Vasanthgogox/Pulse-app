@@ -355,7 +355,6 @@ const styles = StyleSheet.create({
   handle: {
     width: 40,
     height: 4,
-    borderRadius: 2,
     backgroundColor: Theme.borderInput,
     alignSelf: "center",
     marginBottom: 12,
@@ -427,15 +426,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 9,
     paddingHorizontal: 14,
-    borderRadius: 22,
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     maxWidth: "100%",
   },
   chipActive: {
     backgroundColor: Theme.buttonPrimary,
-    borderColor: Theme.pulseIndigo,
   },
   chipIcon: {
     marginRight: 5,
@@ -455,7 +450,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",

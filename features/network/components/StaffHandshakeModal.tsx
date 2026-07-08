@@ -1002,7 +1002,6 @@ const styles = StyleSheet.create({
   assignWebModalCardCompact: {
     width: "98%",
     maxWidth: 760,
-    borderRadius: 14,
     ...Platform.select({
       web: { height: "92vh", maxHeight: "92vh" } as any,
       default: { maxHeight: "92%" },
@@ -1028,7 +1027,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 18,
     backgroundColor: Theme.darkBackground,
-    borderRadius: 12,
     alignSelf: "stretch",
     minWidth: 0,
     ...Platform.select({
@@ -1045,7 +1043,6 @@ const styles = StyleSheet.create({
   handshakeBtnModal: { backgroundColor: Theme.textPrimaryDark },
   otpCard: {
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 16,
     padding: 20,
     marginBottom: 20,
     alignItems: "center",
@@ -1071,7 +1068,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     backgroundColor: Theme.textPrimaryDark,
-    borderRadius: 8,
   },
   otpBtnText: {
     fontSize: 11,
@@ -1086,7 +1082,6 @@ const styles = StyleSheet.create({
   handshakeSegmentPill: {
     flexDirection: "row",
     backgroundColor: "#0f172a",
-    borderRadius: 14,
     padding: 4,
     gap: 4,
     ...Platform.select({
@@ -1108,7 +1103,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     paddingHorizontal: 22,
-    borderRadius: 11,
   },
   handshakeSegBtnActive: {
     backgroundColor: "rgba(255,255,255,0.1)",
@@ -1133,9 +1127,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#f1f5f9",
-    borderRadius: 20,
     paddingVertical: 14,
     paddingHorizontal: 18,
     marginBottom: 20,
@@ -1155,7 +1146,6 @@ const styles = StyleSheet.create({
   handshakeAssignLaterOuterCompact: {
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 14,
     marginBottom: 12,
   },
   handshakeAssignLaterLeft: {
@@ -1168,7 +1158,6 @@ const styles = StyleSheet.create({
   handshakeAssignLaterIconWrap: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     backgroundColor: "#f8fafc",
     alignItems: "center",
     justifyContent: "center",
@@ -1187,7 +1176,6 @@ const styles = StyleSheet.create({
   handshakePrimaryCta: {
     width: "100%",
     minHeight: 52,
-    borderRadius: 18,
     backgroundColor: "#0f172a",
     alignItems: "center",
     justifyContent: "center",
@@ -1228,9 +1216,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     padding: 14,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -1252,9 +1237,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   assignPickerBadge: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     paddingHorizontal: 8,
     paddingVertical: 3,
     backgroundColor: Theme.surfaceLight,
@@ -1268,9 +1250,6 @@ const styles = StyleSheet.create({
   assignEntityRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 10,
     paddingVertical: 10,
@@ -1279,13 +1258,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   assignEntityRowActive: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.surfaceLight,
   },
   assignEntityIconWrap: {
     width: 34,
     height: 34,
-    borderRadius: 17,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -1324,11 +1301,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingHorizontal: 14,
-    borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   assignEmptyActionBtnText: {
     fontSize: 12,
@@ -1339,9 +1312,6 @@ const styles = StyleSheet.create({
   },
   assignSummaryBar: {
     backgroundColor: Theme.surfaceLight,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 14,
@@ -1398,12 +1368,9 @@ const styles = StyleSheet.create({
   tripAssignSourceBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
   },
   tripAssignBadgeUnassigned: {
     backgroundColor: Theme.surfaceLight,
-    borderColor: Theme.borderInput,
   },
   tripAssignSourceBadgeText: {
     fontSize: 7,
@@ -1454,9 +1421,6 @@ const styles = StyleSheet.create({
   aggregatePaneCard: {
     flex: 1,
     minWidth: 0,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
     backgroundColor: Theme.screenBackground,
     padding: 12,
     gap: 8,
@@ -1480,9 +1444,6 @@ const styles = StyleSheet.create({
   },
   aggregatePartnerCard: {
     minHeight: 64,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
@@ -1490,13 +1451,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   aggregatePartnerCardSelected: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.surfaceLight,
   },
   aggregatePartnerAvatar: {
     width: 34,
     height: 34,
-    borderRadius: 17,
     backgroundColor: Theme.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
@@ -1522,9 +1481,6 @@ const styles = StyleSheet.create({
   },
   aggregateViewMoreBtn: {
     minHeight: 36,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
@@ -1557,7 +1513,6 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     minHeight: 44,
-    borderRadius: 10,
     paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
@@ -1590,9 +1545,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     backgroundColor: Theme.screenBackground,
   },
   partnerAddBtnText: {

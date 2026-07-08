@@ -1,5 +1,6 @@
 import Theme from "@/constants/Theme";
-import { Platform, StyleSheet } from "react-native";
+import { column, createStyles, image, text, view, webView, type ColumnStyle } from "@/lib/styles/createStyles";
+import { Platform, StyleSheet, type ImageStyle, type TextStyle, type ViewStyle } from "react-native";
 
 export const METRONIC = {
   border: "#EFF2F5",
@@ -19,17 +20,17 @@ const HEX_PATTERN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="56" heig
 export const METRONIC_HEX_BACKGROUND = {
   backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(HEX_PATTERN_SVG)}")`,
   backgroundSize: "56px 100px",
-} as object;
+} as ViewStyle;
 
-export const networkDesktopHubStyles = StyleSheet.create({
-  root: {
+const networkDesktopHubStylesDef = {
+  root: view({
     flex: 1,
     backgroundColor: METRONIC.bodyBg,
-  },
-  scrollContent: {
+  }),
+  scrollContent: view({
     paddingBottom: 24,
-  },
-  hero: {
+  }),
+  hero: view({
     backgroundColor: METRONIC.heroBg,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
@@ -39,8 +40,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     position: "relative",
     overflow: "hidden",
     ...METRONIC_HEX_BACKGROUND,
-  },
-  heroBackCorner: {
+  }),
+  heroBackCorner: view({
     position: "absolute",
     top: 0,
     left: 0,
@@ -56,9 +57,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
     ...({
       boxShadow: "0 2px 10px rgba(24, 28, 50, 0.06)",
       cursor: "pointer",
-    } as object),
-  },
-  heroHexOverlay: {
+    } as unknown as ViewStyle),
+  }),
+  heroHexOverlay: view({
     position: "absolute",
     top: 0,
     left: 0,
@@ -73,20 +74,20 @@ export const networkDesktopHubStyles = StyleSheet.create({
         backgroundColor: "rgba(255, 255, 255, 0.72)",
       },
     }),
-  },
-  heroInner: {
+  }),
+  heroInner: view({
     width: "100%",
     zIndex: 1,
     position: "relative",
     alignItems: "center",
-  },
-  heroCenter: {
+  }),
+  heroCenter: view({
     width: "100%",
     alignItems: "center",
     gap: 6,
     paddingTop: 20,
-  },
-  heroWelcomeCorner: {
+  }),
+  heroWelcomeCorner: view({
     position: "absolute",
     top: 0,
     right: 0,
@@ -103,23 +104,23 @@ export const networkDesktopHubStyles = StyleSheet.create({
     ...({
       boxShadow: "0 2px 10px rgba(24, 28, 50, 0.06)",
       cursor: "pointer",
-    } as object),
-  },
-  heroWelcomeTextWrap: {
+    } as unknown as ViewStyle),
+  }),
+  heroWelcomeTextWrap: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-  },
-  heroWelcomeText: {
+  }),
+  heroWelcomeText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  heroWelcomeName: {
+  }),
+  heroWelcomeName: text({
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  heroUserRingSm: {
+  }),
+  heroUserRingSm: view({
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -129,17 +130,17 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-  },
-  heroUserImageSm: {
+  }),
+  heroUserImageSm: image({
     width: 24,
     height: 24,
     borderRadius: 12,
-  },
-  heroAvatarPressable: {
+  }),
+  heroAvatarPressable: view({
     position: "relative",
     marginTop: 4,
-  },
-  heroAvatarRing: {
+  }),
+  heroAvatarRing: view({
     width: 68,
     height: 68,
     borderRadius: 34,
@@ -151,14 +152,14 @@ export const networkDesktopHubStyles = StyleSheet.create({
     overflow: "hidden",
     ...({
       boxShadow: "0 4px 12px rgba(24, 28, 50, 0.08)",
-    } as object),
-  },
-  heroAvatarImage: {
+    } as unknown as ViewStyle),
+  }),
+  heroAvatarImage: image({
     width: 62,
     height: 62,
     borderRadius: 31,
-  },
-  heroCameraBadge: {
+  }),
+  heroCameraBadge: view({
     position: "absolute",
     right: 0,
     bottom: 0,
@@ -170,26 +171,26 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
-  },
-  heroMetaRow: {
+  }),
+  heroMetaRow: view({
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
     marginTop: 2,
-  },
-  heroMetaItem: {
+  }),
+  heroMetaItem: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-  },
-  heroMetaText: {
+  }),
+  heroMetaText: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.subtle,
-  },
-  heroStatsRow: {
+  }),
+  heroStatsRow: view({
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
@@ -197,44 +198,44 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 6,
     marginTop: 2,
     paddingHorizontal: 8,
-  },
-  heroStatChip: {
+  }),
+  heroStatChip: text({
     fontSize: 11,
     color: METRONIC.subtle,
-  },
-  heroStatValue: {
+  }),
+  heroStatValue: text({
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  heroStatLabel: {
+  }),
+  heroStatLabel: text({
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  heroStatDivider: {
+  }),
+  heroStatDivider: text({
     fontSize: 11,
     color: METRONIC.muted,
     fontWeight: "600",
-  },
-  heroLogoHint: {
+  }),
+  heroLogoHint: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
     marginTop: 1,
-  },
-  heroNameRow: {
+  }),
+  heroNameRow: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
     marginTop: 2,
-  },
-  heroName: {
+  }),
+  heroName: text({
     fontSize: 17,
     fontWeight: "700",
     color: METRONIC.text,
     letterSpacing: -0.3,
-  },
-  tabBar: {
+  }),
+  tabBar: view({
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
@@ -244,17 +245,17 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingTop: 0,
     backgroundColor: Theme.cardWhite,
     minHeight: 42,
-  },
-  tabScroll: {
+  }),
+  tabScroll: view({
     flexGrow: 0,
     flexShrink: 1,
-  },
-  tabScrollContent: {
+  }),
+  tabScrollContent: view({
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 0,
-  },
-  tabBtn: {
+  }),
+  tabBtn: view({
     paddingHorizontal: 11,
     paddingVertical: 10,
     borderRadius: 0,
@@ -263,28 +264,28 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderBottomColor: "transparent",
     backgroundColor: "transparent",
     marginBottom: -1,
-  },
-  tabBtnActive: {
+  }),
+  tabBtnActive: view({
     borderBottomColor: METRONIC.accent,
     backgroundColor: "transparent",
-  },
-  tabText: {
+  }),
+  tabText: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
     letterSpacing: 0,
-  },
-  tabTextActive: {
+  }),
+  tabTextActive: text({
     color: METRONIC.text,
     fontWeight: "700",
-  },
-  tabActions: {
+  }),
+  tabActions: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
-  },
-  tabActionBtn: {
+  }),
+  tabActionBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -294,20 +295,20 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  tabActionBtnPrimary: {
+  }),
+  tabActionBtnPrimary: view({
     backgroundColor: "#78829D",
     borderColor: "#78829D",
-  },
-  tabActionBtnText: {
+  }),
+  tabActionBtnText: text({
     fontSize: 11,
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  tabActionBtnTextOn: {
+  }),
+  tabActionBtnTextOn: text({
     color: Theme.buttonDarkText,
-  },
-  tabActionIconBtn: {
+  }),
+  tabActionIconBtn: view({
     width: 36,
     height: 36,
     borderRadius: 8,
@@ -316,8 +317,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
-  },
-  panel: {
+  }),
+  panel: view({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 16,
@@ -325,8 +326,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
-  },
-  detailsBody: {
+  }),
+  detailsBody: view({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 16,
@@ -334,8 +335,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
-  },
-  statsBar: {
+  }),
+  statsBar: view({
     flexDirection: "row",
     borderRadius: 8,
     borderWidth: 1,
@@ -344,9 +345,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
     overflow: "hidden",
     ...({
       boxShadow: "0 0 10px 0 rgba(76, 87, 125, 0.04)",
-    } as object),
-  },
-  statCell: {
+    } as unknown as ViewStyle),
+  }),
+  statCell: view({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -354,46 +355,46 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 3,
     borderRightWidth: 1,
     borderRightColor: METRONIC.border,
-  },
-  statCellLast: {
+  }),
+  statCellLast: view({
     borderRightWidth: 0,
-  },
-  statValue: {
+  }),
+  statValue: text({
     fontSize: 16,
     fontWeight: "700",
     color: METRONIC.text,
     letterSpacing: -0.3,
-  },
-  statLabel: {
+  }),
+  statLabel: text({
     fontSize: 9,
     fontWeight: "600",
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  splitRow: {
+  }),
+  splitRow: view({
     flexDirection: "row",
     gap: 12,
     alignItems: "flex-start",
     flexWrap: "wrap",
-  },
-  sidebar: {
+  }),
+  sidebar: view({
     width: "28%",
     minWidth: 220,
     maxWidth: 300,
     gap: 10,
     flexShrink: 0,
-  },
-  mainCol: {
+  }),
+  mainCol: view({
     flex: 1,
     minWidth: 260,
     gap: 10,
     ...({
       display: "flex",
       flexDirection: "column",
-    } as object),
-  },
-  card: {
+    } as unknown as ViewStyle),
+  }),
+  card: view({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: METRONIC.border,
@@ -402,26 +403,26 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 8,
     ...({
       boxShadow: "0 0 10px 0 rgba(76, 87, 125, 0.03)",
-    } as object),
-  },
-  cardTitle: {
+    } as unknown as ViewStyle),
+  }),
+  cardTitle: text({
     fontSize: 13,
     fontWeight: "700",
     color: METRONIC.text,
     marginBottom: 2,
-  },
-  cardTitleInline: {
+  }),
+  cardTitleInline: text({
     marginBottom: 0,
     flex: 1,
     minWidth: 0,
-  },
-  salesCardTitle: {
+  }),
+  salesCardTitle: text({
     fontSize: 15,
     fontWeight: "700",
     color: METRONIC.text,
     marginBottom: 0,
-  },
-  kvRow: {
+  }),
+  kvRow: view({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -429,64 +430,64 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingVertical: 7,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  kvRowLast: {
+  }),
+  kvRowLast: view({
     borderBottomWidth: 0,
     paddingBottom: 0,
-  },
-  kvLabel: {
+  }),
+  kvLabel: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     flexShrink: 0,
-  },
-  kvValue: {
+  }),
+  kvValue: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.text,
     flex: 1,
     textAlign: "right",
-  },
-  kvValueLink: {
+  }),
+  kvValueLink: text({
     color: METRONIC.link,
-  },
-  aboutBody: {
+  }),
+  aboutBody: text({
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "400",
     color: METRONIC.subtle,
-  },
-  sectionHeading: {
+  }),
+  sectionHeading: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.text,
     marginTop: 1,
-  },
-  sectionHeadingSpaced: {
+  }),
+  sectionHeadingSpaced: text({
     marginTop: 12,
-  },
-  subscribedPill: {
+  }),
+  subscribedPill: view({
     alignSelf: "flex-end",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
     backgroundColor: "rgba(80, 205, 137, 0.15)",
-  },
-  subscribedPillText: {
+  }),
+  subscribedPillText: text({
     fontSize: 10,
     fontWeight: "700",
     color: "#47BE7D",
     textTransform: "uppercase",
     letterSpacing: 0.3,
-  },
-  headquarterRow: {
+  }),
+  headquarterRow: view({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
     marginTop: 6,
     alignItems: "stretch",
-  },
-  mapFrame: {
+  }),
+  mapFrame: view({
     flex: 1,
     minWidth: 200,
     minHeight: 160,
@@ -497,8 +498,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: "#F3F6F9",
     overflow: "hidden",
     position: "relative",
-  },
-  mapStaticImage: {
+  }),
+  mapStaticImage: image({
     position: "absolute",
     top: 0,
     left: 0,
@@ -506,8 +507,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     bottom: 0,
     width: "100%",
     height: "100%",
-  },
-  mapPlaceholder: {
+  }),
+  mapPlaceholder: view({
     flex: 1,
     minWidth: 200,
     minHeight: 140,
@@ -519,11 +520,11 @@ export const networkDesktopHubStyles = StyleSheet.create({
     justifyContent: "center",
     padding: 16,
     position: "relative",
-  },
-  mapPlaceholderLoading: {
+  }),
+  mapPlaceholderLoading: view({
     justifyContent: "center",
-  },
-  mapPinBubble: {
+  }),
+  mapPinBubble: view({
     position: "absolute",
     top: 12,
     left: 12,
@@ -538,52 +539,52 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 2,
     ...({
       boxShadow: "0 4px 12px rgba(24, 28, 50, 0.08)",
-    } as object),
-  },
-  mapPinBubbleText: {
+    } as unknown as ViewStyle),
+  }),
+  mapPinBubbleText: text({
     fontSize: 11,
     fontWeight: "700",
     color: METRONIC.text,
     lineHeight: 15,
-  },
-  mapPinBubbleSub: {
+  }),
+  mapPinBubbleSub: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 14,
-  },
-  contactList: {
+  }),
+  contactList: view({
     flex: 1,
     minWidth: 180,
     gap: 9,
     justifyContent: "center",
     paddingVertical: 2,
-  },
-  networkLinkRow: {
+  }),
+  networkLinkRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
     minWidth: 0,
-  },
-  networkLinkText: {
+  }),
+  networkLinkText: text({
     flex: 1,
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.text,
     minWidth: 0,
-  },
-  openJobRow: {
+  }),
+  openJobRow: view({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  openJobRowLast: {
+  }),
+  openJobRowLast: view({
     borderBottomWidth: 0,
-  },
-  openJobIcon: {
+  }),
+  openJobIcon: view({
     width: 30,
     height: 30,
     borderRadius: 7,
@@ -592,76 +593,76 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
     alignItems: "center",
     justifyContent: "center",
-  },
-  openJobTextCol: {
+  }),
+  openJobTextCol: view({
     flex: 1,
     minWidth: 0,
     gap: 1,
-  },
-  openJobCategory: {
+  }),
+  openJobCategory: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.link,
-  },
-  openJobTitle: {
+  }),
+  openJobTitle: text({
     fontSize: 11,
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  openJobMeta: {
+  }),
+  openJobMeta: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
     marginTop: 1,
-  },
-  cardFooterLink: {
+  }),
+  cardFooterLink: view({
     alignItems: "center",
     paddingTop: 8,
-  },
-  cardFooterLinkText: {
+  }),
+  cardFooterLinkText: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.link,
     ...({
       textDecorationLine: "underline",
       textDecorationStyle: "dotted",
-    } as object),
-  },
-  tagWrap: {
+    } as unknown as TextStyle),
+  }),
+  tagWrap: view({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
-  },
-  tagPill: {
+  }),
+  tagPill: view({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 5,
     backgroundColor: "#F1F1F4",
-  },
-  tagPillText: {
+  }),
+  tagPillText: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  productPill: {
+  }),
+  productPill: view({
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 5,
     backgroundColor: "#F1F1F4",
-  },
-  productPillText: {
+  }),
+  productPillText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.text,
-  },
-  cardHeaderRow: {
+  }),
+  cardHeaderRow: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
     marginBottom: 2,
-  },
-  cardEditBtn: {
+  }),
+  cardEditBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -671,13 +672,13 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: "#F9FAFB",
-  },
-  cardEditBtnText: {
+  }),
+  cardEditBtnText: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.muted,
-  },
-  offerLocationBtn: {
+  }),
+  offerLocationBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -685,20 +686,20 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: "#50CD89",
-  },
-  offerLocationBtnText: {
+  }),
+  offerLocationBtnText: text({
     fontSize: 11,
     fontWeight: "700",
     color: Theme.buttonPrimaryText,
-  },
-  locationsGrid: {
+  }),
+  locationsGrid: view({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
     paddingTop: 8,
     alignItems: "stretch",
-  },
-  locationCard: {
+  }),
+  locationCard: webView({
     flexGrow: 1,
     flexShrink: 0,
     flexBasis: "calc(25% - 9px)",
@@ -710,50 +711,50 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
     paddingBottom: 8,
-  },
-  locationCardPressable: {
+  }),
+  locationCardPressable: view({
     flex: 1,
-  },
-  locationsEmpty: {
+  }),
+  locationsEmpty: view({
     paddingVertical: 20,
     alignItems: "center",
     gap: 8,
-  },
-  locationsEmptyText: {
+  }),
+  locationsEmptyText: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
     textAlign: "center",
     lineHeight: 18,
-  },
-  locationImage: {
+  }),
+  locationImage: view({
     height: 80,
     alignItems: "center",
     justifyContent: "center",
-  },
-  locationTitle: {
+  }),
+  locationTitle: text({
     fontSize: 13,
     fontWeight: "700",
     color: METRONIC.text,
     paddingHorizontal: 10,
     paddingTop: 12,
-  },
-  locationAddress: {
+  }),
+  locationAddress: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 16,
     paddingHorizontal: 10,
     paddingBottom: 4,
-  },
-  locationLinkHint: {
+  }),
+  locationLinkHint: text({
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.link,
     paddingHorizontal: 10,
     paddingTop: 6,
-  },
-  projectsTableHead: {
+  }),
+  projectsTableHead: view({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
@@ -761,15 +762,15 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
     marginTop: 4,
-  },
-  projectsHeadCell: {
+  }),
+  projectsHeadCell: text({
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.45,
-  },
-  projectsRow: {
+  }),
+  projectsRow: view({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
@@ -777,94 +778,94 @@ export const networkDesktopHubStyles = StyleSheet.create({
     minHeight: 42,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  projectsRowLast: {
+  }),
+  projectsRowLast: view({
     borderBottomWidth: 0,
-  },
-  projectsCell: {
+  }),
+  projectsCell: text({
     fontSize: 13,
     fontWeight: "600",
     color: METRONIC.text,
-  },
-  projectsCellMuted: {
+  }),
+  projectsCellMuted: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  projectsColName: {
+  }),
+  projectsColName: text({
     flex: 2.4,
     minWidth: 0,
     paddingRight: 16,
-  },
-  projectsColProgress: {
+  }),
+  projectsColProgress: column({
     flex: 1.5,
     minWidth: 72,
     maxWidth: 140,
-  },
-  projectsColPeople: {
+  }),
+  projectsColPeople: column({
     flex: 1.1,
     minWidth: 96,
     paddingRight: 8,
-  },
-  projectsColDue: {
+  }),
+  projectsColDue: text({
     flex: 0.8,
     minWidth: 64,
-  },
-  projectsColMenu: {
+  }),
+  projectsColMenu: view({
     width: 24,
     alignItems: "center",
-  },
-  progressTrackWrap: {
+  }),
+  progressTrackWrap: view({
     paddingRight: 8,
-  },
-  progressTrack: {
+  }),
+  progressTrack: view({
     height: 6,
     borderRadius: 3,
     backgroundColor: "#F1F1F4",
     overflow: "hidden",
-  },
-  progressFill: {
+  }),
+  progressFill: view({
     height: "100%",
     borderRadius: 3,
     backgroundColor: METRONIC.link,
-  },
-  peopleMoreFill: {
+  }),
+  peopleMoreFill: view({
     backgroundColor: "#50CD89",
     borderColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
-  },
-  peopleMoreText: {
+  }),
+  peopleMoreText: text({
     fontSize: 9,
     fontWeight: "800",
     color: Theme.textOnPrimary,
     letterSpacing: -0.2,
-  },
-  projectsPeopleEmpty: {
+  }),
+  projectsPeopleEmpty: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  cardTitleRow: {
+  }),
+  cardTitleRow: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-  },
-  autoRefreshPill: {
+  }),
+  autoRefreshPill: view({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: "#F9FAFB",
-  },
-  autoRefreshText: {
+  }),
+  autoRefreshText: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.muted,
-  },
-  activityCard: {
+  }),
+  activityCard: view({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: METRONIC.border,
@@ -873,22 +874,22 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 12,
     ...({
       boxShadow: "0 0 20px 0 rgba(76, 87, 125, 0.04)",
-    } as object),
-  },
-  activityList: {
+    } as unknown as ViewStyle),
+  }),
+  activityList: view({
     gap: 0,
     paddingTop: 4,
-  },
-  activityItem: {
+  }),
+  activityItem: view({
     flexDirection: "row",
     gap: 14,
     paddingTop: 2,
-  },
-  activityRail: {
+  }),
+  activityRail: view({
     width: 28,
     alignItems: "center",
-  },
-  activityDot: {
+  }),
+  activityDot: view({
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -897,35 +898,35 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
     alignItems: "center",
     justifyContent: "center",
-  },
-  activityLine: {
+  }),
+  activityLine: view({
     flex: 1,
     width: 1,
     backgroundColor: METRONIC.border,
     marginTop: 6,
     minHeight: 28,
-  },
-  activityBody: {
+  }),
+  activityBody: view({
     flex: 1,
     minWidth: 0,
     paddingBottom: 20,
     gap: 5,
-  },
-  activityBodyLast: {
+  }),
+  activityBodyLast: view({
     paddingBottom: 4,
-  },
-  activityTitle: {
+  }),
+  activityTitle: text({
     fontSize: 13,
     fontWeight: "600",
     color: METRONIC.text,
     lineHeight: 20,
-  },
-  activityMeta: {
+  }),
+  activityMeta: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  activityNestedCard: {
+  }),
+  activityNestedCard: view({
     marginTop: 10,
     padding: 14,
     borderRadius: 10,
@@ -933,63 +934,63 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderColor: METRONIC.border,
     backgroundColor: "#F9FAFB",
     gap: 6,
-  },
-  activityNestedTitle: {
+  }),
+  activityNestedTitle: text({
     fontSize: 13,
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  activityNestedBody: {
+  }),
+  activityNestedBody: text({
     fontSize: 12,
     fontWeight: "400",
     color: METRONIC.subtle,
     lineHeight: 18,
-  },
-  sectionToolbar: {
+  }),
+  sectionToolbar: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 4,
-  },
-  sectionTitle: {
+  }),
+  sectionTitle: text({
     fontSize: 16,
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  sectionSub: {
+  }),
+  sectionSub: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
     marginTop: 2,
-  },
-  filterRow: {
+  }),
+  filterRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexWrap: "wrap",
-  },
-  filterPill: {
+  }),
+  filterPill: view({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  filterPillOn: {
+  }),
+  filterPillOn: view({
     borderColor: METRONIC.accent,
     backgroundColor: "rgba(79, 70, 229, 0.06)",
-  },
-  filterPillText: {
+  }),
+  filterPillText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  filterPillTextOn: {
+  }),
+  filterPillTextOn: text({
     color: METRONIC.accent,
-  },
-  searchBox: {
+  }),
+  searchBox: view({
     flex: 1,
     minWidth: 180,
     flexDirection: "row",
@@ -1001,107 +1002,107 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 12,
     paddingVertical: 8,
-  },
-  searchInput: {
+  }),
+  searchInput: text({
     flex: 1,
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.text,
     padding: 0,
     minWidth: 0,
-  },
-  hiddenDataBridge: {
+  }),
+  hiddenDataBridge: view({
     height: 0,
     overflow: "hidden",
     opacity: 0,
-  },
-  tableHead: {
+  }),
+  tableHead: view({
     flexDirection: "row",
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
     backgroundColor: "#F9FAFB",
-  },
-  tableHeadText: {
+  }),
+  tableHeadText: text({
     flex: 1,
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  tableRow: {
+  }),
+  tableRow: view({
     flexDirection: "row",
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
     alignItems: "center",
-  },
-  tableCell: {
+  }),
+  tableCell: text({
     flex: 1,
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.text,
     minWidth: 0,
-  },
-  statusPill: {
+  }),
+  statusPill: view({
     alignSelf: "flex-start",
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 5,
     backgroundColor: "rgba(79, 70, 229, 0.1)",
-  },
-  statusPillText: {
+  }),
+  statusPillText: text({
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.accent,
     textTransform: "uppercase",
-  },
-  emptyWrap: {
+  }),
+  emptyWrap: view({
     paddingVertical: 48,
     alignItems: "center",
     gap: 8,
-  },
-  emptyText: {
+  }),
+  emptyText: text({
     fontSize: 13,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  salesBody: {
+  }),
+  salesBody: view({
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 24,
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
-  },
-  salesCard: {
+  }),
+  salesCard: view({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
     ...({
       boxShadow: "0 0 20px 0 rgba(76, 87, 125, 0.04)",
-    } as object),
-  },
-  salesCardPad: {
+    } as unknown as ViewStyle),
+  }),
+  salesCardPad: view({
     padding: 16,
-  },
-  salesCardPadTight: {
+  }),
+  salesCardPadTight: view({
     paddingHorizontal: 10,
     paddingTop: 12,
     paddingBottom: 10,
-  },
-  salesFilterHint: {
+  }),
+  salesFilterHint: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginTop: -4,
     marginBottom: 8,
-  },
-  salesFilterGroup: {
+  }),
+  salesFilterGroup: text({
     fontSize: 11,
     fontWeight: "700",
     color: METRONIC.muted,
@@ -1109,29 +1110,29 @@ export const networkDesktopHubStyles = StyleSheet.create({
     letterSpacing: 0.4,
     marginTop: 10,
     marginBottom: 6,
-  },
-  salesFilterChip: {
+  }),
+  salesFilterChip: view({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 6,
     backgroundColor: "#F1F1F4",
     borderWidth: 1,
     borderColor: "transparent",
-  },
-  salesFilterChipOn: {
+  }),
+  salesFilterChipOn: view({
     backgroundColor: "rgba(62, 151, 255, 0.12)",
     borderColor: "rgba(62, 151, 255, 0.35)",
-  },
-  salesFilterChipText: {
+  }),
+  salesFilterChipText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  salesFilterChipTextOn: {
+  }),
+  salesFilterChipTextOn: text({
     color: METRONIC.link,
     fontWeight: "700",
-  },
-  salesSidebarToggleRow: {
+  }),
+  salesSidebarToggleRow: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1139,84 +1140,84 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: METRONIC.border,
-  },
-  salesSidebarToggleLabel: {
+  }),
+  salesSidebarToggleLabel: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.text,
     flex: 1,
     paddingRight: 8,
-  },
-  salesClearBtn: {
+  }),
+  salesClearBtn: view({
     marginTop: 12,
     alignItems: "center",
     paddingVertical: 8,
-  },
-  salesClearBtnText: {
+  }),
+  salesClearBtnText: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.link,
     ...({
       textDecorationLine: "underline",
       textDecorationStyle: "dotted",
-    } as object),
-  },
-  salesContributorRow: {
+    } as unknown as TextStyle),
+  }),
+  salesContributorRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  salesContributorRowLast: {
+  }),
+  salesContributorRowLast: view({
     borderBottomWidth: 0,
-  },
-  salesContributorDot: {
+  }),
+  salesContributorDot: view({
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: "#F1F1F4",
     alignItems: "center",
     justifyContent: "center",
-  },
-  salesContributorDotText: {
+  }),
+  salesContributorDotText: text({
     fontSize: 12,
     fontWeight: "800",
     color: METRONIC.subtle,
-  },
-  salesContributorTextCol: {
+  }),
+  salesContributorTextCol: view({
     flex: 1,
     minWidth: 0,
     gap: 2,
-  },
-  salesContributorName: {
+  }),
+  salesContributorName: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  salesContributorMeta: {
+  }),
+  salesContributorMeta: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  salesSidebarPartnerCard: {
+  }),
+  salesSidebarPartnerCard: view({
     minWidth: 0,
-  },
-  salesGrowPanel: {
+  }),
+  salesGrowPanel: view({
     paddingHorizontal: 0,
     paddingTop: 10,
     paddingBottom: 10,
     overflow: "hidden",
-  },
-  salesGrowHeader: {
+  }),
+  salesGrowHeader: view({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
     paddingHorizontal: 12,
     paddingBottom: 8,
-  },
-  salesGrowTitleIcon: {
+  }),
+  salesGrowTitleIcon: view({
     width: 22,
     height: 22,
     borderRadius: 6,
@@ -1224,33 +1225,33 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: 1,
-  },
-  salesGrowHeaderText: {
+  }),
+  salesGrowHeaderText: view({
     flex: 1,
     minWidth: 0,
     gap: 1,
-  },
-  salesGrowTitle: {
+  }),
+  salesGrowTitle: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.text,
     lineHeight: 15,
-  },
-  salesGrowSub: {
+  }),
+  salesGrowSub: text({
     fontSize: 9,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 12,
-  },
-  salesGrowLoading: {
+  }),
+  salesGrowLoading: view({
     paddingVertical: 12,
     alignItems: "center",
-  },
-  salesGrowFeed: {
+  }),
+  salesGrowFeed: view({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: METRONIC.border,
-  },
-  salesGrowRow: {
+  }),
+  salesGrowRow: view({
     paddingLeft: 10,
     paddingRight: 12,
     paddingTop: 8,
@@ -1260,75 +1261,75 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderBottomColor: METRONIC.border,
     borderLeftWidth: 3,
     borderLeftColor: METRONIC.link,
-  },
-  salesGrowRowStripe: {
+  }),
+  salesGrowRowStripe: view({
     backgroundColor: "#FAFBFC",
-  },
-  salesGrowRowLast: {
+  }),
+  salesGrowRowLast: view({
     borderBottomWidth: 0,
-  },
-  salesGrowRowMain: {
+  }),
+  salesGrowRowMain: view({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
     minWidth: 0,
-  },
-  salesGrowRowHeadPressed: {
+  }),
+  salesGrowRowHeadPressed: view({
     opacity: 0.9,
-  },
-  salesGrowRowBody: {
+  }),
+  salesGrowRowBody: view({
     flex: 1,
     minWidth: 0,
     gap: 1,
     paddingTop: 1,
-  },
-  salesGrowNameRow: {
+  }),
+  salesGrowNameRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     minWidth: 0,
-  },
-  salesGrowRowName: {
+  }),
+  salesGrowRowName: text({
     flexShrink: 1,
     fontSize: 11,
     fontWeight: "700",
     color: METRONIC.text,
     lineHeight: 14,
-  },
-  salesGrowRoleBadge: {
+  }),
+  salesGrowRoleBadge: view({
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 4,
     backgroundColor: "rgba(114, 57, 234, 0.1)",
     flexShrink: 0,
-  },
-  salesGrowRoleBadgeText: {
+  }),
+  salesGrowRoleBadgeText: text({
     fontSize: 8,
     fontWeight: "700",
     color: "#7239EA",
     letterSpacing: 0.2,
     textTransform: "uppercase",
-  },
-  salesGrowMatchLine: {
+  }),
+  salesGrowMatchLine: text({
     fontSize: 9,
     lineHeight: 12,
     minHeight: 12,
-  },
-  salesGrowMatchMuted: {
+  }),
+  salesGrowMatchMuted: text({
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  salesGrowMatchHighlight: {
+  }),
+  salesGrowMatchHighlight: text({
     fontWeight: "600",
-  },
-  salesGrowRowMeta: {
+  }),
+  salesGrowRowMeta: text({
     fontSize: 9,
     fontWeight: "500",
     color: METRONIC.subtle,
     lineHeight: 12,
     minHeight: 12,
-  },
-  salesGrowDismissIcon: {
+  }),
+  salesGrowDismissIcon: view({
     width: 18,
     height: 18,
     alignItems: "center",
@@ -1337,27 +1338,27 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: "#F1F1F4",
     flexShrink: 0,
     marginTop: 1,
-  },
-  salesGrowActionRow: {
+  }),
+  salesGrowActionRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingLeft: 38,
-  },
-  salesGrowActionGhost: {
+  }),
+  salesGrowActionGhost: view({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  salesGrowActionGhostText: {
+  }),
+  salesGrowActionGhostText: text({
     fontSize: 9,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  salesGrowActionSend: {
+  }),
+  salesGrowActionSend: view({
     flex: 1,
     minHeight: 26,
     borderRadius: 6,
@@ -1366,34 +1367,34 @@ export const networkDesktopHubStyles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     paddingHorizontal: 8,
-  },
-  salesGrowActionSendText: {
+  }),
+  salesGrowActionSendText: text({
     fontSize: 9,
     fontWeight: "700",
     color: Theme.cardWhite,
-  },
-  salesGrowPendingRow: {
+  }),
+  salesGrowPendingRow: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingLeft: 38,
     paddingRight: 2,
     minHeight: 22,
-  },
-  salesGrowPendingLabel: {
+  }),
+  salesGrowPendingLabel: text({
     fontSize: 9,
     fontWeight: "600",
     color: METRONIC.muted,
-  },
-  salesGrowPendingCancel: {
+  }),
+  salesGrowPendingCancel: text({
     fontSize: 9,
     fontWeight: "700",
     color: METRONIC.link,
-  },
-  salesGrowActionPressed: {
+  }),
+  salesGrowActionPressed: view({
     opacity: 0.88,
-  },
-  salesGrowFooterBtn: {
+  }),
+  salesGrowFooterBtn: view({
     marginTop: 8,
     marginHorizontal: 12,
     minHeight: 28,
@@ -1404,45 +1405,45 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
-  },
-  salesGrowFooterBtnText: {
+  }),
+  salesGrowFooterBtnText: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  salesEmptySide: {
+  }),
+  salesEmptySide: text({
     fontSize: 10,
     color: METRONIC.muted,
     paddingVertical: 8,
     paddingHorizontal: 12,
     lineHeight: 14,
-  },
-  salesPerfViewBar: {
+  }),
+  salesPerfViewBar: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 2,
-  },
-  salesPerfViewTitle: {
+  }),
+  salesPerfViewTitle: text({
     fontSize: 16,
     fontWeight: "800",
     color: METRONIC.text,
     letterSpacing: -0.2,
-  },
-  salesPerfViewSub: {
+  }),
+  salesPerfViewSub: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginTop: 2,
-  },
-  salesPerfViewToggle: {
+  }),
+  salesPerfViewToggle: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
-  },
-  salesPerfViewTab: {
+  }),
+  salesPerfViewTab: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -1452,48 +1453,48 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  salesPerfViewTabOn: {
+  }),
+  salesPerfViewTabOn: view({
     borderColor: METRONIC.accent,
     backgroundColor: "rgba(79, 70, 229, 0.06)",
-  },
-  salesPerfViewTabText: {
+  }),
+  salesPerfViewTabText: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  salesPerfViewTabTextOn: {
+  }),
+  salesPerfViewTabTextOn: text({
     color: METRONIC.accent,
     fontWeight: "700",
-  },
-  salesKpiRow: {
+  }),
+  salesKpiRow: view({
     width: "100%",
     ...({
       display: "grid",
       gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
       gap: 12,
       alignItems: "stretch",
-    } as object),
-  },
-  salesWidgetRowDual: {
+    } as unknown as ViewStyle),
+  }),
+  salesWidgetRowDual: view({
     width: "100%",
     ...({
       display: "grid",
       gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
       gap: 12,
       alignItems: "stretch",
-    } as object),
-  },
-  salesBarRowDual: {
+    } as unknown as ViewStyle),
+  }),
+  salesBarRowDual: view({
     width: "100%",
     ...({
       display: "grid",
       gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
       gap: 12,
       alignItems: "stretch",
-    } as object),
-  },
-  salesKpiCard: {
+    } as unknown as ViewStyle),
+  }),
+  salesKpiCard: view({
     minWidth: 0,
     borderRadius: 12,
     borderWidth: 1,
@@ -1504,9 +1505,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 2,
     ...({
       boxShadow: "0 0 20px 0 rgba(76, 87, 125, 0.04)",
-    } as object),
-  },
-  salesKpiIcon: {
+    } as unknown as ViewStyle),
+  }),
+  salesKpiIcon: view({
     width: 28,
     height: 28,
     borderRadius: 7,
@@ -1514,80 +1515,80 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 2,
-  },
-  salesKpiValue: {
+  }),
+  salesKpiValue: text({
     fontSize: 18,
     fontWeight: "800",
     color: METRONIC.text,
     letterSpacing: -0.4,
-  },
-  salesKpiLabel: {
+  }),
+  salesKpiLabel: text({
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  salesKpiSub: {
+  }),
+  salesKpiSub: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.subtle,
     marginTop: 2,
-  },
-  salesWidgetRow: {
+  }),
+  salesWidgetRow: view({
     width: "100%",
     ...({
       display: "grid",
       gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr)",
       gap: 12,
       alignItems: "stretch",
-    } as object),
-  },
-  salesWidgetTrend: {
+    } as unknown as ViewStyle),
+  }),
+  salesWidgetTrend: view({
     minWidth: 0,
     minHeight: 196,
     overflow: "hidden",
     flexDirection: "column",
-  },
-  salesWidgetDonut: {
+  }),
+  salesWidgetDonut: view({
     minWidth: 0,
     minHeight: 196,
     overflow: "hidden",
     flexDirection: "column",
-  },
-  salesBarRow: {
+  }),
+  salesBarRow: view({
     width: "100%",
     ...({
       display: "grid",
       gridTemplateColumns: "minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr)",
       gap: 12,
       alignItems: "stretch",
-    } as object),
-  },
-  salesBarRowPartner: {
+    } as unknown as ViewStyle),
+  }),
+  salesBarRowPartner: view({
     width: "100%",
-  },
-  salesBarLane: {
+  }),
+  salesBarLane: view({
     minWidth: 0,
-  },
-  salesBarOrigin: {
-    minWidth: 0,
-    minHeight: 196,
-    overflow: "hidden",
-    flexDirection: "column",
-  },
-  salesBarDest: {
+  }),
+  salesBarOrigin: view({
     minWidth: 0,
     minHeight: 196,
     overflow: "hidden",
     flexDirection: "column",
-  },
-  salesBarPartner: {
+  }),
+  salesBarDest: view({
+    minWidth: 0,
+    minHeight: 196,
+    overflow: "hidden",
+    flexDirection: "column",
+  }),
+  salesBarPartner: view({
     minWidth: 0,
     minHeight: 196,
     flexDirection: "column",
-  },
-  salesBarRowQuad: {
+  }),
+  salesBarRowQuad: view({
     width: "100%",
     ...({
       display: "grid",
@@ -1595,27 +1596,27 @@ export const networkDesktopHubStyles = StyleSheet.create({
         "minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr)",
       gap: 12,
       alignItems: "stretch",
-    } as object),
-  },
-  salesWidgetHeader: {
+    } as unknown as ViewStyle),
+  }),
+  salesWidgetHeader: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 2,
-  },
-  salesWidgetSub: {
+  }),
+  salesWidgetSub: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginBottom: 6,
-  },
-  salesWidgetChartBody: {
+  }),
+  salesWidgetChartBody: view({
     width: "100%",
     minWidth: 0,
     marginTop: 2,
     overflow: "hidden",
-  },
-  salesWidgetDonutBody: {
+  }),
+  salesWidgetDonutBody: view({
     flex: 1,
     justifyContent: "center",
     alignItems: "stretch",
@@ -1623,23 +1624,23 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingBottom: 8,
     minHeight: 118,
     overflow: "visible",
-  },
-  salesCardMenu: {
+  }),
+  salesCardMenu: view({
     width: 24,
     height: 24,
     alignItems: "center",
     justifyContent: "center",
-  },
-  salesTableCard: {
+  }),
+  salesTableCard: view({
     overflow: "hidden",
-  },
-  salesTableScroll: {
+  }),
+  salesTableScroll: view({
     width: "100%",
     ...({
       overflowX: "auto",
-    } as object),
-  },
-  salesTableGrid: {
+    } as unknown as ViewStyle),
+  }),
+  salesTableGrid: view({
     width: "100%",
     minWidth: 960,
     ...({
@@ -1649,9 +1650,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
       columnGap: 16,
       alignItems: "center",
       boxSizing: "border-box",
-    } as object),
-  },
-  salesAssetTableGrid: {
+    } as unknown as ViewStyle),
+  }),
+  salesAssetTableGrid: view({
     width: "100%",
     minWidth: 1120,
     ...({
@@ -1661,9 +1662,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
       columnGap: 14,
       alignItems: "center",
       boxSizing: "border-box",
-    } as object),
-  },
-  salesTripTableGrid: {
+    } as unknown as ViewStyle),
+  }),
+  salesTripTableGrid: view({
     width: "100%",
     minWidth: 1040,
     ...({
@@ -1673,52 +1674,51 @@ export const networkDesktopHubStyles = StyleSheet.create({
       columnGap: 14,
       alignItems: "center",
       boxSizing: "border-box",
-    } as object),
-  },
-  salesTripTableTitleCol: {
+    } as unknown as ViewStyle),
+  }),
+  salesTripTableTitleCol: view({
     flex: 1,
     minWidth: 0,
     gap: 2,
-  },
-  salesTripTableSub: {
+  }),
+  salesTripTableSub: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 14,
-  },
-  /** Desktop hub — horizontal connection card strip (matches card minHeight). */
-  connectionsCardsSection: {
+  }),
+  connectionsCardsSection: view({
     width: "100%",
     minHeight: 188,
     marginBottom: 4,
     zIndex: 1,
-  },
-  connectionsPartnersTable: {
+  }),
+  connectionsPartnersTable: view({
     marginTop: 0,
     marginHorizontal: 0,
     width: "100%",
     alignSelf: "stretch",
     zIndex: 0,
-  },
-  salesColTripRef: {
+  }),
+  salesColTripRef: column({
     minWidth: 0,
-  },
-  salesColLane: {
+  }),
+  salesColLane: column({
     minWidth: 0,
-  },
-  salesColTripClient: {
+  }),
+  salesColTripClient: column({
     minWidth: 0,
-  },
-  salesColTripSupplier: {
+  }),
+  salesColTripSupplier: column({
     minWidth: 0,
-  },
-  salesColCost: {
+  }),
+  salesColCost: column({
     minWidth: 0,
-  },
-  salesTripRefCell: {
+  }),
+  salesTripRefCell: view({
     minWidth: 0,
-  },
-  salesTripRefText: {
+  }),
+  salesTripRefText: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.link,
@@ -1727,9 +1727,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
-    } as object),
-  },
-  salesTripPartyText: {
+    } as unknown as TextStyle),
+  }),
+  salesTripPartyText: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.text,
@@ -1738,43 +1738,43 @@ export const networkDesktopHubStyles = StyleSheet.create({
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
-    } as object),
-  },
-  salesTripStatusActive: {
+    } as unknown as TextStyle),
+  }),
+  salesTripStatusActive: view({
     backgroundColor: "rgba(62, 151, 255, 0.12)",
-  },
-  salesTripStatusActiveText: {
+  }),
+  salesTripStatusActiveText: text({
     color: METRONIC.link,
-  },
-  salesTripStatusPending: {
+  }),
+  salesTripStatusPending: view({
     backgroundColor: "rgba(161, 165, 183, 0.15)",
-  },
-  salesTripStatusPendingText: {
+  }),
+  salesTripStatusPendingText: text({
     color: METRONIC.subtle,
-  },
-  salesColPerformance: {
+  }),
+  salesColPerformance: column({
     minWidth: 0,
-  },
-  salesColEarnings: {
+  }),
+  salesColEarnings: column({
     minWidth: 0,
-  },
-  salesAssetPerfCell: {
+  }),
+  salesAssetPerfCell: view({
     gap: 2,
     minWidth: 0,
-  },
-  salesAssetPerfScore: {
+  }),
+  salesAssetPerfScore: text({
     fontSize: 13,
     fontWeight: "800",
     color: METRONIC.text,
     lineHeight: 16,
-  },
-  salesAssetPerfMeta: {
+  }),
+  salesAssetPerfMeta: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 13,
-  },
-  salesAssetVehicleTableGrid: {
+  }),
+  salesAssetVehicleTableGrid: view({
     width: "100%",
     minWidth: 1180,
     ...({
@@ -1784,83 +1784,83 @@ export const networkDesktopHubStyles = StyleSheet.create({
       columnGap: 12,
       alignItems: "center",
       boxSizing: "border-box",
-    } as object),
-  },
-  salesColKm: {
+    } as unknown as ViewStyle),
+  }),
+  salesColKm: column({
     minWidth: 0,
-  },
-  salesColUtil: {
+  }),
+  salesColUtil: column({
     minWidth: 0,
-  },
-  salesVehicleBadge: {
+  }),
+  salesVehicleBadge: view({
     alignSelf: "flex-start",
     marginTop: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     backgroundColor: "rgba(62, 151, 255, 0.1)",
-  },
-  salesVehicleBadgeText: {
+  }),
+  salesVehicleBadgeText: text({
     fontSize: 9,
     fontWeight: "700",
     color: METRONIC.link,
     letterSpacing: 0.2,
-  },
-  salesIntelDimList: {
+  }),
+  salesIntelDimList: view({
     gap: 6,
     marginTop: 4,
-  },
-  salesIntelDimRow: {
+  }),
+  salesIntelDimRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  salesIntelDimLabel: {
+  }),
+  salesIntelDimLabel: text({
     width: 72,
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.muted,
-  },
-  salesIntelDimTrack: {
+  }),
+  salesIntelDimTrack: view({
     flex: 1,
     height: 6,
     borderRadius: 3,
     backgroundColor: "#EEF0F4",
     overflow: "hidden",
-  },
-  salesIntelDimFill: {
+  }),
+  salesIntelDimFill: view({
     height: "100%",
     borderRadius: 3,
     backgroundColor: METRONIC.link,
-  },
-  salesIntelDimValue: {
+  }),
+  salesIntelDimValue: text({
     width: 28,
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.text,
     textAlign: "right",
-  },
-  salesAssetSectionTitle: {
+  }),
+  salesAssetSectionTitle: text({
     fontSize: 13,
     fontWeight: "800",
     color: METRONIC.text,
     letterSpacing: -0.2,
-  },
-  salesAssetSectionSub: {
+  }),
+  salesAssetSectionSub: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginTop: 2,
-  },
-  salesTableTitleRow: {
+  }),
+  salesTableTitleRow: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 10,
-  },
-  salesTableToolbar: {
+  }),
+  salesTableToolbar: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -1868,8 +1868,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  salesTableSearch: {
+  }),
+  salesTableSearch: view({
     flex: 1,
     minWidth: 160,
     maxWidth: 360,
@@ -1882,19 +1882,19 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 10,
     paddingVertical: 7,
-  },
-  salesTableToolbarMid: {
+  }),
+  salesTableToolbarMid: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
-  },
-  salesToolbarLabel: {
+  }),
+  salesToolbarLabel: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  salesColumnsBtn: {
+  }),
+  salesColumnsBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -1905,55 +1905,55 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
     flexShrink: 0,
-  },
-  salesColumnsBtnText: {
+  }),
+  salesColumnsBtnText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  salesTableHead: {
+  }),
+  salesTableHead: view({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
     backgroundColor: "#F9FAFB",
-  },
-  salesTableHeadCell: {
+  }),
+  salesTableHeadCell: text({
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.45,
-  },
-  salesTableRow: {
+  }),
+  salesTableRow: view({
     paddingVertical: 12,
     paddingHorizontal: 16,
     minHeight: 64,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  salesGridNumHead: {
+  }),
+  salesGridNumHead: text({
     ...({
       justifySelf: "end",
       textAlign: "right",
       width: "100%",
-    } as object),
-  },
-  salesGridNumCell: {
+    } as unknown as TextStyle),
+  }),
+  salesGridNumCell: view({
     ...({
       justifySelf: "end",
       width: "100%",
-    } as object),
-  },
-  salesTableRowLast: {
+    } as unknown as ViewStyle),
+  }),
+  salesTableRowLast: view({
     borderBottomWidth: 0,
-  },
-  salesTableCell: {
+  }),
+  salesTableCell: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.text,
-  },
-  salesTableCellMuted: {
+  }),
+  salesTableCellMuted: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
@@ -1961,69 +1961,69 @@ export const networkDesktopHubStyles = StyleSheet.create({
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
-    } as object),
-  },
-  salesColCheck: {
+    } as unknown as TextStyle),
+  }),
+  salesColCheck: view({
     alignItems: "flex-start",
     justifyContent: "center",
-  },
-  salesColPartner: {
+  }),
+  salesColPartner: column({
     minWidth: 0,
-  },
-  salesColRating: {
+  }),
+  salesColRating: column({
     minWidth: 0,
-  },
-  salesColTrips: {
+  }),
+  salesColTrips: column({
     minWidth: 0,
-  },
-  salesColRevenue: {
+  }),
+  salesColRevenue: column({
     minWidth: 0,
-  },
-  salesColMargin: {
+  }),
+  salesColMargin: column({
     minWidth: 0,
-  },
-  salesPartnerCell: {
+  }),
+  salesPartnerCell: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     minWidth: 0,
-  },
-  salesPartnerTextCol: {
+  }),
+  salesPartnerTextCol: view({
     flex: 1,
     minWidth: 0,
     gap: 1,
-  },
-  salesRatingCell: {
+  }),
+  salesRatingCell: view({
     gap: 4,
     minWidth: 0,
-  },
-  salesRatingTopRow: {
+  }),
+  salesRatingTopRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     minWidth: 0,
-  },
-  salesRatingMeta: {
+  }),
+  salesRatingMeta: text({
     fontSize: 11,
     fontWeight: "700",
     color: METRONIC.text,
     lineHeight: 14,
-  },
-  salesRatingSub: {
+  }),
+  salesRatingSub: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 13,
-  },
-  salesMoneyCell: {
+  }),
+  salesMoneyCell: view({
     gap: 3,
     minWidth: 0,
     ...({
       justifySelf: "end",
       alignItems: "flex-end",
-    } as object),
-  },
-  salesMoneyValue: {
+    } as unknown as ViewStyle),
+  }),
+  salesMoneyValue: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.text,
@@ -2031,9 +2031,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
     ...({
       textAlign: "right",
       whiteSpace: "nowrap",
-    } as object),
-  },
-  salesMoneyMeta: {
+    } as unknown as TextStyle),
+  }),
+  salesMoneyMeta: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
@@ -2041,28 +2041,28 @@ export const networkDesktopHubStyles = StyleSheet.create({
     ...({
       textAlign: "right",
       whiteSpace: "nowrap",
-    } as object),
-  },
-  salesTripsCell: {
+    } as unknown as TextStyle),
+  }),
+  salesTripsCell: view({
     gap: 3,
     minWidth: 0,
     ...({
       justifySelf: "end",
       alignItems: "flex-end",
-    } as object),
-  },
-  salesTripsSub: {
+    } as unknown as ViewStyle),
+  }),
+  salesTripsSub: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 13,
     textAlign: "right",
-  },
-  salesColRegion: {
+  }),
+  salesColRegion: column({
     minWidth: 0,
     paddingRight: 4,
-  },
-  salesLaneText: {
+  }),
+  salesLaneText: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.text,
@@ -2071,37 +2071,37 @@ export const networkDesktopHubStyles = StyleSheet.create({
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
-    } as object),
-  },
-  salesColLast: {
+    } as unknown as TextStyle),
+  }),
+  salesColLast: column({
     minWidth: 0,
-  },
-  salesLastActiveText: {
+  }),
+  salesLastActiveText: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 15,
     ...({
       whiteSpace: "nowrap",
-    } as object),
-  },
-  salesColStatus: {
+    } as unknown as TextStyle),
+  }),
+  salesColStatus: column({
     minWidth: 0,
     alignItems: "flex-start",
-  },
-  salesColMenu: {
+  }),
+  salesColMenu: view({
     alignItems: "center",
     justifyContent: "center",
-  },
-  salesCheckBox: {
+  }),
+  salesCheckBox: view({
     width: 16,
     height: 16,
     borderRadius: 4,
     borderWidth: 1,
     borderColor: "#D1D5DB",
     backgroundColor: Theme.cardWhite,
-  },
-  salesPartnerName: {
+  }),
+  salesPartnerName: text({
     fontSize: 13,
     fontWeight: "700",
     color: METRONIC.text,
@@ -2110,39 +2110,39 @@ export const networkDesktopHubStyles = StyleSheet.create({
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
-    } as object),
-  },
-  salesPartnerSub: {
+    } as unknown as TextStyle),
+  }),
+  salesPartnerSub: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginTop: 1,
     lineHeight: 15,
-  },
-  salesTripsValue: {
+  }),
+  salesTripsValue: text({
     fontSize: 13,
     fontWeight: "700",
     color: METRONIC.text,
     textAlign: "right",
     lineHeight: 16,
-  },
-  salesTableEmpty: {
+  }),
+  salesTableEmpty: view({
     paddingVertical: 32,
     alignItems: "center",
-  },
-  salesStatusLive: {
+  }),
+  salesStatusLive: view({
     backgroundColor: "rgba(80, 205, 137, 0.15)",
-  },
-  salesStatusLiveText: {
+  }),
+  salesStatusLiveText: text({
     color: "#47BE7D",
-  },
-  salesStatusInvite: {
+  }),
+  salesStatusInvite: view({
     backgroundColor: "rgba(62, 151, 255, 0.1)",
-  },
-  salesStatusInviteText: {
+  }),
+  salesStatusInviteText: text({
     color: METRONIC.link,
-  },
-  salesPagination: {
+  }),
+  salesPagination: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2152,51 +2152,51 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: METRONIC.border,
-  },
-  salesPageSizeRow: {
+  }),
+  salesPageSizeRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     flexWrap: "wrap",
-  },
-  salesPageSizeLabel: {
+  }),
+  salesPageSizeLabel: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.muted,
     marginRight: 4,
-  },
-  salesPageSizeBtn: {
+  }),
+  salesPageSizeBtn: view({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  salesPageSizeBtnOn: {
+  }),
+  salesPageSizeBtnOn: view({
     borderColor: METRONIC.link,
     backgroundColor: "rgba(62, 151, 255, 0.08)",
-  },
-  salesPageSizeBtnText: {
+  }),
+  salesPageSizeBtnText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  salesPageSizeBtnTextOn: {
+  }),
+  salesPageSizeBtnTextOn: text({
     color: METRONIC.link,
-  },
-  salesPageNav: {
+  }),
+  salesPageNav: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-  },
-  salesPageRange: {
+  }),
+  salesPageRange: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginRight: 8,
-  },
-  salesPageBtn: {
+  }),
+  salesPageBtn: view({
     width: 28,
     height: 28,
     borderRadius: 6,
@@ -2205,86 +2205,86 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
-  },
-  salesPageBtnDisabled: {
+  }),
+  salesPageBtnDisabled: view({
     opacity: 0.4,
-  },
-  salesPageNum: {
+  }),
+  salesPageNum: view({
     minWidth: 28,
     height: 28,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
-  },
-  salesPageNumOn: {
+  }),
+  salesPageNumOn: view({
     backgroundColor: "#F1F1F4",
-  },
-  salesPageNumText: {
+  }),
+  salesPageNumText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  salesPageNumTextOn: {
+  }),
+  salesPageNumTextOn: text({
     color: METRONIC.text,
     fontWeight: "800",
-  },
-  growInviteBanner: {
+  }),
+  growInviteBanner: view({
     backgroundColor: "rgba(62, 151, 255, 0.06)",
     borderColor: "rgba(62, 151, 255, 0.18)",
-  },
-  growInviteBannerHead: {
+  }),
+  growInviteBannerHead: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginBottom: 4,
-  },
-  growInviteBannerTitle: {
+  }),
+  growInviteBannerTitle: text({
     fontSize: 14,
     fontWeight: "800",
     color: METRONIC.text,
-  },
-  growInviteBannerSub: {
+  }),
+  growInviteBannerSub: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginBottom: 10,
-  },
-  growInviteProgressTrack: {
+  }),
+  growInviteProgressTrack: view({
     height: 6,
     borderRadius: 3,
     backgroundColor: "#EEF0F4",
     overflow: "hidden",
     marginBottom: 6,
-  },
-  growInviteProgressFill: {
+  }),
+  growInviteProgressFill: view({
     height: "100%",
     borderRadius: 3,
     backgroundColor: METRONIC.link,
-  },
-  growInviteBannerMeta: {
+  }),
+  growInviteBannerMeta: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  growConnectedRow: {
+  }),
+  growConnectedRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  growConnectedRowLast: {
+  }),
+  growConnectedRowLast: view({
     borderBottomWidth: 0,
-  },
-  growConnectedMenu: {
+  }),
+  growConnectedMenu: view({
     width: 28,
     height: 28,
     alignItems: "center",
     justifyContent: "center",
-  },
-  growConnectProfileBtn: {
+  }),
+  growConnectProfileBtn: view({
     marginTop: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -2295,42 +2295,42 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  growConnectProfileBtnText: {
+  }),
+  growConnectProfileBtnText: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  growToolbarCard: {
+  }),
+  growToolbarCard: view({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 12,
-  },
-  growToolbarTop: {
+  }),
+  growToolbarTop: view({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 12,
-  },
-  growToolbarTitle: {
+  }),
+  growToolbarTitle: text({
     fontSize: 15,
     fontWeight: "800",
     color: METRONIC.text,
-  },
-  growToolbarSub: {
+  }),
+  growToolbarSub: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginTop: 2,
-  },
-  growToolbarActions: {
+  }),
+  growToolbarActions: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
-  },
-  growToolbarPill: {
+  }),
+  growToolbarPill: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -2340,13 +2340,13 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  growToolbarPillText: {
+  }),
+  growToolbarPillText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  growToolbarFilterBtn: {
+  }),
+  growToolbarFilterBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -2354,48 +2354,48 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 8,
     backgroundColor: METRONIC.link,
-  },
-  growToolbarFilterBtnText: {
+  }),
+  growToolbarFilterBtnText: text({
     fontSize: 11,
     fontWeight: "700",
     color: Theme.buttonPrimaryText,
-  },
-  growToolbarBottom: {
+  }),
+  growToolbarBottom: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-  },
-  growViewToggle: {
+  }),
+  growViewToggle: view({
     flexDirection: "row",
     borderRadius: 8,
     borderWidth: 1,
     borderColor: METRONIC.border,
     overflow: "hidden",
     flexShrink: 0,
-  },
-  growViewToggleBtn: {
+  }),
+  growViewToggleBtn: view({
     width: 36,
     height: 36,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
-  },
-  growViewToggleBtnOn: {
+  }),
+  growViewToggleBtnOn: view({
     backgroundColor: "rgba(62, 151, 255, 0.1)",
-  },
-  growCardGrid: {
+  }),
+  growCardGrid: view({
     width: "100%",
     ...({
       display: "grid",
       gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
       gap: 12,
       alignItems: "stretch",
-    } as object),
-  },
-  growListStack: {
+    } as unknown as ViewStyle),
+  }),
+  growListStack: view({
     gap: 12,
-  },
-  growLoadMoreBtn: {
+  }),
+  growLoadMoreBtn: view({
     alignSelf: "center",
     paddingHorizontal: 18,
     paddingVertical: 10,
@@ -2403,46 +2403,46 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  growLoadMoreBtnText: {
+  }),
+  growLoadMoreBtnText: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.link,
-  },
-  growSectionHeader: {
+  }),
+  growSectionHeader: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 8,
     marginBottom: 10,
-  },
-  growSectionTitle: {
+  }),
+  growSectionTitle: text({
     fontSize: 14,
     fontWeight: "800",
     color: METRONIC.text,
-  },
-  growSectionSub: {
+  }),
+  growSectionSub: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  growSentStack: {
+  }),
+  growSentStack: view({
     gap: 12,
     marginBottom: 8,
-  },
-  growTeamsHeader: {
+  }),
+  growTeamsHeader: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 4,
-  },
-  growTeamsCount: {
+  }),
+  growTeamsCount: text({
     fontSize: 16,
     fontWeight: "600",
     color: METRONIC.text,
     letterSpacing: -0.2,
-  },
-  growOrgCard: {
+  }),
+  growOrgCard: view({
     position: "relative",
     borderRadius: 12,
     borderWidth: 1,
@@ -2454,12 +2454,12 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     ...({
       boxShadow: "0 0 20px 0 rgba(76, 87, 125, 0.04)",
-    } as object),
-  },
-  growOrgCardPressed: {
+    } as unknown as ViewStyle),
+  }),
+  growOrgCardPressed: view({
     opacity: 0.92,
-  },
-  growOrgCardMenuFloat: {
+  }),
+  growOrgCardMenuFloat: view({
     position: "absolute",
     top: 10,
     right: 10,
@@ -2468,12 +2468,12 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
-  },
-  growOrgCardHero: {
+  }),
+  growOrgCardHero: view({
     alignItems: "center",
     marginBottom: 12,
-  },
-  growOrgIconHalo: {
+  }),
+  growOrgIconHalo: view({
     width: 64,
     height: 64,
     borderRadius: 32,
@@ -2483,8 +2483,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
-  },
-  growOrgOnlineDot: {
+  }),
+  growOrgOnlineDot: view({
     position: "absolute",
     right: 2,
     bottom: 2,
@@ -2493,8 +2493,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 2,
     borderColor: Theme.cardWhite,
-  },
-  growOrgName: {
+  }),
+  growOrgName: text({
     fontSize: 15,
     fontWeight: "600",
     color: METRONIC.text,
@@ -2504,8 +2504,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     lineHeight: 20,
     maxWidth: "100%",
     paddingHorizontal: 4,
-  },
-  growOrgTagline: {
+  }),
+  growOrgTagline: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.subtle,
@@ -2515,12 +2515,12 @@ export const networkDesktopHubStyles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 6,
     maxWidth: "100%",
-  },
-  growOrgSectionsWrap: {
+  }),
+  growOrgSectionsWrap: view({
     width: "100%",
     marginBottom: 4,
-  },
-  growOrgSection: {
+  }),
+  growOrgSection: view({
     width: "100%",
     flexDirection: "row",
     alignItems: "center",
@@ -2531,16 +2531,16 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderTopColor: "#EEF0F4",
     ...({
       borderStyle: "dashed",
-    } as object),
-  },
-  growOrgSectionList: {
+    } as unknown as ViewStyle),
+  }),
+  growOrgSectionList: view({
     borderTopWidth: 0,
     paddingVertical: 0,
-  },
-  growOrgSectionLast: {
+  }),
+  growOrgSectionLast: view({
     paddingBottom: 2,
-  },
-  growOrgSectionLabel: {
+  }),
+  growOrgSectionLabel: text({
     fontSize: 9,
     fontWeight: "500",
     color: METRONIC.muted,
@@ -2548,103 +2548,103 @@ export const networkDesktopHubStyles = StyleSheet.create({
     letterSpacing: 0.6,
     width: 58,
     flexShrink: 0,
-  },
-  growOrgMembersEmpty: {
+  }),
+  growOrgMembersEmpty: view({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 4,
-  },
-  growMutualMembersCol: {
+  }),
+  growMutualMembersCol: view({
     flex: 1,
     alignItems: "flex-end",
     gap: 6,
     minWidth: 0,
-  },
-  growMutualMembersColList: {
+  }),
+  growMutualMembersColList: view({
     alignItems: "flex-start",
     width: "100%",
-  },
-  growMutualMembersLoading: {
+  }),
+  growMutualMembersLoading: view({
     flex: 1,
     alignItems: "flex-end",
     justifyContent: "center",
     minHeight: 28,
-  },
-  growMutualMemberRow: {
+  }),
+  growMutualMemberRow: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 8,
     maxWidth: "100%",
     minWidth: 0,
-  },
-  growMutualMemberRowList: {
+  }),
+  growMutualMemberRowList: view({
     justifyContent: "flex-start",
     width: "100%",
-  },
-  growMutualMemberRowPressed: {
+  }),
+  growMutualMemberRowPressed: view({
     opacity: 0.88,
-  },
-  growMutualMemberName: {
+  }),
+  growMutualMemberName: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.subtle,
     flexShrink: 1,
     maxWidth: 120,
     textAlign: "right",
-  },
-  growMutualMemberNameList: {
+  }),
+  growMutualMemberNameList: text({
     flex: 1,
     maxWidth: undefined,
     textAlign: "left",
-  },
-  growMutualMoreBtn: {
+  }),
+  growMutualMoreBtn: view({
     alignSelf: "flex-end",
     paddingVertical: 2,
-  },
-  growMutualMoreText: {
+  }),
+  growMutualMoreText: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  growOrgSectionMuted: {
+  }),
+  growOrgSectionMuted: text({
     fontSize: 10,
     fontWeight: "400",
     color: METRONIC.muted,
     flex: 1,
     textAlign: "right",
-  },
-  growOrgPillRow: {
+  }),
+  growOrgPillRow: view({
     flex: 1,
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "flex-end",
     gap: 5,
-  },
-  growOrgSkillPill: {
+  }),
+  growOrgSkillPill: view({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: "#E4E6EF",
     backgroundColor: Theme.cardWhite,
-  },
-  growOrgSkillPillText: {
+  }),
+  growOrgSkillPillText: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.subtle,
-  },
-  growOrgFooter: {
+  }),
+  growOrgFooter: view({
     width: "100%",
     paddingTop: 12,
     marginTop: 2,
     borderTopWidth: 1,
     borderTopColor: METRONIC.border,
     alignItems: "center",
-  },
-  growOrgBtnJoin: {
+  }),
+  growOrgBtnJoin: view({
     width: "100%",
     flexDirection: "row",
     alignItems: "center",
@@ -2656,18 +2656,18 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  growOrgBtnJoinCompact: {
+  }),
+  growOrgBtnJoinCompact: view({
     width: "auto",
     minWidth: 100,
     paddingHorizontal: 10,
-  },
-  growOrgBtnJoinText: {
+  }),
+  growOrgBtnJoinText: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.link,
-  },
-  growOrgBtnJoined: {
+  }),
+  growOrgBtnJoined: view({
     width: "100%",
     flexDirection: "row",
     alignItems: "center",
@@ -2679,18 +2679,18 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  growOrgBtnJoinedCompact: {
+  }),
+  growOrgBtnJoinedCompact: view({
     width: "auto",
     minWidth: 100,
     paddingHorizontal: 10,
-  },
-  growOrgBtnJoinedText: {
+  }),
+  growOrgBtnJoinedText: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  growOrgStatusBtn: {
+  }),
+  growOrgStatusBtn: view({
     width: "100%",
     flexDirection: "row",
     alignItems: "center",
@@ -2699,12 +2699,12 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
-  },
-  growOrgStatusBtnCompact: {
+  }),
+  growOrgStatusBtnCompact: view({
     width: "auto",
     minWidth: 148,
-  },
-  growOrgStatusBtnMain: {
+  }),
+  growOrgStatusBtnMain: view({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -2712,16 +2712,16 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 7,
     paddingVertical: 9,
     paddingHorizontal: 12,
-  },
-  growOrgStatusBtnClose: {
+  }),
+  growOrgStatusBtnClose: view({
     width: 36,
     alignSelf: "stretch",
     alignItems: "center",
     justifyContent: "center",
     borderLeftWidth: 1,
     borderLeftColor: METRONIC.border,
-  },
-  growOrgListCard: {
+  }),
+  growOrgListCard: view({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: METRONIC.border,
@@ -2730,9 +2730,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingVertical: 12,
     ...({
       boxShadow: "0 0 16px 0 rgba(76, 87, 125, 0.03)",
-    } as object),
-  },
-  growOrgListGrid: {
+    } as unknown as ViewStyle),
+  }),
+  growOrgListGrid: view({
     width: "100%",
     ...({
       display: "grid",
@@ -2741,112 +2741,112 @@ export const networkDesktopHubStyles = StyleSheet.create({
       columnGap: 24,
       alignItems: "center",
       boxSizing: "border-box",
-    } as object),
-  },
-  growOrgListIdentity: {
+    } as unknown as ViewStyle),
+  }),
+  growOrgListIdentity: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     minWidth: 0,
-  },
-  growOrgListTextCol: {
+  }),
+  growOrgListTextCol: view({
     flex: 1,
     minWidth: 0,
     gap: 2,
-  },
-  growOrgListName: {
+  }),
+  growOrgListName: text({
     fontSize: 14,
     fontWeight: "600",
     color: METRONIC.text,
     letterSpacing: -0.1,
-  },
-  growOrgListTagline: {
+  }),
+  growOrgListTagline: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.subtle,
     lineHeight: 15,
-  },
-  growOrgListMeta: {
+  }),
+  growOrgListMeta: text({
     fontSize: 10,
     fontWeight: "400",
     color: METRONIC.muted,
     marginTop: 2,
-  },
-  growOrgListCol: {
+  }),
+  growOrgListCol: view({
     minWidth: 0,
     gap: 6,
-  },
-  growOrgListColLabel: {
+  }),
+  growOrgListColLabel: text({
     fontSize: 9,
     fontWeight: "500",
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.6,
-  },
-  growOrgListStarsCol: {
+  }),
+  growOrgListStarsCol: view({
     minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
-  },
-  growOrgListMutualsCol: {
+  }),
+  growOrgListMutualsCol: view({
     minWidth: 0,
     alignItems: "flex-start",
     justifyContent: "center",
     alignSelf: "center",
-  },
-  growOrgListMetricEmpty: {
+  }),
+  growOrgListMetricEmpty: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 16,
-  },
-  growOrgListActionCol: {
+  }),
+  growOrgListActionCol: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     justifyContent: "flex-end",
     alignSelf: "center",
-  },
-  growOrgRolePill: {
+  }),
+  growOrgRolePill: view({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  growOrgRolePillText: {
+  }),
+  growOrgRolePillText: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.subtle,
     letterSpacing: 0.3,
     textTransform: "uppercase",
-  },
-  growOrgListMenu: {
+  }),
+  growOrgListMenu: view({
     width: 28,
     height: 28,
     alignItems: "center",
     justifyContent: "center",
-  },
-  growOrgBtnPendingText: {
+  }),
+  growOrgBtnPendingText: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.subtle,
-  },
-  growOrgBtnPressed: {
+  }),
+  growOrgBtnPressed: view({
     opacity: 0.88,
-  },
-  growOrgBtnDisabled: {
+  }),
+  growOrgBtnDisabled: view({
     opacity: 0.65,
-  },
-  goalsBalanceRow: {
+  }),
+  goalsBalanceRow: view({
     flexDirection: "row",
     gap: 16,
     flexWrap: "wrap",
     marginBottom: 4,
-  },
-  goalsBalanceCard: {
+  }),
+  goalsBalanceCard: view({
     flex: 1,
     minWidth: 280,
     borderRadius: 12,
@@ -2858,9 +2858,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingBottom: 14,
     ...({
       boxShadow: "0 0 20px 0 rgba(76, 87, 125, 0.04)",
-    } as object),
-  },
-  goalsBalanceHeader: {
+    } as unknown as ViewStyle),
+  }),
+  goalsBalanceHeader: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2868,94 +2868,94 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
     marginBottom: 10,
-  },
-  goalsBalanceTitle: {
+  }),
+  goalsBalanceTitle: text({
     fontSize: 14,
     fontWeight: "600",
     color: METRONIC.text,
-  },
-  goalsBalanceIconRow: {
+  }),
+  goalsBalanceIconRow: view({
     marginBottom: 6,
-  },
-  goalsBalanceLabel: {
+  }),
+  goalsBalanceLabel: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginBottom: 4,
-  },
-  goalsBalanceAmount: {
+  }),
+  goalsBalanceAmount: text({
     fontSize: 26,
     fontWeight: "700",
     color: METRONIC.text,
     letterSpacing: -0.5,
     marginBottom: 4,
-  },
-  goalsBalanceSub: {
+  }),
+  goalsBalanceSub: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.subtle,
     lineHeight: 15,
     marginBottom: 12,
-  },
-  goalsPeriodRow: {
+  }),
+  goalsPeriodRow: view({
     flexDirection: "row",
     borderWidth: 1,
     borderColor: METRONIC.border,
     borderRadius: 8,
     overflow: "hidden",
     marginBottom: 12,
-  },
-  goalsPeriodBtn: {
+  }),
+  goalsPeriodBtn: view({
     flex: 1,
     paddingVertical: 6,
     alignItems: "center",
     backgroundColor: Theme.cardWhite,
-  },
-  goalsPeriodBtnOn: {
+  }),
+  goalsPeriodBtnOn: view({
     backgroundColor: "#F1F1F4",
-  },
-  goalsPeriodBtnText: {
+  }),
+  goalsPeriodBtnText: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.muted,
-  },
-  goalsPeriodBtnTextOn: {
+  }),
+  goalsPeriodBtnTextOn: text({
     color: METRONIC.text,
-  },
-  goalsProgressTrack: {
+  }),
+  goalsProgressTrack: view({
     height: 6,
     borderRadius: 3,
     backgroundColor: "#F1F1F4",
     overflow: "hidden",
     marginBottom: 6,
-  },
-  goalsProgressFill: {
+  }),
+  goalsProgressFill: view({
     height: "100%",
     borderRadius: 3,
-  },
-  goalsProgressMeta: {
+  }),
+  goalsProgressMeta: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  goalsChartSub: {
+  }),
+  goalsChartSub: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.muted,
-  },
-  goalsTargetGrid: {
+  }),
+  goalsTargetGrid: view({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 14,
     marginBottom: 4,
-  },
-  goalsTargetGridThree: {
+  }),
+  goalsTargetGridThree: view({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 14,
     marginBottom: 4,
-  },
-  goalsCarryForwardBtn: {
+  }),
+  goalsCarryForwardBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -2966,30 +2966,30 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: "#F1FAFF",
-  },
-  goalsCarryForwardText: {
+  }),
+  goalsCarryForwardText: text({
     flex: 1,
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.link,
     lineHeight: 15,
-  },
-  goalsMonthBanner: {
+  }),
+  goalsMonthBanner: view({
     marginBottom: 8,
     gap: 2,
-  },
-  goalsMonthBannerTitle: {
+  }),
+  goalsMonthBannerTitle: text({
     fontSize: 13,
     fontWeight: "600",
     color: METRONIC.text,
-  },
-  goalsMonthBannerSub: {
+  }),
+  goalsMonthBannerSub: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.subtle,
     lineHeight: 15,
-  },
-  goalsTargetCard: {
+  }),
+  goalsTargetCard: view({
     flex: 1,
     minWidth: 280,
     borderRadius: 12,
@@ -3001,25 +3001,25 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 8,
     ...({
       boxShadow: "0 0 16px 0 rgba(76, 87, 125, 0.03)",
-    } as object),
-  },
-  goalsTargetCardHeader: {
+    } as unknown as ViewStyle),
+  }),
+  goalsTargetCardHeader: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  goalsTargetCardTitle: {
+  }),
+  goalsTargetCardTitle: text({
     fontSize: 14,
     fontWeight: "600",
     color: METRONIC.text,
-  },
-  goalsTargetCardHint: {
+  }),
+  goalsTargetCardHint: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.subtle,
     lineHeight: 15,
-  },
-  goalsTargetInner: {
+  }),
+  goalsTargetInner: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -3029,42 +3029,42 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 12,
     backgroundColor: "#FAFBFC",
-  },
-  goalsTargetValueCol: {
+  }),
+  goalsTargetValueCol: view({
     flex: 1,
     minWidth: 0,
     gap: 4,
-  },
-  goalsTargetActual: {
+  }),
+  goalsTargetActual: text({
     fontSize: 22,
     fontWeight: "700",
     color: METRONIC.text,
     letterSpacing: -0.3,
-  },
-  goalsTargetMeta: {
+  }),
+  goalsTargetMeta: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.subtle,
     lineHeight: 15,
-  },
-  goalsTargetActionBtn: {
+  }),
+  goalsTargetActionBtn: view({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  goalsTargetActionText: {
+  }),
+  goalsTargetActionText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.link,
-  },
-  goalsTargetEditCol: {
+  }),
+  goalsTargetEditCol: view({
     gap: 8,
     minWidth: 120,
-  },
-  goalsTargetInput: {
+  }),
+  goalsTargetInput: text({
     minWidth: 100,
     borderWidth: 1,
     borderColor: METRONIC.border,
@@ -3075,47 +3075,47 @@ export const networkDesktopHubStyles = StyleSheet.create({
     fontWeight: "600",
     color: METRONIC.text,
     backgroundColor: Theme.cardWhite,
-  },
-  goalsTargetEditActions: {
+  }),
+  goalsTargetEditActions: view({
     flexDirection: "row",
     gap: 6,
-  },
-  goalsTargetCancelBtn: {
+  }),
+  goalsTargetCancelBtn: view({
     paddingHorizontal: 8,
     paddingVertical: 5,
-  },
-  goalsTargetCancelText: {
+  }),
+  goalsTargetCancelText: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.muted,
-  },
-  goalsTargetSaveBtn: {
+  }),
+  goalsTargetSaveBtn: view({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
     backgroundColor: METRONIC.link,
-  },
-  goalsTargetSaveText: {
+  }),
+  goalsTargetSaveText: text({
     fontSize: 10,
     fontWeight: "700",
     color: Theme.textOnPrimary,
-  },
-  goalsTargetSliderTrack: {
+  }),
+  goalsTargetSliderTrack: view({
     height: 8,
     borderRadius: 4,
     backgroundColor: "#F1F1F4",
     position: "relative",
     overflow: "visible",
-  },
-  goalsTargetSliderFill: {
+  }),
+  goalsTargetSliderFill: view({
     position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
     borderRadius: 4,
     backgroundColor: "rgba(62, 151, 255, 0.35)",
-  },
-  goalsTargetSliderThumb: {
+  }),
+  goalsTargetSliderThumb: view({
     position: "absolute",
     top: -4,
     width: 16,
@@ -3125,98 +3125,98 @@ export const networkDesktopHubStyles = StyleSheet.create({
     marginLeft: -8,
     borderWidth: 2,
     borderColor: Theme.cardWhite,
-  },
-  goalsStatusPill: {
+  }),
+  goalsStatusPill: view({
     alignSelf: "flex-start",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-  },
-  goalsStatusOnTrack: {
+  }),
+  goalsStatusOnTrack: view({
     backgroundColor: "rgba(80, 205, 137, 0.15)",
-  },
-  goalsStatusOnTrackText: {
+  }),
+  goalsStatusOnTrackText: text({
     color: "#47BE7D",
-  },
-  goalsStatusBehind: {
+  }),
+  goalsStatusBehind: view({
     backgroundColor: "rgba(241, 65, 108, 0.12)",
-  },
-  goalsStatusBehindText: {
+  }),
+  goalsStatusBehindText: text({
     color: "#F1416C",
-  },
-  goalsStatusUnset: {
+  }),
+  goalsStatusUnset: view({
     backgroundColor: "rgba(161, 165, 183, 0.15)",
-  },
-  goalsStatusText: {
+  }),
+  goalsStatusText: text({
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.2,
-  },
-  goalsStatusUnsetText: {
+  }),
+  goalsStatusUnsetText: text({
     color: METRONIC.muted,
-  },
-  goalsSidebarRow: {
+  }),
+  goalsSidebarRow: view({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
     gap: 6,
-  },
-  goalsSidebarRowLast: {
+  }),
+  goalsSidebarRowLast: view({
     borderBottomWidth: 0,
     paddingBottom: 2,
-  },
-  goalsSidebarRowTop: {
+  }),
+  goalsSidebarRowTop: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  goalsSidebarLabel: {
+  }),
+  goalsSidebarLabel: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.text,
-  },
-  goalsSidebarPct: {
+  }),
+  goalsSidebarPct: text({
     fontSize: 11,
     fontWeight: "700",
     color: METRONIC.link,
-  },
-  goalsSidebarTrack: {
+  }),
+  goalsSidebarTrack: view({
     height: 5,
     borderRadius: 3,
     backgroundColor: "#F1F1F4",
     overflow: "hidden",
-  },
-  goalsSidebarFill: {
+  }),
+  goalsSidebarFill: view({
     height: "100%",
     borderRadius: 3,
     backgroundColor: METRONIC.link,
-  },
-  goalsSidebarMeta: {
+  }),
+  goalsSidebarMeta: text({
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  goalsNetValue: {
+  }),
+  goalsNetValue: text({
     fontSize: 22,
     fontWeight: "700",
     color: METRONIC.text,
     marginTop: 4,
-  },
-  goalsNetSub: {
+  }),
+  goalsNetSub: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.subtle,
     marginTop: 6,
     lineHeight: 16,
-  },
-  goalsEntityTableHead: {
+  }),
+  goalsEntityTableHead: view({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
     backgroundColor: "#FAFBFC",
-  },
-  goalsEntityTableGrid: {
+  }),
+  goalsEntityTableGrid: view({
     width: "100%",
     minWidth: 640,
     ...({
@@ -3225,9 +3225,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
       columnGap: 16,
       alignItems: "center",
       boxSizing: "border-box",
-    } as object),
-  },
-  goalsEntityTableGridKam: {
+    } as unknown as ViewStyle),
+  }),
+  goalsEntityTableGridKam: view({
     width: "100%",
     minWidth: 760,
     ...({
@@ -3236,9 +3236,9 @@ export const networkDesktopHubStyles = StyleSheet.create({
       columnGap: 16,
       alignItems: "center",
       boxSizing: "border-box",
-    } as object),
-  },
-  goalsEntityHeadCell: {
+    } as unknown as ViewStyle),
+  }),
+  goalsEntityHeadCell: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.muted,
@@ -3246,97 +3246,97 @@ export const networkDesktopHubStyles = StyleSheet.create({
     letterSpacing: 0.5,
     ...({
       whiteSpace: "nowrap",
-    } as object),
-  },
-  goalsEntityHeadNum: {
+    } as unknown as TextStyle),
+  }),
+  goalsEntityHeadNum: text({
     textAlign: "right",
     ...({
       justifySelf: "end",
       width: "100%",
-    } as object),
-  },
-  goalsEntityColName: {
+    } as unknown as TextStyle),
+  }),
+  goalsEntityColName: column({
     minWidth: 0,
-  },
-  goalsEntityColKam: {
+  }),
+  goalsEntityColKam: column({
     minWidth: 0,
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     ...({
       justifySelf: "start",
-      width: "100%",
-    } as object),
-  },
-  goalsEntityColActual: {
+    } as unknown as ColumnStyle),
+  }),
+  goalsEntityColActual: column({
     minWidth: 0,
+    width: "100%",
     ...({
       justifySelf: "end",
-      width: "100%",
-    } as object),
-  },
-  goalsEntityColTarget: {
+    } as unknown as ColumnStyle),
+  }),
+  goalsEntityColTarget: column({
     minWidth: 0,
+    width: "100%",
     ...({
       justifySelf: "end",
-      width: "100%",
-    } as object),
-  },
-  goalsEntityColProgress: {
+    } as unknown as ColumnStyle),
+  }),
+  goalsEntityColProgress: column({
     minWidth: 0,
+    width: "100%",
     ...({
       justifySelf: "end",
-      width: "100%",
-    } as object),
-  },
-  goalsEntityColAction: {
+    } as unknown as ColumnStyle),
+  }),
+  goalsEntityColAction: view({
     ...({
       justifySelf: "center",
-    } as object),
-  },
-  goalsEntityRow: {
+    } as unknown as ViewStyle),
+  }),
+  goalsEntityRow: view({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  goalsEntityName: {
+  }),
+  goalsEntityName: text({
     fontSize: 13,
     fontWeight: "600",
     color: METRONIC.text,
-  },
-  goalsEntityMeta: {
+  }),
+  goalsEntityMeta: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.subtle,
-  },
-  goalsEntityValue: {
+  }),
+  goalsEntityValue: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.text,
     textAlign: "right",
     ...({
       whiteSpace: "nowrap",
-    } as object),
-  },
-  goalsEntityProgressText: {
+    } as unknown as TextStyle),
+  }),
+  goalsEntityProgressText: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.link,
     textAlign: "right",
     ...({
       whiteSpace: "nowrap",
-    } as object),
-  },
-  goalsEntityEditStack: {
+    } as unknown as TextStyle),
+  }),
+  goalsEntityEditStack: view({
     gap: 6,
     width: "100%",
     alignItems: "stretch",
     ...({
       justifySelf: "end",
-    } as object),
-  },
-  goalsEntityInput: {
+    } as unknown as ViewStyle),
+  }),
+  goalsEntityInput: text({
     borderWidth: 1,
     borderColor: METRONIC.border,
     borderRadius: 6,
@@ -3347,20 +3347,20 @@ export const networkDesktopHubStyles = StyleSheet.create({
     color: METRONIC.text,
     backgroundColor: Theme.cardWhite,
     textAlign: "right",
-  },
-  goalsEntitySaveLink: {
+  }),
+  goalsEntitySaveLink: text({
     fontSize: 11,
     fontWeight: "700",
     color: METRONIC.link,
-  },
-  goalsWizardBackdrop: {
+  }),
+  goalsWizardBackdrop: view({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
-  },
-  goalsWizardSheet: {
+  }),
+  goalsWizardSheet: view({
     width: "100%",
     maxWidth: 560,
     maxHeight: "92%",
@@ -3369,12 +3369,12 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     overflow: "hidden",
-  },
-  goalsWizardSheetTall: {
+  }),
+  goalsWizardSheetTall: view({
     maxWidth: 600,
     maxHeight: "94%",
-  },
-  goalsWizardHeader: {
+  }),
+  goalsWizardHeader: view({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
@@ -3384,23 +3384,23 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
-  },
-  goalsWizardHeaderText: {
+  }),
+  goalsWizardHeaderText: view({
     flex: 1,
     minWidth: 0,
     gap: 4,
-  },
-  goalsWizardTitle: {
+  }),
+  goalsWizardTitle: text({
     fontSize: 16,
     fontWeight: "800",
     color: METRONIC.text,
-  },
-  goalsWizardSubtitle: {
+  }),
+  goalsWizardSubtitle: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
-  },
-  goalsWizardSteps: {
+  }),
+  goalsWizardSteps: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -3409,95 +3409,95 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
-  },
-  goalsWizardStepItem: {
+  }),
+  goalsWizardStepItem: view({
     alignItems: "center",
     gap: 6,
     minWidth: 72,
-  },
-  goalsWizardStepDot: {
+  }),
+  goalsWizardStepDot: view({
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: "#E1E3EA",
-  },
-  goalsWizardStepDotOn: {
+  }),
+  goalsWizardStepDotOn: view({
     backgroundColor: METRONIC.link,
-  },
-  goalsWizardStepLabel: {
+  }),
+  goalsWizardStepLabel: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.muted,
-  },
-  goalsWizardStepLabelOn: {
+  }),
+  goalsWizardStepLabelOn: text({
     color: METRONIC.link,
     fontWeight: "700",
-  },
-  goalsWizardBody: {
+  }),
+  goalsWizardBody: view({
     flex: 1,
     minHeight: 0,
-  },
-  goalsWizardBodyContent: {
+  }),
+  goalsWizardBodyContent: view({
     padding: 20,
     gap: 4,
-  },
-  goalsWizardHero: {
+  }),
+  goalsWizardHero: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     marginBottom: 12,
-  },
-  goalsWizardHeroIcon: {
+  }),
+  goalsWizardHeroIcon: view({
     width: 48,
     height: 48,
     borderRadius: 10,
     backgroundColor: "#F1FAFF",
     alignItems: "center",
     justifyContent: "center",
-  },
-  goalsWizardHeroName: {
+  }),
+  goalsWizardHeroName: text({
     fontSize: 15,
     fontWeight: "800",
     color: METRONIC.text,
-  },
-  goalsWizardHeroMeta: {
+  }),
+  goalsWizardHeroMeta: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
     marginTop: 2,
-  },
-  goalsWizardDetailGrid: {
+  }),
+  goalsWizardDetailGrid: view({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
     marginBottom: 14,
-  },
-  goalsWizardDetailCell: {
+  }),
+  goalsWizardDetailCell: view({
     minWidth: "45%",
     flexGrow: 1,
     gap: 2,
-  },
-  goalsWizardDetailWide: {
+  }),
+  goalsWizardDetailWide: view({
     minWidth: "100%",
-  },
-  goalsWizardDetailLabel: {
+  }),
+  goalsWizardDetailLabel: text({
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  goalsWizardDetailValue: {
+  }),
+  goalsWizardDetailValue: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.text,
     lineHeight: 17,
-  },
-  goalsWizardKpiRow: {
+  }),
+  goalsWizardKpiRow: view({
     flexDirection: "row",
     gap: 10,
-  },
-  goalsWizardKpi: {
+  }),
+  goalsWizardKpi: view({
     flex: 1,
     minWidth: 0,
     padding: 12,
@@ -3506,73 +3506,73 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderColor: METRONIC.border,
     backgroundColor: "#F9F9F9",
     gap: 4,
-  },
-  goalsWizardKpiValue: {
+  }),
+  goalsWizardKpiValue: text({
     fontSize: 14,
     fontWeight: "800",
     color: METRONIC.text,
-  },
-  goalsWizardKpiLabel: {
+  }),
+  goalsWizardKpiLabel: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.muted,
-  },
-  goalsWizardSectionTitle: {
+  }),
+  goalsWizardSectionTitle: text({
     fontSize: 12,
     fontWeight: "800",
     color: METRONIC.text,
     marginTop: 8,
     marginBottom: 10,
-  },
-  goalsWizardHistoryHead: {
+  }),
+  goalsWizardHistoryHead: view({
     flexDirection: "row",
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
-  },
-  goalsWizardHistoryHeadCell: {
+  }),
+  goalsWizardHistoryHeadCell: text({
     fontSize: 9,
     fontWeight: "700",
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  goalsWizardHistoryRow: {
+  }),
+  goalsWizardHistoryRow: view({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  goalsWizardHistoryCell: {
+  }),
+  goalsWizardHistoryCell: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.text,
-  },
-  goalsWizardHistoryMonth: {
+  }),
+  goalsWizardHistoryMonth: text({
     flex: 1.1,
     minWidth: 0,
-  },
-  goalsWizardHistoryNum: {
+  }),
+  goalsWizardHistoryNum: text({
     flex: 1.3,
     minWidth: 0,
     textAlign: "right",
     paddingHorizontal: 4,
-  },
-  goalsWizardHistoryPct: {
+  }),
+  goalsWizardHistoryPct: text({
     width: 40,
     textAlign: "right",
     color: METRONIC.link,
     fontWeight: "800",
-  },
-  goalsWizardEmpty: {
+  }),
+  goalsWizardEmpty: text({
     fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 18,
     paddingVertical: 12,
-  },
-  goalsWizardRecommendCard: {
+  }),
+  goalsWizardRecommendCard: view({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(62, 151, 255, 0.35)",
@@ -3580,29 +3580,29 @@ export const networkDesktopHubStyles = StyleSheet.create({
     padding: 14,
     gap: 8,
     marginBottom: 12,
-  },
-  goalsWizardRecommendHeader: {
+  }),
+  goalsWizardRecommendHeader: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  goalsWizardRecommendTitle: {
+  }),
+  goalsWizardRecommendTitle: text({
     fontSize: 12,
     fontWeight: "800",
     color: METRONIC.text,
-  },
-  goalsWizardRecommendAmount: {
+  }),
+  goalsWizardRecommendAmount: text({
     fontSize: 18,
     fontWeight: "800",
     color: METRONIC.link,
-  },
-  goalsWizardRecommendBody: {
+  }),
+  goalsWizardRecommendBody: text({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.subtle,
     lineHeight: 16,
-  },
-  goalsWizardOptionBtn: {
+  }),
+  goalsWizardOptionBtn: view({
     alignSelf: "flex-start",
     marginTop: 4,
     paddingHorizontal: 12,
@@ -3611,19 +3611,19 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.link,
     backgroundColor: Theme.cardWhite,
-  },
-  goalsWizardOptionBtnOn: {
+  }),
+  goalsWizardOptionBtnOn: view({
     backgroundColor: METRONIC.link,
-  },
-  goalsWizardOptionBtnText: {
+  }),
+  goalsWizardOptionBtnText: text({
     fontSize: 11,
     fontWeight: "700",
     color: METRONIC.link,
-  },
-  goalsWizardOptionBtnTextOn: {
+  }),
+  goalsWizardOptionBtnTextOn: text({
     color: Theme.buttonPrimaryText,
-  },
-  goalsWizardCarryCard: {
+  }),
+  goalsWizardCarryCard: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -3633,23 +3633,23 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
     marginBottom: 14,
-  },
-  goalsWizardCarryCardOn: {
+  }),
+  goalsWizardCarryCardOn: view({
     borderColor: METRONIC.link,
     backgroundColor: "#F1FAFF",
-  },
-  goalsWizardCarryTitle: {
+  }),
+  goalsWizardCarryTitle: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  goalsWizardCarrySub: {
+  }),
+  goalsWizardCarrySub: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.link,
     marginTop: 2,
-  },
-  goalsWizardFieldLabel: {
+  }),
+  goalsWizardFieldLabel: text({
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.muted,
@@ -3657,8 +3657,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     marginBottom: 6,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  goalsWizardInput: {
+  }),
+  goalsWizardInput: text({
     borderWidth: 1,
     borderColor: METRONIC.border,
     borderRadius: 8,
@@ -3668,8 +3668,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     fontWeight: "600",
     color: METRONIC.text,
     backgroundColor: "#F9F9F9",
-  },
-  goalsWizardFooter: {
+  }),
+  goalsWizardFooter: view({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -3678,74 +3678,74 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingBottom: 4,
     borderTopWidth: 1,
     borderTopColor: METRONIC.border,
-  },
-  goalsWizardFooterActions: {
+  }),
+  goalsWizardFooterActions: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     marginLeft: "auto",
-  },
-  goalsWizardBackBtn: {
+  }),
+  goalsWizardBackBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingVertical: 8,
-  },
-  goalsWizardBackBtnText: {
+  }),
+  goalsWizardBackBtnText: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  goalsWizardCancelBtn: {
+  }),
+  goalsWizardCancelBtn: view({
     paddingHorizontal: 10,
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: METRONIC.border,
-  },
-  goalsWizardCancelText: {
+  }),
+  goalsWizardCancelText: text({
     fontSize: 12,
     fontWeight: "700",
     color: METRONIC.text,
-  },
-  goalsWizardPrimaryBtn: {
+  }),
+  goalsWizardPrimaryBtn: view({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
     backgroundColor: "rgba(0, 0, 0, 0.85)",
     minWidth: 108,
     alignItems: "center",
-  },
-  goalsWizardPrimaryText: {
+  }),
+  goalsWizardPrimaryText: text({
     fontSize: 12,
     fontWeight: "800",
     color: Theme.textOnPrimary,
-  },
-  goalsViewMore: {
+  }),
+  goalsViewMore: view({
     alignItems: "center",
     paddingVertical: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: METRONIC.border,
-  },
-  goalsViewMoreText: {
+  }),
+  goalsViewMoreText: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.link,
     ...({
       textDecorationLine: "underline",
       textDecorationStyle: "dashed",
-    } as object),
-  },
-  teamPanelTitleCol: {
+    } as unknown as TextStyle),
+  }),
+  teamPanelTitleCol: view({
     flex: 1,
     minWidth: 0,
     gap: 2,
-  },
-  teamPanelCard: {
+  }),
+  teamPanelCard: view({
     overflow: "hidden",
     paddingTop: 4,
-  },
-  teamInviteBtn: {
+  }),
+  teamInviteBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -3754,13 +3754,13 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: METRONIC.accent,
     flexShrink: 0,
-  },
-  teamInviteBtnText: {
+  }),
+  teamInviteBtnText: text({
     fontSize: 12,
     fontWeight: "700",
     color: Theme.textOnPrimary,
-  },
-  teamInviteCancelBtn: {
+  }),
+  teamInviteCancelBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -3771,17 +3771,17 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
     flexShrink: 0,
-  },
-  teamInviteCancelBtnText: {
+  }),
+  teamInviteCancelBtnText: text({
     fontSize: 12,
     fontWeight: "600",
     color: METRONIC.text,
-  },
-  invitationsPanelCard: {
+  }),
+  invitationsPanelCard: view({
     overflow: "hidden",
     paddingBottom: 0,
-  },
-  invitationsPanelHead: {
+  }),
+  invitationsPanelHead: view({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
@@ -3789,13 +3789,13 @@ export const networkDesktopHubStyles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 4,
-  },
-  invitationsPanelTitleCol: {
+  }),
+  invitationsPanelTitleCol: view({
     flex: 1,
     minWidth: 0,
     gap: 2,
-  },
-  invitationsCloseBtn: {
+  }),
+  invitationsCloseBtn: view({
     width: 32,
     height: 32,
     borderRadius: 8,
@@ -3804,56 +3804,56 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  tabActionBtnInvitesOn: {
+  }),
+  tabActionBtnInvitesOn: view({
     backgroundColor: METRONIC.accent,
     borderColor: METRONIC.accent,
-  },
-  tabActionBtnTextInvitesOn: {
+  }),
+  tabActionBtnTextInvitesOn: text({
     color: Theme.buttonDarkText,
-  },
-  profileSplitRow: {
+  }),
+  profileSplitRow: view({
     flexDirection: "row",
     gap: 12,
     alignItems: "stretch",
     ...({
       flexWrap: "wrap",
-    } as object),
-  },
-  profileCol: {
+    } as unknown as ViewStyle),
+  }),
+  profileCol: view({
     flex: 1,
     minWidth: 300,
     minHeight: 0,
-  },
-  profileCard: {
+  }),
+  profileCard: view({
     flex: 1,
     flexDirection: "column",
     alignSelf: "stretch",
-  },
-  profileCardHeader: {
+  }),
+  profileCardHeader: view({
     paddingBottom: 12,
     marginBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
-  },
-  profileCardTitle: {
+  }),
+  profileCardTitle: text({
     fontSize: 13,
     fontWeight: "600",
     color: METRONIC.text,
     letterSpacing: -0.15,
-  },
-  profileCardSub: {
+  }),
+  profileCardSub: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.muted,
     marginTop: 2,
     lineHeight: 15,
-  },
-  profileCardBody: {
+  }),
+  profileCardBody: view({
     flex: 1,
     gap: 0,
-  },
-  profileCardFooter: {
+  }),
+  profileCardFooter: view({
     marginTop: 4,
     paddingTop: 12,
     borderTopWidth: 1,
@@ -3861,20 +3861,20 @@ export const networkDesktopHubStyles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     alignItems: "center",
-  },
-  profileMediaRow: {
+  }),
+  profileMediaRow: view({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
     marginBottom: 14,
-  },
-  profileAvatarRow: {
+  }),
+  profileAvatarRow: view({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
     marginBottom: 14,
-  },
-  profileAvatarRing: {
+  }),
+  profileAvatarRing: view({
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -3885,13 +3885,13 @@ export const networkDesktopHubStyles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
     flexShrink: 0,
-  },
-  profileAvatarImage: {
+  }),
+  profileAvatarImage: image({
     width: 52,
     height: 52,
     borderRadius: 26,
-  },
-  profileAvatarActions: {
+  }),
+  profileAvatarActions: view({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
@@ -3899,8 +3899,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 6,
     alignItems: "center",
     paddingTop: 4,
-  },
-  profileActionBtn: {
+  }),
+  profileActionBtn: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
@@ -3910,24 +3910,24 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-  },
-  profileActionBtnText: {
+  }),
+  profileActionBtnText: text({
     fontSize: 11,
     fontWeight: "600",
     color: METRONIC.link,
-  },
-  profileFieldGroup: {
+  }),
+  profileFieldGroup: view({
     gap: 4,
     marginBottom: 10,
-  },
-  profileFieldLabel: {
+  }),
+  profileFieldLabel: text({
     fontSize: 10,
     fontWeight: "600",
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  profileFieldInput: {
+  }),
+  profileFieldInput: text({
     borderWidth: 1,
     borderColor: METRONIC.border,
     borderRadius: 6,
@@ -3938,8 +3938,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     color: METRONIC.text,
     backgroundColor: Theme.cardWhite,
     minHeight: 34,
-  },
-  profileFieldReadonly: {
+  }),
+  profileFieldReadonly: view({
     borderWidth: 1,
     borderColor: METRONIC.border,
     borderRadius: 6,
@@ -3948,13 +3948,13 @@ export const networkDesktopHubStyles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
     minHeight: 34,
     justifyContent: "center",
-  },
-  profileFieldReadonlyText: {
+  }),
+  profileFieldReadonlyText: text({
     fontSize: 13,
     fontWeight: "400",
     color: METRONIC.subtle,
-  },
-  profileSaveBtn: {
+  }),
+  profileSaveBtn: view({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 6,
@@ -3963,45 +3963,45 @@ export const networkDesktopHubStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minHeight: 32,
-  },
-  profileSaveBtnDisabled: {
+  }),
+  profileSaveBtnDisabled: view({
     opacity: 0.45,
-  },
-  profileSaveBtnText: {
+  }),
+  profileSaveBtnText: text({
     fontSize: 12,
     fontWeight: "600",
     color: Theme.buttonPrimaryText,
-  },
-  profilePresetGrid: {
+  }),
+  profilePresetGrid: view({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
     marginTop: 6,
     marginBottom: 10,
-  },
-  profilePresetItem: {
+  }),
+  profilePresetItem: view({
     width: 36,
     height: 36,
     borderRadius: 18,
     borderWidth: 2,
     borderColor: "transparent",
     overflow: "hidden",
-  },
-  profilePresetItemSelected: {
+  }),
+  profilePresetItemSelected: view({
     borderColor: METRONIC.link,
-  },
-  profilePresetImage: {
+  }),
+  profilePresetImage: image({
     width: 32,
     height: 32,
     borderRadius: 16,
-  },
-  profileLogoRow: {
+  }),
+  profileLogoRow: view({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
     marginBottom: 14,
-  },
-  profileLogoThumb: {
+  }),
+  profileLogoThumb: view({
     width: 56,
     height: 56,
     borderRadius: 8,
@@ -4012,37 +4012,39 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: METRONIC.border,
     flexShrink: 0,
-  },
-  profileLogoImage: {
+  }),
+  profileLogoImage: image({
     width: 56,
     height: 56,
     borderRadius: 8,
-  },
-  profileLogoInitials: {
+  }),
+  profileLogoInitials: text({
     fontSize: 16,
     fontWeight: "700",
     color: METRONIC.subtle,
-  },
-  profileErrorText: {
+  }),
+  profileErrorText: text({
     fontSize: 11,
     fontWeight: "500",
     color: Theme.negative,
     marginBottom: 6,
-  },
-  profilePageTitle: {
+  }),
+  profilePageTitle: text({
     fontSize: 14,
     fontWeight: "600",
     color: METRONIC.text,
     letterSpacing: -0.2,
-  },
-  profilePageSub: {
+  }),
+  profilePageSub: text({
     fontSize: 11,
     fontWeight: "400",
     color: METRONIC.muted,
     marginTop: 1,
     lineHeight: 15,
-  },
-  profileCardPad: {
+  }),
+  profileCardPad: view({
     padding: 14,
-  },
-});
+  }),
+};
+
+export const networkDesktopHubStyles = createStyles(networkDesktopHubStylesDef);

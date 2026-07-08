@@ -410,9 +410,6 @@ function MetricTile({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
     marginBottom: 12,
     overflow: "hidden",
   },
@@ -436,7 +433,6 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 28,
     height: 28,
-    borderRadius: 8,
     backgroundColor: "#eef2ff",
     alignItems: "center",
     justifyContent: "center",
@@ -468,10 +464,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
     padding: 10,
-    borderRadius: 10,
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   heroMain: { flex: 1, minWidth: 0 },
   heroLabel: {
@@ -519,16 +512,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minWidth: "46%",
     padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     gap: 4,
   },
   metricIcon: {
     width: 26,
     height: 26,
-    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -553,9 +542,6 @@ const styles = StyleSheet.create({
   },
   healthCard: {
     padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     gap: 6,
   },
@@ -573,7 +559,6 @@ const styles = StyleSheet.create({
   healthPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 999,
   },
   healthPillText: {
     fontSize: 9,
@@ -598,7 +583,6 @@ const styles = StyleSheet.create({
   countBadge: {
     minWidth: 20,
     height: 20,
-    borderRadius: 10,
     backgroundColor: "#fef3c7",
     alignItems: "center",
     justifyContent: "center",
@@ -615,9 +599,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
   },
   pendingMain: { flex: 1, minWidth: 0, gap: 2 },
@@ -636,19 +617,12 @@ const styles = StyleSheet.create({
   pendingBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
     backgroundColor: Theme.surface,
     minHeight: 32,
     justifyContent: "center",
   },
   pendingBtnPrimary: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   pendingBtnText: {
     fontSize: 11,
@@ -666,7 +640,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     padding: 10,
-    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
@@ -686,7 +659,6 @@ const styles = StyleSheet.create({
     padding: 14,
     alignItems: "center",
     gap: 6,
-    borderRadius: 10,
     backgroundColor: Theme.surface,
   },
   emptyTitle: {

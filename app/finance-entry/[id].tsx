@@ -87,7 +87,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,

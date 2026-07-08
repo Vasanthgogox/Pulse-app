@@ -380,7 +380,6 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 420,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 42,
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 16,
@@ -394,12 +393,9 @@ const styles = StyleSheet.create({
   headerIconChip: {
     width: 36,
     height: 36,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
   },
   title: {
     fontSize: 15,
@@ -417,7 +413,6 @@ const styles = StyleSheet.create({
   closeBtn: {
     width: 36,
     height: 36,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surface,
@@ -447,13 +442,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 12,
     paddingVertical: 12,
-    borderRadius: 14,
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
   },
   fieldBtnActive: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.screenBackground,
   },
   fieldValue: {
@@ -469,9 +460,6 @@ const styles = StyleSheet.create({
   calendarWrap: {
     marginTop: 10,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
     padding: 14,
   },
   calendarHeader: {
@@ -483,7 +471,6 @@ const styles = StyleSheet.create({
   navBtn: {
     width: 24,
     height: 24,
-    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surface,
@@ -514,7 +501,6 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
     marginBottom: 2,
   },
   dayCellSelected: {
@@ -541,7 +527,6 @@ const styles = StyleSheet.create({
   analysisCard: {
     marginTop: 12,
     backgroundColor: Theme.textPrimaryDark,
-    borderRadius: 24,
     padding: 14,
     overflow: "hidden",
   },
@@ -551,7 +536,6 @@ const styles = StyleSheet.create({
     right: -8,
     width: 74,
     height: 74,
-    borderRadius: 37,
     backgroundColor: "rgba(79,70,229,0.35)",
   },
   analysisRow: {
@@ -592,7 +576,6 @@ const styles = StyleSheet.create({
   },
   applyBtn: {
     paddingVertical: 14,
-    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.buttonPrimary,

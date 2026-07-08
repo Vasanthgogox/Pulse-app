@@ -1,4 +1,5 @@
 import { memo, useMemo } from "react";
+import { createStyles, text, view } from "@/lib/styles/createStyles";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { IndentHubMedalGlyph, IndentHubGlyphSlot } from "@/features/indents/components/IndentHubAnimatedGlyphs";
 
@@ -143,16 +144,16 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
   );
 });
 
-const styles = StyleSheet.create({
-  wrap: {
+const stylesDef = {
+  wrap: view({
     marginBottom: 4,
-  },
-  compareHint: {
+  }),
+  compareHint: text({
     ...indentReviewHubText.bodyMuted,
     marginBottom: 8,
     textAlign: "left",
-  },
-  recoStrip: {
+  }),
+  recoStrip: view({
     marginBottom: 10,
     padding: 10,
     borderRadius: 12,
@@ -160,50 +161,53 @@ const styles = StyleSheet.create({
     borderColor: "rgba(99,102,241,0.22)",
     backgroundColor: "rgba(99,102,241,0.06)",
     gap: 8,
-  },
-  recoStripPressed: {
+  }),
+  recoStripPressed: view({
     opacity: 0.92,
-  },
-  recoStripSelected: {
+  }),
+  recoStripSelected: view({
     borderColor: Theme.positive,
     backgroundColor: "rgba(21,128,61,0.06)",
-  },
-  recoHeader: {
+  }),
+  recoHeader: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-  },
-  recoKicker: {
+  }),
+  recoKicker: text({
     ...indentReviewHubText.sectionTitle,
     color: Theme.primary,
     flex: 1,
-  },
-  recoMeta: {
+  }),
+  recoMeta: text({
     ...indentReviewHubText.chipLabel,
     fontSize: 8,
     color: Theme.textMuted,
-  },
-  recoRow: {
+  }),
+  recoRow: view({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-  },
-  recoBody: {
+  }),
+  recoBody: view({
     flex: 1,
     minWidth: 0,
     gap: 2,
-  },
-  recoName: {
+  }),
+  recoName: text({
     ...indentReviewHubText.partyTitle,
     fontSize: 11,
-  },
-  recoHint: {
+  }),
+  recoHint: text({
     ...indentReviewHubText.bodyMuted,
     fontSize: 8,
-  },
-  recoAmount: {
+  }),
+  recoAmount: text({
     ...indentReviewHubText.quoteRowAmount,
     fontSize: 12,
     color: Theme.textPrimaryDark,
-  },
-});
+    fontVariant: ["tabular-nums"],
+  }),
+};
+
+const styles = createStyles(stylesDef);
