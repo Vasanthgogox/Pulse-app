@@ -17,7 +17,8 @@ Shared test utilities for Pulse platform services.
 ## Usage
 
 ```bash
-npm install
+# Install from the repo root — this package is an npm workspace member,
+# the root package-lock.json is the only authoritative lockfile
 npm run build
 ```
 

@@ -104,6 +104,14 @@ Initial namespace reconciliation completed after reviewing existing platform pac
 
 Instead, OMS depends on `@pulse/platform-workspace` via `"file:../packages/platform/workspace"` in `oms/package.json` — a local symlink to the package without folding OMS's own dependency tree into the root's. This preserves OMS's independent install (its own nested `radix-ui`, its own `@types/react@19.2.17`) while still resolving the shared package. `npm run build` (`tsc -b && vite build`) succeeds under this arrangement.
 
+## Decision: root npm workspaces is the single install model for everything under `packages/`
+
+Before this reconciliation, the root `package.json` had no `workspaces` field at all. `@pulse/platform-identity`, `-observability`, `-runtime`, `-testing` were **standalone npm projects** — each installed independently (`cd packages/platform/identity && npm install`) with its own committed `package-lock.json`. Introducing root workspaces (`["packages/*", "packages/platform/*"]`) made these four packages root workspace members for the first time, which is why the first `npm install` under the new config produced an unusually large root `package-lock.json` diff (identity's real dependency tree — `hono`, `jose`, `zod`, `vitest` and its transitive tree — hoisted into the root lockfile). That diff was a one-time cost of unifying the install model, not a sign of an unrelated dependency being upgraded.
+
+Their four nested `package-lock.json` files have been deleted. Keeping them would have left two lockfiles per package — the root's (now authoritative, since these are workspace members) and the stale local one (silently orphaned the moment the workspace symlink replaced their standalone `node_modules`) — free to drift apart with no warning. `identity/README.md`, `identity/SPRINT1_EXIT_CHECKLIST.md`, and `testing/README.md` are updated to install from the repo root instead of `cd`-ing into the package first.
+
+This rules out Option B (keeping these packages independently installable outside the monorepo) going forward: as long as they're npm workspace members, the root `package-lock.json` is the only lockfile that matters. If one of these packages ever needs to be published or developed standalone again, that requires removing it from the `workspaces` glob and restoring its own lockfile — a deliberate reversal, not something that should happen by a nested lockfile quietly reappearing.
+
 If OMS ever needs to join the root workspace for some other reason, the `radix-ui`/`@types/react` conflict must be solved first (e.g. pinning a single shared `@types/react` version across both apps) — not assumed away.
 
 **Next:** extract Identity → Workspace → Product Registry one at a time, each independently reversible, each its own commit. Only after those are stable does the rest of OMS's technical roadmap (Gateway, Command Store, Timeline, Observatory) get built out inside this same hierarchy.

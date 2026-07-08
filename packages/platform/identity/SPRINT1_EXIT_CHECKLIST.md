@@ -21,10 +21,13 @@ export PULSE_GIT_COMMIT=...   # optional, surfaced on GET /version
 ## Run checklist
 
 ```bash
+# From repo root — installs all workspace members at once (single lockfile)
+npm install
+
 cd packages/contracts && npm run build
-cd ../platform/observability && npm install && npm run build
-cd ../testing && npm install && npm run build
-cd ../identity && npm install && npm run build
+cd ../platform/observability && npm run build
+cd ../testing && npm run build
+cd ../identity && npm run build
 npm run test:unit              # architecture + permission matrix + OpenAPI + health (no DB)
 npm run test:exit-checklist    # full integration flow (real DB)
 npm run test:integration       # auth security + permission enforcement
