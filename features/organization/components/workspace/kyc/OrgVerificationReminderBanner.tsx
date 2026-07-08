@@ -54,33 +54,28 @@ export function OrgVerificationReminderBanner({ orgId }: { orgId: string | null 
 
   return (
     <View style={styles.wrap}>
-      <Pressable
-        style={({ pressed }) => [
-          styles.card,
-          { borderColor: tone.border },
-          pressed && styles.cardPressed,
-        ]}
-        onPress={() => router.push('/workspace?panel=kyc' as Parameters<typeof router.push>[0])}
-        accessibilityRole="button"
-        accessibilityLabel="Verify your business"
-      >
-        <View style={[styles.iconChip, { backgroundColor: tone.bg }]}>
-          <Icon size={17} color={tone.fg} strokeWidth={2.25} />
-        </View>
+      <View style={[styles.card, { borderColor: tone.border }]}>
+        <Pressable
+          style={({ pressed }) => [styles.cardMain, pressed && styles.cardPressed]}
+          onPress={() => router.push('/workspace?panel=kyc' as Parameters<typeof router.push>[0])}
+          accessibilityRole="button"
+          accessibilityLabel="Verify your business"
+        >
+          <View style={[styles.iconChip, { backgroundColor: tone.bg }]}>
+            <Icon size={17} color={tone.fg} strokeWidth={2.25} />
+          </View>
 
-        <View style={styles.body}>
-          <Text style={[styles.eyebrow, { color: tone.fg }]}>{eyebrow}</Text>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.sub} numberOfLines={2}>{sub}</Text>
-        </View>
+          <View style={styles.body}>
+            <Text style={[styles.eyebrow, { color: tone.fg }]}>{eyebrow}</Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.sub} numberOfLines={2}>{sub}</Text>
+          </View>
 
-        <ChevronRight size={16} color={Theme.textMuted} style={styles.chevron} />
+          <ChevronRight size={16} color={Theme.textMuted} style={styles.chevron} />
+        </Pressable>
 
         <Pressable
-          onPress={(e) => {
-            e.stopPropagation();
-            setDismissed(true);
-          }}
+          onPress={() => setDismissed(true)}
           hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
@@ -88,7 +83,7 @@ export function OrgVerificationReminderBanner({ orgId }: { orgId: string | null 
         >
           <X size={13} color={Theme.textMuted} />
         </Pressable>
-      </Pressable>
+      </View>
     </View>
   );
 }
@@ -121,6 +116,12 @@ const styles = StyleSheet.create({
         elevation: 2,
       },
     }),
+  },
+  cardMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   cardPressed: {
     opacity: 0.94,
