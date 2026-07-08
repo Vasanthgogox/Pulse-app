@@ -1,6 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 import {
   uploadVerificationDocument,
@@ -41,6 +42,21 @@ function resolveVerificationDocumentType(
   return null; // iec_certificate / incorporation_certificate / other: not yet supported by the verification pipeline
 }
 
+/** Native `fetch(uri)` on content:// (Android) and sandboxed file:// (iOS)
+ * document-picker URIs is unreliable — it silently throws or returns empty
+ * bytes. Reading through expo-file-system as base64 is the proven fix used
+ * elsewhere in this codebase (see chatDocumentPick.util.ts). */
+async function ensureBase64(asset: {
+  uri: string;
+  base64?: string | null;
+}): Promise<string | undefined> {
+  if (asset.base64) return asset.base64;
+  if (Platform.OS === 'web') return undefined;
+  return FileSystem.readAsStringAsync(asset.uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+}
+
 async function processAsset(
   orgId: string,
   docType: OrganizationKycDocType,
@@ -54,11 +70,23 @@ async function processAsset(
   }
   const mimeType = asset.mimeType ?? 'image/jpeg';
   const fileName = asset.fileName ?? `${docType}-${Date.now()}.jpg`;
+
+  let base64: string | undefined;
+  try {
+    base64 = await ensureBase64(asset);
+  } catch (err) {
+    Alert.alert(
+      'Upload failed',
+      err instanceof Error ? err.message : 'Could not read the selected file.',
+    );
+    return null;
+  }
+
   const file: AddressProofFile = {
     uri: asset.uri,
     mimeType,
     fileName,
-    base64: asset.base64 ?? undefined,
+    base64,
   };
   const { path, error } = await uploadVerificationDocument(orgId, verificationDocType, file);
   if (error || !path) {
@@ -85,22 +113,27 @@ export function pickAndUploadVerificationDocument(
         text: 'Camera',
         onPress: () => {
           void (async () => {
-            const perm = await ImagePicker.requestCameraPermissionsAsync();
-            if (!perm.granted) {
-              Alert.alert('Permission required', 'Camera access is needed.');
+            try {
+              const perm = await ImagePicker.requestCameraPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert('Permission required', 'Camera access is needed.');
+                resolve(null);
+                return;
+              }
+              const res = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['images'],
+                quality: 0.85,
+                base64: true,
+              });
+              if (res.canceled || !res.assets[0]) {
+                resolve(null);
+                return;
+              }
+              resolve(await processAsset(orgId, docType, res.assets[0], addressProofType));
+            } catch (err) {
+              Alert.alert('Upload failed', err instanceof Error ? err.message : 'Camera error.');
               resolve(null);
-              return;
             }
-            const res = await ImagePicker.launchCameraAsync({
-              mediaTypes: ['images'],
-              quality: 0.85,
-              base64: true,
-            });
-            if (res.canceled || !res.assets[0]) {
-              resolve(null);
-              return;
-            }
-            resolve(await processAsset(orgId, docType, res.assets[0], addressProofType));
           })();
         },
       },
@@ -108,22 +141,27 @@ export function pickAndUploadVerificationDocument(
         text: 'Gallery',
         onPress: () => {
           void (async () => {
-            const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (!perm.granted) {
-              Alert.alert('Permission required', 'Photo library access is needed.');
+            try {
+              const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert('Permission required', 'Photo library access is needed.');
+                resolve(null);
+                return;
+              }
+              const res = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images', 'livePhotos'],
+                quality: 0.85,
+                base64: true,
+              });
+              if (res.canceled || !res.assets[0]) {
+                resolve(null);
+                return;
+              }
+              resolve(await processAsset(orgId, docType, res.assets[0], addressProofType));
+            } catch (err) {
+              Alert.alert('Upload failed', err instanceof Error ? err.message : 'Gallery error.');
               resolve(null);
-              return;
             }
-            const res = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ['images', 'livePhotos'],
-              quality: 0.85,
-              base64: true,
-            });
-            if (res.canceled || !res.assets[0]) {
-              resolve(null);
-              return;
-            }
-            resolve(await processAsset(orgId, docType, res.assets[0], addressProofType));
           })();
         },
       },
@@ -131,28 +169,33 @@ export function pickAndUploadVerificationDocument(
         text: 'PDF / File',
         onPress: () => {
           void (async () => {
-            const res = await DocumentPicker.getDocumentAsync({
-              type: ['application/pdf', 'image/*'],
-              copyToCacheDirectory: true,
-            });
-            if (res.canceled || !res.assets[0]) {
+            try {
+              const res = await DocumentPicker.getDocumentAsync({
+                type: ['application/pdf', 'image/*'],
+                copyToCacheDirectory: true,
+              });
+              if (res.canceled || !res.assets[0]) {
+                resolve(null);
+                return;
+              }
+              const a = res.assets[0];
+              resolve(
+                await processAsset(
+                  orgId,
+                  docType,
+                  {
+                    uri: a.uri,
+                    mimeType: a.mimeType ?? 'application/pdf',
+                    fileName: a.name,
+                    fileSize: a.size,
+                  },
+                  addressProofType,
+                ),
+              );
+            } catch (err) {
+              Alert.alert('Upload failed', err instanceof Error ? err.message : 'File error.');
               resolve(null);
-              return;
             }
-            const a = res.assets[0];
-            resolve(
-              await processAsset(
-                orgId,
-                docType,
-                {
-                  uri: a.uri,
-                  mimeType: a.mimeType ?? 'application/pdf',
-                  fileName: a.name,
-                  fileSize: a.size,
-                },
-                addressProofType,
-              ),
-            );
           })();
         },
       },

@@ -47,14 +47,35 @@ export function useMobileWebStepLayout(options: MobileWebStepLayoutOptions = {})
   /** Mobile web always docks the CTA — inline scroll CTAs break with the iOS keyboard. */
   const useDockedFooter = isMobileWeb ? true : !inlinePrimary;
 
-  const footerClearance = useDockedFooter ? MOBILE_WEB_DOCKED_FOOTER_HEIGHT : 0;
-
-  const scrollPaddingBottom =
-    16 + extraScrollPadding + keyboardInset + footerClearance;
-
   const footerPaddingBottom =
     Math.max(insets.bottom, isDesktop ? 8 : 4) +
     (isMobileWeb ? keyboardInset : 0);
+
+  // Real on-screen height of the docked footer: its own content height
+  // (MOBILE_WEB_DOCKED_FOOTER_HEIGHT) plus whatever bottom padding it renders
+  // with (safe-area inset / keyboard inset). Must match footerStyle's
+  // paddingBottom exactly below, or the scroll clearance and the footer's
+  // actual height drift apart and the scroll box's height calc goes wrong
+  // again (see scrollClearance comment).
+  const footerClearance = useDockedFooter
+    ? MOBILE_WEB_DOCKED_FOOTER_HEIGHT + footerPaddingBottom
+    : 0;
+
+  // Small breathing-room padding for real overflowing content — NOT the
+  // footer's clearance. The footer must never be reserved via scroll content
+  // padding: padding inside contentContainerStyle inflates the *scrollable
+  // content height*, so on short steps (e.g. Organization — one field) the
+  // ScrollView reports more scrollable height than there is real content,
+  // and the whole page becomes scrollable to reveal nothing but that padding.
+  // The footer's space must instead be reserved by shrinking the scroll
+  // container itself — see scrollClearance below, applied to styles.scroll.
+  const scrollPaddingBottom = 16 + extraScrollPadding + keyboardInset;
+
+  // Applied as marginBottom on the ScrollView's own box (not its content) so
+  // the visible scroll viewport is genuinely shorter, matching the footer
+  // that overlays it — the ScrollView can then correctly report "no more
+  // content" on short steps instead of remaining scrollable past real content.
+  const scrollClearance = useDockedFooter ? footerClearance : 0;
 
   const rootStyle: ViewStyle = {
     flex: 1,
@@ -83,6 +104,7 @@ export function useMobileWebStepLayout(options: MobileWebStepLayoutOptions = {})
     useDockedFooter,
     showCtaInScroll: inlinePrimary && !isMobileWeb,
     scrollPaddingBottom,
+    scrollClearance,
     rootStyle,
     footerStyle,
     insets,

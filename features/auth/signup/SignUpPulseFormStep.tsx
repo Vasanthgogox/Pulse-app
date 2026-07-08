@@ -129,7 +129,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   const scroll = (
     <ScrollView
       ref={scrollRef}
-      style={styles.scroll}
+      style={[styles.scroll, { marginBottom: layout.scrollClearance }]}
       contentContainerStyle={[
         styles.scrollContent,
         !isDesktop && styles.scrollContentMobile,

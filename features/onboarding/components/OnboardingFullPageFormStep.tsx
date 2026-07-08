@@ -42,7 +42,7 @@ export const OnboardingFullPageFormStep = memo(function OnboardingFullPageFormSt
   return (
     <View style={[styles.root, layout.rootStyle]}>
       <ScrollView
-        style={styles.scroll}
+        style={[styles.scroll, { marginBottom: layout.scrollClearance }]}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: layout.scrollPaddingBottom },

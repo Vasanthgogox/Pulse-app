@@ -304,7 +304,10 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
           </ScrollView>
         ) : (
           <ScrollView
-            style={styles.contentScroll}
+            style={[
+              styles.contentScroll,
+              layout.useDockedFooter && { marginBottom: layout.scrollClearance },
+            ]}
             contentContainerStyle={contentScrollInner}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}

@@ -39,7 +39,7 @@ export const SignUpBrandingStepLayout = memo(function SignUpBrandingStepLayout({
   return (
     <View style={[styles.root, layout.rootStyle]}>
       <ScrollView
-        style={styles.scroll}
+        style={[styles.scroll, { marginBottom: layout.scrollClearance }]}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: layout.scrollPaddingBottom },
