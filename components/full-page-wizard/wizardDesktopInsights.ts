@@ -161,6 +161,10 @@ export function wizardInsightCardsForPreset(
   preset: WizardInsightPreset,
   options?: { desktopForm?: boolean },
 ): { left: WizardInsightCard[]; right: WizardInsightCard[] } {
+  /** Enterprise desktop forms use full-width layout — no marketing side rails. */
+  if (options?.desktopForm) {
+    return { left: [], right: [] };
+  }
   const left =
     preset === "load"
       ? LEFT_LOAD

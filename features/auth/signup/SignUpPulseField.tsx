@@ -5,6 +5,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type NativeSyntheticEvent,
   type TextInputFocusEventData,
   type TextInputProps,
@@ -17,6 +18,7 @@ import { useSignUpPulseFormStepContext } from './SignUpPulseFormStepContext';
 import {
   SIGNUP_CONFIRM_PASSWORD_SCROLL_PAD,
   SIGNUP_PASSWORD_SCROLL_PAD,
+  DESKTOP_BREAKPOINT,
 } from './signUpConstants';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles, SIGNUP_ERROR_COLOR } from './signUpTypography';
@@ -54,10 +56,12 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   onFocus,
   ...inputProps
 }: SignUpPulseFieldProps) {
+  const { width } = useWindowDimensions();
+  const isMobile = width < DESKTOP_BREAKPOINT;
   const hasError = !!errorMessage;
   const fieldStyles = useMemo(
-    () => createFieldStyles(theme, dense, comfortable),
-    [theme, dense, comfortable],
+    () => createFieldStyles(theme, dense, comfortable, isMobile),
+    [theme, dense, comfortable, isMobile],
   );
   const passwordAutofillProps = passwordField
     ? signUpPasswordInputProps(passwordField)
@@ -164,22 +168,29 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   );
 });
 
-function createFieldStyles(theme: SignUpTheme, dense: boolean, comfortable: boolean) {
+function createFieldStyles(
+  theme: SignUpTheme,
+  dense: boolean,
+  comfortable: boolean,
+  isMobile: boolean,
+) {
   const text = createPulseSignUpTextStyles(theme);
 
   return StyleSheet.create({
     wrap: {
-      marginBottom: comfortable ? 16 : dense ? 8 : 14,
+      marginBottom: comfortable ? 16 : dense ? 8 : isMobile ? 16 : 14,
     },
     label: comfortable
       ? {
-          fontSize: 13,
-          lineHeight: 18,
+          fontSize: isMobile ? 15 : 13,
+          lineHeight: isMobile ? 21 : 18,
           fontWeight: '500',
           color: theme.text,
-          marginBottom: 6,
+          marginBottom: isMobile ? 8 : 6,
         }
-      : text.fieldLabel,
+      : isMobile
+        ? { ...text.fieldLabelMobile }
+        : text.fieldLabel,
     req: {
       color: SIGNUP_ERROR_COLOR,
     },
@@ -208,10 +219,10 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean, comfortable: bool
     },
     input: {
       flex: 1,
-      paddingHorizontal: 12,
-      paddingVertical: Platform.OS === 'web' ? 9 : 10,
-      ...text.input,
-      minHeight: Platform.OS === 'web' ? 40 : 44,
+      paddingHorizontal: isMobile ? 14 : 12,
+      paddingVertical: Platform.OS === 'web' ? (isMobile ? 11 : 9) : isMobile ? 12 : 10,
+      ...(isMobile ? text.inputMobile : text.input),
+      minHeight: Platform.OS === 'web' ? (isMobile ? 48 : 40) : isMobile ? 48 : 44,
       ...Platform.select({
         web: { outlineStyle: 'none', cursor: 'text' } as object,
       }),
@@ -225,11 +236,11 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean, comfortable: bool
       paddingRight: 4,
     },
     error: {
-      ...text.error,
+      ...(isMobile ? text.errorMobile : text.error),
       marginTop: 6,
     },
     hint: {
-      ...text.hint,
+      ...(isMobile ? text.hintMobile : text.hint),
       marginTop: 6,
     },
   });

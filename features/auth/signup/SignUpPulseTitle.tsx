@@ -21,14 +21,16 @@ export const SignUpPulseTitle = memo(function SignUpPulseTitle({
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
   const text = createPulseSignUpTextStyles(PULSE_SIGNUP);
-  const compactType = compact || !isDesktop;
+  const isMobile = !isDesktop;
+  const compactType = compact && isDesktop;
 
   return (
-    <View style={[styles.wrap, centered && styles.centered, compactType && styles.wrapCompact]}>
+    <View style={[styles.wrap, centered && styles.centered, isMobile && styles.wrapMobile]}>
       <Text
         style={[
           text.title,
           isDesktop && text.titleDesktop,
+          isMobile && text.titleMobile,
           compactType && text.titleCompact,
           centered ? styles.titleCenter : styles.titleLeft,
         ]}
@@ -41,6 +43,7 @@ export const SignUpPulseTitle = memo(function SignUpPulseTitle({
             style={[
               text.subtitle,
               isDesktop && text.subtitleDesktop,
+              isMobile && text.subtitleMobile,
               compactType && text.subtitleCompact,
               centered ? styles.subtitleCenter : styles.subtitleLeft,
             ]}
@@ -64,6 +67,9 @@ const styles = StyleSheet.create({
   wrapCompact: {
     marginBottom: Platform.OS === 'web' ? 6 : 8,
   },
+  wrapMobile: {
+    marginBottom: Platform.OS === 'web' ? 12 : 14,
+  },
   centered: {
     alignItems: 'center',
   },
@@ -83,7 +89,7 @@ const styles = StyleSheet.create({
   subtitleCenter: {
     textAlign: 'center',
     alignSelf: 'center',
-    maxWidth: 320,
+    maxWidth: 360,
   },
   subtitleSlotLeft: {
     alignSelf: 'stretch',

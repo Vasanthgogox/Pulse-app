@@ -6,6 +6,11 @@ import { PulsePillButton } from "@/components/PulsePillButton";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
 import { HubScreenShell } from "@/components/hub/HubScreenShell";
+import {
+  HubMobileScreenHeader,
+  HubMobileUnderlineTab,
+  hubMobileChromeStyles as hubChrome,
+} from "@/components/hub";
 import type { HubGridPageSize } from "@/components/hub/hubGridCardLayout";
 import { HUB_GRID_DEFAULT_PAGE_SIZE } from "@/components/hub/hubGridCardLayout";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
@@ -135,53 +140,9 @@ type ActiveMetricTabId = TripMetricId | "all";
 /** Mobile hub list — light page; white ticket cards only (no list shell). */
 const TRIPS_PAGE_BG = Theme.screenBackground;
 const TRIPS_LIST_LAYOUT_KEY = "@pulse/trips-list-layout";
-/** Mobile hub accent — matches filter sheet / Pulse indigo. */
-const TRIPS_HUB_ACCENT = Theme.pulseIndigo;
 /** Native mobile: render trips in batches so the hub stays responsive at scale. */
 const MOBILE_HUB_INITIAL_BATCH = 20;
 const MOBILE_HUB_BATCH_STEP = 20;
-
-function TripsMmtUnderlineTab({
-  label,
-  isActive,
-  onPress,
-  accessibilityLabel,
-  compact,
-}: {
-  label: string;
-  isActive: boolean;
-  onPress: () => void;
-  accessibilityLabel?: string;
-  /** Metric / secondary row — smaller type and tighter padding. */
-  compact?: boolean;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.mmtTabItem, compact && styles.mmtTabItemCompact]}
-      onPress={onPress}
-      activeOpacity={0.7}
-      accessibilityRole="tab"
-      accessibilityState={{ selected: isActive }}
-      accessibilityLabel={accessibilityLabel ?? label}
-    >
-      <Text
-        style={[
-          styles.mmtTabLabel,
-          compact && styles.mmtTabLabelCompact,
-          isActive && styles.mmtTabLabelActive,
-        ]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-      {isActive ? (
-        <View
-          style={[styles.mmtTabUnderline, compact && styles.mmtTabUnderlineCompact]}
-        />
-      ) : null}
-    </TouchableOpacity>
-  );
-}
 
 /** Aligns list + Intake / In motion hub counts with All / Asset / Aggregate (same pill logic as hub cards). */
 function tripMatchesSupplyFilter(
@@ -1757,7 +1718,7 @@ export default function TripsScreen() {
           <View
             style={
               isMobileViewport
-                ? styles.tripsBodyFiltersMobileInLayout
+                ? hubChrome.bodyFiltersMobileInLayout
                 : styles.tripsBodyFiltersBleed
             }
           >
@@ -1770,19 +1731,21 @@ export default function TripsScreen() {
             >
               {isMobileViewport ? (
                 <>
-                  <View style={styles.mmtScreenHeaderRow}>
-                    <Text style={styles.mmtScreenTitle}>{tr("myTrips")}</Text>
-                    <PulsePillButton
-                      label={tr("addTrip")}
-                      showPlusIcon
-                      size="compact"
-                      onPress={() => router.push("/add-trip")}
-                      accessibilityLabel={tr("addTrip")}
-                    />
-                  </View>
-                  <View style={styles.mmtTabHeaderRow}>
+                  <HubMobileScreenHeader
+                    title={tr("myTrips")}
+                    action={
+                      <PulsePillButton
+                        label={tr("addTrip")}
+                        showPlusIcon
+                        size="compact"
+                        onPress={() => router.push("/add-trip")}
+                        accessibilityLabel={tr("addTrip")}
+                      />
+                    }
+                  />
+                  <View style={hubChrome.tabHeaderRow}>
                     <TouchableOpacity
-                      style={styles.mmtFilterBtn}
+                      style={hubChrome.filterBtn}
                       onPress={() => setShowSortModal(true)}
                       activeOpacity={0.7}
                       accessibilityRole="button"
@@ -1799,11 +1762,11 @@ export default function TripsScreen() {
                       showsHorizontalScrollIndicator={false}
                       keyboardShouldPersistTaps="handled"
                       nestedScrollEnabled
-                      style={styles.mmtPrimaryTabsScroll}
-                      contentContainerStyle={styles.mmtPrimaryTabsContent}
+                      style={hubChrome.primaryTabsScroll}
+                      contentContainerStyle={hubChrome.primaryTabsContent}
                     >
                       {mainTabs.map((tab) => (
-                        <TripsMmtUnderlineTab
+                        <HubMobileUnderlineTab
                           key={tab.id}
                           label={formatMainTabLabel(tab.label, tab.count)}
                           isActive={tab.isActive}
@@ -1813,7 +1776,7 @@ export default function TripsScreen() {
                       ))}
                     </ScrollView>
                   </View>
-                  <View style={styles.mmtTabDivider} />
+                  <View style={hubChrome.tabDivider} />
                 </>
               ) : (
                 <View style={styles.tripsInlineFilterPanelWeb}>
@@ -1976,8 +1939,8 @@ export default function TripsScreen() {
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
-                  contentContainerStyle={styles.mmtMetricTabsContent}
-                  style={styles.mmtMetricTabsScroll}
+                  contentContainerStyle={hubChrome.metricTabsContent}
+                  style={hubChrome.metricTabsScroll}
                 >
                   {activeMetricIdsForRail.map((metricId) => {
                     const active = activeMetricTab === metricId;
@@ -1987,7 +1950,7 @@ export default function TripsScreen() {
                         ? activeAllCount
                         : metricCounts[metricId];
                     return (
-                      <TripsMmtUnderlineTab
+                      <HubMobileUnderlineTab
                         key={metricId}
                         label={`${copy.title} (${count})`}
                         isActive={active}
@@ -2018,15 +1981,15 @@ export default function TripsScreen() {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.mmtMetricTabsContent}
-                style={styles.mmtMetricTabsScroll}
+                contentContainerStyle={hubChrome.metricTabsContent}
+                style={hubChrome.metricTabsScroll}
               >
                 {[...historyReceivableIds, ...historyPayableIds].map(
                   (metricId) => {
                     const active = activeHistoryMetricTab === metricId;
                     const copy = historyMetricCards[metricId];
                     return (
-                      <TripsMmtUnderlineTab
+                      <HubMobileUnderlineTab
                         key={metricId}
                         label={`${copy.title} (${copy.count})`}
                         isActive={active}
@@ -3002,119 +2965,6 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: { minWidth: 0 },
     }),
-  },
-  /** Mobile: keep filter block inside page layout flow (no full-bleed strip). */
-  tripsBodyFiltersMobileInLayout: {
-    marginBottom: 6,
-    marginHorizontal: -Layout.screenPaddingHorizontal,
-    paddingTop: 2,
-    paddingBottom: 6,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 0,
-    borderWidth: 0,
-    borderColor: "transparent",
-    overflow: "hidden",
-  },
-  mmtScreenHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 4,
-    paddingBottom: 10,
-    gap: 12,
-  },
-  mmtScreenTitle: {
-    flex: 1,
-    fontSize: 22,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.4,
-  },
-  mmtTabHeaderRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    minHeight: 36,
-  },
-  mmtFilterBtn: {
-    width: 34,
-    height: 34,
-    marginRight: 2,
-    marginBottom: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  mmtPrimaryTabsScroll: {
-    flex: 1,
-    minWidth: 0,
-  },
-  mmtPrimaryTabsContent: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    paddingRight: 4,
-  },
-  mmtTabItem: {
-    position: "relative",
-    paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 8,
-    marginRight: 2,
-    justifyContent: "flex-end",
-    minHeight: 34,
-  },
-  mmtTabItemCompact: {
-    paddingHorizontal: 8,
-    paddingTop: 4,
-    paddingBottom: 7,
-    minHeight: 30,
-    marginRight: 0,
-  },
-  mmtTabLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: Theme.textRouteCard,
-    letterSpacing: -0.2,
-  },
-  mmtTabLabelCompact: {
-    fontSize: 11,
-    letterSpacing: -0.25,
-  },
-  mmtTabLabelActive: {
-    fontWeight: "600",
-    color: TRIPS_HUB_ACCENT,
-  },
-  mmtTabUnderline: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 0,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: TRIPS_HUB_ACCENT,
-  },
-  mmtTabUnderlineCompact: {
-    left: 8,
-    right: 8,
-    height: 2,
-  },
-  mmtTabDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.borderLight,
-    marginBottom: 0,
-  },
-  mmtMetricTabsScroll: {
-    minWidth: 0,
-    alignSelf: "stretch",
-    marginTop: 2,
-    marginBottom: 2,
-  },
-  mmtMetricTabsContent: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    paddingRight: 4,
-    paddingBottom: 0,
-    gap: 0,
   },
   /** Narrow web / mobile: one continuous dark strip (tabs + date chips + metric rail). */
   tripsBodyFiltersBleedMobileDark: {

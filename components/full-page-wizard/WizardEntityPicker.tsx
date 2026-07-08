@@ -125,6 +125,8 @@ export function WizardEntitySummaryCard({
   organizationImageUrl,
   organizationAvatarSeed,
   onPress,
+  style,
+  showChevron,
 }: {
   label: string;
   name: string;
@@ -136,6 +138,8 @@ export function WizardEntitySummaryCard({
   organizationImageUrl?: string | null;
   organizationAvatarSeed?: string | null;
   onPress?: () => void;
+  style?: import("react-native").StyleProp<import("react-native").ViewStyle>;
+  showChevron?: boolean;
 }) {
   return (
     <WizardEntityPartyCell
@@ -149,6 +153,8 @@ export function WizardEntitySummaryCard({
       organizationAvatarSeed={organizationAvatarSeed}
       avatarSize={WIZARD_PARTY_AVATAR_SIZE}
       onPress={onPress}
+      style={style}
+      showChevron={showChevron}
     />
   );
 }

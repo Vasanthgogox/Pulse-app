@@ -31,7 +31,7 @@ function resolveActivityActorAvatar(
   const name =
     displayName.trim() ||
     profile?.full_name?.trim() ||
-    "Team member";
+    "Staff";
   return {
     name,
     entityType,
@@ -80,7 +80,7 @@ export function resolveTripActivityUserLabel(
   userId: string | null | undefined,
   currentUserId: string | null | undefined,
   userDisplayById: Record<string, string>,
-  fallback = "Team member",
+  fallback = "Staff",
   userProfileById?: Record<string, TripActivityUserProfile>,
 ): string {
   if (!userId) return fallback;
@@ -90,6 +90,25 @@ export function resolveTripActivityUserLabel(
   const fromProfile = profileDisplayName(userProfileById?.[userId]);
   if (fromProfile) return fromProfile;
   return fallback;
+}
+
+/** Best-effort staff user when ledger / audit rows omit created_by. */
+export function inferTripStaffUserId(
+  trip: TripRow,
+  explicitUserId?: string | null,
+): string | null {
+  const candidates = [
+    explicitUserId,
+    trip.owner_user_id,
+    trip.assigned_by_user_id,
+    trip.created_by_user_id,
+    trip.created_by,
+  ];
+  for (const id of candidates) {
+    const v = String(id ?? "").trim();
+    if (v) return v;
+  }
+  return null;
 }
 
 function categoryLabel(category: TripAuditLogCategory): string {
@@ -150,7 +169,7 @@ function resolveStatusActor(
       creatorId,
       currentUserId,
       userDisplayById,
-      "Team member",
+      "Staff",
       userProfileById,
     );
   }
@@ -173,7 +192,7 @@ function resolveStatusActor(
     trip.status_updated_by,
     currentUserId,
     userDisplayById,
-    context === "assigned" ? "Dispatcher" : "Team member",
+    context === "assigned" ? "Dispatcher" : "Staff",
     userProfileById,
   );
 }
@@ -457,11 +476,12 @@ export function buildTripAuditLog(params: {
     const party = (tx.party_name ?? tx.driver_name ?? "").trim() || "—";
     const at = tx.transaction_date ?? tx.created_at ?? "";
     const signedAmount = `${isIn ? "+" : "−"} ₹${formatAmount(amount)}`;
+    const actorUserId = inferTripStaffUserId(trip, tx.created_by);
     const actor = resolveTripActivityUserLabel(
-      tx.created_by,
+      actorUserId,
       currentUserId,
       userDisplayById,
-      "Team member",
+      "Staff",
       userProfileById,
     );
 
@@ -492,7 +512,7 @@ export function buildTripAuditLog(params: {
       headlineTarget: party !== "—" ? party : undefined,
       actorAvatar: resolveActivityActorAvatar(
         actor,
-        tx.created_by,
+        actorUserId,
         userProfileById,
         "client",
       ),
@@ -525,7 +545,7 @@ export function buildTripAuditLog(params: {
       creatorId,
       currentUserId,
       userDisplayById,
-      "Team member",
+      "Staff",
       userProfileById,
     );
     entries.push({

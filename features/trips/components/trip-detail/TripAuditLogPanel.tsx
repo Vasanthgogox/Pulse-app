@@ -14,6 +14,7 @@ import {
 } from "@/features/trips/services/trips.service";
 import {
   buildTripAuditLog,
+  inferTripStaffUserId,
   matchesTripAuditTab,
   type TripActivityUserProfile,
 } from "@/lib/trips/buildTripAuditLog.util";
@@ -60,7 +61,10 @@ function collectActivityUserIds(
   add(trip.assigned_by_user_id);
   add(trip.status_updated_by);
   for (const row of assignmentAuditRows) add(row.changed_by);
-  for (const tx of transactions) add(tx.created_by);
+  for (const tx of transactions) {
+    add(tx.created_by);
+    add(inferTripStaffUserId(trip, tx.created_by));
+  }
   return Array.from(ids);
 }
 

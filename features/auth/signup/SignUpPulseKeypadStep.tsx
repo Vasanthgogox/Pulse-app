@@ -78,10 +78,10 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   theme = PULSE_SIGNUP,
   centeredLayout = false,
 }: SignUpPulseKeypadStepProps) {
-  const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
+  const styles = useMemo(() => createStyles(theme, isDesktop), [theme, isDesktop]);
   const useKeypad = useSignupKeypadInput();
   const layout = useMobileWebStepLayout();
   const inputRef = useRef<TextInput>(null);
@@ -355,8 +355,9 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   );
 });
 
-function createStyles(theme: SignUpTheme) {
+function createStyles(theme: SignUpTheme, isDesktop: boolean) {
   const text = createPulseSignUpTextStyles(theme);
+  const mobile = !isDesktop;
 
   return StyleSheet.create({
     root: {
@@ -391,8 +392,8 @@ function createStyles(theme: SignUpTheme) {
       alignSelf: 'center',
     },
     contentScrollInnerKeypad: {
-      paddingHorizontal: 20,
-      paddingTop: 4,
+      paddingHorizontal: mobile ? 24 : 20,
+      paddingTop: mobile ? 8 : 4,
       paddingBottom: 4,
       flexGrow: 1,
       width: '100%',
@@ -411,13 +412,13 @@ function createStyles(theme: SignUpTheme) {
     },
     centeredStack: {
       width: '100%',
-      maxWidth: 360,
+      maxWidth: mobile ? 420 : 360,
       alignSelf: 'center',
       alignItems: 'stretch',
     },
     formBody: {
       width: '100%',
-      maxWidth: 360,
+      maxWidth: mobile ? 420 : 360,
       alignSelf: 'center',
       minWidth: 0,
     },
@@ -425,8 +426,8 @@ function createStyles(theme: SignUpTheme) {
       textAlign: 'center',
     },
     fieldLabel: {
-      ...text.fieldLabel,
-      marginBottom: 8,
+      ...(mobile ? text.fieldLabelMobile : text.fieldLabel),
+      marginBottom: mobile ? 10 : 8,
     },
     fieldBlock: {
       width: '100%',
@@ -450,8 +451,8 @@ function createStyles(theme: SignUpTheme) {
       width: '100%',
       maxWidth: '100%',
       alignSelf: 'stretch',
-      paddingHorizontal: 14,
-      minHeight: 44,
+      paddingHorizontal: mobile ? 16 : 14,
+      minHeight: mobile ? 52 : 44,
       backgroundColor: theme.bg,
       borderRadius: PULSE_SIGNUP_RADIUS.input,
       borderWidth: 1,
@@ -472,20 +473,20 @@ function createStyles(theme: SignUpTheme) {
       flexShrink: 0,
     },
     flagWrap: {
-      width: 20,
-      height: 20,
+      width: mobile ? 24 : 20,
+      height: mobile ? 24 : 20,
       alignItems: 'center',
       justifyContent: 'center',
     },
     flag: {
-      fontSize: 14,
-      lineHeight: 18,
+      fontSize: mobile ? 18 : 14,
+      lineHeight: mobile ? 22 : 18,
       ...Platform.select({
         android: { includeFontPadding: false, textAlignVertical: 'center' },
       }),
     },
     prefix: {
-      ...text.displayPrefix,
+      ...(mobile ? text.displayPrefixMobile : text.displayPrefix),
       color: theme.muted,
       letterSpacing: 0,
       ...Platform.select({
@@ -510,7 +511,7 @@ function createStyles(theme: SignUpTheme) {
       minHeight: 24,
     },
     displayValue: {
-      ...text.display,
+      ...(mobile ? text.displayMobile : text.display),
       ...Platform.select({
         android: { includeFontPadding: false, textAlignVertical: 'center' },
         ios: { fontVariant: ['tabular-nums'] as const },
@@ -541,7 +542,7 @@ function createStyles(theme: SignUpTheme) {
     },
     webInput: {
       flex: 1,
-      ...text.display,
+      ...(mobile ? text.displayMobile : text.display),
       color: theme.text,
       minWidth: 0,
       paddingVertical: 0,
@@ -576,14 +577,14 @@ function createStyles(theme: SignUpTheme) {
       }),
     },
     error: {
-      ...text.error,
+      ...(mobile ? text.errorMobile : text.error),
       marginTop: 6,
       marginBottom: 0,
       paddingLeft: 2,
       alignSelf: 'stretch',
     },
     hint: {
-      ...text.hint,
+      ...(mobile ? text.hintMobile : text.hint),
       marginTop: 6,
       marginBottom: 0,
       paddingLeft: 2,
@@ -614,7 +615,7 @@ function createStyles(theme: SignUpTheme) {
       backgroundColor: theme.border,
     },
     orText: {
-      ...text.or,
+      ...(mobile ? text.orMobile : text.or),
     },
     googleBtn: {
       flexDirection: 'row',
@@ -624,13 +625,13 @@ function createStyles(theme: SignUpTheme) {
       width: '100%',
       maxWidth: '100%',
       gap: 8,
-      paddingVertical: 10,
+      paddingVertical: mobile ? 14 : 10,
       borderRadius: PULSE_SIGNUP_RADIUS.button,
       borderWidth: 1,
       borderColor: theme.border,
       backgroundColor: theme.bg,
       marginBottom: 4,
-      minHeight: 40,
+      minHeight: mobile ? 48 : 40,
       ...Platform.select({
         web: { boxSizing: 'border-box' } as object,
       }),
@@ -641,7 +642,7 @@ function createStyles(theme: SignUpTheme) {
     googleBtnPressed: {
       backgroundColor: theme.surface,
     },
-    googleText: text.google,
+    googleText: mobile ? text.googleMobile : text.google,
     accessoryDock: {
       flexShrink: 0,
       paddingHorizontal: 20,

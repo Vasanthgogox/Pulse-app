@@ -17,17 +17,17 @@ import { IndentAggregateAllocationStep } from "@/features/indents/components/Ind
 import { IndentAllocationTripDetailsStep } from "@/features/indents/components/IndentAllocationTripDetailsStep";
 import { IndentDeployOtpPanel } from "@/features/indents/components/IndentDeployOtpPanel";
 import {
+  AssignmentFlowFooter,
+  AssignmentFlowShell,
+  AddTripWizardProgress,
+  SupplyAllocationModeBar,
   getIndentAllocationWizardSteps,
   indentAllocationStepSubtitle,
   isIndentAllocationStepComplete,
   type IndentAllocationStepId,
-} from "@/features/indents/components/indentAllocationWizardSteps";
+} from "@/features/allocation";
 import { AssetRosterPickers } from "@/features/network/components/StaffHandshakeModal";
 import { useStaffHandshake } from "@/features/network/hooks/useStaffHandshake";
-import { AddTripWizardProgress } from "@/features/trips/components/add-trip/AddTripWizardProgress";
-import { AssignmentFlowFooter } from "@/features/trips/components/assignment/assignmentFlowFooter";
-import { AssignmentFlowShell } from "@/features/trips/components/assignment/AssignmentFlowShell";
-import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
 import { formatIsoDateForDisplay, isValidIsoDateString } from "@/lib/dateIso.util";
 import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { ROUTES } from "@/lib/routes";
@@ -301,7 +301,6 @@ export function IndentAllocationFlowScreen({
 
     if (useAdHocDriver) {
       const driverSteps = new Set<IndentAllocationStepId>([
-        "driverPhone",
         "driverName",
         "vehicleReg",
         "commodity",
@@ -327,7 +326,11 @@ export function IndentAllocationFlowScreen({
         };
       }
 
-      const partnerSteps = new Set<IndentAllocationStepId>(["partner", "rates"]);
+      const partnerSteps = new Set<IndentAllocationStepId>([
+        "partner",
+        "rates",
+        "driverPhone",
+      ]);
       if (partnerSteps.has(step)) {
         return {
           left,

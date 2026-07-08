@@ -87,12 +87,12 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
             accessibilityLabel={backLabel}
           >
             <ChevronLeft size={20} color={theme.muted} strokeWidth={2.5} />
-            <Text style={styles.backText}>{backLabel}</Text>
+            <Text style={[styles.backText, !isDesktop && styles.backTextMobile]}>{backLabel}</Text>
           </Pressable>
         ) : (
           <View style={styles.headerSpacer} />
         )}
-        <Text style={styles.brand}>PULSE.</Text>
+        <Text style={[styles.brand, !isDesktop && styles.brandMobile]}>PULSE.</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -234,8 +234,8 @@ function createStyles(theme: SignUpShellTheme, isDesktop: boolean) {
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: isDesktop ? 0 : 20,
-      paddingTop: isDesktop ? 16 : 2,
-      paddingBottom: isDesktop ? 12 : 4,
+      paddingTop: isDesktop ? 16 : 8,
+      paddingBottom: isDesktop ? 12 : 8,
       backgroundColor: theme.bg,
       borderBottomWidth: isDesktop ? StyleSheet.hairlineWidth : 0,
       borderBottomColor: theme.border,
@@ -249,8 +249,13 @@ function createStyles(theme: SignUpShellTheme, isDesktop: boolean) {
       marginLeft: -8,
     },
     backText: text.back,
+    backTextMobile: text.backMobile,
     brand: {
       ...text.brand,
+      flexShrink: 0,
+    },
+    brandMobile: {
+      ...text.brandMobile,
       flexShrink: 0,
     },
     headerSpacer: {

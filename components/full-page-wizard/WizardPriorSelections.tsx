@@ -71,20 +71,30 @@ export const WizardPriorSelections = memo(function WizardPriorSelections({
           right={toPartyCell(contextRow.right)}
         />
       ) : null}
-      {rest.map((item) => (
-        <WizardEntitySummaryCard
-          key={item.id}
-          label={item.label}
-          name={item.name}
-          subtitle={item.subtitle}
-          entityType={item.entityType ?? "client"}
-          avatarUrl={item.avatarUrl}
-          avatarSeed={item.avatarSeed}
-          organizationImageUrl={item.organizationImageUrl}
-          organizationAvatarSeed={item.organizationAvatarSeed}
-          onPress={item.onPress}
-        />
-      ))}
+      {rest.length > 0 ? (
+        <View style={fullPageWizardStyles.wizardPriorSelectionsRow}>
+          {rest.map((item) => (
+            <View
+              key={item.id}
+              style={fullPageWizardStyles.wizardPriorSelectionCell}
+            >
+              <WizardEntitySummaryCard
+                label={item.label}
+                name={item.name}
+                subtitle={item.subtitle}
+                entityType={item.entityType ?? "client"}
+                avatarUrl={item.avatarUrl}
+                avatarSeed={item.avatarSeed}
+                organizationImageUrl={item.organizationImageUrl}
+                organizationAvatarSeed={item.organizationAvatarSeed}
+                onPress={item.onPress}
+                style={fullPageWizardStyles.wizardPriorSelectionCard}
+                showChevron={false}
+              />
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 });

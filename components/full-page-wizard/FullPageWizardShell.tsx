@@ -62,6 +62,7 @@ export function FullPageWizardShell({
   const { keyboardVisible } = useKeyboardVisible();
   const isDesktopRails = width >= Layout.wizardDesktopGridMinWidth;
   const isDesktopForm = isDesktopWizardForm(width);
+  const isMobileWizardLayout = width < Layout.wizardDesktopGridMinWidth;
   const isKeypadStep = fillBody;
   const stepLabel =
     stepIndex != null && stepTotal != null && stepTotal > 0
@@ -96,6 +97,7 @@ export function FullPageWizardShell({
         styles.pageRoot,
         isDesktopRails && styles.pageRootInFrame,
         isDesktopForm && styles.pageRootDesktopForm,
+        isMobileWizardLayout && styles.pageRootMobileFull,
         isKeypadStep && styles.pageRootKeypad,
         {
           paddingTop: insets.top + (isKeypadStep ? 4 : 6),
@@ -107,22 +109,27 @@ export function FullPageWizardShell({
         <Pressable style={styles.headerBackBtn} onPress={onBack} accessibilityLabel="Back">
           <Text style={styles.headerBackBtnText}>{backLabel}</Text>
         </Pressable>
+        <View style={styles.headerTitleCluster}>
+          <Text
+            style={[styles.titleInline, isKeypadStep && styles.titleInlineKeypad]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+        </View>
         {stepLabel ? <Text style={styles.headerStepText}>{stepLabel}</Text> : null}
       </View>
 
-      <View style={[styles.pageHeaderBlock, isKeypadStep && styles.pageHeaderBlockKeypad]}>
-        <Text style={[styles.title, isKeypadStep && styles.titleKeypad]} numberOfLines={2}>
-          {title}
-        </Text>
-        {subtitle ? (
+      {subtitle ? (
+        <View style={[styles.pageHeaderBlock, isKeypadStep && styles.pageHeaderBlockKeypad]}>
           <Text
             style={[styles.subtitle, isKeypadStep && styles.subtitleKeypad]}
             numberOfLines={isKeypadStep ? 2 : 4}
           >
             {subtitle}
           </Text>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
 
       {progress ? <View style={{ flexShrink: 0 }}>{progress}</View> : null}
 

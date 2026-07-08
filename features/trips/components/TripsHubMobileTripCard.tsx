@@ -35,19 +35,17 @@ import {
   type ViewStyle,
 } from "react-native";
 
+import {
+  HUB_MOBILE_LIST_CANVAS_BG,
+  HUB_MOBILE_TICKET_REF,
+  HubMobileListCanvas,
+  hubMobileListCanvasStyles,
+} from "@/components/hub";
+
 /** Page/list strip — transparent (cards provide their own white surface). */
-export const MOBILE_TRIP_CANVAS_BG = "transparent";
+export const MOBILE_TRIP_CANVAS_BG = HUB_MOBILE_LIST_CANVAS_BG;
 
-const REF = {
-  card: Theme.screenBackground,
-  ink: "#1c1c1e",
-  inkMid: "#3d4650",
-  muted: "#9aa3ad",
-  hairline: "#e8ecf0",
-  accent: "#1a73e8",
-  radius: 16,
-} as const;
-
+const REF = HUB_MOBILE_TICKET_REF;
 const ROUTE_ARROW_TOP = 2;
 const ROUTE_PIN_SIZE = 8;
 const CHIP_AVATAR = HUB_CARD_PARTY_CHIP_AVATAR;
@@ -193,7 +191,7 @@ export function formatMobileTripSchedule(iso: string | null | undefined): {
   }
 }
 
-/** Minimal list wrapper — no background panel. */
+/** @deprecated Use `HubMobileListCanvas` from `@/components/hub`. */
 export function TripsHubMobileTripListCanvas({
   children,
   style,
@@ -201,7 +199,7 @@ export function TripsHubMobileTripListCanvas({
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  return <View style={[styles.list, style]}>{children}</View>;
+  return <HubMobileListCanvas style={style}>{children}</HubMobileListCanvas>;
 }
 
 function RoutePin({ variant }: { variant: "origin" | "dest" }) {
@@ -540,8 +538,7 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   cardWrap: {
-    width: "100%",
-    marginBottom: 12,
+    ...hubMobileListCanvasStyles.cardWrap,
   },
   cardWrapGrid: {
     flex: 1,

@@ -35,7 +35,7 @@ import {
   clientsToAvatarGridItems,
   clientsToWizardAvatarGridItems,
 } from "@/features/clients/utils/clientAvatarGridItems.util";
-import { suppliersToAvatarGridItems } from "@/features/suppliers/utils/supplierAvatarGridItems.util";
+import { TripPartnerPickerSection } from "@/features/trips/components/add-trip/TripPartnerPickerSection";
 import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import {
@@ -106,9 +106,9 @@ import { ClientSaleKeypadFlow } from "./ClientSaleKeypadFlow";
 import { DriverPhoneRecommendations } from "./DriverPhoneRecommendations";
 import { lookupDriversByPhoneVariants } from "@/features/trips/utils/driverPhoneLookup.util";
 import { LocationSearchField } from "./LocationSearchField";
-import type { AddTripFormState } from "./types";
+import { TripClientPickerSection } from "./TripClientPickerSection";
 import { TripCommodityFields } from "./TripCommodityFields";
-import type { AddTripSourceIndent } from "./types";
+import type { AddTripFormState, AddTripSourceIndent } from "./types";
 import type { AddTripIssueField, AddTripValidationIssue } from "./useAddTripForm";
 import type { useAddTripForm } from "./useAddTripForm";
 
@@ -187,10 +187,16 @@ export interface AddTripFormFieldsProps {
    * Mobile wizard mode: show a single section card at a time.
    * When unset, renders the full 01/02/03 cards.
    */
-  wizardSection?: "route" | "commodity" | "client" | "sale" | "allocation";
+  wizardSection?: "route" | "commodityClient" | "sale" | "allocation";
+  /** Wide desktop enterprise grid (matches Create Load / indent). */
+  enterpriseFormGrid?: boolean;
+  /** Stepped mobile wizard — indent-style flat steps + shell scroll. */
+  mobileWizardMode?: boolean;
   sourceIndent?: AddTripSourceIndent | null;
   /** Mobile allocation sub-step (one screen at a time). */
   allocationSubStep?: AllocationSubStep;
+  /** Jump back to a prior allocation sub-step (e.g. change partner from rates). */
+  onAllocationSubStepChange?: (step: AllocationSubStep) => void;
 }
 
 function allocationProgressTabLabel(
@@ -232,7 +238,10 @@ export function AddTripFormFields({
   showInlineCta = true,
   enablePrimaryWhenInvalid = false,
   wizardSection,
+  enterpriseFormGrid = false,
+  mobileWizardMode = false,
   allocationSubStep,
+  onAllocationSubStepChange,
   sourceIndent = null,
 }: AddTripFormFieldsProps) {
   void refetchClients;
@@ -256,11 +265,11 @@ export function AddTripFormFields({
   const isCompactMobile = winW < 480;
   const isWeb = Platform.OS === "web";
   const useWebCurrencyField = isWeb && winW >= 720;
-  /** Web only: CSS grid when not in stepped wizard (legacy wide form). */
+  /** Web only: CSS grid when not in stepped wizard (indent-style enterprise layout). */
   const desktopFormGrid =
+    enterpriseFormGrid &&
     wizardSection == null &&
     Platform.OS === "web" &&
-    winW >= Layout.wizardDesktopGridMinWidth &&
     !isCompactMobile;
   /** Tighter typography and fields (desktop grid + mobile). */
   const isDenseForm = !isWeb || desktopFormGrid || winW < 1280;
@@ -283,16 +292,26 @@ export function AddTripFormFields({
   /** Desktop form shell: use viewport minus edge padding (aligned with Create Indent). */
   const desktopFormMaxWidth = Math.min(winW - 32, 1680);
   const showRouteCard = wizardSection == null || wizardSection === "route";
-  const showCommodityCard =
-    wizardSection == null || wizardSection === "commodity";
-  const showClientCard = wizardSection == null || wizardSection === "client" || wizardSection === "sale";
-  const showClientPickerOnly = wizardSection === "client";
+  const isMergedCommodityClient =
+    wizardSection === "commodityClient" ||
+    (wizardSection == null && desktopFormGrid);
+  const showStandaloneCommodityCard =
+    wizardSection == null && !desktopFormGrid;
+  const showCommodityCard = showStandaloneCommodityCard;
+  const showCommodityClientCard = isMergedCommodityClient;
+  const showClientCard = wizardSection == null && !desktopFormGrid;
+  const showSaleCard =
+    wizardSection === "sale" ||
+    (wizardSection == null && desktopFormGrid);
+  const showClientPickerOnly = isMergedCommodityClient;
   const showClientSaleOnly = wizardSection === "sale";
   const hideWizardCardHead = wizardSection != null;
   const hideTonsOnRouteStep = wizardSection === "route";
   const showAllocationCard =
     wizardSection == null || wizardSection === "allocation";
   const mobileAllocWizard = allocationSubStep != null;
+  /** Enterprise desktop card — partner + rates grid (matches Client & Commercials). */
+  const aggregateDesktopEnterprise = desktopFormGrid && !mobileAllocWizard;
   const isWizardRouteStep = wizardSection === "route";
   const isWizardSingleCard =
     wizardSection != null && wizardSection !== "allocation";
@@ -336,12 +355,14 @@ export function AddTripFormFields({
     (wizardSection != null && isWizardSaleKeypad) || allocationFillBody;
   /** Keypad-only steps use fillBody; entity pickers scroll in the shell. */
   const allocationShellFill = allocationFillBody;
-  /** Shell owns scroll on mobile wizard steps (not nested ScrollView). */
+  /** Shell owns scroll on mobile wizard + desktop enterprise (matches Create Load). */
   const wizardShellScroll =
-    wizardSection != null && !wizardKeypadFill;
-  /** Unified attribution-style labels/inputs on all wizard steps except keypad fill. */
+    mobileWizardMode ||
+    desktopFormGrid ||
+    (wizardSection != null && !wizardKeypadFill);
+  /** Unified attribution-style labels/inputs on mobile wizard + stepped sections. */
   const isWizardTypography =
-    wizardSection != null && !wizardKeypadFill;
+    (mobileWizardMode || wizardSection != null) && !wizardKeypadFill;
   const fieldLabelStyle = [
     isWizardTypography ? fullPageWizardStyles.wizardFieldLabel : styles.label,
     !isWizardTypography && labelStyle,
@@ -385,6 +406,14 @@ export function AddTripFormFields({
   useEffect(() => {
     if (!state.supplierId) setPartnerListExpanded(true);
   }, [state.supplierId]);
+
+  const openPartnerPicker = useCallback(() => {
+    setPartnerListExpanded(true);
+    if (mobileAllocWizard && allocationSubStep !== "supply") {
+      onAllocationSubStepChange?.("supply");
+    }
+  }, [mobileAllocWizard, allocationSubStep, onAllocationSubStepChange]);
+
   const [pickupDropdownOpen, setPickupDropdownOpen] = useState(false);
   const [dropDropdownOpen, setDropDropdownOpen] = useState(false);
   const [notesModalOpen, setNotesModalOpen] = useState(false);
@@ -723,6 +752,20 @@ export function AddTripFormFields({
       params: { returnTo: ROUTES.ADD_TRIP },
     });
   }, [router]);
+  const handleSelectPartner = useCallback(
+    (supplier: SupplierRow) => {
+      const primary =
+        supplier.company_name?.trim() || supplier.name?.trim() || "—";
+      setters.setSupplierSelection(supplier.id, primary);
+      setPartnerListExpanded(false);
+    },
+    [setters],
+  );
+  const handleClearPartner = useCallback(() => {
+    releaseAccessoryBar();
+    Keyboard.dismiss();
+    setters.setSupplierSelection(null);
+  }, [setters, releaseAccessoryBar]);
   const handleAddDriverShortcut = useCallback(() => {
     router.push({
       pathname: "/(modals)/add-driver",
@@ -875,6 +918,7 @@ export function AddTripFormFields({
         subtitle: state.advancePaid.trim()
           ? `Advance ₹${Number(state.advancePaid.trim()).toLocaleString("en-IN")}`
           : null,
+        onPress: () => onAllocationSubStepChange?.("rates"),
       });
     }
     const phoneSteps = new Set(["driverName", "vehicle"]);
@@ -883,6 +927,7 @@ export function AddTripFormFields({
         id: "phone",
         label: "Driver phone",
         name: state.driverPhone.trim(),
+        onPress: () => onAllocationSubStepChange?.("driverPhone"),
       });
     }
     if (step === "vehicle" && state.aggregateDriverName.trim()) {
@@ -890,6 +935,7 @@ export function AddTripFormFields({
         id: "name",
         label: "Driver name",
         name: state.aggregateDriverName.trim(),
+        onPress: () => onAllocationSubStepChange?.("driverName"),
       });
     }
     return items;
@@ -903,6 +949,7 @@ export function AddTripFormFields({
     state.driverPhone,
     state.aggregateDriverName,
     allocationSubStep,
+    onAllocationSubStepChange,
   ]);
 
   const allocationContextRow = useMemo(() => {
@@ -936,13 +983,19 @@ export function AddTripFormFields({
             avatarSeed:
               (selectedSupplierRow as { avatar_seed?: string | null })
                 .avatar_seed ?? null,
+            onPress: openPartnerPicker,
           }
         : null;
 
       if (step === "driverPhone") {
         return {
           left,
-          right: partnerCell,
+          right: partnerCell ?? {
+            label: "Partner",
+            name: "Select partner",
+            entityType: "supplier" as const,
+            onPress: openPartnerPicker,
+          },
         };
       }
 
@@ -977,6 +1030,7 @@ export function AddTripFormFields({
                   label: "Partner",
                   name: "Select partner",
                   entityType: "supplier" as const,
+                  onPress: openPartnerPicker,
                 }
               : null,
         };
@@ -1027,6 +1081,7 @@ export function AddTripFormFields({
     selectedSupplierRow,
     showAssetFleetOnSupply,
     selectedDriverRow,
+    openPartnerPicker,
   ]);
 
   return (
@@ -1037,17 +1092,25 @@ export function AddTripFormFields({
           styles.scrollContent,
           isDenseForm && !wizardShellScroll && styles.scrollContentDense,
           wizardShellScroll && styles.scrollContentWizard,
+          (mobileWizardMode || desktopFormGrid) &&
+            fullPageWizardStyles.wizardStepBody,
+          mobileWizardMode && { paddingTop: 0 },
+          desktopFormGrid && styles.scrollContentDesktop,
           wizardKeypadFill && styles.scrollContentFillBody,
           {
             paddingBottom: wizardKeypadFill
               ? 8
               : mobileAllocWizard && isWizardAllocationCard
                 ? wizardFooterPad + insets.bottom
-                : wizardShellScroll
+                : mobileWizardMode
                   ? 8
-                  : Layout.sectionSpacing +
-                    insets.bottom +
-                    (desktopFormGrid ? 52 : isDenseForm ? 88 : isWide ? 68 : 108),
+                  : wizardShellScroll
+                    ? 8
+                    : desktopFormGrid
+                      ? 16
+                      : Layout.sectionSpacing +
+                        insets.bottom +
+                        (desktopFormGrid ? 52 : isDenseForm ? 88 : isWide ? 68 : 108),
           },
         ]}
         scrollViewProps={{
@@ -1077,13 +1140,16 @@ export function AddTripFormFields({
                 : isWide
                   ? 1000
                   : 960,
+              width: desktopFormGrid ? "100%" : undefined,
+              alignSelf: desktopFormGrid ? "stretch" : undefined,
               paddingHorizontal: desktopFormGrid
-                ? 24
-                : isWide
-                  ? 16
-                  : isCompactMobile
-                    ? 0
+                ? 0
+                : mobileWizardMode || isCompactMobile
+                  ? 0
+                  : isWide
+                    ? 16
                     : Layout.screenPaddingHorizontal,
+              paddingTop: mobileWizardMode ? 0 : undefined,
             },
           ]}
         >
@@ -1101,7 +1167,7 @@ export function AddTripFormFields({
               style={[
                 isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
                 !isWizardTypography && isDenseForm && styles.cardDense,
-                desktopFormGrid && styles.cardDesktopGrid,
+                desktopFormGrid && styles.cardDesktopEnterprise,
                 desktopFormGrid && styles.cardDesktopStretch,
                 desktopFormGrid && styles.cardGridRouteWeb,
               ]}
@@ -1111,7 +1177,7 @@ export function AddTripFormFields({
               style={[
                 styles.cardHead,
                 isDenseForm && styles.cardHeadDense,
-                desktopFormGrid && styles.cardHeadDesktop,
+                desktopFormGrid && styles.cardHeadDesktopEnterprise,
                 isWizardRouteStep && styles.cardHeadWizard,
               ]}
             >
@@ -1129,6 +1195,7 @@ export function AddTripFormFields({
                   style={[
                     styles.cardTitle,
                     isDenseForm && styles.cardTitleDense,
+                    desktopFormGrid && styles.cardTitleDesktopEnterprise,
                     isWizardRouteStep && styles.cardTitleWizard,
                   ]}
                 >
@@ -1639,7 +1706,7 @@ export function AddTripFormFields({
               style={[
                 isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
                 !isWizardTypography && isDenseForm && styles.cardDense,
-                desktopFormGrid && styles.cardDesktopGrid,
+                desktopFormGrid && styles.cardDesktopEnterprise,
                 desktopFormGrid && styles.cardDesktopStretch,
                 desktopFormGrid && styles.cardGridCommodityWeb,
               ]}
@@ -1649,7 +1716,7 @@ export function AddTripFormFields({
                 style={[
                   styles.cardHead,
                   isDenseForm && styles.cardHeadDense,
-                  desktopFormGrid && styles.cardHeadDesktop,
+                  desktopFormGrid && styles.cardHeadDesktopEnterprise,
                   wizardSection === "commodity" && styles.cardHeadWizard,
                 ]}
               >
@@ -1667,6 +1734,7 @@ export function AddTripFormFields({
                     style={[
                       styles.cardTitle,
                       isDenseForm && styles.cardTitleDense,
+                      desktopFormGrid && styles.cardTitleDesktopEnterprise,
                       wizardSection === "commodity" && styles.cardTitleWizard,
                     ]}
                   >
@@ -1696,7 +1764,86 @@ export function AddTripFormFields({
             </View>
           ) : null}
 
-          {/* 03 Client & Commercials */}
+          {/* 02 Commodity & Client — indent-style merge (desktop col2 + mobile wizard step) */}
+          {showCommodityClientCard ? (
+            <View
+              style={[
+                isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
+                !isWizardTypography && isDenseForm && styles.cardDense,
+                desktopFormGrid && styles.cardDesktopEnterprise,
+                desktopFormGrid && styles.cardDesktopStretch,
+                desktopFormGrid && styles.cardGridCommodityClientWeb,
+              ]}
+            >
+              {!hideWizardCardHead ? (
+                <View
+                  style={[
+                    styles.cardHead,
+                    isDenseForm && styles.cardHeadDense,
+                    desktopFormGrid && styles.cardHeadDesktopEnterprise,
+                    wizardSection === "commodityClient" && styles.cardHeadWizard,
+                  ]}
+                >
+                  <View style={styles.cardHeadTitleCluster}>
+                    <View
+                      style={[
+                        styles.stepBadge,
+                        isDenseForm && styles.stepBadgeDense,
+                        wizardSection === "commodityClient" && styles.stepBadgeWizard,
+                      ]}
+                    >
+                      <Text style={styles.stepBadgeText}>02</Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.cardTitle,
+                        isDenseForm && styles.cardTitleDense,
+                        desktopFormGrid && styles.cardTitleDesktopEnterprise,
+                        wizardSection === "commodityClient" && styles.cardTitleWizard,
+                      ]}
+                    >
+                      Commodity & Client
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+              <TripCommodityFields
+                vehicleType={state.vehicleType}
+                loadType={state.loadType}
+                tons={state.tons}
+                onVehicleTypeChange={setters.setVehicleType}
+                onLoadTypeChange={setters.setLoadType}
+                onTonsChange={setters.setTons}
+                vehicleTypeError={invalid("vehicleType")}
+                loadTypeError={invalid("loadType")}
+                tonsError={invalid("tons")}
+                indentVehicleType={sourceIndent?.vehicle_type}
+                indentLoadType={sourceIndent?.load_type}
+                isWide={isWide && wizardSection == null}
+                useFormChrome={!isDenseForm && wizardSection == null}
+                preferWebSelect={Platform.OS === "web" && !isDenseForm}
+                fieldLabelStyle={fieldLabelStyle}
+                fieldInputStyle={fieldInputStyle}
+              />
+              <View style={{ marginTop: desktopFormGrid ? 16 : 12 }}>
+                <TripClientPickerSection
+                  clients={clients}
+                  clientsLoading={clientsLoading}
+                  clientId={state.clientId}
+                  clientListExpanded={clientListExpanded}
+                  setClientListExpanded={setClientListExpanded}
+                  onSelectClient={handleSelectClient}
+                  onAddClient={handleAddClientShortcut}
+                  hasError={invalid("client")}
+                  wizardMode={isWizardTypography}
+                  fieldLabelStyle={fieldLabelStyle}
+                  isDenseForm={isDenseForm}
+                />
+              </View>
+            </View>
+          ) : null}
+
+          {/* 03 Client & Commercials (legacy narrow desktop — commodity separate) */}
           {showClientCard ? (
             isWizardSaleKeypad ? (
               <ClientSaleKeypadFlow
@@ -1722,8 +1869,8 @@ export function AddTripFormFields({
               style={[
                 isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
                 !isWizardTypography && isDenseForm && styles.cardDense,
-                desktopFormGrid && styles.cardDesktopGrid,
-                (wizardSection === "client" || wizardSection === "sale") &&
+                desktopFormGrid && styles.cardDesktopEnterprise,
+                (wizardSection === "sale") &&
                   !isWizardTypography &&
                   styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridClientWeb,
@@ -1734,8 +1881,8 @@ export function AddTripFormFields({
               style={[
                 styles.cardHead,
                 isDenseForm && styles.cardHeadDense,
-                desktopFormGrid && styles.cardHeadDesktop,
-                wizardSection === "client" && styles.cardHeadWizard,
+                desktopFormGrid && styles.cardHeadDesktopEnterprise,
+                wizardSection === "sale" && styles.cardHeadWizard,
               ]}
             >
               <View style={styles.cardHeadTitleCluster}>
@@ -1743,7 +1890,7 @@ export function AddTripFormFields({
                   style={[
                     styles.stepBadge,
                     isDenseForm && styles.stepBadgeDense,
-                    wizardSection === "client" && styles.stepBadgeWizard,
+                    wizardSection === "sale" && styles.stepBadgeWizard,
                   ]}
                 >
                   <Text style={styles.stepBadgeText}>03</Text>
@@ -1752,7 +1899,8 @@ export function AddTripFormFields({
                   style={[
                     styles.cardTitle,
                     isDenseForm && styles.cardTitleDense,
-                    wizardSection === "client" && styles.cardTitleWizard,
+                    desktopFormGrid && styles.cardTitleDesktopEnterprise,
+                    wizardSection === "sale" && styles.cardTitleWizard,
                   ]}
                 >
                   Client & Commercials
@@ -1780,168 +1928,26 @@ export function AddTripFormFields({
                   desktopFormGrid && styles.clientCommercialsClientColDesktop,
                 ]}
               >
-                {!isWizardSingleCard ? (
-                <View
-                  style={isWide ? styles.clientCommercialsHeaderBand : undefined}
-                >
-                  <View
-                    style={[
-                      styles.sectionLabelRow,
-                      isDenseForm && styles.sectionLabelRowDense,
-                      isWide && styles.sectionLabelRowFlush,
-                    ]}
-                  >
-                    <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
-                      Select client
-                    </Text>
-                    <View style={styles.sectionLabelActions}>
-                      {state.clientId ? (
-                        <TouchableOpacity
-                          style={styles.changeSelectionBtn}
-                          onPress={() => setClientListExpanded((p) => !p)}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={styles.changeSelectionBtnText}>
-                            {clientListExpanded ? "Collapse" : "Change"}
-                          </Text>
-                          <FontAwesome
-                            name={clientListExpanded ? "chevron-up" : "chevron-down"}
-                            size={11}
-                            color={Theme.iconPrimary}
-                          />
-                        </TouchableOpacity>
-                      ) : null}
-                      <TouchableOpacity
-                        style={[
-                          styles.addClientBtn,
-                          Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
-                        ]}
-                        onPress={handleAddClientShortcut}
-                        activeOpacity={0.85}
-                      >
-                        <PlusCircle size={14} color={Theme.iconPrimary} />
-                        <Text style={styles.addClientBtnText}>Add client</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-                ) : null}
-                {isWizardSingleCard && showClientPickerOnly ? (
-                  <View style={styles.wizardClientPickerBlock}>
-                    {showClientSummary && selectedClientRow ? (
-                      <WizardClientSummaryCard
-                        name={selectedClientRow.name ?? "Client"}
-                        subtitle={resolveWizardClientPhone(selectedClientRow.phone)}
-                        avatarUrl={selectedClientRow.avatar_url}
-                        avatarSeed={selectedClientRow.avatar_seed}
-                        onPress={() => setClientListExpanded(true)}
-                      />
-                    ) : null}
-                    {showClientList ? (
-                      <WizardClientPicker
-                        clients={clients}
-                        loading={clientsLoading}
-                        selectedClientId={state.clientId}
-                        onSelect={handleSelectClient}
-                        onAddClient={handleAddClientShortcut}
-                      />
-                    ) : null}
-                    <Text
-                      style={[
-                        styles.wizardClientPickerHint,
-                        invalid("client") && styles.errorText,
-                      ]}
-                    >
-                      Select a client to continue
-                    </Text>
-                  </View>
-                ) : clientsLoading ? (
-                  <ActivityIndicator color={Theme.iconPrimary} />
-                ) : clients.length === 0 ? (
-                  <Text style={styles.mutedSmall}>
-                    No clients yet. Add clients from the Clients page first.
+                <TripClientPickerSection
+                  clients={clients}
+                  clientsLoading={clientsLoading}
+                  clientId={state.clientId}
+                  clientListExpanded={clientListExpanded}
+                  setClientListExpanded={setClientListExpanded}
+                  onSelectClient={handleSelectClient}
+                  onAddClient={handleAddClientShortcut}
+                  hasError={invalid("client")}
+                  wizardMode={
+                    Boolean(isWizardSingleCard && showClientPickerOnly && isWizardTypography)
+                  }
+                  fieldLabelStyle={fieldLabelStyle}
+                  isDenseForm={isDenseForm}
+                />
+                {isWizardSingleCard && showClientPickerOnly && !invalid("client") ? (
+                  <Text style={styles.wizardClientPickerHint}>
+                    Select a client to continue
                   </Text>
-                ) : (
-                  <>
-                    {showClientSummary ? (
-                      <TouchableOpacity
-                        style={[
-                          styles.clientCard,
-                          isDenseForm && styles.clientCardDense,
-                          styles.selectionSummaryCard,
-                          isWide && !isDenseForm && styles.clientCardWideBesidePrice,
-                          { marginBottom: 10 },
-                        ]}
-                        onPress={() => setClientListExpanded(true)}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.clientMain}>
-                          <PartyAvatar
-                            name={
-                              selectedClientRow!.name ??
-                              selectedClientRow!.contact_person ??
-                              "Client"
-                            }
-                            avatarUrl={selectedClientRow!.avatar_url ?? null}
-                            avatarSeed={selectedClientRow!.avatar_seed ?? null}
-                            entityType="client"
-                            size={isDenseForm ? 32 : 38}
-                            borderStyle={styles.clientAvatarOn}
-                          />
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
-                              {selectedClientRow!.name}
-                            </Text>
-                            {selectedClientRow!.address ? (
-                              <Text style={styles.selectionSummarySub} numberOfLines={1}>
-                                {selectedClientRow!.address}
-                              </Text>
-                            ) : null}
-                          </View>
-                        </View>
-                        <View style={styles.selectionSummaryPill}>
-                          <Text style={styles.selectionSummaryPillText}>Change</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ) : null}
-                    {showClientList ? (
-                      <AssignmentEntityAvatarGrid
-                        title="Select Client"
-                        variant={isWizardTypography ? "wizard" : "grid"}
-                        embedded={isWizardTypography}
-                        totalCount={clients.length}
-                        errorOutline={invalid("client")}
-                        selectedId={state.clientId}
-                        compact={desktopFormGrid && !isWizardTypography}
-                        columns={
-                          isWizardTypography ? 2 : desktopFormGrid ? 4 : undefined
-                        }
-                        scrollMaxHeight={desktopFormGrid ? 260 : 360}
-                        onSelect={(id) => {
-                          const row = clients.find((c) => c.id === id);
-                          if (!row) return;
-                          if (state.clientId === id) {
-                            releaseAccessoryBar();
-                            Keyboard.dismiss();
-                            setters.setClientSelection(null, "");
-                            setClientListExpanded(true);
-                            return;
-                          }
-                          handleSelectClient(row);
-                        }}
-                        items={clientAvatarGridItems}
-                        emptyMessage="No clients yet. Add clients from your network first."
-                        emptyActionLabel="Add client"
-                        onEmptyAction={handleAddClientShortcut}
-                        headerActionLabel="Add client"
-                        onHeaderAction={handleAddClientShortcut}
-                        footerHint={
-                          !state.clientId ? "Select a client to continue" : undefined
-                        }
-                      />
-                    ) : null}
-                  </>
-                )}
+                ) : null}
               </View>
               ) : null}
 
@@ -2014,6 +2020,77 @@ export function AddTripFormFields({
             )
           ) : null}
 
+          {/* 03 Sale — indent-style full-width row (desktop enterprise grid) */}
+          {showSaleCard ? (
+            isWizardSaleKeypad ? (
+              <ClientSaleKeypadFlow
+                clientPrice={state.clientPrice}
+                onClientPriceChange={(v) => setters.setClientPrice(v)}
+                partyPreview={
+                  selectedClientRow
+                    ? {
+                        name: selectedClientRow.name ?? "Client",
+                        subtitle: resolveWizardClientPhone(selectedClientRow.phone) ?? undefined,
+                        entityType: "client",
+                        avatarUrl: selectedClientRow.avatar_url ?? null,
+                        avatarSeed: selectedClientRow.avatar_seed ?? null,
+                      }
+                    : undefined
+                }
+                errorMessage={
+                  invalid("clientPrice") ? "Enter a sale price greater than 0" : undefined
+                }
+              />
+            ) : (
+              <View
+                style={[
+                  styles.card,
+                  isDenseForm && styles.cardDense,
+                  desktopFormGrid && styles.cardDesktopEnterprise,
+                  desktopFormGrid && styles.cardGridSaleWeb,
+                ]}
+              >
+                <View style={[styles.cardHead, isDenseForm && styles.cardHeadDense, desktopFormGrid && styles.cardHeadDesktopEnterprise]}>
+                  <View style={styles.cardHeadTitleCluster}>
+                    <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
+                      <Text style={styles.stepBadgeText}>03</Text>
+                    </View>
+                    <Text style={[styles.cardTitle, isDenseForm && styles.cardTitleDense, desktopFormGrid && styles.cardTitleDesktopEnterprise]}>
+                      Sale
+                    </Text>
+                  </View>
+                </View>
+                <SmartInput
+                  type="currency"
+                  label="Client sale price"
+                  value={state.clientPrice}
+                  onChange={(raw) => setters.setClientPrice(raw)}
+                  variant="field"
+                  density={isDenseForm ? "compact" : "default"}
+                  required
+                  partyPreview={
+                    selectedClientRow
+                      ? {
+                          name: selectedClientRow.name ?? "Client",
+                          subtitle: resolveWizardClientPhone(selectedClientRow.phone) ?? undefined,
+                          entityType: "client",
+                          avatarUrl: selectedClientRow.avatar_url ?? null,
+                          avatarSeed: selectedClientRow.avatar_seed ?? null,
+                        }
+                      : undefined
+                  }
+                  errorMessage={invalid("clientPrice") ? "Enter a sale price" : undefined}
+                />
+                <View style={[styles.infoCallout, isDenseForm && styles.infoCalloutDense]}>
+                  <Info size={isDenseForm ? 14 : 16} color={Theme.iconPrimary} />
+                  <Text style={[styles.infoCalloutText, isDenseForm && styles.infoCalloutTextDense]}>
+                    Revenue should match what you bill this client for this lane.
+                  </Text>
+                </View>
+              </View>
+            )
+          ) : null}
+
           {/* 04 Supply & Allocation */}
           {showAllocationCard ? (
             mobileAllocWizard && isWizardAllocationCard ? (
@@ -2044,80 +2121,6 @@ export function AddTripFormFields({
 
             {showAlloc("supply") ? (
             <>
-            {showAggregatePartnerInline ? (
-              suppliersLoading ? (
-                <ActivityIndicator color={Theme.iconPrimary} />
-              ) : (
-                <>
-                  {showPartnerSummary && selectedSupplierRow && !allocationContextRow?.right ? (
-                    <View style={{ marginBottom: 10 }}>
-                      <WizardEntitySummaryCard
-                        label="Partner"
-                        name={
-                          selectedSupplierRow.company_name?.trim() ||
-                          selectedSupplierRow.name?.trim() ||
-                          "—"
-                        }
-                        subtitle={resolveWizardClientPhone(selectedSupplierRow.phone)}
-                        entityType="supplier"
-                        organizationImageUrl={
-                          (selectedSupplierRow as {
-                            organization_avatar_url?: string | null;
-                          }).organization_avatar_url ?? null
-                        }
-                        organizationAvatarSeed={
-                          (selectedSupplierRow as {
-                            organization_avatar_seed?: string | null;
-                          }).organization_avatar_seed ?? null
-                        }
-                        avatarUrl={
-                          (selectedSupplierRow as { avatar_url?: string | null })
-                            .avatar_url ?? null
-                        }
-                        avatarSeed={
-                          (selectedSupplierRow as { avatar_seed?: string | null })
-                            .avatar_seed ?? null
-                        }
-                        onPress={() => setPartnerListExpanded(true)}
-                      />
-                    </View>
-                  ) : null}
-                  {showPartnerList ? (
-                    <AssignmentEntityAvatarGrid
-                      title="Select partner"
-                      variant="wizard"
-                      embedded
-                      totalCount={suppliers.length}
-                      errorOutline={invalid("partner")}
-                      selectedId={state.supplierId}
-                      onSelect={(id) => {
-                        const row = suppliers.find((s) => s.id === id);
-                        const primary =
-                          row?.company_name?.trim() || row?.name?.trim() || "—";
-                        if (state.supplierId === id) {
-                          releaseAccessoryBar();
-                          Keyboard.dismiss();
-                          setters.setSupplierSelection(null);
-                          return;
-                        }
-                        setters.setSupplierSelection(id, primary);
-                        setPartnerListExpanded(false);
-                      }}
-                      items={suppliersToAvatarGridItems(suppliers)}
-                      emptyMessage="No partners yet. Add suppliers from your network first."
-                      emptyActionLabel="Add partner"
-                      onEmptyAction={handleAddSupplierShortcut}
-                      headerActionLabel="Add partner"
-                      onHeaderAction={handleAddSupplierShortcut}
-                      footerHint={
-                        !state.supplierId ? "Select a transport partner" : undefined
-                      }
-                      scrollMaxHeight={300}
-                    />
-                  ) : null}
-                </>
-              )
-            ) : null}
             <SupplyAllocationModeBar
               mode={supplyIsAsset ? "asset" : "aggregate"}
               variant="wizard"
@@ -2127,19 +2130,33 @@ export function AddTripFormFields({
               onModeChange={(mode) => setters.setSupplySource(mode)}
               onAssignLaterChange={setters.setAssignLater}
             />
-            <View style={{ marginBottom: assignLaterSwitchDisabled ? 12 : 0 }}>
-              {assignLaterSwitchDisabled ? (
-                <Text style={styles.assignLaterLockedHintBelow}>
-                  Remove driver or vehicle assignment to enable assign later.
-                </Text>
-              ) : null}
-            </View>
+            {assignLaterSwitchDisabled ? (
+              <Text style={styles.assignLaterLockedHintBelow}>
+                Remove driver or vehicle assignment to enable assign later.
+              </Text>
+            ) : null}
             {state.assignLater ? (
               <Text style={styles.warningText}>
                 {supplyIsAsset
                   ? "Assign vehicle and driver on the trip screen before the trip starts."
                   : "Add vehicle number and driver phone on the trip screen before the trip starts."}
               </Text>
+            ) : null}
+            {showAggregatePartnerInline && state.supplySource === "aggregate" ? (
+              <TripPartnerPickerSection
+                suppliers={suppliers}
+                suppliersLoading={suppliersLoading}
+                supplierId={state.supplierId}
+                partnerListExpanded={partnerListExpanded}
+                setPartnerListExpanded={setPartnerListExpanded}
+                onSelectPartner={handleSelectPartner}
+                onClearPartner={handleClearPartner}
+                onAddPartner={handleAddSupplierShortcut}
+                hasError={invalid("partner")}
+                wizardMode
+                suppressCollapsedSummary={Boolean(allocationContextRow?.right)}
+                listMaxHeight={300}
+              />
             ) : null}
             </>
             ) : null}
@@ -2337,7 +2354,7 @@ export function AddTripFormFields({
               style={[
                 styles.card,
                 isDenseForm && styles.cardDense,
-                desktopFormGrid && styles.cardDesktopGrid,
+                desktopFormGrid && styles.cardDesktopEnterprise,
                 desktopFormGrid && styles.cardGridSupplyWeb,
               ]}
             >
@@ -2346,7 +2363,7 @@ export function AddTripFormFields({
                 styles.cardHead,
                 styles.cardHeadWithTrailingAction,
                 isDenseForm && styles.cardHeadDense,
-                desktopFormGrid && styles.cardHeadDesktop,
+                desktopFormGrid && styles.cardHeadDesktopEnterprise,
               ]}
             >
               <View style={styles.cardHeadTitleCluster}>
@@ -2354,7 +2371,7 @@ export function AddTripFormFields({
                   <Text style={styles.stepBadgeText}>04</Text>
                 </View>
                 <Text
-                  style={[styles.cardTitle, isDenseForm && styles.cardTitleDense]}
+                  style={[styles.cardTitle, isDenseForm && styles.cardTitleDense, desktopFormGrid && styles.cardTitleDesktopEnterprise]}
                   numberOfLines={1}
                 >
                   Supply & Allocation
@@ -2386,8 +2403,11 @@ export function AddTripFormFields({
             <>
             <SupplyAllocationModeBar
               mode={supplyIsAsset ? "asset" : "aggregate"}
+              variant={desktopFormGrid || mobileAllocWizard ? "wizard" : "classic"}
               compact={isCompactMobile}
-              layout={desktopFormGrid ? "inline" : "stack"}
+              layout={
+                aggregateDesktopEnterprise || mobileAllocWizard ? "stack" : "inline"
+              }
               assignLater={state.assignLater}
               assignLaterDisabled={assignLaterSwitchDisabled}
               onModeChange={(mode) => setters.setSupplySource(mode)}
@@ -2624,135 +2644,74 @@ export function AddTripFormFields({
                 <View
                   style={[
                     styles.aggregateSplit,
-                    allocationWideLayout && styles.aggregateSplitWide,
+                    allocationWideLayout &&
+                      !aggregateDesktopEnterprise &&
+                      styles.aggregateSplitWide,
+                    aggregateDesktopEnterprise && styles.aggregateEnterpriseBody,
+                    aggregateDesktopEnterprise && styles.aggregateSplitEnterprise,
                   ]}
                 >
+                  {aggregateDesktopEnterprise && showPartnerList ? (
+                    <TripPartnerPickerSection
+                      suppliers={suppliers}
+                      suppliersLoading={suppliersLoading}
+                      supplierId={state.supplierId}
+                      partnerListExpanded={partnerListExpanded}
+                      setPartnerListExpanded={setPartnerListExpanded}
+                      onSelectPartner={handleSelectPartner}
+                      onClearPartner={handleClearPartner}
+                      onAddPartner={handleAddSupplierShortcut}
+                      hasError={invalid("partner")}
+                      fieldLabelStyle={fieldLabelStyle}
+                      isDenseForm={isDenseForm}
+                      listMaxHeight={320}
+                    />
+                  ) : null}
+                  <View
+                    style={[
+                      aggregateDesktopEnterprise &&
+                        !(showPartnerList && !state.supplierId) &&
+                        styles.aggregateCommercialsRowDesktop,
+                      aggregateDesktopEnterprise &&
+                        showPartnerList &&
+                        !state.supplierId &&
+                        styles.aggregateCommercialsRowDesktopHidden,
+                      aggregateDesktopEnterprise &&
+                        showPartnerList &&
+                        state.supplierId &&
+                        styles.aggregateCommercialsRatesOnlyDesktop,
+                    ]}
+                  >
                   {(showAlloc("partner") ||
                     !mobileAllocWizard ||
-                    showAggregatePartnerInline) ? (
+                    showAggregatePartnerInline) &&
+                  !(
+                    aggregateDesktopEnterprise &&
+                    showPartnerList &&
+                    state.supplierId
+                  ) ? (
                   <View
                     style={[
                       styles.aggregateLeftPane,
                       allocationWideLayout && styles.aggregateLeftPaneWide,
+                      aggregateDesktopEnterprise && styles.aggregateCommercialsPartnerCol,
                     ]}
                   >
-                    {suppliersLoading ? (
-                      <ActivityIndicator color={Theme.iconPrimary} />
-                    ) : (
-                      <>
-                        {allocationWideLayout && showPartnerSummary ? (
-                          <Text
-                            style={[
-                              ...fieldLabelStyle,
-                              styles.sectionLabelTight,
-                              styles.aggregatePaneFieldLabel,
-                            ]}
-                          >
-                            Transport partner
-                          </Text>
-                        ) : null}
-                        {showPartnerSummary ? (
-                          <TouchableOpacity
-                            style={[
-                              styles.clientCard,
-                              isDenseForm && styles.clientCardDense,
-                              styles.selectionSummaryCard,
-                              { marginBottom: 10 },
-                            ]}
-                            onPress={() => setPartnerListExpanded(true)}
-                            activeOpacity={0.85}
-                          >
-                            <View style={styles.clientMain}>
-                              <PartyAvatar
-                                name={
-                                  selectedSupplierRow!.company_name?.trim() ||
-                                  selectedSupplierRow!.name?.trim() ||
-                                  "—"
-                                }
-                                organizationImageUrl={
-                                  (selectedSupplierRow as {
-                                    organization_avatar_url?: string | null;
-                                  }).organization_avatar_url ?? null
-                                }
-                                organizationAvatarSeed={
-                                  (selectedSupplierRow as {
-                                    organization_avatar_seed?: string | null;
-                                  }).organization_avatar_seed ?? null
-                                }
-                                avatarUrl={
-                                  (selectedSupplierRow as { avatar_url?: string | null })
-                                    .avatar_url ?? null
-                                }
-                                avatarSeed={
-                                  (selectedSupplierRow as { avatar_seed?: string | null })
-                                    .avatar_seed ?? null
-                                }
-                                entityType="supplier"
-                                size={38}
-                                borderStyle={styles.clientAvatarOn}
-                              />
-                              <View style={{ flex: 1, minWidth: 0 }}>
-                                <Text
-                                  style={styles.selectionSummaryTitle}
-                                  numberOfLines={1}
-                                >
-                                  {selectedSupplierRow!.company_name?.trim() ||
-                                    selectedSupplierRow!.name?.trim() ||
-                                    "—"}
-                                </Text>
-                                <Text
-                                  style={styles.selectionSummarySub}
-                                  numberOfLines={1}
-                                >
-                                  {resolveWizardClientPhone(selectedSupplierRow!.phone) ?? "—"}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.selectionSummaryPill}>
-                              <Text style={styles.selectionSummaryPillText}>
-                                Change
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                        ) : null}
-                        {showPartnerList ? (
-                          <AssignmentEntityAvatarGrid
-                            title="Select Transport Partner"
-                            variant={isWizardAllocationCard ? "wizard" : "grid"}
-                            embedded={isWizardAllocationCard}
-                            totalCount={suppliers.length}
-                            errorOutline={invalid("partner")}
-                            selectedId={state.supplierId}
-                            onSelect={(id) => {
-                              const row = suppliers.find((s) => s.id === id);
-                              const primary =
-                                row?.company_name?.trim() ||
-                                row?.name?.trim() ||
-                                "—";
-                              if (state.supplierId === id) {
-                                releaseAccessoryBar();
-                                Keyboard.dismiss();
-                                setters.setSupplierSelection(null);
-                                return;
-                              }
-                              setters.setSupplierSelection(id, primary);
-                              setPartnerListExpanded(false);
-                            }}
-                            items={suppliersToAvatarGridItems(suppliers)}
-                            emptyMessage="No partners yet. Add suppliers from your network first."
-                            emptyActionLabel="Add partner"
-                            onEmptyAction={handleAddSupplierShortcut}
-                            headerActionLabel="Add partner"
-                            onHeaderAction={handleAddSupplierShortcut}
-                            footerHint={
-                              !state.supplierId
-                                ? "Select a transport partner"
-                                : undefined
-                            }
-                          />
-                        ) : null}
-                      </>
-                    )}
+                    <TripPartnerPickerSection
+                      suppliers={suppliers}
+                      suppliersLoading={suppliersLoading}
+                      supplierId={state.supplierId}
+                      partnerListExpanded={partnerListExpanded}
+                      setPartnerListExpanded={setPartnerListExpanded}
+                      onSelectPartner={handleSelectPartner}
+                      onClearPartner={handleClearPartner}
+                      onAddPartner={handleAddSupplierShortcut}
+                      hasError={invalid("partner")}
+                      wizardMode={isWizardAllocationCard}
+                      fieldLabelStyle={fieldLabelStyle}
+                      isDenseForm={isDenseForm}
+                      listMaxHeight={allocationWideLayout ? 280 : 260}
+                    />
                   </View>
                   ) : null}
                   {(showAlloc("rates") ||
@@ -2764,6 +2723,7 @@ export function AddTripFormFields({
                     style={[
                       styles.aggregateRightPane,
                       allocationWideLayout && styles.aggregateRightPaneWide,
+                      aggregateDesktopEnterprise && styles.aggregateCommercialsRatesCol,
                     ]}
                   >
                 <View
@@ -3110,6 +3070,7 @@ export function AddTripFormFields({
                 </View>
                   </View>
                   ) : null}
+                  </View>
                 </View>
             )}
             </View>
@@ -3245,6 +3206,7 @@ const styles = StyleSheet.create({
   allocationStepBody: {
     width: "100%",
     minHeight: 0,
+    gap: 12,
   },
   allocationPickerBody: {
     flexGrow: 1,
@@ -3297,6 +3259,11 @@ const styles = StyleSheet.create({
     web: { gridColumn: 1, gridRow: 1 } as unknown as ViewStyle,
     default: {},
   }),
+  /** Desktop grid: route | commodity & client on row 1 (indent-style). */
+  cardGridCommodityClientWeb: Platform.select<ViewStyle>({
+    web: { gridColumn: 2, gridRow: 1 } as unknown as ViewStyle,
+    default: {},
+  }),
   cardGridCommodityWeb: Platform.select<ViewStyle>({
     web: { gridColumn: 2, gridRow: 1 } as unknown as ViewStyle,
     default: {},
@@ -3305,8 +3272,27 @@ const styles = StyleSheet.create({
     web: { gridColumn: "1 / -1", gridRow: 2 } as unknown as ViewStyle,
     default: {},
   }),
+  /** Desktop grid: sale full-width row 2 (indent load-row pattern). */
+  cardGridSaleWeb: Platform.select<ViewStyle>({
+    web: { gridColumn: "1 / -1", gridRow: 2 } as unknown as ViewStyle,
+    default: {},
+  }),
   cardGridSupplyWeb: Platform.select<ViewStyle>({
     web: { gridColumn: "1 / -1", gridRow: 3 } as unknown as ViewStyle,
+    default: {},
+  }),
+  scrollContentDesktop: {
+    paddingTop: 4,
+    width: "100%",
+  },
+  /** Enterprise desktop cards — matches Create Load. */
+  cardDesktopEnterprise: Platform.select<ViewStyle>({
+    web: {
+      padding: 18,
+      borderRadius: 12,
+      marginBottom: 0,
+      boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+    } as ViewStyle,
     default: {},
   }),
   cardDesktopGrid: {
@@ -3331,6 +3317,14 @@ const styles = StyleSheet.create({
   cardHeadDesktop: {
     paddingBottom: 6,
     marginBottom: 8,
+  },
+  cardHeadDesktopEnterprise: {
+    paddingBottom: 10,
+    marginBottom: 12,
+  },
+  cardTitleDesktopEnterprise: {
+    fontSize: 11,
+    letterSpacing: 0.6,
   },
   gridRowWideDesktop: {
     gap: 16,
@@ -3725,6 +3719,44 @@ const styles = StyleSheet.create({
   aggregateSplit: {
     gap: 10,
   },
+  aggregateEnterpriseBody: {
+    width: "100%",
+    gap: 16,
+  },
+  aggregateSplitEnterprise: {
+    marginTop: 8,
+  },
+  aggregateCommercialsRowDesktop: Platform.select<ViewStyle>({
+    web: {
+      display: "grid",
+      gridTemplateColumns: "minmax(260px, 300px) minmax(0, 1fr)",
+      gap: 20,
+      alignItems: "start",
+      width: "100%",
+    } as unknown as ViewStyle,
+    default: {},
+  }),
+  aggregateCommercialsRowDesktopHidden: Platform.select<ViewStyle>({
+    web: { display: "none" } as unknown as ViewStyle,
+    default: {},
+  }),
+  aggregateCommercialsPartnerCol: Platform.select<ViewStyle>({
+    web: { minWidth: 0, width: "100%" },
+    default: {},
+  }),
+  aggregateCommercialsRatesOnlyDesktop: Platform.select<ViewStyle>({
+    web: {
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 1fr)",
+      gap: 20,
+      width: "100%",
+    } as unknown as ViewStyle,
+    default: {},
+  }),
+  aggregateCommercialsRatesCol: Platform.select<ViewStyle>({
+    web: { minWidth: 0, width: "100%" },
+    default: {},
+  }),
   aggregateSplitMobileWizard: {
     flexDirection: "column",
     gap: 8,
@@ -3810,9 +3842,9 @@ const styles = StyleSheet.create({
   aggregateTrackingSection: {
     width: "100%",
     minWidth: 0,
-    gap: 10,
-    paddingTop: 10,
-    marginTop: 2,
+    gap: 12,
+    paddingTop: 14,
+    marginTop: 4,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },

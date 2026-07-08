@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { ShieldAlert } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -11,8 +11,9 @@ import {
 import Theme from '@/constants/Theme';
 import type { SignUpFlow } from '@/features/auth/signup/hooks/useBusinessSignUpFlow';
 import { SignUpPulseFormStep } from '@/features/auth/signup/SignUpPulseFormStep';
+import { DESKTOP_BREAKPOINT } from '@/features/auth/signup/signUpConstants';
 import { PULSE_SIGNUP } from '@/features/auth/signup/signUpPulseTheme';
-import { SIGNUP_TEXT } from '@/features/auth/signup/signUpTypography';
+import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO_MOBILE } from '@/features/auth/signup/signUpTypography';
 import { ROUTES } from '@/lib/routes';
 
 /**
@@ -20,6 +21,9 @@ import { ROUTES } from '@/lib/routes';
  */
 export function InviteNotFoundStep({ flow }: { flow: SignUpFlow }) {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isMobile = width < DESKTOP_BREAKPOINT;
+  const text = createPulseSignUpTextStyles(PULSE_SIGNUP);
   const displayPhone = flow.phone.replace(/\D/g, '').slice(-10);
 
   return (
@@ -53,8 +57,8 @@ export function InviteNotFoundStep({ flow }: { flow: SignUpFlow }) {
             hitSlop={8}
             style={styles.signInLink}
           >
-            <Text style={SIGNUP_TEXT.linkSmall}>
-              Already have an account? <Text style={SIGNUP_TEXT.linkEmphasis}>Sign in</Text>
+            <Text style={isMobile ? text.linkSmallMobile : text.linkSmall}>
+              Already have an account? <Text style={text.linkEmphasis}>Sign in</Text>
             </Text>
           </Pressable>
         </View>
@@ -65,21 +69,21 @@ export function InviteNotFoundStep({ flow }: { flow: SignUpFlow }) {
           <ShieldAlert size={22} color={Theme.warning} strokeWidth={2} />
         </View>
         <View style={styles.badge}>
-          <Text style={SIGNUP_TEXT.fieldLabel}>Verified number</Text>
-          <Text style={styles.phone}>+91 {displayPhone}</Text>
+          <Text style={isMobile ? text.fieldLabelMobile : text.fieldLabel}>Verified number</Text>
+          <Text style={[styles.phone, isMobile && styles.phoneMobile]}>+91 {displayPhone}</Text>
         </View>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>What you can do</Text>
-        <Text style={styles.bullet}>Ask your admin to invite this mobile number</Text>
-        <Text style={styles.bullet}>Sign in if you were invited by email on an existing account</Text>
-        <Text style={styles.bullet}>Try again with the number your admin used on the invite</Text>
+        <Text style={[styles.cardTitle, isMobile && styles.cardTitleMobile]}>What you can do</Text>
+        <Text style={[styles.bullet, isMobile && styles.bulletMobile]}>Ask your admin to invite this mobile number</Text>
+        <Text style={[styles.bullet, isMobile && styles.bulletMobile]}>Sign in if you were invited by email on an existing account</Text>
+        <Text style={[styles.bullet, isMobile && styles.bulletMobile]}>Try again with the number your admin used on the invite</Text>
       </View>
 
       <View style={styles.cardMuted}>
-        <Text style={styles.cardTitle}>Why limited access?</Text>
-        <Text style={styles.hint}>
+        <Text style={[styles.cardTitle, isMobile && styles.cardTitleMobile]}>Why limited access?</Text>
+        <Text style={[styles.hint, isMobile && styles.hintMobile]}>
           Team invitations match your verified phone or email. Without a pending invite, Pulse
           cannot open a company workspace for this number.
         </Text>
@@ -113,6 +117,10 @@ const styles = StyleSheet.create({
     color: PULSE_SIGNUP.text,
     letterSpacing: 0.2,
   },
+  phoneMobile: {
+    fontSize: PULSE_SIGNUP_TYPO_MOBILE.body.fontSize,
+    lineHeight: PULSE_SIGNUP_TYPO_MOBILE.body.lineHeight,
+  },
   card: {
     borderWidth: 1,
     borderColor: PULSE_SIGNUP.border,
@@ -134,17 +142,33 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   cardTitle: {
-    ...SIGNUP_TEXT.captionMedium,
-    color: PULSE_SIGNUP.text,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: '600',
+    color: PULSE_SIGNUP.text,
+  },
+  cardTitleMobile: {
+    fontSize: PULSE_SIGNUP_TYPO_MOBILE.caption.fontSize,
+    lineHeight: PULSE_SIGNUP_TYPO_MOBILE.caption.lineHeight,
   },
   bullet: {
-    ...SIGNUP_TEXT.caption,
+    fontSize: 10,
+    lineHeight: 14,
+    color: PULSE_SIGNUP.muted,
     paddingLeft: 2,
   },
+  bulletMobile: {
+    fontSize: PULSE_SIGNUP_TYPO_MOBILE.caption.fontSize,
+    lineHeight: PULSE_SIGNUP_TYPO_MOBILE.caption.lineHeight,
+  },
   hint: {
-    ...SIGNUP_TEXT.caption,
+    fontSize: 10,
     lineHeight: 16,
+    color: PULSE_SIGNUP.muted,
+  },
+  hintMobile: {
+    fontSize: PULSE_SIGNUP_TYPO_MOBILE.caption.fontSize,
+    lineHeight: PULSE_SIGNUP_TYPO_MOBILE.caption.lineHeight,
   },
   footer: {
     gap: 10,
