@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -26,6 +26,7 @@ import {
 } from '@/lib/onboarding/productCatalog';
 import { WORKSPACE_SETUP_COPY } from '@/lib/onboarding/workspaceSetupContent';
 import { ROUTES } from '@/lib/routes';
+import { useIsDesktopWebInput } from '@/lib/useIsDesktopWebInput';
 import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
 
 import { ONBOARDING_BRAND } from './onboardingPersonaAssets';
@@ -40,36 +41,7 @@ const signupText = createPulseSignUpTextStyles(PULSE_SIGNUP);
 export function OnboardingPersonaHub() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
-  const [webViewportWidth, setWebViewportWidth] = useState<number>(() => {
-    if (Platform.OS !== 'web') return 0;
-    if (typeof window === 'undefined') return 1280;
-    return window.innerWidth || 1280;
-  });
-  const [webHasFinePointer, setWebHasFinePointer] = useState<boolean>(() => {
-    if (Platform.OS !== 'web') return false;
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
-    return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-  });
-
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const handleResize = () => {
-      setWebViewportWidth(window.innerWidth || 1280);
-      if (typeof window.matchMedia === 'function') {
-        setWebHasFinePointer(window.matchMedia('(hover: hover) and (pointer: fine)').matches);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    handleResize();
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
-    };
-  }, []);
-
-  const isDesktop = Platform.OS === 'web' ? webViewportWidth >= 1024 && webHasFinePointer : false;
+  const isDesktop = useIsDesktopWebInput();
 
   const navigateProduct = useCallback(
     (route: string, productId?: string) => {

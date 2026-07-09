@@ -26,6 +26,7 @@ import { suiteSignInCopy } from '@/lib/suite/suiteAuthContent';
 import { validateEmailRequired } from '@/lib/emailValidation';
 import { getKeepSignedIn } from '@/lib/keepSignedInPreference';
 import { ROUTES } from '@/lib/routes';
+import { useIsDesktopWebInput } from '@/lib/useIsDesktopWebInput';
 import { containsNullByte, validatePasswordForSignIn } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
@@ -75,16 +76,7 @@ export default function SignIn() {
   const signInCopy = suiteSignInCopy(productId);
   const isOnline = useIsOnline();
   const { user, signIn, signInWithGoogle, restoreError, clearRestoreError } = useAuth();
-  const [webViewportWidth, setWebViewportWidth] = useState<number>(() => {
-    if (Platform.OS !== 'web') return 0;
-    if (typeof window === 'undefined') return 1280;
-    return window.innerWidth || 1280;
-  });
-  const [webHasFinePointer, setWebHasFinePointer] = useState<boolean>(() => {
-    if (Platform.OS !== 'web') return false;
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
-    return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-  });
+  const isDesktop = useIsDesktopWebInput();
 
   const [email, setEmail] = useState(() => getEmailFromParams(params));
   const [password, setPassword] = useState('');
@@ -97,32 +89,6 @@ export default function SignIn() {
   const [passwordResetBanner, setPasswordResetBanner] = useState(false);
   const formFade = useRef(new Animated.Value(0)).current;
   const formSlide = useRef(new Animated.Value(10)).current;
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const updatePointerMode = () => {
-      if (typeof window.matchMedia !== 'function') {
-        setWebHasFinePointer(true);
-        return;
-      }
-      setWebHasFinePointer(window.matchMedia('(hover: hover) and (pointer: fine)').matches);
-    };
-    const handleResize = () => {
-      setWebViewportWidth(window.innerWidth || 1280);
-      updatePointerMode();
-    };
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    handleResize();
-    updatePointerMode();
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
-    };
-  }, []);
-
-  // Keep mobile browsers in stacked mode even when they report wider CSS widths.
-  const isDesktop = Platform.OS === 'web' ? webViewportWidth >= 1024 && webHasFinePointer : false;
-
   useEffect(() => {
     Animated.parallel([
       Animated.timing(formFade, {
