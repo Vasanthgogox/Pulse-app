@@ -43,8 +43,3 @@ export {
     type NewUser
 } from './services/driverMatching.service';
 
-// Driver invitation utilities
-export {
-    createDriverFormDataFromExistingDriver, handleDriverInvitation, resetDriverInvitation
-} from './utils/invitationUtils';
-
