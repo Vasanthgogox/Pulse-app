@@ -37,7 +37,7 @@ import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
 import { useIndentDirectQuotesQuery } from "@/lib/queries";
 import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
 import { confirmDialog } from "@/lib/confirmDialog";
-import { ROUTES } from "@/lib/routes";
+import { ROUTES, buildPulseStoryPublicUrl } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import * as Sharing from "expo-sharing";
@@ -67,25 +67,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-function buildPulseStoryPublicUrl(
-  postId: string,
-  orgId: string,
-  storyType: 'LOAD' | 'VEHICLE_AVAILABILITY' | 'UPDATE',
-): string {
-  const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, '') || '';
-  const params = new URLSearchParams({
-    postId,
-    orgId,
-    storyType,
-    queue: postId,
-  });
-  const qs = params.toString();
-  if (webBase !== '') {
-    return `${webBase}/story-detail?${qs}`;
-  }
-  return Linking.createURL(`/story-detail?${qs}`);
-}
 
 const STORY_DURATION = 15000;
 const INK = Theme.textPrimaryDark;

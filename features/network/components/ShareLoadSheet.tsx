@@ -9,6 +9,7 @@ import { type IndentRow, getIndentDisplayNumber, resolveSupplierTargetDisplayRat
 import { createPost } from "@/features/network/services/posts.service";
 import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
 import { formatINR } from "@/lib/format";
+import { buildPulseStoryPublicUrl } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Linking from "expo-linking";
 import * as Sharing from "expo-sharing";
@@ -108,25 +109,6 @@ function BroadcastSpecsGrid({
       ))}
     </View>
   );
-}
-
-function buildPulseStoryPublicUrl(
-  postId: string,
-  orgId: string,
-  storyType: "LOAD",
-): string {
-  const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, "") || "";
-  const params = new URLSearchParams({
-    postId,
-    orgId,
-    storyType,
-    queue: postId,
-  });
-  const qs = params.toString();
-  if (webBase !== "") {
-    return `${webBase}/story-detail?${qs}`;
-  }
-  return Linking.createURL(`/story-detail?${qs}`);
 }
 
 interface ShareLoadSheetProps {

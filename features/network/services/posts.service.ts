@@ -257,6 +257,46 @@ export async function deactivatePost(
   return { error: null };
 }
 
+export interface StoryPreviewRow {
+  id: string;
+  organization_id: string;
+  org_name: string;
+  type: PostType;
+  origin: string | null;
+  destination: string | null;
+  load_date: string | null;
+  vehicle_type: string | null;
+  expires_at: string | null;
+  is_active: boolean;
+}
+
+/**
+ * Public, non-commercial preview of a post for the story-detail share link.
+ * Works for anonymous callers — used to render a preview before sign-in.
+ */
+export async function getStoryPreview(
+  postId: string,
+): Promise<{ error: Error | null; preview: StoryPreviewRow | null }> {
+  const { data, error } = await supabase().rpc('get_story_preview', { p_post_id: postId });
+  if (error) return { error: new Error(error.message), preview: null };
+  const rows = (data ?? []) as StoryPreviewRow[];
+  return { error: null, preview: rows[0] ?? null };
+}
+
+export async function checkOrgsConnected(
+  orgA: string,
+  orgB: string,
+): Promise<{ error: Error | null; connected: boolean }> {
+  if (!orgA || !orgB) return { error: null, connected: false };
+  if (orgA === orgB) return { error: null, connected: true };
+  const { data, error } = await supabase().rpc('are_orgs_connected', {
+    p_org_a: orgA,
+    p_org_b: orgB,
+  });
+  if (error) return { error: new Error(error.message), connected: false };
+  return { error: null, connected: Boolean(data) };
+}
+
 export async function incrementPostViewCount(postId: string): Promise<void> {
   try {
     await supabase().rpc('increment_post_view_count', { p_post_id: postId });

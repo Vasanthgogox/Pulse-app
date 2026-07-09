@@ -226,6 +226,7 @@ function connectionRequestInsertErrorFingerprint(error: unknown): string {
  * PostgREST returns JSON with `code` "23505"; browsers still show HTTP 409 in the Network panel.
  */
 function isDuplicateConnectionRequestInsertError(error: unknown): boolean {
+  if ((error as { code?: string } | null)?.code === "23505") return true;
   const f = connectionRequestInsertErrorFingerprint(error);
   if (f.includes("23505")) return true;
   if (f.includes("duplicate key")) return true;

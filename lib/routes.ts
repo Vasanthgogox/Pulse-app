@@ -4,6 +4,8 @@
  * Use these instead of hardcoded string literals everywhere in the app.
  * Benefits: find-all-references, rename-safety, and a single place to update paths.
  */
+import * as Linking from "expo-linking";
+
 export type TripDetailRouteTab = "trip" | "finance" | "expenses" | "docs";
 export type TripDetailRouteFinanceSubTab = "summary" | "transactions";
 
@@ -238,7 +240,35 @@ export const ROUTES = {
   PULSE_LOADS:   '/pulse-loads'   as const,
   /** DBA audit tool — web only. */
   DBA_AUDIT:     '/audit'          as const,
+  /** Story-detail share landing (Broadcast Load / Pulse story bidding page). */
+  storyDetail: (
+    postId: string,
+    orgId: string,
+    storyType: "LOAD" | "VEHICLE_AVAILABILITY" | "UPDATE",
+    queue?: string,
+  ) => {
+    const q = new URLSearchParams({ postId, orgId, storyType, queue: queue ?? postId });
+    return `/story-detail?${q.toString()}` as const;
+  },
 } as const;
+
+/**
+ * Public shareable URL for a story-detail post (Broadcast Load "bidding page" link).
+ * Uses EXPO_PUBLIC_WEB_BASE_URL when set (real https link for external shares);
+ * falls back to an Expo deep link in dev/native builds without a configured web base.
+ */
+export function buildPulseStoryPublicUrl(
+  postId: string,
+  orgId: string,
+  storyType: "LOAD" | "VEHICLE_AVAILABILITY" | "UPDATE",
+): string {
+  const webBase = process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, "") || "";
+  const qs = ROUTES.storyDetail(postId, orgId, storyType).slice("/story-detail?".length);
+  if (webBase !== "") {
+    return `${webBase}/story-detail?${qs}`;
+  }
+  return Linking.createURL(`/story-detail?${qs}`);
+}
 
 function routeParamOne(
   raw: Record<string, string | string[] | undefined>,
