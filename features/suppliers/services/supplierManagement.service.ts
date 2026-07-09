@@ -1,5 +1,9 @@
 import { supabase } from "@/lib/supabase";
-import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
+import {
+  getSupplierById,
+  getSupplierDetails,
+  mergeSupplierDisplayFields,
+} from "@/features/suppliers/services/suppliers.service";
 import { getTripsForOrg } from "@/features/trips/services/trips.service";
 import { getTransactionsByOrganization } from "@/features/finance/services/finance.service";
 import { getDriversByOrganization } from "@/features/drivers/services/drivers.service";
@@ -19,8 +23,9 @@ export async function getSupplierManagementBundle(
   orgId: string,
   supplierId: string,
 ): Promise<{ error: Error | null; bundle: SupplierManagementBundle | null }> {
-  const [supplierRes, tripsRes, txRes, driversRes, rpcRes] = await Promise.all([
+  const [supplierRes, detailsRes, tripsRes, txRes, driversRes, rpcRes] = await Promise.all([
     getSupplierById(orgId, supplierId),
+    getSupplierDetails(supplierId),
     getTripsForOrg(orgId),
     getTransactionsByOrganization(orgId),
     getDriversByOrganization(orgId),
@@ -34,7 +39,10 @@ export async function getSupplierManagementBundle(
     return { error: supplierRes.error ?? new Error("Supplier not found"), bundle: null };
   }
 
-  const supplier = supplierRes.supplier;
+  const supplier =
+    !detailsRes.error && detailsRes.supplier
+      ? mergeSupplierDisplayFields(supplierRes.supplier, detailsRes.supplier)
+      : supplierRes.supplier;
   const supplierTrips = (tripsRes.trips ?? []).filter((t) => t.supplier_id === supplierId);
   const rpcData = (rpcRes.data ?? {}) as Record<string, unknown>;
 

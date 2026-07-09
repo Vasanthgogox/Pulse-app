@@ -146,8 +146,8 @@ export function supplierToPublicEntity(s: SupplierRow): PublicProfileEntity {
   if (s.contact_person?.trim()) {
     facts.push({ icon: "id", label: "Contact", value: s.contact_person });
   }
-  if (s.gst_number?.trim()) {
-    facts.push({ icon: "briefcase", label: "GSTIN", value: s.gst_number });
+  if (s.gstin?.trim()) {
+    facts.push({ icon: "briefcase", label: "GSTIN", value: s.gstin });
   }
   if (s.address?.trim()) {
     facts.push({ icon: "location", label: "Operational HQ", value: s.address });
@@ -157,6 +157,9 @@ export function supplierToPublicEntity(s: SupplierRow): PublicProfileEntity {
     if (masked) {
       facts.push({ icon: "phone", label: "Contact Channel", value: masked });
     }
+  }
+  if (s.email?.trim()) {
+    facts.push({ icon: "email", label: "Email", value: s.email.trim() });
   }
   const joined = formatMonthYear(s.created_at);
   if (joined) {

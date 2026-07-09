@@ -252,6 +252,36 @@ export async function getSupplierDetails(
   return { error: null, supplier: data as unknown as SupplierRow };
 }
 
+function coalesceSupplierDisplayField(
+  local: string | null | undefined,
+  enriched: string | null | undefined,
+): string | null {
+  const localTrim = local?.trim();
+  if (localTrim) return localTrim;
+  const enrichedTrim = enriched?.trim();
+  if (enrichedTrim) return enrichedTrim;
+  return local ?? enriched ?? null;
+}
+
+/**
+ * Merge display contact fields from `get_supplier_details` onto a full supplier row.
+ * Local supplier row values take priority; enriched linked-org values fill gaps.
+ */
+export function mergeSupplierDisplayFields(
+  base: SupplierRow,
+  details: SupplierRow,
+): SupplierRow {
+  return {
+    ...base,
+    name: coalesceSupplierDisplayField(base.name, details.name),
+    contact: coalesceSupplierDisplayField(base.contact, details.contact),
+    company_name: coalesceSupplierDisplayField(base.company_name, details.company_name),
+    contact_person: coalesceSupplierDisplayField(base.contact_person, details.contact_person),
+    phone: coalesceSupplierDisplayField(base.phone, details.phone),
+    email: coalesceSupplierDisplayField(base.email, details.email),
+  };
+}
+
 /**
  * Fetch display profile (name, contact, phone, email, avatar) for a linked organization (supplier side).
  * Uses RPC get_connection_partner_display (SECURITY DEFINER) so we can read the other org's profile.

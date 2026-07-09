@@ -10,6 +10,7 @@ export {
   getSuppliersByOrganization,
   getSupplierById,
   getSupplierDetails,
+  mergeSupplierDisplayFields,
   createSupplier,
   updateSupplier,
   type SupplierRow,
