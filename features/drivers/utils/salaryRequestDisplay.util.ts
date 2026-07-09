@@ -1,17 +1,17 @@
 import type { SalaryRequestRow } from '@/features/drivers/services/salaryRequests.service';
 
+const SALARY_REQUEST_TYPE_LABELS: Record<string, string> = {
+  monthly: 'Monthly salary',
+  advance: 'Advance',
+  trip_based: 'Trip commission',
+};
+
 export function salaryRequestTypeLabel(type: string): string {
-  if (type === 'monthly') return 'Monthly salary';
-  if (type === 'advance') return 'Advance';
-  if (type === 'trip_based') return 'Trip commission';
-  return type || 'Salary';
+  return SALARY_REQUEST_TYPE_LABELS[type] ?? (type || 'Salary');
 }
 
 export function salaryRequestTypeShortLabel(type: string): string {
-  if (type === 'monthly') return 'Monthly salary';
-  if (type === 'advance') return 'Advance';
-  if (type === 'trip_based') return 'Trip commission';
-  return 'Salary';
+  return SALARY_REQUEST_TYPE_LABELS[type] ?? 'Salary';
 }
 
 export function salaryRequestStatusLabel(status: string): string {
