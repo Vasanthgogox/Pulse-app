@@ -43,6 +43,8 @@ export interface TripFinanceAdjustmentsPanelProps {
   isAssetExecution?: boolean;
   costLaneLabel?: string;
   costBreakdownLines?: ProvisionCostBreakdownLine[];
+  /** True when the supplier/cost rate was never entered on the trip (renders "Not set" instead of a false ₹0). */
+  costUnset?: boolean;
   lineMetaLabel: (adj: TripAdjustment) => string;
   onOpenProvision: (side: "client" | "supplier") => void;
   onRequestDeduction?: (rec: ClientPassThroughRecommendation) => void;
@@ -134,6 +136,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
         costLaneLabel={props.costLaneLabel}
         costPartyEntityType={props.isAssetExecution ? "driver" : "supplier"}
         costBreakdownLines={props.costBreakdownLines}
+        costUnset={props.costUnset}
         onSelectSide={props.onOpenProvision}
         layout={layout}
       />

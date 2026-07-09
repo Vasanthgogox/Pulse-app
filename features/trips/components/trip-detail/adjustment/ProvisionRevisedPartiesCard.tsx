@@ -152,6 +152,11 @@ export interface ProvisionPartyLaneProps {
   active?: boolean;
   onPress?: () => void;
   breakdownLines?: ProvisionCostBreakdownLine[];
+  /**
+   * True when the underlying rate (e.g. trip.supplier_rate) was never entered rather than
+   * genuinely being ₹0. Renders "Not set" instead of a misleading ₹0 that reads as settled.
+   */
+  amountUnset?: boolean;
 }
 
 function PartyLaneCard({
@@ -170,6 +175,7 @@ function PartyLaneCard({
   active,
   onPress,
   breakdownLines,
+  amountUnset,
   layout = "mobile",
   variant = "default",
 }: ProvisionPartyLaneProps & {
@@ -244,7 +250,7 @@ function PartyLaneCard({
               isModal && styles.metricValueMutedModal,
             ]}
           >
-            {formatINR(baseAmount)}
+            {amountUnset ? "Not set" : formatINR(baseAmount)}
           </Text>
         </View>
         <Feather
@@ -276,29 +282,42 @@ function PartyLaneCard({
               styles.metricValueHero,
               isDesktop && styles.metricValueHeroDesktop,
               isModal && styles.metricValueHeroModal,
-              { color: accentColor },
+              { color: amountUnset ? Theme.textMuted : accentColor },
             ]}
           >
-            {formatINR(revisedAmount)}
+            {amountUnset ? "Not set" : formatINR(revisedAmount)}
           </Text>
-          <Text
-            style={[
-              styles.metricDeltaHero,
-              isDesktop && styles.metricDeltaHeroDesktop,
-              isModal && styles.metricDeltaHeroModal,
-              {
-                color:
-                  delta < 0 && entityType === "client"
-                    ? Theme.negative
-                    : delta > 0 && entityType !== "client"
+          {amountUnset ? (
+            <Text
+              style={[
+                styles.metricDeltaHero,
+                isDesktop && styles.metricDeltaHeroDesktop,
+                isModal && styles.metricDeltaHeroModal,
+                { color: Theme.warning },
+              ]}
+            >
+              Rate not entered
+            </Text>
+          ) : (
+            <Text
+              style={[
+                styles.metricDeltaHero,
+                isDesktop && styles.metricDeltaHeroDesktop,
+                isModal && styles.metricDeltaHeroModal,
+                {
+                  color:
+                    delta < 0 && entityType === "client"
                       ? Theme.negative
-                      : accentColor,
-              },
-            ]}
-          >
-            {delta >= 0 ? "+" : "−"}
-            {formatINR(Math.abs(delta))}
-          </Text>
+                      : delta > 0 && entityType !== "client"
+                        ? Theme.negative
+                        : accentColor,
+                },
+              ]}
+            >
+              {delta >= 0 ? "+" : "−"}
+              {formatINR(Math.abs(delta))}
+            </Text>
+          )}
         </View>
       </View>
       {breakdownLines && breakdownLines.length > 0 ? (
@@ -363,6 +382,8 @@ export interface ProvisionRevisedPartiesCardProps {
   costLaneLabel?: string;
   costPartyEntityType?: "supplier" | "driver";
   costBreakdownLines?: ProvisionCostBreakdownLine[];
+  /** True when the supplier/cost rate was never entered on the trip (see amountUnset on PartyLaneCard). */
+  costUnset?: boolean;
   activeSide?: "client" | "supplier" | null;
   onSelectSide?: (side: "client" | "supplier") => void;
   compact?: boolean;
@@ -426,6 +447,7 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
           active={props.activeSide === "supplier"}
           onPress={props.onSelectSide ? () => props.onSelectSide!("supplier") : undefined}
           breakdownLines={props.costBreakdownLines}
+          amountUnset={props.costUnset}
           layout={layout}
           variant={variant}
         />

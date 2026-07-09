@@ -1587,6 +1587,17 @@ export default function TripDetailScreen({
     : isAssetTripFinance
       ? assetCostEstimate
       : supplierCost;
+  /**
+   * trips.service.ts persists supplier_rate as 0 whenever it was never entered (see
+   * createTrip's `Number(data.supplier_rate) || 0`), so a real ₹0 rate and "never set" are
+   * indistinguishable in the DB. Flag it here (supplier assigned but rate is 0) so the UI can
+   * show "Not set" instead of a false, settled-looking ₹0 — see ProvisionRevisedPartiesCard.
+   */
+  const supplierCostRateUnset =
+    !isPartnerSettlementView &&
+    !isAssetTripFinance &&
+    !!(trip.supplier_id ?? "").trim() &&
+    supplierCost === 0;
   const baseFreight = sales;
   const totalExpenses = isAssetTripFinance
     ? 0
@@ -2280,6 +2291,7 @@ export default function TripDetailScreen({
       isAssetExecution={isAssetTripFinance}
       costLaneLabel={isAssetTripFinance ? "Revised trip cost" : undefined}
       costBreakdownLines={assetCostBreakdownLines}
+      costUnset={supplierCostRateUnset}
       lineMetaLabel={provisionLineMetaLabel}
       onOpenProvision={setShowFinanceProvisionPanel}
       onRequestDeduction={handleRequestCostDeduction}

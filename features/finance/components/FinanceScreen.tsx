@@ -1037,7 +1037,12 @@ export function FinanceScreen() {
       entityType: "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER",
       subTab: FinanceSubTab,
     ) => {
-      if (entityType === "CLIENT" && subTab === "customers") {
+      // aggregateCustomers.ts synthesizes `ledger-party-*` ids for parties that only appear in the
+      // ledger (no row in `clients`). That id isn't a real client id, so routing to /client/[id]
+      // sends it to a backend RPC expecting a UUID, which fails and renders "Client not found."
+      // Fall through to the in-memory overlay below instead, which matches by name/ledger data only.
+      const isLedgerOnlyCustomer = data.id.startsWith("ledger-party-");
+      if (entityType === "CLIENT" && subTab === "customers" && !isLedgerOnlyCustomer) {
         router.push(
           ROUTES.clientDetail(data.id, "cash") as Parameters<
             typeof router.push
