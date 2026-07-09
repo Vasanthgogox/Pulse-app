@@ -33,6 +33,7 @@ import {
   toStoryViewRows,
 } from "@/features/network/utils/storyOwnerViews.util";
 import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts } from "@/lib/queries/usePostsQuery";
+import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
 import { useIndentDirectQuotesQuery } from "@/lib/queries";
 import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
@@ -204,6 +205,7 @@ export default function StoryDetailScreen() {
   const { currentOrganization } = useOrganization();
   const myOrgId = currentOrganization?.id ?? "";
   const invalidatePosts = useInvalidatePosts(myOrgId);
+  const invalidateIndents = useInvalidateIndents();
   const afterPostDeleted = useAfterPostDeleted(currentOrganization?.id ?? null);
 
   const feedQ = useNetworkFeedQuery(myOrgId);
@@ -676,6 +678,7 @@ export default function StoryDetailScreen() {
         onClose={() => { setBidPost(null); setEditBidMode(false); }}
         onSuccess={() => {
           invalidatePosts();
+          if (myOrgId) invalidateIndents(myOrgId);
           setBidPost(null);
           setEditBidMode(false);
         }}

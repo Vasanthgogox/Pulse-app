@@ -459,6 +459,11 @@ export async function getMarketIndentsForOrganization(
  * Safety net for supplier load pages:
  * if supplier has already quoted/bid on an indent (incl. story bid -> direct_quote),
  * ensure that indent appears in market loads even when partner-link/date filters exclude it.
+ *
+ * Uses the `quoted_indents_for_org` RPC (SECURITY DEFINER) rather than a plain
+ * `.from("indents").select()` — indents RLS only allows SELECT by members of the
+ * indent's own org, so a non-partner supplier's direct_quote-only access would
+ * otherwise be silently filtered to zero rows here.
  */
 async function mergeQuotedIndentsForSupplier(
   orgId: string,
@@ -466,39 +471,19 @@ async function mergeQuotedIndentsForSupplier(
 ): Promise<IndentRow[]> {
   const existing = new Map(baseIndents.map((i) => [i.id, i]));
 
-  const { data: myQuotes, error: quoteErr } = await supabase()
-    .from("direct_quotes")
-    .select("indent_id")
-    .eq("bidder_organization_id", orgId);
-  if (quoteErr || !myQuotes?.length) return baseIndents;
-
-  const quotedIndentIds = Array.from(
-    new Set(
-      (myQuotes as Array<{ indent_id?: string | null }>)
-        .map((q) => (q.indent_id ?? "").trim())
-        .filter(Boolean),
-    ),
-  ).filter((id) => !existing.has(id));
-
-  if (quotedIndentIds.length === 0) return baseIndents;
-
-  const { data: extraRows, error: extraErr } = await supabase()
-    .from("indents")
-    .select("*, organizations(name)")
-    .in("id", quotedIndentIds)
-    .neq("status", "draft")
-    .order("created_at", { ascending: false });
+  const { data: extraRows, error: extraErr } = await supabase().rpc(
+    "quoted_indents_for_org",
+    { org_id: orgId },
+  );
   if (extraErr || !extraRows?.length) return baseIndents;
 
-  const extras = (extraRows as Array<
-    IndentRow & { organizations?: { name: string | null } | null }
-  >).map((row) => {
-    const { organizations, ...rest } = row;
-    return normalizeIndentRow({
-      ...rest,
-      creator_organization_name: organizations?.name ?? null,
-    } as IndentRow & { trips?: IndentTripJoin[] | null });
-  });
+  const extras = (extraRows as Array<IndentRow & { creator_organization_name?: string | null }>)
+    .filter((row) => !existing.has(row.id))
+    .map((row) =>
+      normalizeIndentRow({
+        ...row,
+      } as IndentRow & { trips?: IndentTripJoin[] | null }),
+    );
 
   const merged = [...baseIndents];
   for (const row of extras) {
