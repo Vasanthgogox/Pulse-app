@@ -1,4 +1,4 @@
-import { createElement, memo, useCallback, useState, type CSSProperties } from "react";
+import { createElement, memo, useCallback, useRef, useState, type CSSProperties } from "react";
 import {
   Modal,
   Platform,
@@ -110,6 +110,18 @@ export const TripCommodityFields = memo(function TripCommodityFields({
 }: TripCommodityFieldsProps) {
   const router = useRouter();
   const [picker, setPicker] = useState<PickerKind>(null);
+  const tonsInputRef = useRef<TextInput>(null);
+
+  const scrollTonsIntoView = useCallback(() => {
+    if (Platform.OS !== "web") return;
+    // KeyboardAvoidingView is disabled on web (no keyboard height events),
+    // so the on-screen keyboard can cover this field without the browser
+    // scrolling it into view. Nudge it manually once focused.
+    requestAnimationFrame(() => {
+      const node = tonsInputRef.current as unknown as { scrollIntoView?: (opts?: ScrollIntoViewOptions) => void } | null;
+      node?.scrollIntoView?.({ block: "center" });
+    });
+  }, []);
   const { vehicleOptions, productOptions, consumePendingPick } = useUserCommodityTypes(
     indentVehicleType,
     indentLoadType,
@@ -259,12 +271,14 @@ export const TripCommodityFields = memo(function TripCommodityFields({
       <View style={blockStyle}>
         <Text style={labelStyle}>Tons (optional)</Text>
         <TextInput
+          ref={tonsInputRef}
           style={[
             useFormChrome ? fieldInputStyle : wizardChrome.wizardFieldInput,
             tonsError && styles.inputError,
           ]}
           value={tons}
           onChangeText={(t) => onTonsChange(t.replace(/[^\d.]/g, "").slice(0, 12))}
+          onFocus={scrollTonsIntoView}
           placeholder="Load weight in tons"
           placeholderTextColor={Theme.placeholder}
           keyboardType="decimal-pad"
