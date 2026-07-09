@@ -130,20 +130,27 @@ export function formatDurationWithDays(totalMinutes: number): string {
   return parts.join(' ');
 }
 
+/** Shared implementation: diff two header timestamp fields and format the duration. */
+function headerDuration(
+  startRaw: unknown,
+  endRaw: unknown,
+  formatter: (minutes: number) => string,
+): string | null {
+  const start = parseISODateTime(startRaw);
+  const end = parseISODateTime(endRaw);
+  if (!start || !end) return null;
+  const minutes = differenceInMinutes(end, start);
+  if (minutes < 0) return null;
+  return formatter(minutes);
+}
+
 /**
  * Compute unloading duration from header (unload_end - unload_start).
  * Returns formatted string like "10h 0m" or null if either time is missing.
  */
 export function getUnloadingDuration(header: { unload_start_date_time?: { value?: unknown }; unload_end_date_time?: { value?: unknown } } | undefined): string | null {
   if (!header) return null;
-  const startRaw = header.unload_start_date_time?.value;
-  const endRaw = header.unload_end_date_time?.value;
-  const start = parseISODateTime(startRaw);
-  const end = parseISODateTime(endRaw);
-  if (!start || !end) return null;
-  const minutes = differenceInMinutes(end, start);
-  if (minutes < 0) return null;
-  return formatDurationMinutes(minutes);
+  return headerDuration(header.unload_start_date_time?.value, header.unload_end_date_time?.value, formatDurationMinutes);
 }
 
 /**
@@ -151,14 +158,7 @@ export function getUnloadingDuration(header: { unload_start_date_time?: { value?
  */
 export function getLoadingDuration(header: { arrival_date_time?: { value?: unknown }; release_date_time?: { value?: unknown } } | undefined): string | null {
   if (!header) return null;
-  const startRaw = header.arrival_date_time?.value;
-  const endRaw = header.release_date_time?.value;
-  const start = parseISODateTime(startRaw);
-  const end = parseISODateTime(endRaw);
-  if (!start || !end) return null;
-  const minutes = differenceInMinutes(end, start);
-  if (minutes < 0) return null;
-  return formatDurationMinutes(minutes);
+  return headerDuration(header.arrival_date_time?.value, header.release_date_time?.value, formatDurationMinutes);
 }
 
 /**
@@ -167,14 +167,7 @@ export function getLoadingDuration(header: { arrival_date_time?: { value?: unkno
  */
 export function getInTransitDuration(header: { release_date_time?: { value?: unknown }; unload_start_date_time?: { value?: unknown } } | undefined): string | null {
   if (!header) return null;
-  const startRaw = header.release_date_time?.value;
-  const endRaw = header.unload_start_date_time?.value;
-  const start = parseISODateTime(startRaw);
-  const end = parseISODateTime(endRaw);
-  if (!start || !end) return null;
-  const minutes = differenceInMinutes(end, start);
-  if (minutes < 0) return null;
-  return formatDurationWithDays(minutes);
+  return headerDuration(header.release_date_time?.value, header.unload_start_date_time?.value, formatDurationWithDays);
 }
 
 /**
@@ -183,14 +176,7 @@ export function getInTransitDuration(header: { release_date_time?: { value?: unk
  */
 export function getArrivalToUnloadEndDuration(header: { arrival_date_time?: { value?: unknown }; unload_end_date_time?: { value?: unknown } } | undefined): string | null {
   if (!header) return null;
-  const arrivalRaw = header.arrival_date_time?.value;
-  const endRaw = header.unload_end_date_time?.value;
-  const arrival = parseISODateTime(arrivalRaw);
-  const end = parseISODateTime(endRaw);
-  if (!arrival || !end) return null;
-  const minutes = differenceInMinutes(end, arrival);
-  if (minutes < 0) return null;
-  return formatDurationWithDays(minutes);
+  return headerDuration(header.arrival_date_time?.value, header.unload_end_date_time?.value, formatDurationWithDays);
 }
 
 /** Return ISO string in YYYY-MM-DDTHH:mm form for datetime-local input, or YYYY-MM-DD for date-only. */
