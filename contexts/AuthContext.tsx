@@ -281,25 +281,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (inflight) return inflight;
 
       const promise = (async () => {
+        const loadVerifiedProfile = async () => {
+          const dbProfile = await authService.getProfile(uid);
+          if (dbProfile) return dbProfile;
+
+          const provision = await authService.ensureCurrentUserProfile();
+          if (provision.error) return null;
+
+          return await authService.getProfile(uid);
+        };
+
         try {
-          return await withTimeout(
-            (async () => {
-              const dbProfile = await authService.getProfile(uid);
-              if (dbProfile) return dbProfile;
-
-              const provision = await authService.ensureCurrentUserProfile();
-              if (provision.error) return null;
-
-              return await authService.getProfile(uid);
-            })(),
-            PROFILE_VERIFY_TIMEOUT_MS,
-          );
+          return await withTimeout(loadVerifiedProfile(), PROFILE_VERIFY_TIMEOUT_MS);
         } catch (e) {
           if (e instanceof TimeoutError) {
-            logAuth("profile_verification_timeout", { uid }, "warn");
-          } else {
-            logAuthError("profile_verification_error", e, { uid });
+            try {
+              return await withTimeout(loadVerifiedProfile(), PROFILE_VERIFY_TIMEOUT_MS);
+            } catch (retryErr) {
+              if (retryErr instanceof TimeoutError) {
+                logAuth("profile_verification_timeout", { uid, retried: true });
+              } else {
+                logAuthError("profile_verification_error", retryErr, { uid, retried: true });
+              }
+              return null;
+            }
           }
+          logAuthError("profile_verification_error", e, { uid });
           return null;
         } finally {
           profileVerifyInflightRef.current.delete(uid);
@@ -567,7 +574,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cancelled || !stored) return;
       setProfile(freezeInDev(authProfileToUserProfile(stored.profile)));
       setStatus("authenticated");
-      logAuth("profile_backfill_from_session", { uid: stored.user.uid }, "warn");
+      logAuth("profile_backfill_from_session", { uid: stored.user.uid });
     });
     return () => {
       cancelled = true;
@@ -604,7 +611,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const stored = await withTimeout(authService.getSession(), AUTH_TIMEOUT_MS).catch(() => null);
         if (stored) {
-          logAuth("zombie_recovery_deferred_session_present", { uid: user.uid }, "warn");
+          logAuth("zombie_recovery_deferred_session_present", { uid: user.uid });
           return;
         }
       } catch {

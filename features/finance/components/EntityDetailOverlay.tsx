@@ -13,6 +13,7 @@ import { ClientRiskBadge } from "@/features/ai";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
+import { computeLedgerDerivedPaidSeed } from "@/features/finance/utils/ledgerDerivedPaidSeed.util";
 import {
   averageScore,
   getRatingsForDriver,
@@ -881,12 +882,31 @@ export function EntityDetailOverlay({
             tx.contact_id != null &&
             tx.contact_id === entity.id;
 
+          const txs = transactions ?? [];
+
+          // amount_paid is ledger-synced (trg_sync_trip_payment_status) and already reflects
+          // any linked transaction below — seeding from it unconditionally AND adding amount_in
+          // on top double-counts (see docs/FINANCE_ACCEPTANCE_GATE_v1.md). Pre-scan which trips
+          // have a linked transaction so the seed can be reset to 0 for those.
+          const tripKeysWithLinkedTx = new Set<string>();
+          for (const tx of txs) {
+            const linkedKey =
+              norm(tx.trip_id) && linkedTripIds.has(norm(tx.trip_id))
+                ? norm(tx.trip_id)
+                : isEntityLinked(tx) && firstTripKey
+                  ? firstTripKey
+                  : undefined;
+            if (linkedKey !== undefined) tripKeysWithLinkedTx.add(linkedKey);
+          }
+
           for (const t of trips) {
             const key = norm(t.id);
-            paidByTripId[key] = Number(t.amount_paid ?? 0);
+            paidByTripId[key] = computeLedgerDerivedPaidSeed({
+              amountPaid: t.amount_paid,
+              hasLinkedTransaction: tripKeysWithLinkedTx.has(key),
+            });
             outByTripId[key] = 0;
           }
-          const txs = transactions ?? [];
           const linkedTxIds = new Set<string>();
           for (const tx of txs) {
             let key: string | undefined =

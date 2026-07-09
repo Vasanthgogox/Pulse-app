@@ -109,6 +109,17 @@ This complements the ownership model above and resolves the case the ownership t
 
 A product rendering another product's data is expected and encouraged (that's the whole point of shared master data and published events); a product treating its own copy of that data as authoritative — accepting writes, resolving conflicts locally, or drifting out of sync with the real owner — is the failure mode this law exists to name and forbid.
 
+## Law: Four Validations Before Any State-Changing Action
+
+**Every state-changing business action must pass four platform validations before execution: Identity, Relationship, Permission, Financial Integrity.**
+
+1. **Identity** — who is performing the action? (Is there a real, authenticated user behind this request?)
+2. **Relationship** — are the parties authorized to transact with each other? (`docs/architecture/11-relationship-guard-v1.md`'s `RelationshipService.canAward()` is the first concrete instance of this check.)
+3. **Permission** — does the actor have permission for this specific action within their workspace? (Role, feature flag, ownership, approval chain.)
+4. **Financial Integrity** — will this action leave the ledger in a valid state? (`docs/FINANCE_ACCEPTANCE_GATE_v1.md` is the concrete backing for this check.)
+
+This is a platform-wide invariant, not a feature-specific rule — it belongs alongside "One System of Record" for the same reason: it's a law every product's write path answers to, not a design choice any single product gets to opt out of. Not every action needs all four to be *meaningful* (e.g. a pure master-data read has no financial-integrity dimension), but no action gets to skip a validation that *is* meaningful for it just because implementing the check is inconvenient. `AwardBid` is the first action this session scoped against — see `11-relationship-guard-v1.md`'s award guard for what "Relationship" looks like in practice; `IndentCreated`'s `ExecutionOrchestrator` validation (customer/warehouse must resolve, order must be dispatchable) is an existing instance of "Permission"/"Financial Integrity"-adjacent checks that predates this law being named.
+
 ## Relationship to `07`, `08`, and `06`
 
 - `07-domain-ownership-audit.md` recorded what exists today, including two findings worth noting here since they affect how "frozen" this document actually is in practice: **Customer and Warehouse ownership already match this document** — both were consolidated onto `lib/platform/services/CustomerService`/`WarehouseService` during the same work that produced this document. This document is ratifying an already-substantially-real state for those two entities, not proposing a change from a cold start.

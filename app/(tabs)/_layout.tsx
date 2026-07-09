@@ -34,7 +34,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AwardedIndentDeployModalProvider } from '@/contexts/AwardedIndentDeployModalContext';
 import { BusinessConnectionRequestModalProvider } from '@/contexts/BusinessConnectionRequestModalContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
-import { OrgVerificationReminderBanner } from '@/features/organization/components/workspace/kyc/OrgVerificationReminderBanner';
+import { OrgVerificationReminderProvider } from '@/features/organization/components/workspace/kyc/OrgVerificationReminderProvider';
 import { useQueryClient } from '@tanstack/react-query';
 
 function DemoCustomTabBar(
@@ -241,7 +241,9 @@ export default function TabLayout() {
   return (
     <AwardedIndentDeployModalProvider>
       <BusinessConnectionRequestModalProvider>
-        <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
+        <OrgVerificationReminderProvider>
+          <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
+        </OrgVerificationReminderProvider>
       </BusinessConnectionRequestModalProvider>
     </AwardedIndentDeployModalProvider>
   );
@@ -249,14 +251,12 @@ export default function TabLayout() {
 
 function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
   const router = useRouter();
-  const org = useOptionalOrganization();
   const openWorkspace = useCallback(() => {
     router.push(ROUTES.WORKSPACE as Parameters<typeof router.push>[0]);
   }, [router]);
 
   return (
     <View style={styles.tabsWrap}>
-      <OrgVerificationReminderBanner orgId={org?.currentOrganization?.id ?? null} />
       <Tabs
       backBehavior="history"
       tabBar={(props) => (

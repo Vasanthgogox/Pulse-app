@@ -1,20 +1,24 @@
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { computeLedgerDerivedPaidSeed } from "@/features/finance/utils/ledgerDerivedPaidSeed.util";
 
 type PaidSeedInput = {
-  trip: Pick<TripRow, "source" | "amount_paid">;
+  trip: Pick<TripRow, "amount_paid">;
   hasLinkedClientTx: boolean;
 };
 
 /**
- * Client detail "paid" seed for a trip before ledger attribution.
- * Manual trips keep amount_paid as fallback only when no linked client tx exists.
+ * Client-detail-specific name for the Ledger Derived Amount Rule
+ * (computeLedgerDerivedPaidSeed) — kept as a thin wrapper so existing call sites
+ * and tests don't need to change. New call sites should prefer the canonical
+ * utility directly; this exists for the client-detail screen's naming continuity only.
  */
 export function computeClientPaidSeed({
   trip,
   hasLinkedClientTx,
 }: PaidSeedInput): number {
-  const isManualTrip = String(trip.source ?? "").trim().toLowerCase() === "manual";
-  if (isManualTrip && hasLinkedClientTx) return 0;
-  return Number(trip.amount_paid ?? 0);
+  return computeLedgerDerivedPaidSeed({
+    amountPaid: trip.amount_paid,
+    hasLinkedTransaction: hasLinkedClientTx,
+  });
 }
 

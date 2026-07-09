@@ -30,6 +30,13 @@ export function openSuiteProductApp(path: string): void {
   window.location.assign(normalized);
 }
 
+/** Open a suite product app in a new browser tab (web only). */
+export function openSuiteProductAppInNewTab(path: string): void {
+  if (typeof window === 'undefined') return;
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  window.open(normalized, '_blank', 'noopener,noreferrer');
+}
+
 /** Navigate to Pulse Commerce on the shared origin. */
 export function buildPulseCommerceUrl(path = '/dashboard'): string {
   const normalized = path.startsWith('/') ? path : `/${path}`;

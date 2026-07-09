@@ -1,4 +1,5 @@
 import Theme from '@/constants/Theme';
+import { platformShadow } from '@/lib/platformShadow';
 import {
   buildYourRoleTiles,
   connectionNextSteps,
@@ -894,12 +895,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#fff',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    elevation: 8,
     flexShrink: 0,
+    ...platformShadow('0 6px 12px rgba(0, 0, 0, 0.22)', {
+      color: '#000',
+      opacity: 0.22,
+      radius: 12,
+      offsetY: 6,
+      elevation: 8,
+    }),
   },
   heroLogo: {
     width: '100%',

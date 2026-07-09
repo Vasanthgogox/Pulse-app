@@ -34,6 +34,7 @@ export type NetworkProfileSnapshot = {
   gstin: string | null;
   operating_model: string | null;
   total_trips: number;
+  member_since_year: number | null;
 };
 
 type OrganizationSnapshotRow = {
@@ -49,6 +50,7 @@ type OrganizationSnapshotRow = {
   profile_website: string | null;
   gstin: string | null;
   operating_model: string | null;
+  created_at: string | null;
 };
 
 type PartnerDisplayBatchRow = {
@@ -58,6 +60,8 @@ type PartnerDisplayBatchRow = {
   avatarSeed?: string | null;
   tripCount?: number | null;
   averageRating?: number | null;
+  orgCreatedAt?: string | null;
+  ownerSignedUpAt?: string | null;
 };
 
 type PartnerDisplaySingleRow = {
@@ -70,7 +74,31 @@ type PartnerDisplaySingleRow = {
   gstin?: string | null;
   address?: string | null;
   website?: string | null;
+  orgCreatedAt?: string | null;
+  ownerSignedUpAt?: string | null;
 };
+
+function yearFromTimestamp(iso: string | null | undefined): number | null {
+  if (!iso?.trim()) return null;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const year = parsed.getFullYear();
+  return Number.isFinite(year) ? year : null;
+}
+
+function resolveMemberSinceYear(
+  orgRow: OrganizationSnapshotRow,
+  partnerBatch: PartnerDisplayBatchRow | null,
+  partnerProfile: PartnerDisplaySingleRow | null,
+): number | null {
+  return (
+    yearFromTimestamp(partnerBatch?.ownerSignedUpAt) ??
+    yearFromTimestamp(partnerProfile?.ownerSignedUpAt) ??
+    yearFromTimestamp(partnerBatch?.orgCreatedAt) ??
+    yearFromTimestamp(partnerProfile?.orgCreatedAt) ??
+    yearFromTimestamp(orgRow.created_at)
+  );
+}
 
 function nonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -84,7 +112,7 @@ async function loadOrganizationRow(
   const orgWithLogo = await supabase()
     .from("organizations")
     .select(
-      "id, name, avatar_seed, logo_url, city, state, address_line, owner_id, profile_sector, profile_website, gstin, operating_model",
+      "id, name, avatar_seed, logo_url, city, state, address_line, owner_id, profile_sector, profile_website, gstin, operating_model, created_at",
     )
     .eq("id", targetOrgId)
     .maybeSingle();
@@ -116,6 +144,7 @@ async function loadOrganizationRow(
         profile_website: null,
         gstin: null,
         operating_model: null,
+        created_at: null,
       },
     };
   }
@@ -153,6 +182,7 @@ function buildOrganizationRowFromPartnerDisplay(
     profile_website: nonEmptyString(singleRow?.website),
     gstin: nonEmptyString(singleRow?.gstin),
     operating_model: null,
+    created_at: null,
   };
 }
 
@@ -217,6 +247,15 @@ export async function getOrgProfileSnapshot(
 
   if (!orgRow) {
     return { error: null, snapshot: null };
+  }
+
+  const partnerSignupAt =
+    nonEmptyString(partnerBatch?.ownerSignedUpAt) ??
+    nonEmptyString(partnerProfile?.ownerSignedUpAt) ??
+    nonEmptyString(partnerBatch?.orgCreatedAt) ??
+    nonEmptyString(partnerProfile?.orgCreatedAt);
+  if (!orgRow.created_at && partnerSignupAt) {
+    orgRow = { ...orgRow, created_at: partnerSignupAt };
   }
 
   let phone =
@@ -399,6 +438,7 @@ export async function getOrgProfileSnapshot(
     gstin,
     operating_model: operatingModel,
     total_trips: totalTrips,
+    member_since_year: resolveMemberSinceYear(orgRow, partnerBatch, partnerProfile),
   };
 
   return { error: null, snapshot };

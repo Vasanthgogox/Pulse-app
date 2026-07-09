@@ -195,7 +195,7 @@ export function logAuth(
     const fn = severity === "error" ? console.error
       : severity === "warn" ? console.warn
       : console.info;
-    fn("[AuthGuard]", payload);
+    fn(`[AuthGuard] ${event}`, details);
 
     devLogBuffer.push({ ts, severity, event, details });
     if (devLogBuffer.length > DEV_LOG_BUFFER_MAX) {
@@ -303,7 +303,7 @@ export const AUTH_TIMEOUT_MS = 15_000;
 /** Cold-start refresh — align with lib/supabase fetch timeout (25s) + one retry window. */
 export const AUTH_RESTORE_REFRESH_TIMEOUT_MS = 25_000;
 /** Timeout for profile verification (may chain getProfile + provision + re-fetch). */
-export const PROFILE_VERIFY_TIMEOUT_MS = 30_000;
+export const PROFILE_VERIFY_TIMEOUT_MS = 45_000;
 /** Skip restore-time getUser() when access token has more than this TTL remaining. */
 export const AUTH_SESSION_FRESH_MS = 5 * 60 * 1000;
 

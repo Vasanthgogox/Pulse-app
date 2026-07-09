@@ -1,8 +1,9 @@
 import Theme from '@/constants/Theme';
 import { tGlobal } from '@/contexts/LanguageContext';
 import { registerAppAlertImplementation } from '@/lib/appAlert';
-import { useCallback, useEffect, useState } from 'react';
+import { platformShadow } from '@/lib/platformShadow';
 import { pe } from '@/lib/platformViewStyle.util';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -85,12 +86,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 26,
     paddingBottom: 20,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.18,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 16 },
-    elevation: 8,
     alignItems: 'stretch',
+    ...platformShadow('0 16px 28px rgba(15, 23, 42, 0.18)', {
+      color: Theme.shadow,
+      opacity: 0.18,
+      radius: 28,
+      offsetY: 16,
+      elevation: 8,
+    }),
   },
   cardCompact: {
     borderRadius: 24,

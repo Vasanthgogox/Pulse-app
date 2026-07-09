@@ -40,6 +40,7 @@ import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { withBundledActiveProducts, type ProductId } from "@/lib/productRegistry";
 import { useWorkspaceProductsQuery } from "@/lib/queries/useWorkspaceProductsQuery";
 import { ROUTES } from "@/lib/routes";
+import { buildPulseCommerceUrl, openSuiteProductApp, openSuiteProductAppInNewTab } from "@/lib/suite/suiteAuth";
 import { useRouter } from "expo-router";
 import {
   Building2,
@@ -53,15 +54,17 @@ import {
   Settings,
   Shield,
   Sparkles,
+  Store,
   Truck,
   User,
   X,
 } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -94,6 +97,7 @@ type HubRow = {
   panelId?: WorkspacePanelId;
   route?: string;
   valuePill?: string;
+  onPress?: () => void;
 };
 
 type Props = {
@@ -134,6 +138,7 @@ export function WorkspaceHubMenu({
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [showCommerceConfirm, setShowCommerceConfirm] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const displayName = (profile?.full_name ?? profile?.displayName ?? "User").trim();
@@ -228,20 +233,46 @@ export function WorkspaceHubMenu({
     },
   ];
 
-  const workspaceRows: HubRow[] = [
-    {
-      id: "ws-kyc",
-      label: "Org Identity & KYC",
-      icon: hubLucideIcon(Shield),
-      panelId: "kyc",
-    },
-    {
-      id: "ws-settings",
-      label: "Settings",
-      icon: hubLucideIcon(Settings),
-      panelId: "settings",
-    },
-  ];
+  const commerceUrl = useMemo(() => buildPulseCommerceUrl(), []);
+
+  const openCommerce = useCallback(() => {
+    setShowCommerceConfirm(true);
+  }, []);
+
+  const confirmCommerceSwitch = useCallback(() => {
+    setShowCommerceConfirm(false);
+    onExit?.();
+    openSuiteProductApp(commerceUrl);
+  }, [commerceUrl, onExit]);
+
+  const confirmCommerceNewWindow = useCallback(() => {
+    setShowCommerceConfirm(false);
+    openSuiteProductAppInNewTab(commerceUrl);
+  }, [commerceUrl]);
+
+  const workspaceRows: HubRow[] = useMemo(
+    () => [
+      {
+        id: "ws-kyc",
+        label: "Org Identity & KYC",
+        icon: hubLucideIcon(Shield),
+        panelId: "kyc",
+      },
+      {
+        id: "ws-settings",
+        label: "Settings",
+        icon: hubLucideIcon(Settings),
+        panelId: "settings",
+      },
+      {
+        id: "ws-commerce",
+        label: "Commerce",
+        icon: hubLucideIcon(Store),
+        onPress: openCommerce,
+      },
+    ],
+    [openCommerce],
+  );
 
   const partyRows: HubRow[] = [
     {
@@ -291,6 +322,10 @@ export function WorkspaceHubMenu({
           <Pressable
             key={row.id}
             onPress={() => {
+              if (row.onPress) {
+                row.onPress();
+                return;
+              }
               if (row.panelId) {
                 onSelectPanel(row.panelId);
                 return;
@@ -583,6 +618,49 @@ export function WorkspaceHubMenu({
           />
         ) : null}
       </View>
+
+      <Modal
+        visible={showCommerceConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCommerceConfirm(false)}
+      >
+        <View style={hubStyles.confirmBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowCommerceConfirm(false)}
+          />
+          <View style={hubStyles.confirmCard}>
+            <Text style={hubStyles.confirmTitle}>Switch to Pulse Commerce</Text>
+            <Text style={hubStyles.confirmBody}>
+              You will be redirected to the Pulse Commerce platform. Your workspace
+              session stays signed in.
+            </Text>
+            <View style={hubStyles.confirmActionsStack}>
+              <Pressable
+                onPress={confirmCommerceSwitch}
+                style={hubStyles.confirmCtaBtn}
+              >
+                <Text style={hubStyles.confirmCtaText}>Switch to Commerce</Text>
+              </Pressable>
+              {Platform.OS === "web" ? (
+                <Pressable
+                  onPress={confirmCommerceNewWindow}
+                  style={hubStyles.confirmSecondaryBtn}
+                >
+                  <Text style={hubStyles.confirmSecondaryText}>Open in new window</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={() => setShowCommerceConfirm(false)}
+                style={hubStyles.confirmCancelBtn}
+              >
+                <Text style={hubStyles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showSignOutConfirm}

@@ -11,6 +11,7 @@ import { adjustedRevenue } from '@/features/trips/services/tripAdjustments';
 import type { TripAdjustment } from '@/features/trips/services/tripAdjustments';
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from '@/features/trips/visibility/tripVisibility';
 import { allocateAmountsToLargestDueTrips } from '@/features/finance/utils/allocateToLargestDue';
+import { computeLedgerDerivedPaidSeed } from '@/features/finance/utils/ledgerDerivedPaidSeed.util';
 
 function toNameKey(name: string): string {
   return (name || '').toLowerCase().trim();
@@ -200,7 +201,10 @@ export function aggregateCustomers(
       if (!clientId) continue;
       const amount = Number(indent.client_price ?? 0);
       if (!amount) continue;
-      tripCount[clientId] = (tripCount[clientId] ?? 0) + 1;
+      // Billing only — do not increment tripCount. The "Trips" badge means real trip records
+      // (public.trips); an indent hasn't become one yet, so counting it here would show e.g.
+      // "2 trips" for a client with only 1 real trip and 1 pending indent, mismatching every
+      // other screen that counts actual trips.
       billedByClientId[clientId] = (billedByClientId[clientId] ?? 0) + amount;
     }
   }
@@ -232,15 +236,33 @@ export function aggregateCustomers(
     let pending: number;
     if (clientTrips.length > 0 && clientTripIds) {
       // Per-trip attribution (aligns with ClientDetailScreen): overpayment on one trip does not reduce due on another.
-      const paidByTripId: Record<string, number> = {};
-      for (const ct of clientTrips) {
-        paidByTripId[ct.tripId] = ct.amountPaid;
-      }
-      const unlinkedClientAmounts: number[] = [];
       const isClientTx = (tx: LedgerTx) =>
         (tx.contact_id && tx.contact_id === id) ||
         (nameKey && (tx.party_name ?? '').trim().toLowerCase() === nameKey) ||
         (tx.trip_id && tripPartyMap?.[tx.trip_id]?.client_id === id);
+
+      // amount_paid is ledger-synced (trg_sync_trip_payment_status) to already include any linked
+      // client transaction's amount_in — seeding from it unconditionally AND adding amount_in below
+      // double-counts. Pre-scan which trips have a linked client tx so the seed can be reset to 0 for
+      // those, matching computeClientPaidSeed's rule in ClientDetailScreen.
+      const tripIdsWithLinkedClientTx = new Set<string>();
+      for (let ti = 0; ti < transactions.length; ti++) {
+        const tx = transactions[ti];
+        if (tx.contact_type !== 'client' || !isClientTx(tx)) continue;
+        const normalizedTripId = normId(tx.trip_id);
+        if (normalizedTripId && clientTripIds.has(normalizedTripId)) {
+          tripIdsWithLinkedClientTx.add(normalizedTripId);
+        }
+      }
+
+      const paidByTripId: Record<string, number> = {};
+      for (const ct of clientTrips) {
+        paidByTripId[ct.tripId] = computeLedgerDerivedPaidSeed({
+          amountPaid: ct.amountPaid,
+          hasLinkedTransaction: tripIdsWithLinkedClientTx.has(ct.tripId),
+        });
+      }
+      const unlinkedClientAmounts: number[] = [];
       for (let ti = 0; ti < transactions.length; ti++) {
         const tx = transactions[ti];
         if (tx.contact_type === 'driver' || tx.contact_type === 'supplier') continue;

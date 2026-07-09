@@ -179,6 +179,7 @@ type NetworkProfileNode = {
   website?: string | null;
   gstin?: string | null;
   operating_model?: string | null;
+  member_since_year?: number | null;
 };
 
 function getNetworkNodeLocation(item: ConnectedOrg): string {
@@ -468,6 +469,7 @@ function NetworkScreenInner() {
               website: snap.website ?? null,
               gstin: snap.gstin ?? null,
               operating_model: snap.operating_model ?? null,
+              member_since_year: snap.member_since_year ?? prev.member_since_year ?? null,
             };
           });
         }
@@ -868,7 +870,7 @@ function NetworkScreenInner() {
               </View>
                   <View style={[styles.commandMainStatsRow, isMobileLayout && styles.commandMainStatsRowCompact]}>
                     <View style={[styles.commandTotalWrap, isMobileLayout && styles.commandTotalWrapCompact]}>
-                      <Text style={styles.commandTotalText} numberOfLines={1}>
+                      <Text style={styles.commandTotalText}>
                         {totalConnectionsDisplay}
                       </Text>
                     </View>
@@ -1580,6 +1582,7 @@ const styles = StyleSheet.create({
   topTicker: {
     marginHorizontal: Layout.screenPaddingHorizontal,
     marginTop: 12,
+    borderRadius: 14,
     backgroundColor: Theme.textPrimaryDark,
     paddingVertical: 9,
     paddingHorizontal: 14,
@@ -1645,6 +1648,9 @@ const styles = StyleSheet.create({
   commandMainCard: {
     flex: 1,
     minWidth: 0,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
   },
@@ -1658,6 +1664,9 @@ const styles = StyleSheet.create({
   connectionsHubCard: {
     width: "100%",
     minWidth: 0,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
   },
@@ -1665,6 +1674,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 240,
     height: 240,
+    borderRadius: 120,
     backgroundColor: Theme.brandBlueWashSubtle,
     right: -72,
     top: -88,
@@ -1697,6 +1707,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 288,
     height: 288,
+    borderRadius: 144,
     backgroundColor: "rgba(55, 48, 163, 0.07)",
     right: -96,
     top: -96,
@@ -1704,12 +1715,16 @@ const styles = StyleSheet.create({
   commandMainContent: {
     width: "100%",
     paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingTop: 18,
+    paddingBottom: 22,
     gap: 12,
+    position: "relative",
+    zIndex: 2,
   },
   commandMainContentCompact: {
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 18,
     gap: 12,
   },
   commandMainHead: {
@@ -1742,6 +1757,9 @@ const styles = StyleSheet.create({
   },
   commandGrowthPill: {
     minHeight: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "rgba(55, 48, 163, 0.28)",
     backgroundColor: "rgba(55, 48, 163, 0.08)",
     flexDirection: "row",
     alignItems: "center",
@@ -1757,17 +1775,20 @@ const styles = StyleSheet.create({
   },
   commandMainStatsRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 16,
     width: "100%",
     minWidth: 0,
+    minHeight: 84,
+    overflow: "visible",
   },
   commandMainStatsRowCompact: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 12,
+    minHeight: 80,
   },
   commandTotalWrap: {
     flexGrow: 0,
@@ -1775,7 +1796,9 @@ const styles = StyleSheet.create({
     flexBasis: "auto",
     minWidth: 116,
     alignItems: "flex-start",
-    justifyContent: "center",
+    justifyContent: "flex-end",
+    overflow: "visible",
+    paddingBottom: 4,
   },
   commandTotalWrapCompact: {
     minWidth: 104,
@@ -1790,7 +1813,11 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: -1.2,
-    lineHeight: 76,
+    lineHeight: 88,
+    ...Platform.select({
+      web: { paddingBottom: 2 },
+      default: { includeFontPadding: true },
+    }),
   },
   commandMetricGrid: {
     flexDirection: "row",
@@ -1809,6 +1836,9 @@ const styles = StyleSheet.create({
   },
   commandMetricCell: {
     width: 62,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     paddingHorizontal: 6,
     paddingVertical: 7,
@@ -1821,6 +1851,7 @@ const styles = StyleSheet.create({
     minWidth: 56,
     maxWidth: 72,
     minHeight: 52,
+    borderRadius: 12,
     paddingHorizontal: 3,
     paddingVertical: 5,
   },

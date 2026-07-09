@@ -30,6 +30,7 @@ export type NetworkProfileModalNode = {
   website?: string | null;
   gstin?: string | null;
   operating_model?: string | null;
+  member_since_year?: number | null;
 };
 
 export type NetworkProfileModalBodyProps = {
@@ -70,6 +71,7 @@ export function NetworkProfileModalBody({
   const tripsValue = profileStatsLoading ? "…" : String(totalTrips);
   const inApp =
     node.is_integrated ?? (node.status === "CONNECTED" || node.status === "LIVE");
+  const memberSinceYear = node.member_since_year ?? null;
 
   const hasEnrichedData =
     node.registered_address ||
@@ -90,7 +92,8 @@ export function NetworkProfileModalBody({
         avatarUrl={node.avatar_url}
         avatarSeed={node.avatar_seed}
         showVerified={inApp}
-        inApp={inApp}
+        isSignedIn={inApp}
+        memberSinceYear={memberSinceYear}
         connectionStatus={connectionLabel}
         onClose={onClose}
         compact={isMobile}
