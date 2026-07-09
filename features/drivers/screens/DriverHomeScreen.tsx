@@ -519,6 +519,9 @@ export default function DriverRadarScreen() {
   // Stays false until the AsyncStorage check completes so we never flash the
   // "Hold to accept" card for a driver who already accepted this trip.
   const [acceptedTripIdResolved, setAcceptedTripIdResolved] = useState(false);
+  // Bumped whenever we explicitly clear acceptedTripId so an in-flight
+  // AsyncStorage read from before the clear can't resurrect the stale value.
+  const acceptedTripIdClearTokenRef = useRef(0);
   const [selectedIncomingTripId, setSelectedIncomingTripId] = useState<
     string | null
   >(null);
@@ -717,8 +720,11 @@ export default function DriverRadarScreen() {
   }, [useLeafletFallback, leafLetForced]);
 
   useEffect(() => {
+    const tokenAtRead = acceptedTripIdClearTokenRef.current;
     AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY).then((id) => {
-      if (id != null && id !== "") setAcceptedTripId(id);
+      if (tokenAtRead === acceptedTripIdClearTokenRef.current && id != null && id !== "") {
+        setAcceptedTripId(id);
+      }
       setAcceptedTripIdResolved(true);
     });
     AsyncStorage.getItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY).then((v) => {
@@ -844,6 +850,7 @@ export default function DriverRadarScreen() {
         if (prev == null) return prev;
         const trip = trips.find((t) => t.id === prev);
         if (!isOtpClaiming && trip && isCompletedStatus(trip.status)) {
+          acceptedTripIdClearTokenRef.current += 1;
           void AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
           return null;
         }
@@ -892,6 +899,7 @@ export default function DriverRadarScreen() {
         String(acceptedTripId ?? "").toLowerCase() ===
         String(tripId).toLowerCase()
       ) {
+        acceptedTripIdClearTokenRef.current += 1;
         setAcceptedTripId(null);
         await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
       }
@@ -1049,11 +1057,14 @@ export default function DriverRadarScreen() {
   // Focus: local storage only — no invalidate (invalidate + unstable query observers caused update loops).
   useFocusEffect(
     useCallback(() => {
+      const tokenAtRead = acceptedTripIdClearTokenRef.current;
       Promise.all([
         AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY),
         AsyncStorage.getItem(DRIVER_NOTIFICATION_FOCUS_TRIP_KEY),
         AsyncStorage.getItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY),
       ]).then(([acceptedId, focusTripId, notifyOnly]) => {
+        // A newer explicit clear happened while this read was in flight — drop it.
+        if (tokenAtRead !== acceptedTripIdClearTokenRef.current) return;
         if (acceptedId != null && acceptedId !== "") setAcceptedTripId(acceptedId);
         if (focusTripId != null && focusTripId !== "") {
           setSelectedIncomingTripId(focusTripId);
@@ -1389,19 +1400,24 @@ export default function DriverRadarScreen() {
     }
   }, [visibleAssignableIncomingTrips.length, clearNotifyOnlyAfterMission]);
 
-  /** Canonical row for the accepted trip — survives pending→linked refresh lag after OTP claim. */
+  /**
+   * Canonical row for the accepted trip — survives pending→linked refresh lag after OTP claim.
+   * Never resolves to a completed trip: a stale/resurrected acceptedTripId (e.g. a late
+   * AsyncStorage read racing a Close) must not be able to re-open the completed-trip flow.
+   */
   const resolvedAcceptedIncomingTrip = useMemo(() => {
     if (!acceptedTripId || String(acceptedTripId).trim() === "") return null;
     const want = String(acceptedTripId).toLowerCase();
     const fromMerged = mergedIncomingTrips.find(
       (t) => String(t.id).toLowerCase() === want,
     );
-    if (fromMerged) return fromMerged;
     const fromAll = allTrips.find((t) => String(t.id).toLowerCase() === want);
-    if (fromAll) return fromAll;
-    return (
-      pendingOtpTrips.find((t) => String(t.id).toLowerCase() === want) ?? null
+    const fromPendingOtp = pendingOtpTrips.find(
+      (t) => String(t.id).toLowerCase() === want,
     );
+    const match = fromMerged ?? fromAll ?? fromPendingOtp ?? null;
+    if (match && isCompletedStatus(match.status)) return null;
+    return match;
   }, [acceptedTripId, mergedIncomingTrips, allTrips, pendingOtpTrips]);
 
   const selectedIncomingTrip =
@@ -4385,13 +4401,14 @@ export default function DriverRadarScreen() {
                 if (uid) void invalidateDriverHome(uid);
               }}
               onBackToDashboard={async () => {
-                await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+                acceptedTripIdClearTokenRef.current += 1;
                 setAcceptedTripId(null);
                 setSelectedIncomingTripId(null);
                 setAssignmentFeedback(null);
                 justCompletedTripRef.current = false;
                 justClaimedTripIdRef.current = null;
                 justClaimedOldTripIdRef.current = null;
+                await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
                 if (uid) void invalidateDriverHome(uid);
               }}
               {...(mapSheet
@@ -4426,13 +4443,14 @@ export default function DriverRadarScreen() {
                 if (uid) void invalidateDriverHome(uid);
               }}
               onBackToDashboard={async () => {
-                await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+                acceptedTripIdClearTokenRef.current += 1;
                 setAcceptedTripId(null);
                 setSelectedIncomingTripId(null);
                 setAssignmentFeedback(null);
                 justCompletedTripRef.current = false;
                 justClaimedTripIdRef.current = null;
                 justClaimedOldTripIdRef.current = null;
+                await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
                 if (uid) void invalidateDriverHome(uid);
               }}
               {...(mapSheet
