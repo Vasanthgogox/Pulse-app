@@ -10,6 +10,7 @@ import {
   type SuiteNavigationIntent,
 } from './suiteNavigationIntent';
 import {
+  buildPulseCommerceUrl,
   isSuiteExternalAppPath,
   normalizeSuiteReturnTo,
   openSuiteProductApp,
