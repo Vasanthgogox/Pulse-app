@@ -24,17 +24,20 @@ export function installDevConsoleFilters(): void {
 
   const originalWarn = console.warn.bind(console);
   console.warn = (...args: unknown[]) => {
-    const first = args[0];
-    const text =
-      typeof first === 'string'
-        ? first
-        : first != null && typeof first === 'object' && 'message' in first
-          ? String((first as { message: unknown }).message)
-          : '';
+    const text = args
+      .map((arg) => {
+        if (typeof arg === 'string') return arg;
+        if (arg instanceof Error) return arg.message;
+        if (arg != null && typeof arg === 'object' && 'message' in arg) {
+          return String((arg as { message: unknown }).message);
+        }
+        return '';
+      })
+      .join(' ');
     if (
       SUPPRESSED_WARN_PREFIXES.some((prefix) => text.includes(prefix)) ||
       isIgnorableSupabaseAuthLockError(
-        first instanceof Error ? first : new Error(text),
+        args[0] instanceof Error ? args[0] : new Error(text),
       )
     ) {
       return;

@@ -705,8 +705,6 @@ export const styles = StyleSheet.create({
     backgroundColor: Theme.financeHeroBg,
     paddingTop: 8,
     paddingBottom: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(255,255,255,0.12)",
     zIndex: 2,
   },
   mobileUnifiedScrollContent: {

@@ -15,7 +15,9 @@ import {
 } from '@/lib/queries/useBidsQuery';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { deactivatePost, isPostVisibleForOrg, type PostRow } from '@/features/network/services/posts.service';
-import { type BidRow } from '@/features/network/services/bids.service';
+import { type BidRow, RelationshipRequiredError } from '@/features/network/services/bids.service';
+import { createConnectionRequest } from '@/features/connections/services/connectionRequests.service';
+import { ROUTES } from '@/lib/routes';
 import { formatINR } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirmDialog';
 import type { LinkedOrgDisplay } from '@/lib/useLinkedOrgProfileMap';
@@ -181,6 +183,56 @@ export default function PostDetailScreen() {
     };
   }, [bids]);
 
+  /**
+   * Relationship Guard v1 (docs/architecture/11-relationship-guard-v1.md): the shipper
+   * should never hit a dead end on this error — always offer the next concrete action.
+   */
+  const handleAcceptBidError = (error: Error) => {
+    if (!(error instanceof RelationshipRequiredError)) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+
+    if (error.eligibility.reason === 'invitation_pending') {
+      Alert.alert('Invitation Pending', error.message, [
+        { text: 'OK', style: 'cancel' },
+        { text: 'View Invitation', onPress: () => router.push(ROUTES.TABS.NETWORK) },
+      ]);
+      return;
+    }
+
+    if (error.eligibility.reason === 'invitation_rejected') {
+      Alert.alert('Relationship Rejected', error.message, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Resend',
+          onPress: () => void sendConnectionRequest(error.bidderOrgId, error.shipperOrgId),
+        },
+      ]);
+      return;
+    }
+
+    Alert.alert('Relationship Required', error.message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Send Connection Request',
+        onPress: () => void sendConnectionRequest(error.bidderOrgId, error.shipperOrgId),
+      },
+    ]);
+  };
+
+  const sendConnectionRequest = async (bidderOrgId: string, shipperOrgId: string) => {
+    const { error } = await createConnectionRequest(shipperOrgId, bidderOrgId, {
+      requestShipperClient: false,
+      requestCarrierSupplier: true,
+    });
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    Alert.alert('Connection Request Sent', 'You can award this bid once the connection is accepted.');
+  };
+
   const handleAccept = (bidId: string) => {
     Alert.alert('Accept Bid', 'Accept this bid? The bidder will be notified.', [
       { text: 'Cancel', style: 'cancel' },
@@ -188,7 +240,7 @@ export default function PostDetailScreen() {
         text: 'Accept',
         onPress: async () => {
           const res = await acceptMutation.mutateAsync(bidId);
-          if (res.error) Alert.alert('Error', res.error.message);
+          if (res.error) handleAcceptBidError(res.error);
         },
       },
     ]);

@@ -1,0 +1,11 @@
+pulse finance acceptance gate — phase 1 (ledger integrity), read-only
+captured_utc: 20260709T080341Z
+repo_root: /Users/ggx/Desktop/q-web
+
+
+================================================================================
+FILE: scripts/sql/finance-gate/01_orphan_ledger_rows.sql
+================================================================================
+Initialising login role...
+unexpected login role status 544: {"message":"Failed to create login role: Connection terminated due to connection timeout"}
+Connect to your database by setting the env var correctly: SUPABASE_DB_PASSWORD

@@ -2,6 +2,11 @@
  * Bids service — submit, accept, reject, withdraw bids on load posts.
  */
 import { getLinkedOrgProfilesBatch } from '@/features/clients/services/clients.service';
+import {
+  canAward,
+  getAwardEligibility,
+  type AwardEligibility,
+} from '@/features/connections/services/relationshipService';
 import { supabase } from '@/lib/supabase';
 
 export type BidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
@@ -182,9 +187,76 @@ export async function submitPulseBidWithDirectQuote(input: {
   };
 }
 
+/**
+ * Carries the discriminated AwardEligibility so the UI can render an action
+ * (Send Connection Request / View Invitation / Resend) instead of a dead-end alert.
+ */
+export class RelationshipRequiredError extends Error {
+  readonly eligibility: AwardEligibility;
+  readonly bidderOrgId: string;
+  readonly shipperOrgId: string;
+
+  constructor(eligibility: AwardEligibility, bidderOrgId: string, shipperOrgId: string) {
+    super(RelationshipRequiredError.messageFor(eligibility));
+    this.name = 'RelationshipRequiredError';
+    this.eligibility = eligibility;
+    this.bidderOrgId = bidderOrgId;
+    this.shipperOrgId = shipperOrgId;
+  }
+
+  private static messageFor(eligibility: AwardEligibility): string {
+    switch (eligibility.reason) {
+      case 'invitation_pending':
+        return 'Waiting for the bidder to accept your connection invitation.';
+      case 'invitation_rejected':
+        return 'This organization declined your connection invitation.';
+      default:
+        return 'This organization is not connected to yours yet. Send a connection request before awarding.';
+    }
+  }
+}
+
+/**
+ * Award guard (docs/architecture/11-relationship-guard-v1.md): a bid can only be
+ * accepted once RelationshipService confirms an active workspace connection between
+ * the bidder and the post's owning (shipper) organization. Enforced here, not just
+ * in the UI — a bypassed/scripted call still gets refused.
+ */
 export async function acceptBid(
   bidId: string,
 ): Promise<{ error: Error | null }> {
+  const { data: bid, error: bidError } = await supabase()
+    .from('bids')
+    .select('post_id, bidder_organization_id')
+    .eq('id', bidId)
+    .eq('status', 'pending')
+    .maybeSingle();
+  if (bidError) return { error: new Error(bidError.message) };
+  if (!bid) return { error: new Error('Bid not found or no longer pending.') };
+
+  const { post_id: postId, bidder_organization_id: bidderOrgId } = bid as {
+    post_id: string;
+    bidder_organization_id: string;
+  };
+
+  const { data: post, error: postError } = await supabase()
+    .from('posts')
+    .select('organization_id')
+    .eq('id', postId)
+    .maybeSingle();
+  if (postError) return { error: new Error(postError.message) };
+  if (!post) return { error: new Error('Load post not found.') };
+
+  const shipperOrgId = (post as { organization_id: string }).organization_id;
+
+  const { error: relationshipError, allowed } = await canAward(bidderOrgId, shipperOrgId);
+  if (relationshipError) return { error: relationshipError };
+  if (!allowed) {
+    const { error: eligibilityError, eligibility } = await getAwardEligibility(bidderOrgId, shipperOrgId);
+    if (eligibilityError) return { error: eligibilityError };
+    return { error: new RelationshipRequiredError(eligibility, bidderOrgId, shipperOrgId) };
+  }
+
   const { error } = await supabase()
     .from('bids')
     .update({ status: 'accepted' })

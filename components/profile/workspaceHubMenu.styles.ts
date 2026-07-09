@@ -474,6 +474,7 @@ export const hubStyles = StyleSheet.create({
   confirmTitle: { fontSize: 17, fontWeight: "700", color: METRONIC.text },
   confirmBody: { fontSize: 14, color: METRONIC.muted, lineHeight: 20 },
   confirmActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  confirmActionsStack: { gap: 10, marginTop: 4 },
   confirmCancelBtn: {
     flex: 1,
     paddingVertical: 12,
@@ -483,6 +484,15 @@ export const hubStyles = StyleSheet.create({
     borderColor: METRONIC.border,
     alignItems: "center",
   },
+  confirmSecondaryBtn: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: METRONIC.heroBg,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    alignItems: "center",
+  },
+  confirmSecondaryText: { fontSize: 14, fontWeight: "600", color: METRONIC.text },
   confirmCancelText: { fontSize: 14, fontWeight: "600", color: METRONIC.subtle },
   confirmCtaBtn: {
     flex: 1,

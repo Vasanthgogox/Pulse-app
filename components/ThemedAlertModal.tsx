@@ -1,5 +1,6 @@
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
+import { platformShadow } from "@/lib/platformShadow";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React from "react";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -112,11 +113,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     alignItems: "center",
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 14,
+    ...platformShadow("0 14px 20px rgba(15, 23, 42, 0.12)", {
+      color: Theme.shadow,
+      opacity: 0.12,
+      radius: 20,
+      offsetY: 14,
+      elevation: 14,
+    }),
   },
   accentBar: {
     width: "100%",

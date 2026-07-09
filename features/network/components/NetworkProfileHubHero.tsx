@@ -31,7 +31,9 @@ type Props = {
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   showVerified?: boolean;
-  inApp?: boolean;
+  /** Partner is registered on Pulse (integrated connection). */
+  isSignedIn?: boolean;
+  memberSinceYear?: number | null;
   connectionStatus?: string;
   stats: NetworkProfileHubHeroStat[];
   onClose?: () => void;
@@ -55,7 +57,8 @@ export function NetworkProfileHubHero({
   avatarUrl,
   avatarSeed,
   showVerified = false,
-  inApp = false,
+  isSignedIn = false,
+  memberSinceYear = null,
   connectionStatus,
   stats,
   onClose,
@@ -134,7 +137,7 @@ export function NetworkProfileHubHero({
           >
             {name}
           </Text>
-          {showVerified || inApp ? (
+          {showVerified || isSignedIn ? (
             <BadgeCheck
               size={compact ? 16 : 18}
               color={METRONIC.link}
@@ -199,29 +202,38 @@ export function NetworkProfileHubHero({
         )}
 
         <View style={[styles.statusRow, compact && styles.statusRowCompact]}>
-          <View
-            style={[
-              styles.presenceTag,
-              inApp ? styles.presenceTagOn : styles.presenceTagOff,
-              compact && styles.presenceTagCompact,
-            ]}
-          >
+          {isSignedIn ? (
             <View
               style={[
-                styles.presenceDot,
-                inApp ? styles.presenceDotOn : styles.presenceDotOff,
-              ]}
-            />
-            <Text
-              style={[
-                styles.presenceText,
-                compact && styles.presenceTextCompact,
-                inApp ? styles.presenceTextOn : styles.presenceTextOff,
+                styles.presenceTag,
+                styles.presenceTagOn,
+                compact && styles.presenceTagCompact,
               ]}
             >
-              {inApp ? "In app" : "Not in app"}
-            </Text>
-          </View>
+              <View style={[styles.presenceDot, styles.presenceDotOn]} />
+              <Text
+                style={[
+                  styles.presenceText,
+                  styles.presenceTextOn,
+                  compact && styles.presenceTextCompact,
+                ]}
+              >
+                Signed in
+              </Text>
+            </View>
+          ) : null}
+          {memberSinceYear != null ? (
+            <View style={[styles.sinceTag, compact && styles.sinceTagCompact]}>
+              <Text
+                style={[
+                  styles.sinceTagText,
+                  compact && styles.sinceTagTextCompact,
+                ]}
+              >
+                Since {memberSinceYear}
+              </Text>
+            </View>
+          ) : null}
           {connectionStatus ? (
             <View style={[styles.connectionTag, compact && styles.connectionTagCompact]}>
               <Text
@@ -385,10 +397,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(80, 205, 137, 0.1)",
     borderColor: "rgba(80, 205, 137, 0.35)",
   },
-  presenceTagOff: {
-    backgroundColor: "#F5F8FA",
-    borderColor: METRONIC.border,
-  },
   presenceDot: {
     width: 6,
     height: 6,
@@ -397,9 +405,6 @@ const styles = StyleSheet.create({
   presenceDotOn: {
     backgroundColor: "#50CD89",
   },
-  presenceDotOff: {
-    backgroundColor: METRONIC.muted,
-  },
   presenceText: {
     fontSize: 11,
     fontWeight: "700",
@@ -407,8 +412,26 @@ const styles = StyleSheet.create({
   presenceTextOn: {
     color: "#1B7F4A",
   },
-  presenceTextOff: {
+  sinceTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#F5F8FA",
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+  },
+  sinceTagCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  sinceTagText: {
+    fontSize: 11,
+    fontWeight: "700",
     color: METRONIC.subtle,
+    letterSpacing: 0.2,
+  },
+  sinceTagTextCompact: {
+    fontWeight: "600",
   },
   connectionTag: {
     paddingHorizontal: 10,
