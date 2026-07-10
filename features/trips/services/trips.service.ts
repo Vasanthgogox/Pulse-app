@@ -1970,6 +1970,7 @@ export async function assignAggregateTripDriverByPhone(
   vehicleDisplayNumber?: string | null,
   vehicleId?: string | null,
   previousDriverId?: string | null,
+  driverName?: string | null,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const normalized = (phone ?? "").trim().replace(/\s+/g, "");
   if (!normalized) {
@@ -2007,6 +2008,13 @@ export async function assignAggregateTripDriverByPhone(
   if (fleetVehicleId) {
     rpcArgs.p_vehicle_id = fleetVehicleId;
   }
+  const trimmedDriverName =
+    driverName != null && String(driverName).trim() !== ""
+      ? String(driverName).trim()
+      : null;
+  if (trimmedDriverName) {
+    rpcArgs.p_driver_name = trimmedDriverName;
+  }
 
   let { data, error } = await supabase().rpc(
     "assign_aggregate_trip_driver",
@@ -2014,11 +2022,13 @@ export async function assignAggregateTripDriverByPhone(
   );
   if (
     error &&
-    fleetVehicleId &&
-    /p_vehicle_id|Could not find the function/i.test(String(error.message ?? ""))
+    (fleetVehicleId || trimmedDriverName) &&
+    /p_vehicle_id|p_driver_name|Could not find the function/i.test(String(error.message ?? ""))
   ) {
+    // Stale RPC (pre-name / pre-vehicle-id signature): retry without the newer args.
     const legacyArgs = { ...rpcArgs };
     delete legacyArgs.p_vehicle_id;
+    delete legacyArgs.p_driver_name;
     ({ data, error } = await supabase().rpc(
       "assign_aggregate_trip_driver",
       legacyArgs,

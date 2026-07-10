@@ -534,6 +534,8 @@ export function TripAssignmentBlock({
         trimmed,
         matchedVehicle ? null : effectiveVehicleInput.trim() || null,
         matchedVehicle?.id ?? null,    // ← pass vehicle_id to RPC directly
+        trip.driver_id ?? null,        // previousDriverId
+        driverNameTrimmed,             // persist typed name instead of 'Driver' placeholder
       );
       if (rpcErr) {
         setPhoneSaving(false);
