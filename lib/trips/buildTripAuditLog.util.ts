@@ -474,7 +474,11 @@ export function buildTripAuditLog(params: {
     const typeLabel =
       getDoubleEntryDisplayLabel(tx) ?? tx.description ?? "Payment";
     const party = (tx.party_name ?? tx.driver_name ?? "").trim() || "—";
-    const at = tx.transaction_date ?? tx.created_at ?? "";
+    // Prefer created_at (full timestamptz) over transaction_date here: the timeline
+    // renders a wall-clock time, but transaction_date is a date-only column, so
+    // `new Date("YYYY-MM-DD")` parses as UTC midnight and shows e.g. 5:30 AM in IST.
+    // (Ledger/statement views intentionally keep transaction_date-first for business date.)
+    const at = tx.created_at ?? tx.transaction_date ?? "";
     const signedAmount = `${isIn ? "+" : "−"} ₹${formatAmount(amount)}`;
     const actorUserId = inferTripStaffUserId(trip, tx.created_by);
     const actor = resolveTripActivityUserLabel(
