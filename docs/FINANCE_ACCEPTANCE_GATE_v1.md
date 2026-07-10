@@ -20,6 +20,14 @@ This rule now has exactly one canonical implementation — `features/finance/uti
 
 **Next audit to run** (not yet done): the double-counting direction is now covered. The opposite failure mode — balances that are subtly too *low* or never reconcile — needs its own pass: missing ledger entries, orphaned transactions, partial settlements, CN/DN adjustments, and write-order/race conditions between a transaction being recorded and a derived total (like `amount_paid`) being synced. These won't show up as duplicated values the way the bug above did, so they need a different search strategy, not a re-run of this same grep.
 
+### Revenue/Liability Recognition Rule
+
+**A client is not liable for a shipment, and no revenue is recognized, until an indent has been allocated and converted into a trip.** An indent (a load posted to the network, pending/quoted/awarded but not yet allocated) is a request, not a commitment — billing must come from `public.trips` only.
+
+This was violated in `aggregateCustomers.ts`'s "Pass 4," which added `client_price` from any non-cancelled/non-completed indent to a client's Sales/Due (and, briefly during this session's own fix, to the "Trips" count too) before that indent had become a real trip. `aggregateSuppliers.ts` already got this right — its own header comment states "Supplier payables are from trips only — not from awarded indents before conversion (no pre-trip quote roll-up)" — so the client side was the outlier, not the rule. Fixed by removing Pass 4 entirely (and the now-dead `indents` parameter/prop threaded from `useFinanceEntities.ts` → `FinanceScreen.tsx` → `FinanceCustomersTab.tsx` → `CustomersTab.tsx` → `aggregateCustomers`). A `ClientDetailScreen.tsx` change made earlier in this same session to mirror Pass 4's indent billing was reverted for the same reason — it was matching a behavior that was itself wrong.
+
+Net effect: Sales/Due/Trip-count for a client now only reflect real, allocated trips — an open indent shows nowhere in client financials until a trip exists for it.
+
 ## Real tables in scope
 
 | Ledger (Phase 1 term) | Real table(s) |

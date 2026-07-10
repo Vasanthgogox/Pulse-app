@@ -4,9 +4,28 @@ import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomContro
 import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
 import MapLibreGL, { type CameraRef } from '@maplibre/maplibre-react-native';
 import React, { useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import type { LeafletLatLng, LeafletMapProps, LeafletMapRef } from './LeafletMap.types';
+import type {
+  LeafletLatLng,
+  LeafletMapProps,
+  LeafletMapRef,
+  LeafletPolylineLayer,
+} from './LeafletMap.types';
+
+function resolvePolylineLayers(
+  polylines: LeafletPolylineLayer[] | undefined,
+  polyline: LeafletLatLng[],
+  polylineColor: string,
+): LeafletPolylineLayer[] {
+  if (polylines?.length) {
+    return polylines.filter((layer) => layer.coordinates?.length >= 2);
+  }
+  if (polyline.length >= 2) {
+    return [{ id: 'main', coordinates: polyline, color: polylineColor }];
+  }
+  return [];
+}
 
 function toLngLat(c: LeafletLatLng): [number, number] {
   return [c.longitude, c.latitude];
@@ -59,6 +78,8 @@ export const LeafletMapMapLibre = React.forwardRef<
       center,
       zoom = 15,
       markers = [],
+      polylines,
+      routeLabels = [],
       polyline = [],
       polylineColor = '#3b82f6',
       lowPower = false,
@@ -104,12 +125,9 @@ export const LeafletMapMapLibre = React.forwardRef<
       zoomOut: () => setCameraZoom(zoomLevelRef.current - 1),
     }));
 
-    const safePolyline = useMemo(
-      () =>
-        (polyline ?? []).filter(
-          (p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude),
-        ),
-      [polyline],
+    const safePolylineLayers = useMemo(
+      () => resolvePolylineLayers(polylines, polyline, polylineColor),
+      [polylines, polyline, polylineColor],
     );
 
     const showZoom = showZoomControls && !interactionLocked;
@@ -133,29 +151,44 @@ export const LeafletMapMapLibre = React.forwardRef<
             }}
           />
 
-          {safePolyline.length >= 2 ? (
+          {safePolylineLayers.map((layer) => (
             <MapLibreGL.ShapeSource
-              id="leaflet-polyline-source"
+              key={layer.id}
+              id={`leaflet-polyline-source-${layer.id}`}
               shape={{
                 type: 'Feature',
                 geometry: {
                   type: 'LineString',
-                  coordinates: safePolyline.map(toLngLat),
+                  coordinates: layer.coordinates.map(toLngLat),
                 },
                 properties: {},
               }}
             >
               <MapLibreGL.LineLayer
-                id="leaflet-polyline-layer"
+                id={`leaflet-polyline-layer-${layer.id}`}
                 style={{
-                  lineColor: polylineColor,
-                  lineWidth: 4,
+                  lineColor: layer.color ?? polylineColor,
+                  lineWidth: layer.width ?? 5,
                   lineCap: 'round',
                   lineJoin: 'round',
+                  ...(layer.dashed ? { lineDasharray: [2, 2.5] } : {}),
                 }}
               />
             </MapLibreGL.ShapeSource>
-          ) : null}
+          ))}
+
+          {(routeLabels ?? []).map((label) => (
+            <MapLibreGL.PointAnnotation
+              key={label.id}
+              id={`leaflet-route-label-${label.id}`}
+              coordinate={toLngLat(label.coordinate)}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View style={styles.routeDistanceLabel}>
+                <Text style={styles.routeDistanceLabelText}>{label.text}</Text>
+              </View>
+            </MapLibreGL.PointAnnotation>
+          ))}
 
           {(markers ?? []).map((m) => (
             <MapLibreGL.PointAnnotation
@@ -202,5 +235,19 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
+  },
+  routeDistanceLabel: {
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(4,120,87,0.28)',
+  },
+  routeDistanceLabelText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.driverEmeraldDark,
+    letterSpacing: 0.2,
   },
 });

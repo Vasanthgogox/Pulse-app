@@ -12,7 +12,6 @@ import {
     aggregateCustomers,
     type TripPartyMap,
 } from "@/features/finance/aggregation";
-import type { IndentForAggregation } from "@/features/finance/aggregation/types";
 import {
     type FinancialRowData
 } from "@/features/finance/components/FinancialRow";
@@ -1604,11 +1603,6 @@ export interface CustomersTabProps {
    * with the correct supplier_rate amount via aggregateCustomers Pass 2.
    */
   tripsWhereOrgIsSupplier?: TripRow[];
-  /**
-   * Pre-trip indents for finance aggregation (pending/quoted/awarded status).
-   * Enables customer billing amounts before a trip row is created (Pass 4 in aggregateCustomers).
-   */
-  indents?: IndentForAggregation[];
   /** Ledger transactions: parties that appear here but not in clients are shown as customer rows (received/pending from amounts). */
   transactions?: LedgerTransactionRow[] | null;
   /** When true, parent is still loading entity data; show loading until ready. */
@@ -1658,7 +1652,6 @@ export function CustomersTab({
   clients: clientsProp,
   trips: tripsProp,
   tripsWhereOrgIsSupplier: tripsWhereOrgIsSupplierProp,
-  indents: indentsProp,
   transactions: transactionsProp,
   parentLoading = false,
   onTotals,
@@ -1723,7 +1716,6 @@ export function CustomersTab({
       allTrips,
       transactions,
       tripPartyMap,
-      indentsProp,
       tripFinanceAdjustmentsByTripId,
     );
   }, [
@@ -1731,7 +1723,6 @@ export function CustomersTab({
     allTrips,
     transactions,
     tripPartyMap,
-    indentsProp,
     tripFinanceAdjustmentsByTripId,
   ]);
 

@@ -5,11 +5,13 @@ import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import { DriverChatSlackInbox } from "@/features/chat/components/driver/DriverChatSlackInbox";
 import { DriverChatSlackThread } from "@/features/chat/components/driver/DriverChatSlackThread";
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
+import { preloadDriverChatThread } from "@/lib/preloadDriverChatWarmup";
 import type { TripConversation } from "@/features/chat/types/chat.types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocalSearchParams, useRouter, useSegments } from "expo-router";
 import Layout from "@/constants/Layout";
 import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Text, TouchableOpacity, View } from "react-native";
 import { MessageSquare } from "lucide-react-native";
@@ -18,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function DriverChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { profile } = useAuth();
   const segments = useSegments();
   const isDriverChatRoute = segments[segments.length - 1] === "chat";
@@ -70,6 +73,24 @@ export default function DriverChatScreen() {
       setTripThreadError(null);
       return;
     }
+
+    const cached = conversations.find(
+      (c) => String(c.trip_id) === normalizedTripId,
+    );
+    if (cached) {
+      setOpeningTripThread(false);
+      setTripThreadError(null);
+      setSelectedId(cached.id);
+      setPendingConvOrgId(cached.organization_id);
+      setMessageInput("");
+      preloadDriverChatThread(queryClient, cached.id);
+      void markReadRef.current(cached.id);
+      return;
+    }
+
+    // Wait for inbox bootstrap before hitting ensure RPC (avoids duplicate work).
+    if (isLoading) return;
+
     let cancelled = false;
     setOpeningTripThread(true);
     setTripThreadError(null);
@@ -83,6 +104,7 @@ export default function DriverChatScreen() {
         if (result) {
           setPendingConvOrgId(result.orgId);
           setSelectedId(result.convId);
+          preloadDriverChatThread(queryClient, result.convId);
           void markReadRef.current(result.convId);
         } else {
           setTripThreadError("Could not open chat for this trip.");
@@ -96,7 +118,7 @@ export default function DriverChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [normalizedTripId]);
+  }, [normalizedTripId, conversations, isLoading, queryClient]);
 
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
   const resolvedOrgId = selectedConv?.organization_id ?? pendingConvOrgId;
@@ -113,6 +135,7 @@ export default function DriverChatScreen() {
     setPendingConvOrgId(conv.organization_id);
     markAsRead(conv.id);
     setMessageInput("");
+    preloadDriverChatThread(queryClient, conv.id);
   };
 
   const renderThread = (conv: Partial<TripConversation> & {

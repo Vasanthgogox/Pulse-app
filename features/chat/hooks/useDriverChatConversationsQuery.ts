@@ -8,7 +8,7 @@ import {
   infrastructureRetryDelay,
   infrastructureShouldRetry,
 } from '@/lib/queryRetry';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 const STALE_MS = 30_000;
@@ -38,11 +38,16 @@ export function useDriverChatConversationsQuery(driverIds: string[]) {
     retryDelay: infrastructureRetryDelay,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
+    placeholderData: keepPreviousData,
   });
+
+  const hasConversations = (query.data?.length ?? 0) > 0;
 
   return {
     conversations: query.data ?? EMPTY,
-    isLoading: query.isLoading,
+    /** True only on first load with no cached rows (not background refetch). */
+    isLoading: query.isPending && !hasConversations,
+    isFetching: query.isFetching,
     refreshConversations: query.refetch,
     driverIdsKey,
   };

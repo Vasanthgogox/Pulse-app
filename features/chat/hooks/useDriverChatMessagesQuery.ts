@@ -15,6 +15,7 @@ import {
   infrastructureShouldRetry,
 } from '@/lib/queryRetry';
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useQueryClient,
 } from '@tanstack/react-query';
@@ -39,6 +40,7 @@ export function useDriverChatMessagesQuery(conversationId: string | null) {
     retry: infrastructureShouldRetry,
     retryDelay: infrastructureRetryDelay,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
     queryFn: async ({ pageParam }) => {
       const rows = await chatService.getMessagesByConversation(cid, {
         before: pageParam,
@@ -58,6 +60,8 @@ export function useDriverChatMessagesQuery(conversationId: string | null) {
     [query.data],
   );
 
+  const hasMessages = messages.length > 0;
+
   const loadOlder = useCallback(async () => {
     if (!query.hasNextPage || query.isFetchingNextPage) return;
     await query.fetchNextPage();
@@ -65,7 +69,9 @@ export function useDriverChatMessagesQuery(conversationId: string | null) {
 
   return {
     messages,
-    isLoading: query.isLoading,
+    /** True only when bootstrap has no cached pages yet (re-open uses cache instantly). */
+    isLoading: query.isPending && !hasMessages,
+    isFetching: query.isFetching,
     isFetchingOlder: query.isFetchingNextPage,
     hasOlder: query.hasNextPage ?? false,
     loadOlder,

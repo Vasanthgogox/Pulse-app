@@ -4,7 +4,9 @@ import {
   CHAT_TEXT_PRIMARY,
 } from "@/features/chat/chatTheme";
 import { SLACK_CHAT_AVATAR } from "@/features/chat/components/shared/chatSlackAvatar.constants";
-import { Platform, StyleSheet } from "react-native";
+import { Platform, StyleSheet, type ViewStyle } from "react-native";
+
+import { withWebSafeShadows } from "@/lib/platformViewStyle.util";
 
 /** Pulse Chat — matte black chrome + indigo accent. */
 export const PULSE_CHAT = {
@@ -92,7 +94,8 @@ export const SLACK_CHAT_LIST_PROPS = {
   showsVerticalScrollIndicator: false,
 };
 
-export const slackMobileStyles = StyleSheet.create({
+export const slackMobileStyles = withWebSafeShadows(
+  StyleSheet.create({
   listScroll: {
     flex: 1,
     minHeight: 0,
@@ -1241,4 +1244,5 @@ export const slackMobileStyles = StyleSheet.create({
     minWidth: 0,
     lineHeight: 17,
   },
-});
+  }),
+);

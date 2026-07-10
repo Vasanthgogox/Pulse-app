@@ -78,7 +78,7 @@ export const SignUpPhotoPickerStep = memo(function SignUpPhotoPickerStep({
             resizeMode="cover"
           />
         ) : previewImage ? (
-          <Image source={previewImage} style={styles.previewImage} resizeMode="cover" />
+          <Image source={previewImage} style={styles.previewImage} resizeMode="contain" />
         ) : (
           previewFallback ?? <View style={styles.previewPlaceholder} />
         )}
@@ -161,7 +161,7 @@ export const SignUpPhotoPickerBody = memo(function SignUpPhotoPickerBody({
             resizeMode="cover"
           />
         ) : previewImage ? (
-          <Image source={previewImage} style={styles.previewImage} resizeMode="cover" />
+          <Image source={previewImage} style={styles.previewImage} resizeMode="contain" />
         ) : (
           previewFallback ?? <View style={styles.previewPlaceholder} />
         )}
@@ -267,15 +267,17 @@ function createStyles(theme: SignUpTheme) {
       marginBottom: 8,
     },
     gridItem: {
-      width: Platform.OS === 'web' ? 48 : 56,
-      height: Platform.OS === 'web' ? 48 : 56,
-      borderRadius: Platform.OS === 'web' ? 12 : 14,
+      width: Platform.OS === 'web' ? 56 : 56,
+      height: Platform.OS === 'web' ? 56 : 56,
+      borderRadius: Platform.OS === 'web' ? 14 : 14,
       overflow: 'hidden',
       borderWidth: 2,
       borderColor: theme.border,
+      backgroundColor: theme.surface,
     },
     gridItemSelected: {
       borderColor: theme.primaryDark,
+      borderWidth: 3,
     },
     gridImage: {
       width: '100%',

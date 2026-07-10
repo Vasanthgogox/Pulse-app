@@ -1,6 +1,7 @@
 import 'react-native-gesture-handler';
 // Shadow / pointerEvents RN Web compat — must run before any StyleSheet.create in the tree.
 import '@/lib/installWebRnCompatPatches';
+import { ensureWebRnCompatPatches } from '@/lib/installWebRnCompatPatches';
 import { ensureWebShellParity } from '@/lib/htmlShell';
 // Background GPS task must be registered before any component mounts — do not move this import.
 import '@/lib/tracking/backgroundTasks';
@@ -261,6 +262,7 @@ LogBox.ignoreLogs([
 
 export default function RootLayout() {
   useEffect(() => {
+    ensureWebRnCompatPatches();
     installDevConsoleFilters();
     clearNativeBundleReloadGuard();
     installNativeBundleRecoveryHandler();

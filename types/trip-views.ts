@@ -50,6 +50,7 @@ export type DriverTripRow = {
   supplier_rate?: number | null;
   driver_commission?: number | null;
   distance?: number | null;
+  supplier_id?: string | null;
 };
 
 /** Map supplier view row → legacy TripRow for screens not yet migrated off TripRow. */
@@ -92,6 +93,62 @@ export function supplierRowToTripRow(row: SupplierTripRow): TripRow {
   };
 }
 
+/** Map full trips row → driver-safe projection when trips_driver_view returns empty. */
+export function tripRowToDriverTripRow(
+  row: Pick<
+    TripRow,
+    | 'id'
+    | 'driver_id'
+    | 'driver_display_trip_id'
+    | 'trip_number'
+    | 'status'
+    | 'pickup_area'
+    | 'drop_location'
+    | 'pickup_date'
+    | 'pickup_lat'
+    | 'pickup_lon'
+    | 'drop_lat'
+    | 'drop_lon'
+    | 'notes'
+    | 'vehicle_id'
+    | 'started_at'
+    | 'created_at'
+    | 'updated_at'
+    | 'client_price'
+    | 'supplier_rate'
+    | 'driver_commission'
+    | 'distance'
+    | 'supplier_id'
+  >,
+): DriverTripRow {
+  return {
+    id: row.id,
+    driver_id: row.driver_id ?? null,
+    driver_display_trip_id: row.driver_display_trip_id ?? row.trip_number ?? null,
+    status: row.status,
+    pickup_location: row.pickup_area ?? null,
+    pickup_address: row.pickup_area ?? null,
+    pickup_scheduled_at: row.pickup_date ?? null,
+    dropoff_location: row.drop_location ?? null,
+    dropoff_address: row.drop_location ?? null,
+    dropoff_scheduled_at: null,
+    instructions: row.notes ?? null,
+    vehicle_id: row.vehicle_id ?? null,
+    pickup_lat: row.pickup_lat ?? null,
+    pickup_lon: row.pickup_lon ?? null,
+    drop_lat: row.drop_lat ?? null,
+    drop_lon: row.drop_lon ?? null,
+    started_at: row.started_at ?? null,
+    created_at: row.created_at,
+    updated_at: row.updated_at ?? row.created_at,
+    client_price: row.client_price ?? null,
+    supplier_rate: row.supplier_rate ?? null,
+    driver_commission: row.driver_commission ?? null,
+    distance: row.distance ?? null,
+    supplier_id: row.supplier_id ?? null,
+  };
+}
+
 /** Map driver view row → legacy TripRow for driver UI until fully on DriverTripRow. */
 export function driverRowToTripRow(row: DriverTripRow): TripRow {
   return {
@@ -126,7 +183,7 @@ export function driverRowToTripRow(row: DriverTripRow): TripRow {
     distance: row.distance ?? null,
     estimated_duration: null,
     client_id: null,
-    supplier_id: null,
+    supplier_id: row.supplier_id ?? null,
     driver_id: row.driver_id ?? null,
     load_type: null,
     completed_at: null,

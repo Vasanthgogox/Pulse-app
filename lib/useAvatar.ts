@@ -10,12 +10,14 @@
  * Signed URLs are resolved async; seed presets and initials render synchronously.
  */
 
-import { getAvatarUriForSeed } from '@/constants/DriverLevels';
+import { getAvatarUriForSeed, getPresetImageSourceForSeed } from '@/constants/DriverLevels';
 import {
   DEFAULT_USER_2D_AVATAR_SEED,
   getUser2DAvatarUriForSeed,
+  getUser2DPresetImageSourceForSeed,
 } from '@/constants/UserAvatars';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ImageSourcePropType } from 'react-native';
 import {
   AVATAR_BUCKET,
   LEGACY_AVATAR_BUCKET,
@@ -87,6 +89,8 @@ export type AvatarParty = DriverParty | OrgParty | UserParty;
 export type UseAvatarResult = {
   /** Resolved signed URL, or null when no photo found → render initials */
   imageUri: string | null;
+  /** Prefer this for bundled preset avatars (web-safe `require()` sources). */
+  imageSource: ImageSourcePropType | null;
   /** True while the async URL resolution is in flight */
   loading: boolean;
   /** 1–2 uppercase chars derived from name */
@@ -208,7 +212,9 @@ function resolvePresetUri(party: AvatarParty, context: AvatarContext): string | 
   switch (party.type) {
     case 'driver': {
       const seed = (party.avatarSeed ?? '').trim();
-      return seed ? getAvatarUriForSeed(seed) : null;
+      if (!seed) return null;
+      if (seed.startsWith('user-')) return getUser2DAvatarUriForSeed(seed);
+      return getAvatarUriForSeed(seed);
     }
     case 'organization': {
       const seed = (party.ownerAvatarSeed ?? '').trim();
@@ -317,8 +323,27 @@ export function useAvatar(
     (u) => typeof u === 'string' && u.trim().length > 0,
   );
 
+  const presetImageSource = useMemo((): ImageSourcePropType | null => {
+    if (hasUploadedPhoto) return null;
+    const seed = presetSeedKey(party, context).split('|').find((s) => s.trim())?.trim();
+    if (!seed) return null;
+    if (party.type === 'driver') {
+      const seed = presetSeedKey(party, context).split('|').find((s) => s.trim())?.trim();
+      if (!seed) return getPresetImageSourceForSeed(null);
+      if (seed.startsWith('user-')) return getUser2DPresetImageSourceForSeed(seed);
+      return getPresetImageSourceForSeed(seed);
+    }
+    return getUser2DPresetImageSourceForSeed(seed);
+  }, [hasUploadedPhoto, party, context]);
+
+  const imageSource = useMemo((): ImageSourcePropType | null => {
+    if (photoUri) return { uri: photoUri };
+    return presetImageSource;
+  }, [photoUri, presetImageSource]);
+
   return {
     imageUri: photoUri ?? (hasUploadedPhoto ? null : presetUri),
+    imageSource,
     loading: hasUploadedPhoto ? loading : false,
     initials: deriveInitials(party.name),
     initialsColor: deriveInitialsColor(party.name),

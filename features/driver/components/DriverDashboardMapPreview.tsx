@@ -6,8 +6,9 @@ import type { LeafletLatLng } from "@/components/driver/LeafletMap.types";
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Maximize2 } from "lucide-react-native";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   StyleSheet,
@@ -42,6 +43,43 @@ export function DriverDashboardMapPreview({
   locationLabel,
   onPressExpand,
 }: Props) {
+  const [mapReady, setMapReady] = useState(Platform.OS !== "web");
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+
+    let cancelled = false;
+    const start = () => {
+      if (!cancelled) setMapReady(true);
+    };
+
+    const idleCallback = (
+      globalThis as typeof globalThis & {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      }
+    ).requestIdleCallback;
+
+    const idleId =
+      typeof idleCallback === "function"
+        ? idleCallback(start, { timeout: 1200 })
+        : window.setTimeout(start, 400);
+
+    return () => {
+      cancelled = true;
+      const cancelIdle = (
+        globalThis as typeof globalThis & {
+          cancelIdleCallback?: (id: number) => void;
+        }
+      ).cancelIdleCallback;
+      if (typeof cancelIdle === "function" && typeof idleCallback === "function") {
+        cancelIdle(idleId);
+      } else {
+        window.clearTimeout(idleId);
+      }
+    };
+  }, []);
+
   const markers = useMemo(
     () => [
       {
@@ -73,15 +111,21 @@ export function DriverDashboardMapPreview({
       accessibilityHint="Tap to open full screen map"
     >
       <View style={styles.mapShell} pointerEvents="none">
-        <LeafletMap
-          style={styles.map}
-          center={center}
-          zoom={14}
-          markers={markers}
-          lowPower
-          interactionLocked
-          showZoomControls={false}
-        />
+        {mapReady ? (
+          <LeafletMap
+            style={styles.map}
+            center={center}
+            zoom={14}
+            markers={markers}
+            lowPower
+            interactionLocked
+            showZoomControls={false}
+          />
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <ActivityIndicator size="small" color={Theme.driverEmerald} />
+          </View>
+        )}
         <View style={styles.mapFade} />
       </View>
 
@@ -131,6 +175,12 @@ const styles = StyleSheet.create({
   },
   map: {
     ...StyleSheet.absoluteFillObject,
+  },
+  mapPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e2e8f0",
   },
   mapFade: {
     ...StyleSheet.absoluteFillObject,

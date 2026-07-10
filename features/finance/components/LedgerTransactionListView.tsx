@@ -39,6 +39,7 @@ import {
     TouchableOpacity,
     useWindowDimensions,
     View,
+    type ViewStyle,
 } from "react-native";
 import {
     FinanceAnalyticsView,
@@ -351,6 +352,14 @@ export function LedgerTransactionListView({
     : isDesktopLedger || !fullWidth
       ? CASH_LEDGER_MAX_WIDTH
       : undefined;
+  const ledgerContentWidthStyle =
+    ledgerContentMaxWidth != null
+      ? ({
+          width: ledgerContentMaxWidth,
+          maxWidth: "100%" as const,
+          alignSelf: "center" as const,
+        } satisfies ViewStyle)
+      : ({ width: "100%" as const, alignSelf: "stretch" as const } satisfies ViewStyle);
   const ledgerContentPadding = isDesktopLedger
     ? LEDGER_DESKTOP_PADDING
     : fullWidth
@@ -730,13 +739,20 @@ export function LedgerTransactionListView({
                     columnAligned={ledgerColumnAligned}
                   />
                   {isSectionExpanded(key) ? (
-                    <View style={styles.tableViewMetaRow}>
+                    <View
+                      style={[
+                        styles.tableViewMetaRow,
+                        { paddingHorizontal: ledgerContentPadding },
+                        ledgerContentWidthStyle,
+                      ]}
+                    >
                       <Text style={styles.tableViewDateBarCount}>
                         {sectionRows.length} transactions
                       </Text>
                     </View>
                   ) : null}
                   {isSectionExpanded(key) && (
+                    <View style={ledgerContentWidthStyle}>
                     <View
                       style={[
                         styles.tableViewTable,
@@ -947,6 +963,7 @@ export function LedgerTransactionListView({
                         );
                       })}
                     </View>
+                    </View>
                   )}
                 </View>
               );
@@ -1045,7 +1062,7 @@ export function LedgerTransactionListView({
                             style={[
                               styles.fiscalTransactionRows,
                               ledgerContentMaxWidth != null &&
-                                styles.fiscalTransactionRowsConstrained,
+                                ledgerContentWidthStyle,
                               (fullWidth || isDesktopLedger) &&
                                 styles.fiscalTransactionRowsFullWidth,
                             ]}
@@ -1899,7 +1916,7 @@ const styles = StyleSheet.create({
   },
   entityDesktopTableWrap: {
     width: "100%",
-    alignSelf: "center",
+    alignSelf: "stretch",
     paddingBottom: 8,
   },
   scrollBottomSpacer: { height: Layout.sectionSpacing },

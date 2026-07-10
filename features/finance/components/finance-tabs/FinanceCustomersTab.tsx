@@ -10,7 +10,6 @@ export function FinanceCustomersTab(props: FinanceTabBodyProps) {
     clientRows,
     tripRows,
     tripsWhereOrgIsSupplier,
-    indentsForFinance,
     entitiesLoading,
     onTabTotals,
     onEntityRowSelect,
@@ -40,7 +39,6 @@ export function FinanceCustomersTab(props: FinanceTabBodyProps) {
       clients={clientRows}
       trips={tripRows}
       tripsWhereOrgIsSupplier={tripsWhereOrgIsSupplier}
-      indents={indentsForFinance}
       transactions={entityAggregationLedger}
       parentLoading={entitiesLoading}
       onTotals={onTabTotals}

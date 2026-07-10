@@ -27,12 +27,13 @@ import { Check, ChevronLeft, Edit3, Mail, Phone, Sparkles } from 'lucide-react-n
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import Typography from '@/constants/Typography';
-import { getAvatarUriForSeed, ALL_PRESET_AVATARS } from '@/constants/DriverLevels';
+import { getAvatarUriForSeed, ALL_PRESET_AVATARS, DEFAULT_DRIVER_AVATAR_SEED, getPresetImageSourceForSeed } from '@/constants/DriverLevels';
 import {
   DEFAULT_USER_2D_AVATAR_SEED,
   FEMALE_USER_2D_AVATARS,
   MALE_USER_2D_AVATARS,
   getUser2DAvatarUriForSeed,
+  getUser2DPresetImageSourceForSeed,
 } from '@/constants/UserAvatars';
 import { useAuth } from '@/contexts/AuthContext';
 import { pickAndUploadAvatar, getSignedAvatarUrl } from '@/lib/avatarUpload';
@@ -41,7 +42,7 @@ import { validatePhone } from '@/lib/phoneValidation';
 import { VALIDATION, maxLength, validateFullName } from '@/lib/validation';
 import * as authService from '../services/auth.service';
 
-const DEFAULT_AVATAR_SEED = 'driver-1';
+const DEFAULT_AVATAR_SEED = DEFAULT_DRIVER_AVATAR_SEED;
 
 /** Driver edit screen — cool white page (reference: #FDFEFF). */
 const DRIVER_EDIT_PAGE_BG = '#F6FAFC';
@@ -143,6 +144,16 @@ export function EditProfileModal({
     },
     [avatarPresetStyle]
   );
+
+  const usesUploadedAvatar = Boolean(profile?.avatar_url?.trim());
+  const avatarPreviewSource = useMemo(() => {
+    if (usesUploadedAvatar && avatarUri.trim()) {
+      return { uri: avatarUri };
+    }
+    return avatarPresetStyle === 'user-2d'
+      ? getUser2DPresetImageSourceForSeed(selectedPresetSeed)
+      : getPresetImageSourceForSeed(selectedPresetSeed);
+  }, [usesUploadedAvatar, avatarUri, avatarPresetStyle, selectedPresetSeed]);
 
   /** Resolve display URI: uploaded (signed URL) or preset avatar. */
   const resolveAvatarUri = useCallback(
@@ -410,7 +421,7 @@ export function EditProfileModal({
                     accessibilityLabel={name}
                     accessibilityState={{ selected: isSelected }}
                   >
-                    <Image source={imageSource as never} style={styles.avatarGridAvatar} />
+                    <Image source={imageSource as never} style={styles.avatarGridAvatar} resizeMode="contain" />
                     {isSelected ? (
                       <View style={styles.avatarGridCheck}>
                         <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
@@ -536,7 +547,7 @@ export function EditProfileModal({
                         style={styles.driverSquircleGradient}
                       >
                         <View style={styles.driverSquircleInner}>
-                          <Image source={{ uri: avatarUri }} style={styles.driverAvatarImageSq} resizeMode="cover" />
+                          <Image source={avatarPreviewSource} style={styles.driverAvatarImageSq} resizeMode="cover" />
                           {photoUploading ? (
                             <View style={styles.driverAvatarLoading}>
                               <LoadingIndicator color={Theme.textOnPrimary} size="large" />
@@ -771,7 +782,7 @@ export function EditProfileModal({
                         },
                       ]}
                     >
-                      <Image source={{ uri: avatarUri }} style={styles.avatarPreview} />
+                      <Image source={avatarPreviewSource} style={styles.avatarPreview} resizeMode="cover" />
                       {photoUploading ? (
                         <View style={styles.avatarPreviewLoading}>
                           <LoadingIndicator size="small" color={Theme.textOnPrimary} />

@@ -25,6 +25,7 @@ import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { ROUTES } from "@/lib/routes";
+import { preloadDriverChatTrip } from "@/lib/preloadDriverChatWarmup";
 import { useSafeBack } from "@/lib/useSafeBack";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as salaryRequestsService from "@/features/drivers/services/salaryRequests.service";
@@ -35,6 +36,7 @@ import { useTripVerificationSync } from "@/features/trips/verification";
 import { useTripOperationsSync } from "@/features/trips/operations";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
@@ -112,6 +114,7 @@ export default function DriverControlScreen() {
       ? params.tripId
       : (params.tripId?.[0] ?? undefined);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   // 1. Trip Control Hook (Status, Steps, Transitions)
   const {
@@ -595,6 +598,10 @@ export default function DriverControlScreen() {
               backgroundColor: colors.whiteMuted,
             },
           ]}
+          onPressIn={() => {
+            if (!trip?.id || linkedDriverIds.length === 0) return;
+            preloadDriverChatTrip(queryClient, trip.id, linkedDriverIds);
+          }}
           onPress={() => {
             const q = encodeURIComponent(String(trip.id));
             router.push(`/(driver)/chat?tripId=${q}` as Href);

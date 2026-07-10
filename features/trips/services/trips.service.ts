@@ -10,6 +10,7 @@ import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { supabase } from "@/lib/supabase";
+import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
 import { TRIP_REASSIGN_STALE_ERROR } from "@/features/trips/utils/tripReassignConflict.util";
 import { shouldMarkAssignedOnFirstAssign } from "@/features/trips/utils/tripReassign.util";
 import {
@@ -18,7 +19,11 @@ import {
 } from "@/features/operations/numbering";
 import { getTripOperationalDisplayCode } from "@/features/operations/display";
 import type { DriverTripRow, SupplierTripRow } from "@/types/trip-views";
-import { driverRowToTripRow, supplierRowToTripRow } from "@/types/trip-views";
+import {
+  driverRowToTripRow,
+  supplierRowToTripRow,
+  tripRowToDriverTripRow,
+} from "@/types/trip-views";
 
 export type { DriverTripRow, SupplierTripRow } from "@/types/trip-views";
 export { driverRowToTripRow, supplierRowToTripRow } from "@/types/trip-views";
@@ -557,6 +562,62 @@ export async function getTripsByDriver(
   return { error: null, trips };
 }
 
+const DRIVER_TRIP_FALLBACK_COLUMNS = [
+  "id",
+  "driver_id",
+  "driver_display_trip_id",
+  "trip_number",
+  "status",
+  "pickup_area",
+  "drop_location",
+  "pickup_date",
+  "pickup_lat",
+  "pickup_lon",
+  "drop_lat",
+  "drop_lon",
+  "notes",
+  "vehicle_id",
+  "started_at",
+  "created_at",
+  "updated_at",
+  "client_price",
+  "supplier_rate",
+  "driver_commission",
+  "distance",
+  "supplier_id",
+].join(",");
+
+async function getTripsByDriverIdsFromTripsTable(
+  driverIds: string[],
+  opts?: PageOpts,
+): Promise<{ error: Error | null; trips: DriverTripRow[]; hasMore?: boolean }> {
+  const base = () =>
+    supabase()
+      .from("trips")
+      .select(DRIVER_TRIP_FALLBACK_COLUMNS)
+      .in("driver_id", driverIds)
+      .order("created_at", { ascending: false });
+  if (opts != null) {
+    const limit = opts.limit ?? DRIVER_TRIPS_PAGE_SIZE;
+    const offset = opts.offset ?? 0;
+    const { data, error } = await base().range(offset, offset + limit);
+    if (error) return { error: new Error(error.message), trips: [] };
+    const raw = ((data ?? []) as unknown as TripRow[]).map(tripRowToDriverTripRow);
+    const hasMore = raw.length > limit;
+    return {
+      error: null,
+      trips: hasMore ? raw.slice(0, limit) : raw,
+      hasMore,
+    };
+  }
+  const { data, error } = await base();
+  if (error) return { error: new Error(error.message), trips: [] };
+  return {
+    error: null,
+    trips: ((data ?? []) as unknown as TripRow[]).map(tripRowToDriverTripRow),
+  };
+}
+
 /** Trips assigned to any of the given driver ids (driver app: user may have multiple driver rows across orgs). */
 export async function getTripsByDriverIds(
   driverIds: string[],
@@ -573,8 +634,14 @@ export async function getTripsByDriverIds(
     const limit = opts.limit ?? DRIVER_TRIPS_PAGE_SIZE;
     const offset = opts.offset ?? 0;
     const { data, error } = await base().range(offset, offset + limit);
-    if (error) return { error: new Error(error.message), trips: [] };
+    if (error) {
+      const fallback = await getTripsByDriverIdsFromTripsTable(driverIds, opts);
+      return fallback.error ? { error: new Error(error.message), trips: [] } : fallback;
+    }
     const raw = (data ?? []) as DriverTripRow[];
+    if (raw.length === 0) {
+      return getTripsByDriverIdsFromTripsTable(driverIds, opts);
+    }
     const hasMore = raw.length > limit;
     return {
       error: null,
@@ -583,8 +650,15 @@ export async function getTripsByDriverIds(
     };
   }
   const { data, error } = await base();
-  if (error) return { error: new Error(error.message), trips: [] };
-  return { error: null, trips: (data ?? []) as DriverTripRow[] };
+  if (error) {
+    const fallback = await getTripsByDriverIdsFromTripsTable(driverIds, opts);
+    return fallback.error ? { error: new Error(error.message), trips: [] } : fallback;
+  }
+  const raw = (data ?? []) as DriverTripRow[];
+  if (raw.length === 0) {
+    return getTripsByDriverIdsFromTripsTable(driverIds, opts);
+  }
+  return { error: null, trips: raw };
 }
 
 /** Legacy driver screens: safe read via view, mapped to TripRow for UI. */
@@ -1791,6 +1865,30 @@ export async function updateTripAssignment(
   }
 
   const updatedTrip = row as TripRow | null;
+
+  // TripAssigned (docs/architecture/10-platform-event-catalog.md) — the single point where a
+  // driver assignment on this trip becomes authoritative. Fires once per successful commit;
+  // a stale-expectedUpdatedAt retry never reaches here (the update above returns early with
+  // TRIP_REASSIGN_STALE_ERROR), which is what makes retries idempotent for this event.
+  if (data.driver_id != null && updatedTrip) {
+    void getPlatformEventBus()
+      .publish({
+        name: "TripAssigned",
+        workspaceId: updatedTrip.organization_id,
+        correlationId: crypto.randomUUID(),
+        occurredAt: new Date().toISOString(),
+        payload: {
+          tripId: updatedTrip.id,
+          indentId: updatedTrip.indent_id ?? null,
+          driverId: updatedTrip.driver_id,
+          vehicleId: updatedTrip.vehicle_id ?? null,
+        },
+      })
+      .catch((err) => {
+        if (__DEV__) console.warn("[trips] TripAssigned publish failed:", err);
+      });
+  }
+
   if (options?.changedBy != null && updatedTrip) {
     const { insertTripAssignmentAudit } =
       await import("./trip-assignment-audit.service");
@@ -2322,6 +2420,25 @@ export async function updateTripStatus(
         COMPLETED_STATUS_SET.has(beforeStatus) || beforeCompletedAt.length > 0;
     }
   }
+  // TripStarted (docs/architecture/10-platform-event-catalog.md) fires only the first time
+  // started_at transitions from empty to set — same idempotency shape as TripAssigned, just
+  // via an explicit before/after check instead of an optimistic-concurrency parameter, since
+  // this function has none. A retry that re-sends the same started_at after it's already set
+  // must not re-publish.
+  let wasAlreadyStarted = true;
+  const settingStartedAt = Boolean(data.started_at != null && String(data.started_at).trim() !== "");
+  if (settingStartedAt) {
+    const before = await supabase()
+      .from("trips")
+      .select("started_at")
+      .eq("id", tripId)
+      .maybeSingle();
+    wasAlreadyStarted = Boolean(
+      !before.error &&
+        before.data &&
+        String((before.data as { started_at?: string | null }).started_at ?? "").trim() !== "",
+    );
+  }
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
     status,
@@ -2350,6 +2467,45 @@ export async function updateTripStatus(
   const updatedTrip = row as TripRow;
   if (COMPLETED_STATUS_SET.has(status) && !wasAlreadyCompleted) {
     await ensureAssetCompletionAutoEntries(updatedTrip);
+    // TripDelivered (docs/architecture/10-platform-event-catalog.md) — reuses the same
+    // wasAlreadyCompleted before-fetch already computed above for ensureAssetCompletionAutoEntries,
+    // so a retry that re-sends the same completed/delivered/done status never re-publishes.
+    void getPlatformEventBus()
+      .publish({
+        name: "TripDelivered",
+        workspaceId: updatedTrip.organization_id,
+        correlationId: crypto.randomUUID(),
+        occurredAt: new Date().toISOString(),
+        payload: {
+          tripId: updatedTrip.id,
+          indentId: updatedTrip.indent_id ?? null,
+          driverId: updatedTrip.driver_id ?? null,
+          vehicleId: updatedTrip.vehicle_id ?? null,
+          deliveredAt: updatedTrip.completed_at ?? String(data.completed_at ?? ""),
+        },
+      })
+      .catch((err) => {
+        if (__DEV__) console.warn("[trips] TripDelivered publish failed:", err);
+      });
+  }
+  if (settingStartedAt && !wasAlreadyStarted) {
+    void getPlatformEventBus()
+      .publish({
+        name: "TripStarted",
+        workspaceId: updatedTrip.organization_id,
+        correlationId: crypto.randomUUID(),
+        occurredAt: new Date().toISOString(),
+        payload: {
+          tripId: updatedTrip.id,
+          indentId: updatedTrip.indent_id ?? null,
+          driverId: updatedTrip.driver_id ?? null,
+          vehicleId: updatedTrip.vehicle_id ?? null,
+          startedAt: updatedTrip.started_at ?? String(data.started_at),
+        },
+      })
+      .catch((err) => {
+        if (__DEV__) console.warn("[trips] TripStarted publish failed:", err);
+      });
   }
   return { error: null, trip: updatedTrip };
 }

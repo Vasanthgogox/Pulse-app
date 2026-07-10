@@ -48,3 +48,9 @@ function installWebStyleSheetFlattenPatch(): void {
 installWebStyleSheetPatch();
 installWebStyleSheetFlattenPatch();
 installDevConsoleFilters();
+
+/** Re-apply patches after Fast Refresh may have restored original StyleSheet helpers. */
+export function ensureWebRnCompatPatches(): void {
+  installWebStyleSheetPatch();
+  installWebStyleSheetFlattenPatch();
+}

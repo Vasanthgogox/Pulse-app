@@ -7,6 +7,7 @@
  * Fallback when DB is unavailable: list storage prefix {tripId}/ and infer type from path segment.
  */
 import { supabase } from "@/lib/supabase";
+import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
 
 const BUCKET = "trip-documents";
 const MAX_TRIP_DOC_BYTES = 10 * 1024 * 1024;
@@ -225,6 +226,40 @@ export async function getDocumentsByTripId(
 }
 
 /**
+ * PODUploaded (docs/architecture/10-platform-event-catalog.md) — fires once per successful
+ * 'pod' upload, at either of uploadTripDocument's two success returns (real trip_documents
+ * insert, or the metadata-table-unavailable fallback that treats a durable storage write as
+ * sufficient). No idempotency guard is needed here the way TripAssigned/TripStarted/TripDelivered
+ * need one: every call generates a fresh storage path (randomUUID()), so there is no "retry of
+ * the same commit" case to dedupe — each successful call is a genuinely new document.
+ */
+function publishPodUploadedEvent(tripId: string, doc: TripDocumentRow): void {
+  void Promise.resolve(
+    supabase().from("trips").select("organization_id").eq("id", tripId).maybeSingle(),
+  )
+    .then(({ data, error }) => {
+      const workspaceId = !error && data ? (data as { organization_id?: string | null }).organization_id : null;
+      if (!workspaceId) return;
+      return getPlatformEventBus().publish({
+        name: "PODUploaded",
+        workspaceId,
+        correlationId: crypto.randomUUID(),
+        occurredAt: new Date().toISOString(),
+        payload: {
+          tripId,
+          documentId: doc.id,
+          storagePath: doc.storage_path,
+          fileName: doc.file_name,
+          uploadedBy: doc.uploaded_by ?? null,
+        },
+      });
+    })
+    .catch((err: unknown) => {
+      if (__DEV__) console.warn("[tripDocuments] PODUploaded publish failed:", err);
+    });
+}
+
+/**
  * Upload a trip document. Pass documentType to correctly classify the file.
  * Storage path: {tripId}/{documentType}/{uuid}.{ext}
  */
@@ -280,20 +315,19 @@ export async function uploadTripDocument(
     if (isTripDocumentsMetaTableUnavailable(insertError)) {
       const now = new Date().toISOString();
       const syntheticId = `storage-meta-${randomUUID()}`;
-      return {
-        doc: {
-          id: syntheticId,
-          trip_id: tripId,
-          file_name: file.fileName,
-          storage_path: path,
-          mime_type: file.mimeType || null,
-          size_bytes: file.arrayBuffer.byteLength,
-          uploaded_at: now,
-          uploaded_by: uploadedBy,
-          document_type: documentType,
-        },
-        error: null,
+      const fallbackDoc: TripDocumentRow = {
+        id: syntheticId,
+        trip_id: tripId,
+        file_name: file.fileName,
+        storage_path: path,
+        mime_type: file.mimeType || null,
+        size_bytes: file.arrayBuffer.byteLength,
+        uploaded_at: now,
+        uploaded_by: uploadedBy,
+        document_type: documentType,
       };
+      if (documentType === "pod") publishPodUploadedEvent(tripId, fallbackDoc);
+      return { doc: fallbackDoc, error: null };
     }
     return {
       doc: null,
@@ -301,13 +335,12 @@ export async function uploadTripDocument(
     };
   }
 
-  return {
-    doc: {
-      ...(row as TripDocumentRow),
-      document_type: ((row as TripDocumentRow).document_type ?? documentType) as TripDocumentType,
-    } as TripDocumentRow,
-    error: null,
-  };
+  const insertedDoc = {
+    ...(row as TripDocumentRow),
+    document_type: ((row as TripDocumentRow).document_type ?? documentType) as TripDocumentType,
+  } as TripDocumentRow;
+  if (documentType === "pod") publishPodUploadedEvent(tripId, insertedDoc);
+  return { doc: insertedDoc, error: null };
 }
 
 /**

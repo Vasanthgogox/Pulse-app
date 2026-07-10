@@ -1,16 +1,13 @@
 /**
- * Inline header nudge — integrated party avatars + grow-network CTA with motion.
- * Palette: ink brown + Add Load sky blue + gold accent (Load Center tokens only).
+ * Inline header nudge — grow-network CTA with solid fills and logistics icons.
  */
 import Theme from "@/constants/Theme";
-import { LOAD_CENTER_NETWORK_NUDGE_LOTTIE } from "@/features/network/components/loadCenterNetworkNudgeAssets";
-import { LinearGradient } from "expo-linear-gradient";
-import LottieView, { type AnimationObject } from "lottie-react-native";
-import { useEffect, useRef } from "react";
+import { platformShadow } from "@/lib/platformShadow";
+import type { LucideIcon } from "lucide-react-native";
+import { PackageSearch, Truck, UserPlus } from "lucide-react-native";
+import { useRef } from "react";
 import {
   Animated,
-  Easing,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -26,130 +23,77 @@ type Props = {
 };
 
 const INK = Theme.loadAddButtonText;
-const INK_BORDER_SOFT = Theme.loadStatusTabBorderSoft;
-const INK_BORDER_FAINT = Theme.loadStatusTabTrayBorder;
-const SKY = Theme.loadAddButtonBg;
-const SKY_WASH = Theme.pulseIndigoWash;
-const SKY_TRAY = Theme.loadStatusTabTrayBg;
 const MUTED = Theme.loadStatusTabTextMuted;
-const IDLE_BG = Theme.loadStatusTabBgIdle;
 
-const GOLD_MUTED = Theme.accentGoldMuted;
-const GOLD_BORDER = Theme.accentGoldBorder;
+const GIVE_ACTIVE = {
+  bg: Theme.accentGold,
+  border: Theme.accentGoldPressed,
+  text: INK,
+  icon: INK,
+};
 
-const TRACK_GRADIENT = [Theme.cardWhite, SKY_TRAY, SKY_WASH] as const;
+const GET_ACTIVE = {
+  bg: Theme.loadAddButtonBg,
+  border: Theme.loadAddButtonBorder,
+  text: INK,
+  icon: INK,
+};
+
+const IDLE = {
+  bg: Theme.surface,
+  border: Theme.borderMedium,
+  text: MUTED,
+  icon: MUTED,
+};
 
 /** Shared vertical rhythm — avatar stack + nudge track align to this. */
-export const LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT = 34;
-export const LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT_COMPACT = 30;
+export const LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT = 36;
+export const LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT_COMPACT = 32;
 
-const GIVE = {
-  accent: INK,
-  bg: GOLD_MUTED,
-  border: GOLD_BORDER,
-  ring: GOLD_BORDER,
-};
-
-const GET = {
-  accent: INK,
-  bg: SKY,
-  border: INK_BORDER_SOFT,
-  ring: Theme.pulseIndigoRing,
-};
-
-function NudgeLottie({
-  source,
+function IconWell({
+  Icon,
   size,
-  renderScale = 1.7,
+  bg,
+  color,
 }: {
-  source: AnimationObject;
+  Icon: LucideIcon;
   size: number;
-  renderScale?: number;
+  bg: string;
+  color: string;
 }) {
-  const render = Math.round(size * renderScale);
+  const well = size + 10;
   return (
-    <View style={[styles.lottieSlot, { width: size, height: size }]}>
-      <LottieView
-        source={source}
-        autoPlay
-        loop
-        speed={0.85}
-        resizeMode="contain"
-        style={{
-          width: render,
-          height: render,
-          position: "absolute",
-          ...(Platform.OS === "web"
-            ? { maxWidth: render, maxHeight: render }
-            : null),
-        }}
-      />
-    </View>
-  );
-}
-
-function ActivePillPulse({
-  active,
-  ringColor,
-}: {
-  active: boolean;
-  ringColor: string;
-}) {
-  const pulse = useRef(new Animated.Value(0.25)).current;
-
-  useEffect(() => {
-    if (!active) {
-      pulse.setValue(0);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 0.7,
-          duration: 1800,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0.25,
-          duration: 1800,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [active, pulse]);
-
-  if (!active) return null;
-
-  return (
-    <Animated.View
-      pointerEvents="none"
+    <View
       style={[
-        StyleSheet.absoluteFillObject,
-        styles.pillPulse,
-        { borderColor: ringColor, opacity: pulse },
+        styles.iconWell,
+        {
+          width: well,
+          height: well,
+          borderRadius: well / 2,
+          backgroundColor: bg,
+        },
       ]}
-    />
+    >
+      <Icon size={size} color={color} strokeWidth={2.3} />
+    </View>
   );
 }
 
 function FlowPill({
   label,
-  lottie,
+  Icon,
   active,
   palette,
   compact,
 }: {
   label: string;
-  lottie: AnimationObject;
+  Icon: LucideIcon;
   active: boolean;
-  palette: typeof GIVE;
+  palette: typeof GIVE_ACTIVE;
   compact: boolean;
 }) {
-  const iconSize = compact ? 13 : 14;
+  const colors = active ? palette : IDLE;
+  const iconSize = compact ? 11 : 12;
 
   return (
     <View
@@ -157,18 +101,19 @@ function FlowPill({
         styles.pill,
         compact && styles.pillCompact,
         {
-          backgroundColor: active ? palette.bg : IDLE_BG,
-          borderColor: active ? palette.border : INK_BORDER_FAINT,
+          backgroundColor: colors.bg,
+          borderColor: colors.border,
         },
+        active && styles.pillActive,
       ]}
     >
-      <ActivePillPulse active={active} ringColor={palette.ring} />
-      <NudgeLottie source={lottie} size={iconSize} renderScale={1.6} />
+      <Icon size={iconSize} color={colors.icon} strokeWidth={2.4} />
       <Text
         style={[
           styles.pillText,
           compact && styles.pillTextCompact,
-          { color: active ? palette.accent : MUTED },
+          { color: colors.text },
+          active && styles.pillTextActive,
         ]}
       >
         {label}
@@ -221,67 +166,49 @@ export function LoadCenterNetworkGrowNudge({
           { transform: [{ scale: pressScale }] },
         ]}
       >
-        <LinearGradient
-          colors={[...TRACK_GRADIENT]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <View
           style={[
             styles.shell,
             compact && styles.shellCompact,
             { minHeight: trackHeight },
           ]}
         >
-          <View style={[styles.iconHalo, compact && styles.iconHaloCompact]}>
-            <NudgeLottie
-              source={LOAD_CENTER_NETWORK_NUDGE_LOTTIE.invite}
-              size={compact ? 18 : 20}
-              renderScale={1.75}
-            />
-          </View>
+          <IconWell
+            Icon={UserPlus}
+            size={compact ? 11 : 12}
+            bg={Theme.brandBlueSoft}
+            color={INK}
+          />
 
           <Text
             style={[styles.lead, compact && styles.leadCompact]}
             numberOfLines={1}
           >
-            Add more network to
+            Grow network for
           </Text>
 
           <View style={styles.chipGroup}>
             <FlowPill
               label="Give load"
-              lottie={LOAD_CENTER_NETWORK_NUDGE_LOTTIE.give}
+              Icon={Truck}
               active={mode === "give"}
-              palette={GIVE}
+              palette={GIVE_ACTIVE}
               compact={compact}
             />
             <View style={styles.connector} />
             <FlowPill
               label="Get load"
-              lottie={LOAD_CENTER_NETWORK_NUDGE_LOTTIE.get}
+              Icon={PackageSearch}
               active={mode === "get"}
-              palette={GET}
+              palette={GET_ACTIVE}
               compact={compact}
             />
           </View>
-        </LinearGradient>
+        </View>
       </Animated.View>
     </Pressable>
   );
 }
-
-const shellShadow = Platform.select({
-  web: {
-    boxShadow: "0 1px 2px rgba(77, 54, 54, 0.06), 0 4px 14px rgba(205, 233, 247, 0.35)",
-  } as object,
-  ios: {
-    shadowColor: "#4D3636",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-  },
-  android: { elevation: 1 },
-  default: {},
-});
 
 const styles = StyleSheet.create({
   outer: {
@@ -293,7 +220,7 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   pressed: {
-    opacity: 0.92,
+    opacity: 0.94,
   },
   shell: {
     flexDirection: "row",
@@ -301,55 +228,46 @@ const styles = StyleSheet.create({
     gap: 10,
     minWidth: 0,
     flexShrink: 1,
-    paddingVertical: 4,
-    paddingLeft: 5,
+    paddingVertical: 5,
+    paddingLeft: 6,
     paddingRight: 8,
     borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: INK_BORDER_FAINT,
-    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
     backgroundColor: Theme.cardWhite,
-    ...shellShadow,
+    ...platformShadow("0 2px 10px rgba(15, 23, 42, 0.06)", {
+      color: Theme.primary,
+      opacity: 0.06,
+      radius: 10,
+      offsetY: 2,
+      elevation: 2,
+    }),
   },
   shellCompact: {
     gap: 8,
-    paddingLeft: 4,
+    paddingLeft: 5,
     paddingRight: 6,
     flexWrap: "nowrap",
   },
-  iconHalo: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  iconWell: {
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    backgroundColor: GOLD_MUTED,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: GOLD_BORDER,
-  },
-  iconHaloCompact: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-  },
-  lottieSlot: {
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Theme.brandBlue,
   },
   lead: {
-    fontSize: 10,
-    fontWeight: "500",
+    fontSize: 11,
+    fontWeight: "600",
     color: MUTED,
-    letterSpacing: 0.02,
+    letterSpacing: 0.01,
     flexShrink: 1,
     lineHeight: 14,
     includeFontPadding: false,
   },
   leadCompact: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 10,
+    lineHeight: 13,
   },
   chipGroup: {
     flexDirection: "row",
@@ -363,27 +281,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 5,
     borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 0,
-    minHeight: 24,
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    minHeight: 26,
+    borderWidth: 1,
     flexShrink: 0,
-    position: "relative",
-    overflow: "hidden",
   },
   pillCompact: {
-    paddingHorizontal: 7,
-    minHeight: 22,
+    paddingHorizontal: 8,
+    minHeight: 24,
     gap: 4,
   },
-  pillPulse: {
-    borderRadius: 999,
-    borderWidth: 1,
+  pillActive: {
+    ...platformShadow("0 1px 4px rgba(15, 23, 42, 0.08)", {
+      color: Theme.primary,
+      opacity: 0.08,
+      radius: 4,
+      offsetY: 1,
+      elevation: 1,
+    }),
   },
   pillText: {
     fontSize: 10,
     fontWeight: "700",
-    letterSpacing: -0.1,
+    letterSpacing: 0.1,
     lineHeight: 13,
     includeFontPadding: false,
   },
@@ -391,12 +312,14 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 12,
   },
+  pillTextActive: {
+    fontWeight: "800",
+  },
   connector: {
-    width: 12,
-    height: StyleSheet.hairlineWidth,
-    borderRadius: 1,
-    backgroundColor: INK_BORDER_SOFT,
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: Theme.borderMedium,
     flexShrink: 0,
-    opacity: 0.85,
   },
 });

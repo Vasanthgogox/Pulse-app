@@ -13,8 +13,8 @@
  * the raw storage path so callers can upgrade to a signed URL asynchronously.
  */
 
-import { getAvatarUriForSeed, ALL_PRESET_AVATARS } from '@/constants/DriverLevels';
-import { getUser2DAvatarUriForSeed, USER_2D_AVATARS } from '@/constants/UserAvatars';
+import { getAvatarUriForSeed, ALL_PRESET_AVATARS, getPresetImageSourceForSeed } from '@/constants/DriverLevels';
+import { getUser2DAvatarUriForSeed, getUser2DPresetImageSourceForSeed, USER_2D_AVATARS } from '@/constants/UserAvatars';
 import {
   getSignedAvatarUrl,
   AVATAR_BUCKET,
@@ -183,10 +183,55 @@ function publicHttpUrl(raw: string | null | undefined): string | null {
 // Core resolution
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Driver seeds use assets/drivers; legacy user-N seeds use assets/avatars. */
+function driverSeedSyncUri(seed: string): string {
+  const s = seed.trim();
+  if (s.startsWith('user-')) return getUser2DAvatarUriForSeed(s);
+  return getAvatarUriForSeed(s);
+}
+
+function driverSeedImageSource(seed: string | null | undefined): ImageSourcePropType {
+  const s = (seed ?? '').trim();
+  if (s.startsWith('user-')) return getUser2DPresetImageSourceForSeed(s);
+  return getPresetImageSourceForSeed(s || undefined);
+}
+
+function resolvePresetImageSource(
+  party: AvatarParty,
+  context: AvatarContext,
+): ImageSourcePropType | null {
+  switch (party.type) {
+    case 'driver':
+      return driverSeedImageSource(party.avatarSeed);
+    case 'organization': {
+      const seed = (party.ownerAvatarSeed ?? '').trim();
+      return seed ? getUser2DPresetImageSourceForSeed(seed) : null;
+    }
+    case 'user': {
+      if (context === 'business') {
+        const orgSeed = (party.orgOwnerAvatarSeed ?? '').trim();
+        if (orgSeed) return getUser2DPresetImageSourceForSeed(orgSeed);
+      }
+      const seed = (party.avatarSeed ?? '').trim();
+      return seed ? getUser2DPresetImageSourceForSeed(seed) : null;
+    }
+  }
+}
+
+function isNetworkImageUri(uri: string): boolean {
+  const u = uri.trim();
+  return (
+    u.startsWith('http://') ||
+    u.startsWith('https://') ||
+    u.startsWith('data:') ||
+    u.startsWith('blob:')
+  );
+}
+
 function resolveDriver(party: DriverParty): AvatarResolution {
   const privatePath = extractPrivatePath(party.avatarUrl);
   const directUrl = publicHttpUrl(party.avatarUrl);
-  const seedUri = party.avatarSeed ? getAvatarUriForSeed(party.avatarSeed) : null;
+  const seedUri = party.avatarSeed ? driverSeedSyncUri(party.avatarSeed) : null;
 
   return {
     syncUri: seedUri ?? directUrl ?? driverFallbackUri(party.name),
@@ -369,7 +414,8 @@ export function userPartyFromProfile(fields: {
 // React hook — handles async upgrade internally
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 
 /**
  * React hook that returns the best available URI for a party.
@@ -384,8 +430,24 @@ import { useEffect, useState } from 'react';
 export function useAvatarUri(
   party: AvatarParty,
   context: AvatarContext = 'personal',
-): { uri: string; initials: string; bg: string } {
+): {
+  uri: string;
+  imageSource: ImageSourcePropType | null;
+  initials: string;
+  bg: string;
+} {
   const resolution = getDisplayAvatar(party, context);
+  const presetImageSource = useMemo(
+    () => resolvePresetImageSource(party, context),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      party.type,
+      (party as DriverParty | UserParty).avatarSeed,
+      (party as OrgParty).ownerAvatarSeed,
+      (party as UserParty).orgOwnerAvatarSeed,
+      context,
+    ],
+  );
   const [uri, setUri] = useState(resolution.syncUri);
 
   useEffect(() => {
@@ -412,5 +474,14 @@ export function useAvatarUri(
     context,
   ]);
 
-  return { uri, initials: resolution.initials, bg: resolution.initialsBackground };
+  const networkUri = uri.trim() && isNetworkImageUri(uri) ? uri.trim() : '';
+  const imageSource: ImageSourcePropType | null =
+    networkUri ? { uri: networkUri } : presetImageSource;
+
+  return {
+    uri: networkUri || uri,
+    imageSource,
+    initials: resolution.initials,
+    bg: resolution.initialsBackground,
+  };
 }

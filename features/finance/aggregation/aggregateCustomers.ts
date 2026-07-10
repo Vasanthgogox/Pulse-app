@@ -1,12 +1,13 @@
 /**
- * O(n) customer aggregation. Single source: received = ledger only; billed = trips + pre-trip indents.
- * Pending = sum of per-trip due (aligns with ClientDetailScreen). Overpayment on one trip does not reduce
- * due on another. Ledger-only parties: pending from amount_out. Per-trip attribution: amount_in with
- * trip_id → that trip; unlinked client tx → trip with largest due.
- * Pass 4: indents not yet converted to a trip add client_price to billing.
+ * O(n) customer aggregation. Single source: received = ledger only; billed = trips only, never
+ * pre-trip indents (a client isn't liable for a shipment until it's allocated — same rule
+ * aggregateSuppliers.ts already follows for payables). Pending = sum of per-trip due (aligns with
+ * ClientDetailScreen). Overpayment on one trip does not reduce due on another. Ledger-only parties:
+ * pending from amount_out. Per-trip attribution: amount_in with trip_id → that trip; unlinked
+ * client tx → trip with largest due.
  */
 import type { FinancialRowData, AggregationTotals } from './types';
-import type { LedgerTx, TripForCustomer, ClientLike, TripPartyMap, IndentForAggregation } from './types';
+import type { LedgerTx, TripForCustomer, ClientLike, TripPartyMap } from './types';
 import { adjustedRevenue } from '@/features/trips/services/tripAdjustments';
 import type { TripAdjustment } from '@/features/trips/services/tripAdjustments';
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from '@/features/trips/visibility/tripVisibility';
@@ -52,7 +53,6 @@ export function aggregateCustomers(
   trips: readonly TripForCustomer[],
   transactions: readonly LedgerTx[],
   tripPartyMap?: TripPartyMap | null,
-  indents?: IndentForAggregation[],
   /** When provided, billed amounts match trip detail / Adjustment Registry (revenue adjustments). */
   adjustmentsByTripId?: Record<string, TripAdjustment[]>,
 ): { rows: FinancialRowData[]; totals: AggregationTotals } {
@@ -182,32 +182,11 @@ export function aggregateCustomers(
     }
   }
 
-  // Pass 4 (O(indents)): pre-trip indent billing. For each non-cancelled indent not yet converted to a trip,
-  // attribute client_price to the matching client. Uses O(n) Set to prevent double-counting with trips.
-  if (indents && indents.length > 0) {
-    const indentIdsCoveredByTrips = new Set<string>();
-    for (let i = 0; i < trips.length; i++) {
-      const id = trips[i].indent_id;
-      if (id) indentIdsCoveredByTrips.add(id);
-    }
-    for (let i = 0; i < indents.length; i++) {
-      const indent = indents[i];
-      const s = (indent.status || '').toLowerCase();
-      if (s === 'cancelled' || s === 'completed') continue;
-      if (indentIdsCoveredByTrips.has(indent.id)) continue;
-      const nameKey = toNameKey(indent.client_name || '');
-      if (!nameKey) continue;
-      const clientId = clientIdByNameKey[nameKey] ?? null;
-      if (!clientId) continue;
-      const amount = Number(indent.client_price ?? 0);
-      if (!amount) continue;
-      // Billing only — do not increment tripCount. The "Trips" badge means real trip records
-      // (public.trips); an indent hasn't become one yet, so counting it here would show e.g.
-      // "2 trips" for a client with only 1 real trip and 1 pending indent, mismatching every
-      // other screen that counts actual trips.
-      billedByClientId[clientId] = (billedByClientId[clientId] ?? 0) + amount;
-    }
-  }
+  // Client revenue/liability is recognized from trips only, never from an indent that hasn't
+  // been allocated/converted to one yet — same rule aggregateSuppliers.ts already follows
+  // ("Supplier payables are from trips only — not from awarded indents before conversion").
+  // A client isn't liable for a shipment until it's actually been allocated; an open indent is
+  // just a request.
 
   // Build trip ID sets per client for per-trip attribution.
   const tripIdsByClientId: Record<string, Set<string>> = {};

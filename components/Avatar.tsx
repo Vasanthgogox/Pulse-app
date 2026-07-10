@@ -100,17 +100,17 @@ export function Avatar({
   borderColor,
   showBorder = true,
 }: AvatarProps) {
-  const { uri, initials, bg } = useAvatarUri(party, context);
+  const { imageSource, initials, bg } = useAvatarUri(party, context);
   const [imgError, setImgError] = useState(false);
 
-  // Reset error when URI changes (e.g. after async upgrade)
-  const prevUri = useRef(uri);
+  // Reset error when source changes (e.g. after async signed URL upgrade)
+  const prevSource = useRef(imageSource);
   useEffect(() => {
-    if (prevUri.current !== uri) {
-      prevUri.current = uri;
+    if (prevSource.current !== imageSource) {
+      prevSource.current = imageSource;
       setImgError(false);
     }
-  }, [uri]);
+  }, [imageSource]);
 
   // Fade-in animation
   const opacity = useRef(new Animated.Value(0)).current;
@@ -136,11 +136,11 @@ export function Avatar({
     style,
   ];
 
-  if (!imgError && uri) {
+  if (!imgError && imageSource) {
     return (
       <View style={containerStyle}>
         <Animated.Image
-          source={{ uri }}
+          source={imageSource}
           style={[
             styles.img,
             { borderRadius: br, opacity },

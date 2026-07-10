@@ -2711,8 +2711,7 @@ const styles = StyleSheet.create({
   cashSection: { marginBottom: 24 },
   cashSectionWebDesktop: {
     width: "100%",
-    maxWidth: 920,
-    alignSelf: "center",
+    alignSelf: "stretch",
   },
   sharedSection: { marginBottom: 24 },
   analyticsSection: {
