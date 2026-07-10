@@ -28,6 +28,7 @@ import { NetworkPhoneAndContactsPanel } from "@/features/network/components/Netw
 import { NetworkSupportHelpCards } from "@/features/network/components/NetworkSupportHelpCards";
 import { discoverSearchTermForOrgs } from "@/lib/networkPhoneSearch";
 import { connectedOrgLedgerDetailRoute } from "@/features/network/utils/connectionDetailNavigation.util";
+import { maskGstin } from "@/features/network/utils/partyContactDisplay.util";
 import { ROUTES } from "@/lib/routes";
 import { MutualConnectionsModal } from "@/features/network/components/MutualConnectionsModal";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
@@ -467,7 +468,7 @@ function NetworkScreenInner() {
               branch_count: snap.branch_count ?? 0,
               sector: snap.sector ?? null,
               website: snap.website ?? null,
-              gstin: snap.gstin ?? null,
+              gstin: maskGstin(snap.gstin),
               operating_model: snap.operating_model ?? null,
               member_since_year: snap.member_since_year ?? prev.member_since_year ?? null,
             };
