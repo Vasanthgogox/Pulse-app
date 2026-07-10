@@ -98,6 +98,10 @@ export function TripAuditLogPanel({
     () => collectActivityUserIds(trip, assignmentAuditRows, tripLedgerEntries),
     [trip, assignmentAuditRows, tripLedgerEntries],
   );
+  // Stable primitive key: the effect below must only re-run when the actual set
+  // of ids changes, not when the parent hands us a new array reference each
+  // render (which otherwise re-fires resolution and flickers the empty state).
+  const activityUserIdsKey = activityUserIds.join(",");
 
   useEffect(() => {
     if (!visible) return;
@@ -177,7 +181,8 @@ export function TripAuditLogPanel({
     return () => {
       cancelled = true;
     };
-  }, [visible, organizationId, trip.organization_id, activityUserIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, organizationId, trip.organization_id, activityUserIdsKey]);
 
   const entries = useMemo(
     () =>

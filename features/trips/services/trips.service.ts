@@ -1791,20 +1791,29 @@ export async function updateTripAssignment(
   }
 
   const updatedTrip = row as TripRow | null;
-  if (options?.changedBy != null && updatedTrip) {
+  if (updatedTrip) {
+    // Always record an assignment audit row so the trip's Assignment timeline
+    // reflects the change. changedBy is the caller-supplied actor; when absent
+    // (e.g. flows that don't thread it through) fall back to the current auth
+    // user so the log is never silently dropped.
+    let changedBy = options?.changedBy ?? null;
+    if (changedBy == null) {
+      const { data: authData } = await supabase().auth.getUser();
+      changedBy = authData?.user?.id ?? null;
+    }
     const { insertTripAssignmentAudit } =
       await import("./trip-assignment-audit.service");
     const hadPrev =
-      (options.driverIdPrev != null && options.driverIdPrev !== "") ||
-      (options.vehicleIdPrev != null && options.vehicleIdPrev !== "");
+      (options?.driverIdPrev != null && options.driverIdPrev !== "") ||
+      (options?.vehicleIdPrev != null && options.vehicleIdPrev !== "");
     const { error: auditError, row: auditRow } = await insertTripAssignmentAudit({
       trip_id: tripId,
       event_type: hadPrev ? "reassignment" : "assignment",
-      driver_id_prev: options.driverIdPrev ?? null,
+      driver_id_prev: options?.driverIdPrev ?? null,
       driver_id_new: updatedTrip.driver_id ?? null,
-      vehicle_id_prev: options.vehicleIdPrev ?? null,
+      vehicle_id_prev: options?.vehicleIdPrev ?? null,
       vehicle_id_new: updatedTrip.vehicle_id ?? null,
-      changed_by: options.changedBy,
+      changed_by: changedBy,
     });
     if (auditError && __DEV__) {
       console.warn(

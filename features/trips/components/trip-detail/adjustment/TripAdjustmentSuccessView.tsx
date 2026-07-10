@@ -183,6 +183,6 @@ const styles = StyleSheet.create({
   doneBtnText: {
     fontSize: 15,
     fontWeight: "800",
-    color: Theme.buttonPrimaryText,
+    color: "#fff",
   },
 });
