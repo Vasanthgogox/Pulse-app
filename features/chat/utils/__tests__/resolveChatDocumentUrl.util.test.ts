@@ -1,0 +1,124 @@
+const mockCreateSignedUrl = jest.fn();
+const mockGetPublicUrl = jest.fn();
+const mockDownload = jest.fn();
+
+jest.mock('@/lib/supabase', () => ({
+  supabase: () => ({
+    storage: {
+      from: () => ({
+        createSignedUrl: (...args: unknown[]) => mockCreateSignedUrl(...args),
+        getPublicUrl: (...args: unknown[]) => mockGetPublicUrl(...args),
+        download: (...args: unknown[]) => mockDownload(...args),
+      }),
+    },
+  }),
+}));
+
+import {
+  resolveChatDocumentStorageUrl,
+  resolveChatImageThumbnail,
+  tryChatDocumentBlobObjectUrl,
+} from '../resolveChatDocumentUrl.util';
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+describe('in-flight request dedup — concurrent calls for the same path share one network call', () => {
+  it('resolveChatDocumentStorageUrl: N concurrent calls before the cache is warm fire exactly one createSignedUrl', async () => {
+    let resolveSignedUrl: (v: unknown) => void;
+    mockCreateSignedUrl.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSignedUrl = resolve;
+      }),
+    );
+
+    const path = 'trip_chat/conv-1/img.jpg';
+    const calls = [
+      resolveChatDocumentStorageUrl(path),
+      resolveChatDocumentStorageUrl(path),
+      resolveChatDocumentStorageUrl(path),
+    ];
+
+    // All three should be in flight against the same unresolved promise before we resolve it.
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(1);
+
+    resolveSignedUrl!({ data: { signedUrl: 'https://signed.example/img.jpg' }, error: null });
+    const results = await Promise.all(calls);
+
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([
+      'https://signed.example/img.jpg',
+      'https://signed.example/img.jpg',
+      'https://signed.example/img.jpg',
+    ]);
+  });
+
+  it('resolveChatImageThumbnail: concurrent calls for the same transform key share one createSignedUrl call', async () => {
+    let resolveSignedUrl: (v: unknown) => void;
+    mockCreateSignedUrl.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSignedUrl = resolve;
+      }),
+    );
+
+    const path = 'trip_chat/conv-2/img.jpg';
+    const calls = [
+      resolveChatImageThumbnail(path, 300, 300, 70, 'cover'),
+      resolveChatImageThumbnail(path, 300, 300, 70, 'cover'),
+    ];
+
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(1);
+
+    resolveSignedUrl!({ data: { signedUrl: 'https://signed.example/thumb.jpg' }, error: null });
+    const results = await Promise.all(calls);
+
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(1);
+    expect(results).toEqual(['https://signed.example/thumb.jpg', 'https://signed.example/thumb.jpg']);
+  });
+
+  it('resolveChatImageThumbnail: a different transform key (e.g. different width) is not deduped against a different one', async () => {
+    mockCreateSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://signed.example/thumb.jpg' },
+      error: null,
+    });
+
+    const path = 'trip_chat/conv-3/img.jpg';
+    await Promise.all([
+      resolveChatImageThumbnail(path, 300, 300, 70, 'cover'),
+      resolveChatImageThumbnail(path, 800, 800, 70, 'cover'),
+    ]);
+
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it('tryChatDocumentBlobObjectUrl: concurrent calls for the same path share one download', async () => {
+    let resolveDownload: (v: unknown) => void;
+    mockDownload.mockReturnValue(
+      new Promise((resolve) => {
+        resolveDownload = resolve;
+      }),
+    );
+    const originalCreateObjectURL = (global as unknown as { URL: typeof URL }).URL?.createObjectURL;
+    (URL as unknown as { createObjectURL: (b: unknown) => string }).createObjectURL = () =>
+      'blob:mock-url';
+
+    const path = 'trip_chat/conv-4/doc.pdf';
+    const calls = [
+      tryChatDocumentBlobObjectUrl(path),
+      tryChatDocumentBlobObjectUrl(path),
+    ];
+
+    expect(mockDownload).toHaveBeenCalledTimes(3); // BUCKET_TRY_ORDER.length, all in the single shared attempt
+    resolveDownload!({ data: new Blob(['x']), error: null });
+    const results = await Promise.all(calls);
+
+    expect(mockDownload).toHaveBeenCalledTimes(3);
+    expect(results[0]?.url).toBe('blob:mock-url');
+    expect(results[1]?.url).toBe('blob:mock-url');
+
+    if (originalCreateObjectURL) {
+      (URL as unknown as { createObjectURL: unknown }).createObjectURL = originalCreateObjectURL;
+    }
+  });
+});

@@ -1,4 +1,5 @@
 import Layout from '@/constants/Layout';
+import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { driverTabMicroLabel } from '@/constants/DriverTypography';
@@ -136,7 +137,8 @@ export function DriverTabBar({ state, navigation }: BottomTabBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = withWebSafeShadows(
+  StyleSheet.create({
   animatedIconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -208,4 +210,5 @@ const styles = StyleSheet.create({
   dockLabelActive: {
     fontWeight: '900',
   },
-});
+  }),
+);

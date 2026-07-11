@@ -31,6 +31,7 @@ import type { DriverChatMessagesPage } from '@/features/chat/utils/driverChatMes
 import { useQueryClient } from '@tanstack/react-query';
 import { getLinkedDriversForCurrentUser } from '@/features/drivers/services/drivers.service';
 import { getTripOperationalDisplay } from "@/features/operations/display";
+import { preloadDriverChatConversations } from '@/lib/preloadDriverChatWarmup';
 
 function buildMinimalDriverTripConversation(
   trip: TripRow,
@@ -84,6 +85,9 @@ export function DriverChatProvider({
 
   const markReadTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pendingMarkReadRef = useRef<Set<string>>(new Set());
+  const ensureConvInFlightRef = useRef<
+    Map<string, Promise<{ convId: string; orgId: string } | null>>
+  >(new Map());
 
   const { activeLinkedDrivers, driverIdsKey } = useDriverHomeDriversQuery(isActive ? uid : null);
 
@@ -97,6 +101,11 @@ export function DriverChatProvider({
     isLoading,
     refreshConversations: refetchConversations,
   } = useDriverChatConversationsQuery(isActive ? driverIds : []);
+
+  useEffect(() => {
+    if (!isActive || driverIds.length === 0) return;
+    preloadDriverChatConversations(queryClient, driverIds);
+  }, [isActive, driverIds, queryClient]);
 
   const patchConversationListPreview = useCallback(
     (conversationId: string, preview: string, at: string) => {
@@ -123,12 +132,24 @@ export function DriverChatProvider({
       const id = String(tripId ?? '').trim();
       if (!id || !uid) return null;
 
+      const inflight = ensureConvInFlightRef.current.get(id);
+      if (inflight) return inflight;
+
+      const run = (async (): Promise<{ convId: string; orgId: string } | null> => {
       let resolvedDriverIds: string[] = Array.isArray(driverIds) ? driverIds : [];
       if (!resolvedDriverIds.length) {
         const { drivers } = await getLinkedDriversForCurrentUser(uid);
         resolvedDriverIds = (drivers ?? []).map((d: { id: string }) => d.id);
       }
       if (!resolvedDriverIds.length) return null;
+
+      const cacheKey = [...resolvedDriverIds].sort().join(',');
+      const cachedConv = queryClient
+        .getQueryData<TripConversation[]>(driverChatConversationsQueryKey(cacheKey))
+        ?.find((c) => String(c.trip_id) === id);
+      if (cachedConv?.id && cachedConv.organization_id) {
+        return { convId: cachedConv.id, orgId: cachedConv.organization_id };
+      }
 
       const { error, trip } = await tripsService.getTripById(id);
       if (error || !trip?.driver_id || !trip.organization_id) return null;
@@ -156,7 +177,6 @@ export function DriverChatProvider({
       const minimal = buildMinimalDriverTripConversation(trip, created);
       // Patch both the sorted-key cache (normal path) and any stale empty-key cache
       // so DriverChatScreen can find the conversation even before driverIds loads.
-      const cacheKey = [...resolvedDriverIds].sort().join(',');
       queryClient.setQueryData<TripConversation[]>(
         driverChatConversationsQueryKey(cacheKey),
         (old) => {
@@ -171,8 +191,16 @@ export function DriverChatProvider({
       // Optimistic cache patch above is correct — no refetch needed.  The
       // realtime subscription will patch the list if the server row diverges.
       return { convId: created.id, orgId: trip.organization_id };
+      })();
+
+      ensureConvInFlightRef.current.set(id, run);
+      try {
+        return await run;
+      } finally {
+        ensureConvInFlightRef.current.delete(id);
+      }
     },
-    [driverIds, profile, uid, queryClient, refetchConversations],
+    [driverIds, profile, uid, queryClient],
   );
 
   const sendMessage = useCallback(

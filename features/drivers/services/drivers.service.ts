@@ -397,6 +397,22 @@ export async function getLinkedDriverForCurrentUser(
 }
 
 /**
+ * Links unlinked driver roster rows to the current auth user by profile email/phone.
+ * Idempotent — safe to call on every driver-home load (e.g. trip assigned after signup).
+ */
+export async function syncLinkedDriverRowsForCurrentUser(): Promise<{
+  error: Error | null;
+  linkedCount: number;
+}> {
+  const { data, error } = await supabase().rpc("sync_my_driver_rows_user_id");
+  if (error) return { error: new Error(error.message), linkedCount: 0 };
+  return {
+    error: null,
+    linkedCount: typeof data === "number" ? data : 0,
+  };
+}
+
+/**
  * Get all driver rows linked to the current user (own org + any fleet orgs after accepting invites).
  * Used so we can load trips assigned to the user in any org.
  */
@@ -405,7 +421,7 @@ export async function getLinkedDriversForCurrentUser(
 ): Promise<{ error: Error | null; drivers: DriverRow[] }> {
   const { data, error } = await supabase()
     .from("drivers")
-    .select(`${DRIVER_COLUMNS}, organizations(name)`)
+    .select(`${DRIVER_COLUMNS}, organizations!left(name)`)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(20);

@@ -3,7 +3,10 @@
  * Distinct from org-scoped {@link useDriversQuery} in useDriversQuery.ts (dispatcher fleet list).
  */
 import type { DriverRow } from '@/features/drivers/services/drivers.service';
-import { getLinkedDriversForCurrentUser } from '@/features/drivers/services/drivers.service';
+import {
+  getLinkedDriversForCurrentUser,
+  syncLinkedDriverRowsForCurrentUser,
+} from '@/features/drivers/services/drivers.service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppStateIsActive } from '@/lib/hooks/useAppStateIsActive';
 import { queryKeys } from '@/lib/queryKeys';
@@ -30,6 +33,7 @@ export function useDriverHomeDriversQuery(userId: string | null) {
   const query = useQuery({
     queryKey: driverHomeLinkedDriversQueryKey(uid),
     queryFn: async () => {
+      await syncLinkedDriverRowsForCurrentUser();
       const { error, drivers } = await getLinkedDriversForCurrentUser(uid);
       if (error) throw error;
       return drivers ?? [];

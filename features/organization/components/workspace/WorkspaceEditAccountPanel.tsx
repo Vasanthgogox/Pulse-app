@@ -10,11 +10,12 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
-import { ALL_PRESET_AVATARS, getAvatarUriForSeed } from "@/constants/DriverLevels";
+import { ALL_PRESET_AVATARS, getAvatarUriForSeed, getPresetImageSourceForSeed } from "@/constants/DriverLevels";
 import {
   DEFAULT_USER_2D_AVATAR_SEED,
   USER_2D_AVATARS,
   getUser2DAvatarUriForSeed,
+  getUser2DPresetImageSourceForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import * as authService from "@/features/auth/services/auth.service";
@@ -31,6 +32,7 @@ import { Camera, Check, ImagePlus, Trash2 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Image,
+  type ImageSourcePropType,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -217,6 +219,16 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
     [avatarPresetStyle],
   );
 
+  const usesUploadedAvatar = Boolean(profile?.avatar_url?.trim());
+  const avatarPreviewSource = useMemo((): ImageSourcePropType => {
+    if (usesUploadedAvatar && avatarUri.trim()) {
+      return { uri: avatarUri };
+    }
+    return avatarPresetStyle === "user-2d"
+      ? getUser2DPresetImageSourceForSeed(selectedPresetSeed)
+      : getPresetImageSourceForSeed(selectedPresetSeed);
+  }, [usesUploadedAvatar, avatarUri, avatarPresetStyle, selectedPresetSeed]);
+
   const footerSlot = (
     <View style={styles.footerRow}>
       <Pressable
@@ -264,7 +276,7 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
         <Text style={styles.sectionEyebrow}>CHANGE PROFILE PHOTO</Text>
         <View style={styles.avatarRow}>
           <View style={styles.avatarRingWrap}>
-            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+            <Image source={avatarPreviewSource} style={styles.avatarImage} resizeMode="cover" />
             {photoUploading ? (
               <View style={styles.avatarLoading}>
                 <LoadingIndicator size="small" color="#ffffff" />
@@ -379,8 +391,9 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
                         accessibilityState={{ selected: isSelected }}
                       >
                         <Image
-                          source={imageSource as never}
+                          source={imageSource as ImageSourcePropType}
                           style={styles.presetImage}
+                          resizeMode="cover"
                         />
                         {isSelected ? (
                           <View style={styles.presetCheck}>

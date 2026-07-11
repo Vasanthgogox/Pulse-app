@@ -11,7 +11,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { AnimationObject } from 'lottie-react-native';
 import { GoogleBrandIcon } from '@/features/auth/components/GoogleBrandIcon';
+
+import { HubPromoHeroLottie } from '@/components/hub/HubPromoLottie';
 
 import { DecimalKeypad } from '@/components/mobile-input/DecimalKeypad';
 import { applyKeypadPress, type KeypadKey } from '@/components/mobile-input/keypad';
@@ -50,6 +53,8 @@ export interface SignUpPulseKeypadStepProps {
   theme?: SignUpTheme;
   /** Center title, OTP row, and actions — used on verification step. */
   centeredLayout?: boolean;
+  /** Optional hero animation above the title (driver / activation steps). */
+  heroLottie?: AnimationObject;
 }
 
 export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
@@ -77,6 +82,7 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   googleDisabled = false,
   theme = PULSE_SIGNUP,
   centeredLayout = false,
+  heroLottie,
 }: SignUpPulseKeypadStepProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -257,6 +263,16 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
 
   const formBody = (
     <View style={[styles.formBody, centeredLayout && styles.centeredStack]}>
+      {heroLottie ? (
+        <View style={[styles.heroWrap, centeredLayout && styles.heroWrapCentered]}>
+          <HubPromoHeroLottie
+            source={heroLottie}
+            width={isDesktop ? 112 : 96}
+            height={isDesktop ? 112 : 96}
+            renderScale={1.08}
+          />
+        </View>
+      ) : null}
       <SignUpPulseTitle
         title={title}
         subtitle={subtitle}
@@ -424,6 +440,14 @@ function createStyles(theme: SignUpTheme, isDesktop: boolean) {
       maxWidth: mobile ? 420 : 360,
       alignSelf: 'center',
       minWidth: 0,
+    },
+    heroWrap: {
+      alignItems: 'flex-start',
+      marginBottom: mobile ? 12 : 14,
+    },
+    heroWrapCentered: {
+      alignItems: 'center',
+      alignSelf: 'center',
     },
     fieldLabelCenter: {
       textAlign: 'center',

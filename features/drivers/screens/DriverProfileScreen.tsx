@@ -109,7 +109,12 @@ export default function DriverProfileScreen() {
     user?.email?.split('@')[0] ||
     'Pilot';
 
-  const { imageUri: displayAvatarUri, initials: displayAvatarInitials, initialsColor: displayAvatarColor } = useAvatar({
+  const {
+    imageUri: displayAvatarUri,
+    imageSource: displayAvatarSource,
+    initials: displayAvatarInitials,
+    initialsColor: displayAvatarColor,
+  } = useAvatar({
     type: 'driver',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
@@ -570,8 +575,8 @@ export default function DriverProfileScreen() {
                   <TouchableOpacity style={styles.avatarCluster} onPress={() => setShowEditProfileModal(true)} activeOpacity={0.9}>
                     <LinearGradient colors={[Theme.driverPrimary, Theme.driverEmeraldDark, '#0f766e']} style={styles.avatarRing}>
                       <View style={styles.avatarInner}>
-                        {displayAvatarUri ? (
-                          <Image source={{ uri: displayAvatarUri }} style={styles.avatarImg} />
+                        {displayAvatarSource ? (
+                          <Image source={displayAvatarSource} style={styles.avatarImg} resizeMode="cover" />
                         ) : (
                           <View
                             style={[

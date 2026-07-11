@@ -1,6 +1,7 @@
 import Theme from "@/constants/Theme";
 import { LeafletMapZoomControls } from "@/components/driver/LeafletMapZoomControls";
 import {
+  createRouteDistanceLabelElement,
   createTripMapMarkerElement,
   tripMapMarkerRoleFromId,
 } from "@/lib/mapMarkerIcons.util";
@@ -11,6 +12,7 @@ import type {
   LeafletLatLng,
   LeafletMapProps,
   LeafletMapRef,
+  LeafletPolylineLayer,
 } from "./LeafletMap.types";
 
 export type { LeafletLatLng, LeafletMapRef, LeafletMarker } from "./LeafletMap.types";
@@ -53,6 +55,8 @@ type MapLibreSourceLike = {
 
 type MapLibreMapLike = {
   on: (event: string, cb: () => void) => void;
+  off?: (event: string, cb: () => void) => void;
+  isStyleLoaded?: () => boolean;
   addSource: (id: string, source: unknown) => void;
   getSource: (id: string) => MapLibreSourceLike | undefined;
   addLayer: (layer: unknown) => void;
@@ -60,8 +64,10 @@ type MapLibreMapLike = {
   setPaintProperty: (
     layerId: string,
     name: string,
-    value: string | number,
+    value: string | number | number[],
   ) => void;
+  removeLayer?: (id: string) => void;
+  removeSource?: (id: string) => void;
   fitBounds: (
     bounds: [[number, number], [number, number]],
     options?: { padding?: number; duration?: number },
@@ -103,6 +109,125 @@ type MapLibreModuleLike = {
     setText: (text: string) => unknown;
   };
 };
+
+function resolvePolylineLayers(
+  polylines: LeafletPolylineLayer[] | undefined,
+  polyline: LeafletLatLng[],
+  polylineColor: string,
+): LeafletPolylineLayer[] {
+  if (polylines?.length) {
+    return polylines.filter((layer) => layer.coordinates?.length >= 2);
+  }
+  if (polyline.length >= 2) {
+    return [
+      {
+        id: "main",
+        coordinates: polyline,
+        color: polylineColor,
+      },
+    ];
+  }
+  return [];
+}
+
+function isMapStyleReady(map: MapLibreMapLike | null | undefined): boolean {
+  if (!map) return false;
+  if (typeof map.isStyleLoaded === "function") {
+    return map.isStyleLoaded();
+  }
+  return false;
+}
+
+function upsertRouteLayer(
+  map: MapLibreMapLike,
+  layer: LeafletPolylineLayer,
+): void {
+  if (!isMapStyleReady(map)) return;
+
+  try {
+  const sourceId = `route-src-${layer.id}`;
+  const outlineId = `route-outline-${layer.id}`;
+  const mainId = `route-main-${layer.id}`;
+  const color = layer.color ?? Theme.driverPrimary;
+  const mainWidth = layer.width ?? 5;
+  const glowWidth = layer.glowWidth ?? mainWidth + 5;
+  const pts = layer.coordinates.map((p) => [p.longitude, p.latitude]);
+
+  const source = map.getSource(sourceId);
+  const data: GeoJsonLine = {
+    type: "Feature",
+    geometry: { type: "LineString", coordinates: pts },
+    properties: {},
+  };
+  if (source?.setData) {
+    source.setData(data);
+  } else {
+    map.addSource(sourceId, { type: "geojson", data });
+  }
+
+  if (!map.getLayer(outlineId)) {
+    map.addLayer({
+      id: outlineId,
+      type: "line",
+      source: sourceId,
+      paint: {
+        "line-color": `${color}40`,
+        "line-width": glowWidth,
+        "line-blur": layer.dashed ? 0 : 1.5,
+      },
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+    });
+  } else {
+    map.setPaintProperty(outlineId, "line-color", `${color}40`);
+    map.setPaintProperty(outlineId, "line-width", glowWidth);
+  }
+
+  if (!map.getLayer(mainId)) {
+    map.addLayer({
+      id: mainId,
+      type: "line",
+      source: sourceId,
+      paint: {
+        "line-color": color,
+        "line-width": mainWidth,
+        ...(layer.dashed ? { "line-dasharray": [2, 2.5] } : {}),
+      },
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+    });
+  } else {
+    map.setPaintProperty(mainId, "line-color", color);
+    map.setPaintProperty(mainId, "line-width", mainWidth);
+    if (layer.dashed) {
+      map.setPaintProperty(mainId, "line-dasharray", [2, 2.5]);
+    } else {
+      map.setPaintProperty(mainId, "line-dasharray", [1, 0]);
+    }
+  }
+  } catch (e) {
+    console.warn("[LeafletMap.web] upsertRouteLayer:", e);
+  }
+}
+
+function removeRouteLayer(map: MapLibreMapLike, layerId: string): void {
+  if (!isMapStyleReady(map)) return;
+
+  const outlineId = `route-outline-${layerId}`;
+  const mainId = `route-main-${layerId}`;
+  const sourceId = `route-src-${layerId}`;
+  try {
+    if (map.getLayer(mainId)) map.removeLayer?.(mainId);
+    if (map.getLayer(outlineId)) map.removeLayer?.(outlineId);
+    if (map.getSource(sourceId)) map.removeSource?.(sourceId);
+  } catch {
+    /* map may be tearing down */
+  }
+}
 
 function clampToBounds(
   point: LeafletLatLng,
@@ -148,6 +273,8 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       center,
       zoom = 15,
       markers = [],
+      polylines,
+      routeLabels = [],
       polyline = [],
       polylineColor = "#3b82f6",
       maxBounds,
@@ -164,7 +291,9 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
     interactionLockedRef.current = interactionLocked;
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const markersRef = useRef<MapLibreMarkerLike[]>([]);
+    const routeLayerIdsRef = useRef<string[]>([]);
     const lastPolylineStrRef = useRef<string>("");
+    const mapStyleLoadedRef = useRef(false);
     const isMountedRef = useRef(true);
 
     useEffect(() => {
@@ -216,50 +345,8 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
           mapRef.current = map;
 
-          map.on("load", () => {
-            if (!map.getSource("route-src")) {
-              map.addSource("route-src", {
-                type: "geojson",
-                data: {
-                  type: "Feature",
-                  geometry: {
-                    type: "LineString",
-                    coordinates: [],
-                  },
-                  properties: {},
-                },
-              });
-            }
-            if (!map.getLayer("route-outline")) {
-              map.addLayer({
-                id: "route-outline",
-                type: "line",
-                source: "route-src",
-                paint: {
-                  "line-color": `${polylineColor}33`,
-                  "line-width": 8,
-                },
-                layout: {
-                  "line-cap": "round",
-                  "line-join": "round",
-                },
-              });
-            }
-            if (!map.getLayer("route-main")) {
-              map.addLayer({
-                id: "route-main",
-                type: "line",
-                source: "route-src",
-                paint: {
-                  "line-color": polylineColor,
-                  "line-width": 4,
-                },
-                layout: {
-                  "line-cap": "round",
-                  "line-join": "round",
-                },
-              });
-            }
+          const handleMapLoad = () => {
+            mapStyleLoadedRef.current = true;
             try {
               map.resize();
             } catch {
@@ -273,7 +360,13 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
               }
             }, 120);
             applyMapInteractionLock(map, interactionLockedRef.current);
-          });
+          };
+
+          if (isMapStyleReady(map)) {
+            handleMapLoad();
+          } else {
+            map.on("load", handleMapLoad);
+          }
         });
       };
 
@@ -283,6 +376,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         cancelled = true;
         cancelAnimationFrame(rafId);
         isMountedRef.current = false;
+        mapStyleLoadedRef.current = false;
         if (mapRef.current) {
           markersRef.current.forEach((m) => m.remove?.());
           markersRef.current = [];
@@ -302,160 +396,191 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       }
 
       let cancelled = false;
+      let loadListener: (() => void) | null = null;
+
+      const syncMapOverlays = (maplibregl: MapLibreModuleLike) => {
+        if (cancelled || !isMountedRef.current) return;
+        const mapInstance = mapRef.current;
+        if (!mapInstance || !isMapStyleReady(mapInstance)) return;
+
+        try {
+          markersRef.current.forEach((m) => m.remove?.());
+          markersRef.current = [];
+
+          let shouldFitBounds = false;
+          const activeLayers = resolvePolylineLayers(polylines, polyline, polylineColor);
+          const currentPolylineStr = JSON.stringify(activeLayers);
+          if (currentPolylineStr !== lastPolylineStrRef.current) {
+            shouldFitBounds = true;
+            lastPolylineStrRef.current = currentPolylineStr;
+          }
+
+          const activeIds = activeLayers.map((layer) => layer.id);
+          for (const staleId of routeLayerIdsRef.current) {
+            if (!activeIds.includes(staleId)) {
+              removeRouteLayer(mapInstance, staleId);
+            }
+          }
+          routeLayerIdsRef.current = activeIds;
+
+          // India bounding box — fallback view when no route or markers
+          const INDIA_BOUNDS: [[number, number], [number, number]] = [
+            [68.1, 6.7],
+            [97.4, 37.1],
+          ];
+
+          const allRoutePts: number[][] = [];
+          for (const layer of activeLayers) {
+            upsertRouteLayer(mapInstance, layer);
+            layer.coordinates.forEach((p) => {
+              allRoutePts.push([p.longitude, p.latitude]);
+            });
+          }
+
+          if (shouldFitBounds) {
+            try {
+              if (allRoutePts.length >= 2) {
+                const bounds = allRoutePts.reduce(
+                  (acc, [lng, lat]) => {
+                    acc.minLng = Math.min(acc.minLng, lng);
+                    acc.maxLng = Math.max(acc.maxLng, lng);
+                    acc.minLat = Math.min(acc.minLat, lat);
+                    acc.maxLat = Math.max(acc.maxLat, lat);
+                    return acc;
+                  },
+                  {
+                    minLng: Infinity,
+                    maxLng: -Infinity,
+                    minLat: Infinity,
+                    maxLat: -Infinity,
+                  },
+                );
+                mapInstance.fitBounds(
+                  [
+                    [bounds.minLng, bounds.minLat],
+                    [bounds.maxLng, bounds.maxLat],
+                  ],
+                  { padding: 80, duration: lowPower ? 0 : 600 },
+                );
+              } else {
+                const currentMarkersForBounds = Array.isArray(markers)
+                  ? markers.filter((m) => m?.coordinate)
+                  : [];
+                if (currentMarkersForBounds.length >= 2) {
+                  const mBounds = currentMarkersForBounds.reduce(
+                    (acc, m) => {
+                      acc.minLng = Math.min(acc.minLng, m.coordinate.longitude);
+                      acc.maxLng = Math.max(acc.maxLng, m.coordinate.longitude);
+                      acc.minLat = Math.min(acc.minLat, m.coordinate.latitude);
+                      acc.maxLat = Math.max(acc.maxLat, m.coordinate.latitude);
+                      return acc;
+                    },
+                    {
+                      minLng: Infinity,
+                      maxLng: -Infinity,
+                      minLat: Infinity,
+                      maxLat: -Infinity,
+                    },
+                  );
+                  mapInstance.fitBounds(
+                    [
+                      [mBounds.minLng, mBounds.minLat],
+                      [mBounds.maxLng, mBounds.maxLat],
+                    ],
+                    { padding: 100, duration: lowPower ? 0 : 600 },
+                  );
+                } else if (currentMarkersForBounds.length === 1) {
+                  const m = currentMarkersForBounds[0];
+                  mapInstance.easeTo({
+                    center: [m.coordinate.longitude, m.coordinate.latitude],
+                    zoom: 8,
+                    duration: lowPower ? 0 : 500,
+                  });
+                } else {
+                  mapInstance.fitBounds(INDIA_BOUNDS, {
+                    padding: 40,
+                    duration: lowPower ? 0 : 600,
+                  });
+                }
+              }
+            } catch (e) {
+              console.warn("[LeafletMap.web] Error fitting bounds:", e);
+            }
+          }
+
+          const currentMarkers = Array.isArray(markers) ? markers : [];
+          for (const m of currentMarkers) {
+            if (!m || !m.coordinate) continue;
+            const lat = m.coordinate.latitude;
+            const lng = m.coordinate.longitude;
+            const color = m.color || Theme.driverEmerald;
+            const role = tripMapMarkerRoleFromId(m.id);
+            const el = createTripMapMarkerElement(role, m.label, color, {
+              avatarUri: m.avatarUri,
+              avatarSeed: m.avatarSeed,
+              isOnline: m.isOnline,
+              highlighted: m.highlighted,
+            });
+            const anchor =
+              role === "origin" || role === "destination" || role === "driver"
+                ? "bottom"
+                : "center";
+
+            const marker = new maplibregl.Marker({
+              element: el,
+              anchor,
+            })
+              .setLngLat([lng, lat])
+              .addTo(mapInstance);
+            markersRef.current.push(marker);
+          }
+
+          for (const label of routeLabels ?? []) {
+            if (!label?.coordinate || !label.text?.trim()) continue;
+            const el = createRouteDistanceLabelElement(label.text);
+            const labelMarker = new maplibregl.Marker({
+              element: el,
+              anchor: "center",
+            })
+              .setLngLat([label.coordinate.longitude, label.coordinate.latitude])
+              .addTo(mapInstance);
+            markersRef.current.push(labelMarker);
+          }
+
+          mapInstance.resize();
+        } catch (e) {
+          console.warn("[LeafletMap.web] Error syncing overlays:", e);
+        }
+      };
+
+      const mapInstance = mapRef.current;
+      const scheduleSync = (maplibregl: MapLibreModuleLike) => {
+        if (isMapStyleReady(mapInstance)) {
+          syncMapOverlays(maplibregl);
+          return;
+        }
+        loadListener = () => {
+          mapStyleLoadedRef.current = true;
+          syncMapOverlays(maplibregl);
+        };
+        mapInstance.on("load", loadListener);
+      };
+
       import("maplibre-gl").then((MapLibreModule) => {
         if (cancelled || !isMountedRef.current) return;
         const maplibregl =
           ((MapLibreModule as unknown) as { default?: MapLibreModuleLike }).default ??
           (MapLibreModule as unknown as MapLibreModuleLike);
-        const mapInstance = mapRef.current;
-        if (!mapInstance) return;
-
-        markersRef.current.forEach((m) => m.remove?.());
-        markersRef.current = [];
-
-        let shouldFitBounds = false;
-        const currentPolylineStr = JSON.stringify(polyline || []);
-        if (currentPolylineStr !== lastPolylineStrRef.current) {
-          shouldFitBounds = true;
-          lastPolylineStrRef.current = currentPolylineStr;
-        }
-
-        const source = mapInstance.getSource("route-src");
-        // India bounding box — fallback view when no route or markers
-        const INDIA_BOUNDS: [[number, number], [number, number]] = [
-          [68.1, 6.7],
-          [97.4, 37.1],
-        ];
-
-        if (Array.isArray(polyline) && polyline.length >= 2) {
-          const pts = polyline.map((p) => [p.longitude, p.latitude]);
-          source?.setData?.({
-            type: "Feature",
-            geometry: {
-              type: "LineString",
-              coordinates: pts,
-            },
-            properties: {},
-          });
-          if (mapInstance.getLayer("route-main")) {
-            mapInstance.setPaintProperty(
-              "route-main",
-              "line-color",
-              polylineColor,
-            );
-          }
-          if (mapInstance.getLayer("route-outline")) {
-            mapInstance.setPaintProperty(
-              "route-outline",
-              "line-color",
-              `${polylineColor}33`,
-            );
-          }
-
-          if (shouldFitBounds) {
-            try {
-              const bounds = pts.reduce(
-                (acc, [lng, lat]) => {
-                  acc.minLng = Math.min(acc.minLng, lng);
-                  acc.maxLng = Math.max(acc.maxLng, lng);
-                  acc.minLat = Math.min(acc.minLat, lat);
-                  acc.maxLat = Math.max(acc.maxLat, lat);
-                  return acc;
-                },
-                {
-                  minLng: Infinity,
-                  maxLng: -Infinity,
-                  minLat: Infinity,
-                  maxLat: -Infinity,
-                },
-              );
-              mapInstance.fitBounds(
-                [
-                  [bounds.minLng, bounds.minLat],
-                  [bounds.maxLng, bounds.maxLat],
-                ],
-                { padding: 80, duration: lowPower ? 0 : 600 },
-              );
-            } catch (e) {
-              console.warn("[LeafletMap.web] Error fitting bounds:", e);
-            }
-          }
-        } else {
-          source?.setData?.({
-            type: "Feature",
-            geometry: { type: "LineString", coordinates: [] },
-            properties: {},
-          });
-
-          const currentMarkersForBounds = Array.isArray(markers) ? markers.filter(m => m?.coordinate) : [];
-          if (shouldFitBounds) {
-            try {
-              if (currentMarkersForBounds.length >= 2) {
-                // Fit to all marker positions
-                const mBounds = currentMarkersForBounds.reduce(
-                  (acc, m) => {
-                    acc.minLng = Math.min(acc.minLng, m.coordinate.longitude);
-                    acc.maxLng = Math.max(acc.maxLng, m.coordinate.longitude);
-                    acc.minLat = Math.min(acc.minLat, m.coordinate.latitude);
-                    acc.maxLat = Math.max(acc.maxLat, m.coordinate.latitude);
-                    return acc;
-                  },
-                  { minLng: Infinity, maxLng: -Infinity, minLat: Infinity, maxLat: -Infinity },
-                );
-                mapInstance.fitBounds(
-                  [[mBounds.minLng, mBounds.minLat], [mBounds.maxLng, mBounds.maxLat]],
-                  { padding: 100, duration: lowPower ? 0 : 600 },
-                );
-              } else if (currentMarkersForBounds.length === 1) {
-                // Single marker: center on it at city zoom
-                const m = currentMarkersForBounds[0];
-                mapInstance.easeTo({
-                  center: [m.coordinate.longitude, m.coordinate.latitude],
-                  zoom: 8,
-                  duration: lowPower ? 0 : 500,
-                });
-              } else {
-                // No coords: show all of India
-                mapInstance.fitBounds(INDIA_BOUNDS, { padding: 40, duration: lowPower ? 0 : 600 });
-              }
-            } catch (e) {
-              console.warn("[LeafletMap.web] Error setting view:", e);
-            }
-          }
-        }
-
-        const currentMarkers = Array.isArray(markers) ? markers : [];
-        for (const m of currentMarkers) {
-          if (!m || !m.coordinate) continue;
-          const lat = m.coordinate.latitude;
-          const lng = m.coordinate.longitude;
-          const color = m.color || Theme.driverEmerald;
-          const role = tripMapMarkerRoleFromId(m.id);
-          const el = createTripMapMarkerElement(role, m.label, color, {
-            avatarUri: m.avatarUri,
-            avatarSeed: m.avatarSeed,
-            isOnline: m.isOnline,
-          });
-          const anchor =
-            role === "origin" || role === "destination" || role === "driver"
-              ? "bottom"
-              : "center";
-
-          const marker = new maplibregl.Marker({
-            element: el,
-            anchor,
-          })
-            .setLngLat([lng, lat])
-            .addTo(mapInstance);
-          markersRef.current.push(marker);
-        }
-
-        mapInstance.resize();
+        scheduleSync(maplibregl);
       });
+
       return () => {
         cancelled = true;
+        if (loadListener && mapRef.current?.off) {
+          mapRef.current.off("load", loadListener);
+        }
       };
-    }, [center, zoom, markers, polyline, polylineColor, maxBounds, lowPower]);
+    }, [center, zoom, markers, polylines, routeLabels, polyline, polylineColor, maxBounds, lowPower]);
 
     const adjustZoom = useCallback(
       (delta: number) => {

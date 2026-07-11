@@ -159,12 +159,21 @@ export function resolveInboundInviteAvatar(
   item: InboundProtocolInviteItem,
 ): RegistryNotificationAvatar {
   const isDriver = item.kind === "driver";
+  const resolvedOrgUri = (item.avatarUri ?? "").trim() || null;
+  const rawLogo = (item.logoUrl ?? "").trim() || null;
+
+  // `avatarUri` is pre-resolved in global sync (signed logo / owner photo / org seed preset).
+  // Prefer it over raw `logoUrl` — storage paths block seed fallback and often fail to sign in UI.
+  const organizationImageUrl = resolvedOrgUri ?? rawLogo;
+
   return {
     name: item.name?.trim() || "Partner",
     entityType: isDriver ? "driver" : "client",
-    organizationImageUrl: item.logoUrl ?? item.avatarUri ?? null,
-    organizationAvatarSeed: item.orgAvatarSeed ?? null,
-    avatarUrl: isDriver ? item.avatarUri : item.ownerAvatarUrl ?? null,
+    organizationImageUrl,
+    organizationAvatarSeed: item.orgAvatarSeed ?? item.senderAvatarSeed ?? null,
+    avatarUrl: isDriver
+      ? (resolvedOrgUri ?? item.ownerAvatarUrl ?? null)
+      : item.ownerAvatarUrl ?? null,
     avatarSeed: item.senderAvatarSeed ?? null,
     initialsColorSeed: item.partnerOrgId || item.id,
   };

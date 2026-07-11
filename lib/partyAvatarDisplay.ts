@@ -123,12 +123,14 @@ export function resolvePartyDisplayUri(options: {
 
   const orgSeed = (options.organizationAvatarSeed ?? "").trim();
   if (orgSeed) {
+    if (orgSeed.startsWith("user-")) return getUser2DAvatarUriForSeed(orgSeed);
     return (options.entityType ?? "client") === "driver"
       ? getAvatarUriForSeed(orgSeed)
       : getUser2DAvatarUriForSeed(orgSeed);
   }
   const seed = (options.avatarSeed ?? "").trim();
   if (!seed) return null;
+  if (seed.startsWith("user-")) return getUser2DAvatarUriForSeed(seed);
   return (options.entityType ?? "client") === "driver"
     ? getAvatarUriForSeed(seed)
     : getUser2DAvatarUriForSeed(seed);

@@ -6,10 +6,24 @@ import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker
 import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomControls';
 import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
 import React, { useCallback, useImperativeHandle, useMemo, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
-import type { LeafletLatLng, LeafletMapProps, LeafletMapRef } from './LeafletMap.types';
+import type { LeafletLatLng, LeafletMapProps, LeafletMapRef, LeafletPolylineLayer } from './LeafletMap.types';
+
+function resolvePolylineLayers(
+  polylines: LeafletPolylineLayer[] | undefined,
+  polyline: LeafletLatLng[],
+  polylineColor: string,
+): LeafletPolylineLayer[] {
+  if (polylines?.length) {
+    return polylines.filter((layer) => layer.coordinates?.length >= 2);
+  }
+  if (polyline.length >= 2) {
+    return [{ id: 'main', coordinates: polyline, color: polylineColor }];
+  }
+  return [];
+}
 
 function zoomToRegionDeltas(zoom: number): { lat: number; lng: number } {
   const z = Math.max(2, Math.min(20, zoom));
@@ -21,12 +35,16 @@ function zoomToRegionDeltas(zoom: number): { lat: number; lng: number } {
 function MarkerContent({
   markerId,
   color,
+  label,
+  highlighted,
   avatarUri,
   avatarSeed,
   isOnline,
 }: {
   markerId: string;
   color?: string;
+  label?: string;
+  highlighted?: boolean;
   avatarUri?: string | null;
   avatarSeed?: string | null;
   isOnline?: boolean;
@@ -40,6 +58,42 @@ function MarkerContent({
         isOnline={isOnline}
         size={48}
       />
+    );
+  }
+  if (role === 'origin' || role === 'destination') {
+    const isDrop = role === 'destination';
+    return (
+      <View style={styles.pinMarkerWrap}>
+        {label?.trim() ? (
+          <View
+            style={[
+              styles.pinLabel,
+              isDrop ? styles.pinLabelDrop : styles.pinLabelPickup,
+              highlighted ? styles.pinLabelActive : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.pinLabelText,
+                isDrop ? styles.pinLabelTextDrop : styles.pinLabelTextPickup,
+              ]}
+              numberOfLines={1}
+            >
+              {label.trim()}
+            </Text>
+          </View>
+        ) : null}
+        <View
+          style={[
+            styles.pinDot,
+            {
+              backgroundColor: color ?? (isDrop ? Theme.driverGold : Theme.driverEmerald),
+            },
+            highlighted ? styles.pinDotActive : null,
+          ]}
+        />
+        <View style={styles.pinTail} />
+      </View>
     );
   }
   return (
@@ -59,6 +113,8 @@ export const LeafletMapRnMaps = React.forwardRef<
       center,
       zoom = 15,
       markers = [],
+      polylines,
+      routeLabels = [],
       polyline = [],
       polylineColor = '#3b82f6',
       lowPower = false,
@@ -113,12 +169,9 @@ export const LeafletMapRnMaps = React.forwardRef<
       zoomOut: () => animateToZoom(zoomLevelRef.current - 1),
     }));
 
-    const safePolyline = useMemo(
-      () =>
-        (polyline ?? []).filter(
-          (p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude),
-        ),
-      [polyline],
+    const safePolylineLayers = useMemo(
+      () => resolvePolylineLayers(polylines, polyline, polylineColor),
+      [polylines, polyline, polylineColor],
     );
 
     const { lat: initLatD, lng: initLngD } = zoomToRegionDeltas(zoom);
@@ -140,27 +193,60 @@ export const LeafletMapRnMaps = React.forwardRef<
           scrollEnabled={!interactionLocked}
           zoomEnabled={!interactionLocked}
         >
-          {safePolyline.length >= 2 ? (
-            <Polyline
-              coordinates={safePolyline}
-              strokeColor={polylineColor}
-              strokeWidth={4}
-              lineCap="round"
-              lineJoin="round"
-            />
-          ) : null}
+          {safePolylineLayers.map((layer) => {
+            const color = layer.color ?? polylineColor;
+            const mainWidth = layer.width ?? 5;
+            const glowWidth = layer.glowWidth ?? mainWidth + 5;
+            return (
+              <React.Fragment key={layer.id}>
+                <Polyline
+                  coordinates={layer.coordinates}
+                  strokeColor={`${color}40`}
+                  strokeWidth={glowWidth}
+                  lineCap="round"
+                  lineJoin="round"
+                  lineDashPattern={layer.dashed ? [6, 8] : undefined}
+                />
+                <Polyline
+                  coordinates={layer.coordinates}
+                  strokeColor={color}
+                  strokeWidth={mainWidth}
+                  lineCap="round"
+                  lineJoin="round"
+                  lineDashPattern={layer.dashed ? [6, 8] : undefined}
+                />
+              </React.Fragment>
+            );
+          })}
+
+          {(routeLabels ?? []).map((label) => (
+            <Marker
+              key={label.id}
+              coordinate={label.coordinate}
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
+            >
+              <View style={styles.routeDistanceLabel}>
+                <Text style={styles.routeDistanceLabelText}>{label.text}</Text>
+              </View>
+            </Marker>
+          ))}
 
           {(markers ?? []).map((m) => {
-            const isDriver = tripMapMarkerRoleFromId(m.id) === 'driver';
+            const role = tripMapMarkerRoleFromId(m.id);
+            const isDriver = role === 'driver';
+            const isPin = role === 'origin' || role === 'destination';
             return (
               <Marker
                 key={m.id}
                 coordinate={m.coordinate}
-                anchor={isDriver ? { x: 0.5, y: 1 } : { x: 0.5, y: 0.5 }}
+                anchor={isDriver || isPin ? { x: 0.5, y: 1 } : { x: 0.5, y: 0.5 }}
               >
                 <MarkerContent
                   markerId={m.id}
                   color={m.color}
+                  label={m.label}
+                  highlighted={m.highlighted}
                   avatarUri={m.avatarUri}
                   avatarSeed={m.avatarSeed}
                   isOnline={m.isOnline}
@@ -195,5 +281,85 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
+  },
+  pinMarkerWrap: {
+    alignItems: 'center',
+    minWidth: 72,
+  },
+  pinLabel: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: 1,
+    marginBottom: 4,
+    maxWidth: 140,
+  },
+  pinLabelPickup: {
+    borderColor: 'rgba(4,120,87,0.24)',
+  },
+  pinLabelDrop: {
+    borderColor: 'rgba(245,158,11,0.38)',
+  },
+  pinLabelActive: {
+    shadowColor: Theme.driverPrimary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  pinLabelText: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  pinLabelTextPickup: {
+    color: Theme.driverEmeraldDark,
+  },
+  pinLabelTextDrop: {
+    color: '#92400e',
+  },
+  pinDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2.5,
+    borderColor: '#ffffff',
+  },
+  pinDotActive: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 3,
+  },
+  pinTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#ffffff',
+    marginTop: -1,
+  },
+  routeDistanceLabel: {
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(4,120,87,0.28)',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  routeDistanceLabelText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.driverEmeraldDark,
+    letterSpacing: 0.2,
   },
 });

@@ -23,6 +23,11 @@ export function installDevConsoleFilters(): void {
   installed = true;
 
   const originalWarn = console.warn.bind(console);
+  const originalError = console.error?.bind(console);
+  const shouldSuppress = (text: string) =>
+    SUPPRESSED_WARN_PREFIXES.some((prefix) => text.includes(prefix)) ||
+    isIgnorableSupabaseAuthLockError(new Error(text));
+
   console.warn = (...args: unknown[]) => {
     const text = args
       .map((arg) => {
@@ -34,14 +39,21 @@ export function installDevConsoleFilters(): void {
         return '';
       })
       .join(' ');
-    if (
-      SUPPRESSED_WARN_PREFIXES.some((prefix) => text.includes(prefix)) ||
-      isIgnorableSupabaseAuthLockError(
-        args[0] instanceof Error ? args[0] : new Error(text),
-      )
-    ) {
+    if (shouldSuppress(text)) {
       return;
     }
     originalWarn(...args);
   };
+
+  if (originalError) {
+    console.error = (...args: unknown[]) => {
+      const text = args
+        .map((arg) => (typeof arg === 'string' ? arg : ''))
+        .join(' ');
+      if (shouldSuppress(text)) {
+        return;
+      }
+      originalError(...args);
+    };
+  }
 }

@@ -1,3 +1,4 @@
+import { type ImageSourcePropType } from "react-native";
 import { type PresetAvatar, getPresetAvatarUri } from "./DriverLevels";
 
 export type UserAvatarGender = "male" | "female";
@@ -86,4 +87,9 @@ export const DEFAULT_USER_2D_AVATAR_SEED = USER_2D_AVATARS[0]?.seed ?? 'user-1';
 export function getUser2DAvatarUriForSeed(seed: string): string {
   const preset = USER_2D_AVATARS.find((a) => a.seed === seed);
   return getPresetAvatarUri(preset ?? USER_2D_AVATARS[0]!);
+}
+
+export function getUser2DPresetImageSourceForSeed(seed: string): ImageSourcePropType {
+  const preset = USER_2D_AVATARS.find((a) => a.seed === seed);
+  return (preset ?? USER_2D_AVATARS[0]!).image;
 }

@@ -108,3 +108,9 @@ Products are **platform-owned catalog**, not Commerce-owned — reusable across 
 
 **Backlog:** Unify soft-delete representation across `CustomerService`, `WarehouseService`, and `ProductService` when schema migration is scheduled.
 
+## Trip Room vs. legacy chat messaging model (ADR-008, pending product decision)
+
+**Status:** Not decided. Full options analysis, dependency map, and trade-offs in `docs/ADR-008-trip-room-messaging-model.md`. Engineering work on the `trip_messages`/`chat_messages` dual-write (`docs/REALTIME_MESSAGING_ARCHITECTURE_REVIEW.md`) is frozen until this is answered.
+
+**The question:** is Trip Room (`chatPlatform.service.ts`, `chat_messages`/`chat_conversations`) intended to replace legacy per-lane Driver/User/Dispatcher chat (`chat.service.ts`, `trip_messages`/`trip_conversations`), observe it permanently, or is neither schema the right long-term canonical model? The mirror trigger bridging the two tables is either temporary migration scaffolding or permanent, load-bearing sync infrastructure depending on the answer — this is a product-intent question, not something resolvable from code.
+

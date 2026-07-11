@@ -26,6 +26,7 @@ import {
   toggleMarkdownFormat,
 } from "@/features/chat/utils/chatMessageMarkdown.util";
 import { Theme } from "@/constants/Theme";
+import { withWebSafeShadows } from "@/lib/platformViewStyle.util";
 import {
   Mic,
   Paperclip,
@@ -453,7 +454,8 @@ export function ChatMobileComposer({
 }
 
 // ── Slack variant styles ───────────────────────────────────────────────────────
-const sl = StyleSheet.create({
+const sl = withWebSafeShadows(
+  StyleSheet.create({
   root: {
     backgroundColor: "#FFFFFF",
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -648,7 +650,8 @@ const sl = StyleSheet.create({
     color: "#EF4444",
     fontWeight: "700",
   },
-});
+  }),
+);
 
 // ── Default variant styles ─────────────────────────────────────────────────────
 const styles = StyleSheet.create({

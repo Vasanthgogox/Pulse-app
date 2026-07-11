@@ -115,14 +115,14 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
           <>
             <Polyline
               coordinates={route.coordinates}
-              strokeColor={`${Theme.primary}33`}
-              strokeWidth={8}
+              strokeColor={`${Theme.driverPrimary}40`}
+              strokeWidth={10}
               lineCap="round"
             />
             <Polyline
               coordinates={route.coordinates}
-              strokeColor={Theme.primary}
-              strokeWidth={4}
+              strokeColor={Theme.driverPrimary}
+              strokeWidth={5}
               lineCap="round"
             />
           </>
@@ -186,27 +186,43 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Theme.positive,
+    backgroundColor: Theme.driverEmerald,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: 'white',
+    shadowColor: Theme.driverEmeraldDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 5,
   },
   markerPickupActive: {
-    transform: [{ scale: 1.08 }],
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 3,
   },
   markerDrop: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: Theme.negative,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Theme.driverGold,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: 'white',
+    shadowColor: '#b45309',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 5,
   },
   markerDropActive: {
-    transform: [{ scale: 1.08 }],
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 3,
   },
   guidanceChip: {
     position: 'absolute',

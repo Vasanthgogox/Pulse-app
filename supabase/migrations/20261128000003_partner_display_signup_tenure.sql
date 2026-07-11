@@ -1,4 +1,5 @@
 -- Partner display: expose owner signup (profiles.created_at) and org tenure for network profiles.
+-- Applied on remote as version 20261128000003; retained here for local db reset parity.
 
 CREATE OR REPLACE FUNCTION public.get_connection_partner_display_batch(
   p_linked_organization_ids uuid[]

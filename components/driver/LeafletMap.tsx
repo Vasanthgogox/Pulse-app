@@ -5,7 +5,7 @@ import { Platform } from "react-native";
 import { LeafletMap as LeafletMapWeb } from "./LeafletMap.web";
 import type { LeafletLatLng, LeafletMapProps, LeafletMapRef } from "./LeafletMap.types";
 
-export type { LeafletLatLng, LeafletMapRef, LeafletMarker } from "./LeafletMap.types";
+export type { LeafletLatLng, LeafletMapRef, LeafletMarker, LeafletPolylineLayer, LeafletRouteLabel } from "./LeafletMap.types";
 
 type NativeLeafletCtor = React.ForwardRefExoticComponent<
   LeafletMapProps & React.RefAttributes<LeafletMapRef>

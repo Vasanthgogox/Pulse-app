@@ -899,7 +899,7 @@ export function DriverChatSlackThread({
           ) : null
         }
         ListEmptyComponent={
-          messagesLoading ? (
+          messagesLoading && merged.length === 0 ? (
             <View style={localStyles.centered}>
               <LoadingIndicator size="small" color={Theme.primary} />
             </View>

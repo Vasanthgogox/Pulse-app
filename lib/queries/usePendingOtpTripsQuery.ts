@@ -47,6 +47,7 @@ export function usePendingOtpTripsQuery(userId: string | null) {
     refetchOnReconnect: true,
     refetchInterval: (q) => {
       if (!appActive) return false;
+      if (q.state.status === 'error') return false;
       return hasPendingOtpTrips(q.state.data) ? POLL_WITH_PENDING_MS : POLL_IDLE_MS;
     },
   });

@@ -57,6 +57,7 @@
     "db:use-local": "bash scripts/use-local-supabase.sh",
     "db:use-cloud": "bash scripts/use-cloud-supabase.sh",
     "audit": "node tools/serve.js",
+    "db:push": "supabase db push --linked",
     "db:push-both": "bash scripts/push-both-dbs.sh",
     "functions:deploy": "supabase functions deploy",
     "functions:deploy-both": "bash scripts/push-both-dbs.sh",

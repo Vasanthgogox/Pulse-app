@@ -41,6 +41,16 @@ const blobUrlCache = new Map<string, string>();
 /** Cache for transformed (thumbnail) signed URLs, keyed by `${path}:${width}x${height}q${quality}`. */
 const thumbUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
+/**
+ * In-flight request dedup — separate from the TTL caches above, which only short-circuit
+ * *after* a request completes. Without this, N components mounting for the same storagePath
+ * before the cache is warm each fire their own createSignedUrl/download call. Keyed the same
+ * way as the corresponding cache; cleared once the shared promise settles either way.
+ */
+const inFlightSignedUrl = new Map<string, Promise<string | null>>();
+const inFlightThumbUrl = new Map<string, Promise<string | null>>();
+const inFlightBlobUrl = new Map<string, Promise<{ url: string; revoke: () => void } | null>>();
+
 type ImageTransformResize = "cover" | "contain";
 
 function thumbCacheKey(
@@ -77,14 +87,7 @@ export function peekChatDocumentSignedUrl(storagePath: string): string | null {
   return null;
 }
 
-export async function resolveChatDocumentStorageUrl(storagePath: string): Promise<string | null> {
-  const path = normalizeTripDocumentsStoragePath(String(storagePath ?? '').trim());
-  if (!path) return null;
-  if (/^https?:\/\//i.test(path)) return path;
-
-  const cached = signedUrlCache.get(path);
-  if (cached && Date.now() < cached.expiresAt) return cached.url;
-
+async function fetchChatDocumentStorageUrl(path: string): Promise<string | null> {
   let lastError: string | null = null;
 
   for (const bucket of bucketsToTry(path)) {
@@ -113,11 +116,45 @@ export async function resolveChatDocumentStorageUrl(storagePath: string): Promis
   return null;
 }
 
+export async function resolveChatDocumentStorageUrl(storagePath: string): Promise<string | null> {
+  const path = normalizeTripDocumentsStoragePath(String(storagePath ?? '').trim());
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+
+  const cached = signedUrlCache.get(path);
+  if (cached && Date.now() < cached.expiresAt) return cached.url;
+
+  const pending = inFlightSignedUrl.get(path);
+  if (pending) return pending;
+
+  const request = fetchChatDocumentStorageUrl(path).finally(() => {
+    inFlightSignedUrl.delete(path);
+  });
+  inFlightSignedUrl.set(path, request);
+  return request;
+}
+
 /**
  * Downloads the object with the authenticated Supabase client and returns a blob: URL.
  * Use for inline preview on web when `<Image source={{ uri: signedUrl }}>` is blocked by CORS.
  * Caller must revoke the URL when unmounting.
  */
+async function fetchChatDocumentBlobObjectUrl(
+  path: string,
+): Promise<{ url: string; revoke: () => void } | null> {
+  const dlResults = await Promise.allSettled(
+    BUCKET_TRY_ORDER.map((bucket) => supabase().storage.from(bucket).download(path))
+  );
+  for (const result of dlResults) {
+    if (result.status === 'fulfilled' && !result.value.error && result.value.data) {
+      const url = URL.createObjectURL(result.value.data);
+      blobUrlCache.set(path, url);
+      return { url, revoke: () => {} };
+    }
+  }
+  return null;
+}
+
 export async function tryChatDocumentBlobObjectUrl(
   storagePath: string,
 ): Promise<{ url: string; revoke: () => void } | null> {
@@ -134,17 +171,14 @@ export async function tryChatDocumentBlobObjectUrl(
     return { url: cached, revoke: () => {} };
   }
 
-  const dlResults = await Promise.allSettled(
-    BUCKET_TRY_ORDER.map((bucket) => supabase().storage.from(bucket).download(path))
-  );
-  for (const result of dlResults) {
-    if (result.status === 'fulfilled' && !result.value.error && result.value.data) {
-      const url = URL.createObjectURL(result.value.data);
-      blobUrlCache.set(path, url);
-      return { url, revoke: () => {} };
-    }
-  }
-  return null;
+  const pending = inFlightBlobUrl.get(path);
+  if (pending) return pending;
+
+  const request = fetchChatDocumentBlobObjectUrl(path).finally(() => {
+    inFlightBlobUrl.delete(path);
+  });
+  inFlightBlobUrl.set(path, request);
+  return request;
 }
 
 /**
@@ -176,20 +210,15 @@ export function peekChatImageThumbnailUrl(
   return null;
 }
 
-export async function resolveChatImageThumbnail(
+async function fetchChatImageThumbnail(
   storagePath: string,
-  width  = 300,
-  height = 300,
-  quality = 70,
-  resize: ImageTransformResize = "cover",
+  path: string,
+  cacheKey: string,
+  width: number,
+  height: number,
+  quality: number,
+  resize: ImageTransformResize,
 ): Promise<string | null> {
-  const path = normalizeTripDocumentsStoragePath(String(storagePath ?? '').trim());
-  if (!path || /^https?:\/\//i.test(path)) return storagePath || null;
-
-  const cacheKey = thumbCacheKey(path, width, height, quality, resize);
-  const cached = thumbUrlCache.get(cacheKey);
-  if (cached && Date.now() < cached.expiresAt) return cached.url;
-
   for (const bucket of bucketsToTry(path)) {
     try {
       const { data, error } = await supabase()
@@ -215,6 +244,32 @@ export async function resolveChatImageThumbnail(
 
   // Fallback: return the full signed URL if transforms are not available.
   return resolveChatDocumentStorageUrl(storagePath);
+}
+
+export async function resolveChatImageThumbnail(
+  storagePath: string,
+  width  = 300,
+  height = 300,
+  quality = 70,
+  resize: ImageTransformResize = "cover",
+): Promise<string | null> {
+  const path = normalizeTripDocumentsStoragePath(String(storagePath ?? '').trim());
+  if (!path || /^https?:\/\//i.test(path)) return storagePath || null;
+
+  const cacheKey = thumbCacheKey(path, width, height, quality, resize);
+  const cached = thumbUrlCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) return cached.url;
+
+  const pending = inFlightThumbUrl.get(cacheKey);
+  if (pending) return pending;
+
+  const request = fetchChatImageThumbnail(storagePath, path, cacheKey, width, height, quality, resize).finally(
+    () => {
+      inFlightThumbUrl.delete(cacheKey);
+    },
+  );
+  inFlightThumbUrl.set(cacheKey, request);
+  return request;
 }
 
 /**

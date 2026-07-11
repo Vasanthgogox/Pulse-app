@@ -4,7 +4,6 @@ import type {
   DriverOffer,
   DriverRow,
 } from "@/features/drivers/services/drivers.service";
-import type { IndentRow } from "@/features/indents/services/indents.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
@@ -53,7 +52,6 @@ export interface FinanceTabBodyProps {
   supplierRows: SupplierRow[];
   tripsWhereOrgIsClient: TripRow[];
   tripsWhereOrgIsSupplier?: TripRow[];
-  indentsForFinance?: IndentRow[];
   vehicleRows: VehicleRow[];
   driverRows: DriverRow[];
   driverOffers: Record<string, DriverOffer>;

@@ -21,6 +21,10 @@ export interface SignUpMobileShellProps {
   headerSubtitle?: string;
   trustMode?: 'business' | 'driver';
   isDesktop?: boolean;
+  brandWord?: string;
+  marketingTag?: string;
+  marketingTitle?: string;
+  marketingOutcomeLines?: readonly string[];
   scrollRef?: RefObject<ScrollView | null>;
 }
 
@@ -36,6 +40,10 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
   children,
   trustMode = 'business',
   isDesktop = false,
+  brandWord,
+  marketingTag,
+  marketingTitle,
+  marketingOutcomeLines,
   scrollRef,
   bodyMode = 'scroll',
   scrollBottomPad = 24,
@@ -73,6 +81,10 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
       hideProgress={hideProgress}
       isDesktop={isDesktop}
       theme={theme}
+      brandWord={brandWord}
+      marketingTag={marketingTag}
+      marketingTitle={marketingTitle}
+      marketingOutcomeLines={marketingOutcomeLines}
     >
       <View style={styles.body}>{body}</View>
     </SignUpPulseShell>

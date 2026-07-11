@@ -1,8 +1,7 @@
 import Theme from '@/constants/Theme';
 import {
-  DEFAULT_USER_2D_AVATAR_SEED,
-  getUser2DAvatarUriForSeed,
-} from '@/constants/UserAvatars';
+  resolveDriverAvatarImageSource,
+} from '@/constants/DriverLevels';
 import { useEffect } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -25,12 +24,8 @@ export type DriverMapAvatarMarkerProps = {
 function resolveAvatarSource(
   avatarUri?: string | null,
   avatarSeed?: string | null,
-): { uri: string } | number {
-  const trimmed = avatarUri?.trim();
-  if (trimmed && (trimmed.startsWith('http') || trimmed.startsWith('data:'))) {
-    return { uri: trimmed };
-  }
-  return { uri: getUser2DAvatarUriForSeed(avatarSeed?.trim() || DEFAULT_USER_2D_AVATAR_SEED) };
+) {
+  return resolveDriverAvatarImageSource(avatarUri, avatarSeed);
 }
 
 export function DriverMapAvatarMarker({

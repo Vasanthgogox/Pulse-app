@@ -7,7 +7,6 @@
  * Step 5: Success, go to app
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import { PULSE_PILOT_BRAND_WORD } from '@/lib/brand/pulseBrandMark.tokens';
 import { ALL_PRESET_AVATARS } from '@/constants/DriverLevels';
 import Theme from '@/constants/Theme';
@@ -32,8 +31,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
     Alert,
     Image,
-    KeyboardAvoidingView,
-  Modal,
+    Modal,
     NativeSyntheticEvent,
     Platform,
     Pressable,
@@ -59,7 +57,9 @@ import { SignUpPulseTitle } from '@/features/auth/signup/SignUpPulseTitle';
 import { SignUpOtpBoxes } from '@/features/auth/signup/SignUpOtpBoxes';
 import { formatSignupPhoneDisplay } from '@/features/auth/signup/signUpKeypad.util';
 import { DRIVER_SIGNUP } from '@/features/auth/signup/signUpDriverTheme';
+import { DRIVER_SIGNUP_LOTTIE } from '@/features/auth/signup/signUpDriverLottieAssets';
 import { createPulseSignUpTextStyles } from '@/features/auth/signup/signUpTypography';
+import { suiteSignUpCopy } from '@/lib/suite/suiteAuthContent';
 import { updateProfile } from '@/features/auth';
 import { pickLocalAvatar, uploadAvatarFromLocal } from '@/lib/avatarUpload';
 import {
@@ -231,7 +231,6 @@ export default function DriverSignUpScreen() {
   const safeBack = useSafeBack('/sign-in');
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const isOnline = useIsOnline();
-  const scrollRef = useRef<ScrollView>(null);
   /** Per-page vertical scroll (horizontal pager does not scroll vertically). */
   const pageVerticalScrollRefs = useRef<Array<ScrollView | null>>([]);
   /** Mobile shell scroll (driver signup step body on phone / mobile web). */
@@ -279,7 +278,8 @@ export default function DriverSignUpScreen() {
   /** Step index 2: approximate Y from top of scroll content for keyboard scroll. */
   const PROFILE_FIELD_SCROLL_Y = { callsign: 0, email: 112, password: 224, confirmPassword: 336 } as const;
   const isDesktop = width >= 1024;
-  const useMobileLayout = !isDesktop;
+  const useMobileLayout = true;
+  const driverSignUpCopy = suiteSignUpCopy('pilot');
   const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
 
   useEffect(() => {
@@ -867,6 +867,7 @@ export default function DriverSignUpScreen() {
         {pageBody(0, useMobileLayout ? (
           <SignUpPulseKeypadStep
             theme={DRIVER_SIGNUP}
+            heroLottie={DRIVER_SIGNUP_LOTTIE.phone}
             title={STEP_CONTENT[0].title}
             subtitle={STEP_CONTENT[0].subtitle}
             value={phone}
@@ -970,6 +971,8 @@ export default function DriverSignUpScreen() {
         {pageBody(1, useMobileLayout ? (
           <SignUpPulseKeypadStep
             theme={DRIVER_SIGNUP}
+            heroLottie={DRIVER_SIGNUP_LOTTIE.verify}
+            centeredLayout
             title={STEP_CONTENT[1].title}
             subtitle={
               phone.trim().length === 10
@@ -982,7 +985,7 @@ export default function DriverSignUpScreen() {
             formatDisplay={(d) => d}
             fieldLabel="Verification Code"
             emptyPlaceholder=""
-            customDisplay={<SignUpOtpBoxes digits={otpValue} length={OTP_LENGTH} />}
+            customDisplay={<SignUpOtpBoxes digits={otpValue} length={OTP_LENGTH} centered />}
             onPrimary={verifyOtpStep}
             primaryDisabled={otpValue.length < OTP_LENGTH}
             primaryLoading={loading}
@@ -1572,9 +1575,8 @@ export default function DriverSignUpScreen() {
     </>
   );
 
-  if (useMobileLayout) {
-    const usesKeypadBody = step === 0 || step === 1;
-    return (
+  const usesKeypadBody = step === 0 || step === 1;
+  return (
       <>
         <SignUpMobileShell
           backLabel={step === 0 ? 'Back' : 'Previous'}
@@ -1586,6 +1588,11 @@ export default function DriverSignUpScreen() {
           scrollBottomPad={insets.bottom + 24}
           scrollRef={mobileScrollRef}
           trustMode="driver"
+          isDesktop={isDesktop}
+          brandWord={PULSE_PILOT_BRAND_WORD}
+          marketingTag={driverSignUpCopy.marketingTag}
+          marketingTitle={driverSignUpCopy.marketingTitle}
+          marketingOutcomeLines={driverSignUpCopy.principles}
         >
           {stepPages}
         </SignUpMobileShell>
@@ -1616,76 +1623,6 @@ export default function DriverSignUpScreen() {
         </Modal>
       </>
     );
-  }
-
-  return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'web' ? undefined : 'padding'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
-    >
-      <TouchableOpacity
-        style={[styles.backLink, isDesktop && styles.backLinkDesktop, { paddingTop: insets.top + 8 }]}
-        onPress={handleBack}
-        hitSlop={12}
-      >
-        <FontAwesome name="chevron-left" size={20} color={LIGHT.textMuted} />
-        <Text style={styles.backLinkText}>{step === 0 ? 'Back to sign up' : 'Back'}</Text>
-      </TouchableOpacity>
-      <View style={[styles.brandRow, isDesktop && styles.brandRowDesktop]}>
-        <PulseBrandMark word={PULSE_PILOT_BRAND_WORD} size="display" style={styles.brandRowInner} />
-      </View>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        scrollEnabled={false}
-        showsHorizontalScrollIndicator={false}
-        style={[styles.pagesScroller, isDesktop && styles.pagesScrollerDesktop]}
-        contentContainerStyle={styles.pagesWrap}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-      >
-        {stepPages}
-      </ScrollView>
-
-      <Modal
-        visible={previewDocUri != null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPreviewDocUri(null)}
-      >
-        <View style={styles.previewBackdrop}>
-          <View style={styles.previewCard}>
-            {previewDocUri ? (
-              <Image source={{ uri: previewDocUri }} style={styles.previewImage} resizeMode="contain" />
-            ) : null}
-            <TouchableOpacity
-              style={styles.previewCloseBtn}
-              onPress={() => setPreviewDocUri(null)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.previewCloseText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Step indicator */}
-      <View style={[styles.stepIndicator, { paddingBottom: insets.bottom + 8 }]}>
-        {STEP_CONTENT.map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.stepDot,
-              i === step && styles.stepDotActive,
-              i < step && styles.stepDotDone,
-            ]}
-          />
-        ))}
-      </View>
-    </KeyboardAvoidingView>
-  );
 }
 
 const styles = StyleSheet.create({

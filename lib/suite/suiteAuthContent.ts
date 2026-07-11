@@ -62,7 +62,14 @@ const DEFAULT_SIGN_UP_COPY: SuiteSignUpCopy = {
   principles: ['One workspace.', 'One team.', 'One source of truth.'] as const,
 };
 
+const PILOT_SIGN_UP_COPY: SuiteSignUpCopy = {
+  marketingTag: 'Driver activation',
+  marketingTitle: 'Trips, documents, and earnings — built for drivers.',
+  principles: ['Verify once.', 'Run assigned trips.', 'Get paid on time.'] as const,
+};
+
 export function suiteSignUpCopy(productId: SuiteProductId | null): SuiteSignUpCopy {
   if (productId === 'commerce') return COMMERCE_SIGN_UP_COPY;
+  if (productId === 'pilot') return PILOT_SIGN_UP_COPY;
   return DEFAULT_SIGN_UP_COPY;
 }

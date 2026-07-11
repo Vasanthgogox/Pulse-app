@@ -182,7 +182,6 @@ export function FinanceScreen() {
     tripsError,
     refetchTrips,
     garagePeriodOptions,
-    indentsForFinance,
     setPendingDriverSalaryRequests,
   } = entities;
 
@@ -583,7 +582,6 @@ export function FinanceScreen() {
       allTripsForLedger,
       ledgerTransactions ?? [],
       tripPartyMap,
-      indentsForFinance,
     );
     const suppliersAgg = aggregateSuppliers(
       supplierRows,
@@ -700,7 +698,6 @@ export function FinanceScreen() {
     currentOrganization?.id,
     driverOffers,
     driverRows,
-    indentsForFinance,
     ledgerTotalsData.totalIn,
     ledgerTotalsData.totalOut,
     ledgerTransactions,
@@ -749,7 +746,6 @@ export function FinanceScreen() {
         allTripsForLedger,
         ledgerRows,
         tripPartyMap,
-        indentsForFinance,
         tripFinanceAdjustmentsByTripId,
       );
       let filteredRows = rows;
@@ -967,7 +963,6 @@ export function FinanceScreen() {
     entityFilter,
     filteredLedgerForDisplay,
     financeSubTab,
-    indentsForFinance,
     ledgerTransactions,
     searchQuery,
     supplierRows,
@@ -1586,7 +1581,6 @@ export function FinanceScreen() {
               supplierRows={supplierRows}
               tripsWhereOrgIsClient={financeFilteredTripsWhereOrgIsClient}
               tripsWhereOrgIsSupplier={financeFilteredTripsWhereOrgIsSupplier}
-              indentsForFinance={indentsForFinance}
               vehicleRows={vehicleRows}
               driverRows={driverRows}
               driverOffers={driverOffers}

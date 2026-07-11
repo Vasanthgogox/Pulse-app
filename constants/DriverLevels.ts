@@ -5,7 +5,20 @@
  */
 
 import { Asset } from 'expo-asset';
-import { Image, type ImageSourcePropType } from 'react-native';
+import { Image, Platform, type ImageSourcePropType } from 'react-native';
+
+function absolutizeWebUri(uri: string): string {
+  if (
+    typeof window !== 'undefined' &&
+    uri.startsWith('/') &&
+    !uri.startsWith('//')
+  ) {
+    return `${window.location.origin}${uri}`;
+  }
+  return uri;
+}
+
+export const DEFAULT_DRIVER_AVATAR_SEED = 'driver-1';
 
 export const LEVELS_CONFIG = [
   { level: 1, name: 'Initiate', goalText: 'Complete Signup', type: 'signup', target: 1, reward: 'Access Hub', tier: 'Bronze' },
@@ -49,28 +62,114 @@ export const DRIVER_PRESET_AVATARS: PresetAvatar[] = [
 /** All presets shown in driver profile avatar picker. */
 export const ALL_PRESET_AVATARS: PresetAvatar[] = DRIVER_PRESET_AVATARS;
 
-/** URI for a preset (from bundled asset). */
+/** URI for a preset (from bundled asset). Works on native and react-native-web. */
 export function getPresetAvatarUri(av: PresetAvatar): string {
-  const source = av.image as any;
-
+  const source = av.image as ImageSourcePropType;
   if (!source) return '';
-  if (typeof source === 'string') return source;
-  if (typeof source?.uri === 'string' && source.uri.length > 0) return source.uri;
 
-  const resolver = (Image as any)?.resolveAssetSource;
-  if (typeof resolver === 'function') {
-    const resolved = resolver(source);
-    if (typeof resolved?.uri === 'string' && resolved.uri.length > 0) return resolved.uri;
+  if (typeof source === 'string') {
+    const uri = source.trim();
+    if (uri) return absolutizeWebUri(uri);
   }
 
-  const asset = Asset.fromModule(source);
-  return asset?.uri ?? asset?.localUri ?? '';
+  if (typeof source === 'number') {
+    try {
+      const asset = Asset.fromModule(source);
+      const uri = (asset?.uri ?? asset?.localUri ?? '').trim();
+      if (uri) return absolutizeWebUri(uri);
+    } catch {
+      // fall through
+    }
+  }
+
+  if (typeof source === 'object' && source !== null) {
+    if ('uri' in source) {
+      const uri = typeof source.uri === 'string' ? source.uri.trim() : '';
+      if (uri) return absolutizeWebUri(uri);
+    }
+    const mod = source as { default?: unknown };
+    if (typeof mod.default === 'string' && mod.default.trim()) {
+      return absolutizeWebUri(mod.default.trim());
+    }
+    if (typeof mod.default === 'number') {
+      try {
+        const asset = Asset.fromModule(mod.default);
+        const uri = (asset?.uri ?? asset?.localUri ?? '').trim();
+        if (uri) return absolutizeWebUri(uri);
+      } catch {
+        // fall through
+      }
+    }
+  }
+
+  // resolveAssetSource is native-only — undefined on react-native-web.
+  if (
+    Platform.OS !== 'web' &&
+    typeof Image.resolveAssetSource === 'function'
+  ) {
+    const resolved = Image.resolveAssetSource(source);
+    if (resolved?.uri) {
+      return absolutizeWebUri(resolved.uri.trim());
+    }
+  }
+
+  try {
+    const asset = Asset.fromModule(source);
+    const uri = (asset?.uri ?? asset?.localUri ?? '').trim();
+    if (uri) return absolutizeWebUri(uri);
+  } catch {
+    return '';
+  }
+
+  return '';
+}
+
+/** Bundled `require()` source for a driver preset seed (preferred for `<Image source={…} />`). */
+export function getPresetImageSourceForSeed(
+  seed?: string | null,
+): ImageSourcePropType {
+  return getDriverPresetForSeed(seed).image;
 }
 
 /** Resolve stored avatarSeed to display URI. */
 export function getAvatarUriForSeed(seed: string): string {
   const preset = ALL_PRESET_AVATARS.find((av) => av.seed === seed);
   return preset ? getPresetAvatarUri(preset) : getPresetAvatarUri(ALL_PRESET_AVATARS[0]);
+}
+
+/** Preset row for a driver seed (falls back to driver-1). */
+export function getDriverPresetForSeed(seed?: string | null): PresetAvatar {
+  const s = (seed ?? '').trim();
+  return ALL_PRESET_AVATARS.find((av) => av.seed === s) ?? ALL_PRESET_AVATARS[0]!;
+}
+
+/** Image source for driver UI: uploaded photo URL or bundled preset (`assets/drivers` or legacy `user-N`). */
+export function resolveDriverAvatarImageSource(
+  avatarUri?: string | null,
+  avatarSeed?: string | null,
+): ImageSourcePropType {
+  const trimmed = avatarUri?.trim();
+  if (trimmed && (trimmed.startsWith('http') || trimmed.startsWith('data:'))) {
+    return { uri: trimmed };
+  }
+  const seed = (avatarSeed ?? '').trim();
+  if (seed.startsWith('user-')) {
+    const { getUser2DPresetImageSourceForSeed } =
+      require('./UserAvatars') as typeof import('./UserAvatars');
+    return getUser2DPresetImageSourceForSeed(seed);
+  }
+  return getDriverPresetForSeed(avatarSeed).image;
+}
+
+/** Display URI for map markers / web img src (bundled driver or legacy user presets). */
+export function resolveDriverAvatarUriForSeed(seed?: string | null): string {
+  const s = (seed ?? '').trim();
+  if (s.startsWith('user-')) {
+    const { getUser2DAvatarUriForSeed } =
+      require('./UserAvatars') as typeof import('./UserAvatars');
+    return getUser2DAvatarUriForSeed(s);
+  }
+  return getPresetAvatarUri(getDriverPresetForSeed(seed));
 }
 
 /** @deprecated Use getAvatarUriForSeed. Kept for compatibility. */

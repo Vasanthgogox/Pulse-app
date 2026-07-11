@@ -6,7 +6,6 @@
 import type { PartyOption, TripOption } from "@/components/AddTransactionModal";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import { type DriverOffer, type DriverRow } from "@/features/drivers/services/drivers.service";
-import type { IndentRow } from "@/features/indents/services/indents.service";
 import { type SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
 import { type VehicleRow } from "@/features/vehicles/services/vehicles.service";
@@ -19,7 +18,6 @@ import {
   useClientsQuery,
   useDriverOffersQuery,
   useDriversQuery,
-  useIndentsForFinanceQuery,
   useSalaryRequestsQuery,
   useSuppliersQuery,
   useTripsQuery,
@@ -59,8 +57,6 @@ export interface UseFinanceEntitiesResult {
   tripsError: boolean;
   refetchTrips: () => void;
   garagePeriodOptions: { value: string; label: string }[];
-  /** Pending/quoted/awarded indents for finance aggregation (pre-trip customer billing visibility). */
-  indentsForFinance: IndentRow[];
   setPendingDriverSalaryRequests: React.Dispatch<
     React.SetStateAction<SalaryRequestWithDriverRow[]>
   >;
@@ -85,8 +81,6 @@ export function useFinanceEntities({
     useTripsWhereOrgIsClientQuery(orgId);
   const { data: tripsWhereOrgIsSupplier = [], isPending: tripsAsSupplierLoading } =
     useTripsWhereOrgIsSupplierQuery(orgId);
-  const { data: indentsForFinance = [], isPending: indentsForFinanceLoading } =
-    useIndentsForFinanceQuery(orgId);
   const { data: salaryRequestsFromQuery = [] } = useSalaryRequestsQuery(orgId, "pending");
 
   const tripIdsWhereOrgIsSupplier = useMemo(
@@ -248,7 +242,6 @@ export function useFinanceEntities({
     entitiesLoading,
     tripsError,
     refetchTrips: () => refetchTrips(),
-    indentsForFinance,
     garagePeriodOptions,
     setPendingDriverSalaryRequests,
   };

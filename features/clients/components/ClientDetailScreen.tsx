@@ -44,10 +44,6 @@ import {
 import { getProfileImageBatch } from "@/features/finance/services/finance.service";
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
-import {
-    getIndentsByOrganization,
-    type IndentRow,
-} from "@/features/indents/services/indents.service";
 import { averageScore } from "@/features/ratings";
 import {
     getSuppliersByOrganization,
@@ -262,8 +258,6 @@ export default function ClientDetailScreen({
   const [client, setClient] = useState<ClientRow | null>(null);
   const clientName = client?.name || client?.contact_person || t("client");
   const [trips, setTrips] = useState<TripRow[]>([]);
-  /** Pre-trip indents for this client (pending/quoted/awarded) — billed but not yet a trip. */
-  const [pendingIndents, setPendingIndents] = useState<IndentRow[]>([]);
   const tripIdsForFinanceAdj = useMemo(
     () => trips.map((t) => String(t.id)).filter(Boolean),
     [trips],
@@ -438,15 +432,9 @@ export default function ClientDetailScreen({
       ? Promise.resolve({ error: null, trips: cachedTrips })
       : getTripsForOrg(orgId);
 
-    const cachedIndents = queryClient.getQueryData<IndentRow[]>(queryKeys.indents.finite(orgId));
-    const indentsPromise = cachedIndents !== undefined
-      ? Promise.resolve({ error: null, indents: cachedIndents })
-      : getIndentsByOrganization(orgId);
-
     Promise.all([
       getClientDetailBundle(orgId, clientId),
       tripsPromise,
-      indentsPromise,
       getClientsByOrganization(orgId),
       getTransactionsByOrganization(orgId),
       getSuppliersByOrganization(orgId),
@@ -456,14 +444,12 @@ export default function ClientDetailScreen({
         ([
           bundleRes,
           tripsRes,
-          indentsRes,
           clientsRes,
           txRes,
           suppliersRes,
           driversRes,
         ]) => {
           const allTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
-          const allIndents = indentsRes.error ? [] : (indentsRes.indents ?? []);
           const allClients = clientsRes.error ? [] : (clientsRes.clients ?? []);
           const allTx = txRes.error ? [] : (txRes.transactions ?? []);
           const allSuppliers = suppliersRes.error
@@ -520,26 +506,6 @@ export default function ClientDetailScreen({
             return matchesDirect || matchesTx || matchesLinkedOrg;
           });
           setTrips(forClient);
-          // Pre-trip indents (pending/quoted/awarded) billed but not yet converted to a trip —
-          // matches aggregateCustomers.ts Pass 4, which is why the customer list shows Sales/Due
-          // this screen otherwise misses for a client whose only activity so far is an indent.
-          const indentIdsCoveredByTrips = new Set(
-            allTrips
-              .map((t: TripRow) => (t as { indent_id?: string | null }).indent_id)
-              .filter((id): id is string => id != null),
-          );
-          const forClientIndents = allIndents.filter((indent: IndentRow) => {
-            const status = (indent.status || "").toLowerCase();
-            if (status === "cancelled" || status === "completed") return false;
-            if (indentIdsCoveredByTrips.has(indent.id)) return false;
-            return (
-              indent.client_id === clientId ||
-              (clientDisplayName !== "" &&
-                (indent.client_name || "").toLowerCase().trim() ===
-                  clientDisplayName)
-            );
-          });
-          setPendingIndents(forClientIndents);
           setSuppliers(allSuppliers);
           setDrivers(allDrivers);
           setClientRatingAvg(
@@ -1263,24 +1229,6 @@ export default function ClientDetailScreen({
       }
     }
 
-    // Pass 3b: Pre-trip indents — billed but not yet converted to a trip, so they have no
-    // supplier/driver/cost breakdown and don't belong in the per-trip table, but their client_price
-    // is real billing and must count toward Total Sales / Due (matches aggregateCustomers.ts Pass 4).
-    for (const indent of pendingIndents) {
-      const amount = Number(indent.client_price ?? 0);
-      if (!amount) continue;
-      finalRows.push({
-        id: `indent-${indent.id}`,
-        missionId: "IND",
-        dest:
-          `${indent.pickup_area ?? ""} → ${indent.drop_location ?? ""}`.trim() ||
-          "Pending indent",
-        sales: amount,
-        paid: 0,
-        due: amount,
-      });
-    }
-
     // Pass 4: Final Totals from consolidated data
     const totalSales = finalRows.reduce(
       (s, r) => s + (r.missionId !== "ADJ" ? r.sales : 0),
@@ -1306,7 +1254,7 @@ export default function ClientDetailScreen({
       tripIdToDue,
       paidByTripId: allocatedPaidByTripId,
     };
-  }, [trips, transactions, clientId, client, tripFinanceAdjRecord, pendingIndents]);
+  }, [trips, transactions, clientId, client, tripFinanceAdjRecord]);
 
   const tripDateOpts = useMemo(
     () => ({ customFrom: tripCustomFrom, customTo: tripCustomTo }),
@@ -3342,8 +3290,7 @@ const styles = StyleSheet.create({
   cashSection: { marginBottom: 24 },
   cashSectionWebDesktop: {
     width: "100%",
-    maxWidth: 920,
-    alignSelf: "center",
+    alignSelf: "stretch",
   },
   cashCard: {
     flexDirection: "row",
