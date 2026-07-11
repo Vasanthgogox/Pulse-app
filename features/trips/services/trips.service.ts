@@ -1889,16 +1889,8 @@ export async function updateTripAssignment(
       });
   }
 
-  if (updatedTrip) {
-    // Always record an assignment audit row so the trip's Assignment timeline
-    // reflects the change. changedBy is the caller-supplied actor; when absent
-    // (e.g. flows that don't thread it through) fall back to the current auth
-    // user so the log is never silently dropped.
-    let changedBy = options?.changedBy ?? null;
-    if (changedBy == null) {
-      const { data: authData } = await supabase().auth.getUser();
-      changedBy = authData?.user?.id ?? null;
-    }
+  if (options?.changedBy != null && updatedTrip) {
+    const changedBy = options.changedBy;
     const { insertTripAssignmentAudit } =
       await import("./trip-assignment-audit.service");
     const hadPrev =
