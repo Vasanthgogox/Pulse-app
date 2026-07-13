@@ -10769,6 +10769,8 @@ export type Database = {
         Args: { p_trip_ids: string[] }
         Returns: {
           assigner_user_id: string
+          assigning_organization_id: string
+          assigning_organization_logo_url: string
           assigning_organization_name: string
           display_name: string
           trip_id: string

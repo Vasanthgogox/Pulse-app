@@ -129,10 +129,15 @@ export function WizardSelectionGrid({
                     style={[
                       isPartyCard ? styles.partyCard : styles.selectionGridTile,
                       isPartyCard && styles.partyCardSelectable,
+                      isPartyCard &&
+                        !showListShell &&
+                        styles.partyCardFlat,
                       selected &&
                         !disabled &&
                         (isPartyCard
-                          ? styles.partyCardSelected
+                          ? !showListShell
+                            ? styles.partyCardFlatSelected
+                            : styles.partyCardSelected
                           : styles.selectionGridTileSelected),
                       disabled && styles.selectionGridTileDisabled,
                     ]}

@@ -6,6 +6,7 @@ export const routeStackScreenOptions: NativeStackNavigationOptions = {
   headerShown: false,
   contentStyle: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: Theme.screenBackground,
   },
 };

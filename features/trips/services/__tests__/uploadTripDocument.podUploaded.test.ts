@@ -39,6 +39,17 @@ function tripsLookupBuilder(result: { data: unknown; error: unknown }) {
   return builder;
 }
 
+function workflowEventInsertBuilder(
+  result: { data: unknown; error: unknown } = { data: { id: 'evt-1' }, error: null },
+) {
+  const builder: Record<string, unknown> = {
+    insert: jest.fn(() => builder),
+    select: jest.fn(() => builder),
+    single: jest.fn(() => Promise.resolve(result)),
+  };
+  return builder;
+}
+
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 beforeEach(() => {
@@ -68,6 +79,9 @@ describe('uploadTripDocument — PODUploaded event', () => {
       if (table === 'trips') {
         return tripsLookupBuilder({ data: { organization_id: 'org-1' }, error: null });
       }
+      if (table === 'trip_workflow_events') {
+        return workflowEventInsertBuilder();
+      }
       throw new Error(`unexpected table: ${table}`);
     });
 
@@ -90,6 +104,39 @@ describe('uploadTripDocument — PODUploaded event', () => {
     });
     expect(typeof published.correlationId).toBe('string');
     expect(published.correlationId.length).toBeGreaterThan(0);
+  });
+
+  it('also records a pod.uploaded workflow event alongside the platform event', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'trip_documents') {
+        return insertBuilder({
+          data: {
+            id: 'doc-1',
+            trip_id: 'trip-1',
+            file_name: 'pod.jpg',
+            storage_path: 'trip-1/pod/uuid.jpg',
+            mime_type: 'image/jpeg',
+            size_bytes: 10,
+            uploaded_at: '2026-07-10T12:00:00.000Z',
+            uploaded_by: 'user-1',
+            document_type: 'pod',
+          },
+          error: null,
+        });
+      }
+      if (table === 'trips') {
+        return tripsLookupBuilder({ data: { organization_id: 'org-1' }, error: null });
+      }
+      if (table === 'trip_workflow_events') {
+        return workflowEventInsertBuilder();
+      }
+      throw new Error(`unexpected table: ${table}`);
+    });
+
+    await uploadTripDocument('trip-1', 'user-1', file, 'pod');
+    await flushPromises();
+
+    expect(mockFrom).toHaveBeenCalledWith('trip_workflow_events');
   });
 
   it('does not publish for a non-pod document type (e.g. manifest)', async () => {
@@ -160,6 +207,9 @@ describe('uploadTripDocument — PODUploaded event', () => {
       }
       if (table === 'trips') {
         return tripsLookupBuilder({ data: { organization_id: 'org-1' }, error: null });
+      }
+      if (table === 'trip_workflow_events') {
+        return workflowEventInsertBuilder();
       }
       throw new Error(`unexpected table: ${table}`);
     });

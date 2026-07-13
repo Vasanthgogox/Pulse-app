@@ -93,16 +93,25 @@ function resolveSupplierName(
   return "";
 }
 
+function isGenericDriverLabel(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  return !v || v === "driver" || v === "—" || v === "-";
+}
+
 function resolveDriverName(
   t: TripRow,
   driverById: Map<string, DriverRow>,
 ): string {
   const fromTrip = (t.driver_display_name ?? "").trim();
-  if (fromTrip && !isUuidLikeString(fromTrip)) return fromTrip;
+  if (fromTrip && !isUuidLikeString(fromTrip) && !isGenericDriverLabel(fromTrip)) {
+    return fromTrip;
+  }
   const did = (t.driver_id ?? "").trim().toLowerCase();
   if (!did) return "";
   const row = driverById.get(did);
-  return (row?.name ?? "").trim();
+  const fromRow = (row?.name ?? "").trim();
+  if (fromRow && !isGenericDriverLabel(fromRow)) return fromRow;
+  return "";
 }
 
 /** Supplier / client / driver avatar fields for hub cards and table (org logos resolved in UI via linked-org map). */

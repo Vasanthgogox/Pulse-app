@@ -109,9 +109,9 @@ export function mobileTripDriverChipLabel(
   unassignedLabel: string,
 ): string {
   const resolved = asLabel(displayDriverName);
-  if (resolved !== "—") return resolved;
+  if (resolved !== "—" && !/^driver$/i.test(resolved.trim())) return resolved;
   const fromTrip = asLabel(trip.driver_display_name);
-  if (fromTrip !== "—") return fromTrip;
+  if (fromTrip !== "—" && !/^driver$/i.test(fromTrip.trim())) return fromTrip;
   return unassignedLabel;
 }
 

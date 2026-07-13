@@ -61,7 +61,7 @@ export default function AddTripPage() {
 
   const handleComplete = async (
     data: AddTripFormData,
-    options?: { supplySource: string; driverPhone?: string },
+    options?: { supplySource: string; driverPhone?: string; driverName?: string },
   ): Promise<AddTripCompleteResult | void> => {
     const { orgId, userId } = ensureSessionReady();
     const loadTonsRaw =
@@ -79,6 +79,7 @@ export default function AddTripPage() {
         : 0;
     const isAggregate = options?.supplySource === 'aggregate' && !!data.supplier_id;
     const assignDriverByPhone = !!options?.driverPhone?.trim();
+    const assignDriverName = options?.driverName?.trim() || undefined;
     if (isAggregate) {
       const { error, trip, otp } = await createTripWithOtp(orgId, userId, {
         pickup_area: data.pickup_area,
@@ -133,6 +134,7 @@ export default function AddTripPage() {
             changedBy: userId,
             driverIdPrev: null,
             vehicleIdPrev: null,
+            driverName: assignDriverName,
           },
         );
         if (assignErr) {
@@ -199,6 +201,7 @@ export default function AddTripPage() {
           changedBy: userId,
           driverIdPrev: null,
           vehicleIdPrev: null,
+          driverName: options.driverName?.trim() || undefined,
         },
       );
       if (assignErr) console.warn('Trip created but driver assign by phone failed:', assignErr.message);

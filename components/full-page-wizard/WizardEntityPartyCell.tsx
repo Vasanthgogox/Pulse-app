@@ -43,7 +43,7 @@ export const WizardEntityPartyCell = memo(function WizardEntityPartyCell({
   const content = (
     <View
       style={[
-        styles.partyCard,
+        styles.partyCardFlat,
         onPress && styles.partyCardPressable,
         style,
       ]}

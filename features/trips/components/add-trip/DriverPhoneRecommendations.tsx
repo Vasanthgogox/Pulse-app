@@ -23,6 +23,8 @@ export type DriverPhoneRecommendationsProps = {
   compact?: boolean;
   /** Web desktop: recommendations beside the phone field. */
   layout?: "stack" | "aside";
+  /** Override empty-state body copy (e.g. desktop: name field is below). */
+  emptyHint?: string;
 };
 
 export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendations({
@@ -33,6 +35,7 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
   phoneComplete,
   compact = false,
   layout = "stack",
+  emptyHint,
 }: DriverPhoneRecommendationsProps) {
   if (!phoneComplete) return null;
 
@@ -68,7 +71,8 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
           No driver profile for this number
         </Text>
         <Text style={[styles.emptySub, compact && styles.emptySubCompact]}>
-          Enter the driver name on the next step, or invite them to Pulse first.
+          {emptyHint ??
+            "Enter the driver name on the next step, or invite them to Pulse first."}
         </Text>
       </View>
     );
@@ -154,23 +158,29 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   emptyWrap: {
-    marginTop: 12,
-    padding: 12,
+    marginTop: 4,
+    marginBottom: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 10,
     backgroundColor: Theme.surface,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    gap: 6,
+    width: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
   },
   emptyTitle: {
     fontSize: 13,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
+    lineHeight: 18,
   },
   emptySub: {
     fontSize: 12,
     lineHeight: 17,
     color: Theme.textMuted,
-    marginTop: 4,
   },
   sectionLabel: {
     fontSize: 10,

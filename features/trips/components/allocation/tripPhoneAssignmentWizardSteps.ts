@@ -4,6 +4,8 @@ import type { ExistingDriverMatch } from "@/features/drivers/services/drivers.se
 
 export type TripPhoneWizardStep = "driverPhone" | "driverName" | "vehicle" | "review";
 
+export type ReassignFocus = "driver" | "vehicle";
+
 export const TRIP_PHONE_WIZARD_STEPS = [
   { id: "driverPhone" as const, label: "Phone" },
   { id: "driverName" as const, label: "Driver" },
@@ -11,25 +13,79 @@ export const TRIP_PHONE_WIZARD_STEPS = [
   { id: "review" as const, label: "Confirm" },
 ];
 
+export function getTripPhoneWizardSteps(opts: {
+  isReassign: boolean;
+  reassignFocus?: ReassignFocus;
+  vehicleRequired: boolean;
+}): ReadonlyArray<{ id: TripPhoneWizardStep; label: string }> {
+  if (!opts.isReassign) return TRIP_PHONE_WIZARD_STEPS;
+
+  if (opts.reassignFocus === "vehicle") {
+    return [
+      { id: "vehicle", label: "Vehicle" },
+      { id: "review", label: "Confirm" },
+    ];
+  }
+
+  if (!opts.vehicleRequired) {
+    return [
+      { id: "driverPhone", label: "Phone" },
+      { id: "driverName", label: "Driver" },
+      { id: "review", label: "Confirm" },
+    ];
+  }
+
+  return TRIP_PHONE_WIZARD_STEPS;
+}
+
 export function tripPhoneWizardSubtitle(
   step: TripPhoneWizardStep,
-  isReassign: boolean,
+  opts: {
+    isReassign: boolean;
+    reassignFocus?: ReassignFocus;
+    stepIndex?: number;
+    stepTotal?: number;
+  },
 ): string {
+  const stepPrefix =
+    opts.stepIndex != null && opts.stepTotal != null && opts.stepTotal > 0
+      ? `Step ${opts.stepIndex} of ${opts.stepTotal} · `
+      : "";
+
+  if (opts.isReassign && opts.reassignFocus === "vehicle") {
+    switch (step) {
+      case "vehicle":
+        return `${stepPrefix}Update vehicle number — driver stays the same`;
+      case "review":
+        return `${stepPrefix}Review vehicle change — OTP verification applies`;
+      default:
+        return "Change vehicle on this trip";
+    }
+  }
+
   switch (step) {
     case "driverPhone":
-      return isReassign
-        ? "Step 1 · New driver mobile — we'll suggest a name if they're on Pulse"
-        : "Step 1 · Driver mobile — we'll suggest a name if they're on Pulse";
+      return `${stepPrefix}${
+        opts.isReassign ? "Edit driver mobile" : "Driver mobile"
+      } — change the number or Continue to fix the name`;
     case "driverName":
-      return "Step 2 · Driver name for tracking";
+      return `${stepPrefix}${
+        opts.isReassign
+          ? "Edit driver’s real name (required)"
+          : "Enter the driver's real name (not “Driver”)"
+      }`;
     case "vehicle":
-      return "Step 3 · Vehicle number (XX NN LL NNNN)";
+      return `${stepPrefix}${
+        opts.isReassign
+          ? "Edit vehicle number — or keep the current plate"
+          : "Vehicle number (XX NN LL NNNN)"
+      }`;
     case "review":
-      return isReassign
-        ? "Step 4 · Review reassignment — OTP verification applies"
-        : "Step 4 · Review assignment — OTP verification applies";
+      return `${stepPrefix}Review ${
+        opts.isReassign ? "reassignment" : "assignment"
+      } — OTP verification applies`;
     default:
-      return isReassign ? "Reassign by phone" : "Assign by phone";
+      return opts.isReassign ? "Reassign by phone" : "Assign by phone";
   }
 }
 
@@ -47,6 +103,8 @@ export function isTripPhoneWizardStepComplete(
     vehicleRequired?: boolean;
     /** When reassigning, trip may already have a complete plate — empty input keeps it. */
     existingVehiclePlate?: string;
+    /** When reassigning vehicle only, driver steps are skipped. */
+    skipDriverSteps?: boolean;
   },
 ): boolean {
   const effectiveVehiclePlate =
@@ -56,6 +114,7 @@ export function isTripPhoneWizardStepComplete(
 
   switch (step) {
     case "driverPhone": {
+      if (state.skipDriverSteps) return true;
       if (!state.phoneComplete) return false;
       if (state.phoneLookupLoading) return false;
       if (state.phoneInTrip) return false;
@@ -63,7 +122,13 @@ export function isTripPhoneWizardStepComplete(
       return !validatePhone(state.driverPhone.trim());
     }
     case "driverName":
-      return state.driverName.trim().length >= 2;
+      if (state.skipDriverSteps) return true;
+      {
+        const name = state.driverName.trim();
+        if (name.length < 2) return false;
+        if (/^driver$/i.test(name)) return false;
+        return true;
+      }
     case "vehicle": {
       if (!effectiveVehiclePlate) {
         return state.vehicleRequired === false;

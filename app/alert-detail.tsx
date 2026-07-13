@@ -10,6 +10,7 @@ export default function AlertDetailRoute() {
   const raw = useLocalSearchParams<{
     kind?: string;
     id?: string;
+    alertId?: string;
     mode?: string;
   }>();
   const { kind, id, mode } = parseAlertDetailParams(raw);

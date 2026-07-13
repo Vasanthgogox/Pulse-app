@@ -1,5 +1,6 @@
 /**
  * Create Trip / Create Load — full-page light wizard shell (attribution-style).
+ * Desktop stepped flow uses {@link CreateTripDesktopShell} (reference overlay layout).
  */
 import type { ReactNode } from "react";
 
@@ -8,6 +9,8 @@ import {
   FullPageWizardShell,
   type WizardInsightPreset,
 } from "@/components/full-page-wizard";
+
+import { CreateTripDesktopShell } from "./CreateTripDesktopShell";
 
 export interface AddTripModalLayoutProps {
   title: string;
@@ -23,6 +26,7 @@ export interface AddTripModalLayoutProps {
   stepIndex?: number;
   stepTotal?: number;
   onClose: () => void;
+  onBack?: () => void;
   onSubmit: () => void;
   children: ReactNode;
   progress?: ReactNode;
@@ -51,6 +55,7 @@ export function AddTripModalLayout({
   stepIndex,
   stepTotal,
   onClose,
+  onBack,
   onSubmit,
   children,
   progress,
@@ -72,6 +77,32 @@ export function AddTripModalLayout({
 
   const submitDisabled =
     submitting || (lockPrimaryUntilValid ? !canSubmit : false);
+
+  if (steppedLayout) {
+    return (
+      <CreateTripDesktopShell
+        title={title}
+        subtitle={subtitle}
+        stepIndex={stepIndex}
+        stepTotal={stepTotal}
+        onClose={onClose}
+        onBack={onBack}
+        progress={progress}
+        fillBody={fillBody}
+        primaryLabel={submitting ? "Saving…" : submitLabel}
+        onPrimaryPress={onSubmit}
+        primaryDisabled={submitDisabled}
+        primaryLoading={submitting}
+        hint={
+          submitDisabled && !submitting
+            ? validationMessage ?? "Fill required fields to continue"
+            : null
+        }
+      >
+        {children}
+      </CreateTripDesktopShell>
+    );
+  }
 
   return (
     <FullPageWizardShell

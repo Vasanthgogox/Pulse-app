@@ -10,13 +10,20 @@ export interface AllocationMobileWizardShellProps {
   progressSteps?: readonly { id: string; label: string }[];
   currentStepId?: string;
   fillBody?: boolean;
+  /** Desktop stepped wizard — flat body inside parent step surface. */
+  desktop?: boolean;
   children: ReactNode;
 }
 
 export const AllocationMobileWizardShell = memo(function AllocationMobileWizardShell({
   fillBody = false,
+  desktop = false,
   children,
 }: AllocationMobileWizardShellProps) {
+  if (desktop) {
+    return <View style={{ width: "100%" }}>{children}</View>;
+  }
+
   return (
     <View
       style={[

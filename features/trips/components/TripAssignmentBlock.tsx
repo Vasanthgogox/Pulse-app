@@ -232,6 +232,10 @@ export function TripAssignmentBlock({
     code: string;
     expires_at: string | null;
   } | null>(null);
+  const [phoneAssignSuccess, setPhoneAssignSuccess] = useState<{
+    driverLabel: string;
+    vehicleLabel: string;
+  } | null>(null);
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && windowWidth >= 768;
@@ -253,6 +257,7 @@ export function TripAssignmentBlock({
       closeAssignModal();
       setShowPhoneModal(false);
       setPhoneAssignOtpReveal(null);
+      setPhoneAssignSuccess(null);
       setShowPicker(false);
     }
   }, [effectiveCanAssign, closeAssignModal]);
@@ -412,11 +417,14 @@ export function TripAssignmentBlock({
   const applyPhoneDriverDisplayName = useCallback(
     async (driverId: string | null | undefined, orgForDriver: string) => {
       const customName = phoneDriverNameInput.trim();
-      if (!driverId || customName.length < 2) return;
-      if (phoneName && customName === phoneName.trim()) return;
+      if (!driverId || customName.length < 2 || /^driver$/i.test(customName)) {
+        return;
+      }
+      // Always stamp — aggregate RPC may leave placeholder "Driver" even when the
+      // dispatcher kept the phone-lookup suggestion (previously skipped as no-op).
       await updateDriver(orgForDriver, driverId, { name: customName });
     },
-    [phoneDriverNameInput, phoneName],
+    [phoneDriverNameInput],
   );
 
   const assignByPhone = useCallback(async () => {
@@ -477,6 +485,7 @@ export function TripAssignmentBlock({
       trackingOnly: !!(trip.supplier_id && String(trip.supplier_id).trim()),
       // For reassignment, always require OTP claim (do not show trip directly to any driver).
       forceOtpClaim: phoneModalIsReassign,
+      driverName: driverNameTrimmed,
     };
     const vehicleNumNorm = normalizeVehicleNumber(phoneVehicleInput);
     const existingVehicleDisplay = (
@@ -534,6 +543,8 @@ export function TripAssignmentBlock({
         trimmed,
         matchedVehicle ? null : effectiveVehicleInput.trim() || null,
         matchedVehicle?.id ?? null,    // ← pass vehicle_id to RPC directly
+        trip.driver_id ?? null,
+        driverNameTrimmed,
       );
       if (rpcErr) {
         setPhoneSaving(false);
@@ -602,8 +613,8 @@ export function TripAssignmentBlock({
 
     setPhoneSaving(false);
 
+    // Prefer OTP reveal whenever a code was issued — Confirm & close dismisses the panel.
     if (
-      isAggregateTripFlow &&
       willHaveVehicleAssigned &&
       !otpLockedByTripProgress &&
       regenOtp.code &&
@@ -628,16 +639,21 @@ export function TripAssignmentBlock({
       return;
     }
 
-    setShowPhoneModal(false);
-    setPhoneInput("");
-    setPhoneDriverNameInput("");
-    setPhoneName(null);
-    setPhoneError(null);
-    setPhoneVehicleInput("");
-    setPhoneModalIsReassign(false);
-    setPhoneAssignOtpReveal(null);
+    const successDriver =
+      phoneDriverNameInput.trim() || phoneName?.trim() || "Driver";
+    const successVehicle =
+      formatIndianVehicleNumber(
+        effectiveVehicleInput.trim() ||
+          trip.vehicle_display_number ||
+          propsVehicleLabel ||
+          "",
+      ).trim() || "—";
+    setPhoneAssignSuccess({
+      driverLabel: successDriver,
+      vehicleLabel: successVehicle,
+    });
     onUpdated();
-    if (fullPageFlow) onFlowComplete?.();
+    // Keep modal open on success panel — Confirm & close dismisses.
   }, [
     trip.id,
     trip.driver_id,
@@ -654,10 +670,10 @@ export function TripAssignmentBlock({
     currentUserId,
     propsVehicleLabel,
     trip.vehicle_display_number,
+    phoneName,
     normalizeVehicleNumber,
+    otpLockedByTripProgress,
     onUpdated,
-    fullPageFlow,
-    onFlowComplete,
   ]);
 
   const handleRegenerateOtp = useCallback(async () => {
@@ -698,6 +714,7 @@ export function TripAssignmentBlock({
     (isReassign?: boolean, initialVehicle?: string) => {
       setPhoneModalIsReassign(isReassign ?? false);
       setPhoneAssignOtpReveal(null);
+      setPhoneAssignSuccess(null);
       setPhoneInput("");
       setPhoneError(null);
       setPhoneName(null);
@@ -731,6 +748,11 @@ export function TripAssignmentBlock({
       trip.driver_display_name,
     ],
   );
+
+  const currentAssignedDriverPhone = useMemo(() => {
+    const row = drivers.find((d) => d.id === trip.driver_id);
+    return row?.phone?.trim() ?? null;
+  }, [drivers, trip.driver_id]);
 
   const pilotText =
     propsDriverName ??
@@ -2101,6 +2123,7 @@ export function TripAssignmentBlock({
         onClose={() => {
           setShowPhoneModal(false);
           setPhoneAssignOtpReveal(null);
+          setPhoneAssignSuccess(null);
           if (fullPageFlow) onFlowDismiss?.();
         }}
         trip={trip}
@@ -2122,6 +2145,19 @@ export function TripAssignmentBlock({
         onOtpDismiss={() => {
           setShowPhoneModal(false);
           setPhoneAssignOtpReveal(null);
+          setPhoneAssignSuccess(null);
+          setPhoneInput("");
+          setPhoneDriverNameInput("");
+          setPhoneName(null);
+          setPhoneVehicleInput("");
+          setPhoneModalIsReassign(false);
+          if (fullPageFlow) onFlowComplete?.();
+        }}
+        assignSuccess={phoneAssignSuccess}
+        onAssignSuccessDismiss={() => {
+          setShowPhoneModal(false);
+          setPhoneAssignOtpReveal(null);
+          setPhoneAssignSuccess(null);
           setPhoneInput("");
           setPhoneDriverNameInput("");
           setPhoneName(null);
@@ -2130,6 +2166,11 @@ export function TripAssignmentBlock({
           if (fullPageFlow) onFlowComplete?.();
         }}
         fullPageFlow={fullPageFlow}
+        activeDriverPhone={currentAssignedDriverPhone}
+        activeDriverName={propsDriverName ?? trip.driver_display_name ?? null}
+        activeVehiclePlate={
+          trip.vehicle_display_number ?? propsVehicleLabel ?? null
+        }
         vehicleRequired={
           !!showAssignByPhone &&
           !(

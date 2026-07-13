@@ -338,14 +338,13 @@ export function LedgerExpandedCardFromData({
       return;
     }
     router.push({
-      pathname: "/trip-ledger/[id]",
+      pathname: `/trip-ledger/${encodeURIComponent(tripId)}`,
       params: {
-        id: tripId,
         entityType: partyType === "client" ? "CLIENT" : "SUPPLIER",
         entityId,
         partyName: data.name ?? "",
       },
-    });
+    } as never);
   }, [data.ledgerPartyType, data.tripId, data.counterpartyId, data.name, router]);
   const onOpenCompareVerify = onOpenCompareVerifyProp ?? (data.counterpartyIntegrated ? defaultOpenCompareVerify : undefined);
   const hasTripDetail = data.tripDetail != null;

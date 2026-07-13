@@ -25,7 +25,7 @@ import {
   X,
 } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 export type NetworkProfileHubHeroStat = {
   value: string;
@@ -58,18 +58,18 @@ const META_TONE: Record<
   MetaTone,
   { bg: string; icon: string }
 > = {
-  role: { bg: Theme.brandBlueSoft, icon: Theme.primary },
-  location: { bg: Theme.warningMuted, icon: Theme.warning },
-  phone: { bg: Theme.positiveMuted, icon: Theme.darkGreen },
+  role: { bg: Theme.surface, icon: Theme.textSecondary },
+  location: { bg: Theme.surface, icon: Theme.textSecondary },
+  phone: { bg: Theme.surface, icon: Theme.textSecondary },
 };
 
 const STAT_TONE: Record<
   StatTone,
   { bg: string; icon: string }
 > = {
-  trips: { bg: Theme.brandBlueSoft, icon: Theme.primary },
-  rating: { bg: Theme.warningMuted, icon: Theme.warning },
-  mutuals: { bg: Theme.positiveMuted, icon: Theme.darkGreen },
+  trips: { bg: Theme.surface, icon: Theme.primary },
+  rating: { bg: Theme.surface, icon: Theme.warning },
+  mutuals: { bg: Theme.surface, icon: Theme.darkGreen },
   default: { bg: Theme.surface, icon: METRONIC.subtle },
 };
 
@@ -219,8 +219,16 @@ export function NetworkProfileHubHero({
   const avatarSize = compact ? 72 : 88;
 
   return (
-    <View style={[hubStyles.hero, compact && styles.heroCompact]}>
-      <View style={[hubStyles.heroHexOverlay, compact && styles.heroHexOverlayCompact]} pointerEvents="none" />
+    <View
+      style={[
+        hubStyles.hero,
+        compact && styles.heroCompact,
+        compact && styles.heroCompactNoPattern,
+      ]}
+    >
+      {!compact ? (
+        <View style={[hubStyles.heroHexOverlay, compact && styles.heroHexOverlayCompact]} pointerEvents="none" />
+      ) : null}
 
       {onClose ? (
         <Pressable
@@ -258,7 +266,7 @@ export function NetworkProfileHubHero({
           </View>
         </View>
 
-        <View style={hubStyles.heroNameRow}>
+        <View style={[hubStyles.heroNameRow, compact && styles.heroNameRowCompact]}>
           <Text
             style={[hubStyles.heroName, compact && styles.heroNameCompact]}
             numberOfLines={2}
@@ -347,20 +355,25 @@ export function NetworkProfileHubHero({
 
 const styles = StyleSheet.create({
   heroCompact: {
-    paddingTop: 14,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderMedium,
+    borderBottomColor: Theme.borderLight,
   },
+  heroCompactNoPattern: Platform.select({
+    web: { backgroundImage: "none" as const },
+    default: {},
+  }),
   heroHexOverlayCompact: {
-    backgroundColor: Theme.surface,
-    opacity: 1,
+    backgroundColor: "transparent",
+    opacity: 0,
   },
   heroInnerCompact: {
     alignItems: "stretch",
-    gap: 10,
+    gap: 14,
+    width: "100%",
   },
   heroAvatarPressableCompact: {
     alignSelf: "center",
@@ -383,12 +396,18 @@ const styles = StyleSheet.create({
     }),
   },
   heroNameCompact: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "700",
-    letterSpacing: -0.35,
+    letterSpacing: -0.4,
     textAlign: "center",
-    alignSelf: "center",
+    flexShrink: 1,
     color: METRONIC.text,
+  },
+  heroNameRowCompact: {
+    width: "100%",
+    alignSelf: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
   },
   closeBtnCompact: {
     top: 10,
@@ -416,21 +435,23 @@ const styles = StyleSheet.create({
     }),
   },
   iconWell: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
   },
   metaCard: {
     alignSelf: "stretch",
-    backgroundColor: Theme.surface,
-    borderRadius: 14,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 14,
+    paddingVertical: 2,
   },
   metaCardInline: {
     alignSelf: "stretch",
@@ -448,62 +469,58 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     minWidth: 0,
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   metaDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.borderMedium,
+    backgroundColor: Theme.borderLight,
+    marginLeft: 44,
   },
   metaRowText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
     color: METRONIC.text,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   statsRow: {
     alignSelf: "stretch",
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
   },
   statTile: {
     flex: 1,
     minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
-    borderRadius: 14,
-    backgroundColor: Theme.cardWhite,
+    gap: 5,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    ...platformShadow("0 2px 8px rgba(15, 23, 42, 0.04)", {
-      color: Theme.primary,
-      opacity: 0.04,
-      radius: 8,
-      offsetY: 2,
-      elevation: 1,
-    }),
+    borderColor: Theme.borderLight,
   },
   statTileCompact: {
-    paddingVertical: 10,
+    paddingVertical: 12,
+    minHeight: 88,
   },
   statTileValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
     color: METRONIC.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.35,
+    fontVariant: ["tabular-nums"],
   },
   statTileLabel: {
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.muted,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
   statusRow: {
     flexDirection: "row",
@@ -534,9 +551,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.darkGreen,
   },
   statusPillSince: {
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.borderLight,
   },
   statusPillConnection: {
     backgroundColor: Theme.primary,

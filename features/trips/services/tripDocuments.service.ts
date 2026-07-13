@@ -8,6 +8,7 @@
  */
 import { supabase } from "@/lib/supabase";
 import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
+import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
 
 const BUCKET = "trip-documents";
 const MAX_TRIP_DOC_BYTES = 10 * 1024 * 1024;
@@ -232,6 +233,10 @@ export async function getDocumentsByTripId(
  * sufficient). No idempotency guard is needed here the way TripAssigned/TripStarted/TripDelivered
  * need one: every call generates a fresh storage path (randomUUID()), so there is no "retry of
  * the same commit" case to dedupe — each successful call is a genuinely new document.
+ *
+ * Also records the `pod.uploaded` trip_workflow_events entry (singleton, idempotent via its
+ * own `${tripId}:pod.uploaded` key) — this is the only place that milestone is recorded, so
+ * `deriveWorkflowState().docComplete` stays accurate.
  */
 function publishPodUploadedEvent(tripId: string, doc: TripDocumentRow): void {
   void Promise.resolve(
@@ -240,6 +245,13 @@ function publishPodUploadedEvent(tripId: string, doc: TripDocumentRow): void {
     .then(({ data, error }) => {
       const workspaceId = !error && data ? (data as { organization_id?: string | null }).organization_id : null;
       if (!workspaceId) return;
+      void recordTripWorkflowEvent({
+        tripId,
+        orgId: workspaceId,
+        eventType: "pod.uploaded",
+      }).catch((err) => {
+        if (__DEV__) console.warn("[tripDocuments] recordTripWorkflowEvent(pod.uploaded) failed:", err);
+      });
       return getPlatformEventBus().publish({
         name: "PODUploaded",
         workspaceId,

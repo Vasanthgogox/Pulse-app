@@ -196,6 +196,44 @@ select {
 }
 
 /*
+  RN Web bordered shells (SignUpPulseField, modals): native <input> must not paint its
+  own box inside a styled wrapper — otherwise borders/backgrounds overlap at the edges.
+*/
+.pulse-input-shell input,
+.pulse-input-shell textarea {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+/* Neutralize Chrome/Safari autofill blue/yellow fill inside Pulse shells */
+.pulse-input-shell input:-webkit-autofill,
+.pulse-input-shell input:-webkit-autofill:hover,
+.pulse-input-shell input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #111827;
+  caret-color: #111827;
+  transition: background-color 99999s ease-in-out 0s;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+}
+
+.pulse-input-shell.pulse-input-shell--error input:-webkit-autofill,
+.pulse-input-shell.pulse-input-shell--error input:-webkit-autofill:hover,
+.pulse-input-shell.pulse-input-shell--error input:-webkit-autofill:focus {
+  box-shadow: 0 0 0 1000px #fef2f2 inset !important;
+}
+
+/* Standalone RN Web inputs — delay autofill tint so themed backgrounds win */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus {
+  transition: background-color 99999s ease-in-out 0s;
+}
+
+/*
   Desktop web (fine pointer): cap hub width so columns/cards do not stretch on
   ultrawide monitors. Centered shell keeps header, content, and pinned footers aligned.
   Mobile web is unchanged.

@@ -603,6 +603,327 @@ export async function signInWithGoogle(): Promise<SignInResult> {
   }
 }
 
+/**
+ * Sends a real Supabase phone OTP (via the project's configured SMS provider).
+ * `phone` must be E.164 (e.g. "+919876543210") — callers resolve/validate the
+ * number before calling this.
+ */
+export async function sendDriverPhoneOtp(phone: string): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase().auth.signInWithOtp({ phone });
+    if (error) return { error: new Error(error.message || "Could not send OTP.") };
+    return { error: null };
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error("Cannot reach server. Check your internet connection and try again."),
+      };
+    }
+    return { error: e instanceof Error ? e : new Error("Could not send OTP.") };
+  }
+}
+
+/**
+ * Verifies a driver's phone OTP and completes sign-in against their REAL, existing
+ * account. verifyOtp alone would only prove phone possession — Supabase has no
+ * verified phone identity on existing driver accounts yet, so the first successful
+ * verification here lands on a brand-new, disconnected auth identity for the phone.
+ * The link-driver-phone Edge Function finds the driver's real account (by the same
+ * phone, read from THIS now-verified session — never from client input) and, on
+ * first use, hands back a magic-link token that completes sign-in against the real
+ * account. On every sign-in after the first, Supabase's own phone auth already
+ * resolves straight to the real account and no further step is needed.
+ */
+export async function verifyDriverPhoneOtp(phone: string, token: string): Promise<SignInResult> {
+  try {
+    const { error: verifyError } = await supabase().auth.verifyOtp({
+      phone,
+      token,
+      type: "sms",
+    });
+    if (verifyError) {
+      return { error: new Error(verifyError.message || "Incorrect or expired code.") };
+    }
+
+    const { data: linkData, error: linkError } = await supabase().functions.invoke(
+      "link-driver-phone",
+      { body: {} },
+    );
+    if (linkError) {
+      return { error: new Error(linkError.message || "Could not complete sign in.") };
+    }
+    const payload = linkData as
+      | { linked?: boolean; alreadyCurrent?: boolean; email?: string; magicLinkToken?: string; error?: string; message?: string }
+      | null;
+
+    if (payload?.alreadyCurrent) {
+      return { error: null };
+    }
+    if (payload?.magicLinkToken && payload?.email) {
+      const { error: magicLinkError } = await supabase().auth.verifyOtp({
+        email: payload.email,
+        token: payload.magicLinkToken,
+        type: "magiclink",
+      });
+      if (magicLinkError) {
+        return { error: new Error(magicLinkError.message || "Could not complete sign in.") };
+      }
+      return { error: null };
+    }
+    return {
+      error: new Error(payload?.message || payload?.error || "Could not complete sign in."),
+    };
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error("Cannot reach server. Check your internet connection and try again."),
+      };
+    }
+    return { error: e instanceof Error ? e : new Error("Could not complete sign in.") };
+  }
+}
+
+/**
+ * TEMPORARY / INSECURE: signs a driver in from a phone number alone, with no real
+ * OTP check — Supabase's SMS provider isn't configured yet, so there is currently
+ * no way to prove phone possession. Anyone who knows a driver's phone number can
+ * sign in as that driver via this path. Replace call sites with
+ * sendDriverPhoneOtp/verifyDriverPhoneOtp once the SMS provider is enabled, then
+ * delete this function and supabase/functions/driver-phone-signin-unverified/.
+ */
+export async function signInDriverByPhoneUnverified(phone: string): Promise<SignInResult> {
+  const normalized = normalizePhoneToTenDigits(phone);
+  if (!normalized) {
+    return { error: new Error("Enter a valid 10-digit mobile number.") };
+  }
+
+  try {
+    const payload = await invokeDriverPhoneSignInEdgeFunction(normalized);
+    if (payload.error) {
+      return { error: payload.error };
+    }
+    if (payload.session) {
+      return applyDriverAuthSession(payload.session);
+    }
+    return completeDriverMagicLinkSignIn(payload.email, payload.magicLinkToken);
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error("Cannot reach server. Check your internet connection and try again."),
+      };
+    }
+    return { error: e instanceof Error ? e : new Error("Could not sign in.") };
+  }
+}
+
+type DriverPhoneSignInPayload = {
+  email?: string;
+  magicLinkToken?: string;
+  session?: {
+    access_token?: string;
+    refresh_token?: string;
+  };
+  error?: string;
+  message?: string;
+};
+
+type DriverPhoneSignInSuccess =
+  | { session: { access_token: string; refresh_token: string } }
+  | { email: string; magicLinkToken: string };
+
+async function invokeDriverPhoneSignInEdgeFunction(
+  normalizedPhone: string,
+): Promise<DriverPhoneSignInSuccess | { error: Error }> {
+  const invoke = async (
+    functionName: string,
+    body: Record<string, string>,
+  ): Promise<{ data: DriverPhoneSignInPayload | null; error: Error | null }> => {
+    const { data, error } = await supabase().functions.invoke(functionName, { body });
+    const payload = (data ?? null) as DriverPhoneSignInPayload | null;
+    if (error) {
+      // supabase-js often still parses the JSON body on non-2xx — keep it for messaging.
+      const fromBody =
+        payload?.message?.trim() ||
+        payload?.error?.trim() ||
+        "";
+      if (fromBody) {
+        return { data: payload, error: new Error(fromBody) };
+      }
+      const context = (error as { context?: Response }).context;
+      if (context && typeof context.json === "function") {
+        try {
+          const bodyJson = (await context.json()) as DriverPhoneSignInPayload;
+          const msg =
+            bodyJson?.message?.trim() ||
+            bodyJson?.error?.trim() ||
+            error.message ||
+            "Could not sign in.";
+          return { data: bodyJson, error: new Error(msg) };
+        } catch {
+          // fall through
+        }
+      }
+      return {
+        data: payload,
+        error: new Error(error.message || "Could not sign in."),
+      };
+    }
+    return { data: payload, error: null };
+  };
+
+  const primary = await invoke("check-user-by-phone", {
+    phone: normalizedPhone,
+    intent: "driver_signin",
+  });
+  const primarySession = extractDriverSignInSession(primary.data);
+  if (primarySession) {
+    return primarySession;
+  }
+  const primaryMagicEarly = extractDriverSignInMagicLink(primary.data);
+  if (primaryMagicEarly) {
+    return primaryMagicEarly;
+  }
+
+  const legacy = await invoke("driver-phone-signin-unverified", { phone: normalizedPhone });
+  const legacyResult = extractDriverSignInPayload(legacy.data);
+  if (legacyResult) {
+    return legacyResult;
+  }
+
+  if (
+    primary.error &&
+    !isEdgeFunctionUnavailableError(primary.error) &&
+    !isRecoverableDriverSignInEdgeError(primary.error)
+  ) {
+    return { error: primary.error };
+  }
+
+  const message =
+    legacy.data?.message ||
+    legacy.data?.error ||
+    primary.data?.message ||
+    primary.data?.error ||
+    legacy.error?.message ||
+    primary.error?.message ||
+    "Driver sign-in is unavailable. Please try again shortly.";
+  return { error: new Error(message) };
+}
+
+function isRecoverableDriverSignInEdgeError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("could not complete sign in") ||
+    message.includes("sign-in session could not be created") ||
+    message.includes("non-2xx")
+  );
+}
+
+function extractDriverSignInSession(
+  payload: DriverPhoneSignInPayload | null,
+): { session: { access_token: string; refresh_token: string } } | null {
+  const accessToken = payload?.session?.access_token?.trim();
+  const refreshToken = payload?.session?.refresh_token?.trim();
+  if (accessToken && refreshToken) {
+    return { session: { access_token: accessToken, refresh_token: refreshToken } };
+  }
+  return null;
+}
+
+function extractDriverSignInMagicLink(
+  payload: DriverPhoneSignInPayload | null,
+): { email: string; magicLinkToken: string } | null {
+  const email = payload?.email?.trim();
+  const magicLinkToken = payload?.magicLinkToken?.trim();
+  if (email && magicLinkToken) {
+    return { email, magicLinkToken };
+  }
+  return null;
+}
+
+function extractDriverSignInPayload(
+  payload: DriverPhoneSignInPayload | null,
+): DriverPhoneSignInSuccess | null {
+  const session = extractDriverSignInSession(payload);
+  if (session) return session;
+  return extractDriverSignInMagicLink(payload);
+}
+
+async function applyDriverAuthSession(session: {
+  access_token: string;
+  refresh_token: string;
+}): Promise<SignInResult> {
+  try {
+    await supabase().auth.signOut({ scope: "local" });
+  } catch {
+    // Best-effort — stale local session must not block a fresh driver sign-in.
+  }
+
+  const { error } = await supabase().auth.setSession({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+  });
+  if (error) {
+    return { error: new Error(error.message || "Could not complete sign in.") };
+  }
+  return { error: null };
+}
+
+function isEdgeFunctionUnavailableError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("failed to send a request to the edge function") ||
+    message.includes("requested function was not found") ||
+    message.includes("not_found")
+  );
+}
+
+async function completeDriverMagicLinkSignIn(
+  email: string,
+  magicLinkToken: string,
+): Promise<SignInResult> {
+  try {
+    await supabase().auth.signOut({ scope: "local" });
+  } catch {
+    // Best-effort — stale local session must not block magic-link exchange.
+  }
+
+  const verifyAttempts = [
+    () =>
+      supabase().auth.verifyOtp({
+        token_hash: magicLinkToken,
+        type: "email",
+      }),
+    () =>
+      supabase().auth.verifyOtp({
+        token_hash: magicLinkToken,
+        type: "magiclink",
+      }),
+    () =>
+      supabase().auth.verifyOtp({
+        email,
+        token: magicLinkToken,
+        type: "email",
+      }),
+    () =>
+      supabase().auth.verifyOtp({
+        email,
+        token: magicLinkToken,
+        type: "magiclink",
+      }),
+  ];
+
+  let lastMessage = "Could not complete sign in.";
+  for (const attempt of verifyAttempts) {
+    const { error } = await attempt();
+    if (!error) {
+      return { error: null };
+    }
+    lastMessage = error.message || lastMessage;
+  }
+
+  return { error: new Error(lastMessage) };
+}
+
 export async function setPendingOAuthMetadata(
   metadata: PendingOAuthOnboardingMetadata,
 ): Promise<{ error: Error | null }> {

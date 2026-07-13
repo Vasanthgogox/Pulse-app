@@ -3,6 +3,7 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  excludeTrackingOnlyDrivers,
   getDriversByOrganization,
   syncDriversWithCache,
   type DriverRow,
@@ -23,7 +24,7 @@ export function useDriversQuery(orgId: string | null) {
         (qc.getQueryData(queryKeys.drivers.finite(orgId ?? '')) as
           | DriverRow[]
           | undefined) ?? [];
-      return fetchEntityListWithFallback<DriverRow>({
+      const rows = await fetchEntityListWithFallback<DriverRow>({
         orgId: orgId!,
         domain: 'drivers',
         cachedRows: existing,
@@ -36,10 +37,14 @@ export function useDriversQuery(orgId: string | null) {
           return { error: res.error, rows: res.drivers };
         },
       });
+      // Party roster only — never cache one-time assign-by-phone stubs.
+      return excludeTrackingOnlyDrivers(rows);
     },
     enabled: !!orgId && status !== 'restoring',
     staleTime: STALE.moderate,
     refetchOnMount: refetchOnMountIfEntityListEmpty<DriverRow[]>(),
+    // Drop tracking_only rows from any stale in-memory / persisted cache.
+    select: excludeTrackingOnlyDrivers,
   });
 }
 

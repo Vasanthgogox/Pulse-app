@@ -760,6 +760,9 @@ export function useStaffHandshake({
         orgId,
         phoneTrimmed,
         regNum || null,
+        null,
+        null,
+        nameTrimmed,
       );
       if (assignAggErr) {
         await saveSubcontract();

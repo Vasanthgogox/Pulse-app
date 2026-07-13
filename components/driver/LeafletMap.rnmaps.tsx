@@ -6,7 +6,8 @@ import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker
 import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomControls';
 import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
 import React, { useCallback, useImperativeHandle, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 import type { LeafletLatLng, LeafletMapProps, LeafletMapRef, LeafletPolylineLayer } from './LeafletMap.types';
@@ -40,6 +41,7 @@ function MarkerContent({
   avatarUri,
   avatarSeed,
   isOnline,
+  onPress,
 }: {
   markerId: string;
   color?: string;
@@ -48,6 +50,7 @@ function MarkerContent({
   avatarUri?: string | null;
   avatarSeed?: string | null;
   isOnline?: boolean;
+  onPress?: () => void;
 }) {
   const role = tripMapMarkerRoleFromId(markerId);
   if (role === 'driver') {
@@ -57,6 +60,7 @@ function MarkerContent({
         avatarSeed={avatarSeed}
         isOnline={isOnline}
         size={48}
+        onPressStatus={onPress}
       />
     );
   }
@@ -97,7 +101,11 @@ function MarkerContent({
     );
   }
   return (
-    <View
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? 'View location' : undefined}
       style={[styles.markerDot, { backgroundColor: color ?? Theme.driverEmerald }]}
     />
   );
@@ -250,6 +258,7 @@ export const LeafletMapRnMaps = React.forwardRef<
                   avatarUri={m.avatarUri}
                   avatarSeed={m.avatarSeed}
                   isOnline={m.isOnline}
+                  onPress={m.onPress}
                 />
               </Marker>
             );
@@ -266,7 +275,8 @@ export const LeafletMapRnMaps = React.forwardRef<
   },
 );
 
-const styles = StyleSheet.create({
+const styles = withWebSafeShadows(
+  StyleSheet.create({
   mapHost: {
     position: 'relative',
     overflow: 'hidden',
@@ -362,4 +372,6 @@ const styles = StyleSheet.create({
     color: Theme.driverEmeraldDark,
     letterSpacing: 0.2,
   },
-});
+}),
+);
+

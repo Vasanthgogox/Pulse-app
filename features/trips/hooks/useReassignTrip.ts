@@ -254,6 +254,7 @@ export function useReassignTrip({
             payload.vehicleDisplayNumber ?? null,
             payload.vehicleId ?? null,
             trip.driver_id ?? null,
+            nameTrimmed,
           );
           if (rpcErr) {
             setError(rpcErr.message);
@@ -298,7 +299,10 @@ export function useReassignTrip({
           trip.id,
           orgForDriver,
           payload.phone,
-          auditOptions,
+          {
+            ...auditOptions,
+            driverName: nameTrimmed,
+          },
         );
         if (phoneErr || !updated) {
           setError(phoneErr?.message ?? 'Assignment failed');

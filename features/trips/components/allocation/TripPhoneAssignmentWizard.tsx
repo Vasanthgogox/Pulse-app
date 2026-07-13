@@ -26,11 +26,13 @@ import type { AddTripIssueField } from "@/features/trips/components/add-trip/use
 import { AssignmentFlowFooter } from "@/features/trips/components/assignment/assignmentFlowFooter";
 import { AssignmentFlowShell } from "@/features/trips/components/assignment/AssignmentFlowShell";
 import {
+  getTripPhoneWizardSteps,
   isTripPhoneWizardStepComplete,
-  TRIP_PHONE_WIZARD_STEPS,
+  type ReassignFocus,
   tripPhoneWizardSubtitle,
   type TripPhoneWizardStep,
 } from "@/features/trips/components/allocation/tripPhoneAssignmentWizardSteps";
+import { TripPhoneReassignContextRail } from "@/features/trips/components/allocation/TripPhoneReassignContextRail";
 import { useAggregateDriverPhoneLookup } from "@/features/trips/hooks/useAggregateDriverPhoneLookup";
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import { formatIndianVehicleNumber, formatMobileNumber } from "@/lib/format";
@@ -39,6 +41,12 @@ import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/tr
 export type TripPhoneOtpReveal = {
   code: string;
   expires_at: string | null;
+};
+
+/** Shown after assign/reassign succeeds without an OTP handoff. */
+export type TripPhoneAssignSuccess = {
+  driverLabel: string;
+  vehicleLabel: string;
 };
 
 export type TripPhoneAssignmentWizardProps = {
@@ -61,9 +69,18 @@ export type TripPhoneAssignmentWizardProps = {
   onSubmit: () => void;
   otpReveal: TripPhoneOtpReveal | null;
   onOtpDismiss: () => void;
+  /** Success panel after assign (no OTP) — Confirm & close. */
+  assignSuccess?: TripPhoneAssignSuccess | null;
+  onAssignSuccessDismiss?: () => void;
   fullPageFlow?: boolean;
   /** When false, vehicle step can be skipped (optional plate). Default true for aggregate. */
   vehicleRequired?: boolean;
+  /** Current assigned driver phone (reassign vehicle-only keeps this). */
+  activeDriverPhone?: string | null;
+  /** Current assigned driver display name. */
+  activeDriverName?: string | null;
+  /** Current assigned vehicle plate. */
+  activeVehiclePlate?: string | null;
   presentationStyle?: "pageSheet" | "fullScreen";
 };
 
@@ -87,16 +104,40 @@ export function TripPhoneAssignmentWizard({
   onSubmit,
   otpReveal,
   onOtpDismiss,
+  assignSuccess = null,
+  onAssignSuccessDismiss,
   fullPageFlow = false,
   vehicleRequired = true,
   presentationStyle = "pageSheet",
+  activeDriverPhone = null,
+  activeDriverName = null,
+  activeVehiclePlate = null,
 }: TripPhoneAssignmentWizardProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const useSteppedWizard =
     fullPageFlow ||
+    isReassign ||
     Platform.OS !== "web" ||
     windowWidth < Layout.wizardSteppedMaxWidth;
+  const showReassignRail = isReassign && useSteppedWizard;
+  const reassignRailDesktop = showReassignRail && windowWidth >= 768;
+
+  const resolvedActiveDriverName = useMemo(
+    () => (activeDriverName ?? initialDriverName ?? trip.driver_display_name ?? "").trim(),
+    [activeDriverName, initialDriverName, trip.driver_display_name],
+  );
+  const resolvedActiveDriverPhone = useMemo(
+    () => (activeDriverPhone ?? "").trim(),
+    [activeDriverPhone],
+  );
+  const resolvedActiveVehiclePlate = useMemo(
+    () =>
+      formatIndianVehicleNumber(
+        activeVehiclePlate ?? trip.vehicle_display_number ?? initialVehicle ?? "",
+      ).trim(),
+    [activeVehiclePlate, trip.vehicle_display_number, initialVehicle],
+  );
 
   const existingVehiclePlate = useMemo(
     () =>
@@ -123,14 +164,102 @@ export function TripPhoneAssignmentWizard({
   ]);
 
   const [wizardStep, setWizardStep] = useState<TripPhoneWizardStep>("driverPhone");
+  const [reassignFocus, setReassignFocus] = useState<ReassignFocus>("driver");
   const [driverNameManual, setDriverNameManual] = useState(false);
+
+  const skipDriverSteps = isReassign && reassignFocus === "vehicle";
+
+  const wizardSteps = useMemo(
+    () =>
+      getTripPhoneWizardSteps({
+        isReassign,
+        reassignFocus,
+        vehicleRequired: effectiveVehicleRequired,
+      }),
+    [isReassign, reassignFocus, effectiveVehicleRequired],
+  );
+
+  const applyCurrentDriverToForm = useCallback(() => {
+    if (resolvedActiveDriverPhone) {
+      onDriverPhoneChange(formatMobileNumber(resolvedActiveDriverPhone));
+    }
+    const name = resolvedActiveDriverName.trim();
+    if (name && !/^driver$/i.test(name)) {
+      setDriverNameManual(false);
+      onDriverNameChange(name);
+    } else {
+      setDriverNameManual(true);
+      onDriverNameChange("");
+    }
+  }, [
+    resolvedActiveDriverPhone,
+    resolvedActiveDriverName,
+    onDriverPhoneChange,
+    onDriverNameChange,
+  ]);
+
+  const editCurrentDriver = useCallback(() => {
+    setReassignFocus("driver");
+    setDriverNameManual(false);
+    applyCurrentDriverToForm();
+    onVehiclePlateChange(
+      resolvedActiveVehiclePlate || formatIndianVehicleNumber(initialVehicle ?? ""),
+    );
+    const hasPhone = !!resolvedActiveDriverPhone.trim();
+    const nameMissing =
+      !resolvedActiveDriverName.trim() ||
+      /^driver$/i.test(resolvedActiveDriverName.trim());
+    // Name missing but phone exists → jump to name step so they can fix it.
+    if (hasPhone && nameMissing) {
+      setWizardStep("driverName");
+      return;
+    }
+    setWizardStep(hasPhone ? "driverPhone" : "driverPhone");
+  }, [
+    applyCurrentDriverToForm,
+    resolvedActiveVehiclePlate,
+    initialVehicle,
+    onVehiclePlateChange,
+    resolvedActiveDriverPhone,
+    resolvedActiveDriverName,
+  ]);
+
+  const editCurrentVehicle = useCallback(() => {
+    setReassignFocus("vehicle");
+    setDriverNameManual(false);
+    applyCurrentDriverToForm();
+    onVehiclePlateChange(
+      resolvedActiveVehiclePlate || formatIndianVehicleNumber(initialVehicle ?? ""),
+    );
+    setWizardStep("vehicle");
+  }, [
+    applyCurrentDriverToForm,
+    resolvedActiveVehiclePlate,
+    initialVehicle,
+    onVehiclePlateChange,
+  ]);
+
+  const handleReassignFocusChange = useCallback(
+    (focus: ReassignFocus) => {
+      if (focus === "vehicle") {
+        editCurrentVehicle();
+        return;
+      }
+      editCurrentDriver();
+    },
+    [editCurrentDriver, editCurrentVehicle],
+  );
 
   const lookup = useAggregateDriverPhoneLookup({
     phone: driverPhone,
     tripId: trip.id,
     organizationId,
     driverAssignOrgId,
-    enabled: visible && !otpReveal,
+    enabled:
+      visible &&
+      !otpReveal &&
+      !skipDriverSteps &&
+      wizardStep !== "review",
   });
 
   const tripLabel = getTripDisplayNumber(trip);
@@ -138,9 +267,17 @@ export function TripPhoneAssignmentWizard({
   useEffect(() => {
     if (!visible) {
       setWizardStep("driverPhone");
+      setReassignFocus("driver");
       setDriverNameManual(false);
+      return;
     }
-  }, [visible]);
+    if (isReassign) {
+      // Pre-load current assignment so Edit works immediately.
+      editCurrentDriver();
+    }
+    // Only when opening; editCurrentDriver identity changes often.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, isReassign]);
 
   useEffect(() => {
     if (!visible || driverNameManual || wizardStep !== "driverName") return;
@@ -159,18 +296,22 @@ export function TripPhoneAssignmentWizard({
 
   const stepValidationState = useMemo(
     () => ({
-      driverPhone,
-      driverName,
+      driverPhone: skipDriverSteps ? resolvedActiveDriverPhone : driverPhone,
+      driverName: skipDriverSteps ? resolvedActiveDriverName : driverName,
       vehiclePlate,
-      phoneComplete: lookup.phoneComplete,
-      phoneLookupLoading: lookup.loading,
-      phoneInTrip: lookup.inTrip,
-      phoneMatches: lookup.matches,
-      selectedMatchUserId: lookup.selectedUserId,
+      phoneComplete: skipDriverSteps ? true : lookup.phoneComplete,
+      phoneLookupLoading: skipDriverSteps ? false : lookup.loading,
+      phoneInTrip: skipDriverSteps ? false : lookup.inTrip,
+      phoneMatches: skipDriverSteps ? [] : lookup.matches,
+      selectedMatchUserId: skipDriverSteps ? null : lookup.selectedUserId,
       vehicleRequired: effectiveVehicleRequired,
       existingVehiclePlate,
+      skipDriverSteps,
     }),
     [
+      skipDriverSteps,
+      resolvedActiveDriverPhone,
+      resolvedActiveDriverName,
       driverPhone,
       driverName,
       vehiclePlate,
@@ -221,12 +362,23 @@ export function TripPhoneAssignmentWizard({
   );
 
   const handleWizardPrimary = useCallback(() => {
+    if (reassignFocus === "vehicle") {
+      if (wizardStep === "vehicle" && canContinue) {
+        setWizardStep("review");
+        return;
+      }
+      if (wizardStep === "review" && canContinue) {
+        onSubmit();
+      }
+      return;
+    }
+
     if (wizardStep === "driverPhone" && canContinue) {
       setWizardStep("driverName");
       return;
     }
     if (wizardStep === "driverName" && canContinue) {
-      setWizardStep("vehicle");
+      setWizardStep(effectiveVehicleRequired ? "vehicle" : "review");
       return;
     }
     if (wizardStep === "vehicle" && canContinue) {
@@ -236,27 +388,51 @@ export function TripPhoneAssignmentWizard({
     if (wizardStep === "review" && canContinue) {
       onSubmit();
     }
-  }, [wizardStep, canContinue, onSubmit]);
+  }, [reassignFocus, wizardStep, canContinue, effectiveVehicleRequired, onSubmit]);
 
   const handleWizardBack = useCallback(() => {
+    if (reassignFocus === "vehicle") {
+      if (wizardStep === "review") {
+        setWizardStep("vehicle");
+        return;
+      }
+      onClose();
+      return;
+    }
+
     if (wizardStep === "driverName") setWizardStep("driverPhone");
     else if (wizardStep === "vehicle") setWizardStep("driverName");
-    else if (wizardStep === "review") setWizardStep("vehicle");
-    else onClose();
-  }, [wizardStep, onClose]);
+    else if (wizardStep === "review") {
+      setWizardStep(effectiveVehicleRequired ? "vehicle" : "driverName");
+    } else onClose();
+  }, [reassignFocus, wizardStep, effectiveVehicleRequired, onClose]);
 
   const wizardPrimaryLabel = useMemo(() => {
     if (wizardStep === "review" || !useSteppedWizard) {
       return saving
         ? isReassign
-          ? "Reassigning…"
+          ? "Confirming…"
           : "Assigning…"
         : isReassign
-          ? "Reassign"
-          : "Assign";
+          ? "Confirm reassign"
+          : "Confirm assign";
     }
     return "Continue";
   }, [wizardStep, saving, isReassign, useSteppedWizard]);
+
+  const footerSecondaryLabel = useMemo(() => {
+    if (!useSteppedWizard) return "Close";
+    if (wizardStep === wizardSteps[0]?.id) return "Close";
+    return "Back";
+  }, [useSteppedWizard, wizardStep, wizardSteps]);
+
+  const handleFooterSecondary = useCallback(() => {
+    if (!useSteppedWizard || wizardStep === wizardSteps[0]?.id) {
+      onClose();
+      return;
+    }
+    handleWizardBack();
+  }, [useSteppedWizard, wizardStep, wizardSteps, onClose, handleWizardBack]);
 
   const summaryDriver = useMemo(() => {
     const name = driverName.trim();
@@ -317,10 +493,22 @@ export function TripPhoneAssignmentWizard({
     error,
   ]);
 
+  const wizardStepIndex = useMemo(() => {
+    const idx = wizardSteps.findIndex((step) => step.id === wizardStep);
+    return idx >= 0 ? idx + 1 : 1;
+  }, [wizardSteps, wizardStep]);
+
+  const wizardStepTotal = wizardSteps.length;
+
   const title = isReassign ? "Reassign driver by phone" : "Assign driver by phone";
   const subtitle = otpReveal
     ? `Share with driver for ${tripLabel}`
-    : tripPhoneWizardSubtitle(wizardStep, isReassign);
+    : tripPhoneWizardSubtitle(wizardStep, {
+        isReassign,
+        reassignFocus,
+        stepIndex: wizardStepIndex,
+        stepTotal: wizardStepTotal,
+      });
 
   const invalidField = useCallback(
     (field: AddTripIssueField) => {
@@ -328,7 +516,12 @@ export function TripPhoneAssignmentWizard({
         return wizardStep === "driverPhone" && !canContinue && lookup.phoneComplete;
       }
       if (field === "driverName") {
-        return wizardStep === "driverName" && driverName.trim().length > 0 && driverName.trim().length < 2;
+        const n = driverName.trim();
+        return (
+          wizardStep === "driverName" &&
+          n.length > 0 &&
+          (n.length < 2 || /^driver$/i.test(n))
+        );
       }
       if (field === "vehicleNumber") {
         return (
@@ -364,16 +557,61 @@ export function TripPhoneAssignmentWizard({
           style={[
             assignmentShellStyles.assignModalWrapSlate,
             fullPageFlow && { flex: 1, width: "100%", maxWidth: "100%", borderRadius: 0 },
+            reassignRailDesktop &&
+              !fullPageFlow &&
+              Platform.OS === "web" && { maxWidth: 1320, width: "92%", maxHeight: "92%" },
             { flex: Platform.OS === "web" && !fullPageFlow ? 0 : 1 },
           ]}
         >
-          {otpReveal ? (
+          {assignSuccess ? (
             <View style={{ flex: 1, paddingTop: insets.top }}>
               <AssignmentFlowShell
-                title="OTP ready"
-                subtitle={`Share with driver for ${tripLabel}`}
+                title={isReassign ? "Reassignment complete" : "Assignment complete"}
+                subtitle={`Updated ${tripLabel}`}
+                onClose={onAssignSuccessDismiss ?? onClose}
+                insightPreset="allocation"
+                footer={
+                  <AssignmentFlowFooter
+                    summary={`${assignSuccess.driverLabel} · ${assignSuccess.vehicleLabel}`}
+                    secondaryLabel="Close"
+                    onSecondaryPress={onAssignSuccessDismiss ?? onClose}
+                    primaryLabel="Confirm & close"
+                    onPrimaryPress={onAssignSuccessDismiss ?? onClose}
+                  />
+                }
+              >
+                <View style={styles.otpCard}>
+                  <FontAwesome name="check-circle" size={36} color={Theme.primary} />
+                  <Text style={styles.otpTitle}>
+                    {isReassign ? "Driver updated" : "Driver assigned"}
+                  </Text>
+                  <Text style={styles.otpHint}>
+                    {assignSuccess.driverLabel}
+                    {"\n"}
+                    {assignSuccess.vehicleLabel}
+                  </Text>
+                  <Text style={styles.otpHint}>
+                    Changes are saved. Confirm & close to return to the trip.
+                  </Text>
+                </View>
+              </AssignmentFlowShell>
+            </View>
+          ) : otpReveal ? (
+            <View style={{ flex: 1, paddingTop: insets.top }}>
+              <AssignmentFlowShell
+                title={isReassign ? "Reassignment complete" : "Assignment complete"}
+                subtitle={`OTP ready for ${tripLabel} — share with the driver`}
                 onClose={onOtpDismiss}
                 insightPreset="allocation"
+                footer={
+                  <AssignmentFlowFooter
+                    summary={`${summaryDriver} · ${summaryVehicle}`}
+                    secondaryLabel="Close"
+                    onSecondaryPress={onOtpDismiss}
+                    primaryLabel="Confirm & close"
+                    onPrimaryPress={onOtpDismiss}
+                  />
+                }
               >
                 <View style={styles.otpCard}>
                   <FontAwesome name="check-circle" size={36} color={Theme.primary} />
@@ -388,13 +626,6 @@ export function TripPhoneAssignmentWizard({
                     Ask the driver to enter this code in the driver app to claim the trip.
                     You can resend from trip details if needed.
                   </Text>
-                  <TouchableOpacity
-                    style={styles.otpDoneBtn}
-                    onPress={onOtpDismiss}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.otpDoneText}>Done</Text>
-                  </TouchableOpacity>
                 </View>
               </AssignmentFlowShell>
             </View>
@@ -404,15 +635,18 @@ export function TripPhoneAssignmentWizard({
               subtitle={subtitle}
               onClose={onClose}
               onBack={useSteppedWizard ? handleWizardBack : undefined}
-              showBack={useSteppedWizard && wizardStep !== "driverPhone"}
+              showBack={useSteppedWizard && wizardStep !== wizardSteps[0]?.id}
               submitting={saving}
               fillBody={useSteppedWizard}
               scrollBody={!useSteppedWizard}
+              steppedLayout={useSteppedWizard}
+              stepIndex={useSteppedWizard ? wizardStepIndex : undefined}
+              stepTotal={useSteppedWizard ? wizardStepTotal : undefined}
               insightPreset="allocation"
               progress={
                 useSteppedWizard ? (
                   <AddTripWizardProgress
-                    steps={TRIP_PHONE_WIZARD_STEPS}
+                    steps={wizardSteps}
                     currentStepId={wizardStep}
                   />
                 ) : undefined
@@ -424,13 +658,18 @@ export function TripPhoneAssignmentWizard({
                       ? `${summaryDriver} · ${summaryVehicle}`
                       : undefined
                   }
+                  secondaryLabel={footerSecondaryLabel}
+                  onSecondaryPress={handleFooterSecondary}
                   primaryLabel={wizardPrimaryLabel}
                   onPrimaryPress={
                     useSteppedWizard ? handleWizardPrimary : () => onSubmit()
                   }
                   primaryDisabled={
                     useSteppedWizard
-                      ? !canContinue || saving || lookup.inTrip || lookup.loading
+                      ? !canContinue ||
+                        saving ||
+                        lookup.inTrip ||
+                        (wizardStep !== "review" && lookup.loading)
                       : !canSubmitAll || saving || lookup.inTrip || lookup.loading
                   }
                   loading={saving}
@@ -439,7 +678,48 @@ export function TripPhoneAssignmentWizard({
               }
             >
               {useSteppedWizard ? (
-                <>
+                <View
+                  style={
+                    reassignRailDesktop
+                      ? styles.reassignDesktopRow
+                      : styles.reassignMobileColumn
+                  }
+                >
+                  {showReassignRail ? (
+                    <View
+                      style={
+                        reassignRailDesktop ? styles.reassignRailColumn : undefined
+                      }
+                    >
+                      <TripPhoneReassignContextRail
+                        tripLabel={tripLabel}
+                        driverName={resolvedActiveDriverName}
+                        driverPhone={resolvedActiveDriverPhone || null}
+                        vehiclePlate={resolvedActiveVehiclePlate}
+                        focus={reassignFocus}
+                        onFocusChange={handleReassignFocusChange}
+                        onEditCurrentDriver={editCurrentDriver}
+                        onEditCurrentVehicle={editCurrentVehicle}
+                        layout={reassignRailDesktop ? "rail" : "row"}
+                        incomingDriverName={
+                          skipDriverSteps ? resolvedActiveDriverName : driverName
+                        }
+                        incomingDriverPhone={
+                          skipDriverSteps ? resolvedActiveDriverPhone : driverPhone
+                        }
+                        incomingVehiclePlate={
+                          formatIndianVehicleNumber(vehiclePlate).trim() ||
+                          resolvedActiveVehiclePlate
+                        }
+                      />
+                    </View>
+                  ) : null}
+                  <View
+                    style={[
+                      styles.reassignStepMain,
+                      reassignRailDesktop && styles.reassignStepMainDesktop,
+                    ]}
+                  >
                   {wizardStep === "driverPhone" ||
                   wizardStep === "driverName" ||
                   wizardStep === "vehicle" ? (
@@ -464,8 +744,13 @@ export function TripPhoneAssignmentWizard({
 
                   {wizardStep === "review" ? (
                     <View style={styles.reviewStack}>
-                      <View style={assignmentShellStyles.tripAssignSurfaceCard}>
-                        <Text style={styles.reviewHeading}>Review assignment</Text>
+                      <Text style={styles.reviewSectionLabel}>Review assignment</Text>
+                      <View
+                        style={[
+                          assignmentShellStyles.tripAssignSurfaceCard,
+                          styles.reviewCard,
+                        ]}
+                      >
                         <View style={styles.reviewRow}>
                           <Text style={styles.reviewLabel}>Driver</Text>
                           <Text style={styles.reviewValue} numberOfLines={2}>
@@ -504,7 +789,8 @@ export function TripPhoneAssignmentWizard({
                   {wizardStep !== "review" && error ? (
                     <Text style={styles.errorText}>{error}</Text>
                   ) : null}
-                </>
+                  </View>
+                </View>
               ) : (
                 <ScrollView
                   keyboardShouldPersistTaps="handled"
@@ -583,16 +869,18 @@ export function TripPhoneAssignmentWizard({
 const styles = {
   reviewStack: {
     gap: 12,
-    paddingTop: 4,
     flex: 1,
+    minHeight: 0,
   },
-  reviewHeading: {
-    fontSize: 11,
+  reviewSectionLabel: {
+    fontSize: 10,
     fontWeight: "800" as const,
-    letterSpacing: 0.6,
+    letterSpacing: 0.55,
     color: Theme.textMuted,
     textTransform: "uppercase" as const,
-    marginBottom: 8,
+  },
+  reviewCard: {
+    marginBottom: 0,
   },
   reviewRow: {
     flexDirection: "row" as const,
@@ -696,5 +984,43 @@ const styles = {
     fontSize: 15,
     fontWeight: "700" as const,
     color: Theme.textOnPrimary,
+  },
+  reassignDesktopRow: {
+    flex: 1,
+    minHeight: 0,
+    flexDirection: "row" as const,
+    alignItems: "stretch",
+    gap: 0,
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
+  },
+  reassignRailColumn: {
+    width: 320,
+    maxWidth: 360,
+    flexShrink: 0,
+    borderRightWidth: 1,
+    borderRightColor: Theme.borderLight,
+    paddingRight: 24,
+    marginRight: 24,
+    paddingTop: 4,
+    minHeight: 0,
+  },
+  reassignMobileColumn: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    gap: 0,
+  },
+  reassignStepMain: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    gap: 12,
+  },
+  reassignStepMainDesktop: {
+    paddingTop: 4,
+    justifyContent: "flex-start" as const,
+    alignSelf: "stretch" as const,
   },
 };

@@ -9,7 +9,7 @@ export function alertDetailRoute(
 ): `/alert-detail?${string}` {
   const q = new URLSearchParams({
     kind,
-    id,
+    alertId: id,
     mode,
   });
   return `/alert-detail?${q.toString()}` as `/alert-detail?${string}`;
@@ -18,6 +18,7 @@ export function alertDetailRoute(
 export function parseAlertDetailParams(raw: {
   kind?: string | string[];
   id?: string | string[];
+  alertId?: string | string[];
   mode?: string | string[];
 }): {
   kind: RegistryFeedKind | null;
@@ -25,7 +26,11 @@ export function parseAlertDetailParams(raw: {
   mode: AlertDetailMode;
 } {
   const kindRaw = typeof raw.kind === "string" ? raw.kind : raw.kind?.[0];
-  const id = typeof raw.id === "string" ? raw.id : raw.id?.[0] ?? "";
+  // Prefer alertId — legacy bookmarks used `id`, which conflicts with `/trip/[id]` path params.
+  const id =
+    (typeof raw.alertId === "string" ? raw.alertId : raw.alertId?.[0]) ||
+    (typeof raw.id === "string" ? raw.id : raw.id?.[0]) ||
+    "";
   const modeRaw = typeof raw.mode === "string" ? raw.mode : raw.mode?.[0];
   const kind: RegistryFeedKind | null =
     kindRaw === "salary" || kindRaw === "shared" || kindRaw === "ops"

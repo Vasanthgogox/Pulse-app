@@ -521,6 +521,19 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
               isOnline: m.isOnline,
               highlighted: m.highlighted,
             });
+            if (m.onPress) {
+              el.style.cursor = "pointer";
+              el.style.pointerEvents = "auto";
+              el.setAttribute("role", "button");
+              el.setAttribute(
+                "aria-label",
+                m.label?.trim() || (role === "driver" ? "View location" : "Map marker"),
+              );
+              el.addEventListener("click", (event) => {
+                event.stopPropagation();
+                m.onPress?.();
+              });
+            }
             const anchor =
               role === "origin" || role === "destination" || role === "driver"
                 ? "bottom"

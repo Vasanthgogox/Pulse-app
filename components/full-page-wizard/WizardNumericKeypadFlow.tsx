@@ -98,56 +98,26 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         avatarSeed={partyPreview.avatarSeed}
         organizationImageUrl={partyPreview.organizationImageUrl}
         organizationAvatarSeed={partyPreview.organizationAvatarSeed}
+        style={isDesktopKeypad ? undefined : styles.wizardKeypadPartyCard}
       />
     );
-  }, [partyPreview]);
+  }, [partyPreview, isDesktopKeypad]);
 
   if (!activeField) return null;
 
-  const amountPane = (
+  const labelBlock = (
+    <View style={styles.wizardKeypadLabelBlock}>
+      <Text style={styles.wizardKeypadTitle}>
+        {activeField.label}
+        {!showFieldSwitch && activeField.optional ? " (optional)" : ""}
+      </Text>
+      {hint ? <Text style={styles.wizardKeypadHint}>{hint}</Text> : null}
+    </View>
+  );
+
+  const amountDisplay = (
     <>
-      {partyCell ? (
-        <View style={[styles.wizardKeypadPartyWrap, isDesktopKeypad && { alignSelf: "stretch" }]}>
-          {partyCell}
-        </View>
-      ) : null}
-
-      {showFieldSwitch ? (
-        <View style={[styles.modeRow, styles.wizardKeypadFieldSwitch]}>
-          {fields.map((field) => {
-            const selected = field.id === activeField.id;
-            return (
-              <Pressable
-                key={field.id}
-                style={[styles.modeChip, selected && styles.modeChipActive]}
-                onPress={() => onActiveFieldChange?.(field.id)}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-              >
-                <Text
-                  style={[
-                    styles.modeChipText,
-                    selected && styles.modeChipTextActive,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {field.label}
-                  {field.optional ? " (opt.)" : ""}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
-      <View style={styles.wizardKeypadLabelBlock}>
-        <Text style={styles.wizardKeypadTitle}>
-          {activeField.label}
-          {!showFieldSwitch && activeField.optional ? " (optional)" : ""}
-        </Text>
-        {hint ? <Text style={styles.wizardKeypadHint}>{hint}</Text> : null}
-      </View>
-
+      {labelBlock}
       <NumericDisplay
         rawValue={activeField.rawValue}
         type="currency"
@@ -155,7 +125,6 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         placeholder={placeholder}
         variant="wizard"
       />
-
       {activeField.errorMessage ? (
         <Text style={styles.wizardKeypadError} accessibilityRole="alert">
           {activeField.errorMessage}
@@ -164,20 +133,68 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
     </>
   );
 
+  const fieldSwitch = showFieldSwitch ? (
+    <View style={[styles.modeRow, styles.wizardKeypadFieldSwitch]}>
+      {fields.map((field) => {
+        const selected = field.id === activeField.id;
+        return (
+          <Pressable
+            key={field.id}
+            style={[styles.modeChip, selected && styles.modeChipActive]}
+            onPress={() => onActiveFieldChange?.(field.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+          >
+            <Text
+              style={[
+                styles.modeChipText,
+                selected && styles.modeChipTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              {field.label}
+              {field.optional ? " (opt.)" : ""}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  ) : null;
+
   if (isDesktopKeypad) {
     return (
       <View style={styles.wizardKeypadRoot}>
-        <View style={styles.wizardKeypadDesktopRow}>
-          <View style={styles.wizardKeypadAmountPane}>{amountPane}</View>
-          <View style={styles.wizardKeypadKeysPane}>
-            <View style={styles.wizardKeypadKeysCard}>
-              <KeypadDock onKey={handleKey} showDecimal={showDecimal} />
+        <View style={styles.wizardKeypadDesktopCenter}>
+          <View style={styles.wizardKeypadDesktopCard}>
+            {partyCell ? (
+              <View style={styles.wizardKeypadPartyInCard}>{partyCell}</View>
+            ) : null}
+            <View style={styles.wizardKeypadDesktopRow}>
+              <View style={styles.wizardKeypadAmountPane}>
+                {fieldSwitch}
+                {amountDisplay}
+              </View>
+              <View style={styles.wizardKeypadKeysPane}>
+                <View style={styles.wizardKeypadKeysCard}>
+                  <KeypadDock onKey={handleKey} showDecimal={showDecimal} />
+                </View>
+              </View>
             </View>
           </View>
         </View>
       </View>
     );
   }
+
+  const amountPane = (
+    <>
+      {partyCell ? (
+        <View style={styles.wizardKeypadPartyWrap}>{partyCell}</View>
+      ) : null}
+      {fieldSwitch}
+      {amountDisplay}
+    </>
+  );
 
   return (
     <View style={styles.wizardKeypadRoot}>

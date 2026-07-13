@@ -13,6 +13,12 @@ import {
 
 import { signUpPasswordInputProps, type SignUpPasswordFieldRole } from '@/lib/signupPasswordInput.util';
 import { scrollFocusedWebInputIntoView } from '@/lib/webKeyboard';
+import {
+  pulseInputShellErrorStyle,
+  pulseInputShellStyle,
+  pulseInputTextStyle,
+  pulseInputTrailingHitSlop,
+} from '@/lib/pulseInputChrome';
 
 import { useSignUpPulseFormStepContext } from './SignUpPulseFormStepContext';
 import {
@@ -127,6 +133,15 @@ export const SignUpPulseField = memo(function SignUpPulseField({
     }
   };
 
+  const shellWebProps =
+    Platform.OS === 'web'
+      ? ({
+          className: hasError
+            ? 'pulse-input-shell pulse-input-shell--error'
+            : 'pulse-input-shell',
+        } as object)
+      : {};
+
   return (
     <View ref={wrapRef} style={fieldStyles.wrap} collapsable={false}>
       <Text style={fieldStyles.label}>
@@ -139,6 +154,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
           hasError && fieldStyles.inputShellError,
           multiline && fieldStyles.inputShellMultiline,
         ]}
+        {...shellWebProps}
       >
         <TextInput
           ref={inputRef}
@@ -157,7 +173,9 @@ export const SignUpPulseField = memo(function SignUpPulseField({
           ]}
           placeholderTextColor={theme.placeholder}
         />
-        {trailing}
+        {trailing ? (
+          <View style={fieldStyles.trailingWrap}>{trailing}</View>
+        ) : null}
       </View>
       {errorMessage ? (
         <Text style={fieldStyles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{errorMessage}</Text>
@@ -175,6 +193,13 @@ function createFieldStyles(
   isMobile: boolean,
 ) {
   const text = createPulseSignUpTextStyles(theme);
+
+  const inputTypography = isMobile ? text.inputMobile : text.input;
+  const inputMinHeight =
+    Platform.OS === 'web' ? (isMobile ? 48 : 40) : isMobile ? 48 : 44;
+  const inputPadH = isMobile ? 14 : 12;
+  const inputPadV =
+    Platform.OS === 'web' ? (isMobile ? 11 : 9) : isMobile ? 12 : 10;
 
   return StyleSheet.create({
     wrap: {
@@ -194,47 +219,32 @@ function createFieldStyles(
     req: {
       color: SIGNUP_ERROR_COLOR,
     },
-    inputShell: {
-      borderWidth: 1,
+    inputShell: pulseInputShellStyle({
+      backgroundColor: theme.bg,
       borderColor: theme.border,
       borderRadius: PULSE_SIGNUP_RADIUS.input,
-      backgroundColor: theme.bg,
-      flexDirection: 'row',
-      alignItems: 'center',
-      position: 'relative',
-      width: '100%',
-      maxWidth: '100%',
-      alignSelf: 'stretch',
-      ...Platform.select({
-        web: { boxSizing: 'border-box', overflow: 'visible' } as object,
-        default: { overflow: 'hidden' as const },
-      }),
-    },
+      minHeight: inputMinHeight,
+      multiline: false,
+    }),
+    inputShellError: pulseInputShellErrorStyle,
     inputShellMultiline: {
       alignItems: 'flex-start',
-    },
-    inputShellError: {
-      borderColor: SIGNUP_ERROR_COLOR,
-      backgroundColor: '#fef2f2',
+      minHeight: undefined,
     },
     input: {
-      flex: 1,
-      paddingHorizontal: isMobile ? 14 : 12,
-      paddingVertical: Platform.OS === 'web' ? (isMobile ? 11 : 9) : isMobile ? 12 : 10,
-      ...(isMobile ? text.inputMobile : text.input),
-      minHeight: Platform.OS === 'web' ? (isMobile ? 48 : 40) : isMobile ? 48 : 44,
-      ...Platform.select({
-        web: { outlineStyle: 'none', cursor: 'text' } as object,
+      ...pulseInputTextStyle(inputTypography, {
+        minHeight: inputMinHeight,
+        hasTrailing: false,
       }),
+      paddingHorizontal: inputPadH,
+      paddingVertical: inputPadV,
     },
-    inputMultiline: {
-      minHeight: 120,
-      textAlignVertical: 'top',
-      paddingTop: 14,
-    },
-    inputWithTrailing: {
-      paddingRight: 4,
-    },
+    inputMultiline: pulseInputTextStyle(inputTypography, { multiline: true }),
+    inputWithTrailing: pulseInputTextStyle(inputTypography, {
+      minHeight: inputMinHeight,
+      hasTrailing: true,
+    }),
+    trailingWrap: pulseInputTrailingHitSlop(),
     error: {
       ...(isMobile ? text.errorMobile : text.error),
       marginTop: 6,

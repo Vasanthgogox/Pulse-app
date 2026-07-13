@@ -2023,124 +2023,156 @@ export default function ClientDetailScreen({
               isWebDesktop && styles.tableCardWebDesktop,
             ]}
           >
+            <ScrollView
+              horizontal={isWebDesktop}
+              showsHorizontalScrollIndicator={isWebDesktop}
+              bounces={false}
+              style={isWebDesktop ? styles.tableScrollWebDesktop : undefined}
+              contentContainerStyle={
+                isWebDesktop ? styles.tableGridWebDesktop : undefined
+              }
+            >
+              <View style={isWebDesktop ? styles.tableGridInnerWebDesktop : undefined}>
             <View
               style={[
                 styles.tableHeader,
                 isWebDesktop && styles.tableHeaderWebDesktop,
               ]}
             >
-              <Text
-                style={[
-                  styles.th,
-                  styles.thMission,
-                  isWebDesktop && styles.thWebDesktop,
-                  isWebDesktop && styles.tripColWebDesktop,
-                ]}
+              <View
+                style={isWebDesktop ? styles.tripColWebDesktop : undefined}
               >
-                Trip
-              </Text>
+                <Text
+                  style={[
+                    styles.th,
+                    !isWebDesktop && styles.thMission,
+                    isWebDesktop && styles.thWebDesktop,
+                  ]}
+                  numberOfLines={1}
+                >
+                  Trip
+                </Text>
+              </View>
               {isWebDesktop ? (
                 <View style={styles.partyColWebDesktop}>
-                  <Text style={[styles.th, styles.thWebDesktop]}>Supplier</Text>
+                  <Text style={[styles.th, styles.thWebDesktop]} numberOfLines={1}>
+                    Supplier
+                  </Text>
                 </View>
               ) : null}
               {isWebDesktop ? (
                 <View style={styles.driverColWebDesktop}>
-                  <Text style={[styles.th, styles.thWebDesktop]}>Driver</Text>
+                  <Text style={[styles.th, styles.thWebDesktop]} numberOfLines={1}>
+                    Driver
+                  </Text>
                 </View>
               ) : null}
               <View
-                style={[
-                  styles.headerAmountCol,
-                  isWebDesktop && styles.amountColWebDesktop,
-                ]}
+                style={
+                  isWebDesktop ? styles.amountColWebDesktop : styles.headerAmountCol
+                }
               >
                 <Text
                   style={[
                     styles.th,
                     styles.thSales,
                     isWebDesktop && styles.thWebDesktop,
+                    isWebDesktop && styles.thAmountDesktop,
                   ]}
+                  numberOfLines={1}
                 >
                   Sales
                 </Text>
               </View>
               {isWebDesktop ? (
-                <View
-                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
-                >
+                <View style={styles.amountColWebDesktop}>
                   <Text
-                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
+                    style={[
+                      styles.th,
+                      styles.thRight,
+                      styles.thWebDesktop,
+                      styles.thAmountDesktop,
+                    ]}
+                    numberOfLines={1}
                   >
                     Cost
                   </Text>
                 </View>
               ) : null}
               {isWebDesktop ? (
-                <View
-                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
-                >
+                <View style={styles.amountColWebDesktop}>
                   <Text
                     style={[
                       styles.th,
                       styles.thRight,
                       styles.thWebDesktop,
-                      { textAlign: "right" as const },
+                      styles.thAmountDesktop,
                     ]}
+                    numberOfLines={1}
                   >
                     P&L
                   </Text>
                 </View>
               ) : null}
               <View
-                style={[
-                  styles.headerAmountCol,
-                  isWebDesktop && styles.amountColWebDesktop,
-                ]}
+                style={
+                  isWebDesktop ? styles.amountColWebDesktop : styles.headerAmountCol
+                }
               >
                 <Text
                   style={[
                     styles.th,
                     styles.thRight,
                     isWebDesktop && styles.thWebDesktop,
+                    isWebDesktop && styles.thAmountDesktop,
                   ]}
+                  numberOfLines={1}
                 >
                   Received
                 </Text>
               </View>
               <View
-                style={[
-                  styles.headerAmountCol,
-                  isWebDesktop && styles.amountColWebDesktop,
-                ]}
+                style={
+                  isWebDesktop ? styles.amountColWebDesktop : styles.headerAmountCol
+                }
               >
                 <Text
                   style={[
                     styles.th,
                     styles.thRight,
                     isWebDesktop && styles.thWebDesktop,
+                    isWebDesktop && styles.thAmountDesktop,
                   ]}
+                  numberOfLines={1}
                 >
                   Due
                 </Text>
               </View>
               {isWebDesktop ? (
-                <View
-                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
-                >
+                <View style={styles.txnsColWebDesktop}>
                   <Text
-                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
+                    style={[
+                      styles.th,
+                      styles.thRight,
+                      styles.thWebDesktop,
+                      styles.thTxnsDesktop,
+                    ]}
+                    numberOfLines={1}
                   >
                     Txns
                   </Text>
                 </View>
               ) : null}
               {isWebDesktop ? (
-                <View
-                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
-                >
+                <View style={styles.lastTxnColWebDesktop}>
                   <Text
-                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
+                    style={[
+                      styles.th,
+                      styles.thRight,
+                      styles.thWebDesktop,
+                      styles.thAmountDesktop,
+                    ]}
+                    numberOfLines={1}
                   >
                     Last Txn
                   </Text>
@@ -2211,10 +2243,13 @@ export default function ClientDetailScreen({
                     const driverRow = driverIdKey
                       ? driverById.get(driverIdKey)
                       : undefined;
-                    const driverName =
+                    const rawDriverName =
                       (row.trip.driver_display_name ?? "").trim() ||
-                      (driverRow?.name ?? "").trim() ||
-                      "—";
+                      (driverRow?.name ?? "").trim();
+                    const driverName =
+                      !rawDriverName || /^driver$/i.test(rawDriverName)
+                        ? "—"
+                        : rawDriverName;
                     return (
                       <>
                         <View
@@ -2343,10 +2378,11 @@ export default function ClientDetailScreen({
                           </View>
                         ) : null}
                         <View
-                          style={[
-                            styles.amountCol,
-                            isWebDesktop && styles.amountColWebDesktop,
-                          ]}
+                          style={
+                            isWebDesktop
+                              ? styles.amountColWebDesktop
+                              : styles.amountCol
+                          }
                         >
                           <Text
                             numberOfLines={1}
@@ -2360,12 +2396,7 @@ export default function ClientDetailScreen({
                           </Text>
                         </View>
                         {isWebDesktop ? (
-                          <View
-                            style={[
-                              styles.amountCol,
-                              styles.amountColWebDesktop,
-                            ]}
-                          >
+                          <View style={styles.amountColWebDesktop}>
                             <Text
                               numberOfLines={1}
                               style={[
@@ -2379,12 +2410,7 @@ export default function ClientDetailScreen({
                           </View>
                         ) : null}
                         {isWebDesktop ? (
-                          <View
-                            style={[
-                              styles.amountCol,
-                              styles.amountColWebDesktop,
-                            ]}
-                          >
+                          <View style={styles.amountColWebDesktop}>
                             <Text
                               numberOfLines={1}
                               style={[
@@ -2400,10 +2426,11 @@ export default function ClientDetailScreen({
                           </View>
                         ) : null}
                         <View
-                          style={[
-                            styles.amountCol,
-                            isWebDesktop && styles.amountColWebDesktop,
-                          ]}
+                          style={
+                            isWebDesktop
+                              ? styles.amountColWebDesktop
+                              : styles.amountCol
+                          }
                         >
                           <Text
                             numberOfLines={1}
@@ -2418,10 +2445,11 @@ export default function ClientDetailScreen({
                           </Text>
                         </View>
                         <View
-                          style={[
-                            styles.amountCol,
-                            isWebDesktop && styles.amountColWebDesktop,
-                          ]}
+                          style={
+                            isWebDesktop
+                              ? styles.amountColWebDesktop
+                              : styles.amountCol
+                          }
                         >
                           <Text
                             numberOfLines={1}
@@ -2436,18 +2464,12 @@ export default function ClientDetailScreen({
                           </Text>
                         </View>
                         {isWebDesktop ? (
-                          <View
-                            style={[
-                              styles.amountCol,
-                              styles.amountColWebDesktop,
-                            ]}
-                          >
+                          <View style={styles.txnsColWebDesktop}>
                             <Text
                               numberOfLines={1}
                               style={[
                                 styles.td,
-                                styles.tdRight,
-                                styles.tdAmountWebDesktop,
+                                styles.tdTxnsWebDesktop,
                               ]}
                             >
                               {meta.count}
@@ -2455,12 +2477,7 @@ export default function ClientDetailScreen({
                           </View>
                         ) : null}
                         {isWebDesktop ? (
-                          <View
-                            style={[
-                              styles.amountCol,
-                              styles.amountColWebDesktop,
-                            ]}
-                          >
+                          <View style={styles.lastTxnColWebDesktop}>
                             <Text
                               numberOfLines={1}
                               style={[
@@ -2483,6 +2500,8 @@ export default function ClientDetailScreen({
             ) : (
               <EntityTripTableEmptyRow />
             )}
+              </View>
+            </ScrollView>
           </View>
         )}
 
@@ -3132,21 +3151,36 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: Theme.surface,
     marginHorizontal: 0,
+    overflow: "hidden",
+  },
+  tableScrollWebDesktop: {
+    width: "100%",
+  },
+  tableGridWebDesktop: {
+    flexGrow: 1,
+    minWidth: "100%",
+    width: "100%",
+  },
+  tableGridInnerWebDesktop: {
+    minWidth: 1080,
+    width: "100%",
+    alignSelf: "stretch",
   },
   tableHeader: edc.tableHeader,
   tableHeaderWebDesktop: {
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    ...edc.tableHeaderDesktop,
+    width: "100%",
     backgroundColor: Theme.surface,
     borderBottomColor: Theme.borderMedium,
   },
   th: edc.th,
   thWebDesktop: {
-    fontSize: 11,
-    letterSpacing: 0.08,
+    fontSize: 10,
+    letterSpacing: 0.2,
     color: Theme.textSecondary,
-    fontWeight: "600",
+    fontWeight: "700",
     fontStyle: "normal",
+    textTransform: "uppercase",
   },
   clientColWebDesktop: {
     flexGrow: 0,
@@ -3155,29 +3189,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingRight: 6,
   },
-  tripColWebDesktop: {
-    flex: 1,
-    minWidth: 200,
-    width: "31%",
-  },
-  partyColWebDesktop: {
-    flexGrow: 0,
-    flexShrink: 0,
-    width: "14%",
-    justifyContent: "center",
-    borderLeftWidth: 1,
-    borderLeftColor: Theme.borderLight,
-    paddingLeft: 8,
-  },
-  driverColWebDesktop: {
-    flexGrow: 0,
-    flexShrink: 0,
-    width: "9%",
-    justifyContent: "center",
-    borderLeftWidth: 1,
-    borderLeftColor: Theme.borderLight,
-    paddingLeft: 7,
-  },
+  tripColWebDesktop: edc.tripColDesktop,
+  partyColWebDesktop: edc.tripPartyColDesktop,
+  driverColWebDesktop: edc.tripDriverColDesktop,
+  amountColWebDesktop: edc.tripAmountColDesktop,
+  txnsColWebDesktop: edc.tripCountColDesktop,
+  lastTxnColWebDesktop: edc.tripLastTxnColDesktop,
+  thAmountDesktop: edc.thCellRight,
+  thTxnsDesktop: edc.thCellCenter,
   tdPartyAvatarRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -3191,26 +3210,14 @@ const styles = StyleSheet.create({
   },
   headerAmountCol: edc.headerAmountCol,
   amountCol: edc.amountCol,
-  amountColWebDesktop: {
-    flexGrow: 0,
-    flexShrink: 0,
-    flex: 1,
-    width: "auto",
-    minWidth: 64,
-    maxWidth: 104,
-    borderLeftWidth: 1,
-    borderLeftColor: Theme.borderLight,
-    paddingLeft: 5,
-  },
   thMission: edc.thMission,
   thSales: { textAlign: "right" as const },
   thRight: { textAlign: "right" as const },
   tableRow: edc.tableRow,
   tableRowWebDesktop: {
-    paddingVertical: 7,
-    paddingHorizontal: 8,
+    ...edc.tableRowDesktop,
+    width: "100%",
     borderBottomColor: Theme.borderLight,
-    minHeight: 46,
     backgroundColor: Theme.surface,
   },
   td: edc.td,
@@ -3234,12 +3241,7 @@ const styles = StyleSheet.create({
     lineHeight: 11,
     marginTop: 2,
   },
-  tdTripColWebDesktop: {
-    flex: 1,
-    minWidth: 200,
-    width: "31%",
-    paddingRight: 6,
-  },
+  tdTripColWebDesktop: edc.tripColDesktop,
   tdPartyWebDesktop: {
     fontSize: 9,
     color: Theme.textPrimaryDark,
@@ -3254,11 +3256,17 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   tdAmountWebDesktop: {
-    width: "100%",
-    textAlign: "right" as const,
+    ...edc.tdAmountRight,
     fontSize: 9,
     fontWeight: "600",
-    fontStyle: "italic",
+    fontStyle: "normal",
+  },
+  tdTxnsWebDesktop: {
+    ...edc.thCellCenter,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    fontVariant: ["tabular-nums"],
   },
   tdAmountMuted: {
     fontWeight: "600",

@@ -20,6 +20,7 @@ const PUBLIC_ROUTES = new Set([
   '/sign-in',
   '/sign-up',
   '/driver-signup',
+  '/driver-sign-in',
   '/welcome',
   '/forgot-password',
   '/auth/reset-password',

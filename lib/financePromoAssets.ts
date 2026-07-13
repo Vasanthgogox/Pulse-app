@@ -60,7 +60,7 @@ export const FINANCE_PROMO_PRESETS: Record<FinancePromoVariant, FinancePromoPres
     title: "Your ledger is empty",
     description:
       "Add customers, suppliers, or drivers and associate trips first. Record transactions from a trip or party tab — details will show here.",
-    ctaLabel: "",
+    ctaLabel: "Add cash",
     bullets: [
       { label: "Add parties first", Icon: UserPlus, tint: "rgba(79, 70, 229, 0.1)" },
       { label: "Associate trips", Icon: Route, tint: "rgba(59, 130, 246, 0.1)" },

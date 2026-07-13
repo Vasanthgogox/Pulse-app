@@ -60,6 +60,7 @@
     "db:push": "supabase db push --linked",
     "db:push-both": "bash scripts/push-both-dbs.sh",
     "functions:deploy": "supabase functions deploy",
+    "functions:deploy:auth": "supabase functions deploy check-user-by-phone driver-phone-signin-unverified link-driver-phone",
     "functions:deploy-both": "bash scripts/push-both-dbs.sh",
     "oms:dev": "npm run dev --prefix oms",
     "oms:build": "npm run build --prefix oms"
