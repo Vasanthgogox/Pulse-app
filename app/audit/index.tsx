@@ -371,6 +371,14 @@ const HTML_STYLE = `
   .flow-field-name { color: #9cdcfe; min-width: 140px; }
   .flow-field-val { color: var(--txm); font-size: 10px; }
 
+  .detail-raw {
+    margin: 0; padding: 12px;
+    background: var(--s2); border: 1px solid var(--bd); border-radius: 7px;
+    font-family: var(--mono); font-size: 11px; line-height: 1.6;
+    color: var(--txm); white-space: pre-wrap; word-break: break-word;
+    max-height: min(60vh, 640px); overflow-y: auto;
+  }
+
   /* route path */
   .route-path {
     background: var(--s2); border: 1px solid var(--bd); border-radius: 7px;
@@ -1113,6 +1121,13 @@ function AuditApp() {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {selAction.data_detail && (
+            <div className="dp-section">
+              <div className="dp-section-label">Schema Detail</div>
+              <pre className="detail-raw">{selAction.data_detail}</pre>
             </div>
           )}
 

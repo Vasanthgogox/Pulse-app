@@ -35068,3 +35068,12 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 
+
+-- ── Internal health-monitor tables: RLS lockdown ────────────────────────────
+-- Written only by SECURITY DEFINER functions (run as owner, bypass RLS).
+-- Enable RLS with no policies (default-deny) + revoke client grants so the
+-- Supabase linter (rls_disabled_in_public / anon-exposed) stays clean on reset.
+ALTER TABLE "public"."_monitor_watchdog_state" ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON "public"."_monitor_watchdog_state" FROM "anon", "authenticated";
+ALTER TABLE "public"."_monitor_net_fail_snapshot" ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON "public"."_monitor_net_fail_snapshot" FROM "anon", "authenticated";
