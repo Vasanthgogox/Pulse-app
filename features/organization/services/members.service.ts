@@ -3,7 +3,7 @@
  * Handles team member invite, list, role change, and removal.
  */
 import { supabase } from "@/lib/supabase";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import type {
   OrgMember,
   OrgTeamRoster,
@@ -72,33 +72,26 @@ export function subscribeToOrgTeamRoster(
   orgId: string,
   onChange: () => void,
 ): () => void {
-  const channel: RealtimeChannel = supabase()
-    .channel(`org-team:${orgId}`)
-    .on(
-      "postgres_changes",
+  // Shared ref-counted channel via the registry — same two-table invalidation,
+  // reuses one server channel and inherits cap/grace/prune lifecycle.
+  return subscribeSharedPostgresChanges(
+    `org-team:${orgId}`,
+    [
       {
         event: "*",
         schema: "public",
         table: "organization_members",
         filter: `organization_id=eq.${orgId}`,
       },
-      () => onChange(),
-    )
-    .on(
-      "postgres_changes",
       {
         event: "*",
         schema: "public",
         table: "organization_team_invites",
         filter: `organization_id=eq.${orgId}`,
       },
-      () => onChange(),
-    )
-    .subscribe();
-
-  return () => {
-    supabase().removeChannel(channel);
-  };
+    ],
+    () => onChange(),
+  );
 }
 
 // ─── List members ──────────────────────────────────────────────────────────────

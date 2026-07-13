@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import { resolveMapLocationLabel } from "@/lib/mapLocationLabel.service";
 import { TRIP_TRACKING_HISTORY_FETCH_LIMIT } from "@/lib/trackingLocation.constants";
-import { supabase } from "@/lib/supabase";
+import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 
 export function useDriverLocation(tripId: string | undefined) {
   const [driverLocation, setDriverLocation] =
@@ -42,28 +42,25 @@ export function useDriverLocation(tripId: string | undefined) {
     // Initial fetch (location + history)
     fetchDriverLocationFromDb();
 
-    // Realtime subscription for live location updates — replaces 30s polling
-    const channel = supabase()
-      .channel(`driver_location:${tripId}`)
-      .on(
-        'postgres_changes',
+    // Realtime subscription for live location updates — replaces 30s polling.
+    // Shared registry channel (ref-counted, cap/grace/prune) instead of a
+    // private per-hook channel; same filter + payload handling.
+    return subscribeSharedPostgresChanges(
+      `driver_location:${tripId}`,
+      [
         {
           event: '*',
           schema: 'public',
           table: 'driver_locations',
           filter: `trip_id=eq.${tripId}`,
         },
-        (payload) => {
-          if (payload.new && typeof payload.new === 'object') {
-            setDriverLocation(payload.new as driverLocationService.DriverLocationRow);
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase().removeChannel(channel);
-    };
+      ],
+      (payload) => {
+        if (payload.new && typeof payload.new === 'object') {
+          setDriverLocation(payload.new as driverLocationService.DriverLocationRow);
+        }
+      },
+    );
   }, [tripId, fetchDriverLocationFromDb]);
 
   useEffect(() => {

@@ -17,6 +17,7 @@ import {
 import type { RatingRow } from '@/features/ratings/types';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import * as driversService from '@/features/drivers/services/drivers.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -208,15 +209,14 @@ export default function DriverProfileScreen() {
   }, [loadTrips]));
 
   useEffect(() => {
-    const client = supabase();
-    if (!client) return;
-    const channel = client
-      .channel('driver-profile-trips')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trips' }, () => {
-        loadTrips();
-      })
-      .subscribe();
-    return () => { client.removeChannel(channel); };
+    // Shared ref-counted channel (registry) instead of a private static-named
+    // channel — same behavior (refetch on any trips change), but reuses one
+    // server channel and inherits cap/grace/prune lifecycle.
+    return subscribeSharedPostgresChanges(
+      'trips:all',
+      [{ event: '*', schema: 'public', table: 'trips' }],
+      () => { loadTrips(); },
+    );
   }, [loadTrips]);
 
   useEffect(() => {

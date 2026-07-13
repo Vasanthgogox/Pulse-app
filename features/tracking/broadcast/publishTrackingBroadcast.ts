@@ -8,30 +8,56 @@ import type {
   TrackingBroadcastPayload,
 } from '@/features/tracking/types/broadcast.types';
 
-const tripChannels = new Map<string, RealtimeChannel>();
-const fleetChannels = new Map<string, RealtimeChannel>();
+type CachedChannel = { channel: RealtimeChannel; lastUsedAt: number };
+
+const tripChannels = new Map<string, CachedChannel>();
+const fleetChannels = new Map<string, CachedChannel>();
+
+// Idle eviction: publish channels are reused across many GPS pings, but were
+// never closed once a trip/session went quiet (leak — they lived for the whole
+// app session). Close any channel untouched for IDLE_MS. Reuse/send behavior for
+// active channels is unchanged; a later ping just re-creates the channel.
+const IDLE_MS = 5 * 60_000;
+
+function evictIdle(map: Map<string, CachedChannel>, now: number): void {
+  for (const [key, entry] of map) {
+    if (now - entry.lastUsedAt > IDLE_MS) {
+      void supabase().removeChannel(entry.channel);
+      map.delete(key);
+    }
+  }
+}
 
 function getOrCreateTripChannel(tripId: string): RealtimeChannel {
-  const key = tripId;
-  let ch = tripChannels.get(key);
-  if (ch) return ch;
-  ch = supabase().channel(trackingTripChannelName(tripId), {
+  const now = Date.now();
+  evictIdle(tripChannels, now);
+  const existing = tripChannels.get(tripId);
+  if (existing) {
+    existing.lastUsedAt = now;
+    return existing.channel;
+  }
+  const channel = supabase().channel(trackingTripChannelName(tripId), {
     config: { broadcast: { self: false, ack: false } },
   });
-  void ch.subscribe();
-  tripChannels.set(key, ch);
-  return ch;
+  void channel.subscribe();
+  tripChannels.set(tripId, { channel, lastUsedAt: now });
+  return channel;
 }
 
 function getOrCreateFleetChannel(orgId: string): RealtimeChannel {
-  let ch = fleetChannels.get(orgId);
-  if (ch) return ch;
-  ch = supabase().channel(trackingFleetChannelName(orgId), {
+  const now = Date.now();
+  evictIdle(fleetChannels, now);
+  const existing = fleetChannels.get(orgId);
+  if (existing) {
+    existing.lastUsedAt = now;
+    return existing.channel;
+  }
+  const channel = supabase().channel(trackingFleetChannelName(orgId), {
     config: { broadcast: { self: false, ack: false } },
   });
-  void ch.subscribe();
-  fleetChannels.set(orgId, ch);
-  return ch;
+  void channel.subscribe();
+  fleetChannels.set(orgId, { channel, lastUsedAt: now });
+  return channel;
 }
 
 export async function publishTrackingBroadcast(
@@ -86,13 +112,13 @@ export async function publishPingRequest(tripId: string): Promise<void> {
 
 export function teardownTrackingPublishChannels(tripId?: string, orgId?: string): void {
   if (tripId) {
-    const ch = tripChannels.get(tripId);
-    if (ch) void supabase().removeChannel(ch);
+    const entry = tripChannels.get(tripId);
+    if (entry) void supabase().removeChannel(entry.channel);
     tripChannels.delete(tripId);
   }
   if (orgId) {
-    const ch = fleetChannels.get(orgId);
-    if (ch) void supabase().removeChannel(ch);
+    const entry = fleetChannels.get(orgId);
+    if (entry) void supabase().removeChannel(entry.channel);
     fleetChannels.delete(orgId);
   }
 }

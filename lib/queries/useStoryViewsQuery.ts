@@ -13,7 +13,9 @@ export function useStoryViewsQuery(postId: string | null, enabled: boolean) {
     },
     enabled: !!postId && enabled,
     staleTime: STALE.moderate,
-    refetchOnWindowFocus: true,
+    // Uses the global refetchOnWindowFocus:false default — story-view counts are
+    // moderate-stale and refreshed via mutation/realtime; refetching on every
+    // window focus was redundant network load with no freshness benefit.
   });
 }
 

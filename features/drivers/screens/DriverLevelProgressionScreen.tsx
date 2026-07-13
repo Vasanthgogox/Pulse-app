@@ -20,7 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import * as driversService from '@/features/drivers/services/drivers.service';
 import * as tripsService from '@/features/trips/services/trips.service';
-import { supabase } from '@/lib/supabase';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 
 
 const DARK_HERO_BG = '#0f0f0f';
@@ -86,18 +86,14 @@ export default function LevelProgressionScreen() {
   }, [load]));
 
   // Supabase Realtime: re-fetch trips count whenever any of the driver's trips change.
+  // Uses the shared registry channel ('trips:all') so this and DriverProfileScreen
+  // reuse ONE server channel instead of two private static-named channels.
   useEffect(() => {
-    const client = supabase();
-    if (!client) return;
-    const channel = client
-      .channel('level-progression-trips')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'trips' },
-        () => { load(false); },
-      )
-      .subscribe();
-    return () => { client.removeChannel(channel); };
+    return subscribeSharedPostgresChanges(
+      'trips:all',
+      [{ event: '*', schema: 'public', table: 'trips' }],
+      () => { load(false); },
+    );
   }, [load]);
 
   const currentLevel = Math.min(1 + Math.floor(tripsCount / 2), 8);

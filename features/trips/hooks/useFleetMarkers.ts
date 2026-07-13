@@ -12,7 +12,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { Map as MaplibreMap, GeoJSONSource } from 'maplibre-gl';
-import { supabase } from '@/lib/supabase';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 
 const INTERPOLATION_MS = 2_000; // slower than single-trip view; matches 30s presence cadence
 
@@ -75,17 +75,38 @@ export function useFleetMarkers(mapRef: MapViewRef, orgId: string | null): void 
   useEffect(() => {
     if (!orgId) return;
 
-    const ch = supabase()
-      .channel(`fleet:presence:${orgId}`)
-      .on(
-        'postgres_changes',
+    // Shared registry channel (ref-counted, cap/grace/prune). One listener fans
+    // out; dispatch UPDATE vs DELETE on payload.eventType to preserve the two
+    // original handlers exactly.
+    const unsubscribe = subscribeSharedPostgresChanges(
+      `fleet:presence:${orgId}`,
+      [
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'driver_presence',
           filter: `organization_id=eq.${orgId}`,
         },
-        (payload) => {
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'driver_presence',
+          filter: `organization_id=eq.${orgId}`,
+        },
+      ],
+      (payload) => {
+        if (payload.eventType === 'DELETE') {
+          const driverId = (payload.old as { driver_id?: string }).driver_id;
+          if (!driverId) return;
+          const frame = animFrameMap.current.get(driverId);
+          if (frame != null) cancelAnimationFrame(frame);
+          animFrameMap.current.delete(driverId);
+          currentPosMap.current.delete(driverId);
+          headingMap.current.delete(driverId);
+          flushDriverToGL(mapRef, driverId, [0, 0], 0);
+          return;
+        }
+        {
           const row = payload.new as PresenceRow;
           const { driver_id: driverId, latitude, longitude, heading } = row;
 
@@ -125,36 +146,16 @@ export function useFleetMarkers(mapRef: MapViewRef, orgId: string | null): void 
             }
           }
           animFrameMap.current.set(driverId, requestAnimationFrame(step));
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'driver_presence',
-          filter: `organization_id=eq.${orgId}`,
-        },
-        (payload) => {
-          const driverId = (payload.old as { driver_id?: string }).driver_id;
-          if (!driverId) return;
-          const frame = animFrameMap.current.get(driverId);
-          if (frame != null) cancelAnimationFrame(frame);
-          animFrameMap.current.delete(driverId);
-          currentPosMap.current.delete(driverId);
-          headingMap.current.delete(driverId);
-          // Remove the source data from GL
-          flushDriverToGL(mapRef, driverId, [0, 0], 0);
-        },
-      )
-      .subscribe();
+        }
+      },
+    );
 
     return () => {
       animFrameMap.current.forEach((id) => cancelAnimationFrame(id));
       animFrameMap.current.clear();
       currentPosMap.current.clear();
       headingMap.current.clear();
-      supabase().removeChannel(ch);
+      unsubscribe();
     };
   }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 }

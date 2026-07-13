@@ -121,6 +121,7 @@ import {
     getClientDetailBundle,
     getClientsByOrganization,
     getLinkedOrgProfile,
+    getLinkedOrgProfilesBatch,
     type ClientRow,
 } from "../services/clients.service";
 import type { ClientWarehouse } from "../services/clientWarehouses.service";
@@ -640,10 +641,13 @@ export default function ClientDetailScreen({
     void (async () => {
       const updates: Record<string, string> = {};
       const branding: Record<string, PartnerOrgBranding> = {};
-      for (const oid of toResolve) {
-        if (cancelled) return;
-        fetchedPartnerOrgIdsRef.current.add(oid);
-        const { profile } = await getLinkedOrgProfile(oid);
+      const orgIds = Array.from(toResolve);
+      orgIds.forEach((oid) => fetchedPartnerOrgIdsRef.current.add(oid));
+      // Batch: one RPC for all linked orgs instead of one per org (was an N+1).
+      const profiles = await getLinkedOrgProfilesBatch(orgIds);
+      if (cancelled) return;
+      for (const oid of orgIds) {
+        const profile = profiles[oid];
         const name = profile?.organizationName?.trim();
         if (name) updates[oid] = name;
         if (profile) {

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,33 +101,26 @@ export function subscribeToVerificationUpdates(
   orgId:    string,
   onChange: () => void,
 ): () => void {
-  const channel: RealtimeChannel = supabase()
-    .channel(`verification:${orgId}`)
-    .on(
-      'postgres_changes',
+  // Shared ref-counted channel via the registry — same two-table UPDATE
+  // invalidation, reuses one server channel and inherits lifecycle management.
+  return subscribeSharedPostgresChanges(
+    `verification:${orgId}`,
+    [
       {
-        event:  'UPDATE',
+        event: 'UPDATE',
         schema: 'public',
-        table:  'verification_jobs',
+        table: 'verification_jobs',
         filter: `organization_id=eq.${orgId}`,
       },
-      () => onChange(),
-    )
-    .on(
-      'postgres_changes',
       {
-        event:  'UPDATE',
+        event: 'UPDATE',
         schema: 'public',
-        table:  'organizations',
+        table: 'organizations',
         filter: `id=eq.${orgId}`,
       },
-      () => onChange(),
-    )
-    .subscribe();
-
-  return () => {
-    supabase().removeChannel(channel);
-  };
+    ],
+    () => onChange(),
+  );
 }
 
 // ─── Penny drop ──────────────────────────────────────────────────────────────

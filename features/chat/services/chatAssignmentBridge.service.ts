@@ -164,16 +164,21 @@ export async function postAssignmentUpdateToTripChats(params: {
     return;
   }
 
-  for (const conv of conversations) {
-    const { data: existing } = await supabase()
-      .from("trip_messages")
-      .select("id")
-      .eq("conversation_id", conv.id)
-      .eq("message_type", "assignment_update")
-      .contains("metadata", { assignment_audit_id: audit.id })
-      .maybeSingle();
+  // Batch the per-conversation dedupe check into ONE query for all conversations
+  // (was an N+1 SELECT), then Set-lookup which already have this audit card.
+  const convIds = conversations.map((c) => c.id);
+  const { data: existingRows } = await supabase()
+    .from("trip_messages")
+    .select("conversation_id")
+    .in("conversation_id", convIds)
+    .eq("message_type", "assignment_update")
+    .contains("metadata", { assignment_audit_id: audit.id });
+  const alreadyPosted = new Set(
+    (existingRows ?? []).map((r) => (r as { conversation_id: string }).conversation_id),
+  );
 
-    if (existing) continue;
+  for (const conv of conversations) {
+    if (alreadyPosted.has(conv.id)) continue;
 
     const { error: rpcError } = await supabase().rpc("send_trip_chat_message", {
       p_conversation_id: conv.id,
@@ -216,15 +221,23 @@ export async function postAggregateAssignmentMessage(
 
   let driverAvatarUrl: string | null = null;
   let driverAvatarSeed: string | null = null;
-  const driverRes = await getDriverById(trip.organization_id, trip.driver_id);
-  driverAvatarUrl = driverRes.driver?.avatar_url ?? null;
-  driverAvatarSeed = driverRes.driver?.avatar_seed ?? null;
-
   let driverAvatarUrlPrev: string | null = null;
   let driverAvatarSeedPrev: string | null = null;
   let driverDisplayNamePrev: string | null = null;
-  if (previousDriverId) {
-    const prevRes = await getDriverById(trip.organization_id, previousDriverId);
+
+  // Current and previous driver lookups are independent — fetch in parallel
+  // (previous only when a prior driver exists, preserving prior behavior).
+  const [driverRes, prevRes] = await Promise.all([
+    getDriverById(trip.organization_id, trip.driver_id),
+    previousDriverId
+      ? getDriverById(trip.organization_id, previousDriverId)
+      : Promise.resolve(null),
+  ]);
+
+  driverAvatarUrl = driverRes.driver?.avatar_url ?? null;
+  driverAvatarSeed = driverRes.driver?.avatar_seed ?? null;
+
+  if (prevRes) {
     driverAvatarUrlPrev = prevRes.driver?.avatar_url ?? null;
     driverAvatarSeedPrev = prevRes.driver?.avatar_seed ?? null;
     driverDisplayNamePrev =
@@ -248,16 +261,20 @@ export async function postAggregateAssignmentMessage(
     return;
   }
 
-  for (const conv of conversations) {
-    const { data: existing } = await supabase()
-      .from('trip_messages')
-      .select('id')
-      .eq('conversation_id', conv.id)
-      .eq('message_type', 'assignment_update')
-      .contains('metadata', { agg_dedupe_key: dedupeKey })
-      .maybeSingle();
+  // Batch the per-conversation dedupe check into ONE query (was an N+1 SELECT).
+  const aggConvIds = conversations.map((c) => c.id);
+  const { data: aggExistingRows } = await supabase()
+    .from('trip_messages')
+    .select('conversation_id')
+    .in('conversation_id', aggConvIds)
+    .eq('message_type', 'assignment_update')
+    .contains('metadata', { agg_dedupe_key: dedupeKey });
+  const aggAlreadyPosted = new Set(
+    (aggExistingRows ?? []).map((r) => (r as { conversation_id: string }).conversation_id),
+  );
 
-    if (existing) continue;
+  for (const conv of conversations) {
+    if (aggAlreadyPosted.has(conv.id)) continue;
 
     const { error: rpcError } = await supabase().rpc('send_trip_chat_message', {
       p_conversation_id: conv.id,
