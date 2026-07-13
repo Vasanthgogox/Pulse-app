@@ -7,6 +7,7 @@ import Theme from '@/constants/Theme';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { createDirectQuote } from '@/features/indents/services/direct-quotes.service';
 import {
+  getBroadcastIndentTarget,
   getVisibleIndentById,
   resolveSupplierTargetDisplayRate,
 } from '@/features/indents/services/indents.service';
@@ -84,7 +85,15 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
     queryFn: async () => {
       const { indent, error } = await getVisibleIndentById(orgId, sourceIndentId!);
       if (error) throw error;
-      return indent;
+      // Broadcast may not be circulated to this org, so the market lookup can
+      // miss. Fall back to the broadcast-scoped RPC for supplier_target.
+      if (indent?.supplier_target && Number(indent.supplier_target) > 0) return indent;
+      const target = await getBroadcastIndentTarget(sourceIndentId);
+      if (!target) return indent;
+      return {
+        ...(indent ?? {}),
+        supplier_target: target.supplier_target,
+      };
     },
     enabled: visible && !!sourceIndentId && !!orgId,
     staleTime: 60_000,

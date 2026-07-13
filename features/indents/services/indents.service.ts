@@ -608,16 +608,40 @@ export function getIndentDisplayNumber(row: IndentRow): string {
   return getIndentOperationalDisplay(row);
 }
 
+/**
+ * Reference rate for a broadcast-linked indent, visible to any bidding org.
+ * Falls back to this when the indent is not in the caller's market list
+ * (e.g. broadcast not circulated to the supplier). Returns null on any miss.
+ */
+export async function getBroadcastIndentTarget(
+  indentId: string | null | undefined,
+): Promise<{ supplier_target: number | null } | null> {
+  const id = (indentId ?? "").trim();
+  if (!id) return null;
+  const { data, error } = await supabase().rpc("indent_target_for_broadcast", {
+    indent_id: id,
+  });
+  if (error || !Array.isArray(data) || data.length === 0) return null;
+  const row = data[0] as { supplier_target: number | null };
+  return { supplier_target: row.supplier_target ?? null };
+}
+
 /** Supplier-facing target rate (not load-giver client sales price). */
 export function resolveSupplierTargetDisplayRate(
   supplierTarget: number | null | undefined,
   clientPrice?: number | null | undefined,
   fallback?: number | null | undefined,
 ): number | null {
-  const rate = supplierTarget ?? clientPrice ?? fallback ?? null;
-  if (rate == null || !Number.isFinite(Number(rate))) return null;
-  const n = Number(rate);
-  return n > 0 ? n : null;
+  // Supplier-facing rate only: supplier_target, then broadcast rate_offer.
+  // Never fall back to client_price (load owner's client sales price).
+  // Skip non-positive/invalid values (supplier_target is often 0).
+  void clientPrice;
+  for (const candidate of [supplierTarget, fallback]) {
+    if (candidate == null) continue;
+    const n = Number(candidate);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
 }
 
 /**

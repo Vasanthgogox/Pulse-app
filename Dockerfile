@@ -1,7 +1,10 @@
 # --- Stage 1: build the static web app ---
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
+
+# The web export is memory-hungry; match the dev/CI heap bump so it doesn't OOM.
+ENV NODE_OPTIONS=--max-old-space-size=8192
 
 # Install deps first so this layer is cached unless package.json changes
 COPY package.json package-lock.json ./
