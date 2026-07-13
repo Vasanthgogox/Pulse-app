@@ -1,6 +1,6 @@
 import type { FlowStep } from '@/lib/flowStep.types';
 
-export type InspectorRowLayer = 'meta' | 'ui' | 'auth' | 'db' | 'read' | 'route' | 'note';
+export type InspectorRowLayer = 'meta' | 'ui' | 'auth' | 'db' | 'read' | 'route' | 'query' | 'note';
 
 export type InspectorTableRow = {
   layer: InspectorRowLayer;
@@ -16,6 +16,7 @@ const LAYER_LABELS: Record<InspectorRowLayer, string> = {
   db: 'Table',
   read: 'Read',
   route: 'Routing',
+  query: 'Query',
   note: 'Note',
 };
 
@@ -110,13 +111,24 @@ export function buildStepInspectorRows(step: FlowStep): InspectorTableRow[] {
     rows.push({ layer: 'meta', field: call, writesTo: 'RPC / service call', when: 'This step' });
   }
 
-  for (const f of step.fields ?? []) {
-    rows.push({
-      layer: 'ui',
-      field: f,
-      writesTo: step.phase === 'auth' ? 'signUp() / pending OAuth metadata' : 'Form state',
-      when: step.phase === 'post-auth' ? 'Post-auth' : 'This step',
-    });
+  if (step.fieldMappings?.length) {
+    for (const m of step.fieldMappings) {
+      rows.push({
+        layer: 'ui',
+        field: m.input,
+        writesTo: m.storesTo,
+        when: step.phase === 'post-auth' ? 'On save' : 'User input',
+      });
+    }
+  } else {
+    for (const f of step.fields ?? []) {
+      rows.push({
+        layer: 'ui',
+        field: f,
+        writesTo: step.phase === 'auth' ? 'signUp() / pending OAuth metadata' : 'Form state',
+        when: step.phase === 'post-auth' ? 'Post-auth' : 'This step',
+      });
+    }
   }
 
   for (const k of step.authMetadata ?? []) {
@@ -147,6 +159,15 @@ export function buildStepInspectorRows(step: FlowStep): InspectorTableRow[] {
       field: route.context,
       writesTo: `${route.track} → ${route.nextScreen}`,
       when: 'After step completes',
+    });
+  }
+
+  for (const q of step.queries ?? []) {
+    rows.push({
+      layer: 'query',
+      field: q.label,
+      writesTo: q.sql,
+      when: q.when,
     });
   }
 

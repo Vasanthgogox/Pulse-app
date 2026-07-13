@@ -1,4 +1,5 @@
 import type { FlowStep } from '@/lib/flowStep.types';
+import { RPC_GET_EMAIL_BY_PHONE, RPC_RESOLVE_TEAM_INVITES } from '@/lib/flows/shared/sqlSnippets';
 
 /**
  * Business sign-up · step 2 — OTP verification + onboarding resolver.
@@ -25,11 +26,28 @@ export const businessSignUpStep02OtpVerify: FlowStep = {
   phase: 'ui',
   fields: ['6-digit OTP (OTP_LENGTH=6)', 'phone (from step 1, verified identity)'],
   reads: [
-    'profiles (checkExistingUserByPhone — phone exists, masked email)',
-    'RPC expire_stale_team_invitations',
-    'RPC resolve_pending_team_invitations_by_phone',
-    'organization_team_invites (via resolver RPC)',
-    'auth.users email check (checkEmailRegisteredForSignup)',
+    'RPC get_email_by_phone (re-fetch if stale)',
+    'RPC expire_stale_team_invitations + resolve_pending_team_invitations_by_phone',
+    'organization_team_invites (via resolver)',
+    'checkEmailRegisteredForSignup (invite email candidate)',
+  ],
+  queries: [
+    {
+      label: 'Phone re-check',
+      when: 'verifyOtp if phoneExistsCheck stale',
+      sql: RPC_GET_EMAIL_BY_PHONE,
+    },
+    {
+      label: 'Team invitations',
+      when: 'platformIdentityService.resolveInvitations',
+      sql: RPC_RESOLVE_TEAM_INVITES,
+    },
+    {
+      label: 'No writes',
+      when: 'OTP verify + resolver',
+      sql: `-- setPendingInvitation → AsyncStorage only
+-- applyOnboardingContext → React state (signupTrack, invitePhase)`,
+    },
   ],
   routing: [
     { context: 'owner', track: 'owner', nextScreen: 'OrgStep (step 3 wizard)' },

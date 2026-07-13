@@ -1,71 +1,7 @@
-import type { FlowBranch, FlowStep, PersonaFlow, PersonaId } from '@/lib/appFlowModel';
+import type { FlowBranch, PersonaFlow, PersonaId } from '@/lib/appFlowModel';
 import { TRIGGER_STEP, branchStepCount } from '@/lib/appFlowModel';
-
-function StepCard({
-  step,
-  selected,
-  onSelect,
-}: {
-  step: FlowStep;
-  selected: boolean;
-  onSelect: (id: string) => void;
-}) {
-  const phaseClass = (phase: FlowStep['phase']) => {
-    switch (phase) {
-      case 'auth':
-        return 'phase-auth';
-      case 'trigger':
-        return 'phase-trigger';
-      case 'post-auth':
-        return 'phase-post';
-      case 'join':
-        return 'phase-join';
-      default:
-        return 'phase-ui';
-    }
-  };
-
-  const phaseLabels: Record<FlowStep['phase'], string> = {
-    ui: 'UI',
-    auth: 'Auth',
-    trigger: 'Trigger',
-    'post-auth': 'Post-auth',
-    join: 'Join',
-  };
-
-  return (
-    <button
-      type="button"
-      className={`flow-step-card${selected ? ' selected' : ''}`}
-      onClick={() => onSelect(step.id)}
-    >
-      <div className="flow-step-rail">
-        <span className="flow-step-order">{step.order}</span>
-        <span className="flow-step-line" />
-      </div>
-      <div className="flow-step-body">
-        <div className="flow-step-head">
-          <span className="flow-step-label">{step.label}</span>
-          <span className={`flow-phase ${phaseClass(step.phase)}`}>{phaseLabels[step.phase]}</span>
-        </div>
-        <div className="flow-step-title">{step.title}</div>
-        {step.subtitle ? <div className="flow-step-sub">{step.subtitle}</div> : null}
-        {step.tables?.length ? (
-          <div className="flow-step-chips">
-            {step.tables.slice(0, 3).map((t) => (
-              <span key={t} className="flow-chip table">
-                {t}
-              </span>
-            ))}
-            {step.tables.length > 3 ? (
-              <span className="flow-chip muted">+{step.tables.length - 3}</span>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    </button>
-  );
-}
+import { FlowStepCard } from '@/components/FlowStepCard';
+import { FlowStepConnector } from '@/components/FlowStepConnector';
 
 function BranchSection({
   branch,
@@ -97,13 +33,11 @@ function BranchSection({
       </button>
       {expanded ? (
         <div className="flow-branch-steps">
-          {branch.steps.map((step) => (
-            <StepCard
-              key={step.id}
-              step={step}
-              selected={selectedStepId === step.id}
-              onSelect={onSelectStep}
-            />
+          {branch.steps.map((step, i) => (
+            <div key={step.id} className="flow-shared-row">
+              {i > 0 ? <FlowStepConnector fromStep={branch.steps[i - 1]!} /> : null}
+              <FlowStepCard step={step} selected={selectedStepId === step.id} onSelect={onSelectStep} />
+            </div>
           ))}
         </div>
       ) : null}
@@ -130,18 +64,35 @@ export function SignupFlowEmbed({
 }: SignupFlowEmbedProps) {
   return (
     <div className="signup-flow-embed">
+      <div className="flow-entry-card signup-embed-entry">
+        <div className="flow-entry-icon">{personaId === 'business' ? '🏢' : '🚛'}</div>
+        <div>
+          <div className="flow-entry-title">{persona.label}</div>
+          <code className="flow-entry-route">{persona.route}</code>
+          <div className="flow-entry-screen">{persona.screen}</div>
+        </div>
+      </div>
+
       {persona.sharedSteps.length > 0 ? (
         <section className="flow-section">
           <h3 className="flow-section-label">Shared entry</h3>
+          <div className="flow-op-legend" aria-label="Step operation legend">
+            <span className="flow-op-badge op-input">Input</span>
+            <span className="flow-op-badge op-read">Read</span>
+            <span className="flow-op-badge op-write">Write</span>
+            <span className="flow-op-legend-hint">Badges on each step · arrow shows DB flow</span>
+          </div>
           <div className="flow-shared-steps">
             {persona.sharedSteps.map((step, i) => (
               <div key={step.id} className="flow-shared-row">
-                <StepCard step={step} selected={selectedStepId === step.id} onSelect={onSelectStep} />
-                {i < persona.sharedSteps.length - 1 ? <div className="flow-connector" /> : null}
+                {i > 0 ? <FlowStepConnector fromStep={persona.sharedSteps[i - 1]!} /> : null}
+                <FlowStepCard step={step} selected={selectedStepId === step.id} onSelect={onSelectStep} />
               </div>
             ))}
           </div>
-          <div className="flow-fork-label">After OTP · resolver branches</div>
+          <div className="flow-fork-label">
+            After OTP · resolver branches — expand a variant below for Org → Account → trigger
+          </div>
         </section>
       ) : null}
 
@@ -164,13 +115,11 @@ export function SignupFlowEmbed({
       {persona.tailSteps?.length ? (
         <section className="flow-section tail">
           <h3 className="flow-section-label">DB provisioning (auth signup paths)</h3>
-          {persona.tailSteps.map((step) => (
-            <StepCard
-              key={step.id}
-              step={step}
-              selected={selectedStepId === step.id}
-              onSelect={onSelectStep}
-            />
+          {persona.tailSteps.map((step, i) => (
+            <div key={step.id} className="flow-shared-row">
+              {i > 0 ? <FlowStepConnector fromStep={persona.tailSteps![i - 1]!} /> : null}
+              <FlowStepCard step={step} selected={selectedStepId === step.id} onSelect={onSelectStep} />
+            </div>
           ))}
         </section>
       ) : null}

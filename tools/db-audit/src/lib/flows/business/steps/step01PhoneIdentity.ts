@@ -1,4 +1,5 @@
 import type { FlowStep } from '@/lib/flowStep.types';
+import { RPC_GET_EMAIL_BY_PHONE } from '@/lib/flows/shared/sqlSnippets';
 
 /** Business sign-up · step 1 — phone entry and exists check. */
 export const businessSignUpStep01PhoneIdentity: FlowStep = {
@@ -12,6 +13,13 @@ export const businessSignUpStep01PhoneIdentity: FlowStep = {
   service: 'checkExistingUserByPhone',
   phase: 'ui',
   fields: ['phone (10-digit India)'],
-  reads: ['profiles (phone lookup — exists, email, masked_email)'],
-  notes: ['Debounced phone-exists check; pre-fills email if account found'],
+  reads: ['profiles.email via get_email_by_phone RPC'],
+  queries: [
+    {
+      label: 'Phone → email lookup',
+      when: 'Debounced on phone change + continuePhone',
+      sql: RPC_GET_EMAIL_BY_PHONE,
+    },
+  ],
+  notes: ['Pre-fills email if account found; redirects existing users to sign-in'],
 };

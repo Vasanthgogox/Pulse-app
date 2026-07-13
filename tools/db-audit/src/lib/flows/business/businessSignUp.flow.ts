@@ -1,227 +1,18 @@
-import type { FlowBranch, FlowStep, PersonaFlow } from '@/lib/flowStep.types';
+import type { FlowBranch, PersonaFlow } from '@/lib/flowStep.types';
+import { businessGoogleOAuthSignInStep } from '@/lib/flows/business/steps/stepGoogleOAuthSignIn';
 import { businessSignUpStep01PhoneIdentity } from '@/lib/flows/business/steps/step01PhoneIdentity';
 import { businessSignUpStep02OtpVerify } from '@/lib/flows/business/steps/step02OtpVerify';
+import { GOOGLE_BRANDING_STEP, GOOGLE_WIZARD_STEP } from '@/lib/flows/business/steps/googleSignupSteps';
+import { OWNER_SIGNUP_STEPS } from '@/lib/flows/business/steps/ownerSignupSteps';
+import {
+  TEAM_EXISTING_SIGNUP_STEPS,
+  TEAM_NEW_SIGNUP_STEPS,
+} from '@/lib/flows/business/steps/teamSignupSteps';
 import { triggerHandleNewUser } from '@/lib/flows/shared/triggerHandleNewUser';
 
-const BUSINESS_SHARED: FlowStep[] = [
-  businessSignUpStep01PhoneIdentity,
-  businessSignUpStep02OtpVerify,
-];
+const BUSINESS_SHARED = [businessSignUpStep01PhoneIdentity, businessSignUpStep02OtpVerify];
 
-const OWNER_STEPS: FlowStep[] = [
-  {
-    id: 'bu-owner-org',
-    order: 3,
-    label: 'Org',
-    title: 'Workspace',
-    subtitle: 'Name your operator on the Pulse network',
-    route: '/sign-up',
-    screen: 'OrgStep',
-    service: 'checkOrganizationNameTaken',
-    phase: 'ui',
-    fields: ['company_name → orgName'],
-    reads: ['organizations (name uniqueness)'],
-  },
-  {
-    id: 'bu-owner-profile',
-    order: 4,
-    label: 'Profile',
-    title: 'Operations profile',
-    subtitle: 'Fleet model, scale, and structure',
-    route: '/sign-up',
-    screen: 'CompanyDetailsStep',
-    phase: 'ui',
-    fields: [
-      'business_type',
-      'employee_count',
-      'operating_model (ASSET_BASED | NON_ASSET | HYBRID)',
-      'fleet_size_band',
-      'monthly_volume_band',
-    ],
-    notes: ['fleet_size_band & monthly_volume_band → auth metadata only (not org columns)'],
-  },
-  {
-    id: 'bu-owner-city',
-    order: 5,
-    label: 'City',
-    title: 'Base location',
-    subtitle: 'Primary office for dispatch context',
-    route: '/sign-up',
-    screen: 'CompanyLocationStep',
-    phase: 'ui',
-    fields: ['address_line', 'locality', 'pincode', 'city', 'state', 'zone', 'office lat/lon'],
-  },
-  {
-    id: 'bu-owner-account',
-    order: 6,
-    label: 'Account',
-    title: 'Credentials',
-    subtitle: 'Secure account before activation',
-    route: '/sign-up',
-    screen: 'AccountStep',
-    service: 'auth.service signUp',
-    phase: 'auth',
-    fields: ['full_name', 'email', 'password'],
-    authMetadata: [
-      'role=user',
-      'onboarding_type=owner',
-      'phone',
-      'company_name',
-      'operating_model',
-      'business_type',
-      'employee_count',
-      'address_line',
-      'locality',
-      'pincode',
-      'city',
-      'state',
-      'zone',
-      'fleet_size_band',
-      'monthly_volume_band',
-      'avatar_seed (random driver-1…10)',
-    ],
-    tables: [
-      'auth.users',
-      'public.users',
-      'public.profiles',
-      'public.organizations',
-      'public.organization_members',
-    ],
-    notes: ['DB trigger handle_new_user on auth.users INSERT'],
-  },
-  {
-    id: 'bu-owner-logo',
-    order: 7,
-    label: 'Logo',
-    title: 'Workspace branding',
-    subtitle: 'Optional org logo (post-auth)',
-    route: '/sign-up',
-    screen: 'OrgLogoStep',
-    service: 'updateOrganizationLogo',
-    phase: 'post-auth',
-    tables: ['organizations.logo_url'],
-  },
-  {
-    id: 'bu-owner-photo',
-    order: 8,
-    label: 'Photo',
-    title: 'Profile photo',
-    subtitle: 'Avatar seed or upload (post-auth)',
-    route: '/sign-up',
-    screen: 'ProfilePhotoStep',
-    service: 'updateProfile',
-    phase: 'post-auth',
-    fields: ['avatar_seed | avatar_url'],
-    tables: ['profiles', 'auth.users metadata'],
-  },
-];
-
-const TEAM_NEW_STEPS: FlowStep[] = [
-  {
-    id: 'bu-team-invite',
-    order: 3,
-    label: 'Invite',
-    title: 'Accept invitation',
-    subtitle: 'Picker or single active invite',
-    route: '/sign-up · ?intent=team',
-    screen: 'InviteAcceptanceStep · InvitePickerStep',
-    phase: 'ui',
-    notes: ['Skips org wizard — joins existing workspace'],
-  },
-  {
-    id: 'bu-team-account',
-    order: 4,
-    label: 'Account',
-    title: 'Create account',
-    subtitle: 'Minimal credentials for new member',
-    route: '/sign-up',
-    screen: 'AccountStep',
-    service: 'auth.service signUp',
-    phase: 'auth',
-    fields: ['full_name', 'email', 'password', 'phone'],
-    authMetadata: ['role=user', 'onboarding_type=member', 'operating_model=HYBRID'],
-    tables: ['auth.users', 'public.users', 'public.profiles'],
-    notes: ['No organizations row on signup'],
-  },
-  {
-    id: 'bu-team-join',
-    order: 5,
-    label: 'Join',
-    title: 'Accept into workspace',
-    subtitle: 'Creates organization_members',
-    route: '/sign-up',
-    screen: 'useCompleteInvitationJoin',
-    service: 'platformIdentityService.acceptInvitation',
-    phase: 'join',
-    tables: ['organization_members'],
-  },
-];
-
-const TEAM_EXISTING_STEPS: FlowStep[] = [
-  {
-    id: 'bu-existing-invite',
-    order: 3,
-    label: 'Invite',
-    title: 'Invitation context',
-    subtitle: 'Phone matched to pending invite',
-    route: '/sign-up',
-    screen: 'InviteExistingAccountStep',
-    phase: 'ui',
-  },
-  {
-    id: 'bu-existing-signin',
-    order: 4,
-    label: 'Sign in',
-    title: 'Existing account',
-    subtitle: 'No new auth.users row',
-    route: '/sign-in',
-    screen: 'signIn',
-    phase: 'auth',
-    notes: ['Uses existing profile'],
-  },
-  {
-    id: 'bu-existing-join',
-    order: 5,
-    label: 'Join',
-    title: 'Accept invitation',
-    subtitle: 'Link user to org membership',
-    service: 'completeTeamJoinAfterAuth',
-    phase: 'join',
-    tables: ['organization_members'],
-  },
-];
-
-const GOOGLE_OWNER_STEPS: FlowStep[] = [
-  {
-    id: 'bu-google-wizard',
-    order: 3,
-    label: 'Wizard',
-    title: 'Same as owner',
-    subtitle: 'Org → profile → city steps before OAuth',
-    route: '/sign-up',
-    phase: 'ui',
-    notes: ['Pending metadata in AsyncStorage before Google session'],
-  },
-  {
-    id: 'bu-google-oauth',
-    order: 4,
-    label: 'Google',
-    title: 'OAuth sign-in',
-    route: '/sign-up',
-    service: 'signInWithGoogle + applyPendingOAuthMetadata',
-    phase: 'auth',
-    authMetadata: ['Same as owner path — applied post-session'],
-    tables: ['auth.users', 'profiles', 'organizations (update after trigger)'],
-  },
-  {
-    id: 'bu-google-branding',
-    order: 5,
-    label: 'Branding',
-    title: 'Logo + photo',
-    subtitle: 'Same post-auth steps as email owner',
-    phase: 'post-auth',
-  },
-];
+const GOOGLE_OWNER_STEPS = [GOOGLE_WIZARD_STEP, businessGoogleOAuthSignInStep, GOOGLE_BRANDING_STEP];
 
 export const BUSINESS_SIGNUP_FLOW: PersonaFlow = {
   id: 'business',
@@ -236,21 +27,21 @@ export const BUSINESS_SIGNUP_FLOW: PersonaFlow = {
       label: 'Owner',
       summary: 'Full 8-step wizard · provisions new org',
       badge: 'default',
-      steps: OWNER_STEPS,
+      steps: OWNER_SIGNUP_STEPS,
     },
     {
       id: 'team-new',
       label: 'Team invite (new account)',
       summary: 'Member onboarding_type · acceptInvitation',
       badge: 'invite',
-      steps: TEAM_NEW_STEPS,
+      steps: TEAM_NEW_SIGNUP_STEPS,
     },
     {
       id: 'team-existing',
       label: 'Team invite (existing account)',
       summary: 'Sign in then join — no new signup row',
       badge: 'invite',
-      steps: TEAM_EXISTING_STEPS,
+      steps: TEAM_EXISTING_SIGNUP_STEPS,
     },
     {
       id: 'google-owner',
