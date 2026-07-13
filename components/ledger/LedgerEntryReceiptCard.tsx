@@ -26,7 +26,7 @@ function ReceiptLottieGlyph({
   loop?: boolean;
   speed?: number;
 }) {
-  const scale = 1.55;
+  const scale = 1.18;
   const renderSize = Math.round(size * scale);
   const offset = (size - renderSize) / 2;
   return (
@@ -121,15 +121,17 @@ export const LedgerEntryReceiptCard = memo(function LedgerEntryReceiptCard(
         {heroLottie ? (
           <ReceiptLottieGlyph
             source={heroLottie}
-            size={heroAnimation === "success" ? 152 : 120}
+            size={heroAnimation === "success" ? 72 : 56}
             loop={heroAnimation !== "success"}
             speed={heroAnimation === "success" ? 1 : 0.85}
           />
         ) : null}
-        <View style={styles.statusPill}>
-          <Text style={styles.statusPillText}>{props.statusLabel}</Text>
+        <View style={styles.heroTextBlock}>
+          <View style={styles.statusPill}>
+            <Text style={styles.statusPillText}>{props.statusLabel}</Text>
+          </View>
+          <Text style={styles.headline}>{props.title}</Text>
         </View>
-        <Text style={styles.headline}>{props.title}</Text>
         <Text style={[styles.amount, { color: amountColor }]}>
           {props.isIn ? "+" : "−"}
           {formatINR(props.amount)}
@@ -169,68 +171,78 @@ export const LedgerEntryReceiptCard = memo(function LedgerEntryReceiptCard(
 const styles = StyleSheet.create({
   card: {
     backgroundColor: LEDGER_RECEIPT.cardBg,
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
     borderWidth: 1,
     borderColor: LEDGER_RECEIPT.border,
-    gap: 16,
-    maxWidth: 400,
+    gap: 12,
+    maxWidth: 360,
     width: "100%",
     alignSelf: "center",
     shadowColor: LEDGER_RECEIPT.shadow,
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
   cardDesktop: {
-    maxWidth: 440,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 24,
-    borderRadius: 22,
+    maxWidth: 380,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 18,
+    borderRadius: 18,
   },
   hero: {
     alignItems: "center",
     width: "100%",
-    gap: 8,
+    gap: 4,
+    paddingBottom: 2,
+  },
+  heroTextBlock: {
+    alignItems: "center",
+    width: "100%",
+    gap: 4,
+    marginTop: 2,
   },
   lottieSlot: {
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 2,
+    marginBottom: 0,
   },
   statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
     borderRadius: 999,
     backgroundColor: LEDGER_RECEIPT.statusBg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LEDGER_RECEIPT.statusBorder,
   },
   statusPillText: {
-    fontSize: 7,
-    fontWeight: "600",
-    letterSpacing: 0.6,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
     color: LEDGER_RECEIPT.statusText,
   },
   headline: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: LEDGER_RECEIPT.title,
     textAlign: "center",
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
+    lineHeight: 18,
   },
   amount: {
-    fontSize: 34,
+    fontSize: 26,
     fontWeight: "800",
-    letterSpacing: -0.6,
+    letterSpacing: -0.4,
     fontVariant: ["tabular-nums"],
     textAlign: "center",
+    lineHeight: 30,
+    marginTop: 2,
   },
   detailCard: {
     backgroundColor: LEDGER_RECEIPT.detailBg,
@@ -245,9 +257,9 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     width: "100%",
     minWidth: 0,
   },
@@ -295,10 +307,10 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: LEDGER_RECEIPT.primaryBtn,
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 48,
+    minHeight: 44,
     width: "100%",
     alignSelf: "stretch",
   },

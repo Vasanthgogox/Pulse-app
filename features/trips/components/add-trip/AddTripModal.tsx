@@ -4,7 +4,8 @@
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
 import { useEffect, useMemo, useState } from "react";
-import { WIZARD_FULL_PAGE_STEPPED, isDesktopWizardForm } from "@/lib/wizardLayout.util";
+import { WIZARD_FULL_PAGE_STEPPED } from "@/lib/wizardLayout.util";
+import Layout from "@/constants/Layout";
 import {
   Alert,
   Platform,
@@ -78,17 +79,14 @@ export function AddTripModal({
 }: AddTripModalProps) {
   const { width: winW } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
-  /** Indent-style: wide desktop = enterprise grid; narrow = stepped wizard. */
-  const isDesktopEnterprise = isDesktopWizardForm(winW);
-  const isMobileWizard = !isDesktopEnterprise && WIZARD_FULL_PAGE_STEPPED;
+  /** Desktop + mobile: one wizard step at a time (no multi-card enterprise grid). */
+  const wizardEnabled = WIZARD_FULL_PAGE_STEPPED;
+  /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
+  const webAllocSubSteps = false;
   const form = useAddTripForm();
   const [wizardStep, setWizardStep] = useState<WizardStep>("route");
   const [allocationSubStep, setAllocationSubStep] =
     useState<AllocationSubStep>("supply");
-  /** Stepped wizard only on narrow viewports (matches Create Load / indent). */
-  const wizardEnabled = isMobileWizard;
-  /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
-  const webAllocSubSteps = false;
   const allocationFlowActive =
     (wizardEnabled && wizardStep === "allocation") || webAllocSubSteps;
   /** Hide field errors until the user tries to continue / create (avoids red UI on empty open). */
@@ -414,12 +412,7 @@ export function AddTripModal({
     <AddTripModalLayout
       title={wizardStepMeta?.title ?? "Create Trip"}
       insightPreset="trip"
-      subtitle={
-        wizardStepMeta?.subtitle ??
-        (isDesktopEnterprise
-          ? "Route · commodity & client · sale · allocation"
-          : "Route · commodity & client · sale · allocation")
-      }
+      subtitle={wizardStepMeta?.subtitle}
       stepIndex={wizardStepMeta?.stepIndex}
       stepTotal={wizardStepMeta?.stepTotal}
       submitLabel={wizardSubmitLabel}
@@ -430,9 +423,10 @@ export function AddTripModal({
       onClose={handleWizardBackOrClose}
       onSubmit={handleWizardPrimary}
       fillBody={wizardFillBody}
-      scrollBody={(wizardEnabled && !wizardFillBody) || isDesktopEnterprise}
+      scrollBody={wizardEnabled && !wizardFillBody}
+      steppedLayout={isWeb && winW >= Layout.wizardDesktopGridMinWidth}
       progress={
-        wizardEnabled && wizardStepMeta ? (
+        wizardStepMeta ? (
           <AddTripWizardProgress
             steps={wizardStepMeta.steps}
             currentStepId={wizardStepMeta.currentId}
@@ -454,7 +448,7 @@ export function AddTripModal({
         validationIssues={visibleIssues}
         validationMessage={visibleValidationMessage}
         wizardSection={wizardEnabled ? wizardStep : undefined}
-        enterpriseFormGrid={isDesktopEnterprise}
+        enterpriseFormGrid={false}
         mobileWizardMode={wizardEnabled}
         sourceIndent={sourceIndent ?? null}
         allocationSubStep={allocationFlowActive ? allocationSubStep : undefined}

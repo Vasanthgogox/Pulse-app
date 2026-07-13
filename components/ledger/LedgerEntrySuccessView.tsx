@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: "100%",
     minHeight: 0,
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   doneBtn: {
     marginTop: 10,

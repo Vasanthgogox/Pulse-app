@@ -22,7 +22,7 @@ import {
   resolvePartyDisplayUri,
   resolvePartyPhotoUriAsync,
 } from '@/lib/partyAvatarDisplay';
-import { LinearGradient } from 'expo-linear-gradient';
+
 import {
   ArrowRight,
   Building2,
@@ -64,10 +64,11 @@ type Props = {
   onNext?: () => void;
 };
 
-const PURPLE = Theme.pulseIndigo;
-
 const DISMISS_DRAG_PX = 72;
 const DISMISS_VELOCITY = 0.65;
+
+/** Pulse brand brown — solid, professional connection invite chrome. */
+const CONNECTION_BROWN = Theme.brandBlueInk;
 
 type InvitePalette = {
   gradientStart: string;
@@ -81,58 +82,17 @@ type InvitePalette = {
   inlinePillBg: string;
 };
 
-function colorWithAlpha(hex: string, alpha: number): string {
-  const safeAlpha = Math.min(1, Math.max(0, alpha));
-  const a = Math.round(safeAlpha * 255)
-    .toString(16)
-    .padStart(2, '0');
-  return `${hex}${a}`;
-}
-
-function invitePaletteForType(type: string): InvitePalette {
-  const upper = type.toUpperCase();
-  const hasClient = upper.includes('CLIENT');
-  const hasSupplier = upper.includes('SUPPLIER');
-
-  if (hasSupplier && !hasClient) {
-    const brown = Theme.brandBlueInk;
-    return {
-      gradientStart: brown,
-      gradientEnd: brown,
-      accent: brown,
-      accentSoftBg: 'rgba(77, 54, 54, 0.06)',
-      accentSoftBorder: Theme.brandBlueRing,
-      accentIconBg: 'rgba(77, 54, 54, 0.12)',
-      textOnAccent: Theme.textOnDark,
-      mutedOnAccent: Theme.textOnDarkMuted,
-      inlinePillBg: 'rgba(255,255,255,0.16)',
-    };
-  }
-
-  if (hasClient && !hasSupplier) {
-    return {
-      gradientStart: Theme.loadMainTabBgIdle,
-      gradientEnd: colorWithAlpha(Theme.loadMainTabBg, 0.82),
-      accent: Theme.textPrimaryDark,
-      accentSoftBg: colorWithAlpha(Theme.loadMainTabBg, 0.2),
-      accentSoftBorder: colorWithAlpha(Theme.loadMainTabBg, 0.56),
-      accentIconBg: colorWithAlpha(Theme.loadMainTabBg, 0.28),
-      textOnAccent: Theme.textPrimaryDark,
-      mutedOnAccent: colorWithAlpha(Theme.textPrimaryDark, 0.7),
-      inlinePillBg: colorWithAlpha(Theme.textOnPrimary, 0.62),
-    };
-  }
-
+function invitePaletteForType(_type: string): InvitePalette {
   return {
-    gradientStart: 'rgba(4, 120, 87, 0.16)',
-    gradientEnd: 'rgba(5, 150, 105, 0.24)',
-    accent: Theme.darkGreen,
-    accentSoftBg: colorWithAlpha(Theme.darkGreen, 0.12),
-    accentSoftBorder: colorWithAlpha(Theme.darkGreen, 0.3),
-    accentIconBg: colorWithAlpha(Theme.darkGreen, 0.18),
-    textOnAccent: Theme.textPrimaryDark,
-    mutedOnAccent: colorWithAlpha(Theme.textPrimaryDark, 0.72),
-    inlinePillBg: colorWithAlpha(Theme.textOnPrimary, 0.58),
+    gradientStart: CONNECTION_BROWN,
+    gradientEnd: CONNECTION_BROWN,
+    accent: CONNECTION_BROWN,
+    accentSoftBg: 'rgba(77, 54, 54, 0.06)',
+    accentSoftBorder: Theme.brandBlueRing,
+    accentIconBg: 'rgba(77, 54, 54, 0.1)',
+    textOnAccent: Theme.textOnDark,
+    mutedOnAccent: Theme.textOnDarkMuted,
+    inlinePillBg: 'rgba(255, 255, 255, 0.14)',
   };
 }
 
@@ -443,20 +403,9 @@ export function BusinessConnectionRequestModal({
             </View>
           ) : null}
 
-          {palette.gradientStart === palette.gradientEnd ? (
-            <View style={[styles.hero, { backgroundColor: palette.gradientStart }]}>
-              {heroContent}
-            </View>
-          ) : (
-            <LinearGradient
-              colors={[palette.gradientStart, palette.gradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.hero}
-            >
-              {heroContent}
-            </LinearGradient>
-          )}
+          <View style={[styles.hero, { backgroundColor: palette.gradientStart }]}>
+            {heroContent}
+          </View>
 
           <ScrollView
             style={styles.body}
@@ -621,43 +570,23 @@ export function BusinessConnectionRequestModal({
                   disabled={busy}
                   activeOpacity={0.88}
                 >
-                  {palette.gradientStart === palette.gradientEnd ? (
-                    <View
-                      style={[
-                        styles.acceptGradient,
-                        { backgroundColor: palette.gradientStart },
-                      ]}
-                    >
-                      {busy ? (
-                        <ActivityIndicator size="small" color={palette.textOnAccent} />
-                      ) : (
-                        <>
-                          <Check size={15} color={palette.textOnAccent} strokeWidth={3} />
-                          <Text style={[styles.acceptText, { color: palette.textOnAccent }]}>
-                            Accept & connect
-                          </Text>
-                        </>
-                      )}
-                    </View>
-                  ) : (
-                    <LinearGradient
-                      colors={[palette.gradientStart, palette.gradientEnd]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.acceptGradient}
-                    >
-                      {busy ? (
-                        <ActivityIndicator size="small" color={palette.textOnAccent} />
-                      ) : (
-                        <>
-                          <Check size={15} color={palette.textOnAccent} strokeWidth={3} />
-                          <Text style={[styles.acceptText, { color: palette.textOnAccent }]}>
-                            Accept & connect
-                          </Text>
-                        </>
-                      )}
-                    </LinearGradient>
-                  )}
+                  <View
+                    style={[
+                      styles.acceptGradient,
+                      { backgroundColor: palette.accent },
+                    ]}
+                  >
+                    {busy ? (
+                      <ActivityIndicator size="small" color={palette.textOnAccent} />
+                    ) : (
+                      <>
+                        <Check size={15} color={palette.textOnAccent} strokeWidth={3} />
+                        <Text style={[styles.acceptText, { color: palette.textOnAccent }]}>
+                          Accept & connect
+                        </Text>
+                      </>
+                    )}
+                  </View>
                 </TouchableOpacity>
               </View>
 
@@ -926,9 +855,9 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: 20,
-    fontWeight: '900',
+    fontWeight: '800',
     color: '#fff',
-    letterSpacing: -0.5,
+    letterSpacing: -0.45,
     lineHeight: 24,
   },
   heroOrgKicker: {
@@ -1031,12 +960,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: Theme.pulseIndigoWash,
+    backgroundColor: 'rgba(77, 54, 54, 0.06)',
   },
   offerPillText: {
     fontSize: 10,
     fontWeight: '700',
-    color: PURPLE,
+    color: CONNECTION_BROWN,
   },
   payGrid: {
     flexDirection: 'row',
@@ -1069,8 +998,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   payTilePrimary: {
-    backgroundColor: Theme.pulseIndigoWash,
-    borderColor: Theme.pulseIndigoRing,
+    backgroundColor: 'rgba(77, 54, 54, 0.06)',
+    borderColor: Theme.brandBlueRing,
   },
   payTileSecondary: {
     backgroundColor: Theme.surface,
@@ -1108,7 +1037,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
-    color: PURPLE,
+    color: CONNECTION_BROWN,
     lineHeight: 12,
   },
   nextCard: {
@@ -1142,8 +1071,8 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Theme.pulseIndigoRing,
-    backgroundColor: Theme.pulseIndigoWash,
+    borderColor: Theme.brandBlueRing,
+    backgroundColor: 'rgba(77, 54, 54, 0.05)',
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
@@ -1194,9 +1123,9 @@ const styles = StyleSheet.create({
   },
   acceptText: {
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#fff',
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
   },
   nextRequestBtn: {
     alignItems: 'center',
@@ -1205,7 +1134,7 @@ const styles = StyleSheet.create({
   nextRequestText: {
     fontSize: 13,
     fontWeight: '700',
-    color: PURPLE,
+    color: CONNECTION_BROWN,
   },
   laterBtn: {
     alignItems: 'center',

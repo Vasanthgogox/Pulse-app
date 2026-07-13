@@ -6,7 +6,10 @@ import { EntityIntelWidgetRow } from "@/components/entityIntel/EntityIntelWidget
 import { pickEntityReport } from "@/components/entityIntel/pickEntityReport";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { EntityTripTableEmptyRow } from "@/components/EntityTripTableEmptyRow";
-import { entityDetailPageChromeStyles as edc } from "@/components/entityDetailPageChrome.styles";
+import {
+  entityDetailDownloadIconColor,
+  entityDetailPageChromeStyles as edc,
+} from "@/components/entityDetailPageChrome.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
@@ -64,7 +67,7 @@ import {
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
-import { formatINR, formatLedgerDate } from "@/lib/format";
+import { formatINR, formatLedgerDate, formatTripTableDate } from "@/lib/format";
 import {
   type LedgerIdentityContext,
   resolveLedgerRowPartyIdentity,
@@ -1292,7 +1295,7 @@ export default function SupplierDetailScreen({
               <FontAwesome
                 name="cloud-download"
                 size={16}
-                color={Theme.textOnPrimary}
+                color={entityDetailDownloadIconColor}
               />
           </TouchableOpacity>
         </View>
@@ -1795,6 +1798,8 @@ export default function SupplierDetailScreen({
                       : undefined;
                     const clientNameForUi = resolveClientDisplayName(row.trip);
                     const settledPct = formatSettlementPct(row.paid, row.sales);
+                    const tripDateIso =
+                      row.trip.pickup_date ?? row.trip.created_at;
                     return (
                       <>
                         <View
@@ -1803,9 +1808,19 @@ export default function SupplierDetailScreen({
                             isWebDesktop && styles.tdMissionWebDesktop,
                           ]}
                         >
-                          <Text style={styles.tdMissionId}>
-                            {row.missionId}
-                          </Text>
+                          <View style={styles.tdMissionIdRow}>
+                            <Text
+                              style={[styles.tdMissionId, styles.tdMissionIdFlex]}
+                              numberOfLines={1}
+                              ellipsizeMode="middle"
+                            >
+                              {row.missionId}
+                            </Text>
+                            <Text style={styles.tdMissionDateSep}>·</Text>
+                            <Text style={styles.tdMissionDate} numberOfLines={1}>
+                              {formatTripTableDate(tripDateIso)}
+                            </Text>
+                          </View>
                           <Text
                             style={styles.tdRoute}
                             numberOfLines={isWebDesktop ? 3 : 1}
@@ -2673,6 +2688,10 @@ const styles = StyleSheet.create({
   td: edc.td,
   tdMission: edc.thMission,
   tdMissionId: edc.tdMissionId,
+  tdMissionIdRow: edc.tdMissionIdRow,
+  tdMissionIdFlex: edc.tdMissionIdFlex,
+  tdMissionDateSep: edc.tdMissionDateSep,
+  tdMissionDate: edc.tdMissionDate,
   tdRoute: edc.tdRoute,
   tdMissionWebDesktop: {
     flexGrow: 1,

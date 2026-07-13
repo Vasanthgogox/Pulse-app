@@ -40,6 +40,8 @@ export interface FullPageWizardShellProps {
   insightPreset?: WizardInsightPreset;
   /** Trip summary or step context shown in the right rail on desktop. */
   contextPanel?: ReactNode;
+  /** When true, use stepped wizard chrome on wide desktop (not enterprise multi-card grid). */
+  steppedLayout?: boolean;
 }
 
 export function FullPageWizardShell({
@@ -56,13 +58,15 @@ export function FullPageWizardShell({
   scrollBody = false,
   insightPreset = "trip",
   contextPanel,
+  steppedLayout = false,
 }: FullPageWizardShellProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { keyboardVisible } = useKeyboardVisible();
   const isDesktopRails = width >= Layout.wizardDesktopGridMinWidth;
-  const isDesktopForm = isDesktopWizardForm(width);
-  const isMobileWizardLayout = width < Layout.wizardDesktopGridMinWidth;
+  const isDesktopForm = steppedLayout ? false : isDesktopWizardForm(width);
+  const isMobileWizardLayout =
+    steppedLayout ? false : width < Layout.wizardDesktopGridMinWidth;
   const isKeypadStep = fillBody;
   const stepLabel =
     stepIndex != null && stepTotal != null && stepTotal > 0

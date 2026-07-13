@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   },
   cardShell: {
     width: "100%",
-    maxWidth: 440,
+    maxWidth: 380,
     alignSelf: "center",
   },
 });

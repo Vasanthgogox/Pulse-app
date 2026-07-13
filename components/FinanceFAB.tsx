@@ -128,27 +128,39 @@ export function FinanceFAB({
   const shouldShowPlus = showPlusSuffix && icon !== "plus";
 
   const MainIcon = icon === "receipt-text" || icon === "credit-card" ? Receipt : IconComponent;
-  const useLottieGlyph = Boolean(lottieGlyph);
-  const useSvgGlyph = !useLottieGlyph && Boolean(assetGlyph);
-  const useGlyphChrome = useLottieGlyph || useSvgGlyph;
+  const useIllustrationGlyph = Boolean(assetGlyph);
+  const useLottieGlyph = !useIllustrationGlyph && Boolean(lottieGlyph);
+  const useGlyphChrome = useIllustrationGlyph || useLottieGlyph;
 
-  const chipSize = Math.round(size * 0.56);
+  const glyphWellSize = Math.round(size * FAB_LOTTIE_WELL_RATIO);
   const assetGlyphSize = Math.round(
-    chipSize * (assetGlyph?.glyphScale ?? 0.74),
+    glyphWellSize * (assetGlyph?.glyphScale ?? 0.88),
   );
-  const lottieWellSize = Math.round(size * FAB_LOTTIE_WELL_RATIO);
   const lottieRenderSize = lottieGlyph
-    ? Math.round(lottieWellSize * lottieGlyph.renderScale)
+    ? Math.round(glyphWellSize * lottieGlyph.renderScale)
     : 0;
 
-  const mainGlyph = lottieGlyph ? (
+  const mainGlyph = useIllustrationGlyph && assetGlyph ? (
+    <View
+      style={[
+        styles.assetChip,
+        {
+          width: glyphWellSize,
+          height: glyphWellSize,
+          borderRadius: glyphWellSize / 2,
+        },
+      ]}
+    >
+      <assetGlyph.Asset width={assetGlyphSize} height={assetGlyphSize} />
+    </View>
+  ) : useLottieGlyph && lottieGlyph ? (
     <View
       style={[
         styles.lottieWell,
         {
-          width: lottieWellSize,
-          height: lottieWellSize,
-          borderRadius: lottieWellSize / 2,
+          width: glyphWellSize,
+          height: glyphWellSize,
+          borderRadius: glyphWellSize / 2,
         },
       ]}
     >
@@ -164,19 +176,6 @@ export function FinanceFAB({
           position: "absolute",
         }}
       />
-    </View>
-  ) : assetGlyph ? (
-    <View
-      style={[
-        styles.assetChip,
-        {
-          width: chipSize,
-          height: chipSize,
-          borderRadius: chipSize / 2,
-        },
-      ]}
-    >
-      <assetGlyph.Asset width={assetGlyphSize} height={assetGlyphSize} />
     </View>
   ) : (
     <MainIcon size={Math.max(18, iconSize)} color={fabIconColor} strokeWidth={2.4} />

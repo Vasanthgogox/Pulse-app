@@ -29,6 +29,8 @@ export interface AddTripModalLayoutProps {
   fillBody?: boolean;
   /** Shell ScrollView for step content (avoids nested scroll on mobile wizards). */
   scrollBody?: boolean;
+  /** Wide desktop: stepped wizard rails instead of enterprise form chrome. */
+  steppedLayout?: boolean;
   insightPreset?: WizardInsightPreset;
   contextPanel?: ReactNode;
   tertiaryLabel?: string;
@@ -54,6 +56,7 @@ export function AddTripModalLayout({
   progress,
   fillBody = false,
   scrollBody = false,
+  steppedLayout = false,
   insightPreset = "trip",
   contextPanel,
   tertiaryLabel,
@@ -83,6 +86,7 @@ export function AddTripModalLayout({
       progress={progress}
       fillBody={fillBody}
       scrollBody={scrollBody}
+      steppedLayout={steppedLayout}
       insightPreset={insightPreset}
       contextPanel={contextPanel}
       footer={

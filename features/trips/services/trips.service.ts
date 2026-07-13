@@ -2510,6 +2510,40 @@ export async function updateTripStatus(
   return { error: null, trip: updatedTrip };
 }
 
+export interface ForceSetTripStatusSimulatedData {
+  status: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  statusChangeOrigin: string;
+}
+
+/**
+ * Business-simulation-only escape hatch for the admin "Simulate"/"Revoke simulation"
+ * UI (TripDetailScreen): unconditionally sets trip status, bypassing updateTripStatus()'s
+ * validation (e.g. the supplier-link check on completion). Only called when updateTripStatus()
+ * itself has already rejected the transition — never a normal driver/ops codepath.
+ */
+export async function forceSetTripStatusSimulated(
+  tripId: string,
+  data: ForceSetTripStatusSimulatedData,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const updates: Record<string, unknown> = {
+    status: data.status,
+    status_change_origin: data.statusChangeOrigin,
+    updated_at: new Date().toISOString(),
+  };
+  if (data.startedAt !== undefined) updates.started_at = data.startedAt ?? null;
+  if (data.completedAt !== undefined) updates.completed_at = data.completedAt ?? null;
+  const { data: row, error } = await supabase()
+    .from("trips")
+    .update(updates)
+    .eq("id", tripId)
+    .select()
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  return { error: null, trip: row as TripRow | null };
+}
+
 export interface TripDriverOnlineState {
   isOnline: boolean;
   lastSeen: string | null;

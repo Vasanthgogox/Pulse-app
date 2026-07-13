@@ -9,7 +9,10 @@ import { EntityIntelWidgetRow } from "@/components/entityIntel/EntityIntelWidget
 import { pickEntityReport } from "@/components/entityIntel/pickEntityReport";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { EntityTripTableEmptyRow } from "@/components/EntityTripTableEmptyRow";
-import { entityDetailPageChromeStyles as edc } from "@/components/entityDetailPageChrome.styles";
+import {
+  entityDetailDownloadIconColor,
+  entityDetailPageChromeStyles as edc,
+} from "@/components/entityDetailPageChrome.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
@@ -66,7 +69,7 @@ import {
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
-import { formatINR, formatLedgerDate } from "@/lib/format";
+import { formatINR, formatLedgerDate, formatTripTableDate } from "@/lib/format";
 import {
   type LedgerIdentityContext,
   resolveLedgerRowPartyIdentity,
@@ -210,21 +213,6 @@ function isPlaceholderPhone(value: string | null | undefined): boolean {
   if (/^linked-/i.test(s)) return true;
   if (s.toLowerCase().includes("linked-")) return true;
   return false;
-}
-
-/** Full trip row date e.g. "17 APR 2026" (desktop trip column). */
-function formatTripTableDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "—";
-    const day = d.getDate();
-    const month = d.toLocaleString("en-IN", { month: "short" }).toUpperCase();
-    const year = d.getFullYear();
-    return `${day} ${month} ${year}`;
-  } catch {
-    return "—";
-  }
 }
 
 export interface ClientDetailScreenProps {
@@ -1661,7 +1649,7 @@ export default function ClientDetailScreen({
               <FontAwesome
                 name="cloud-download"
                 size={16}
-                color={Theme.textOnPrimary}
+                color={entityDetailDownloadIconColor}
               />
           </TouchableOpacity>
         </View>
@@ -2235,32 +2223,32 @@ export default function ClientDetailScreen({
                             isWebDesktop && styles.tdTripColWebDesktop,
                           ]}
                         >
-                          <Text
-                            style={[
-                              styles.tdMissionId,
-                              isWebDesktop && styles.tdMissionIdWebDesktop,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {row.missionId}
-                          </Text>
+                          <View style={styles.tdMissionIdRow}>
+                            <Text
+                              style={[
+                                styles.tdMissionId,
+                                styles.tdMissionIdFlex,
+                                isWebDesktop && styles.tdMissionIdWebDesktop,
+                              ]}
+                              numberOfLines={1}
+                              ellipsizeMode="middle"
+                            >
+                              {row.missionId}
+                            </Text>
+                            <Text style={styles.tdMissionDateSep}>·</Text>
+                            <Text style={styles.tdMissionDate} numberOfLines={1}>
+                              {formatTripTableDate(tripDateIso)}
+                            </Text>
+                          </View>
                           <Text
                             style={[
                               styles.tdRoute,
                               isWebDesktop && styles.tdRouteWebDesktop,
                             ]}
-                            numberOfLines={isWebDesktop ? 3 : 1}
+                            numberOfLines={isWebDesktop ? 3 : 2}
                           >
                             {row.route}
                           </Text>
-                          {isWebDesktop ? (
-                            <Text
-                              style={styles.tdMissionDateWeb}
-                              numberOfLines={1}
-                            >
-                              {formatTripTableDate(tripDateIso)}
-                            </Text>
-                          ) : null}
                         </View>
                         {isWebDesktop ? (
                           <View style={styles.partyColWebDesktop}>
@@ -3228,25 +3216,20 @@ const styles = StyleSheet.create({
   td: edc.td,
   tdMission: edc.thMission,
   tdMissionId: edc.tdMissionId,
+  tdMissionIdRow: edc.tdMissionIdRow,
+  tdMissionIdFlex: edc.tdMissionIdFlex,
+  tdMissionDateSep: edc.tdMissionDateSep,
+  tdMissionDate: edc.tdMissionDate,
   tdMissionIdWebDesktop: {
     fontSize: 10,
-    fontWeight: "500",
-    fontStyle: "italic",
-  },
-  tdMissionDateWeb: {
-    marginTop: 2,
-    fontSize: 7,
-    fontWeight: "500",
+    fontWeight: "600",
     fontStyle: "normal",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
   },
   tdRoute: edc.tdRoute,
   tdRouteWebDesktop: {
     fontSize: 8,
     fontWeight: "400",
-    fontStyle: "italic",
+    fontStyle: "normal",
     color: Theme.textMuted,
     lineHeight: 11,
     marginTop: 2,
@@ -3281,10 +3264,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMuted,
   },
-  tdSales: { textAlign: "right" as const },
+  tdSales: { textAlign: "right" as const, color: Theme.textPrimaryDark },
   tdRight: { textAlign: "right" as const },
-  tdGreen: { color: Theme.darkGreen },
-  tdRed: { color: Theme.teslaRed },
+  tdGreen: { color: Theme.darkGreen, fontWeight: "700" },
+  tdRed: { color: Theme.teslaRed, fontWeight: "700" },
   emptyRow: edc.emptyRow,
   emptyRowText: edc.emptyRowText,
   cashSection: { marginBottom: 24 },

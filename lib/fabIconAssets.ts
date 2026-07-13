@@ -1,14 +1,11 @@
 /**
- * Colorful brand-style glyphs for floating action buttons (from `assets/icon and logos`).
+ * Illustration glyphs for floating action buttons — aligned with finance promo heroes.
  */
-import CloudOneIcon from "@/assets/icon and logos/cloud-one.svg";
-import DuolingoIcon from "@/assets/icon and logos/duolingo.svg";
-import GrabIcon from "@/assets/icon and logos/grab.svg";
-import HotAirBalloonIcon from "@/assets/icon and logos/hot-air-balloon.svg";
-import OfficeIcon from "@/assets/icon and logos/office.svg";
-import ProyectoCasaIcon from "@/assets/icon and logos/proyecto-casa.svg";
-import QuickbooksIcon from "@/assets/icon and logos/quickbooks.svg";
-import StripeIcon from "@/assets/icon and logos/stripe.svg";
+import Illustration3 from "@/assets/illustrations/3.svg";
+import Illustration6 from "@/assets/illustrations/6.svg";
+import Illustration14 from "@/assets/illustrations/14.svg";
+import Illustration20 from "@/assets/illustrations/20.svg";
+import Illustration28 from "@/assets/illustrations/28.svg";
 import type { ComponentType } from "react";
 import type { SvgProps } from "react-native-svg";
 
@@ -30,15 +27,13 @@ export type FabAssetGlyph = {
   glyphScale?: number;
 };
 
-/** Maps semantic FAB icons to full-color SVG assets. */
+/** Maps semantic FAB icons to full-color illustration assets. */
 export const FAB_ICON_ASSETS: Partial<Record<FABIconName, FabAssetGlyph>> = {
-  building: { Asset: OfficeIcon, glyphScale: 0.78 },
-  warehouse: { Asset: ProyectoCasaIcon, glyphScale: 0.76 },
-  truck: { Asset: GrabIcon, glyphScale: 0.72 },
-  user: { Asset: DuolingoIcon, glyphScale: 0.74 },
-  "user-plus": { Asset: DuolingoIcon, glyphScale: 0.74 },
-  "receipt-text": { Asset: QuickbooksIcon, glyphScale: 0.76 },
-  "credit-card": { Asset: StripeIcon, glyphScale: 0.7 },
-  package: { Asset: CloudOneIcon, glyphScale: 0.76 },
-  road: { Asset: HotAirBalloonIcon, glyphScale: 0.76 },
+  building: { Asset: Illustration3, glyphScale: 0.92 },
+  warehouse: { Asset: Illustration28, glyphScale: 0.9 },
+  truck: { Asset: Illustration14, glyphScale: 0.9 },
+  user: { Asset: Illustration20, glyphScale: 0.9 },
+  "user-plus": { Asset: Illustration20, glyphScale: 0.9 },
+  "receipt-text": { Asset: Illustration6, glyphScale: 0.88 },
+  "credit-card": { Asset: Illustration6, glyphScale: 0.88 },
 };

@@ -8,6 +8,7 @@ import { PackageSearch, Truck, UserPlus } from "lucide-react-native";
 import { useRef } from "react";
 import {
   Animated,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -23,7 +24,7 @@ type Props = {
 };
 
 const INK = Theme.loadAddButtonText;
-const MUTED = Theme.loadStatusTabTextMuted;
+const MUTED = Theme.textSecondary;
 
 const GIVE_ACTIVE = {
   bg: Theme.accentGold,
@@ -43,38 +44,36 @@ const IDLE = {
   bg: Theme.surface,
   border: Theme.borderMedium,
   text: MUTED,
-  icon: MUTED,
+  icon: INK,
 };
 
 /** Shared vertical rhythm — avatar stack + nudge track align to this. */
-export const LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT = 36;
-export const LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT_COMPACT = 32;
+export const LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT = 42;
+export const LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT_COMPACT = 38;
 
 function IconWell({
   Icon,
-  size,
-  bg,
+  iconSize,
+  wellSize,
   color,
 }: {
   Icon: LucideIcon;
-  size: number;
-  bg: string;
+  iconSize: number;
+  wellSize: number;
   color: string;
 }) {
-  const well = size + 10;
   return (
     <View
       style={[
         styles.iconWell,
         {
-          width: well,
-          height: well,
-          borderRadius: well / 2,
-          backgroundColor: bg,
+          width: wellSize,
+          height: wellSize,
+          borderRadius: wellSize / 2,
         },
       ]}
     >
-      <Icon size={size} color={color} strokeWidth={2.3} />
+      <Icon size={iconSize} color={color} strokeWidth={2.5} />
     </View>
   );
 }
@@ -93,7 +92,7 @@ function FlowPill({
   compact: boolean;
 }) {
   const colors = active ? palette : IDLE;
-  const iconSize = compact ? 11 : 12;
+  const iconSize = compact ? 14 : 15;
 
   return (
     <View
@@ -107,7 +106,7 @@ function FlowPill({
         active && styles.pillActive,
       ]}
     >
-      <Icon size={iconSize} color={colors.icon} strokeWidth={2.4} />
+      <Icon size={iconSize} color={colors.icon} strokeWidth={2.5} />
       <Text
         style={[
           styles.pillText,
@@ -131,12 +130,14 @@ export function LoadCenterNetworkGrowNudge({
     ? LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT_COMPACT
     : LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT;
   const pressScale = useRef(new Animated.Value(1)).current;
+  const leadIconSize = compact ? 13 : 14;
+  const leadWellSize = compact ? 28 : 30;
 
   const onPressIn = () => {
     Animated.spring(pressScale, {
-      toValue: 0.985,
-      tension: 280,
-      friction: 18,
+      toValue: 0.98,
+      tension: 320,
+      friction: 20,
       useNativeDriver: true,
     }).start();
   };
@@ -144,8 +145,8 @@ export function LoadCenterNetworkGrowNudge({
   const onPressOut = () => {
     Animated.spring(pressScale, {
       toValue: 1,
-      tension: 220,
-      friction: 16,
+      tension: 240,
+      friction: 14,
       useNativeDriver: true,
     }).start();
   };
@@ -157,7 +158,11 @@ export function LoadCenterNetworkGrowNudge({
       onPressOut={onPressOut}
       accessibilityRole="button"
       accessibilityLabel="Add more network to give load and get load"
-      style={({ pressed }) => [pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.pressable,
+        pressed && styles.pressed,
+        Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
+      ]}
     >
       <Animated.View
         style={[
@@ -166,17 +171,11 @@ export function LoadCenterNetworkGrowNudge({
           { transform: [{ scale: pressScale }] },
         ]}
       >
-        <View
-          style={[
-            styles.shell,
-            compact && styles.shellCompact,
-            { minHeight: trackHeight },
-          ]}
-        >
+        <View style={[styles.shell, compact && styles.shellCompact, { height: trackHeight }]}>
           <IconWell
             Icon={UserPlus}
-            size={compact ? 11 : 12}
-            bg={Theme.brandBlueSoft}
+            iconSize={leadIconSize}
+            wellSize={leadWellSize}
             color={INK}
           />
 
@@ -211,59 +210,63 @@ export function LoadCenterNetworkGrowNudge({
 }
 
 const styles = StyleSheet.create({
+  pressable: {
+    minWidth: 0,
+    flexShrink: 1,
+  },
   outer: {
     minWidth: 0,
     flexShrink: 1,
-    maxWidth: 480,
+    maxWidth: 500,
   },
   outerCompact: {
     maxWidth: "100%",
   },
   pressed: {
-    opacity: 0.94,
+    opacity: 0.92,
   },
   shell: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 9,
     minWidth: 0,
     flexShrink: 1,
-    paddingVertical: 5,
-    paddingLeft: 6,
-    paddingRight: 8,
+    paddingLeft: 8,
+    paddingRight: 10,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
     backgroundColor: Theme.cardWhite,
-    ...platformShadow("0 2px 10px rgba(15, 23, 42, 0.06)", {
+    ...platformShadow("0 2px 12px rgba(15, 23, 42, 0.07)", {
       color: Theme.primary,
-      opacity: 0.06,
-      radius: 10,
-      offsetY: 2,
-      elevation: 2,
+      opacity: 0.07,
+      radius: 12,
+      offsetY: 3,
+      elevation: 3,
     }),
   },
   shellCompact: {
-    gap: 8,
-    paddingLeft: 5,
-    paddingRight: 6,
-    flexWrap: "nowrap",
+    gap: 7,
+    paddingLeft: 7,
+    paddingRight: 8,
   },
   iconWell: {
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    backgroundColor: Theme.brandBlueSoft,
     borderWidth: 1,
-    borderColor: Theme.brandBlue,
+    borderColor: "rgba(77, 54, 54, 0.12)",
   },
   lead: {
     fontSize: 11,
     fontWeight: "600",
     color: MUTED,
-    letterSpacing: 0.01,
+    letterSpacing: 0.02,
     flexShrink: 1,
     lineHeight: 14,
     includeFontPadding: false,
+    marginRight: 2,
   },
   leadCompact: {
     fontSize: 10,
@@ -272,39 +275,40 @@ const styles = StyleSheet.create({
   chipGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
     flexShrink: 0,
+    marginLeft: "auto" as const,
   },
   pill: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 6,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    minHeight: 26,
-    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    minHeight: 30,
+    borderWidth: 1.5,
     flexShrink: 0,
   },
   pillCompact: {
-    paddingHorizontal: 8,
-    minHeight: 24,
-    gap: 4,
+    paddingHorizontal: 9,
+    minHeight: 28,
+    gap: 5,
   },
   pillActive: {
-    ...platformShadow("0 1px 4px rgba(15, 23, 42, 0.08)", {
+    ...platformShadow("0 2px 6px rgba(15, 23, 42, 0.1)", {
       color: Theme.primary,
-      opacity: 0.08,
-      radius: 4,
-      offsetY: 1,
-      elevation: 1,
+      opacity: 0.1,
+      radius: 6,
+      offsetY: 2,
+      elevation: 2,
     }),
   },
   pillText: {
     fontSize: 10,
     fontWeight: "700",
-    letterSpacing: 0.1,
+    letterSpacing: 0.15,
     lineHeight: 13,
     includeFontPadding: false,
   },
@@ -316,10 +320,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   connector: {
-    width: 3,
-    height: 3,
+    width: 4,
+    height: 4,
     borderRadius: 2,
     backgroundColor: Theme.borderMedium,
     flexShrink: 0,
+    opacity: 0.85,
   },
 });

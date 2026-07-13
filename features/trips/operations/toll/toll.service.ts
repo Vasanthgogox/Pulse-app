@@ -100,8 +100,10 @@ export async function createTripTollEntry(
   input: Omit<SaveTollEntryInput, "receiptLocalUri"> & {
     receiptStoragePath?: string | null;
     ocrJobId?: string | null;
+    /** Offline outbox queue item id — passed through as idempotency_key so a sync retry/replay is a safe no-op. */
+    queueItemId?: string | null;
   },
-): Promise<{ error: Error | null; entry: TripTollEntry | null }> {
+): Promise<{ error: Error | null; entry: TripTollEntry | null; alreadyExists?: boolean }> {
   const paymentOwner = resolvePaymentOwnerForSave(input);
   const paymentMode: OperationalPaymentMode =
     input.paymentMode ?? (input.actorRole === "driver" ? "cash" : "unknown");
@@ -136,13 +138,20 @@ export async function createTripTollEntry(
     reimbursement_notes: null,
     approved_by: null,
     approved_at: null,
+    idempotency_key: input.queueItemId ?? null,
   };
   const { data, error } = await supabase()
     .from("trip_toll_entries")
     .insert(payload)
     .select("*")
     .single();
-  if (error) return { error: new Error(error.message), entry: null };
+  if (error) {
+    // Postgres unique violation = this queue item was already synced -> safe no-op
+    if (error.code === "23505" && input.queueItemId) {
+      return { error: null, entry: null, alreadyExists: true };
+    }
+    return { error: new Error(error.message), entry: null };
+  }
   await createVehicleOperationLedgerDraftFromSource({
     sourceType: "toll",
     sourceId: String(data.id),

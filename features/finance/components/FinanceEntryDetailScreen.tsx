@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   },
   receiptCenter: {
     width: "100%",
-    maxWidth: 440,
+    maxWidth: 380,
     alignSelf: "center",
   },
 });
