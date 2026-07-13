@@ -53,6 +53,10 @@ export function useMarkSeen({
       for (const token of viewableItems) {
         const msg = token.item as TripMessageRow | undefined;
         if (!msg) continue;
+        // Skip synthetic list rows (date/unread dividers) — their ids are
+        // sentinels like "__date__2026-07-10", not UUIDs, and would make the
+        // mark_messages_seen RPC fail with 22P02 (invalid uuid) → 400.
+        if (typeof msg.id !== 'string' || msg.id.startsWith('__')) continue;
         // Only mark messages from others (not own sends).
         if (msg.sender_role === 'dispatcher') continue;
         if (msg.sender_user_id === selfUid) continue;

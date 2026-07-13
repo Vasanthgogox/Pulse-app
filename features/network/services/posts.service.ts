@@ -223,6 +223,30 @@ export async function createPost(
     return { error: new Error(fallback.error.message), postId: null };
   }
 
+  // RLS: posts_insert requires organization_id ∈ the caller's organization_members.
+  // A 42501 here means the active-workspace org isn't one the user is a member of
+  // (e.g. a connected/partner org or a stale workspace selection). Surface a clear
+  // message instead of the raw policy violation.
+  if (
+    primary.error.code === '42501' ||
+    primary.error.message.toLowerCase().includes('row-level security')
+  ) {
+    if (__DEV__) {
+      console.warn(
+        '[posts] createPost blocked by RLS — user',
+        userId,
+        'is not a member of org',
+        input.organizationId,
+      );
+    }
+    return {
+      error: new Error(
+        'You can only post for an organization you belong to. Please reselect your workspace and try again.',
+      ),
+      postId: null,
+    };
+  }
+
   return { error: new Error(primary.error.message), postId: null };
 }
 

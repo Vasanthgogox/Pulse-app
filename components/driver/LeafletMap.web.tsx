@@ -80,6 +80,9 @@ type MapLibreMapLike = {
   getZoom?: () => number;
   getCenter?: () => { lng: number; lat: number };
   resize: () => void;
+  triggerRepaint?: () => void;
+  redraw?: () => void;
+  getContainer?: () => HTMLElement;
   remove?: () => void;
 };
 
@@ -295,6 +298,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
     const lastPolylineStrRef = useRef<string>("");
     const mapStyleLoadedRef = useRef(false);
     const isMountedRef = useRef(true);
+    const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
     useEffect(() => {
       isMountedRef.current = true;
@@ -345,21 +349,53 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
           mapRef.current = map;
 
-          const handleMapLoad = () => {
-            mapStyleLoadedRef.current = true;
+          // Sync MapLibre's canvas to the container's real pixel size and force a
+          // repaint. On desktop flex layouts the container can still report 0
+          // height on the `load` frame, so resizing then paints an empty canvas
+          // even though tiles are already fetched/cached — this is why the map
+          // stayed blank until a manual zoom (which forced a fresh render).
+          // resize() alone is insufficient: if MapLibre thinks its size is
+          // unchanged it skips the repaint, so we also call triggerRepaint().
+          const syncCanvas = () => {
+            const m = mapRef.current;
+            if (!m) return;
+            const el = mapContainerRef.current;
+            // Bail until the container has a real size; retry next frame.
+            if (el && (el.clientWidth === 0 || el.clientHeight === 0)) {
+              requestAnimationFrame(syncCanvas);
+              return;
+            }
             try {
-              map.resize();
+              m.resize();
+              m.triggerRepaint?.();
+              m.redraw?.();
             } catch {
               // ignore
             }
-            setTimeout(() => {
-              try {
-                map.resize();
-              } catch {
-                // ignore
-              }
-            }, 120);
+          };
+
+          const handleMapLoad = () => {
+            mapStyleLoadedRef.current = true;
+            syncCanvas();
+            requestAnimationFrame(syncCanvas);
+            setTimeout(syncCanvas, 150);
+            setTimeout(syncCanvas, 400);
             applyMapInteractionLock(map, interactionLockedRef.current);
+
+            // Recover from any later container size change (layout settle, tab
+            // switch, split-pane resize) by re-syncing the canvas + repainting.
+            if (
+              typeof ResizeObserver !== "undefined" &&
+              mapContainerRef.current &&
+              !resizeObserverRef.current
+            ) {
+              const observer = new ResizeObserver(() => {
+                if (!isMountedRef.current || !mapRef.current) return;
+                syncCanvas();
+              });
+              observer.observe(mapContainerRef.current);
+              resizeObserverRef.current = observer;
+            }
           };
 
           if (isMapStyleReady(map)) {
@@ -377,6 +413,10 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         cancelAnimationFrame(rafId);
         isMountedRef.current = false;
         mapStyleLoadedRef.current = false;
+        if (resizeObserverRef.current) {
+          resizeObserverRef.current.disconnect();
+          resizeObserverRef.current = null;
+        }
         if (mapRef.current) {
           markersRef.current.forEach((m) => m.remove?.());
           markersRef.current = [];
@@ -638,7 +678,20 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
     return (
       <View style={[style, styles.mapHost]}>
-        <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
+        {/* Absolute-fill (not height:100%) so the canvas gets a resolved pixel
+            size even when the host's flex height settles a frame after mount —
+            percentage height against an unresolved parent reads 0 and paints a
+            blank canvas on desktop. */}
+        <div
+          ref={mapContainerRef}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+          }}
+        />
         {showZoom ? (
           <LeafletMapZoomControls
             onZoomIn={() => adjustZoom(1)}
@@ -652,6 +705,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
 const styles = StyleSheet.create({
   mapHost: {
+    position: "relative",
     overflow: "hidden",
   },
 });

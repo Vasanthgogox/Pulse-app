@@ -18,6 +18,12 @@ function isSchemaMissingError(message: string | undefined): boolean {
   const msg = String(message ?? '').toLowerCase();
   return (
     msg.includes('404') ||
+    // 406 / PGRST schema-cache misses: table/schema not exposed by PostgREST
+    // (these tables are optional in some environments — degrade to empty).
+    msg.includes('406') ||
+    msg.includes('not acceptable') ||
+    msg.includes('pgrst106') ||
+    msg.includes('pgrst205') ||
     msg.includes('not found') ||
     msg.includes('relation') ||
     msg.includes('does not exist')

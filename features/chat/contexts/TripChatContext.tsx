@@ -230,10 +230,16 @@ export function TripChatProvider({
   // Single mark-seen RPC path for all `useMarkSeen` instances (debounced in store).
   useEffect(() => {
     registerMarkMessagesSeenRpc((conversationId, messageIds) => {
+      // Defense-in-depth: never send non-UUID sentinel ids (e.g. divider rows
+      // like "__date__…") to the RPC — they cause 22P02 → 400.
+      const ids = messageIds.filter(
+        (id) => typeof id === "string" && !id.startsWith("__"),
+      );
+      if (ids.length === 0) return;
       void supabase()
         .rpc("mark_messages_seen", {
           p_conversation_id: conversationId,
-          p_message_ids: messageIds,
+          p_message_ids: ids,
         })
         .then(({ error }) => {
           if (error && __DEV__) console.warn("[mark_messages_seen]", error.message);

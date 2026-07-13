@@ -88,7 +88,7 @@ function specsSignature(specs: PostgresChangeSpec[]): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function emitToListeners(key: string, payload: RealtimePostgresChangesPayload<Record<string, any>>) {
+function emitToListeners(key: string, payload: any) {
   const entry = registry.get(key);
   if (!entry) return;
   for (const listener of entry.listeners) {
@@ -109,6 +109,42 @@ function createSharedChannel(key: string, specs: PostgresChangeSpec[]): Realtime
     channel = channel.on("postgres_changes", spec, (payload) => emitToListeners(key, payload));
   }
   return channel.subscribe();
+}
+
+/** Attach a listener to an existing/new entry and return a ref-counted unsubscribe.
+ * Shared by postgres_changes and broadcast subscribers so both get the same
+ * grace-period teardown and never open duplicate server channels on churn. */
+function attachToEntry(
+  key: string,
+  entry: RegistryEntry,
+  listener: RealtimeListener,
+): () => void {
+  entry.refs += 1;
+  entry.listeners.add(listener);
+
+  return () => {
+    const current = registry.get(key);
+    if (!current) return;
+    current.listeners.delete(listener);
+    current.refs = Math.max(0, current.refs - 1);
+    if (current.refs === 0) {
+      logRegistryState('GRACE (last ref gone, scheduling teardown)', key);
+      if (current.teardownTimer) clearTimeout(current.teardownTimer);
+      current.teardownTimer = setTimeout(() => {
+        const e = registry.get(key);
+        if (!e || e.refs > 0) return;
+        telemetry.closes += 1;
+        logRegistryState('CLOSE (grace expired)', key);
+        void supabase().removeChannel(e.channel).catch((err: unknown) => {
+          console.warn("[realtime] remove shared channel failed:", err);
+        });
+        registry.delete(key);
+      }, TEARDOWN_GRACE_MS);
+    } else {
+      telemetry.detaches += 1;
+      logRegistryState('DETACH (refs remaining)', key);
+    }
+  };
 }
 
 function sweepStaleChannels() {
@@ -263,32 +299,70 @@ export function subscribeSharedPostgresChanges(
     logRegistryState('ATTACH (shared channel)', key);
   }
 
-  entry.refs += 1;
-  entry.listeners.add(listener);
+  return attachToEntry(key, entry, listener);
+}
 
-  return () => {
-    const current = registry.get(key);
-    if (!current) return;
-    current.listeners.delete(listener);
-    current.refs = Math.max(0, current.refs - 1);
-    if (current.refs === 0) {
-      logRegistryState('GRACE (last ref gone, scheduling teardown)', key);
-      if (current.teardownTimer) clearTimeout(current.teardownTimer);
-      current.teardownTimer = setTimeout(() => {
-        const entry = registry.get(key);
-        if (!entry || entry.refs > 0) return;
-        telemetry.closes += 1;
-        logRegistryState('CLOSE (grace expired)', key);
-        void supabase().removeChannel(entry.channel).catch((err: unknown) => {
-          console.warn("[realtime] remove shared channel failed:", err);
-        });
-        registry.delete(key);
-      }, TEARDOWN_GRACE_MS);
-    } else {
-      telemetry.detaches += 1;
-      logRegistryState('DETACH (refs remaining)', key);
+/**
+ * Ref-counted shared broadcast channel by key. Same lifecycle guarantees as
+ * subscribeSharedPostgresChanges — one server channel per key, grace-period
+ * teardown, cap enforcement — but for Supabase `broadcast` events. Listeners
+ * are fanned out from a single `.on('broadcast')` handler and receive the raw
+ * broadcast payload.
+ */
+export function subscribeSharedBroadcast(
+  key: string,
+  event: string,
+  listener: (payload: unknown) => void,
+  options?: { self?: boolean },
+): () => void {
+  const signature = `broadcast:${event}`;
+  let entry = registry.get(key);
+
+  if (!entry) {
+    enforceChannelCap();
+    if (registry.size >= MAX_SHARED_CHANNELS) {
+      console.warn(`[realtimeRegistry] channel cap (${MAX_SHARED_CHANNELS}) reached — broadcast for key "${key}" was not registered`);
+      return () => {};
     }
-  };
+    const now = Date.now();
+    const channel = supabase()
+      .channel(key, { config: { broadcast: { self: options?.self ?? true, ack: false } } })
+      .on("broadcast", { event }, ({ payload }: { payload: unknown }) =>
+        emitToListeners(key, payload),
+      );
+    void channel.subscribe();
+    entry = {
+      channel,
+      refs: 0,
+      specsSignature: signature,
+      listeners: new Set(),
+      openedAt: now,
+      lastAttachedAt: now,
+      teardownTimer: null,
+    };
+    registry.set(key, entry);
+    telemetry.opens += 1;
+    logRegistryState('OPEN (new broadcast channel)', key);
+  } else if (entry.specsSignature !== signature) {
+    console.warn(
+      `[realtime] shared key "${key}" reused with different specs; keeping existing channel`,
+    );
+  } else {
+    if (entry.teardownTimer) {
+      clearTimeout(entry.teardownTimer);
+      entry.teardownTimer = null;
+      telemetry.graceReattaches += 1;
+      logRegistryState('REATTACH (teardown cancelled)', key);
+    }
+    entry.lastAttachedAt = Date.now();
+    telemetry.attaches += 1;
+    logRegistryState('ATTACH (shared broadcast)', key);
+  }
+
+  // The listener Set is payload-agnostic at runtime; broadcast payloads are not
+  // postgres_changes events, so cast at this single boundary rather than widen
+  // the shared RealtimeListener type (which would weaken every postgres caller).
+  return attachToEntry(key, entry, listener as RealtimeListener);
 }
 
 // ─── Production health export ─────────────────────────────────────────────────

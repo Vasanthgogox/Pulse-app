@@ -2,10 +2,12 @@
  * Event-driven driver payment status — no polling while waiting for clearance.
  * Listens for ledger INSERT (postgres_changes) and optional PAYMENT_COMPLETED broadcast.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
-import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
+import {
+  subscribeSharedBroadcast,
+  subscribeSharedPostgresChanges,
+} from '@/lib/realtimeRegistry';
 import { useInvalidateDriverHomeDashboard } from '@/lib/queries/useInvalidateDriverHomeDashboard';
 import {
   DRIVER_PAYMENT_BROADCAST_EVENT,
@@ -84,9 +86,18 @@ export function useDriverPaymentListener({
   enabled = true,
 }: UseDriverPaymentListenerArgs) {
   const uid = userId ?? '';
-  // Guard against non-array values at runtime (corrupted cache, wrong caller type).
-  const safeDriverIds = Array.isArray(driverIds) ? driverIds : [];
-  const driverIdsKey = safeDriverIds.length > 0 ? [...safeDriverIds].sort().join(',') : '';
+  // Guard against non-array values at runtime (corrupted cache, wrong caller type)
+  // and memoize on the stable primitive key so the subscription effect only
+  // re-runs when the driver set actually changes — not on every render (which
+  // previously churned realtime channels and leaked connections).
+  const driverIdsKey = useMemo(() => {
+    const arr = Array.isArray(driverIds) ? driverIds : [];
+    return arr.length > 0 ? [...arr].sort().join(',') : '';
+  }, [driverIds]);
+  const safeDriverIds = useMemo(
+    () => (driverIdsKey ? driverIdsKey.split(',') : []),
+    [driverIdsKey],
+  );
   const invalidateDashboard = useInvalidateDriverHomeDashboard();
 
   const [lastPaymentEvent, setLastPaymentEvent] =
@@ -145,28 +156,22 @@ export function useDriverPaymentListener({
       unsubs.push(unsub);
     }
 
-    const channelName = driverPaymentBroadcastChannelName(uid);
-    const broadcastChannel = supabase().channel(channelName, {
-      config: { broadcast: { self: true, ack: false } },
-    });
-
     const eventName: DriverPaymentBroadcastEventName =
       DRIVER_PAYMENT_BROADCAST_EVENT.PAYMENT_COMPLETED;
 
-    broadcastChannel.on(
-      'broadcast',
-      { event: eventName },
-      ({ payload }) => {
-        const parsed = parseBroadcastPayload(payload);
-        if (!parsed) return;
-        emitPaymentCompleted(parsed);
-      },
+    // Ref-counted via the shared registry so rapid re-renders reattach within
+    // the grace window instead of tearing down and reopening the channel.
+    unsubs.push(
+      subscribeSharedBroadcast(
+        driverPaymentBroadcastChannelName(uid),
+        eventName,
+        (payload) => {
+          const parsed = parseBroadcastPayload(payload);
+          if (!parsed) return;
+          emitPaymentCompleted(parsed);
+        },
+      ),
     );
-
-    void broadcastChannel.subscribe();
-    unsubs.push(() => {
-      void supabase().removeChannel(broadcastChannel);
-    });
 
     return () => {
       for (const u of unsubs) u();
