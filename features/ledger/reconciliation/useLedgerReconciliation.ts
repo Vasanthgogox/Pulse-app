@@ -158,6 +158,15 @@ export function useLedgerReconciliation(input: {
   const retryPosting = useMutation({
     mutationFn: async (rows: ReconciliationMismatchView[]) => {
       const tripIds = Array.from(new Set(rows.map((row) => row.tripId)));
+      // Cap the retry batch: each trip fans out into multiple sequential ledger
+      // writes via reconcileOperationalPosting, so an uncapped set held one
+      // pooled connection for a long time. Fail fast above the cap.
+      const MAX_RETRY_TRIPS = 50;
+      if (tripIds.length > MAX_RETRY_TRIPS) {
+        throw new Error(
+          `Too many trips selected (${tripIds.length}). Retry at most ${MAX_RETRY_TRIPS} at a time.`,
+        );
+      }
       for (const tripId of tripIds) {
         const res = await reconcileOperationalPosting({
           tripId,

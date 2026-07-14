@@ -104,34 +104,19 @@ async function lookupEmailByPhone(
     p_phone: normalized,
   });
 
-  if (!rpcError && emailRpc != null && typeof emailRpc === 'string' && emailRpc.trim() !== '') {
+  if (rpcError) {
+    // Fail closed. Previously this fell back to a `.limit(10_000)` full scan of
+    // `profiles` scanned in JS — on a public endpoint that turned an RPC-availability
+    // problem into a heavy repeated-read load problem exactly when the DB was
+    // already stressed. The indexed RPC is the only lookup path; if it is down we
+    // surface a controlled error rather than table-scanning.
+    console.warn('[check-user-by-phone] get_email_by_phone RPC failed:', rpcError.message);
+    throw new Error('lookup_unavailable');
+  }
+
+  if (emailRpc != null && typeof emailRpc === 'string' && emailRpc.trim() !== '') {
     return emailRpc.trim();
   }
-  if (!rpcError) {
-    return null;
-  }
-
-  const { data: rows, error } = await supabase
-    .from('profiles')
-    .select('id, email, phone')
-    .not('phone', 'is', null)
-    .limit(10_000);
-
-  if (error) {
-    console.warn('[check-user-by-phone] lookup failed:', error.message);
-    return null;
-  }
-
-  const list = Array.isArray(rows) ? rows : [];
-  for (const row of list) {
-    const stored = row?.phone != null ? String(row.phone) : '';
-    const storedTen = toTenDigits(stored);
-    if (storedTen === normalized) {
-      const email = (row?.email != null ? String(row.email) : '').trim();
-      if (email) return email;
-    }
-  }
-
   return null;
 }
 
@@ -177,7 +162,19 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Server configuration error' }, 503, req);
   }
 
-  const email = await lookupEmailByPhone(supabase, normalized);
+  let email: string | null;
+  try {
+    email = await lookupEmailByPhone(supabase, normalized);
+  } catch (e) {
+    // Lookup infrastructure (indexed RPC) is unavailable — fail closed with a
+    // controlled 503 instead of degrading into an expensive fallback scan.
+    const msg = e instanceof Error ? e.message : 'lookup_error';
+    return jsonResponse(
+      { error: 'lookup_unavailable', message: 'Phone lookup is temporarily unavailable. Please retry.', detail: msg },
+      503,
+      req,
+    );
+  }
 
   if (intent === 'driver_signin') {
     if (!email) {

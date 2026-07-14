@@ -446,30 +446,38 @@ export async function executeInvoiceCreation(
       ]),
     );
 
-    await Promise.all(
-      sanitizedIds.map(async (id) => {
-        const { error: logError } = await supabase().rpc("log_activity", {
-          p_action: "INVOICE_GENERATED",
-          p_entity_type: "trip",
-          p_entity_id: id,
-          p_details: { invoice_no: invoiceNo, payload },
+    // Bounded-concurrency fan-out instead of an unbounded Promise.all over all
+    // selected trips. A large bulk invoice previously fired 2N simultaneous DB
+    // ops (log_activity RPC + a detached, un-awaited workflow write per trip),
+    // bursting the connection pool. We cap concurrency and await the workflow
+    // writes so nothing outlives the request unbatched.
+    const LOG_CONCURRENCY = 5;
+    const runOne = async (id: string) => {
+      const { error: logError } = await supabase().rpc("log_activity", {
+        p_action: "INVOICE_GENERATED",
+        p_entity_type: "trip",
+        p_entity_id: id,
+        p_details: { invoice_no: invoiceNo, payload },
+      });
+      if (logError) {
+        console.warn("[invoicing] log_activity RPC failed for trip", id, logError.message);
+      }
+      const orgId = orgIdByTripId.get(id);
+      if (orgId) {
+        await recordTripWorkflowEvent({
+          tripId: id,
+          orgId,
+          eventType: "invoice.generated",
+          payload: { invoice_no: invoiceNo },
+        }).catch((err) => {
+          console.warn("[invoicing] recordTripWorkflowEvent failed for trip", id, err);
         });
-        if (logError) {
-          console.warn("[invoicing] log_activity RPC failed for trip", id, logError.message);
-        }
-        const orgId = orgIdByTripId.get(id);
-        if (orgId) {
-          void recordTripWorkflowEvent({
-            tripId: id,
-            orgId,
-            eventType: "invoice.generated",
-            payload: { invoice_no: invoiceNo },
-          }).catch((err) => {
-            console.warn("[invoicing] recordTripWorkflowEvent failed for trip", id, err);
-          });
-        }
-      }),
-    );
+      }
+    };
+    for (let i = 0; i < sanitizedIds.length; i += LOG_CONCURRENCY) {
+      const chunk = sanitizedIds.slice(i, i + LOG_CONCURRENCY);
+      await Promise.all(chunk.map(runOne));
+    }
 
     return { error: null };
   } catch (e) {

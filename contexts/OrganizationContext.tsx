@@ -76,6 +76,20 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
    */
   const workspacePopulatedForUserRef = useRef<string | null>(null);
 
+  /**
+   * Infra-error retry backoff state. Keyed on a stable counter, NOT on the
+   * `error` object identity — `setError` creates a fresh Error each failure,
+   * so depending on `error` would re-arm the timer every attempt and produce
+   * an uncapped, un-jittered 5s lockstep retry across all clients (this was a
+   * contributor to a DB connection-pileup incident). We cap attempts and use
+   * exponential backoff + jitter, mirroring lib/supabase.ts's auth-refresh fix.
+   */
+  const orgRetryAttemptRef = useRef(0);
+  const [orgRetryTick, setOrgRetryTick] = useState(0);
+  const ORG_RETRY_MAX_ATTEMPTS = 6;
+  const ORG_RETRY_BASE_MS = 5_000;
+  const ORG_RETRY_CAP_MS = 60_000;
+
   // Public setter — wraps state setter so ActiveWorkspaceContext can signal
   // that it has already populated org state for the current user.
   const setCurrentOrganization = useCallback((org: CurrentOrganization | null) => {
@@ -122,18 +136,27 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       if (staleForUser(sessionUid)) return;
       if (err) {
         setError(err);
-        if (!isInfrastructureErrorMessage(err.message)) {
+        if (isInfrastructureErrorMessage(err.message)) {
+          setOrgRetryTick((n) => n + 1); // arm the backoff retry effect
+        } else {
           setCurrentOrganizationState(null);
         }
       } else if (organizations.length > 0) {
+        orgRetryAttemptRef.current = 0; // recovered — reset infra-retry backoff
         setCurrentOrganizationState(organizations[0]);
       } else {
+        orgRetryAttemptRef.current = 0;
         setCurrentOrganizationState(null);
       }
     } catch (e) {
       if (staleForUser(sessionUid)) return;
-      setError(e instanceof Error ? e : new Error(String(e)));
-      setCurrentOrganizationState(null);
+      const errObj = e instanceof Error ? e : new Error(String(e));
+      setError(errObj);
+      if (isInfrastructureErrorMessage(errObj.message)) {
+        setOrgRetryTick((n) => n + 1); // arm the backoff retry effect
+      } else {
+        setCurrentOrganizationState(null);
+      }
     } finally {
       if (!staleForUser(sessionUid)) {
         // Only mark once during cold boot — not on every org refresh.
@@ -160,15 +183,35 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     };
   }, [userId, status, loadOrganizationsForSession]);
 
+  // Reset the infra-retry backoff whenever the session identity changes, so a
+  // new user/session starts from attempt 0 rather than inheriting a capped-out
+  // counter from a previous session.
+  useEffect(() => {
+    orgRetryAttemptRef.current = 0;
+  }, [userId, status]);
+
   useEffect(() => {
     if (!error || !isInfrastructureErrorMessage(error.message)) return;
     if (status === 'restoring' || !user || profile?.role === 'driver') return;
-    const retryMs = 5_000;
+    if (orgRetryAttemptRef.current >= ORG_RETRY_MAX_ATTEMPTS) return; // give up; stop hammering the DB
+
+    const attempt = orgRetryAttemptRef.current;
+    // Exponential backoff capped at ORG_RETRY_CAP_MS, plus ±20% jitter so
+    // clients recovering together don't retry in lockstep.
+    const base = Math.min(ORG_RETRY_BASE_MS * 2 ** attempt, ORG_RETRY_CAP_MS);
+    const jittered = base * (0.8 + Math.random() * 0.4);
     const t = setTimeout(() => {
+      orgRetryAttemptRef.current = attempt + 1;
       void refreshOrganization();
-    }, retryMs);
+      // Re-arm only via this stable counter — never via the changing `error`
+      // object identity — so each failure schedules exactly one next retry.
+      setOrgRetryTick((n) => n + 1);
+    }, jittered);
     return () => clearTimeout(t);
-  }, [error, status, userId, profile?.role, refreshOrganization]);
+    // orgRetryTick (stable counter) drives re-arming; `error` presence is read
+    // but intentionally excluded from deps to avoid identity-churn re-fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgRetryTick, status, userId, profile?.role, refreshOrganization]);
 
   // Invalidate non-realtime TanStack Query cache on org switch to prevent cross-org data bleed.
   // Realtime-covered queries self-update; the rest need a forced eviction.

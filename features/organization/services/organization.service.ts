@@ -296,23 +296,32 @@ export async function getOrganizationLocationsByNames(orgNames: string[]): Promi
   const uniqueNames = [...new Set(orgNames.map((name) => name.trim()).filter(Boolean))];
   if (uniqueNames.length === 0) return { error: null, locations: [] };
 
-  const queries = uniqueNames.map((name) =>
-    supabase()
-      .from("organizations")
-      .select("id, name, city, state, address_line")
-      .ilike("name", escapeLike(name))
-      .limit(1),
-  );
+  // Single round trip instead of one `.ilike` query per name (which fanned out
+  // N concurrent queries proportional to caller input). Preserves the prior
+  // case-insensitive match via an OR of ilike filters, and de-dupes to one row
+  // per name to match the previous `.limit(1)` per-name behavior.
+  const orFilter = uniqueNames
+    .map((name) => `name.ilike.${escapeLike(name)}`)
+    .join(",");
 
-  const responses = await Promise.all(queries);
-  const errors = responses.filter((response) => response.error);
-  if (errors.length > 0) {
-    return { error: new Error(errors[0].error?.message ?? "Failed to fetch organization locations"), locations: [] };
+  const { data, error } = await supabase()
+    .from("organizations")
+    .select("id, name, city, state, address_line")
+    .or(orFilter);
+
+  if (error) {
+    return { error: new Error(error.message ?? "Failed to fetch organization locations"), locations: [] };
   }
 
-  const locations = responses
-    .flatMap((response) => response.data ?? [])
-    .filter(Boolean) as OrganizationLocation[];
+  const rows = (data ?? []) as OrganizationLocation[];
+  const seenByName = new Set<string>();
+  const locations: OrganizationLocation[] = [];
+  for (const row of rows) {
+    const key = (row.name ?? "").trim().toLowerCase();
+    if (seenByName.has(key)) continue;
+    seenByName.add(key);
+    locations.push(row);
+  }
   return { error: null, locations };
 }
 

@@ -1,12 +1,23 @@
 /**
  * Full-page Indian driving licence entry with segment-aware custom keypad.
+ * Desktop web: type with the physical keyboard (on-screen QWERTY hidden).
+ * Mobile / tablet: on-screen keypad only.
  */
 import { memo, useCallback, useMemo } from "react";
-import { Platform, Text, TextInput, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { CreditCard } from "lucide-react-native";
 
 import Theme from "@/constants/Theme";
 import { IndianVehicleRegistrationKeypad } from "@/components/indianVehicle/IndianVehicleRegistrationKeypad";
+import { useIndianVehiclePhysicalKeypad } from "@/components/indianVehicle/useIndianVehiclePhysicalKeypad";
+import { useInputPlatform } from "@/components/mobile-input/useInputPlatform";
 import { partyMobileWizardStyles as wizard } from "@/components/party/partyMobileWizardStyles";
 import {
   partyKeypadDisplayMono,
@@ -15,7 +26,6 @@ import {
 import { KeypadDisplayValueWithCaret } from "@/components/party/keypad/KeypadDisplayValueWithCaret";
 import {
   appendIndianDlChar,
-  applyIndianDlKeystroke,
   deleteIndianDlLastChar,
   getIndianDlFormatHint,
   getIndianDlKeyboardKind,
@@ -48,6 +58,11 @@ export const IndianDrivingLicenseKeypadFlow = memo(
     );
     const displayValue = value.trim();
     const showCursor = normLen < INDIAN_DL_TOTAL_LENGTH;
+    const inputPlatform = useInputPlatform();
+    const { width } = useWindowDimensions();
+    const isDesktopWeb = Platform.OS === "web" && inputPlatform === "desktop";
+    // Party wizard card on mid-width web: keep content top-stacked.
+    const groupTop = Platform.OS === "web" && width >= 720;
 
     const handleKey = useCallback(
       (key: string) => {
@@ -60,22 +75,24 @@ export const IndianDrivingLicenseKeypadFlow = memo(
       [onChangeText, value],
     );
 
+    // Same physical-key map as vehicle plates (letters → numbers by segment).
+    useIndianVehiclePhysicalKeypad({
+      enabled: isDesktopWeb,
+      kind: keyboardKind,
+      onKey: handleKey,
+    });
+
     return (
-      <View style={flow.root} testID={Platform.OS === "web" ? undefined : testID}>
-        {Platform.OS === "web" ? (
-          <TextInput
-            testID={testID}
-            value={value}
-            onChangeText={(next) => onChangeText(applyIndianDlKeystroke(next))}
-            autoCapitalize="characters"
-            style={flow.hiddenInput}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          />
-        ) : null}
+      <View
+        style={groupTop ? styles.rootGrouped : flow.root}
+        testID={Platform.OS === "web" ? undefined : testID}
+      >
         <View style={flow.main}>
           <Text style={wizard.fieldLabel}>LICENCE NUMBER</Text>
           <Text style={flow.formatHint}>{formatHint}</Text>
+          {isDesktopWeb ? (
+            <Text style={styles.typeHint}>Type with your keyboard</Text>
+          ) : null}
 
           <View style={flow.formatMaskRow}>
             {SEGMENT_LABELS.map((seg, i) => (
@@ -91,7 +108,24 @@ export const IndianDrivingLicenseKeypadFlow = memo(
             ))}
           </View>
 
-          <View style={[flow.displayRow, error && flow.displayRowError]}>
+          <Pressable
+            onPress={() => {
+              if (!isDesktopWeb || typeof window === "undefined") return;
+              window.focus();
+            }}
+            disabled={!isDesktopWeb}
+            style={({ pressed }) => [
+              flow.displayRow,
+              error && flow.displayRowError,
+              isDesktopWeb && pressed && styles.displayRowPressed,
+            ]}
+            accessibilityRole={isDesktopWeb ? "button" : undefined}
+            accessibilityLabel={
+              isDesktopWeb
+                ? "Driving licence. Type letters then numbers with your keyboard."
+                : displayValue || "Driving licence number"
+            }
+          >
             <CreditCard
               size={20}
               color={Theme.iconMuted}
@@ -106,17 +140,39 @@ export const IndianDrivingLicenseKeypadFlow = memo(
               caretStyle={flow.cursor}
               accessibilityLabel={displayValue || "Driving licence number"}
             />
-          </View>
+          </Pressable>
         </View>
 
-        <View style={flow.keypadDock}>
-          <IndianVehicleRegistrationKeypad
-            kind={keyboardKind}
-            onKey={handleKey}
-            normalizedLength={Math.min(normLen, 1)}
-          />
-        </View>
+        {/* Desktop: physical keyboard only. Mobile/tablet: on-screen keypad. */}
+        {isDesktopWeb ? null : (
+          <View style={groupTop ? flow.keypadDockWizard : flow.keypadDock}>
+            <IndianVehicleRegistrationKeypad
+              kind={keyboardKind}
+              onKey={handleKey}
+              normalizedLength={Math.min(normLen, 1)}
+            />
+          </View>
+        )}
       </View>
     );
   },
 );
+
+const styles = StyleSheet.create({
+  rootGrouped: {
+    width: "100%",
+    justifyContent: "flex-start",
+    gap: 16,
+  },
+  typeHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    marginBottom: 8,
+    marginTop: -4,
+  },
+  displayRowPressed: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceLight,
+  },
+});

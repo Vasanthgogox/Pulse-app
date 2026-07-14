@@ -26,16 +26,23 @@ export async function publishDriverPaymentCompleted(
   const channel = supabase().channel(driverPaymentBroadcastChannelName(uid), {
     config: { broadcast: { self: false, ack: false } },
   });
-  await channel.send({
-    type: 'broadcast',
-    event: DRIVER_PAYMENT_BROADCAST_EVENT.PAYMENT_COMPLETED,
-    payload: {
-      driverId: args.driverId,
-      organizationId: args.organizationId,
-      tripId: args.tripId ?? null,
-      ledgerId: args.ledgerId ?? '',
-      type: args.type ?? 'settlement',
-    },
-  });
-  await supabase().removeChannel(channel);
+  // try/finally guarantees the channel is always torn down — even if send()
+  // rejects (network blip / Realtime error). Without this the channel was
+  // orphaned on the error path (no reference retained), leaking a server-side
+  // subscription and bypassing the realtimeRegistry cap/sweep.
+  try {
+    await channel.send({
+      type: 'broadcast',
+      event: DRIVER_PAYMENT_BROADCAST_EVENT.PAYMENT_COMPLETED,
+      payload: {
+        driverId: args.driverId,
+        organizationId: args.organizationId,
+        tripId: args.tripId ?? null,
+        ledgerId: args.ledgerId ?? '',
+        type: args.type ?? 'settlement',
+      },
+    });
+  } finally {
+    await supabase().removeChannel(channel);
+  }
 }

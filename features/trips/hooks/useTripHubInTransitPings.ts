@@ -10,6 +10,7 @@ import {
   isTripTrackingActive,
   latestIsoTimestamp,
 } from "@/features/trips/utils/tripTrackingStatus.util";
+import { useAppStateIsActive } from "@/lib/hooks/useAppStateIsActive";
 import { queryKeys } from "@/lib/queryKeys";
 import { useQuery } from "@tanstack/react-query";
 
@@ -96,6 +97,7 @@ export function useTripHubInTransitPings(
   organizationId: string | null | undefined,
   trips: TripRow[],
 ) {
+  const isActive = useAppStateIsActive();
   const inTransitIds = trips
     .filter(shouldFetchHubPing)
     .map((t) => t.id)
@@ -109,7 +111,9 @@ export function useTripHubInTransitPings(
     ),
     enabled: !!organizationId && inTransitIds.length > 0,
     staleTime: 90_000,
-    refetchInterval: 120_000,
+    // Only poll while the app is foregrounded — a backgrounded web tab was
+    // otherwise issuing 2 DB reads per in-transit trip every 2 min indefinitely.
+    refetchInterval: isActive ? 120_000 : false,
     queryFn: () => fetchInTransitPings(trips.filter(shouldFetchHubPing)),
   });
 }

@@ -16,6 +16,24 @@ import {
 } from "@/lib/queries/operationalInvalidation";
 import type { OperationalQueueItem } from "../types";
 
+/**
+ * Hard cap on how many items/trips a single batch action may process. Each item
+ * fans out into multiple sequential DB writes (approval + posting / reconcile),
+ * so an uncapped multi-select held one pooled connection for a long time and,
+ * across concurrent operators, drove connection pressure. Above this cap we fail
+ * fast and ask the operator to process in smaller batches rather than issue an
+ * unbounded long-running mutation.
+ */
+const MAX_BATCH_ITEMS = 50;
+
+function assertBatchWithinCap(count: number) {
+  if (count > MAX_BATCH_ITEMS) {
+    throw new Error(
+      `Too many items selected (${count}). Process at most ${MAX_BATCH_ITEMS} at a time.`,
+    );
+  }
+}
+
 function uniqueTripIds(items: OperationalQueueItem[]): string[] {
   return Array.from(
     new Set(
@@ -39,6 +57,7 @@ export function useOperationsBatchActions(input: {
 
   const approveSelected = useMutation({
     mutationFn: async (items: OperationalQueueItem[]) => {
+      assertBatchWithinCap(items.length);
       for (const item of items) {
         if (!item.trip) continue;
         if (item.sourceType === "fuel") {
@@ -88,6 +107,7 @@ export function useOperationsBatchActions(input: {
 
   const rejectSelected = useMutation({
     mutationFn: async (items: OperationalQueueItem[]) => {
+      assertBatchWithinCap(items.length);
       for (const item of items) {
         if (item.sourceType === "fuel") {
           const approval = await updateTripFuelApprovalState({
@@ -124,6 +144,7 @@ export function useOperationsBatchActions(input: {
   const reconcileSelected = useMutation({
     mutationFn: async (items: OperationalQueueItem[]) => {
       const tripIds = uniqueTripIds(items);
+      assertBatchWithinCap(tripIds.length);
       for (const tripId of tripIds) {
         const res = await reconcileOperationalPosting({
           tripId,

@@ -29,6 +29,27 @@ function json(body: object, status = 200) {
   });
 }
 
+// Per-external-call timeout. Without this, a hung registry/OCR call keeps the
+// invocation (and its DB session) alive indefinitely — under backlog that stacks
+// long-lived connections. Each external call now aborts after EXTERNAL_CALL_TIMEOUT_MS.
+const EXTERNAL_CALL_TIMEOUT_MS = 15_000;
+// Overall worker budget — a single invocation must not run unbounded.
+const WORKER_TIMEOUT_MS = 50_000;
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs = EXTERNAL_CALL_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Registry abstraction ──────────────────────────────────────────────────────
 // In production, replace with HyperVerge / Signzy SDK calls.
 // These functions return a normalised result regardless of provider.
@@ -42,7 +63,7 @@ interface RegistryResult {
 async function verifyGstin(gstin: string, supabaseUrl: string, serviceKey: string): Promise<RegistryResult> {
   // Delegate to our existing validate-gstin edge function
   try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/validate-gstin`, {
+    const res = await fetchWithTimeout(`${supabaseUrl}/functions/v1/validate-gstin`, {
       method:  'POST',
       headers: {
         'Content-Type':  'application/json',
@@ -70,7 +91,7 @@ async function verifyPan(pan: string, hypervergeApiKey: string): Promise<Registr
 
   try {
     // HyperVerge PAN verification endpoint
-    const res = await fetch('https://ind.idv.hyperverge.co/v1/pan-basic', {
+    const res = await fetchWithTimeout('https://ind.idv.hyperverge.co/v1/pan-basic', {
       method:  'POST',
       headers: {
         'Content-Type':  'application/json',
@@ -115,7 +136,7 @@ async function verifyMCA(
   }
 
   try {
-    const res = await fetch('https://ind.idv.hyperverge.co/v1/company-basic', {
+    const res = await fetchWithTimeout('https://ind.idv.hyperverge.co/v1/company-basic', {
       method:  'POST',
       headers: {
         'Content-Type':  'application/json',
@@ -154,6 +175,24 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
+  // Overall worker timeout budget — a single invocation must never run
+  // unbounded. If the pipeline exceeds WORKER_TIMEOUT_MS we return early so the
+  // invocation (and its DB session) is released; the job stays retryable.
+  let timeoutHandle: number | undefined;
+  const timeoutGuard = new Promise<Response>((resolve) => {
+    timeoutHandle = setTimeout(
+      () => resolve(json({ ok: false, error: 'WORKER_TIMEOUT' }, 504)),
+      WORKER_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([processRequest(req), timeoutGuard]);
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+  }
+});
+
+async function processRequest(req: Request): Promise<Response> {
   const supabaseUrl    = Deno.env.get('SUPABASE_URL')              ?? '';
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const hypervergeKey  = Deno.env.get('HYPERVERGE_APP_KEY')        ?? '';
@@ -228,7 +267,7 @@ Deno.serve(async (req: Request) => {
 
   // ── OCR congruence (skip if already PASSED) ───────────────────────────────
   if (job.ocr_status === 'QUEUED' && org.address_proof_path) {
-    const ocrRes = await fetch(`${supabaseUrl}/functions/v1/ocr-doc-verify`, {
+    const ocrRes = await fetchWithTimeout(`${supabaseUrl}/functions/v1/ocr-doc-verify`, {
       method:  'POST',
       headers: {
         'Content-Type':  'application/json',
@@ -343,4 +382,4 @@ Deno.serve(async (req: Request) => {
     },
     status: updates.status,
   });
-});
+}
