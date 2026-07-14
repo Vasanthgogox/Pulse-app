@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuditProvider } from '@/context/AuditContext';
 import { AuditApp } from '@/components/AuditApp';
 import { FlowMapPage } from '@/pages/FlowMapPage';
+import { LifecycleMindMapPage } from '@/pages/LifecycleMindMapPage';
 import { ROUTES } from '@/lib/routes';
 
 export default function App() {
@@ -11,6 +12,7 @@ export default function App() {
         <Routes>
           <Route path={ROUTES.AUDIT} element={<AuditApp />} />
           <Route path={ROUTES.FLOW_MAP} element={<FlowMapPage />} />
+          <Route path={ROUTES.LIFECYCLE_MAP} element={<LifecycleMindMapPage />} />
           <Route path={ROUTES.VISUALIZATION} element={<Navigate to={ROUTES.FLOW_MAP} replace />} />
         </Routes>
       </BrowserRouter>

@@ -61,15 +61,18 @@ function TrackSection({
 }) {
   const allocLabel = mode === 'create' ? '④ Allocate' : 'Re-assign';
   const saveLabel = mode === 'create' ? '⑤ Save trip' : '';
+  const lifeLabel = mode === 'create' ? '⑥ After create' : 'After re-assign';
   const stepTotal =
     track.allocationSteps.length +
     (track.submitSteps?.length ?? 0) +
-    (track.submitForks?.reduce((n, f) => n + f.steps.length, 0) ?? 0);
+    (track.submitForks?.reduce((n, f) => n + f.steps.length, 0) ?? 0) +
+    (track.lifecycleSteps?.length ?? 0);
 
   const containsSelection = useMemo(() => {
     if (
       track.allocationSteps.some((s) => s.id === selectedStepId) ||
-      track.submitSteps?.some((s) => s.id === selectedStepId)
+      track.submitSteps?.some((s) => s.id === selectedStepId) ||
+      track.lifecycleSteps?.some((s) => s.id === selectedStepId)
     ) {
       return true;
     }
@@ -144,6 +147,23 @@ function TrackSection({
               </div>
             );
           })}
+
+          {track.lifecycleSteps && track.lifecycleSteps.length > 0 ? (
+            <>
+              <div className="flow-track-divider" role="separator">
+                <span className="flow-track-divider-line" />
+                <span className="flow-track-divider-label">{lifeLabel}</span>
+                <span className="flow-track-divider-line" />
+              </div>
+              <div className="flow-track-phase">
+                <StepChain
+                  steps={track.lifecycleSteps}
+                  selectedStepId={selectedStepId}
+                  onSelectStep={onSelectStep}
+                />
+              </div>
+            </>
+          ) : null}
 
           <TrackExits exits={track.exits} />
         </div>
@@ -230,8 +250,8 @@ export function WizardTrackEmbed({
         <span className="flow-op-badge op-write">Write</span>
         <span className="flow-op-legend-hint">
           {mode === 'create'
-            ? 'One card = full journey from allocation through save'
-            : 'One card = one re-assign path from trip detail'}
+            ? 'One card = allocate → save → after-create (parties · chat · finance)'
+            : 'One card = re-assign path → chat / OTP visibility'}
         </span>
       </div>
 

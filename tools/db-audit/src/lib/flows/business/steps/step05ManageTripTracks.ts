@@ -1,16 +1,21 @@
 import type { FlowWizardTrack } from '@/lib/flowStep.types';
+import { lifecycleForManageTrack } from './step05CreateTripLifecycle';
 import { businessManageTripAssignmentBranches } from './step05ManageTripAssignment';
 
 /** Re-assign paths after opening trip detail */
 export const businessManageTripTracks: FlowWizardTrack[] =
-  businessManageTripAssignmentBranches.map((branch) => ({
-    id: `manage-${branch.id}`,
-    label: branch.label,
-    badge: branch.badge,
-    summary: branch.summary,
-    allocationSteps: branch.steps,
-    exits: [{ label: 'Back to trip detail', route: '/trip/[id]', context: 'onUpdated' }],
-  }));
+  businessManageTripAssignmentBranches.map((branch) => {
+    const id = `manage-${branch.id}`;
+    return {
+      id,
+      label: branch.label,
+      badge: branch.badge,
+      summary: `${branch.summary} · then chat fan-out / OTP visibility`,
+      allocationSteps: branch.steps,
+      lifecycleSteps: lifecycleForManageTrack(id),
+      exits: [{ label: 'Back to trip detail', route: '/trip/[id]', context: 'onUpdated' }],
+    };
+  });
 
 export const DEFAULT_MANAGE_TRIP_TRACK_ID = 'manage-manage-assign-asset-fleet';
 
@@ -19,9 +24,16 @@ export function manageTripTrackIds(): string[] {
 }
 
 export function manageTripTrackStepCount(): number {
-  return businessManageTripTracks.reduce((n, t) => n + t.allocationSteps.length, 0);
+  return businessManageTripTracks.reduce(
+    (n, t) => n + t.allocationSteps.length + (t.lifecycleSteps?.length ?? 0),
+    0,
+  );
 }
 
 export function findManageTripTrackForStep(stepId: string): FlowWizardTrack | undefined {
-  return businessManageTripTracks.find((t) => t.allocationSteps.some((s) => s.id === stepId));
+  return businessManageTripTracks.find(
+    (t) =>
+      t.allocationSteps.some((s) => s.id === stepId) ||
+      t.lifecycleSteps?.some((s) => s.id === stepId),
+  );
 }

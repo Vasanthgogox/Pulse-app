@@ -61,7 +61,10 @@ function FlowRailTrackColumn({
 
         {track.allocationSteps.map((step, i) => {
           const idx = stepIndex++;
-          const isLastAlloc = i === track.allocationSteps.length - 1 && !track.submitSteps?.length;
+          const isLastAlloc =
+            i === track.allocationSteps.length - 1 &&
+            !track.submitSteps?.length &&
+            !track.lifecycleSteps?.length;
           return (
             <FlowRailStepRow
               key={step.id}
@@ -80,7 +83,8 @@ function FlowRailTrackColumn({
             <FlowRailMarker label={saveLabel || 'Save'} sublabel="Step ⑤" variant="phase" />
             {track.submitSteps.map((step, i) => {
               const idx = stepIndex++;
-              const isLastSubmit = i === track.submitSteps!.length - 1;
+              const isLastSubmit =
+                i === track.submitSteps!.length - 1 && !track.lifecycleSteps?.length;
               return (
                 <div key={step.id} className="flow-rail-step-with-fork">
                   <FlowRailStepRow
@@ -129,6 +133,30 @@ function FlowRailTrackColumn({
                     </div>
                   ) : null}
                 </div>
+              );
+            })}
+          </>
+        ) : null}
+
+        {track.lifecycleSteps && track.lifecycleSteps.length > 0 ? (
+          <>
+            <FlowRailMarker
+              label={mode === 'create' ? 'After create' : 'After re-assign'}
+              sublabel="Step ⑥"
+              variant="phase"
+            />
+            {track.lifecycleSteps.map((step, i) => {
+              const idx = stepIndex++;
+              return (
+                <FlowRailStepRow
+                  key={step.id}
+                  step={step}
+                  index={idx}
+                  selected={selectedStepId === step.id}
+                  isFirst={i === 0}
+                  isLast={i === track.lifecycleSteps!.length - 1 && !track.exits?.length}
+                  onSelect={onSelectStep}
+                />
               );
             })}
           </>

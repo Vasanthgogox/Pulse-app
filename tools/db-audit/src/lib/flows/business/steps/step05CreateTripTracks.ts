@@ -1,5 +1,6 @@
 import type { FlowWizardTrack } from '@/lib/flowStep.types';
 import { businessCreateTripAllocationBranches } from './step05CreateTripAllocation';
+import { lifecycleForCreateTrack } from './step05CreateTripLifecycle';
 import { businessCreateTripSubmitBranches } from './step05CreateTripSubmit';
 
 function allocSteps(branchId: string) {
@@ -16,18 +17,22 @@ export const businessCreateTripTracks: FlowWizardTrack[] = [
     id: 'track-asset-now',
     label: 'Asset · assign now',
     badge: 'asset',
-    summary: 'Fleet driver + vehicle on supply → createTrip → Trips list',
+    summary:
+      'Fleet assign → createTrip → parties/chat/finance (asset) · no OTP · no supplier lane',
     allocationSteps: allocSteps('alloc-asset-now'),
     submitSteps: submitSteps('submit-asset-now'),
+    lifecycleSteps: lifecycleForCreateTrack('track-asset-now'),
     exits: [{ label: 'Trips list', route: '/(tabs)/trips', context: 'Success' }],
   },
   {
     id: 'track-asset-later',
     label: 'Asset · assign later',
     badge: 'asset',
-    summary: 'Assign later ON → createTrip without driver/vehicle → assign on trip detail',
+    summary:
+      'Create without driver → assign on detail → same asset chat/finance lifecycle after assign',
     allocationSteps: allocSteps('alloc-asset-later'),
     submitSteps: submitSteps('submit-asset-later'),
+    lifecycleSteps: lifecycleForCreateTrack('track-asset-later'),
     exits: [
       {
         label: 'Trip assignment',
@@ -40,9 +45,11 @@ export const businessCreateTripTracks: FlowWizardTrack[] = [
     id: 'track-aggregate-now',
     label: 'Aggregate · assign now',
     badge: 'aggregate',
-    summary: 'Partner + rates + phone/name/vehicle → createTripWithOtp → phone assign or OTP',
+    summary:
+      'Partner + phone assign → OTP if app-less · supplier offline vs app · chat + advance finance',
     allocationSteps: allocSteps('alloc-aggregate-now'),
     submitSteps: submitSteps('submit-aggregate-now'),
+    lifecycleSteps: lifecycleForCreateTrack('track-aggregate-now'),
     submitForks: [
       {
         id: 'fork-aggregate-inline-otp',
@@ -61,9 +68,11 @@ export const businessCreateTripTracks: FlowWizardTrack[] = [
     id: 'track-aggregate-later',
     label: 'Aggregate · assign later',
     badge: 'aggregate',
-    summary: 'Partner + rates only → createTripWithOtp → assign on trip detail',
+    summary:
+      'Partner + rates now · driver/OTP/chat driver-lane later · advance may still post at create',
     allocationSteps: allocSteps('alloc-aggregate-later'),
     submitSteps: submitSteps('submit-aggregate-later'),
+    lifecycleSteps: lifecycleForCreateTrack('track-aggregate-later'),
     exits: [
       {
         label: 'Trip assignment',
@@ -83,7 +92,8 @@ export function createTripTrackIds(): string[] {
 export function createTripTrackStepCount(): number {
   return businessCreateTripTracks.reduce((n, t) => {
     const forkSteps = (t.submitForks ?? []).reduce((fn, f) => fn + f.steps.length, 0);
-    return n + t.allocationSteps.length + (t.submitSteps?.length ?? 0) + forkSteps;
+    const life = t.lifecycleSteps?.length ?? 0;
+    return n + t.allocationSteps.length + (t.submitSteps?.length ?? 0) + forkSteps + life;
   }, 0);
 }
 
@@ -100,6 +110,7 @@ export function findCreateTripTrackForStep(stepId: string): FlowWizardTrack | un
     (t) =>
       t.allocationSteps.some((s) => s.id === stepId) ||
       t.submitSteps?.some((s) => s.id === stepId) ||
-      t.submitForks?.some((f) => f.steps.some((s) => s.id === stepId)),
+      t.submitForks?.some((f) => f.steps.some((s) => s.id === stepId)) ||
+      t.lifecycleSteps?.some((s) => s.id === stepId),
   );
 }

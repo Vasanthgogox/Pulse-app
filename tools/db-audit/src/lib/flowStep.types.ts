@@ -22,6 +22,33 @@ export type FlowFieldMapping = {
   storesTo: string;
 };
 
+/** Notebook-style wire flowchart (lanes · fan-out) shown in inspector. */
+export type FlowWireNodeKind = 'event' | 'service' | 'lane' | 'write' | 'fanout';
+
+export type FlowWireNode = {
+  id: string;
+  kind: FlowWireNodeKind;
+  label: string;
+  detail?: string;
+  /** Lane chips when kind is lane / fanout targets */
+  lanes?: string[];
+  /** Parallel wires under this node (notebook fan-out) */
+  branches?: { label: string; detail?: string; lanes?: string[] }[];
+};
+
+export type FlowWireEdge = {
+  from: string;
+  to: string;
+  label?: string;
+};
+
+export type FlowWireDiagram = {
+  title: string;
+  hint?: string;
+  nodes: FlowWireNode[];
+  edges: FlowWireEdge[];
+};
+
 export type FlowStep = {
   id: string;
   order: number;
@@ -47,6 +74,8 @@ export type FlowStep = {
   notes?: string[];
   /** Literal queries (SQL or PostgREST) for audit — not inferred. */
   queries?: FlowStepQuery[];
+  /** Notebook wire chart (chat fan-out etc.) */
+  wire?: FlowWireDiagram;
 };
 
 export type FlowBranch = {
@@ -82,6 +111,11 @@ export type FlowWizardTrack = {
   allocationSteps: FlowStep[];
   submitSteps?: FlowStep[];
   submitForks?: FlowWizardSubmitFork[];
+  /**
+   * Post-save (or post re-assign) path unique to this track:
+   * parties matrix · OTP vs linked driver · chat fan-out · finance · who gets updates.
+   */
+  lifecycleSteps?: FlowStep[];
   exits?: FlowTrackExit[];
 };
 

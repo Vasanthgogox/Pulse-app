@@ -49,13 +49,20 @@ export function FlowStepCard({
         <span className="flow-step-line" />
       </div>
       <div className="flow-step-body">
-        <div className="flow-step-head">
+        <div className="flow-step-meta-row">
           <span className="flow-step-label">{step.label}</span>
-          <FlowStepOpBadges ops={opBadges} />
           <span className={`flow-phase ${phaseClass(step.phase)}`}>{phaseLabels[step.phase]}</span>
         </div>
         <div className="flow-step-title">{step.title}</div>
         {step.subtitle ? <div className="flow-step-sub">{step.subtitle}</div> : null}
+        {step.wire ? (
+          <div className="flow-step-wire-hint">Wire · Inspect or open Rail view for connected fan-out</div>
+        ) : null}
+        {opBadges.length ? (
+          <div className="flow-step-ops-row">
+            <FlowStepOpBadges ops={opBadges} />
+          </div>
+        ) : null}
         {step.fieldMappings?.length ? (
           <div className="flow-step-field-maps">
             {step.fieldMappings.map((m) => (

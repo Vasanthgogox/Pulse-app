@@ -91,7 +91,7 @@ export function SignupFlowEmbed({
             ))}
           </div>
           <div className="flow-fork-label">
-            After OTP · resolver branches — expand a variant below for Org → Account → trigger
+            After OTP — expand a variant below for Org → Account → trigger
           </div>
         </section>
       ) : null}

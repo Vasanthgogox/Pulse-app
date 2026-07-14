@@ -375,3 +375,33 @@ export const VEHICLE_INSERT = `INSERT INTO public.vehicles (
 );
 -- type = 'owned' (organization) | 'adhoc' (partner)
 -- vehicles.service createVehicle`;
+
+/** Ensure client / supplier / driver chat lanes for a trip */
+export const ENSURE_TRIP_PARTY_CHATS = `-- DB: fn_ensure_trip_party_conversations(trip_id)
+-- Upserts trip_conversations rows for present parties:
+--   client   if trips.client_id
+--   supplier if trips.supplier_id
+--   driver   if trips.driver_id
+-- Plus unified room via fn_ensure_trip_chat_room_core`;
+
+/** Status change → system message on every trip lane */
+export const BROADCAST_TRIP_STATUS_TO_CHAT = `-- Trigger trg_trip_status_to_chat ON trips.status INSERT/UPDATE
+-- → fn_broadcast_trip_status_to_chat → fn_post_system_message_to_trip_chats
+-- App RPC: change_trip_status_with_notification (status_change to all lanes)
+-- Terminal statuses may also post feedback prompts`;
+
+/** Driver claims OTP trip (app-less / tracking_only row) */
+export const CLAIM_TRIP_BY_OTP = `-- tripOtp.service claimTripByOtp
+-- Validates trip_otp_codes then links drivers.user_id = auth.uid()
+-- After claim: driver app sees trip via Drivers can read own trips RLS`;
+
+/** Assignment bridge posts to all trip conversations */
+export const CHAT_ASSIGNMENT_BRIDGE = `-- chatAssignmentBridge.service
+-- postAssignmentUpdateToTripChats / postAggregateAssignmentMessage
+-- INSERT trip_messages type=assignment_update into EVERY conversation for the trip
+-- (skips duplicate when status broadcast already covered initial assign)`;
+
+/** Ledger event posts only to matching client or supplier lane */
+export const CHAT_LEDGER_BRIDGE = `-- chatLedgerBridge.service postLedgerEventToChat
+-- Posts ledger_event to matching client OR supplier lane only (not driver)
+-- Visibility filtered by messagePartyVisibility`;

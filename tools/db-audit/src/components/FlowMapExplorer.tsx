@@ -29,6 +29,7 @@ import {
   layerRowClass,
 } from '@/lib/stepInspectorTable';
 import { FlowStepOpBadges } from '@/components/FlowStepOpBadges';
+import { NotebookWireMap } from '@/components/NotebookWireOverlay';
 import { getStepOperationBadges } from '@/lib/stepOperationBadges';
 import { findCreateTripTrackForStep } from '@/lib/flows/business/steps/step05CreateTripTracks';
 import { findManageTripTrackForStep } from '@/lib/flows/business/steps/step05ManageTripTracks';
@@ -60,12 +61,16 @@ function PhasePill({ phase }: { phase: FlowStep['phase'] }) {
 }
 
 function StepInspector({ step }: { step: FlowStep | null }) {
-  const [view, setView] = useState<'detail' | 'table'>('detail');
+  const [view, setView] = useState<'map' | 'detail' | 'table'>('map');
   const tableRows = useMemo(() => (step ? buildStepInspectorRows(step) : []), [step]);
   const trackContext = useMemo(() => {
     if (!step) return null;
     return findCreateTripTrackForStep(step.id) ?? findManageTripTrackForStep(step.id) ?? null;
   }, [step]);
+
+  useEffect(() => {
+    setView('map');
+  }, [step?.id]);
 
   if (!step) {
     return (
@@ -73,7 +78,7 @@ function StepInspector({ step }: { step: FlowStep | null }) {
         <div className="flow-inspector-placeholder">
           <span className="flow-inspector-icon">◎</span>
           <p>Expand an <strong>app flow step</strong> or click <strong>Inspect</strong> for module overview.</p>
-          <p className="muted">Inside a module, click a step for fields, services, reads, and DB writes.</p>
+          <p className="muted">Click a step — Schema Map appears here.</p>
         </div>
       </div>
     );
@@ -86,6 +91,15 @@ function StepInspector({ step }: { step: FlowStep | null }) {
           <PhasePill phase={step.phase} />
           <FlowStepOpBadges ops={getStepOperationBadges(step)} />
           <div className="flow-inspector-view-tabs" role="tablist" aria-label="Inspector view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'map'}
+              className={`flow-inspector-view-tab${view === 'map' ? ' active' : ''}`}
+              onClick={() => setView('map')}
+            >
+              Map
+            </button>
             <button
               type="button"
               role="tab"
@@ -118,7 +132,12 @@ function StepInspector({ step }: { step: FlowStep | null }) {
         <p className="flow-inspector-sub">{step.subtitle || '—'}</p>
       </div>
 
-      {view === 'table' ? (
+      {view === 'map' ? (
+        <div className="flow-inspector-wire-pane">
+          <div className="flow-schema-eyebrow inline">Schema Map</div>
+          <NotebookWireMap step={step} />
+        </div>
+      ) : view === 'table' ? (
         <div className="flow-inspector-table-wrap">
           <table className="flow-inspector-table">
             <thead>
@@ -591,7 +610,7 @@ export function FlowMapExplorer({ personaId }: { personaId: PersonaId }) {
         </div>
 
         <aside className="flow-inspector-wrap">
-          <div className="flow-inspector-label">Step inspector</div>
+          <div className="flow-inspector-label">Schema Map</div>
           <StepInspector
             step={selectedStep ?? (selectedStepId === TRIGGER_STEP.id ? TRIGGER_STEP : null)}
           />

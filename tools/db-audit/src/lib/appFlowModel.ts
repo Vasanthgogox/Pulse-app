@@ -157,7 +157,7 @@ export function createTripModuleStats(persona: PersonaFlow): FlowAppModule | nul
     label: 'Create',
     title: 'Create trip',
     summary:
-      'Route → load → sale, then one of 4 journeys (allocate + save + exit on the same track).',
+      'Route → load → sale → 4 journeys (allocate + save) → per-track parties · OTP · chat · finance · who updates.',
     route: '/add-trip',
     screen: 'AddTripModal · AllocationMobileWizardShell · handleComplete',
     kind: 'wizard-embed',
@@ -186,7 +186,8 @@ export function manageTripModuleStats(persona: PersonaFlow): FlowAppModule | nul
     order: 6,
     label: 'Manage',
     title: 'Manage trip',
-    summary: 'Trip detail → re-assign track → shared ops & verification.',
+    summary:
+      'Trip detail → re-assign track → chat/OTP visibility → shared ops & verification.',
     route: '/trip/[id]',
     screen: 'TripDetailScreen · TripAssignmentFlowScreen · operations · verification',
     kind: 'wizard-embed',

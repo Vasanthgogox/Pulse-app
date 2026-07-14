@@ -37,11 +37,11 @@ export function AppFlowModuleCard({
           </span>
           <span className="flow-module-order">{module.order}</span>
           <div className="flow-module-meta">
-            <div className="flow-module-title-row">
+            <div className="flow-module-kicker">
               <span className="flow-module-label">{module.label}</span>
-              <span className="flow-module-title">{module.title}</span>
               <span className="flow-module-count">{countLabel}</span>
             </div>
+            <div className="flow-module-title">{module.title}</div>
             <div className="flow-module-summary">{module.summary}</div>
             <code className="flow-module-route">{module.route}</code>
           </div>

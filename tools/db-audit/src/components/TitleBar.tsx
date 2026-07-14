@@ -17,6 +17,9 @@ export function TitleBar() {
         <Link to={ROUTES.FLOW_MAP} className="tbar-nav-link">
           Flow Map
         </Link>
+        <Link to={ROUTES.LIFECYCLE_MAP} className="tbar-nav-link">
+          Lifecycle Map
+        </Link>
       </div>
       <div className="titlebar-spacer" />
       <span className="tbar-tester">tester: {tester}</span>

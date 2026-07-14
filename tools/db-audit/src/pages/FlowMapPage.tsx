@@ -24,6 +24,9 @@ export function FlowMapPage() {
           <Link to={ROUTES.AUDIT} className="tbar-nav-link">
             ← Audit Matrix
           </Link>
+          <Link to={ROUTES.LIFECYCLE_MAP} className="tbar-nav-link">
+            Lifecycle Map
+          </Link>
         </div>
         <div className="titlebar-spacer" />
       </div>

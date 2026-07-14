@@ -1,15 +1,7 @@
 import type { FlowStep } from '@/lib/flowStep.types';
-import { buildFlowRailAttachments, type FlowRailAttachmentKind } from '@/lib/flowRailAttachments';
+import { buildFlowRailAttachments } from '@/lib/flowRailAttachments';
 import { FlowStepOpBadges } from '@/components/FlowStepOpBadges';
 import { getStepOperationBadges } from '@/lib/stepOperationBadges';
-
-const ATTACH_LABELS: Record<FlowRailAttachmentKind, string> = {
-  read: 'Read',
-  write: 'Write',
-  service: 'Service',
-  route: 'Route',
-  field: 'Field',
-};
 
 function phaseClass(phase: FlowStep['phase']): string {
   switch (phase) {
@@ -24,6 +16,12 @@ function phaseClass(phase: FlowStep['phase']): string {
     default:
       return 'phase-ui';
   }
+}
+
+function countMindNodes(step: FlowStep): number {
+  const attachments = buildFlowRailAttachments(step);
+  if (attachments.length === 0) return 1;
+  return attachments.reduce((n, a) => n + 1 + (a.children?.length ?? 0), 0);
 }
 
 export function FlowRailStepRow({
@@ -41,11 +39,15 @@ export function FlowRailStepRow({
   isLast?: boolean;
   onSelect: (stepId: string) => void;
 }) {
-  const attachments = buildFlowRailAttachments(step);
   const ops = getStepOperationBadges(step);
+  const nodeCount = countMindNodes(step);
 
   return (
-    <div className={`flow-rail-row${selected ? ' is-selected' : ''}${isLast ? ' is-last' : ''}`}>
+    <div
+      className={`flow-rail-row${selected ? ' is-selected' : ''}${isLast ? ' is-last' : ''}${
+        step.wire ? ' has-wire' : ''
+      }`}
+    >
       <div className="flow-rail-spine-col" aria-hidden={false}>
         {!isFirst ? <div className="flow-rail-stem" /> : <div className="flow-rail-stem flow-rail-stem-top" />}
         <button
@@ -73,26 +75,18 @@ export function FlowRailStepRow({
       </div>
 
       <div className="flow-rail-attach-col">
-        {attachments.length === 0 ? (
-          <div className="flow-rail-attach flow-rail-attach-empty">
-            <span className="flow-rail-attach-kind">—</span>
-            <span className="flow-rail-attach-label">UI only</span>
-          </div>
-        ) : (
-          attachments.map((att) => (
-            <button
-              key={att.id}
-              type="button"
-              className={`flow-rail-attach kind-${att.kind}${selected ? ' is-parent-selected' : ''}`}
-              onClick={() => onSelect(step.id)}
-              title={att.detail}
-            >
-              <span className="flow-rail-attach-kind">{ATTACH_LABELS[att.kind]}</span>
-              <span className="flow-rail-attach-label">{att.label}</span>
-              {att.detail ? <span className="flow-rail-attach-detail">{att.detail}</span> : null}
-            </button>
-          ))
-        )}
+        <button
+          type="button"
+          className={`flow-rail-map-cta${selected ? ' is-selected' : ''}`}
+          onClick={() => onSelect(step.id)}
+          title="Open Schema Map"
+        >
+          <span className="flow-rail-map-cta-label">Schema map</span>
+          <span className="flow-rail-map-cta-meta">{nodeCount} nodes</span>
+          <span className="flow-rail-map-cta-arrow" aria-hidden>
+            ›
+          </span>
+        </button>
       </div>
     </div>
   );

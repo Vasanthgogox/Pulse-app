@@ -173,6 +173,7 @@ function flattenTrackSteps(tracks: typeof businessCreateTripTracks): FlowStep[] 
     out.push(...t.allocationSteps);
     if (t.submitSteps) out.push(...t.submitSteps);
     for (const f of t.submitForks ?? []) out.push(...f.steps);
+    if (t.lifecycleSteps) out.push(...t.lifecycleSteps);
   }
   return out;
 }
