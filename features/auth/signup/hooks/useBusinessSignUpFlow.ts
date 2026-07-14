@@ -4,6 +4,7 @@ import {
   checkExistingUserByPhone,
   checkEmailRegisteredForSignup,
   checkOrganizationNameTaken,
+  applyPendingOAuthMetadata,
   OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE,
   resendVerificationEmail,
   setPendingOAuthMetadata,
@@ -37,6 +38,13 @@ import {
   readBusinessSignupBrandingStep,
   setBusinessSignupBrandingActive,
 } from '@/lib/onboarding/businessSignupBranding.util';
+import {
+  clearOwnerBusinessProfileRequired,
+  hydrateOwnerBusinessProfileFlag,
+  persistOwnerBusinessProfileStep,
+  readOwnerBusinessProfileStep,
+  setOwnerBusinessProfileRequired,
+} from '@/lib/onboarding/incompleteOwnerOrg.util';
 import {
   clearPendingPersonalization,
   getPendingPersonalization,
@@ -120,6 +128,8 @@ export function useBusinessSignUpFlow() {
 
   const [step, setStep] = useState(0);
   const [introDismissed, setIntroDismissed] = useState(() => isTeamInviteEntry);
+  /** After welcome-Google (or shell-org gate): collect Org → Profile → City, skip Account. */
+  const [postGoogleOwnerWizard, setPostGoogleOwnerWizard] = useState(false);
 
   // Step 0
   const [phone, setPhoneRaw] = useState('');
@@ -334,6 +344,31 @@ export function useBusinessSignUpFlow() {
       cancelled = true;
     };
   }, []);
+
+  // Resume post-Google owner wizard (org/profile/city) after bounce or incomplete-org gate.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const required = await hydrateOwnerBusinessProfileFlag();
+      if (cancelled || !required) return;
+      setPostGoogleOwnerWizard(true);
+      setIntroDismissed(true);
+      const savedStep = await readOwnerBusinessProfileStep();
+      if (cancelled) return;
+      setStep(savedStep != null ? savedStep : 2);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist org wizard progress while the incomplete-owner gate is active.
+  useEffect(() => {
+    if (!postGoogleOwnerWizard) return;
+    if (step >= 2 && step <= 4) {
+      void persistOwnerBusinessProfileStep(step);
+    }
+  }, [postGoogleOwnerWizard, step]);
 
   // Resume member invite onboarding after app restart (pending invitation in storage).
   useEffect(() => {
@@ -972,9 +1007,50 @@ export function useBusinessSignUpFlow() {
     goToPage(4);
   };
 
-  const continueCompanyLocation = () => {
+  const continueCompanyLocation = async () => {
     setStep4Attempted(true);
     if (!step4Valid) return;
+
+    // Post-Google path: session already exists — write business fields, skip Account.
+    if (postGoogleOwnerWizard) {
+      if (!isOnline) return Alert.alert('No internet', 'Connect to continue.');
+      setLoading(true);
+      const storedPhone = normalizeIndianPhoneForMetadata(phone);
+      const pending = await setPendingOAuthMetadata({
+        fullName: fullName.trim() || undefined,
+        phone: storedPhone && extractIndianMobileTenDigits(phone) ? storedPhone : undefined,
+        companyName: orgName.trim(),
+        role: 'user',
+        operatingModel,
+        addressLine: streetAddress.trim(),
+        locality: locality.trim() || undefined,
+        pincode: pincode.replace(/\D/g, ''),
+        city: selectedLocation?.city,
+        state: selectedLocation?.state,
+        zone: selectedLocation?.zone,
+        officeLatitude: officeLatitude ?? undefined,
+        officeLongitude: officeLongitude ?? undefined,
+        businessType: businessType ?? undefined,
+        employeeCount: employeeCount ?? undefined,
+        fleetSizeBand: fleetSize ?? undefined,
+        monthlyVolumeBand: monthlyVolume ?? undefined,
+        onboardingType: 'owner',
+      });
+      if (pending.error) {
+        setLoading(false);
+        return Alert.alert('Error', pending.error.message);
+      }
+      const applied = await applyPendingOAuthMetadata();
+      setLoading(false);
+      if (applied.status === 'partial_failure') {
+        return Alert.alert("You're signed in", OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE);
+      }
+      clearOwnerBusinessProfileRequired();
+      setPostGoogleOwnerWizard(false);
+      await enterPostAuthBranding();
+      return;
+    }
+
     goToPage(5);
   };
 
@@ -1168,6 +1244,7 @@ export function useBusinessSignUpFlow() {
       employeeCount: employeeCount ?? undefined,
       fleetSizeBand: fleetSize ?? undefined,
       monthlyVolumeBand: monthlyVolume ?? undefined,
+      onboardingType: 'owner',
     });
     if (pending.error) { setGoogleLoading(false); return Alert.alert('Error', pending.error.message); }
 
@@ -1179,9 +1256,7 @@ export function useBusinessSignUpFlow() {
     }
 
     // Follow the same post-auth progression as the email/password path (createAccount)
-    // instead of leaving the user on this screen with no way forward. Scoped to this
-    // path only — continueWithGoogleFromWelcome collects no business data and is a
-    // separate express-signup entry point, not covered by this fix.
+    // instead of leaving the user on this screen with no way forward.
     await enterPostAuthBranding();
   };
 
@@ -1193,6 +1268,7 @@ export function useBusinessSignUpFlow() {
     const pending = await setPendingOAuthMetadata({
       role: 'user',
       operatingModel: 'HYBRID',
+      onboardingType: 'owner',
       ...(storedPhone && tenDigits ? { phone: storedPhone } : {}),
     });
     if (pending.error) { setGoogleLoading(false); return Alert.alert('Error', pending.error.message); }
@@ -1202,6 +1278,12 @@ export function useBusinessSignUpFlow() {
     if (metadataStatus === 'partial_failure') {
       Alert.alert("You're signed in", OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE);
     }
+
+    // Keep the user on signup to collect Org → Profile → City (do not dump into workspace).
+    setOwnerBusinessProfileRequired(true);
+    setPostGoogleOwnerWizard(true);
+    setIntroDismissed(true);
+    goToPage(2);
   };
 
   const resendVerification = async () => {
@@ -1391,8 +1473,7 @@ export function useBusinessSignUpFlow() {
     locationScrollRef,
     isOnline,
 
-    // step
-    step,
+    postGoogleOwnerWizard,
     showIntro,
     dismissIntro: () => setIntroDismissed(true),
     goToPage,
@@ -1514,7 +1595,10 @@ export function useBusinessSignUpFlow() {
     uploadProfilePhoto,
     continueFromProfilePhoto,
     skipProfilePhoto,
-    finishBusinessSignup: clearBusinessSignupBranding,
+    finishBusinessSignup: () => {
+      clearBusinessSignupBranding();
+      clearOwnerBusinessProfileRequired();
+    },
 
     // invitation resolver
     signupTrack,

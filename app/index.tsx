@@ -17,6 +17,13 @@ import {
   isBusinessSignupBrandingActiveSync,
   isDriverSignupSuccessActiveSync,
 } from '@/lib/onboarding/businessSignupBranding.util';
+import {
+  detectIncompleteOwnerOrgForSession,
+  isOwnerBusinessProfileRequiredSync,
+  sessionHasGoogleProvider,
+  setOwnerBusinessProfileRequired,
+} from '@/lib/onboarding/incompleteOwnerOrg.util';
+import { hasPendingOAuthMetadata } from '@/features/auth/services/auth.service';
 import { DEFAULT_DRIVER_ROUTE, ROUTES } from '@/lib/routes';
 import {
   finalizeSuiteNavigationIntent,
@@ -69,9 +76,14 @@ export default function Index() {
       return;
     }
 
-    if (isBusinessSignupBrandingActiveSync()) {
+    if (isBusinessSignupBrandingActiveSync() || isOwnerBusinessProfileRequiredSync()) {
       if (pathname === '/' || pathname === '') {
-        logRouteDecision('redirect_business_signup_branding_resume', { uid, pathname });
+        logRouteDecision('redirect_business_signup_resume', {
+          uid,
+          pathname,
+          branding: isBusinessSignupBrandingActiveSync(),
+          ownerProfile: isOwnerBusinessProfileRequiredSync(),
+        });
         router.replace(ROUTES.ONBOARDING.BUSINESS);
       }
       return;
@@ -144,11 +156,34 @@ export default function Index() {
 
     if (!claimIndexBootRedirect(uid)) return;
 
-    void getLastTabRoute().then((route) => {
-      preloadTabForRoute(route);
-      logRouteDecision('redirect_dispatcher_last_tab', { uid, pathname, route });
-      router.replace(route as '/');
-    });
+    void (async () => {
+      try {
+        const pendingMeta = await hasPendingOAuthMetadata();
+        if (pendingMeta) {
+          setOwnerBusinessProfileRequired(true);
+          logRouteDecision('redirect_pending_oauth_metadata', { uid });
+          router.replace(ROUTES.ONBOARDING.BUSINESS);
+          return;
+        }
+        const isGoogle = await sessionHasGoogleProvider();
+        if (isGoogle) {
+          const { incomplete } = await detectIncompleteOwnerOrgForSession();
+          if (incomplete) {
+            setOwnerBusinessProfileRequired(true);
+            logRouteDecision('redirect_incomplete_owner_org', { uid });
+            router.replace(ROUTES.ONBOARDING.BUSINESS);
+            return;
+          }
+        }
+      } catch {
+        // Fall through to normal tab redirect
+      }
+      void getLastTabRoute().then((route) => {
+        preloadTabForRoute(route);
+        logRouteDecision('redirect_dispatcher_last_tab', { uid, pathname, route });
+        router.replace(route as '/');
+      });
+    })();
   }, [uid, profile, loading, pathname, router, isFocused, brandingGateHydrated, returnTo]);
 
   const splashVariant = useMemo(() => {

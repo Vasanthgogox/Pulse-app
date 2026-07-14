@@ -399,6 +399,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               commitAuthenticatedSession(auth.user, auth.profile, {
                 logEvent: "auth_state_signed_in",
               });
+              // Finish Google wizard metadata if a prior apply was partial / interrupted.
+              void authService.applyPendingOAuthMetadata();
               scheduleDbProfileHydration(auth.user.uid, auth.profile, () =>
                 mounted && isCurrentListenerSeq(seqId),
               );
@@ -464,6 +466,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               logEvent: "restore_session_applied",
             });
             restoringRef.current = false;
+            // Retry deferred Google onboarding writes kept in AsyncStorage.
+            void authService.applyPendingOAuthMetadata();
 
             void (async () => {
               try {

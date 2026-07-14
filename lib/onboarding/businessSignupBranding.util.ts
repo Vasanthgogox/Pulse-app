@@ -1,4 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  hydrateOwnerBusinessProfileFlag,
+  isOwnerBusinessProfileRequiredSync,
+} from '@/lib/onboarding/incompleteOwnerOrg.util';
 
 const BUSINESS_BRANDING_FLAG_KEY = '@pulse_business_signup_branding_v1';
 const BUSINESS_BRANDING_STEP_KEY = '@pulse_business_signup_branding_step_v1';
@@ -45,7 +49,11 @@ export function isDriverSignupSuccessActiveSync(): boolean {
 }
 
 export function isSignupFlowGateActiveSync(): boolean {
-  return businessBrandingActive || driverSuccessActive;
+  return (
+    businessBrandingActive ||
+    driverSuccessActive ||
+    isOwnerBusinessProfileRequiredSync()
+  );
 }
 
 export async function hydrateBusinessSignupBrandingFlag(): Promise<boolean> {
@@ -70,7 +78,11 @@ export async function hydrateDriverSignupSuccessFlag(): Promise<boolean> {
 
 /** Hydrate all signup completion gates (call once at boot). */
 export async function hydrateSignupFlowFlags(): Promise<void> {
-  await Promise.all([hydrateBusinessSignupBrandingFlag(), hydrateDriverSignupSuccessFlag()]);
+  await Promise.all([
+    hydrateBusinessSignupBrandingFlag(),
+    hydrateDriverSignupSuccessFlag(),
+    hydrateOwnerBusinessProfileFlag(),
+  ]);
 }
 
 export async function persistBusinessSignupBrandingStep(step: number): Promise<void> {

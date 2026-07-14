@@ -948,11 +948,24 @@ export const OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE =
   "You're signed in, but we couldn't finish saving some of your business information. " +
   'Please review your business profile after entering the workspace.';
 
+/** True when AsyncStorage still holds pending Google onboarding metadata. */
+export async function hasPendingOAuthMetadata(): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(PENDING_OAUTH_METADATA_KEY);
+    return !!raw;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Applies onboarding metadata (role, business profile details) captured before the
  * OAuth session existed. Auth metadata, profile, and organization writes are each
  * checked independently — callers must not infer success from the absence of a
  * thrown error; inspect the returned status instead.
+ *
+ * Pending storage is cleared only after every required write succeeds so a retry
+ * (callback re-entry or session restore) can finish a partial failure.
  */
 export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataResult> {
   let raw: string | null = null;
@@ -971,10 +984,10 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
     pending = JSON.parse(raw) as PendingOAuthOnboardingMetadata;
   } catch {
     pending = null;
-  } finally {
-    await AsyncStorage.removeItem(PENDING_OAUTH_METADATA_KEY).catch(() => {});
   }
   if (!pending) {
+    // Corrupt payload — drop it so we do not retry forever.
+    await AsyncStorage.removeItem(PENDING_OAUTH_METADATA_KEY).catch(() => {});
     void trySyncMyDriverRowsUserId();
     return { status: 'skipped' };
   }
@@ -1010,6 +1023,8 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
   const pendingOnboardingType: OnboardingType =
     pending.onboardingType ??
     (pending.skipOrgCreation ? 'member' : 'owner');
+  // Explicit so Google INSERT (which defaults onboarding_type in the trigger) and
+  // post-session auth.user metadata stay aligned with the wizard intent.
   Object.assign(authData, onboardingTypeToMetadata(pendingOnboardingType));
 
   if (pending.phone != null && pending.phone !== "") {
@@ -1046,7 +1061,10 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
     if (pending.locality?.trim()) orgUpdates.locality = pending.locality.trim();
     if (pending.pincode?.trim()) {
       const digits = pending.pincode.replace(/\D/g, '');
-      if (digits) orgUpdates.pincode = digits;
+      if (digits) {
+        orgUpdates.pincode = digits;
+        orgUpdates.address_pincode = digits;
+      }
     }
     if (pending.city?.trim()) orgUpdates.city = pending.city.trim();
     if (pending.state?.trim()) orgUpdates.state = pending.state.trim();
@@ -1056,11 +1074,14 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
   }
 
   const profileResult = Object.keys(profileUpdates).length > 0
-    ? await supabase().from("profiles").update(profileUpdates).eq("id", userId)
+    ? await supabase().from("profiles").update(profileUpdates).eq("id", userId).select("id")
     : null;
 
   if (profileResult?.error) {
     console.warn('[auth] applyPendingOAuthMetadata: profile update failed:', profileResult.error.message);
+    failedSteps.push('profile');
+  } else if (profileResult && (!profileResult.data || profileResult.data.length === 0)) {
+    console.warn('[auth] applyPendingOAuthMetadata: profile update matched 0 rows');
     failedSteps.push('profile');
   }
 
@@ -1089,21 +1110,28 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
     const orgFilter = orgId
       ? { column: "id" as const, value: orgId }
       : { column: "owner_id" as const, value: userId };
-    const { error: orgUpdateError } = await supabase()
+    const { data: updatedOrgs, error: orgUpdateError } = await supabase()
       .from("organizations")
       .update(orgUpdates)
-      .eq(orgFilter.column, orgFilter.value);
+      .eq(orgFilter.column, orgFilter.value)
+      .select("id");
     if (orgUpdateError) {
       console.warn('[auth] applyPendingOAuthMetadata: organization update failed:', orgUpdateError.message);
+      failedSteps.push('organization');
+    } else if (!updatedOrgs || updatedOrgs.length === 0) {
+      console.warn('[auth] applyPendingOAuthMetadata: organization update matched 0 rows');
       failedSteps.push('organization');
     }
   }
 
   void trySyncMyDriverRowsUserId();
 
-  return failedSteps.length > 0
-    ? { status: 'partial_failure', failedSteps }
-    : { status: 'success' };
+  if (failedSteps.length > 0) {
+    return { status: 'partial_failure', failedSteps };
+  }
+
+  await AsyncStorage.removeItem(PENDING_OAUTH_METADATA_KEY).catch(() => {});
+  return { status: 'success' };
 }
 
 export async function signOut(): Promise<void> {

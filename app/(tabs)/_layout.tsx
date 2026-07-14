@@ -29,6 +29,7 @@ import {
   isBusinessSignupBrandingActiveSync,
   isDriverSignupSuccessActiveSync,
 } from '@/lib/onboarding/businessSignupBranding.util';
+import { isOwnerBusinessProfileRequiredSync } from '@/lib/onboarding/incompleteOwnerOrg.util';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -207,7 +208,7 @@ export default function TabLayout() {
       router.replace('/driver-signup');
       return;
     }
-    if (isBusinessSignupBrandingActiveSync()) {
+    if (isBusinessSignupBrandingActiveSync() || isOwnerBusinessProfileRequiredSync()) {
       router.replace(ROUTES.ONBOARDING.BUSINESS);
       return;
     }
