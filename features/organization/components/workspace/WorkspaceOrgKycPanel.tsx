@@ -35,6 +35,7 @@ import {
   kycBusinessDetailsProgressPct,
   kycDocumentsProgressPct,
   kycStructureRequirementsHint,
+  effectiveKycRegistrationType,
   registrationTypeLabel,
 } from '@/features/organization/utils/kycVerification.util';
 import { useOrgRole } from '@/lib/hooks/useOrgRole';
@@ -173,9 +174,9 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
             canSubmit={canSubmit}
             submitting={submitting}
             missingItems={submitGaps}
-            structureLabel={registrationTypeLabel(kyc?.registration_type) || null}
+            structureLabel={registrationTypeLabel(effectiveKycRegistrationType(kyc)) || null}
             structureHint={kycStructureRequirementsHint(
-              kyc?.registration_type,
+              effectiveKycRegistrationType(kyc),
               !!kyc?.gst_not_applicable,
             )}
             onSubmit={() => void submitForVerification()}

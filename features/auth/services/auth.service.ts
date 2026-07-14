@@ -9,6 +9,7 @@ import { PHONE_LOOKUP_TIMEOUT_MS } from "@/features/auth/signup/signUpConstants"
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { OnboardingType } from '@/lib/onboarding/onboardingTypes';
 import { createsOrganization, onboardingTypeToMetadata } from '@/lib/onboarding/onboardingTypes';
+import { registrationTypeFromBusinessType } from '@/features/organization/utils/kycVerification.util';
 import {
   extractIndianMobileTenDigits,
   normalizeIndianPhoneForMetadata,
@@ -1069,7 +1070,12 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
     if (pending.city?.trim()) orgUpdates.city = pending.city.trim();
     if (pending.state?.trim()) orgUpdates.state = pending.state.trim();
     if (pending.zone?.trim()) orgUpdates.zone = pending.zone.trim();
-    if (pending.businessType?.trim()) orgUpdates.business_type = pending.businessType.trim();
+    if (pending.businessType?.trim()) {
+      orgUpdates.business_type = pending.businessType.trim();
+      // Keep KYC registration_type in sync with signup structure.
+      const mapped = registrationTypeFromBusinessType(pending.businessType);
+      if (mapped) orgUpdates.registration_type = mapped;
+    }
     if (pending.employeeCount?.trim()) orgUpdates.employee_count = pending.employeeCount.trim();
   }
 

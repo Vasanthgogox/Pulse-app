@@ -1474,6 +1474,8 @@ export function useBusinessSignUpFlow() {
     isOnline,
 
     postGoogleOwnerWizard,
+    // step
+    step,
     showIntro,
     dismissIntro: () => setIntroDismissed(true),
     goToPage,

@@ -6,6 +6,7 @@ import {
   kycOptionalDocumentDefs,
   kycRequiredDocumentDefs,
   kycStructureRequirementsHint,
+  effectiveKycRegistrationType,
   registrationTypeLabel,
 } from '@/features/organization/utils/kycVerification.util';
 import { StyleSheet, Text, View } from 'react-native';
@@ -33,9 +34,10 @@ export function KycRequiredDocumentsSection({
 }: Props) {
   const requiredDefs = kycRequiredDocumentDefs(kyc);
   const optionalDefs = kycOptionalDocumentDefs(kyc);
-  const structureLabel = registrationTypeLabel(kyc?.registration_type);
+  const resolvedType = effectiveKycRegistrationType(kyc);
+  const structureLabel = registrationTypeLabel(resolvedType);
   const structureHint = kycStructureRequirementsHint(
-    kyc?.registration_type,
+    resolvedType,
     !!kyc?.gst_not_applicable,
   );
 

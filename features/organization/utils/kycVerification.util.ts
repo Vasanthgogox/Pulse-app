@@ -12,6 +12,34 @@ import {
 import type { RegistrationType, WorkspaceKyc } from '@/types/organization';
 import { isVerificationFrozen } from '@/types/organization';
 
+/**
+ * Signup `organizations.business_type` → KYC `registration_type`.
+ * OPC / OTHER have no matrix equivalent and stay unset.
+ */
+export const BUSINESS_TYPE_TO_REGISTRATION: Record<string, RegistrationType> = {
+  SOLE_PROPRIETOR: 'proprietorship',
+  PARTNERSHIP: 'partnership',
+  PVT_LTD: 'pvt_ltd',
+  LLP: 'llp',
+  // PUBLIC_LTD not collected at signup today; map if ever added:
+  PUBLIC_LTD: 'public_ltd',
+};
+
+export function registrationTypeFromBusinessType(
+  businessType: string | null | undefined,
+): RegistrationType | null {
+  if (!businessType?.trim()) return null;
+  return BUSINESS_TYPE_TO_REGISTRATION[businessType.trim()] ?? null;
+}
+
+/** Prefer explicit KYC registration_type; else map signup business_type. */
+export function effectiveKycRegistrationType(
+  kyc: Pick<WorkspaceKyc, 'registration_type' | 'business_type'> | null | undefined,
+): RegistrationType | null {
+  if (!kyc) return null;
+  return kyc.registration_type ?? registrationTypeFromBusinessType(kyc.business_type);
+}
+
 function isWorkspaceKyc(
   value: RegistrationType | WorkspaceKyc | null | undefined,
 ): value is WorkspaceKyc {
@@ -76,7 +104,7 @@ export function kycRequiredDocumentDefs(
   let skipGst: boolean;
 
   if (isWorkspaceKyc(registrationTypeOrKyc)) {
-    registrationType = registrationTypeOrKyc.registration_type;
+    registrationType = effectiveKycRegistrationType(registrationTypeOrKyc);
     skipGst = !!registrationTypeOrKyc.gst_not_applicable;
   } else {
     registrationType = registrationTypeOrKyc ?? null;
@@ -169,10 +197,11 @@ export function kycOptionalDocumentDefs(
 
   const extras: OrganizationKycDocDefinition[] = [];
 
+  const resolvedForOptional = effectiveKycRegistrationType(kyc);
   if (
-    kyc?.registration_type === 'proprietorship' ||
-    kyc?.registration_type === 'partnership' ||
-    !kyc?.registration_type
+    resolvedForOptional === 'proprietorship' ||
+    resolvedForOptional === 'partnership' ||
+    !resolvedForOptional
   ) {
     // Companies/LLP already require incorporation; sole traders may still attach optionally.
     if (!covered.has('cin_certificate') && !covered.has('incorporation_certificate')) {
@@ -249,10 +278,11 @@ export function listMissingKycRequirements(
   const fields: string[] = [];
   const docs: string[] = [];
 
-  if (!kyc.registration_type) fields.push('registration_type');
+  const resolvedType = effectiveKycRegistrationType(kyc);
+  if (!resolvedType) fields.push('registration_type');
   if (!kyc.business_pan?.trim()) fields.push('business_pan');
   if (!kyc.gst_not_applicable && !kyc.gstin?.trim()) fields.push('gstin');
-  if (registrationTypeRequiresCin(kyc.registration_type) && !kyc.cin?.trim()) {
+  if (registrationTypeRequiresCin(resolvedType) && !kyc.cin?.trim()) {
     fields.push('cin');
   }
 
@@ -346,11 +376,12 @@ export function kycVerificationProgressPct(
   documents: OrganizationKycDocument[] = [],
 ): number {
   if (!kyc) return 0;
+  const resolvedType = effectiveKycRegistrationType(kyc);
   const checks = [
     kyc.gst_not_applicable || !!kyc.gstin?.trim(),
     !!kyc.business_pan?.trim(),
-    !registrationTypeRequiresCin(kyc.registration_type) || !!kyc.cin?.trim(),
-    !!kyc.registration_type,
+    !registrationTypeRequiresCin(resolvedType) || !!kyc.cin?.trim(),
+    !!resolvedType,
     !!(kyc.address_line?.trim() && kyc.city?.trim() && kyc.state?.trim()),
     !!kyc.address_pincode?.trim(),
     kycMandatoryDocumentsComplete(documents, kyc),
@@ -417,7 +448,7 @@ export function kycBusinessDetailsProgressPct(
   website?: string | null,
 ): number {
   const checks = [
-    !!kyc?.registration_type,
+    !!effectiveKycRegistrationType(kyc),
     !!(kyc?.address_line?.trim() && kyc?.city?.trim() && kyc?.state?.trim()),
     !!website?.trim(),
   ];

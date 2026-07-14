@@ -1,9 +1,12 @@
 import {
+  effectiveKycRegistrationType,
   kycRequiredDocumentDefs,
+  kycStructureRequirementsHint,
   kycTaxIdentifiersComplete,
   kycVerificationReady,
   listKycVerificationGaps,
   listMissingKycRequirements,
+  registrationTypeFromBusinessType,
   registrationTypeRequiresCin,
 } from '@/features/organization/utils/kycVerification.util';
 import type { OrganizationKycDocument } from '@/features/organization/types/organizationKycDocuments.types';
@@ -215,5 +218,29 @@ describe('structure-driven KYC document matrix', () => {
         doc('llp_agreement'),
       ]),
     ).toBe(true);
+  });
+
+  it('uses signup business_type when registration_type is null', () => {
+    expect(registrationTypeFromBusinessType('SOLE_PROPRIETOR')).toBe('proprietorship');
+    expect(
+      effectiveKycRegistrationType({
+        registration_type: null,
+        business_type: 'SOLE_PROPRIETOR',
+      }),
+    ).toBe('proprietorship');
+
+    const kyc = baseKyc({
+      registration_type: null,
+      business_type: 'SOLE_PROPRIETOR',
+      business_pan: 'LTUPS6014E',
+      ...address,
+    });
+    expect(listMissingKycRequirements(kyc, []).fields).not.toContain('registration_type');
+    expect(kycRequiredDocumentDefs(kyc).map((d) => d.type)).toEqual(
+      expect.arrayContaining(['pan_card', 'address_proof', 'gst_certificate']),
+    );
+    expect(kycStructureRequirementsHint(effectiveKycRegistrationType(kyc), false)).toMatch(
+      /Proprietorship/,
+    );
   });
 });

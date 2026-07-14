@@ -51,6 +51,7 @@ import {
 } from '@/features/organization/services/businessVerification.service';
 import { isVerificationFrozen } from '@/types/organization';
 import type { AddressProofType, KycVerificationStatus, RegistrationType, WorkspaceKyc } from '@/types/organization';
+import { BUSINESS_TYPE_TO_REGISTRATION } from '@/features/organization/utils/kycVerification.util';
 
 const REGISTRATION_TYPES: { value: RegistrationType; label: string }[] = [
   { value: 'proprietorship', label: 'Proprietorship'          },
@@ -80,16 +81,6 @@ interface WizardDraft {
   pan:     string;
   proofType: AddressProofType | null;
 }
-
-/** Signup collects business_type (SOLE_PROPRIETOR/PVT_LTD/…); map it to the
- *  verification registration_type enum so the wizard prefills. OPC/OTHER have
- *  no equivalent and stay unselected. */
-const BUSINESS_TYPE_TO_REGISTRATION: Record<string, RegistrationType> = {
-  SOLE_PROPRIETOR: 'proprietorship',
-  PARTNERSHIP:     'partnership',
-  PVT_LTD:         'pvt_ltd',
-  LLP:             'llp',
-};
 
 // ─── Frozen / read-only view ──────────────────────────────────────────────────
 

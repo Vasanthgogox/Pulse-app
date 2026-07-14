@@ -2,6 +2,7 @@ import { LoadingIndicator } from '@/components/LoadingIndicator';
 import Theme from '@/constants/Theme';
 import {
   REGISTRATION_TYPE_OPTIONS,
+  effectiveKycRegistrationType,
   registrationTypeLabel,
 } from '@/features/organization/utils/kycVerification.util';
 import {
@@ -11,7 +12,7 @@ import {
 } from '@/features/organization/components/workspace/workspacePanelUi';
 import type { RegistrationType, WorkspaceKyc } from '@/types/organization';
 import { Check, CircleDashed, Pencil } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 type RegistrationProps = {
@@ -23,12 +24,27 @@ type RegistrationProps = {
 
 export function KycRegistrationTypeRow({ kyc, canEdit, frozen, onSave }: RegistrationProps) {
   const [expanded, setExpanded] = useState(false);
-  const [selected, setSelected] = useState<RegistrationType | null>(kyc?.registration_type ?? null);
+  const [selected, setSelected] = useState<RegistrationType | null>(
+    () => effectiveKycRegistrationType(kyc),
+  );
   const [saving, setSaving] = useState(false);
+  const syncedFromBusinessTypeRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setSelected(kyc?.registration_type ?? null);
-  }, [kyc?.registration_type]);
+    setSelected(effectiveKycRegistrationType(kyc));
+  }, [kyc?.registration_type, kyc?.business_type]);
+
+  // Persist signup business_type → registration_type once so Submit RPC + admin see it.
+  useEffect(() => {
+    if (!canEdit || frozen || !kyc) return;
+    if (kyc.registration_type) return;
+    const mapped = effectiveKycRegistrationType(kyc);
+    if (!mapped) return;
+    const key = `${kyc.id}:${mapped}`;
+    if (syncedFromBusinessTypeRef.current === key) return;
+    syncedFromBusinessTypeRef.current = key;
+    void onSave(mapped);
+  }, [canEdit, frozen, kyc?.id, kyc?.registration_type, kyc?.business_type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filled = !!selected;
   const statusBg = filled ? GREEN_TINT : Theme.surfaceGray;
