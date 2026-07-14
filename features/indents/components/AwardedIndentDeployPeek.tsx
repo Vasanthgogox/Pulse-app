@@ -7,15 +7,14 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronUp, Truck } from "lucide-react-native";
 import { MotiView } from "moti";
 
-import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { getIndentDisplayNumber } from "@/features/indents/services/indents.service";
 import type { PendingAwardedDeployItem } from "@/features/indents/utils/pendingAwardedDeploy.util";
 import { formatINR } from "@/lib/format";
+import { TAB_BAR_DOCK_METRICS, useLayoutInsets } from "@/lib/layoutInsets";
 
 export type AwardedIndentDeployPeekProps = {
   items: PendingAwardedDeployItem[];
@@ -28,7 +27,7 @@ export const AwardedIndentDeployPeek = memo(function AwardedIndentDeployPeek({
   pageIndex,
   onExpand,
 }: AwardedIndentDeployPeekProps) {
-  const insets = useSafeAreaInsets();
+  const layout = useLayoutInsets();
   const item = items[pageIndex] ?? items[0];
   if (!item) return null;
 
@@ -41,19 +40,18 @@ export const AwardedIndentDeployPeek = memo(function AwardedIndentDeployPeek({
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
 
+  // Sit just above the floating tab dock (same metrics as FAB / FloatingChatButton).
+  // Old code used Layout.tabBarHeight (56) and under-cleared Android/iOS, covering the nav.
+  const bottom = layout.hasBottomTabBar
+    ? layout.tabBarDockHeight() + TAB_BAR_DOCK_METRICS.contentGap
+    : Math.max(layout.bottom, 8);
+
   return (
     <MotiView
       from={{ opacity: 0, translateY: 48 }}
       animate={{ opacity: 1, translateY: 0 }}
       transition={{ type: "timing", duration: 280 }}
-      style={[
-        styles.shell,
-        {
-          bottom:
-            Math.max(insets.bottom, 8) +
-            (Platform.OS === "web" ? 0 : Layout.tabBarHeight),
-        },
-      ]}
+      style={[styles.shell, { bottom }]}
       pointerEvents="box-none"
     >
       <Pressable

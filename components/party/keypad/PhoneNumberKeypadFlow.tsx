@@ -136,20 +136,22 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
               <IndiaFlagIcon width={22} height={16} />
               <Text style={styles.ccText}>+91</Text>
             </View>
-            <Text
-              style={[
-                flow.displayValue,
-                wizardShell && styles.displayValueWizard,
-                !digits && flow.displayPlaceholder,
-              ]}
-              numberOfLines={1}
-              accessibilityLabel={digits || placeholder}
-            >
-              {digits || placeholder}
-            </Text>
-            {showCursor ? (
-              <View style={[flow.cursor, wizardShell && styles.cursorWizard]} />
-            ) : null}
+            <View style={flow.displayValueCluster}>
+              <Text
+                style={[
+                  flow.displayValue,
+                  wizardShell && styles.displayValueWizard,
+                  !digits && flow.displayPlaceholder,
+                ]}
+                numberOfLines={1}
+                accessibilityLabel={digits || placeholder}
+              >
+                {digits || placeholder}
+              </Text>
+              {showCursor ? (
+                <View style={[flow.cursor, wizardShell && styles.cursorWizard]} />
+              ) : null}
+            </View>
           </Pressable>
         </View>
 

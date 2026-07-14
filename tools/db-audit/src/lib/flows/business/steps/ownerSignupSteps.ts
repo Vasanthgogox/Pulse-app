@@ -36,27 +36,49 @@ export const OWNER_SIGNUP_STEPS: FlowStep[] = [
     order: 4,
     label: 'Profile',
     title: 'Operations profile',
-    subtitle: 'Fleet model, scale, and structure',
+    subtitle: 'How do you operate? · fleet model, scale, and structure',
     route: '/sign-up',
     screen: 'CompanyDetailsStep',
     phase: 'ui',
     fields: [
+      'operating_model (ASSET_BASED | NON_ASSET | HYBRID)',
       'business_type',
       'employee_count',
-      'operating_model (ASSET_BASED | NON_ASSET | HYBRID)',
-      'fleet_size_band',
-      'monthly_volume_band',
+      'fleet_size_band (Asset · Hybrid)',
+      'monthly_volume_band (Aggregate · Hybrid)',
+    ],
+    routing: [
+      {
+        context: 'ASSET_BASED',
+        track: 'Asset · own trucks',
+        nextScreen: 'Required: business_type · employee_count · fleet_size_band',
+      },
+      {
+        context: 'NON_ASSET',
+        track: 'Aggregate · broker only',
+        nextScreen: 'Required: business_type · employee_count · monthly_volume_band',
+      },
+      {
+        context: 'HYBRID',
+        track: 'Both · mixed fleet',
+        nextScreen: 'Required: business_type · employee_count · fleet_size_band · monthly_volume_band',
+      },
     ],
     queries: [
       {
         label: 'No DB write on this step',
         when: 'Form state → signUp metadata at step 6',
         sql: `-- Stored in React state until createAccount / signUp()
--- fleet_size_band, monthly_volume_band → auth.users metadata ONLY
--- business_type, employee_count, operating_model → auth + organizations (trigger)`,
+-- operating_model → auth.users metadata + organizations.operating_model (trigger)
+-- business_type, employee_count → auth + organizations
+-- fleet_size_band (ASSET_BASED|HYBRID), monthly_volume_band (NON_ASSET|HYBRID) → auth metadata ONLY`,
       },
     ],
-    notes: ['fleet_size_band & monthly_volume_band → auth metadata only (not org columns)'],
+    notes: [
+      'CompanyDetailsStep: fleet_size required for ASSET_BASED + HYBRID',
+      'CompanyDetailsStep: monthly_volume required for NON_ASSET + HYBRID',
+      'fleet_size_band & monthly_volume_band → auth metadata only (not org columns)',
+    ],
   },
   {
     id: 'bu-owner-city',

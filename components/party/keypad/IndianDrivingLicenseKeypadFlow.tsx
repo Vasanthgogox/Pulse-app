@@ -95,18 +95,20 @@ export const IndianDrivingLicenseKeypadFlow = memo(
               color={Theme.iconMuted}
               style={flow.leadingIcon}
             />
-            <Text
-              style={[
-                flow.displayValue,
-                partyKeypadDisplayMono,
-                !displayValue && flow.displayPlaceholder,
-              ]}
-              numberOfLines={1}
-              accessibilityLabel={displayValue || "Driving licence number"}
-            >
-              {displayValue || "TN01 20200001234"}
-            </Text>
-            {showCursor ? <View style={flow.cursor} /> : null}
+            <View style={flow.displayValueCluster}>
+              <Text
+                style={[
+                  flow.displayValue,
+                  partyKeypadDisplayMono,
+                  !displayValue && flow.displayPlaceholder,
+                ]}
+                numberOfLines={1}
+                accessibilityLabel={displayValue || "Driving licence number"}
+              >
+                {displayValue || "TN01 20200001234"}
+              </Text>
+              {showCursor ? <View style={flow.cursor} /> : null}
+            </View>
           </View>
         </View>
 

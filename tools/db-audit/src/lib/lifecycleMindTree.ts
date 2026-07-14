@@ -48,6 +48,14 @@ function appendNextInSeries(host: MindNode, next: MindNode): MindNode {
       host.children.length > 0 &&
       host.children.every((c) => c.kind === 'action' || c.kind === 'fork' || c.kind === 'exit');
     if (parallelFan) {
+      const lastIdx = host.children.length - 1;
+      const lastChild = host.children[lastIdx]!;
+      // Shared prefix + trailing plan fork → push next into each plan (separate Enter workspace)
+      if (lastChild.kind === 'fork') {
+        const kids = host.children.map((c) => cloneNode(c));
+        kids[lastIdx] = appendNextInSeries(kids[lastIdx]!, next);
+        return { ...host, children: kids };
+      }
       return {
         ...host,
         children: [...host.children.map((c) => cloneNode(c)), next],
@@ -125,7 +133,7 @@ function userFieldNodes(step: FlowStep, prefix: string): MindNode[] {
   return [];
 }
 
-function systemNodes(step: FlowStep, prefix: string): MindNode[] {
+function systemNodes(step: FlowStep, prefix: string, opts?: { omitRouting?: boolean }): MindNode[] {
   const out: MindNode[] = [];
   for (const r of step.reads ?? []) {
     out.push({ id: `${prefix}-read-${r}`, label: r, kind: 'read', children: [] });
@@ -139,14 +147,16 @@ function systemNodes(step: FlowStep, prefix: string): MindNode[] {
   for (const call of step.serviceCalls?.slice(0, 3) ?? []) {
     out.push({ id: `${prefix}-svc-${call}`, label: call, kind: 'service', children: [] });
   }
-  for (const r of step.routing ?? []) {
-    out.push({
-      id: `${prefix}-route-${r.track}`,
-      label: r.context,
-      kind: 'route',
-      detail: r.nextScreen,
-      children: [],
-    });
+  if (!opts?.omitRouting) {
+    for (const r of step.routing ?? []) {
+      out.push({
+        id: `${prefix}-route-${r.track}`,
+        label: r.context,
+        kind: 'route',
+        detail: r.nextScreen,
+        children: [],
+      });
+    }
   }
   return out;
 }
@@ -199,8 +209,8 @@ function fieldHintFromSteps(steps: FlowStep[], prefix: string): string {
   return fields.length ? `Enter: ${fields.map((f) => f.label).join(' · ')}` : '';
 }
 
-function backendPhase(steps: FlowStep[], prefix: string): MindNode | null {
-  const system = steps.flatMap((s, i) => systemNodes(s, `${prefix}-b${i}`));
+function backendPhase(steps: FlowStep[], prefix: string, opts?: { omitRouting?: boolean }): MindNode | null {
+  const system = steps.flatMap((s, i) => systemNodes(s, `${prefix}-b${i}`, opts));
   // Dedupe by label
   const seen = new Set<string>();
   const kids: MindNode[] = [];
@@ -253,6 +263,132 @@ function modalOrStepAction(steps: FlowStep[], prefix: string): MindNode {
     detail: [`Single UI · ${host}`, enter].filter(Boolean).join(' — '),
     children: backend ? [backend] : [],
   };
+}
+
+function isOpsProfileStep(step: FlowStep): boolean {
+  return (
+    step.id === 'bu-owner-profile' ||
+    (/operating_model/i.test(step.fields?.join(' ') ?? '') &&
+      /ASSET_BASED|NON_ASSET|HYBRID/i.test(step.fields?.join(' ') ?? ''))
+  );
+}
+
+type OpsPlanDef = {
+  id: string;
+  label: string;
+  code: string;
+  summary: string;
+  fields: { label: string; detail: string }[];
+};
+
+const OPS_PLANS: OpsPlanDef[] = [
+  {
+    id: 'asset',
+    label: 'Asset',
+    code: 'ASSET_BASED',
+    summary: 'Own trucks · fleet size required · no monthly volume',
+    fields: [
+      { label: 'business_type', detail: 'Business structure · required all plans' },
+      { label: 'employee_count', detail: 'Headcount band · required all plans' },
+      {
+        label: 'fleet_size_band',
+        detail: 'Own fleet size (trucks) · required · auth metadata only',
+      },
+      {
+        label: 'operating_model',
+        detail: 'ASSET_BASED → auth metadata + organizations.operating_model',
+      },
+    ],
+  },
+  {
+    id: 'aggregate',
+    label: 'Aggregate',
+    code: 'NON_ASSET',
+    summary: 'Broker / 3PL · monthly volume required · no fleet size',
+    fields: [
+      { label: 'business_type', detail: 'Business structure · required all plans' },
+      { label: 'employee_count', detail: 'Headcount band · required all plans' },
+      {
+        label: 'monthly_volume_band',
+        detail: 'Shipments arranged / month · required · auth metadata only',
+      },
+      {
+        label: 'operating_model',
+        detail: 'NON_ASSET → auth metadata + organizations.operating_model',
+      },
+    ],
+  },
+  {
+    id: 'hybrid',
+    label: 'Both',
+    code: 'HYBRID',
+    summary: 'Mixed fleet · fleet size + monthly volume both required',
+    fields: [
+      { label: 'business_type', detail: 'Business structure · required all plans' },
+      { label: 'employee_count', detail: 'Headcount band · required all plans' },
+      {
+        label: 'fleet_size_band',
+        detail: 'Own fleet size (trucks) · required · auth metadata only',
+      },
+      {
+        label: 'monthly_volume_band',
+        detail: 'Shipments arranged / month · required · auth metadata only',
+      },
+      {
+        label: 'operating_model',
+        detail: 'HYBRID → auth metadata + organizations.operating_model',
+      },
+    ],
+  },
+];
+
+/**
+ * Owner-style path: Identity…Workspace shared, then Asset / Aggregate / Hybrid each get
+ * remaining signup steps + their own Enter workspace (same pattern as Owner vs Google OAuth).
+ */
+function buildSignupPathChildren(steps: FlowStep[], prefix: string): MindNode[] {
+  const opsIdx = steps.findIndex(isOpsProfileStep);
+  if (opsIdx < 0) {
+    return steps.map((s, i) => modalOrStepAction([s], `${prefix}-s${i}`));
+  }
+
+  const before = steps.slice(0, opsIdx);
+  const after = steps.slice(opsIdx + 1);
+  const prefixNodes = before.map((s, i) => modalOrStepAction([s], `${prefix}-pre${i}`));
+
+  const planFork: MindNode = {
+    id: `${prefix}-om-plans`,
+    label: 'How do you operate?',
+    kind: 'fork',
+    detail: 'ASSET_BASED · NON_ASSET · HYBRID — each persona continues signup separately',
+    children: OPS_PLANS.map((plan) => {
+      const planFields: MindNode = {
+        id: `${prefix}-om-${plan.id}-profile`,
+        label: 'Operations profile',
+        kind: 'action',
+        detail: `${plan.code} · ${plan.summary}`,
+        children: plan.fields.map((f, i) => ({
+          id: `${prefix}-om-${plan.id}-f${i}`,
+          label: f.label,
+          kind: 'field' as const,
+          detail: f.detail,
+          children: [] as MindNode[],
+        })),
+      };
+      const afterNodes = after.map((s, i) =>
+        modalOrStepAction([s], `${prefix}-om-${plan.id}-s${i}`),
+      );
+      return {
+        id: `${prefix}-om-${plan.id}`,
+        label: plan.label,
+        kind: 'branch' as const,
+        detail: `${plan.code} · ${plan.summary}`,
+        children: [planFields, ...afterNodes],
+      };
+    }),
+  };
+
+  return [...prefixNodes, planFork];
 }
 
 /** Linear / modal-grouped UI → next › … → join (e.g. handle_new_user). */
@@ -366,13 +502,13 @@ function moduleToMind(mod: FlowAppModule, persona: PersonaFlow, lane: string): M
         detail: paths.map((b) => b.label).join(' · '),
         children: paths.map((b) => {
           const steps = signupPathSteps(persona, b);
-          // All wizard steps stay visible as siblings (east of path); layout is a clean column + one join.
+          // Ops-model paths: shared prefix → Asset/Aggregate/Hybrid each with remaining steps + Enter workspace
           return {
             id: `${prefix}-path-${b.id}`,
             label: b.label,
             kind: 'branch' as const,
             detail: b.summary,
-            children: steps.map((s, i) => modalOrStepAction([s], `${prefix}-${b.id}-s${i}`)),
+            children: buildSignupPathChildren(steps, `${prefix}-${b.id}`),
           };
         }),
       },

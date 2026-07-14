@@ -1,5 +1,3 @@
-import Layout from '@/constants/Layout';
-
 /**
  * Single source for the web HTML shell customizations. Consumed two ways:
  * - app/+html.tsx inlines these into the statically rendered HTML
@@ -234,17 +232,12 @@ textarea:-webkit-autofill:focus {
 }
 
 /*
-  Desktop web (fine pointer): cap hub width so columns/cards do not stretch on
-  ultrawide monitors. Centered shell keeps header, content, and pinned footers aligned.
-  Mobile web is unchanged.
+  Desktop web: full-bleed shell. #root spans the full viewport width so the top
+  nav, hero, and content stretch edge-to-edge on any monitor. Mobile web unchanged.
 */
-@media (min-width: ${Layout.webDesktopMinWidth}px) and (hover: hover) and (pointer: fine) {
-  #root {
-    max-width: ${Layout.desktopHubMaxWidth}px;
-    width: 100%;
-    margin-left: auto;
-    margin-right: auto;
-  }
+#root {
+  width: 100%;
+  max-width: none;
 }
 `;
 

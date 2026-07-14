@@ -84,9 +84,15 @@ export const partyKeypadFlowStyles = StyleSheet.create({
   leadingIcon: {
     marginRight: 10,
   },
-  displayValue: {
+  /** Text + caret sit together so the caret follows digits (not the row’s right edge). */
+  displayValueCluster: {
     flex: 1,
     minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  displayValue: {
+    flexShrink: 1,
     fontSize: 22,
     fontWeight: "600",
     letterSpacing: 2,
@@ -106,7 +112,8 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     height: 26,
     borderRadius: 1,
     backgroundColor: Theme.positive,
-    marginLeft: 6,
+    marginLeft: 2,
+    flexShrink: 0,
   },
   keypadDock: {
     flexShrink: 0,

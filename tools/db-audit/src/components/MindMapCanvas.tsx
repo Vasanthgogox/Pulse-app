@@ -22,12 +22,18 @@ function isOpsLeaf(kind: MindNodeKind): boolean {
 function isJoinFanChildren(kids: MindNode[]): { isJoinFan: boolean; last?: MindNode; priors: MindNode[] } {
   const last = kids[kids.length - 1];
   const priors = kids.slice(0, -1);
-  const isJoinFan =
-    !!last &&
-    priors.length >= 1 &&
-    (last.kind === 'module' || last.kind === 'branch') &&
+  if (!last || priors.length < 1) return { isJoinFan: false, last, priors };
+
+  // Suffix wizard steps → Enter workspace (per plan / per signup path)
+  const stepsToModule =
+    last.kind === 'module' &&
     priors.every((p) => p.kind === 'action' || p.kind === 'fork' || p.kind === 'exit');
-  return { isJoinFan, last, priors };
+
+  // Shared Identity…Workspace → How do you operate? fork
+  const stepsToFork =
+    last.kind === 'fork' && priors.every((p) => p.kind === 'action' || p.kind === 'exit');
+
+  return { isJoinFan: stepsToModule || stepsToFork, last, priors };
 }
 
 function portPoint(
@@ -365,9 +371,9 @@ export function MindMapCanvas({
         collected.push({ fromId: n.id, toId: c.id, kind: 'tree' });
       }
       if (isJoinFan && last) {
-        // Parallel wizard steps converge into the next module (Enter workspace)
+        // Parallel steps converge into next module / plan fork
         for (const p of priors) {
-          if (p.kind === 'action' || p.kind === 'fork') {
+          if (p.kind === 'action' || p.kind === 'fork' || p.kind === 'branch') {
             collected.push({ fromId: p.id, toId: last.id, kind: 'join' });
           }
         }
