@@ -4,7 +4,7 @@ import { AppFlowModuleCard } from '@/components/AppFlowModuleCard';
 import { BranchStepsEmbed } from '@/components/BranchStepsEmbed';
 import { LinearStepsEmbed } from '@/components/LinearStepsEmbed';
 import { SignupFlowEmbed } from '@/components/SignupFlowEmbed';
-import { WizardTrackEmbed } from '@/components/WizardTrackEmbed';
+import { FlowRailEmbed } from '@/components/FlowRailEmbed';
 import {
   APP_FLOWS,
   TRIGGER_STEP,
@@ -285,7 +285,7 @@ function AppFlowModuleList({
   onToggleModule,
   onInspectModule,
   onToggleBranch,
-  onToggleTrack,
+  onSelectTrack,
   onToggleFork,
   onSelectStep,
 }: {
@@ -298,7 +298,7 @@ function AppFlowModuleList({
   onToggleModule: (moduleId: string) => void;
   onInspectModule: (moduleId: string) => void;
   onToggleBranch: (branchId: string) => void;
-  onToggleTrack: (trackId: string) => void;
+  onSelectTrack: (trackId: string) => void;
   onToggleFork: (forkId: string) => void;
   onSelectStep: (stepId: string) => void;
 }) {
@@ -339,14 +339,14 @@ function AppFlowModuleList({
               sectionHint="Each party type is a nested card — inner steps show what the user enters and where it is stored."
             />
           ) : mod.kind === 'wizard-embed' && mod.embeddedTracks ? (
-            <WizardTrackEmbed
+            <FlowRailEmbed
               prefixSteps={mod.embeddedPrefixSteps}
               tracks={mod.embeddedTracks}
               suffixSteps={mod.embeddedSuffixSteps}
               expandedTracks={expandedTracks}
               expandedForks={expandedForks}
               selectedStepId={selectedStepId}
-              onToggleTrack={onToggleTrack}
+              onSelectTrack={onSelectTrack}
               onToggleFork={onToggleFork}
               onSelectStep={onSelectStep}
               mode={mod.wizardTrackMode ?? 'create'}
@@ -436,12 +436,21 @@ export function FlowMapExplorer({ personaId }: { personaId: PersonaId }) {
 
   const toggleTrack = useCallback((trackId: string) => {
     setExpandedTracks((prev) => {
-      const next = new Set(prev);
-      if (next.has(trackId)) next.delete(trackId);
-      else next.add(trackId);
-      return next;
+      if (prev.size > 1) {
+        const next = new Set(prev);
+        if (next.has(trackId)) {
+          next.delete(trackId);
+          if (next.size === 0) return new Set([trackId]);
+        } else {
+          next.add(trackId);
+        }
+        return next;
+      }
+      return new Set([trackId]);
     });
   }, []);
+
+  const selectTrack = toggleTrack;
 
   const toggleFork = useCallback((forkId: string) => {
     setExpandedForks((prev) => {
@@ -574,7 +583,7 @@ export function FlowMapExplorer({ personaId }: { personaId: PersonaId }) {
               onToggleModule={toggleModule}
               onInspectModule={inspectModule}
               onToggleBranch={toggleBranch}
-              onToggleTrack={toggleTrack}
+              onSelectTrack={selectTrack}
               onToggleFork={toggleFork}
               onSelectStep={selectStep}
             />
