@@ -1,10 +1,10 @@
 import {
-  ORG_KYC_REQUIRED_DOCUMENTS,
   ORG_KYC_OPTIONAL_DOCUMENTS,
 } from '@/features/organization/types/organizationKycDocuments.types';
 import type { OrganizationKycDocument } from '@/features/organization/types/organizationKycDocuments.types';
 import type { OrganizationKycDocType } from '@/features/organization/types/organizationKycDocuments.types';
 import type { AddressProofType, WorkspaceKyc } from '@/types/organization';
+import { kycRequiredDocumentDefs } from '@/features/organization/utils/kycVerification.util';
 
 import { KycRequiredDocumentRow } from './KycRequiredDocumentRow';
 
@@ -27,9 +27,11 @@ export function KycRequiredDocumentsSection({
   onUpload,
   onRemove,
 }: Props) {
+  const requiredDefs = kycRequiredDocumentDefs(kyc);
+
   return (
     <>
-      {ORG_KYC_REQUIRED_DOCUMENTS.map((def) => (
+      {requiredDefs.map((def) => (
         <KycRequiredDocumentRow
           key={def.type}
           definition={def}

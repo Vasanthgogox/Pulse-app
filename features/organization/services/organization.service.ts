@@ -399,18 +399,33 @@ export async function updateWorkspaceKyc(
     state?: string | null;
   },
 ): Promise<{ error: Error | null; kyc: WorkspaceKyc | null }> {
-  const coreFields = { business_pan: fields.business_pan, gstin: fields.gstin, cin: fields.cin };
+  // update_workspace_kyc RPC uses COALESCE — it cannot clear gstin. When marking
+  // GST not applicable we must null gstin via a direct organizations update.
+  const clearingGstinForSkip =
+    fields.gst_not_applicable === true && fields.gstin === null;
+
+  const coreFields = {
+    business_pan: fields.business_pan,
+    gstin: clearingGstinForSkip ? undefined : fields.gstin,
+    cin: fields.cin,
+  };
   const hasCoreUpdate = Object.values(coreFields).some((v) => v !== undefined);
-  const hasExtUpdate = fields.msme_number !== undefined || fields.tan_number !== undefined
-    || fields.iec_number !== undefined || fields.gst_not_applicable !== undefined
-    || fields.address_line !== undefined || fields.city !== undefined || fields.state !== undefined;
+  const hasExtUpdate =
+    fields.msme_number !== undefined ||
+    fields.tan_number !== undefined ||
+    fields.iec_number !== undefined ||
+    fields.gst_not_applicable !== undefined ||
+    fields.address_line !== undefined ||
+    fields.city !== undefined ||
+    fields.state !== undefined ||
+    clearingGstinForSkip;
 
   if (hasCoreUpdate) {
     const { data, error } = await supabase().rpc('update_workspace_kyc', {
       p_org_id: orgId,
-      p_pan:    fields.business_pan ?? null,
-      p_gstin:  fields.gstin ?? null,
-      p_cin:    fields.cin ?? null,
+      p_pan: fields.business_pan ?? null,
+      p_gstin: fields.gstin ?? null,
+      p_cin: fields.cin ?? null,
     });
     if (error) return { error: new Error(error.message), kyc: null };
     if (!hasExtUpdate) return { error: null, kyc: (data as WorkspaceKyc) ?? null };
@@ -418,11 +433,22 @@ export async function updateWorkspaceKyc(
 
   if (hasExtUpdate) {
     const patch: Record<string, unknown> = {};
-    if (fields.msme_number !== undefined) patch.msme_number = fields.msme_number?.trim().toUpperCase() || null;
-    if (fields.tan_number !== undefined) patch.tan_number = fields.tan_number?.trim().toUpperCase() || null;
-    if (fields.iec_number !== undefined) patch.iec_number = fields.iec_number?.trim() || null;
-    if (fields.gst_not_applicable !== undefined) patch.gst_not_applicable = fields.gst_not_applicable;
-    if (fields.address_line !== undefined) patch.address_line = fields.address_line?.trim() || null;
+    if (fields.msme_number !== undefined) {
+      patch.msme_number = fields.msme_number?.trim().toUpperCase() || null;
+    }
+    if (fields.tan_number !== undefined) {
+      patch.tan_number = fields.tan_number?.trim().toUpperCase() || null;
+    }
+    if (fields.iec_number !== undefined) {
+      patch.iec_number = fields.iec_number?.trim() || null;
+    }
+    if (fields.gst_not_applicable !== undefined) {
+      patch.gst_not_applicable = fields.gst_not_applicable;
+    }
+    if (clearingGstinForSkip) patch.gstin = null;
+    if (fields.address_line !== undefined) {
+      patch.address_line = fields.address_line?.trim() || null;
+    }
     if (fields.city !== undefined) patch.city = fields.city?.trim() || null;
     if (fields.state !== undefined) patch.state = fields.state?.trim() || null;
     const { error } = await supabase().from('organizations').update(patch).eq('id', orgId);

@@ -4,10 +4,20 @@ import {
 } from '@/features/organization/types/organizationKycDocuments.types';
 import { latestOrgKycDocument } from '@/features/organization/services/organizationKycDocuments.service';
 import type { WorkspaceKyc } from '@/types/organization';
+import { isVerificationFrozen } from '@/types/organization';
 
-/** Core tax identifiers required before submit. */
+/** Core tax identifiers required before submit. GSTIN skipped when gst_not_applicable. */
 export function kycTaxIdentifiersComplete(kyc: WorkspaceKyc | null): boolean {
-  return !!(kyc?.gstin?.trim() && kyc?.business_pan?.trim());
+  if (!kyc?.business_pan?.trim()) return false;
+  if (kyc.gst_not_applicable) return true;
+  return !!kyc.gstin?.trim();
+}
+
+export function kycRequiredDocumentDefs(kyc: WorkspaceKyc | null) {
+  if (kyc?.gst_not_applicable) {
+    return ORG_KYC_REQUIRED_DOCUMENTS.filter((d) => d.type !== 'gst_certificate');
+  }
+  return ORG_KYC_REQUIRED_DOCUMENTS;
 }
 
 /** Legal + document requirements for submit_business_verification. */
@@ -15,19 +25,14 @@ export function kycVerificationReady(
   kyc: WorkspaceKyc | null,
   documents: OrganizationKycDocument[] = [],
 ): boolean {
-  if (!kyc || !kycTaxIdentifiersComplete(kyc)) return false;
-  if (!kycMandatoryDocumentsComplete(documents, kyc)) return false;
-  const hasAddress =
-    !!(kyc.address_line?.trim() && kyc.city?.trim() && kyc.state?.trim()) ||
-    !!kyc.address_pincode?.trim();
-  return !!kyc.registration_type && hasAddress;
+  return listKycVerificationGaps(kyc, documents).length === 0;
 }
 
 export function kycMandatoryDocumentsComplete(
   documents: OrganizationKycDocument[],
   kyc: WorkspaceKyc | null,
 ): boolean {
-  for (const def of ORG_KYC_REQUIRED_DOCUMENTS) {
+  for (const def of kycRequiredDocumentDefs(kyc)) {
     const doc = latestOrgKycDocument(documents, def.type);
     if (doc?.storage_path) continue;
     if (def.type === 'address_proof' && kyc?.address_proof_path?.trim()) continue;
@@ -36,12 +41,57 @@ export function kycMandatoryDocumentsComplete(
   return true;
 }
 
+/**
+ * Human-readable checklist of what still blocks Submit for verification.
+ * Empty when ready (or when profile is locked under review / verified).
+ */
+export function listKycVerificationGaps(
+  kyc: WorkspaceKyc | null,
+  documents: OrganizationKycDocument[] = [],
+): string[] {
+  if (!kyc) return ['Load organisation profile'];
+  const status = kyc.verification_status ?? 'unverified';
+  if (isVerificationFrozen(status)) return [];
+  if (status !== 'unverified' && status !== 'rejected') return [];
+
+  const gaps: string[] = [];
+
+  if (!kyc.gst_not_applicable && !kyc.gstin?.trim()) {
+    gaps.push('Add GSTIN — or skip if not registered for GST');
+  }
+  if (!kyc.business_pan?.trim()) {
+    gaps.push('Add Business PAN');
+  }
+
+  for (const def of kycRequiredDocumentDefs(kyc)) {
+    const doc = latestOrgKycDocument(documents, def.type);
+    if (doc?.storage_path) continue;
+    if (def.type === 'address_proof' && kyc.address_proof_path?.trim()) continue;
+    gaps.push(`Upload ${def.label}`);
+  }
+
+  if (!kyc.registration_type) {
+    gaps.push('Select registration type');
+  }
+
+  const hasAddress =
+    !!(kyc.address_line?.trim() && kyc.city?.trim() && kyc.state?.trim()) ||
+    !!kyc.address_pincode?.trim();
+  if (!hasAddress) {
+    gaps.push('Add operating address');
+  }
+
+  return gaps;
+}
+
 export function kycDocumentsProgressPct(
   documents: OrganizationKycDocument[],
   kyc: WorkspaceKyc | null,
 ): number {
-  const total = ORG_KYC_REQUIRED_DOCUMENTS.length;
-  const done = ORG_KYC_REQUIRED_DOCUMENTS.filter((def) => {
+  const defs = kycRequiredDocumentDefs(kyc);
+  const total = defs.length;
+  if (total === 0) return 100;
+  const done = defs.filter((def) => {
     const doc = latestOrgKycDocument(documents, def.type);
     if (doc?.storage_path) return true;
     if (def.type === 'address_proof' && kyc?.address_proof_path?.trim()) return true;
@@ -68,7 +118,7 @@ export function kycVerificationProgressPct(
 ): number {
   if (!kyc) return 0;
   const checks = [
-    !!kyc.gstin?.trim(),
+    kyc.gst_not_applicable || !!kyc.gstin?.trim(),
     !!kyc.business_pan?.trim(),
     !!kyc.cin?.trim(),
     !!kyc.registration_type,

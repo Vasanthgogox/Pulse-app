@@ -20,7 +20,7 @@ import {
   upsertOrganizationKycDocument,
 } from '@/features/organization/services/organizationKycDocuments.service';
 import { pickAndUploadVerificationDocument } from '@/features/organization/utils/kycDocumentUpload.util';
-import { kycVerificationReady } from '@/features/organization/utils/kycVerification.util';
+import { kycVerificationReady, listKycVerificationGaps } from '@/features/organization/utils/kycVerification.util';
 import type { OrganizationKycDocType } from '@/features/organization/types/organizationKycDocuments.types';
 import type { OrganizationKycDocument } from '@/features/organization/types/organizationKycDocuments.types';
 import { ORG_KYC_REQUIRED_DOCUMENTS } from '@/features/organization/types/organizationKycDocuments.types';
@@ -61,15 +61,33 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
   }, [reload]);
 
   const frozen = isVerificationFrozen(kyc?.verification_status ?? 'unverified');
+  const submitGaps = listKycVerificationGaps(kyc, documents);
   const canSubmit =
     !frozen &&
     (kyc?.verification_status === 'unverified' || kyc?.verification_status === 'rejected') &&
-    kycVerificationReady(kyc, documents);
+    submitGaps.length === 0;
 
   const saveKycField = useCallback(
     async (field: KycField, val: string) => {
       if (!orgId) return { error: new Error('No workspace') };
-      const { kyc: updated, error } = await updateWorkspaceKyc(orgId, { [field]: val || null });
+      const patch =
+        field === 'gstin' && val.trim()
+          ? { gstin: val.trim().toUpperCase(), gst_not_applicable: false }
+          : { [field]: val || null };
+      const { kyc: updated, error } = await updateWorkspaceKyc(orgId, patch);
+      if (!error && updated) setKyc(updated);
+      return { error };
+    },
+    [orgId],
+  );
+
+  const setGstNotApplicable = useCallback(
+    async (notApplicable: boolean) => {
+      if (!orgId) return { error: new Error('No workspace') };
+      const { kyc: updated, error } = await updateWorkspaceKyc(orgId, {
+        gst_not_applicable: notApplicable,
+        ...(notApplicable ? { gstin: null } : {}),
+      });
       if (!error && updated) setKyc(updated);
       return { error };
     },
@@ -257,6 +275,7 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
         address_pincode: kyc.address_pincode ?? undefined,
         address_proof_path: kyc.address_proof_path ?? undefined,
         address_proof_type: kyc.address_proof_type ?? undefined,
+        gst_not_applicable: kyc.gst_not_applicable ?? false,
       });
       if (!ok || error) {
         Alert.alert('Submission failed', error?.message ?? 'Could not submit for verification.');
@@ -282,8 +301,10 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
     uploadingDocType,
     frozen,
     canSubmit,
+    submitGaps,
     reload,
     saveKycField,
+    setGstNotApplicable,
     validateGstinField,
     saveRegistrationType,
     saveOperatingAddress,

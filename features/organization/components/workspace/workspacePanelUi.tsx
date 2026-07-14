@@ -113,8 +113,9 @@ export function validateKyc(f: KycField, val: string): string | null {
 
 export function kycCompletionPct(kyc: WorkspaceKyc | null): number {
   if (!kyc) return 0;
-  const core: KycField[] = ['gstin', 'business_pan', 'cin'];
-  return Math.round((core.filter((f) => !!kyc[f]).length / core.length) * 100);
+  const gstOk = !!kyc.gst_not_applicable || !!kyc.gstin?.trim();
+  const checks = [gstOk, !!kyc.business_pan?.trim(), !!kyc.cin?.trim()];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
 export type OrgProfileSnapshot = {
@@ -651,6 +652,7 @@ export function KycFieldsList({
   canEdit,
   onSave,
   onValidateGstin,
+  onSetGstNotApplicable,
 }: {
   kyc: WorkspaceKyc | null;
   canEdit: boolean;
@@ -658,10 +660,69 @@ export function KycFieldsList({
   onValidateGstin?: (
     gstin: string,
   ) => Promise<{ ok: boolean; message?: string; registryName?: string }>;
+  onSetGstNotApplicable?: (notApplicable: boolean) => Promise<void>;
 }) {
+  const gstSkipped = !!kyc?.gst_not_applicable;
+  const [gstSkipBusy, setGstSkipBusy] = useState(false);
+
+  const handleGstSkip = async (notApplicable: boolean) => {
+    if (!onSetGstNotApplicable || gstSkipBusy) return;
+    setGstSkipBusy(true);
+    try {
+      await onSetGstNotApplicable(notApplicable);
+    } finally {
+      setGstSkipBusy(false);
+    }
+  };
+
   return (
     <>
-      {KYC_FIELD_ORDER.map((field) => (
+      {gstSkipped ? (
+        <View style={kf.gstSkipActive}>
+          <View style={kf.gstSkipActiveTextCol}>
+            <Text style={kf.gstSkipActiveTitle}>GSTIN</Text>
+            <Text style={kf.gstSkipActiveSub}>
+              Not registered for GST — skip saved on this organisation
+            </Text>
+          </View>
+          {canEdit && onSetGstNotApplicable ? (
+            <Pressable
+              style={kf.gstSkipUndo}
+              disabled={gstSkipBusy}
+              onPress={() => void handleGstSkip(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Add GSTIN instead"
+            >
+              <Text style={kf.gstSkipUndoText}>{gstSkipBusy ? '…' : 'Add GSTIN'}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : (
+        <>
+          <KycFieldRow
+            field="gstin"
+            value={kyc?.gstin}
+            verificationStatus={kyc?.verification_status}
+            canEdit={canEdit}
+            onSave={onSave}
+            onValidateGstin={onValidateGstin}
+          />
+          {canEdit && onSetGstNotApplicable ? (
+            <Pressable
+              style={kf.gstSkipRow}
+              disabled={gstSkipBusy}
+              onPress={() => void handleGstSkip(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Skip GSTIN — not registered for GST"
+            >
+              <Text style={kf.gstSkipRowText}>
+                {gstSkipBusy ? 'Saving…' : "I don't have a GSTIN (not registered for GST)"}
+              </Text>
+            </Pressable>
+          ) : null}
+        </>
+      )}
+      {KYC_FIELD_ORDER.filter((field) => field !== 'gstin').map((field) => (
         <KycFieldRow
           key={field}
           field={field}
@@ -669,7 +730,7 @@ export function KycFieldsList({
           verificationStatus={kyc?.verification_status}
           canEdit={canEdit}
           onSave={onSave}
-          onValidateGstin={field === 'gstin' ? onValidateGstin : undefined}
+          onValidateGstin={undefined}
         />
       ))}
     </>
@@ -798,6 +859,56 @@ const kf = StyleSheet.create({
     flexShrink: 0,
   },
   editBtnText: { fontSize: 10, fontWeight: '600', color: PURPLE },
+  gstSkipRow: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  gstSkipRowText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Theme.primary,
+  },
+  gstSkipActive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    minHeight: 48,
+  },
+  gstSkipActiveTextCol: { flex: 1, minWidth: 0, gap: 2 },
+  gstSkipActiveTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+  },
+  gstSkipActiveSub: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    fontWeight: '500',
+    lineHeight: 14,
+  },
+  gstSkipUndo: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+  },
+  gstSkipUndoText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Theme.primary,
+  },
 });
 
 const oid = StyleSheet.create({

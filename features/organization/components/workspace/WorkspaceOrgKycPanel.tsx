@@ -63,7 +63,9 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
     uploadingDocType,
     frozen,
     canSubmit,
+    submitGaps,
     saveKycField,
+    setGstNotApplicable,
     validateGstinField,
     saveRegistrationType,
     saveOperatingAddress,
@@ -108,6 +110,24 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
     [notice, saveKycField],
   );
 
+  const handleSetGstNotApplicable = useCallback(
+    async (notApplicable: boolean) => {
+      const { error } = await setGstNotApplicable(notApplicable);
+      if (error) {
+        notice({ kind: 'error', title: 'Save failed', message: error.message });
+        return;
+      }
+      notice({
+        kind: 'success',
+        title: notApplicable
+          ? 'Marked as not registered for GST'
+          : 'GSTIN required again',
+        duration: 2400,
+      });
+    },
+    [notice, setGstNotApplicable],
+  );
+
   const handleValidateGstin = useCallback(
     async (gstin: string) => {
       const result = await validateGstinField(gstin);
@@ -150,6 +170,7 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
           <KycSubmitFooter
             canSubmit={canSubmit}
             submitting={submitting}
+            missingItems={submitGaps}
             onSubmit={() => void submitForVerification()}
           />
         ) : null
@@ -184,6 +205,7 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
             canEdit={canEdit && !frozen}
             onSave={handleSaveKycField}
             onValidateGstin={handleValidateGstin}
+            onSetGstNotApplicable={handleSetGstNotApplicable}
           />
         </View>
 
