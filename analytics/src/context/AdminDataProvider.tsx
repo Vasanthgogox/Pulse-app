@@ -4,9 +4,14 @@ import type {
   OrgUser, UsageMetric, FeatureFlag,
   BillingTier, AppStatus, CheckStatus,
   AuditEntry, AutomatedCheck, BusinessDocument,
+  DocumentType,
 } from '@/types/admin';
 import { supabase } from '@/lib/supabase';
 import { fetchKycDocumentsByOrg } from '@/lib/kycDocuments';
+import {
+  registrationTypeRequiresCin,
+  requiredKycDocSlots,
+} from '@/lib/kycDocumentMatrix';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -20,23 +25,51 @@ export function useAdmin(): AdminContextValue {
 
 // ─── Map DB row → Organization ────────────────────────────────────────────────
 
-function ensureRequiredDocuments(orgId: string, docs: BusinessDocument[]): BusinessDocument[] {
-  const required: BusinessDocument['type'][] = ['GST Certificate', 'PAN Card', 'Address Proof'];
+function docSatisfiesSlot(
+  docs: BusinessDocument[],
+  satisfyWith: DocumentType[],
+): BusinessDocument | undefined {
+  return docs.find(
+    (d) =>
+      satisfyWith.includes(d.type) &&
+      d.status !== 'Missing' &&
+      (!!d.url || !!d.file_name),
+  );
+}
+
+/** Pad Missing placeholders using the structure matrix (client/RPC parity). */
+function ensureRequiredDocuments(
+  orgId: string,
+  docs: BusinessDocument[],
+  registrationType: string | null | undefined,
+  gstNotApplicable: boolean,
+): BusinessDocument[] {
+  const slots = requiredKycDocSlots(registrationType, gstNotApplicable);
   const result = [...docs];
-  for (const type of required) {
-    if (!result.some((d) => d.type === type)) {
-      result.push({
-        id: `${orgId}-${type.replace(/\s+/g, '_').toLowerCase()}`,
-        type,
-        file_name: '',
-        status: 'Missing',
-        uploaded_at: '',
-        url: '',
-        mime_type: 'application/pdf',
-        size_kb: 0,
-      });
-    }
+
+  for (const slot of slots) {
+    if (docSatisfiesSlot(result, slot.satisfyWith)) continue;
+    // Avoid duplicate Missing rows for the same primary type
+    if (result.some((d) => d.type === slot.type && d.status === 'Missing')) continue;
+    result.push({
+      id: `${orgId}-${slot.type.replace(/\s+/g, '_').toLowerCase()}-missing`,
+      type: slot.type,
+      file_name: '',
+      status: 'Missing',
+      uploaded_at: '',
+      url: '',
+      mime_type: 'application/pdf',
+      size_kb: 0,
+    });
   }
+
+  // GST skipped: drop a Missing GST Certificate placeholder if present
+  if (gstNotApplicable) {
+    return result.filter(
+      (d) => !(d.type === 'GST Certificate' && d.status === 'Missing' && !d.url),
+    );
+  }
+
   return result;
 }
 
@@ -105,7 +138,12 @@ function mapOrg(
     rejection_notes:      (row.kyc_rejected_reason as string) ?? undefined,
     escalation_reason:    undefined,
     automated_checks:     mapChecks(row, documents),
-    documents:            ensureRequiredDocuments(row.id as string, documents),
+    documents:            ensureRequiredDocuments(
+      row.id as string,
+      documents,
+      row.registration_type as string | null,
+      !!row.gst_not_applicable,
+    ),
     audit_trail:          auditByOrg[row.id as string] ?? [] as AuditEntry[],
     billing_tier:         'Starter' as BillingTier,
     api_usage:            0,
@@ -163,23 +201,31 @@ function auditTitle(prev: string | null, next: string, notes: string | null): st
 }
 
 function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]): AutomatedCheck[] {
-  const docCheck = (type: BusinessDocument['type']): AutomatedCheck['status'] => {
-    const doc = documents.find((d) => d.type === type);
-    if (!doc || doc.status === 'Missing') return 'Pending';
+  const registrationType = row.registration_type as string | null;
+  const gstNotApplicable = !!row.gst_not_applicable;
+  const slots = requiredKycDocSlots(registrationType, gstNotApplicable);
+
+  const slotCheck = (satisfyWith: DocumentType[]): AutomatedCheck['status'] => {
+    const doc = docSatisfiesSlot(documents, satisfyWith);
+    if (!doc) return 'Pending';
     if (doc.status === 'Flagged' || doc.status === 'Expired') return 'Failed';
     if (doc.status === 'Unreadable') return 'Manual Review';
     return 'Passed';
   };
 
   const addressPassed =
-    docCheck('Address Proof') === 'Passed' || !!row.address_proof_path;
+    slotCheck(['Address Proof']) === 'Passed' || !!row.address_proof_path;
 
-  return [
+  const checks: AutomatedCheck[] = [
     {
       id: 'gstin',
-      label: 'GSTIN Registry',
-      status: row.gstin ? 'Passed' : 'Pending',
-      detail: row.gstin ? `GSTIN: ${row.gstin}` : 'Not submitted',
+      label: gstNotApplicable ? 'GST (not applicable)' : 'GSTIN Registry',
+      status: gstNotApplicable ? 'N/A' : row.gstin ? 'Passed' : 'Pending',
+      detail: gstNotApplicable
+        ? 'Marked GST not applicable'
+        : row.gstin
+          ? `GSTIN: ${row.gstin}`
+          : 'Not submitted',
     },
     {
       id: 'pan',
@@ -187,56 +233,40 @@ function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]):
       status: row.business_pan ? 'Passed' : 'Pending',
       detail: row.business_pan ? `PAN: ${row.business_pan}` : 'Not submitted',
     },
-    {
-      id: 'gst_cert',
-      label: 'GST Certificate',
-      status: docCheck('GST Certificate'),
-      detail:
-        documents.find((d) => d.type === 'GST Certificate')?.file_name ?? 'Not uploaded',
-    },
-    {
-      id: 'pan_card',
-      label: 'PAN Card',
-      status: docCheck('PAN Card'),
-      detail: documents.find((d) => d.type === 'PAN Card')?.file_name ?? 'Not uploaded',
-    },
-    {
-      id: 'address',
-      label: 'Address Proof',
-      status: addressPassed ? 'Passed' : 'Pending',
-      detail:
-        (row.address_proof_type as string) ??
-        documents.find((d) => d.type === 'Address Proof')?.file_name ??
-        'Not uploaded',
-    },
   ];
-}
 
-// Maps verification_documents.document_type (from 20261111000000) to the
-// admin console's DocumentType label set.
-function mapDocumentType(t: string): BusinessDocument['type'] {
-  switch (t) {
-    case 'gst_certificate':              return 'GST Certificate';
-    case 'pan_card':                     return 'PAN Card';
-    case 'address_proof_lease':
-    case 'address_proof_utility_bill':
-    case 'address_proof_other':          return 'Address Proof';
-    default:                             return 'Address Proof';
+  if (registrationTypeRequiresCin(registrationType)) {
+    checks.push({
+      id: 'cin',
+      label: 'CIN',
+      status: row.cin ? 'Passed' : 'Pending',
+      detail: row.cin ? `CIN: ${row.cin}` : 'Required for limited company',
+    });
   }
-}
 
-// Maps verification_documents.status to the admin console's review-facing
-// DocumentStatus. MANUAL_REVIEW/OCR_FAILED read as Flagged rather than a
-// distinct state — the checklist above (mapChecks) already surfaces the
-// specific OCR reason via automated_checks; this drives the doc tab badge.
-function mapDocumentStatus(s: string): BusinessDocument['status'] {
-  switch (s) {
-    case 'OCR_PASSED':    return 'Valid';
-    case 'OCR_FAILED':
-    case 'MANUAL_REVIEW': return 'Flagged';
-    case 'UPLOADED':
-    default:              return 'Valid';
+  for (const slot of slots) {
+    if (slot.type === 'Address Proof') {
+      checks.push({
+        id: 'address',
+        label: slot.label,
+        status: addressPassed ? 'Passed' : 'Pending',
+        detail:
+          (row.address_proof_type as string) ??
+          docSatisfiesSlot(documents, slot.satisfyWith)?.file_name ??
+          'Not uploaded',
+      });
+      continue;
+    }
+    const match = docSatisfiesSlot(documents, slot.satisfyWith);
+    checks.push({
+      id: `doc_${slot.type.replace(/\s+/g, '_').toLowerCase()}`,
+      label: slot.label,
+      status: slotCheck(slot.satisfyWith),
+      detail: match?.file_name ?? 'Not uploaded',
+    });
   }
+
+  return checks;
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────

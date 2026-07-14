@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
-import type { BusinessDocument, DocumentStatus, DocumentType } from '@/types/admin';
+import { mapDbDocTypeToAdmin } from '@/lib/kycDocumentMatrix';
+import type { BusinessDocument, DocumentStatus } from '@/types/admin';
 
 const VERIFICATION_BUCKET = 'verification-documents';
 
@@ -16,17 +17,6 @@ type KycDocRow = {
   rejection_notes: string | null;
   created_at: string;
   updated_at: string;
-};
-
-const DOC_TYPE_LABELS: Record<string, DocumentType> = {
-  gst_certificate: 'GST Certificate',
-  pan_card: 'PAN Card',
-  address_proof: 'Address Proof',
-  cin_certificate: 'COI',
-  msme_certificate: 'Address Proof',
-  iec_certificate: 'GST Certificate',
-  incorporation_certificate: 'COI',
-  other: 'Address Proof',
 };
 
 function mapDocStatus(row: KycDocRow): DocumentStatus {
@@ -80,7 +70,7 @@ export async function fetchKycDocumentsByOrg(): Promise<Record<string, BusinessD
     const path = row.storage_path?.trim() ?? '';
     byOrg[orgId].push({
       id: row.id,
-      type: DOC_TYPE_LABELS[row.doc_type] ?? 'Address Proof',
+      type: mapDbDocTypeToAdmin(row.doc_type),
       file_name: row.file_name ?? row.doc_label ?? row.doc_type,
       status: mapDocStatus(row),
       flag_reason: row.rejection_notes ?? undefined,

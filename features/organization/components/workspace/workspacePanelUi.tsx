@@ -114,7 +114,13 @@ export function validateKyc(f: KycField, val: string): string | null {
 export function kycCompletionPct(kyc: WorkspaceKyc | null): number {
   if (!kyc) return 0;
   const gstOk = !!kyc.gst_not_applicable || !!kyc.gstin?.trim();
-  const checks = [gstOk, !!kyc.business_pan?.trim(), !!kyc.cin?.trim()];
+  const needsCin =
+    kyc.registration_type === 'pvt_ltd' || kyc.registration_type === 'public_ltd';
+  const checks = [
+    gstOk,
+    !!kyc.business_pan?.trim(),
+    !needsCin || !!kyc.cin?.trim(),
+  ];
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
@@ -466,6 +472,8 @@ export function KycFieldRow({
   canEdit,
   onSave,
   onValidateGstin,
+  required,
+  optional,
 }: {
   field: KycField;
   value: string | null | undefined;
@@ -475,6 +483,9 @@ export function KycFieldRow({
   onValidateGstin?: (
     gstin: string,
   ) => Promise<{ ok: boolean; message?: string; registryName?: string }>;
+  /** Structure-driven: show Required pill (e.g. CIN for Private Limited). */
+  required?: boolean;
+  optional?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? '');
@@ -553,9 +564,23 @@ export function KycFieldRow({
       <View style={kf.row}>
         <View style={[kf.iconBox, { backgroundColor: statusBg }]}>{statusIcon}</View>
         <View style={kf.main}>
-          <Text style={kf.label}>{kycLabel(field)}</Text>
-          <Text style={kf.hint} numberOfLines={1}>
-            {kycSub(field)}
+          <View style={kf.labelRow}>
+            <Text style={kf.label}>{kycLabel(field)}</Text>
+            {required ? (
+              <View style={kf.requiredPill}>
+                <Text style={kf.requiredPillText}>Required</Text>
+              </View>
+            ) : null}
+            {optional && !required ? (
+              <View style={kf.optionalPill}>
+                <Text style={kf.optionalPillText}>Optional</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={kf.hint} numberOfLines={2}>
+            {required && field === 'cin'
+              ? 'Required for Private / Public Limited'
+              : kycSub(field)}
           </Text>
         </View>
         {!editing ? (
@@ -722,17 +747,29 @@ export function KycFieldsList({
           ) : null}
         </>
       )}
-      {KYC_FIELD_ORDER.filter((field) => field !== 'gstin').map((field) => (
-        <KycFieldRow
-          key={field}
-          field={field}
-          value={kyc?.[field]}
-          verificationStatus={kyc?.verification_status}
-          canEdit={canEdit}
-          onSave={onSave}
-          onValidateGstin={undefined}
-        />
-      ))}
+      {KYC_FIELD_ORDER.filter((field) => field !== 'gstin').map((field) => {
+        const cinRequired =
+          field === 'cin' &&
+          (kyc?.registration_type === 'pvt_ltd' || kyc?.registration_type === 'public_ltd');
+        const optionalField =
+          field === 'msme_number' ||
+          field === 'tan_number' ||
+          field === 'iec_number' ||
+          (field === 'cin' && !cinRequired);
+        return (
+          <KycFieldRow
+            key={field}
+            field={field}
+            value={kyc?.[field]}
+            verificationStatus={kyc?.verification_status}
+            canEdit={canEdit}
+            onSave={onSave}
+            onValidateGstin={undefined}
+            required={cinRequired}
+            optional={optionalField}
+          />
+        );
+      })}
     </>
   );
 }
@@ -762,11 +799,38 @@ const kf = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   main: { flex: 1, minWidth: 0, gap: 1 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   label: {
     fontSize: 12,
     fontWeight: '600',
     color: Theme.textPrimaryDark,
     letterSpacing: -0.1,
+  },
+  requiredPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(59,130,246,0.12)',
+  },
+  requiredPillText: {
+    fontSize: 8.5,
+    fontWeight: '700',
+    color: Theme.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  optionalPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceGray,
+  },
+  optionalPillText: {
+    fontSize: 8.5,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   hint: {
     fontSize: 10,

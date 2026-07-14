@@ -1,7 +1,10 @@
 import {
-  listKycVerificationGaps,
+  kycRequiredDocumentDefs,
   kycTaxIdentifiersComplete,
   kycVerificationReady,
+  listKycVerificationGaps,
+  listMissingKycRequirements,
+  registrationTypeRequiresCin,
 } from '@/features/organization/utils/kycVerification.util';
 import type { OrganizationKycDocument } from '@/features/organization/types/organizationKycDocuments.types';
 import type { WorkspaceKyc } from '@/types/organization';
@@ -55,6 +58,13 @@ function doc(type: OrganizationKycDocument['doc_type'], path = 'path'): Organiza
   };
 }
 
+const address = {
+  address_line: '1 St',
+  city: 'Coimbatore',
+  state: 'Tamil Nadu',
+  address_pincode: '641001',
+} as const;
+
 describe('kycVerification gaps + GST skip', () => {
   it('lists GSTIN and docs when incomplete', () => {
     const gaps = listKycVerificationGaps(baseKyc({ business_pan: 'LTUPS6014E' }), []);
@@ -71,23 +81,17 @@ describe('kycVerification gaps + GST skip', () => {
     expect(kycVerificationReady(baseKyc({ business_pan: 'LTUPS6014E' }), [])).toBe(false);
   });
 
-  it('treats gst_not_applicable as tax-complete without GSTIN or GST cert', () => {
+  it('treats gst_not_applicable as tax-complete without GSTIN or GST cert for partnership when deed uploaded', () => {
     const kyc = baseKyc({
       gst_not_applicable: true,
       business_pan: 'LTUPS6014E',
-      registration_type: 'pvt_ltd',
-      address_line: '1 St',
-      city: 'Coimbatore',
-      state: 'Tamil Nadu',
+      registration_type: 'partnership',
+      ...address,
     });
     expect(kycTaxIdentifiersComplete(kyc)).toBe(true);
-    const gaps = listKycVerificationGaps(kyc, [
-      doc('pan_card'),
-      doc('address_proof'),
-    ]);
-    expect(gaps).toEqual([]);
-    expect(gaps.some((g) => /GST/i.test(g))).toBe(false);
-    expect(kycVerificationReady(kyc, [doc('pan_card'), doc('address_proof')])).toBe(true);
+    const docs = [doc('pan_card'), doc('address_proof'), doc('partnership_deed')];
+    expect(listKycVerificationGaps(kyc, docs)).toEqual([]);
+    expect(kycVerificationReady(kyc, docs)).toBe(true);
   });
 
   it('returns no gaps while under review (locked)', () => {
@@ -97,5 +101,119 @@ describe('kycVerification gaps + GST skip', () => {
         [],
       ),
     ).toEqual([]);
+  });
+});
+
+describe('structure-driven KYC document matrix', () => {
+  it('builds dynamic required defs from registrationType + gstNotApplicable', () => {
+    const types = kycRequiredDocumentDefs('pvt_ltd', true).map((d) => d.type);
+    expect(types).toContain('pan_card');
+    expect(types).toContain('address_proof');
+    expect(types).toContain('incorporation_certificate');
+    expect(types).not.toContain('gst_certificate');
+  });
+
+  it('requires proprietorship activity proof when GST skipped', () => {
+    const defs = kycRequiredDocumentDefs('proprietorship', true);
+    const activity = defs.find((d) => d.type === 'msme_certificate');
+    expect(activity?.acceptTypes).toEqual(
+      expect.arrayContaining(['msme_certificate', 'iec_certificate', 'gst_certificate']),
+    );
+
+    const kyc = baseKyc({
+      gst_not_applicable: true,
+      business_pan: 'LTUPS6014E',
+      registration_type: 'proprietorship',
+      ...address,
+    });
+    expect(listMissingKycRequirements(kyc, [doc('pan_card'), doc('address_proof')]).docs).toContain(
+      'msme_certificate',
+    );
+    expect(
+      listKycVerificationGaps(kyc, [
+        doc('pan_card'),
+        doc('address_proof'),
+        doc('iec_certificate'),
+      ]),
+    ).toEqual([]);
+    // GST cert counts as activity proof even when GST skipped
+    expect(
+      kycVerificationReady(kyc, [
+        doc('pan_card'),
+        doc('address_proof'),
+        doc('gst_certificate'),
+      ]),
+    ).toBe(true);
+  });
+
+  it('does not require activity proof for proprietorship when GST is provided', () => {
+    const defs = kycRequiredDocumentDefs('proprietorship', false);
+    expect(defs.some((d) => d.acceptTypes?.includes('iec_certificate'))).toBe(false);
+    expect(defs.map((d) => d.type)).toContain('gst_certificate');
+  });
+
+  it('requires partnership deed and not CIN', () => {
+    expect(registrationTypeRequiresCin('partnership')).toBe(false);
+    const kyc = baseKyc({
+      gstin: '33AAAAA0000A1Z5',
+      business_pan: 'LTUPS6014E',
+      registration_type: 'partnership',
+      ...address,
+    });
+    const missing = listMissingKycRequirements(kyc, [
+      doc('gst_certificate'),
+      doc('pan_card'),
+      doc('address_proof'),
+    ]);
+    expect(missing.docs).toContain('partnership_deed');
+    expect(missing.fields).not.toContain('cin');
+  });
+
+  it('requires CIN + incorporation for pvt_ltd; accepts legacy cin_certificate', () => {
+    expect(registrationTypeRequiresCin('pvt_ltd')).toBe(true);
+    const kyc = baseKyc({
+      gst_not_applicable: true,
+      business_pan: 'LTUPS6014E',
+      registration_type: 'pvt_ltd',
+      cin: 'U12345MH2024PTC123456',
+      ...address,
+    });
+    expect(
+      listMissingKycRequirements(kyc, [doc('pan_card'), doc('address_proof')]).docs,
+    ).toContain('incorporation_certificate');
+    expect(
+      kycVerificationReady(kyc, [
+        doc('pan_card'),
+        doc('address_proof'),
+        doc('cin_certificate'),
+      ]),
+    ).toBe(true);
+  });
+
+  it('requires LLP incorporation + agreement; CIN not required', () => {
+    expect(registrationTypeRequiresCin('llp')).toBe(false);
+    const kyc = baseKyc({
+      gstin: '33AAAAA0000A1Z5',
+      business_pan: 'LTUPS6014E',
+      registration_type: 'llp',
+      ...address,
+    });
+    const missing = listMissingKycRequirements(kyc, [
+      doc('gst_certificate'),
+      doc('pan_card'),
+      doc('address_proof'),
+      doc('incorporation_certificate'),
+    ]);
+    expect(missing.fields).not.toContain('cin');
+    expect(missing.docs).toContain('llp_agreement');
+    expect(
+      kycVerificationReady(kyc, [
+        doc('gst_certificate'),
+        doc('pan_card'),
+        doc('address_proof'),
+        doc('incorporation_certificate'),
+        doc('llp_agreement'),
+      ]),
+    ).toBe(true);
   });
 });

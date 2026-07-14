@@ -1,18 +1,11 @@
+/// <reference path="../deno.d.ts" />
 // Immediate on-upload document verification (Gemini Vision)
 //
-// Called by the mobile client right after uploadVerificationDocument()/
-// uploadAddressProof() succeeds — before the user reaches Submit. Gives
-// instant feedback under each upload zone instead of waiting for the
-// post-submit async worker (verification-worker/index.ts, which still runs
-// the authoritative Claude-based OCR congruence check at submit time).
-//
-// gst_certificate / pan_card: extract the tax ID and fuzzy-match against
-// what the user typed. address_proof_*: no typed value to compare against,
-// so this only confirms the document is legible and looks like the
-// declared document type.
+// Per-document-type prompts + evaluation for GST, PAN, address proof, and
+// structure KYC docs (CIN/COI, partnership deed, LLP agreement, MSME, IEC).
 
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -36,7 +29,7 @@ function normaliseTaxId(s: string): string {
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
   const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
   );
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
@@ -56,21 +49,248 @@ function taxIdSimilarity(typed: string, extracted: string): number {
   return 1 - levenshtein(a, b) / maxLen;
 }
 
-type DocumentType =
+type KycUploadDocumentType =
   | 'gst_certificate'
   | 'pan_card'
   | 'address_proof_lease'
   | 'address_proof_utility_bill'
-  | 'address_proof_other';
+  | 'address_proof_other'
+  | 'cin_certificate'
+  | 'incorporation_certificate'
+  | 'partnership_deed'
+  | 'llp_agreement'
+  | 'msme_certificate'
+  | 'iec_certificate';
 
 interface VerifyRequest {
-  document_type: DocumentType;
-  storage_path:  string;   // path in 'verification-documents' private bucket
-  typed_gstin?:  string;   // required for gst_certificate
-  typed_pan?:    string;   // required for pan_card
+  document_type: KycUploadDocumentType;
+  storage_path: string;
+  typed_gstin?: string;
+  typed_pan?: string;
+  typed_cin?: string;
+  typed_msme?: string;
+  typed_iec?: string;
+}
+
+interface ExtractedFields {
+  gstin: string | null;
+  pan: string | null;
+  cin: string | null;
+  msme: string | null;
+  iec: string | null;
+  company_name: string | null;
+  document_type: string | null;
+  legible: boolean;
 }
 
 const HARD_THRESHOLD = 0.85;
+
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+/** Indian CIN / LLPIN — 21 alphanumeric (MCA). */
+const CIN_REGEX = /^[A-Z0-9]{21}$/;
+/** Udyam registration number. */
+const UDYAM_REGEX = /^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/i;
+/** IEC — 10 digits (DGFT). */
+const IEC_REGEX = /^\d{10}$/;
+
+const INCORPORATION_TYPES = new Set(['cin_certificate', 'incorporation_certificate']);
+
+function buildPrompt(documentType: KycUploadDocumentType): string {
+  const commonFooter =
+    'Return ONLY the JSON object — no markdown fences, no explanation.';
+
+  if (documentType === 'gst_certificate') {
+    return `You are verifying an Indian GST registration certificate.
+Extract fields. Return ONLY valid JSON:
+{
+  "gstin": "<15-char GSTIN or null>",
+  "pan": null,
+  "cin": null,
+  "msme": null,
+  "iec": null,
+  "company_name": "<legal/trade name or null>",
+  "document_type": "<'gst_certificate' | 'pan_card' | 'other' | 'unreadable'>",
+  "legible": <true | false>
+}
+Rules:
+- Set document_type to gst_certificate only if this is a GST registration certificate (GSTIN, GST letterhead / Form GST REG).
+- Only set gstin from a GST certificate. Do not invent values.
+${commonFooter}`;
+  }
+
+  if (documentType === 'pan_card') {
+    return `You are verifying an Indian Permanent Account Number (PAN) card.
+Extract fields. Return ONLY valid JSON:
+{
+  "gstin": null,
+  "pan": "<10-char PAN or null>",
+  "cin": null,
+  "msme": null,
+  "iec": null,
+  "company_name": "<name as on card or null>",
+  "document_type": "<'pan_card' | 'gst_certificate' | 'other' | 'unreadable'>",
+  "legible": <true | false>
+}
+Rules:
+- Set document_type to pan_card only for an Income Tax PAN card.
+- Only set pan from a PAN card. Ignore other IDs.
+${commonFooter}`;
+  }
+
+  if (
+    documentType === 'address_proof_lease' ||
+    documentType === 'address_proof_utility_bill' ||
+    documentType === 'address_proof_other'
+  ) {
+    return `You are verifying Indian business address proof.
+Expected class: ${documentType.replace('address_proof_', '')}.
+Extract fields. Return ONLY valid JSON:
+{
+  "gstin": null,
+  "pan": null,
+  "cin": null,
+  "msme": null,
+  "iec": null,
+  "company_name": null,
+  "document_type": "<'lease_agreement' | 'utility_bill' | 'other' | 'unreadable'>",
+  "legible": <true | false>
+}
+Rules:
+- lease_agreement = rental/lease deed; utility_bill = electricity/water/gas/telecom bill;
+  other = government address document (property tax, municipal, etc.).
+- Do not extract tax IDs from address proofs.
+${commonFooter}`;
+  }
+
+  if (INCORPORATION_TYPES.has(documentType)) {
+    return `You are verifying an Indian Certificate of Incorporation / CIN document (MCA COI, SPICe+, LLP incorporation certificate, or CIN allotment letter).
+Extract fields. Return ONLY valid JSON:
+{
+  "gstin": null,
+  "pan": null,
+  "cin": "<21-character CIN or LLPIN or null>",
+  "msme": null,
+  "iec": null,
+  "company_name": "<company / LLP name or null>",
+  "document_type": "<'incorporation_certificate' | 'cin_certificate' | 'other' | 'unreadable'>",
+  "legible": <true | false>
+}
+Rules:
+- CIN / LLPIN is exactly 21 alphanumeric characters (e.g. U12345MH2024PTC123456 or AAB-1234 style normalised to 21 chars without spaces/hyphens in cin).
+- Prefer document_type incorporation_certificate for Certificate of Incorporation; cin_certificate if the page is mainly a CIN letter.
+- Reject unrelated docs (PAN, Aadhaar, GST) as other/unreadable.
+${commonFooter}`;
+  }
+
+  if (documentType === 'partnership_deed') {
+    return `You are verifying an Indian partnership deed (registered or notarised).
+Extract fields. Return ONLY valid JSON:
+{
+  "gstin": null,
+  "pan": null,
+  "cin": null,
+  "msme": null,
+  "iec": null,
+  "company_name": "<firm name or null>",
+  "document_type": "<'partnership_deed' | 'other' | 'unreadable'>",
+  "legible": <true | false>
+}
+Rules:
+- partnership_deed must mention partners / partnership / deed of partnership.
+- Reject unrelated identity or tax cards.
+${commonFooter}`;
+  }
+
+  if (documentType === 'llp_agreement') {
+    return `You are verifying an Indian LLP Agreement (Limited Liability Partnership agreement).
+Extract fields. Return ONLY valid JSON:
+{
+  "gstin": null,
+  "pan": null,
+  "cin": "<LLPIN if printed (21 chars) or null>",
+  "msme": null,
+  "iec": null,
+  "company_name": "<LLP name or null>",
+  "document_type": "<'llp_agreement' | 'other' | 'unreadable'>",
+  "legible": <true | false>
+}
+Rules:
+- Must look like an LLP agreement (partners, capital contribution, MCA/LLP references).
+- Reject unrelated documents.
+${commonFooter}`;
+  }
+
+  if (documentType === 'msme_certificate') {
+    return `You are verifying an Indian Udyam / MSME registration certificate.
+Extract fields. Return ONLY valid JSON:
+{
+  "gstin": null,
+  "pan": null,
+  "cin": null,
+  "msme": "<Udyam number e.g. UDYAM-XX-00-0000000 or null>",
+  "iec": null,
+  "company_name": "<enterprise name or null>",
+  "document_type": "<'msme_certificate' | 'other' | 'unreadable'>",
+  "legible": <true | false>
+}
+Rules:
+- msme must be a Udyam Registration Number when visible (UDYAM-ST-##-#######).
+- Only classify as msme_certificate for Udyam/MSME certificates.
+${commonFooter}`;
+  }
+
+  // iec_certificate
+  return `You are verifying an Indian IEC (Importer Exporter Code) certificate / DGFT document.
+Extract fields. Return ONLY valid JSON:
+{
+  "gstin": null,
+  "pan": null,
+  "cin": null,
+  "msme": null,
+  "iec": "<10-digit IEC or null>",
+  "company_name": "<firm name or null>",
+  "document_type": "<'iec_certificate' | 'other' | 'unreadable'>",
+  "legible": <true | false>
+}
+Rules:
+- IEC is exactly 10 digits. Do not confuse with phone numbers unless clearly labelled as IEC.
+- Only classify as iec_certificate for DGFT / IEC allotment documents.
+${commonFooter}`;
+}
+
+function emptyExtracted(partial?: Partial<ExtractedFields>): ExtractedFields {
+  return {
+    gstin: null,
+    pan: null,
+    cin: null,
+    msme: null,
+    iec: null,
+    company_name: null,
+    document_type: null,
+    legible: false,
+    ...partial,
+  };
+}
+
+function fail(message: string, extracted: ExtractedFields) {
+  return json({
+    passed: false,
+    route_to_manual: true,
+    message,
+    extracted,
+  });
+}
+
+function pass(message: string, extracted: ExtractedFields, score?: number) {
+  return json({
+    passed: true,
+    route_to_manual: false,
+    message,
+    ...(score != null ? { score } : {}),
+    extracted,
+  });
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
@@ -85,9 +305,9 @@ Deno.serve(async (req: Request) => {
 
 async function handle(req: Request): Promise<Response> {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-  const supabaseUrl    = Deno.env.get('SUPABASE_URL')              ?? '';
-  const geminiKey       = Deno.env.get('GEMINI_API_KEY')            ?? '';
-  const geminiModel     = Deno.env.get('GEMINI_MODEL')              ?? 'gemini-2.5-flash';
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const geminiKey = Deno.env.get('GEMINI_API_KEY') ?? '';
+  const geminiModel = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
 
   if (!geminiKey) {
     return json({ error: 'GEMINI_API_KEY not configured' }, 500);
@@ -100,26 +320,27 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { document_type, storage_path, typed_gstin, typed_pan } = body;
-  if (!storage_path)  return json({ error: 'storage_path required' }, 400);
+  const {
+    document_type,
+    storage_path,
+    typed_gstin,
+    typed_pan,
+    typed_cin,
+    typed_msme,
+    typed_iec,
+  } = body;
+  if (!storage_path) return json({ error: 'storage_path required' }, 400);
   if (!document_type) return json({ error: 'document_type required' }, 400);
 
-  // ── 1. Fetch signed URL for the private document ──────────────────────────
-  // Storage's /sign endpoint requires `apikey` alongside `Authorization` when
-  // the project uses the new sb_secret_/sb_publishable_ key format — Bearer
-  // alone returns "Invalid Compact JWS" since sb_secret_ keys aren't JWTs.
-  // Encode each path segment separately — encoding the whole path (with `/`
-  // as %2F) bakes the wrong path into the signed token, so the storage
-  // backend later rejects the download with "InvalidSignature".
   const encodedStoragePath = storage_path.split('/').map(encodeURIComponent).join('/');
   const signedUrlRes = await fetch(
     `${supabaseUrl}/storage/v1/object/sign/verification-documents/${encodedStoragePath}`,
     {
       method: 'POST',
       headers: {
-        'apikey':        serviceRoleKey,
-        'Authorization': `Bearer ${serviceRoleKey}`,
-        'Content-Type':  'application/json',
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({ expiresIn: 120 }),
     },
@@ -130,54 +351,37 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: `Failed to generate signed URL for document: ${errText}` }, 500);
   }
   const { signedURL } = await signedUrlRes.json() as { signedURL: string };
-  // signedURL from Storage's /sign endpoint is relative (e.g. "/object/sign/...")
-  // — fetch() requires an absolute URL, so prefix with the storage base.
   const absoluteSignedUrl = signedURL.startsWith('http')
     ? signedURL
     : `${supabaseUrl}/storage/v1${signedURL}`;
 
-  // ── 2. Download document bytes ─────────────────────────────────────────────
   const docRes = await fetch(absoluteSignedUrl);
   if (!docRes.ok) {
     const errText = await docRes.text();
-    return json({ error: `Failed to download document from storage: ${docRes.status} ${errText} url=${absoluteSignedUrl}` }, 500);
+    return json({
+      error: `Failed to download document from storage: ${docRes.status} ${errText} url=${absoluteSignedUrl}`,
+    }, 500);
   }
 
   const docBuffer = await docRes.arrayBuffer();
-  const docBytes  = new Uint8Array(docBuffer);
+  const docBytes = new Uint8Array(docBuffer);
   let binary = '';
-  for (let i = 0; i < docBytes.length; i++) binary += String.fromCharCode(docBytes[i]);
+  for (let i = 0; i < docBytes.length; i++) binary += String.fromCharCode(docBytes[i]!);
   const base64Doc = btoa(binary);
 
   const contentType = docRes.headers.get('content-type') ?? 'image/jpeg';
   const isImage = contentType.startsWith('image/');
-  const isPdf   = contentType === 'application/pdf';
+  const isPdf = contentType === 'application/pdf';
   if (!isImage && !isPdf) {
     return json({ error: `Unsupported document type: ${contentType}` }, 400);
   }
 
-  // ── 3. Call Gemini Vision for field extraction ─────────────────────────────
-  const prompt = `Extract the following fields from this Indian document. Return ONLY a valid JSON object with these exact keys. If a field is not visible, use null.
-
-{
-  "gstin": "<15-character GSTIN or null>",
-  "pan": "<10-character PAN or null>",
-  "document_type": "<'gst_certificate' | 'pan_card' | 'lease_agreement' | 'utility_bill' | 'aadhaar_card' | 'voter_id' | 'other' | 'unreadable'>",
-  "legible": <true | false>
-}
-
-Only set "gstin" if this document is a GST registration certificate (has a
-GSTIN, legal/trade name, and GST registry letterhead). Only set "pan" if this
-document is an actual PAN card. Do not extract a gstin or pan value from any
-other document type (Aadhaar, voter ID, driving licence, etc.) even if it
-contains a similarly-shaped number.
-
-Return ONLY the JSON — no markdown, no explanation.`;
+  const prompt = buildPrompt(document_type);
 
   const geminiRes = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
     {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{
@@ -188,12 +392,6 @@ Return ONLY the JSON — no markdown, no explanation.`;
         }],
         generationConfig: {
           temperature: 0,
-          // gemini-2.5-flash spends part of maxOutputTokens on internal
-          // "thinking" before writing the visible response — with a low
-          // budget the model can exhaust it mid-JSON, producing truncated
-          // output like `{"gstin":` with nothing after it. Disable thinking
-          // (not needed for a straight extraction task) and give the
-          // visible output a generous ceiling.
           maxOutputTokens: 1024,
           thinkingConfig: { thinkingBudget: 0 },
         },
@@ -210,170 +408,262 @@ Return ONLY the JSON — no markdown, no explanation.`;
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
 
-  let extracted: {
-    gstin: string | null;
-    pan: string | null;
-    document_type: string | null;
-    legible: boolean;
-  };
-
   const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+  let extracted: ExtractedFields;
   try {
-    // Gemini sometimes prefixes/suffixes the JSON with prose despite
-    // instructions ("Here's the data:\n\n{...}\n\nLet me know if..."), which
-    // fails a strict whole-string parse even though valid JSON is present.
-    // Strip markdown fences, then extract the first {...} block rather than
-    // requiring the entire response to be clean JSON.
     const withoutFences = rawText.replace(/```json?\n?|\n?```/g, '').trim();
     const jsonMatch = withoutFences.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON object found in response');
-    extracted = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0]) as Partial<ExtractedFields>;
+    extracted = emptyExtracted({
+      gstin: parsed.gstin ?? null,
+      pan: parsed.pan ?? null,
+      cin: parsed.cin ?? null,
+      msme: parsed.msme ?? null,
+      iec: parsed.iec ?? null,
+      company_name: parsed.company_name ?? null,
+      document_type: parsed.document_type ?? null,
+      legible: !!parsed.legible,
+    });
   } catch {
-    // Gemini returned something we still couldn't salvage a JSON object
-    // from — most likely a safety refusal or plain-language explanation
-    // instead of the requested JSON (seen on sensitive ID documents like
-    // Aadhaar). Treat as "could not verify", not a transport error — a 500
-    // here gets swallowed by the client as a pass-through, which would
-    // silently accept an unverified document. Surface the raw text in the
-    // response itself (get_logs doesn't expose console output from this
-    // environment) so it's visible in the client console during triage.
     console.error('[gemini-doc-verify] unparseable response:', rawText);
     return json({
-      passed: false, route_to_manual: true,
+      passed: false,
+      route_to_manual: true,
       message: 'Could not verify this document right now. Please try again.',
-      extracted: { gstin: null, pan: null, document_type: null, legible: false },
+      extracted: emptyExtracted(),
       debug_raw_gemini_text: rawText,
     });
   }
 
-  const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
-  const PAN_REGEX   = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+  // ── Evaluate per declared upload type ──────────────────────────────────────
 
-  // ── 4. Evaluate result per document type ───────────────────────────────────
-  // Empty typed value means the field hasn't been filled yet — client
-  // auto-fills it from `extracted` instead of comparing. Still requires the
-  // extracted value to match the real GSTIN/PAN format before trusting it.
   if (document_type === 'gst_certificate') {
     if (!extracted.legible) {
-      return json({
-        passed: false, route_to_manual: true,
-        message: 'Could not read a GSTIN from this document. Please upload a clear photo of your GST certificate.',
+      return fail(
+        'Could not read a GSTIN from this document. Please upload a clear photo of your GST certificate.',
         extracted,
-      });
+      );
     }
-    // Check the document's own classification before checking for a
-    // missing GSTIN — a PAN card/Aadhaar with no GSTIN should say "wrong
-    // document", not the more generic "could not read a GSTIN".
     if (extracted.document_type !== 'gst_certificate') {
-      return json({
-        passed: false, route_to_manual: true,
-        message: 'This doesn\'t look like a GST certificate. Please upload the correct document.',
-        extracted,
-      });
+      return fail("This doesn't look like a GST certificate. Please upload the correct document.", extracted);
     }
     if (!extracted.gstin) {
-      return json({
-        passed: false, route_to_manual: true,
-        message: 'Could not read a GSTIN from this document. Please upload a clear photo of your GST certificate.',
+      return fail(
+        'Could not read a GSTIN from this document. Please upload a clear photo of your GST certificate.',
         extracted,
-      });
+      );
     }
     const extractedGstin = extracted.gstin.toUpperCase().replace(/\s/g, '');
     if (!GSTIN_REGEX.test(extractedGstin)) {
-      return json({
-        passed: false, route_to_manual: true,
-        message: `Extracted text (${extractedGstin}) doesn't look like a valid GSTIN. Please upload a clearer photo.`,
+      return fail(
+        `Extracted text (${extractedGstin}) doesn't look like a valid GSTIN. Please upload a clearer photo.`,
         extracted,
-      });
+      );
     }
+    const next = { ...extracted, gstin: extractedGstin };
     if (!typed_gstin?.trim()) {
-      return json({
-        passed: true, route_to_manual: false,
-        message: `Read GSTIN ${extractedGstin} from this document.`,
-        extracted: { ...extracted, gstin: extractedGstin },
-      });
+      return pass(`Read GSTIN ${extractedGstin} from this document.`, next);
     }
     const score = taxIdSimilarity(typed_gstin, extractedGstin);
-    const passed = score >= HARD_THRESHOLD;
-    return json({
-      passed,
-      route_to_manual: !passed,
-      message: passed
-        ? 'GST certificate matches the GSTIN you entered.'
-        : `The GSTIN on this document (${extractedGstin}) doesn't match what you entered (${typed_gstin}). Please check and re-upload.`,
-      score: Math.round(score * 100),
-      extracted: { ...extracted, gstin: extractedGstin },
-    });
+    const ok = score >= HARD_THRESHOLD;
+    return ok
+      ? pass('GST certificate matches the GSTIN you entered.', next, Math.round(score * 100))
+      : fail(
+        `The GSTIN on this document (${extractedGstin}) doesn't match what you entered (${typed_gstin}). Please check and re-upload.`,
+        next,
+      );
   }
 
   if (document_type === 'pan_card') {
     if (!extracted.legible) {
-      return json({
-        passed: false, route_to_manual: true,
-        message: 'Could not read a PAN from this document. Please upload a clear photo of your PAN card.',
+      return fail(
+        'Could not read a PAN from this document. Please upload a clear photo of your PAN card.',
         extracted,
-      });
+      );
     }
-    // Check the document's own classification before checking for a
-    // missing PAN — a GST cert/Aadhaar with no PAN should say "wrong
-    // document", not the more generic "could not read a PAN".
     if (extracted.document_type !== 'pan_card') {
-      return json({
-        passed: false, route_to_manual: true,
-        message: 'This doesn\'t look like a PAN card. Please upload the correct document.',
-        extracted,
-      });
+      return fail("This doesn't look like a PAN card. Please upload the correct document.", extracted);
     }
     if (!extracted.pan) {
-      return json({
-        passed: false, route_to_manual: true,
-        message: 'Could not read a PAN from this document. Please upload a clear photo of your PAN card.',
+      return fail(
+        'Could not read a PAN from this document. Please upload a clear photo of your PAN card.',
         extracted,
-      });
+      );
     }
     const extractedPan = extracted.pan.toUpperCase().replace(/\s/g, '');
     if (!PAN_REGEX.test(extractedPan)) {
-      return json({
-        passed: false, route_to_manual: true,
-        message: `Extracted text (${extractedPan}) doesn't look like a valid PAN. Please upload a clearer photo.`,
+      return fail(
+        `Extracted text (${extractedPan}) doesn't look like a valid PAN. Please upload a clearer photo.`,
         extracted,
-      });
+      );
     }
+    const next = { ...extracted, pan: extractedPan };
     if (!typed_pan?.trim()) {
-      return json({
-        passed: true, route_to_manual: false,
-        message: `Read PAN ${extractedPan} from this document.`,
-        extracted: { ...extracted, pan: extractedPan },
-      });
+      return pass(`Read PAN ${extractedPan} from this document.`, next);
     }
     const score = taxIdSimilarity(typed_pan, extractedPan);
-    const passed = score >= HARD_THRESHOLD;
-    return json({
-      passed,
-      route_to_manual: !passed,
-      message: passed
-        ? 'PAN card matches the PAN you entered.'
-        : `The PAN on this document (${extractedPan}) doesn't match what you entered (${typed_pan}). Please check and re-upload.`,
-      score: Math.round(score * 100),
-      extracted: { ...extracted, pan: extractedPan },
-    });
+    const ok = score >= HARD_THRESHOLD;
+    return ok
+      ? pass('PAN card matches the PAN you entered.', next, Math.round(score * 100))
+      : fail(
+        `The PAN on this document (${extractedPan}) doesn't match what you entered (${typed_pan}). Please check and re-upload.`,
+        next,
+      );
   }
 
-  // Address proof: no typed value to compare — just confirm it's legible and
-  // recognisable as an address document, not a mismatch check.
-  const looksLikeAddressDoc = extracted.document_type === 'lease_agreement'
-    || extracted.document_type === 'utility_bill'
-    || extracted.document_type === 'other';
+  if (
+    document_type === 'address_proof_lease' ||
+    document_type === 'address_proof_utility_bill' ||
+    document_type === 'address_proof_other'
+  ) {
+    const looksLikeAddressDoc =
+      extracted.document_type === 'lease_agreement' ||
+      extracted.document_type === 'utility_bill' ||
+      extracted.document_type === 'other';
+    if (!extracted.legible || !looksLikeAddressDoc) {
+      return fail(
+        !extracted.legible
+          ? 'This document is too blurry or unclear to read. Please upload a clearer photo or scan.'
+          : "This doesn't look like an address proof document. Please upload a lease agreement, utility bill, or similar.",
+        extracted,
+      );
+    }
+    return pass('Document looks readable.', extracted);
+  }
 
-  const passed = extracted.legible && looksLikeAddressDoc;
-  return json({
-    passed,
-    route_to_manual: !passed,
-    message: passed
-      ? 'Document looks readable.'
-      : !extracted.legible
-      ? 'This document is too blurry or unclear to read. Please upload a clearer photo or scan.'
-      : "This doesn't look like an address proof document. Please upload a lease agreement, utility bill, or similar.",
-    extracted,
-  });
+  if (INCORPORATION_TYPES.has(document_type)) {
+    const looksLikeCoi =
+      extracted.document_type === 'incorporation_certificate' ||
+      extracted.document_type === 'cin_certificate';
+    if (!extracted.legible) {
+      return fail(
+        'Could not read this incorporation / CIN document. Please upload a clearer scan.',
+        extracted,
+      );
+    }
+    if (!looksLikeCoi) {
+      return fail(
+        "This doesn't look like a Certificate of Incorporation or CIN document.",
+        extracted,
+      );
+    }
+    let cin = (extracted.cin ?? '').toUpperCase().replace(/[\s\-]/g, '');
+    if (cin && !CIN_REGEX.test(cin)) {
+      return fail(
+        `Extracted CIN (${extracted.cin}) doesn't look like a valid 21-character CIN/LLPIN. Please upload a clearer scan.`,
+        extracted,
+      );
+    }
+    if (!cin) {
+      // COI can still pass without a visible CIN (rare), but prefer extraction
+      return pass('Incorporation document looks readable.', { ...extracted, cin: null });
+    }
+    const next = { ...extracted, cin };
+    if (!typed_cin?.trim()) {
+      return pass(`Read CIN ${cin} from this document.`, next);
+    }
+    const score = taxIdSimilarity(typed_cin, cin);
+    const ok = score >= HARD_THRESHOLD;
+    return ok
+      ? pass('Incorporation document matches the CIN you entered.', next, Math.round(score * 100))
+      : fail(
+        `The CIN on this document (${cin}) doesn't match what you entered (${typed_cin}). Please check and re-upload.`,
+        next,
+      );
+  }
+
+  if (document_type === 'partnership_deed') {
+    if (!extracted.legible || extracted.document_type !== 'partnership_deed') {
+      return fail(
+        !extracted.legible
+          ? 'This partnership deed is too unclear to read. Please upload a clearer scan.'
+          : "This doesn't look like a partnership deed. Please upload the correct document.",
+        extracted,
+      );
+    }
+    return pass('Partnership deed looks readable.', extracted);
+  }
+
+  if (document_type === 'llp_agreement') {
+    if (!extracted.legible || extracted.document_type !== 'llp_agreement') {
+      return fail(
+        !extracted.legible
+          ? 'This LLP agreement is too unclear to read. Please upload a clearer scan.'
+          : "This doesn't look like an LLP agreement. Please upload the correct document.",
+        extracted,
+      );
+    }
+    let cin = (extracted.cin ?? '').toUpperCase().replace(/[\s\-]/g, '');
+    if (cin && !CIN_REGEX.test(cin)) cin = '';
+    return pass('LLP agreement looks readable.', { ...extracted, cin: cin || null });
+  }
+
+  if (document_type === 'msme_certificate') {
+    if (!extracted.legible || extracted.document_type !== 'msme_certificate') {
+      return fail(
+        !extracted.legible
+          ? 'Could not read this Udyam / MSME certificate. Please upload a clearer scan.'
+          : "This doesn't look like a Udyam / MSME certificate.",
+        extracted,
+      );
+    }
+    let msme = (extracted.msme ?? '').toUpperCase().replace(/\s+/g, '');
+    if (msme && !UDYAM_REGEX.test(msme)) {
+      return fail(
+        `Extracted Udyam number (${extracted.msme}) doesn't look valid. Please upload a clearer certificate.`,
+        extracted,
+      );
+    }
+    const next = { ...extracted, msme: msme || null };
+    if (msme && typed_msme?.trim()) {
+      const score = taxIdSimilarity(typed_msme, msme);
+      if (score < HARD_THRESHOLD) {
+        return fail(
+          `Udyam on this document (${msme}) doesn't match what you entered (${typed_msme}).`,
+          next,
+        );
+      }
+      return pass('Udyam certificate matches the number you entered.', next, Math.round(score * 100));
+    }
+    return pass(
+      msme ? `Read Udyam ${msme} from this document.` : 'Udyam / MSME certificate looks readable.',
+      next,
+    );
+  }
+
+  if (document_type === 'iec_certificate') {
+    if (!extracted.legible || extracted.document_type !== 'iec_certificate') {
+      return fail(
+        !extracted.legible
+          ? 'Could not read this IEC certificate. Please upload a clearer scan.'
+          : "This doesn't look like an IEC certificate.",
+        extracted,
+      );
+    }
+    let iec = (extracted.iec ?? '').replace(/\s/g, '');
+    if (iec && !IEC_REGEX.test(iec)) {
+      return fail(
+        `Extracted IEC (${extracted.iec}) doesn't look like a valid 10-digit code.`,
+        extracted,
+      );
+    }
+    const next = { ...extracted, iec: iec || null };
+    if (iec && typed_iec?.trim()) {
+      const score = taxIdSimilarity(typed_iec, iec);
+      if (score < HARD_THRESHOLD) {
+        return fail(
+          `IEC on this document (${iec}) doesn't match what you entered (${typed_iec}).`,
+          next,
+        );
+      }
+      return pass('IEC certificate matches the code you entered.', next, Math.round(score * 100));
+    }
+    return pass(
+      iec ? `Read IEC ${iec} from this document.` : 'IEC certificate looks readable.',
+      next,
+    );
+  }
+
+  return fail('Unsupported document type for verification.', extracted);
 }

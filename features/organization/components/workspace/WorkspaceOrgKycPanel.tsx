@@ -34,6 +34,8 @@ import {
 import {
   kycBusinessDetailsProgressPct,
   kycDocumentsProgressPct,
+  kycStructureRequirementsHint,
+  registrationTypeLabel,
 } from '@/features/organization/utils/kycVerification.util';
 import { useOrgRole } from '@/lib/hooks/useOrgRole';
 import * as Clipboard from 'expo-clipboard';
@@ -171,6 +173,11 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
             canSubmit={canSubmit}
             submitting={submitting}
             missingItems={submitGaps}
+            structureLabel={registrationTypeLabel(kyc?.registration_type) || null}
+            structureHint={kycStructureRequirementsHint(
+              kyc?.registration_type,
+              !!kyc?.gst_not_applicable,
+            )}
             onSubmit={() => void submitForVerification()}
           />
         ) : null
@@ -228,12 +235,17 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
             frozen={frozen}
             uploadingDocType={uploadingDocType}
             onUpload={async (docType, proofType) => {
-              const { error } = await uploadKycDocument(docType, proofType);
-              if (error) {
-                notice({ kind: 'error', title: 'Upload failed', message: error.message });
-              } else {
-                notice({ kind: 'success', title: 'Document uploaded', duration: 2400 });
+              const result = await uploadKycDocument(docType, proofType);
+              if (result.cancelled) return;
+              if (result.error) {
+                notice({
+                  kind: 'error',
+                  title: 'Upload failed',
+                  message: result.error.message,
+                });
+                return;
               }
+              notice({ kind: 'success', title: 'Document uploaded', duration: 2400 });
             }}
             onRemove={async (docType) => {
               const { error } = await removeKycDocument(docType);

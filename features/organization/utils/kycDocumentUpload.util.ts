@@ -6,6 +6,7 @@ import { Alert, Platform } from 'react-native';
 import {
   uploadVerificationDocument,
   type AddressProofFile,
+  type DocVerifyTypedValues,
   type VerificationDocumentType,
 } from '@/features/organization/services/businessVerification.service';
 import type { OrganizationKycDocType } from '@/features/organization/types/organizationKycDocuments.types';
@@ -18,7 +19,24 @@ export type PickedVerificationDocument = {
   sizeBytes?: number;
   extractedGstin?: string | null;
   extractedPan?: string | null;
+  extractedCin?: string | null;
+  extractedMsme?: string | null;
+  extractedIec?: string | null;
 };
+
+/** Distinguishes cancel vs OCR/upload failure — callers must not toast success on error. */
+export type PickVerificationDocumentResult =
+  | { status: 'ok'; document: PickedVerificationDocument }
+  | { status: 'cancelled' }
+  | { status: 'error'; error: Error };
+
+function failResult(message: string): PickVerificationDocumentResult {
+  // Native Alert is fine; on web Alert.alert is a no-op so callers must surface `error`.
+  if (Platform.OS !== 'web') {
+    Alert.alert('Upload failed', message);
+  }
+  return { status: 'error', error: new Error(message) };
+}
 
 /** address_proof has no single enum member — it maps to one of three
  * sub-types based on what the user picked in the document-type chips. */
@@ -37,17 +55,17 @@ function resolveVerificationDocumentType(
     docType === 'gst_certificate' ||
     docType === 'pan_card' ||
     docType === 'cin_certificate' ||
-    docType === 'msme_certificate'
+    docType === 'msme_certificate' ||
+    docType === 'iec_certificate' ||
+    docType === 'incorporation_certificate' ||
+    docType === 'partnership_deed' ||
+    docType === 'llp_agreement'
   ) {
     return docType;
   }
-  return null; // iec_certificate / incorporation_certificate / other: not yet supported by the verification pipeline
+  return null;
 }
 
-/** Native `fetch(uri)` on content:// (Android) and sandboxed file:// (iOS)
- * document-picker URIs is unreliable — it silently throws or returns empty
- * bytes. Reading through expo-file-system as base64 is the proven fix used
- * elsewhere in this codebase (see chatDocumentPick.util.ts). */
 async function ensureBase64(asset: {
   uri: string;
   base64?: string | null;
@@ -62,13 +80,19 @@ async function ensureBase64(asset: {
 async function processAsset(
   orgId: string,
   docType: OrganizationKycDocType,
-  asset: { uri: string; mimeType?: string | null; fileName?: string | null; base64?: string | null; fileSize?: number | null },
+  asset: {
+    uri: string;
+    mimeType?: string | null;
+    fileName?: string | null;
+    base64?: string | null;
+    fileSize?: number | null;
+  },
   addressProofType?: AddressProofType,
-): Promise<PickedVerificationDocument | null> {
+  typedValues?: DocVerifyTypedValues,
+): Promise<PickVerificationDocumentResult> {
   const verificationDocType = resolveVerificationDocumentType(docType, addressProofType);
   if (!verificationDocType) {
-    Alert.alert('Upload failed', 'This document type is not yet supported.');
-    return null;
+    return failResult('This document type is not yet supported.');
   }
   const mimeType = asset.mimeType ?? 'image/jpeg';
   const fileName = asset.fileName ?? `${docType}-${Date.now()}.jpg`;
@@ -77,11 +101,7 @@ async function processAsset(
   try {
     base64 = await ensureBase64(asset);
   } catch (err) {
-    Alert.alert(
-      'Upload failed',
-      err instanceof Error ? err.message : 'Could not read the selected file.',
-    );
-    return null;
+    return failResult(err instanceof Error ? err.message : 'Could not read the selected file.');
   }
 
   const file: AddressProofFile = {
@@ -90,36 +110,43 @@ async function processAsset(
     fileName,
     base64,
   };
-  const { path, error, verify } = await uploadVerificationDocument(orgId, verificationDocType, file);
+  const { path, error, verify } = await uploadVerificationDocument(
+    orgId,
+    verificationDocType,
+    file,
+    typedValues,
+  );
   if (error || !path) {
-    Alert.alert('Upload failed', error?.message ?? 'Could not upload document.');
-    return null;
+    return failResult(error?.message ?? 'Could not upload document.');
   }
   return {
-    path,
-    fileName,
-    mimeType,
-    sizeBytes: asset.fileSize ?? undefined,
-    extractedGstin: verify?.extracted?.gstin ?? null,
-    extractedPan: verify?.extracted?.pan ?? null,
+    status: 'ok',
+    document: {
+      path,
+      fileName,
+      mimeType,
+      sizeBytes: asset.fileSize ?? undefined,
+      extractedGstin: verify?.extracted?.gstin ?? null,
+      extractedPan: verify?.extracted?.pan ?? null,
+      extractedCin: verify?.extracted?.cin ?? null,
+      extractedMsme: verify?.extracted?.msme ?? null,
+      extractedIec: verify?.extracted?.iec ?? null,
+    },
   };
 }
 
-/** react-native-web's Alert.alert is a no-op (no dialog, no callbacks ever
- * fire) — see react-native-web/dist/exports/Alert/index.js. A 3-way source
- * chooser is therefore unreachable on web; go straight to the file picker,
- * which already renders the OS/browser's native file dialog. */
 async function pickAndUploadVerificationDocumentWeb(
   orgId: string,
   docType: OrganizationKycDocType,
   addressProofType?: AddressProofType,
-): Promise<PickedVerificationDocument | null> {
+  typedValues?: DocVerifyTypedValues,
+): Promise<PickVerificationDocumentResult> {
   try {
     const res = await DocumentPicker.getDocumentAsync({
       type: ['application/pdf', 'image/*'],
       copyToCacheDirectory: true,
     });
-    if (res.canceled || !res.assets[0]) return null;
+    if (res.canceled || !res.assets[0]) return { status: 'cancelled' };
     const a = res.assets[0];
     return await processAsset(
       orgId,
@@ -131,10 +158,10 @@ async function pickAndUploadVerificationDocumentWeb(
         fileSize: a.size,
       },
       addressProofType,
+      typedValues,
     );
   } catch (err) {
-    Alert.alert('Upload failed', err instanceof Error ? err.message : 'File error.');
-    return null;
+    return failResult(err instanceof Error ? err.message : 'File error.');
   }
 }
 
@@ -143,9 +170,10 @@ export function pickAndUploadVerificationDocument(
   orgId: string,
   docType: OrganizationKycDocType,
   addressProofType?: AddressProofType,
-): Promise<PickedVerificationDocument | null> {
+  typedValues?: DocVerifyTypedValues,
+): Promise<PickVerificationDocumentResult> {
   if (Platform.OS === 'web') {
-    return pickAndUploadVerificationDocumentWeb(orgId, docType, addressProofType);
+    return pickAndUploadVerificationDocumentWeb(orgId, docType, addressProofType, typedValues);
   }
   return new Promise((resolve) => {
     Alert.alert('Upload document', 'Choose a source', [
@@ -156,8 +184,7 @@ export function pickAndUploadVerificationDocument(
             try {
               const perm = await ImagePicker.requestCameraPermissionsAsync();
               if (!perm.granted) {
-                Alert.alert('Permission required', 'Camera access is needed.');
-                resolve(null);
+                resolve(failResult('Camera access is needed.'));
                 return;
               }
               const res = await ImagePicker.launchCameraAsync({
@@ -166,13 +193,12 @@ export function pickAndUploadVerificationDocument(
                 base64: true,
               });
               if (res.canceled || !res.assets[0]) {
-                resolve(null);
+                resolve({ status: 'cancelled' });
                 return;
               }
-              resolve(await processAsset(orgId, docType, res.assets[0], addressProofType));
+              resolve(await processAsset(orgId, docType, res.assets[0], addressProofType, typedValues));
             } catch (err) {
-              Alert.alert('Upload failed', err instanceof Error ? err.message : 'Camera error.');
-              resolve(null);
+              resolve(failResult(err instanceof Error ? err.message : 'Camera error.'));
             }
           })();
         },
@@ -184,8 +210,7 @@ export function pickAndUploadVerificationDocument(
             try {
               const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
               if (!perm.granted) {
-                Alert.alert('Permission required', 'Photo library access is needed.');
-                resolve(null);
+                resolve(failResult('Photo library access is needed.'));
                 return;
               }
               const res = await ImagePicker.launchImageLibraryAsync({
@@ -194,13 +219,12 @@ export function pickAndUploadVerificationDocument(
                 base64: true,
               });
               if (res.canceled || !res.assets[0]) {
-                resolve(null);
+                resolve({ status: 'cancelled' });
                 return;
               }
-              resolve(await processAsset(orgId, docType, res.assets[0], addressProofType));
+              resolve(await processAsset(orgId, docType, res.assets[0], addressProofType, typedValues));
             } catch (err) {
-              Alert.alert('Upload failed', err instanceof Error ? err.message : 'Gallery error.');
-              resolve(null);
+              resolve(failResult(err instanceof Error ? err.message : 'Gallery error.'));
             }
           })();
         },
@@ -215,7 +239,7 @@ export function pickAndUploadVerificationDocument(
                 copyToCacheDirectory: true,
               });
               if (res.canceled || !res.assets[0]) {
-                resolve(null);
+                resolve({ status: 'cancelled' });
                 return;
               }
               const a = res.assets[0];
@@ -230,17 +254,17 @@ export function pickAndUploadVerificationDocument(
                     fileSize: a.size,
                   },
                   addressProofType,
+                  typedValues,
                 ),
               );
             } catch (err) {
-              Alert.alert('Upload failed', err instanceof Error ? err.message : 'File error.');
-              resolve(null);
+              resolve(failResult(err instanceof Error ? err.message : 'File error.'));
             }
           })();
         },
       },
-      { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
-    ], { cancelable: true, onDismiss: () => resolve(null) });
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve({ status: 'cancelled' }) },
+    ], { cancelable: true, onDismiss: () => resolve({ status: 'cancelled' }) });
   });
 }
 

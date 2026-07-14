@@ -1,0 +1,130 @@
+/**
+ * Admin-side KYC document matrix — mirrors
+ * features/organization/utils/kycVerification.util.ts (client) and
+ * submit_business_verification RPC.
+ */
+
+import type { DocumentType } from '@/types/admin';
+
+export type RegistrationTypeDb =
+  | 'proprietorship'
+  | 'partnership'
+  | 'pvt_ltd'
+  | 'public_ltd'
+  | 'llp';
+
+export type RequiredDocSlot = {
+  /** Primary admin DocumentType for the tab / Missing placeholder. */
+  type: DocumentType;
+  /** Any of these uploaded DocumentTypes satisfy the slot. */
+  satisfyWith: DocumentType[];
+  label: string;
+};
+
+const ALWAYS_BASE: RequiredDocSlot[] = [
+  {
+    type: 'PAN Card',
+    satisfyWith: ['PAN Card'],
+    label: 'PAN Card',
+  },
+  {
+    type: 'Address Proof',
+    satisfyWith: ['Address Proof'],
+    label: 'Address Proof',
+  },
+];
+
+/** Structure-driven required document slots for admin review. */
+export function requiredKycDocSlots(
+  registrationType: string | null | undefined,
+  gstNotApplicable: boolean,
+): RequiredDocSlot[] {
+  const slots: RequiredDocSlot[] = [...ALWAYS_BASE];
+
+  if (!gstNotApplicable) {
+    slots.unshift({
+      type: 'GST Certificate',
+      satisfyWith: ['GST Certificate'],
+      label: 'GST Certificate',
+    });
+  }
+
+  switch (registrationType) {
+    case 'proprietorship':
+      if (gstNotApplicable) {
+        slots.push({
+          type: 'Activity Proof',
+          satisfyWith: ['MSME / Udyam', 'IEC', 'GST Certificate'],
+          label: 'Activity proof (Udyam or IEC)',
+        });
+      }
+      break;
+    case 'partnership':
+      slots.push({
+        type: 'Partnership Deed',
+        satisfyWith: ['Partnership Deed'],
+        label: 'Partnership deed',
+      });
+      break;
+    case 'pvt_ltd':
+    case 'public_ltd':
+      slots.push({
+        type: 'COI',
+        satisfyWith: ['COI'],
+        label: 'Incorporation / CIN certificate',
+      });
+      break;
+    case 'llp':
+      slots.push(
+        {
+          type: 'COI',
+          satisfyWith: ['COI'],
+          label: 'Incorporation certificate',
+        },
+        {
+          type: 'LLP Agreement',
+          satisfyWith: ['LLP Agreement'],
+          label: 'LLP agreement',
+        },
+      );
+      break;
+    default:
+      break;
+  }
+
+  return slots;
+}
+
+export function registrationTypeRequiresCin(
+  registrationType: string | null | undefined,
+): boolean {
+  return registrationType === 'pvt_ltd' || registrationType === 'public_ltd';
+}
+
+/** Map DB organization_kyc_documents.doc_type → admin DocumentType. */
+export function mapDbDocTypeToAdmin(docType: string): DocumentType {
+  switch (docType) {
+    case 'gst_certificate':
+      return 'GST Certificate';
+    case 'pan_card':
+      return 'PAN Card';
+    case 'address_proof':
+    case 'address_proof_lease':
+    case 'address_proof_utility_bill':
+    case 'address_proof_other':
+      return 'Address Proof';
+    case 'cin_certificate':
+    case 'incorporation_certificate':
+      return 'COI';
+    case 'partnership_deed':
+      return 'Partnership Deed';
+    case 'llp_agreement':
+      return 'LLP Agreement';
+    case 'msme_certificate':
+      return 'MSME / Udyam';
+    case 'iec_certificate':
+      return 'IEC';
+    default:
+      return 'Address Proof';
+  }
+}

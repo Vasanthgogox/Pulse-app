@@ -8,6 +8,10 @@ type Props = {
   onSubmit: () => void;
   /** What still blocks submit — shown when disabled so the button is not a silent pass. */
   missingItems?: string[];
+  /** e.g. "Private Limited" — title becomes structure-aware. */
+  structureLabel?: string | null;
+  /** One-line reminder of the matrix for this structure. */
+  structureHint?: string | null;
 };
 
 export function KycSubmitFooter({
@@ -15,14 +19,22 @@ export function KycSubmitFooter({
   submitting,
   onSubmit,
   missingItems = [],
+  structureLabel,
+  structureHint,
 }: Props) {
   const showGaps = !canSubmit && !submitting && missingItems.length > 0;
+  const gapsTitle = structureLabel
+    ? `For ${structureLabel}, still needed`
+    : 'Still needed before submit';
 
   return (
     <View style={styles.wrap}>
       {showGaps ? (
         <View style={styles.gapsBox}>
-          <Text style={styles.gapsTitle}>Still needed before submit</Text>
+          <Text style={styles.gapsTitle}>{gapsTitle}</Text>
+          <Text style={styles.structureHint}>
+            These items are required for your business structure before submit:
+          </Text>
           {missingItems.map((item) => (
             <Text key={item} style={styles.gapItem}>
               • {item}
@@ -31,8 +43,9 @@ export function KycSubmitFooter({
         </View>
       ) : (
         <Text style={styles.hint}>
-          Submit locks your profile for review. Ensure tax IDs, required documents, and business
-          details are complete.
+          {structureHint
+            ? structureHint
+            : 'Submit locks your profile for review. Ensure tax IDs, required documents, and business details are complete.'}
         </Text>
       )}
       <Pressable
@@ -69,6 +82,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Theme.textPrimaryDark,
     marginBottom: 2,
+  },
+  structureHint: {
+    fontSize: 10,
+    color: Theme.textSecondary,
+    lineHeight: 14,
+    fontWeight: '500',
+    marginBottom: 4,
   },
   gapItem: {
     fontSize: 10,

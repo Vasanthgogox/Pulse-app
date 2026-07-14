@@ -20,10 +20,15 @@ import {
   upsertOrganizationKycDocument,
 } from '@/features/organization/services/organizationKycDocuments.service';
 import { pickAndUploadVerificationDocument } from '@/features/organization/utils/kycDocumentUpload.util';
-import { kycVerificationReady, listKycVerificationGaps } from '@/features/organization/utils/kycVerification.util';
-import type { OrganizationKycDocType } from '@/features/organization/types/organizationKycDocuments.types';
-import type { OrganizationKycDocument } from '@/features/organization/types/organizationKycDocuments.types';
-import { ORG_KYC_REQUIRED_DOCUMENTS } from '@/features/organization/types/organizationKycDocuments.types';
+import type {
+  OrganizationKycDocument,
+  OrganizationKycDocType,
+} from '@/features/organization/types/organizationKycDocuments.types';
+import {
+  isKycDocMandatoryForOrg,
+  kycVerificationReady,
+  listKycVerificationGaps,
+} from '@/features/organization/utils/kycVerification.util';
 import type { KycField } from '@/features/organization/components/workspace/workspacePanelUi';
 import type { AddressProofType, RegistrationType, WorkspaceKyc } from '@/types/organization';
 import { isVerificationFrozen } from '@/types/organization';
@@ -166,22 +171,25 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
 
   const uploadKycDocument = useCallback(
     async (docType: OrganizationKycDocType, proofType?: AddressProofType) => {
-      if (!orgId || uploadingDocType) return { error: new Error('Busy') };
+      if (!orgId || uploadingDocType) return { error: new Error('Busy'), cancelled: false as const };
       if (docType === 'address_proof' && !proofType) {
-        return { error: new Error('Select address proof type first.') };
+        return { error: new Error('Select address proof type first.'), cancelled: false as const };
       }
       setUploadingDocType(docType);
       try {
-        const picked = await pickAndUploadVerificationDocument(orgId, docType, proofType);
-        if (!picked) return { error: null };
+        const pick = await pickAndUploadVerificationDocument(orgId, docType, proofType, {
+          gstin: kyc?.gstin ?? undefined,
+          pan: kyc?.business_pan ?? undefined,
+          cin: kyc?.cin ?? undefined,
+          msme: kyc?.msme_number ?? undefined,
+          iec: kyc?.iec_number ?? undefined,
+        });
+        if (pick.status === 'cancelled') return { error: null, cancelled: true as const };
+        if (pick.status === 'error') return { error: pick.error, cancelled: false as const };
+        const picked = pick.document;
 
         // OCR auto-fill: only backfill an empty field, never overwrite a
         // value the user already typed in the Tax & compliance IDs section.
-        // Checked BEFORE the document is registered — a PAN/GSTIN already
-        // claimed by another workspace (organizations_pan_unique /
-        // organizations_gstin_unique) means this document can't belong to
-        // this org either, so the whole upload is rejected, not just the
-        // field auto-fill.
         if (docType === 'pan_card' && picked.extractedPan && !kyc?.business_pan) {
           const { error: panErr } = await saveKycField('business_pan', picked.extractedPan);
           if (panErr) {
@@ -192,6 +200,7 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
                   ? 'This PAN is already registered to another workspace.'
                   : `Could not verify PAN: ${panErr.message}`,
               ),
+              cancelled: false as const,
             };
           }
         }
@@ -205,8 +214,43 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
                   ? 'This GSTIN is already registered to another workspace.'
                   : `Could not verify GSTIN: ${gstinErr.message}`,
               ),
+              cancelled: false as const,
             };
           }
+        }
+        if (
+          (docType === 'cin_certificate' || docType === 'incorporation_certificate') &&
+          picked.extractedCin &&
+          !kyc?.cin
+        ) {
+          const { error: cinErr } = await saveKycField('cin', picked.extractedCin);
+          if (cinErr) {
+            return {
+              error: new Error(`Could not save CIN from document: ${cinErr.message}`),
+              cancelled: false as const,
+            };
+          }
+        }
+        if (docType === 'msme_certificate' && picked.extractedMsme && !kyc?.msme_number) {
+          const { error: msmeErr } = await saveKycField('msme_number', picked.extractedMsme);
+          if (msmeErr) {
+            return {
+              error: new Error(`Could not save Udyam from document: ${msmeErr.message}`),
+              cancelled: false as const,
+            };
+          }
+        }
+        if (docType === 'iec_certificate' && picked.extractedIec && !kyc?.iec_number) {
+          const { error: iecErr } = await saveKycField('iec_number', picked.extractedIec);
+          if (iecErr) {
+            return {
+              error: new Error(`Could not save IEC from document: ${iecErr.message}`),
+              cancelled: false as const,
+            };
+          }
+        }
+        if (docType === 'llp_agreement' && picked.extractedCin && !kyc?.cin) {
+          await saveKycField('cin', picked.extractedCin);
         }
 
         const { document, error: upsertErr } = await upsertOrganizationKycDocument(orgId, {
@@ -215,16 +259,16 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
           file_name: picked.fileName,
           mime_type: picked.mimeType,
           file_size_bytes: picked.sizeBytes,
-          is_mandatory: ORG_KYC_REQUIRED_DOCUMENTS.some((d) => d.type === docType),
+          is_mandatory: isKycDocMandatoryForOrg(docType, kyc),
         });
-        if (upsertErr) return { error: upsertErr };
+        if (upsertErr) return { error: upsertErr, cancelled: false as const };
 
         if (docType === 'address_proof' && proofType) {
           const { error: draftErr } = await saveVerificationDraft(orgId, {
             address_proof_path: picked.path,
             address_proof_type: proofType,
           });
-          if (draftErr) return { error: draftErr };
+          if (draftErr) return { error: draftErr, cancelled: false as const };
         }
 
         if (document) {
@@ -234,7 +278,7 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
           });
         }
         await reload();
-        return { error: null };
+        return { error: null, cancelled: false as const };
       } finally {
         setUploadingDocType(null);
       }

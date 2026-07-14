@@ -1,15 +1,18 @@
 import { LoadingIndicator } from '@/components/LoadingIndicator';
 import Theme from '@/constants/Theme';
 import { getVerificationDocumentSignedUrl } from '@/features/organization/services/businessVerification.service';
-import { latestOrgKycDocument } from '@/features/organization/services/organizationKycDocuments.service';
 import type {
   OrganizationKycDocDefinition,
   OrganizationKycDocument,
+  OrganizationKycDocType,
 } from '@/features/organization/types/organizationKycDocuments.types';
+import { ORG_KYC_DOC_LABELS } from '@/features/organization/types/organizationKycDocuments.types';
 import {
   ADDRESS_PROOF_OPTIONS,
   addressProofTypeLabel,
   docStatusLabel,
+  latestOrgKycDocumentMatching,
+  resolveAcceptTypes,
 } from '@/features/organization/utils/kycVerification.util';
 import {
   AMBER,
@@ -26,7 +29,7 @@ import {
   Trash2,
   UploadCloud,
 } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 type Props = {
@@ -36,8 +39,8 @@ type Props = {
   canEdit: boolean;
   frozen: boolean;
   uploading: boolean;
-  onUpload: (proofType?: AddressProofType) => Promise<void>;
-  onRemove: () => Promise<void>;
+  onUpload: (docType: OrganizationKycDocType, proofType?: AddressProofType) => Promise<void>;
+  onRemove: (docType: OrganizationKycDocType) => Promise<void>;
 };
 
 export function KycRequiredDocumentRow({
@@ -50,13 +53,23 @@ export function KycRequiredDocumentRow({
   onUpload,
   onRemove,
 }: Props) {
+  const acceptTypes = useMemo(() => resolveAcceptTypes(definition), [definition]);
+  const uploadChoices = definition.uploadChoices?.length
+    ? definition.uploadChoices
+    : acceptTypes.length > 1
+      ? acceptTypes
+      : [definition.type];
+
   const [expanded, setExpanded] = useState(false);
   const [proofType, setProofType] = useState<AddressProofType | null>(
     kyc?.address_proof_type ?? null,
   );
+  const [uploadDocType, setUploadDocType] = useState<OrganizationKycDocType>(
+    uploadChoices[0] ?? definition.type,
+  );
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
 
-  const doc = latestOrgKycDocument(documents, definition.type);
+  const doc = latestOrgKycDocumentMatching(documents, acceptTypes);
   const legacyPath =
     definition.type === 'address_proof' ? kyc?.address_proof_path?.trim() : null;
   const storagePath = doc?.storage_path?.trim() || legacyPath || null;
@@ -74,6 +87,12 @@ export function KycRequiredDocumentRow({
   }, [kyc?.address_proof_type]);
 
   useEffect(() => {
+    if (doc?.doc_type && uploadChoices.includes(doc.doc_type)) {
+      setUploadDocType(doc.doc_type);
+    }
+  }, [doc?.doc_type, uploadChoices]);
+
+  useEffect(() => {
     if (!storagePath) {
       setSignedUrl(null);
       return;
@@ -84,10 +103,13 @@ export function KycRequiredDocumentRow({
   const summary = hasDoc
     ? definition.type === 'address_proof'
       ? addressProofTypeLabel(kyc?.address_proof_type) || doc?.file_name || 'Document uploaded'
-      : doc?.file_name || 'Document uploaded'
+      : doc?.file_name ||
+        (doc ? ORG_KYC_DOC_LABELS[doc.doc_type] : null) ||
+        'Document uploaded'
     : docStatusLabel(doc, frozen);
 
   const needsProofType = definition.type === 'address_proof';
+  const showUploadChoices = !needsProofType && uploadChoices.length > 1;
   const canUpload = !needsProofType || !!proofType;
 
   return (
@@ -163,6 +185,30 @@ export function KycRequiredDocumentRow({
             </>
           ) : null}
 
+          {showUploadChoices ? (
+            <>
+              <Text style={styles.fieldLabel}>Upload as</Text>
+              <View style={styles.chipRow}>
+                {uploadChoices.map((choice) => (
+                  <Pressable
+                    key={choice}
+                    style={[styles.chip, uploadDocType === choice && styles.chipOn]}
+                    onPress={() => setUploadDocType(choice)}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        uploadDocType === choice && styles.chipTextOn,
+                      ]}
+                    >
+                      {ORG_KYC_DOC_LABELS[choice]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : null}
+
           {hasDoc ? (
             <View style={styles.docPreview}>
               <FileText size={14} color={Theme.textSecondary} />
@@ -182,7 +228,10 @@ export function KycRequiredDocumentRow({
               style={[styles.uploadBtn, (!canUpload || uploading) && styles.btnDisabled]}
               disabled={!canUpload || uploading}
               onPress={() =>
-                void onUpload(needsProofType ? (proofType ?? undefined) : undefined)
+                void onUpload(
+                  needsProofType ? definition.type : uploadDocType,
+                  needsProofType ? (proofType ?? undefined) : undefined,
+                )
               }
             >
               {uploading ? (
@@ -195,7 +244,10 @@ export function KycRequiredDocumentRow({
               )}
             </Pressable>
             {hasDoc ? (
-              <Pressable style={styles.removeBtn} onPress={() => void onRemove()}>
+              <Pressable
+                style={styles.removeBtn}
+                onPress={() => void onRemove(doc?.doc_type ?? definition.type)}
+              >
                 <Trash2 size={11} color={Theme.destructive} strokeWidth={2.2} />
                 <Text style={styles.removeBtnText}>Remove</Text>
               </Pressable>

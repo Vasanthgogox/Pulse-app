@@ -3,7 +3,18 @@
 export type EntityType     = 'Pvt Ltd' | 'LLP' | 'Proprietorship' | 'Partnership' | 'Public Ltd';
 export type AppStatus      = 'Pending' | 'Approved' | 'Rejected' | 'Escalated' | 'Under Review';
 export type RiskLevel      = 'Low' | 'Medium' | 'High';
-export type DocumentType   = 'COI' | 'PAN Card' | 'Board Resolution' | 'GST Certificate' | 'Address Proof' | 'MOA/AOA';
+export type DocumentType =
+  | 'COI'
+  | 'PAN Card'
+  | 'Board Resolution'
+  | 'GST Certificate'
+  | 'Address Proof'
+  | 'MOA/AOA'
+  | 'Partnership Deed'
+  | 'LLP Agreement'
+  | 'MSME / Udyam'
+  | 'IEC'
+  | 'Activity Proof';
 export type DocumentStatus = 'Valid' | 'Flagged' | 'Unreadable' | 'Missing' | 'Expired';
 export type CheckStatus    = 'Passed' | 'Failed' | 'Pending' | 'Manual Review' | 'N/A';
 export type AuditActorType = 'system' | 'admin' | 'applicant';

@@ -18,7 +18,17 @@ export type VerificationDocumentType =
   | 'address_proof_utility_bill'
   | 'address_proof_other'
   | 'cin_certificate'
-  | 'msme_certificate';
+  | 'msme_certificate'
+  | 'iec_certificate'
+  | 'incorporation_certificate'
+  | 'partnership_deed'
+  | 'llp_agreement';
+
+/** Tax scans must pass Gemini; constitutional docs soft-fail (register if OCR unavailable). */
+const OCR_STRICT_DOCUMENT_TYPES: ReadonlySet<VerificationDocumentType> = new Set([
+  'gst_certificate',
+  'pan_card',
+]);
 
 export function validateDocumentFile(file: {
   mimeType: string;
@@ -90,29 +100,39 @@ async function readFileBytes(uri: string, base64?: string): Promise<Uint8Array> 
 }
 
 export interface DocVerifyResult {
-  passed:          boolean;
+  passed: boolean;
   route_to_manual: boolean;
-  message:         string;
-  score?:          number;
+  message: string;
+  score?: number;
   extracted?: {
-    gstin: string | null;
-    pan:   string | null;
+    gstin?: string | null;
+    pan?: string | null;
+    cin?: string | null;
+    msme?: string | null;
+    iec?: string | null;
+    company_name?: string | null;
+    document_type?: string | null;
   };
 }
+
+export type DocVerifyTypedValues = {
+  gstin?: string;
+  pan?: string;
+  cin?: string;
+  msme?: string;
+  iec?: string;
+};
 
 /** Calls gemini-doc-verify right after upload. Network/config failures
  *  return null, meaning "the check could not run" — NOT "the document
  *  passed". Callers must decide what null means for their document type:
- *  the post-submit worker (ocr-doc-verify) only re-checks address proof,
- *  never gst_certificate/pan_card, so for those two types a null result
- *  here is the only check that will ever run and must fail closed. */
+ *  GST/PAN fail closed; structure docs soft-pass on null. */
 async function verifyUploadedDocument(
   documentType: VerificationDocumentType,
-  storagePath:  string,
-  typedGstin?:  string,
-  typedPan?:    string,
+  storagePath: string,
+  typed?: DocVerifyTypedValues,
 ): Promise<DocVerifyResult | null> {
-  console.log('%c[OCR] 1/4 starting', 'color:#2563eb', { documentType, storagePath, typedGstin, typedPan });
+  console.log('%c[OCR] 1/4 starting', 'color:#2563eb', { documentType, storagePath, typed });
 
   const { data: { session } } = await supabase().auth.getSession();
   const token = session?.access_token ?? '';
@@ -131,16 +151,19 @@ async function verifyUploadedDocument(
 
   try {
     const res = await fetch(url, {
-      method:  'POST',
+      method: 'POST',
       headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         document_type: documentType,
-        storage_path:  storagePath,
-        typed_gstin:   typedGstin,
-        typed_pan:     typedPan,
+        storage_path: storagePath,
+        typed_gstin: typed?.gstin,
+        typed_pan: typed?.pan,
+        typed_cin: typed?.cin,
+        typed_msme: typed?.msme,
+        typed_iec: typed?.iec,
       }),
     });
 
@@ -149,19 +172,18 @@ async function verifyUploadedDocument(
     if (!res.ok) {
       const bodyText = await res.text();
       console.error('%c[OCR] ABORT: non-OK response', 'color:#dc2626', res.status, bodyText);
-      return null; // config/network issue — don't block on it
+      return null;
     }
     const result = await res.json() as DocVerifyResult;
     console.log(
       '%c[OCR] 4/4 result',
       result.passed ? 'color:#16a34a' : 'color:#d97706',
       {
-        passed:          result.passed,
+        passed: result.passed,
         route_to_manual: result.route_to_manual,
-        message:         result.message,
-        score:           result.score,
-        extracted_gstin: result.extracted?.gstin,
-        extracted_pan:   result.extracted?.pan,
+        message: result.message,
+        score: result.score,
+        extracted: result.extracted,
       },
     );
     return result;
@@ -226,17 +248,17 @@ export interface VerificationDocumentFile {
 }
 
 export async function uploadVerificationDocument(
-  orgId:        string,
+  orgId: string,
   documentType: VerificationDocumentType,
-  file:         VerificationDocumentFile,
-  typedValues?: { gstin?: string; pan?: string },
+  file: VerificationDocumentFile,
+  typedValues?: DocVerifyTypedValues,
 ): Promise<{ path: string | null; error: Error | null; verify: DocVerifyResult | null }> {
   const bytes = await readFileBytes(file.uri, file.base64);
 
   const formatError = validateDocumentFile({ mimeType: file.mimeType, sizeBytes: bytes.byteLength });
   if (formatError) return { path: null, error: new Error(formatError), verify: null };
 
-  const ext  = file.fileName.split('.').pop()?.toLowerCase() ?? 'jpg';
+  const ext = file.fileName.split('.').pop()?.toLowerCase() ?? 'jpg';
   const path = `${orgId}/${documentType}/${Date.now()}.${ext}`;
 
   const { error: uploadError } = await supabase()
@@ -245,19 +267,23 @@ export async function uploadVerificationDocument(
 
   if (uploadError) return { path: null, error: new Error(uploadError.message), verify: null };
 
-  const verify = await verifyUploadedDocument(documentType, path, typedValues?.gstin, typedValues?.pan);
+  const verify = await verifyUploadedDocument(documentType, path, typedValues);
+  const strictOcr = OCR_STRICT_DOCUMENT_TYPES.has(documentType);
 
-  // Gemini explicitly rejected the document (mismatch/unreadable), or the
-  // check couldn't run at all (verify === null) — remove the file and don't
-  // register it. Nothing downstream re-checks gst_certificate/pan_card, so
-  // a null result here must fail closed rather than silently pass through.
-  if (!verify || !verify.passed) {
+  if (strictOcr) {
+    if (!verify || !verify.passed) {
+      await supabase().storage.from(VERIFICATION_BUCKET).remove([path]);
+      return {
+        path: null,
+        error: new Error(
+          verify?.message ?? 'Could not verify this document right now. Please try again.',
+        ),
+        verify,
+      };
+    }
+  } else if (verify && !verify.passed) {
     await supabase().storage.from(VERIFICATION_BUCKET).remove([path]);
-    return {
-      path: null,
-      error: new Error(verify?.message ?? 'Could not verify this document right now. Please try again.'),
-      verify,
-    };
+    return { path: null, error: new Error(verify.message), verify };
   }
 
   const { error: rpcError } = await supabase().rpc('register_verification_document', {
