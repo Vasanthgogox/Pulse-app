@@ -458,15 +458,17 @@ async function getConversationsByOrganizationLight(
   organizationId: string,
 ): Promise<TripConversation[]> {
   async function loadMerged(tripEmbedFields: string): Promise<unknown[]> {
-    const selectConv = tripConversationSelect(tripEmbedFields);
+    // Meta only — do NOT embed trip_messages on inbox list load.
+    // Embedding fans out RLS on every conversation and historically caused
+    // PostgREST SELECTs on trip_messages to hang >60s under concurrency.
+    // Thread bodies hydrate via fetchConversationHistory / getTripConversationById({ includeRecentMessages: true }).
+    const selectConv = tripConversationMetaSelect(tripEmbedFields);
     const [{ data: ownOrgRows, error: ownErr }, supplierTripIdsRes] = await Promise.all([
       supabase()
         .from("trip_conversations")
         .select(selectConv)
         .eq("organization_id", organizationId)
-        .order("last_message_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false, referencedTable: "trip_messages" })
-        .limit(TRIP_MESSAGES_EMBED_RECENT, { referencedTable: "trip_messages" }),
+        .order("last_message_at", { ascending: false, nullsFirst: false }),
       supabase().rpc("get_supplier_trip_ids_for_org", { p_org_id: organizationId }),
     ]);
 
@@ -532,10 +534,7 @@ async function getConversationsByOrganizationLight(
       trip_organization_id: (trips?.organization_id as string | null | undefined) ?? null,
       pickup_area: (trips?.pickup_area as string | undefined) ?? "",
       drop_location: (trips?.drop_location as string | undefined) ?? "",
-      messages: ((row.trip_messages ?? []) as TripMessageRow[]).sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      ),
+      messages: [] as TripMessageRow[],
     };
   }) as unknown as TripConversation[];
 
