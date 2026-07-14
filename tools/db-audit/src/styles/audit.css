@@ -300,6 +300,7 @@ html,body{height:100%;background:var(--g);color:var(--tx);font-family:var(--f);f
 .flow-branch-badge.asset{background:rgba(62,207,142,.12);color:var(--ins);border:1px solid rgba(62,207,142,.2)}
 .flow-branch-badge.aggregate{background:rgba(240,180,41,.12);color:var(--ac);border:1px solid rgba(240,180,41,.25)}
 .flow-branch-badge.otp{background:var(--insb);color:var(--ins)}
+.flow-branch-badge.signin{background:rgba(91,156,245,.14);color:var(--upd);border:1px solid rgba(91,156,245,.25)}
 .flow-branch-badge.shared{background:var(--nab);color:var(--txm)}
 .flow-wizard-track-embed{display:flex;flex-direction:column;gap:12px}
 .flow-wizard-track{border:1px solid var(--bd);border-radius:10px;margin-bottom:10px;background:var(--s2);overflow:hidden;transition:border-color .15s}

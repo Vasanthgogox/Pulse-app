@@ -98,7 +98,7 @@ export function SignupFlowEmbed({
 
       <section className="flow-section">
         <h3 className="flow-section-label">
-          {personaId === 'business' ? 'Business user variants' : 'Driver path'}
+          {personaId === 'business' ? 'Business user variants' : 'Driver paths'}
         </h3>
         {persona.branches.map((branch) => (
           <BranchSection

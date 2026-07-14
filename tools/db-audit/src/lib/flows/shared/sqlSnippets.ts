@@ -6,6 +6,15 @@ export const RPC_GET_EMAIL_BY_PHONE = `SELECT public.get_email_by_phone(:phone_1
 -- SELECT trim(pr.email) FROM public.profiles pr
 -- WHERE normalize_last_10(pr.phone) = :phone_10_digits LIMIT 1;`;
 
+/** Driver phone sign-in — Edge check-user-by-phone with intent=driver_signin */
+export const EDGE_DRIVER_PHONE_SIGNIN = `-- Edge: check-user-by-phone POST { phone, intent: 'driver_signin' }
+-- 1) admin.rpc get_email_by_phone (or profiles scan)
+-- 2) _shared/driverSessionExchange.exchangeMagicLinkForSession(email)
+--    → { email, session: { access_token, refresh_token } }
+--    OR { email, magicLinkToken } for client verifyOtp
+-- Legacy fallback Edge: driver-phone-signin-unverified { phone } (same contract)
+-- Verified path (SMS): link-driver-phone — JWT phone only; get_driver_invitee_by_phone`;
+
 export const RPC_ORG_NAME_TAKEN = `SELECT public.organization_name_is_taken(:company_name);
 -- Equivalent:
 -- SELECT EXISTS (

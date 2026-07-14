@@ -56,8 +56,16 @@ WHERE id = ${AUTH_UID};`,
     routing: [
       { context: 'driver authenticated', track: 'default', nextScreen: '/(driver) dashboard' },
       { context: 'driver signup success flag', track: 'resume', nextScreen: '/driver-signup' },
+      {
+        context: 'from /driver-sign-in phone session',
+        track: 'returning',
+        nextScreen: '/(driver) — skips signup success screen',
+      },
     ],
-    notes: ['(tabs)/_layout rejects role=driver → ROUTES.DRIVER_ROOT'],
+    notes: [
+      '(tabs)/_layout rejects role=driver → ROUTES.DRIVER_ROOT',
+      'Phone sign-in also lands here via router.replace("/") after setSession',
+    ],
   },
   {
     id: 'dr-enter-shell',

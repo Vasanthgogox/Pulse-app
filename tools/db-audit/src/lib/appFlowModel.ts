@@ -67,7 +67,7 @@ export function signupModuleStats(persona: PersonaFlow): FlowAppModule {
     id: signupModuleId(persona.id),
     order: 1,
     label: 'Signup',
-    title: persona.id === 'business' ? 'Workspace onboarding' : 'Driver registry',
+    title: persona.id === 'business' ? 'Workspace onboarding' : 'Driver registry · phone sign-in',
     summary: persona.description,
     route: persona.route,
     screen: persona.screen,
@@ -254,11 +254,13 @@ function moduleOverviewStep(module: FlowAppModule, persona: PersonaFlow): FlowSt
       `${module.stepCount} inner steps`,
       module.kind === 'signup-embed' && persona.id === 'business'
         ? `${module.variantCount} signup variants`
-        : module.kind === 'branch-embed'
-          ? `${module.variantCount} party types`
-          : module.variantCount > 0
-            ? `${module.variantCount} sections`
-            : 'Linear path',
+        : module.kind === 'signup-embed' && persona.id === 'driver'
+          ? `${module.variantCount} paths (signup · phone sign-in)`
+          : module.kind === 'branch-embed'
+            ? `${module.variantCount} party types`
+            : module.variantCount > 0
+              ? `${module.variantCount} sections`
+              : 'Linear path',
       'Expand module to inspect individual steps',
     ],
   };
