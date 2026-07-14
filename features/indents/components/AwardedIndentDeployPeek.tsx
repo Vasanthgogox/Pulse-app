@@ -10,11 +10,12 @@ import {
 import { ChevronUp, Truck } from "lucide-react-native";
 import { MotiView } from "moti";
 
+import { PULSE_BOTTOM_TAB_DOCK } from "@/components/navigation/PulseBottomTabBar/dockMetrics";
 import Theme from "@/constants/Theme";
 import { getIndentDisplayNumber } from "@/features/indents/services/indents.service";
 import type { PendingAwardedDeployItem } from "@/features/indents/utils/pendingAwardedDeploy.util";
 import { formatINR } from "@/lib/format";
-import { TAB_BAR_DOCK_METRICS, useLayoutInsets } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 
 export type AwardedIndentDeployPeekProps = {
   items: PendingAwardedDeployItem[];
@@ -40,57 +41,64 @@ export const AwardedIndentDeployPeek = memo(function AwardedIndentDeployPeek({
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
 
-  // Sit just above the floating tab dock (same metrics as FAB / FloatingChatButton).
-  // Old code used Layout.tabBarHeight (56) and under-cleared Android/iOS, covering the nav.
-  const bottom = layout.hasBottomTabBar
-    ? layout.tabBarDockHeight() + TAB_BAR_DOCK_METRICS.contentGap
-    : Math.max(layout.bottom, 8);
+  // `peekBottom` = live dock height (from PulseBottomTabBar metrics + safe area) + gap.
+  // Positioning lives on a plain View (not Moti) so bottom clearance is not dropped on web.
+  const bottom = layout.peekBottom();
 
   return (
-    <MotiView
-      from={{ opacity: 0, translateY: 48 }}
-      animate={{ opacity: 1, translateY: 0 }}
-      transition={{ type: "timing", duration: 280 }}
-      style={[styles.shell, { bottom }]}
+    <View
       pointerEvents="box-none"
+      style={[
+        styles.shell,
+        Platform.OS === "web" && styles.shellWebFixed,
+        { bottom },
+      ]}
     >
-      <Pressable
-        onPress={onExpand}
-        style={({ pressed }) => [
-          styles.bar,
-          pressed && styles.barPressed,
-          webCursor,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={`Trip awarded, ${shipperName}. Tap to expand and assign vehicle.`}
-        accessibilityHint="Opens the full deploy card"
+      <MotiView
+        from={{ opacity: 0, translateY: 48 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: "timing", duration: 280 }}
+        style={styles.motiInner}
+        pointerEvents="box-none"
       >
-        <View style={styles.iconTile}>
-          <Truck size={18} color={Theme.textOnDark} strokeWidth={2.2} />
-        </View>
-        <View style={styles.textCol}>
-          <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={1}>
-              Assign vehicle · {indentNo}
-            </Text>
-            {queueLabel ? (
-              <View style={styles.queueBadge}>
-                <Text style={styles.queueBadgeText}>{queueLabel}</Text>
-              </View>
-            ) : null}
+        <Pressable
+          onPress={onExpand}
+          style={({ pressed }) => [
+            styles.bar,
+            pressed && styles.barPressed,
+            webCursor,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Trip awarded, ${shipperName}. Tap to expand and assign vehicle.`}
+          accessibilityHint="Opens the full deploy card"
+        >
+          <View style={styles.iconTile}>
+            <Truck size={18} color={Theme.textOnDark} strokeWidth={2.2} />
           </View>
-          <Text style={styles.route} numberOfLines={1}>
-            {origin} → {dest}
-          </Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {shipperName} · {formatINR(awardAmountInr)}
-          </Text>
-        </View>
-        <View style={styles.expandCol}>
-          <ChevronUp size={18} color={Theme.primary} strokeWidth={2.5} />
-        </View>
-      </Pressable>
-    </MotiView>
+          <View style={styles.textCol}>
+            <View style={styles.titleRow}>
+              <Text style={styles.title} numberOfLines={1}>
+                Assign vehicle · {indentNo}
+              </Text>
+              {queueLabel ? (
+                <View style={styles.queueBadge}>
+                  <Text style={styles.queueBadgeText}>{queueLabel}</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.route} numberOfLines={1}>
+              {origin} → {dest}
+            </Text>
+            <Text style={styles.meta} numberOfLines={1}>
+              {shipperName} · {formatINR(awardAmountInr)}
+            </Text>
+          </View>
+          <View style={styles.expandCol}>
+            <ChevronUp size={18} color={Theme.primary} strokeWidth={2.5} />
+          </View>
+        </Pressable>
+      </MotiView>
+    </View>
   );
 });
 
@@ -101,12 +109,22 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     paddingHorizontal: 12,
-    zIndex: 100001,
-    elevation: 24,
+    zIndex: PULSE_BOTTOM_TAB_DOCK.peekZIndexNative,
+    elevation: 8,
+  },
+  /** Same coordinate space as DemoCustomTabBar mobile-web (`position: fixed`). */
+  shellWebFixed: {
+    position: "fixed",
+    zIndex: PULSE_BOTTOM_TAB_DOCK.peekZIndexWeb,
+  },
+  motiInner: {
+    width: "100%",
+    maxWidth: 440,
+    alignSelf: "center",
+    alignItems: "center",
   },
   bar: {
     width: "100%",
-    maxWidth: 440,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,

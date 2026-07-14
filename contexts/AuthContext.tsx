@@ -38,6 +38,7 @@ import {
   type UserProfile,
 } from "@/lib/authEngine";
 import { clearStaleAuthOnFirstLaunch } from "@/lib/firstLaunch";
+import { resetIndexBootRedirect } from "@/lib/indexBootRedirect.util";
 import { getKeepSignedIn, setKeepSignedIn } from "@/lib/keepSignedInPreference";
 import { clearAllRealtimeChannels } from "@/lib/realtimeRegistry";
 import {
@@ -245,6 +246,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ---- state transitions ----
 
   const clearAuthState = useCallback((expired: boolean) => {
+    // Clear the module-level index boot-redirect guard here — not just in
+    // app/index.tsx — because on web logout navigates straight to /sign-in and
+    // index.tsx's reset branch (gated on pathname === '/') never runs. Leaving
+    // bootRedirectUid set makes the next login's claimIndexBootRedirect() return
+    // false, so no router.replace fires and the app hangs on the splash until a
+    // hard refresh discards the module. See lib/indexBootRedirect.util.ts.
+    resetIndexBootRedirect();
     setUser(null);
     setProfile(null);
     setRoleVerified(false);

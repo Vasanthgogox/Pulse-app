@@ -1,21 +1,29 @@
 /**
- * Single source of truth for bottom safe area + floating tab bar clearance.
- * Keep `TAB_BAR_DOCK_METRICS` in sync with `components/demo/DemoTabBar.tsx` styles.
+ * Bottom safe area + floating tab bar clearance.
+ *
+ * Dock chrome numbers come from `PulseBottomTabBar/dockMetrics` (single source of
+ * truth with the rendered tab bar). Do not re-hardcode bar heights here.
  */
 import Layout from "@/constants/Layout";
+import {
+  PULSE_BOTTOM_TAB_DOCK,
+  pulseTabBarChromeHeight,
+} from "@/components/navigation/PulseBottomTabBar/dockMetrics";
 import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
 import { Platform, useWindowDimensions } from "react-native";
 import { useMemo } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/** DemoTabBar mobile dock (mmtFooterShell + mmtFooterBar). */
+/**
+ * @deprecated Prefer `PULSE_BOTTOM_TAB_DOCK` from PulseBottomTabBar/dockMetrics.
+ * Kept as a thin alias so existing imports keep compiling.
+ */
 export const TAB_BAR_DOCK_METRICS = {
-  shellPaddingTop: 10,
-  barMinHeight: 58,
-  barPaddingTop: 4,
-  footerPaddingMin: 10,
-  /** Space between scroll content and the top edge of the dock */
-  contentGap: 12,
+  shellPaddingTop: PULSE_BOTTOM_TAB_DOCK.shellPaddingTop,
+  barMinHeight: pulseTabBarChromeHeight(true) - PULSE_BOTTOM_TAB_DOCK.shellPaddingTop,
+  barPaddingTop: PULSE_BOTTOM_TAB_DOCK.barPaddingTop,
+  footerPaddingMin: PULSE_BOTTOM_TAB_DOCK.footerPaddingMin,
+  contentGap: PULSE_BOTTOM_TAB_DOCK.contentGap,
 } as const;
 
 export type TabBarLayoutPlatform = "native" | "web-mobile" | "web-desktop";
@@ -29,33 +37,51 @@ export function resolveTabBarLayoutPlatform(opts: {
   return "native";
 }
 
-/** Footer padding inside DemoTabBar (home indicator / gesture bar). */
+/**
+ * DemoTabBar always passes `isCompactMobile={!isDesktopWeb}` — mobile dock is compact.
+ */
+function usesCompactMobileDock(platform: TabBarLayoutPlatform): boolean {
+  return platform !== "web-desktop";
+}
+
+/** Footer padding inside PulseBottomTabBar (home indicator / gesture bar). */
 export function tabBarFooterPadding(
   bottomInset: number,
   platform: TabBarLayoutPlatform,
 ): number {
   if (platform === "web-desktop") return 0;
   if (platform === "web-mobile") {
-    return Math.max(bottomInset, TAB_BAR_DOCK_METRICS.footerPaddingMin);
+    return Math.max(bottomInset, PULSE_BOTTOM_TAB_DOCK.footerPaddingMin);
   }
   return Math.max(
     Math.round(bottomInset * 0.35),
-    TAB_BAR_DOCK_METRICS.footerPaddingMin,
+    PULSE_BOTTOM_TAB_DOCK.footerPaddingMin,
   );
 }
 
-/** Total height of the bottom tab dock including safe area padding. */
+/**
+ * Extra pad on the native tab-shell when there is no bottom safe-area
+ * (`app/(tabs)/_layout.tsx`).
+ */
+function tabBarNativeShellPad(
+  bottomInset: number,
+  platform: TabBarLayoutPlatform,
+): number {
+  if (platform !== "native") return 0;
+  return bottomInset > 0 ? 0 : PULSE_BOTTOM_TAB_DOCK.nativeZeroInsetShellPad;
+}
+
+/** Total height of the bottom tab dock including safe area + native shell pad. */
 export function tabBarDockHeight(
   bottomInset: number,
   platform: TabBarLayoutPlatform,
 ): number {
   if (platform === "web-desktop") return 0;
-  const footerPad = tabBarFooterPadding(bottomInset, platform);
+  const compact = usesCompactMobileDock(platform);
   return (
-    TAB_BAR_DOCK_METRICS.shellPaddingTop +
-    TAB_BAR_DOCK_METRICS.barMinHeight +
-    TAB_BAR_DOCK_METRICS.barPaddingTop +
-    footerPad
+    pulseTabBarChromeHeight(compact) +
+    tabBarFooterPadding(bottomInset, platform) +
+    tabBarNativeShellPad(bottomInset, platform)
   );
 }
 
@@ -70,7 +96,7 @@ export function scrollClearanceAboveTabBar(
   if (platform === "web-desktop") return extra;
   return (
     tabBarDockHeight(bottomInset, platform) +
-    TAB_BAR_DOCK_METRICS.contentGap +
+    PULSE_BOTTOM_TAB_DOCK.contentGap +
     extra
   );
 }
@@ -94,6 +120,20 @@ export function fabBottomAboveTabBar(
 }
 
 /**
+ * `bottom` for banners / peeks that sit just above the dock (no FAB offset).
+ */
+export function peekBottomAboveTabBar(
+  bottomInset: number,
+  platform: TabBarLayoutPlatform,
+  extra = 0,
+): number {
+  if (platform === "web-desktop") {
+    return Math.max(bottomInset, 8) + extra;
+  }
+  return scrollClearanceAboveTabBar(bottomInset, extra, platform);
+}
+
+/**
  * @deprecated Replace with `scrollClearanceAboveTabBar(bottom, extra, platform)`.
  * Old: `Layout.demoTabBarScrollBottomInset + insets.bottom + Layout.tabBarBottomPaddingMin`
  */
@@ -107,7 +147,7 @@ export function legacyTabBarScrollPadding(
       bottomInset,
       extra + Layout.tabBarBottomPaddingMin,
       platform,
-    ) - TAB_BAR_DOCK_METRICS.contentGap
+    ) - PULSE_BOTTOM_TAB_DOCK.contentGap
   );
 }
 
@@ -139,6 +179,8 @@ export function useLayoutInsets() {
         scrollClearanceAboveTabBar(bottom, extra, platform),
       fabBottom: (options?: { extra?: number; stackOffset?: number }) =>
         fabBottomAboveTabBar(bottom, platform, options),
+      /** Assign-vehicle peek / similar banners above the dock. */
+      peekBottom: (extra = 0) => peekBottomAboveTabBar(bottom, platform, extra),
     }),
     [
       insets.top,

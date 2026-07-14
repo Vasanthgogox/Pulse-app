@@ -13,6 +13,7 @@ import {
 import { DecimalKeypad } from '@/components/mobile-input/DecimalKeypad';
 import { applyKeypadPress, type KeypadKey } from '@/components/mobile-input/keypad';
 import { useInputPlatform } from '@/components/mobile-input/useInputPlatform';
+import { KeypadDisplayValueWithCaret } from '@/components/party/keypad/KeypadDisplayValueWithCaret';
 import { OperationalButton } from '@/components/operational';
 import { colors } from '@/design-system/colors';
 import { layout } from '@/design-system/layout';
@@ -73,6 +74,7 @@ export const OnboardingKeypadStep = memo(function OnboardingKeypadStep({
   const digits = value.replace(/\D/g, '').slice(0, maxDigits);
   const display = digits.length > 0 ? formatDisplay(digits) : emptyPlaceholder;
   const isEmpty = digits.length === 0;
+  const showCursor = digits.length < maxDigits;
   const canSubmit = digits.length >= maxDigits && !primaryDisabled && !primaryLoading;
   const ctaLabel =
     primaryLabel ?? primaryButtonLabel ?? primaryAccessibilityLabel ?? 'Continue';
@@ -137,15 +139,16 @@ export const OnboardingKeypadStep = memo(function OnboardingKeypadStep({
             <View style={[styles.displayRow, errorMessage ? styles.displayError : null]}>
               {displayFlag ? <Text style={styles.flag}>{displayFlag}</Text> : null}
               {displayPrefix ? <Text style={styles.prefix}>{displayPrefix}</Text> : null}
-              <Text
-                style={[styles.displayValue, isEmpty && styles.placeholder]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.65}
-              >
-                {display}
-              </Text>
-              <Animated.View style={[styles.cursor, { opacity: blink }]} />
+              <KeypadDisplayValueWithCaret
+                value={isEmpty ? '' : display}
+                placeholder={display}
+                showCaret={showCursor}
+                valueStyle={styles.displayValue}
+                placeholderStyle={styles.placeholder}
+                caret={
+                  <Animated.View style={[styles.cursor, { opacity: blink }]} />
+                }
+              />
             </View>
           )}
 
@@ -237,7 +240,8 @@ const styles = StyleSheet.create({
     marginRight: space[2],
   },
   displayValue: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 1,
     fontSize: 24,
     fontWeight: '600',
     letterSpacing: 0.8,
@@ -254,6 +258,7 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: colors.brand,
     marginLeft: space[1],
+    flexShrink: 0,
   },
   error: {
     fontSize: 13,

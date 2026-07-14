@@ -92,6 +92,7 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     alignItems: "center",
   },
   displayValue: {
+    flexGrow: 0,
     flexShrink: 1,
     fontSize: 22,
     fontWeight: "600",

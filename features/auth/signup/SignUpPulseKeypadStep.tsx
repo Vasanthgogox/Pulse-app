@@ -18,6 +18,7 @@ import { HubPromoHeroLottie } from '@/components/hub/HubPromoLottie';
 
 import { DecimalKeypad } from '@/components/mobile-input/DecimalKeypad';
 import { applyKeypadPress, type KeypadKey } from '@/components/mobile-input/keypad';
+import { KeypadDisplayValueWithCaret } from '@/components/party/keypad/KeypadDisplayValueWithCaret';
 import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
 import { useSignupKeypadInput } from '@/lib/onboarding/useSignupKeypadInput';
 
@@ -161,25 +162,25 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
     ) : (
       <View style={[styles.displayRow, errorMessage ? styles.displayError : null]}>
         {phoneLead}
-        <View style={styles.digitArea}>
-          {showCursor && isEmpty ? (
-            <Animated.View style={[styles.cursor, styles.cursorLeading, { opacity: blink }]} />
-          ) : null}
-          <Text
-            style={[
-              styles.displayValue,
-              isEmpty ? styles.placeholder : styles.displayValueTyped,
-            ]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.75}
-          >
-            {displayText}
-          </Text>
-          {showCursor && !isEmpty ? (
-            <Animated.View style={[styles.cursor, { opacity: blink }]} />
-          ) : null}
-        </View>
+        <KeypadDisplayValueWithCaret
+          value={isEmpty ? '' : displayText}
+          placeholder={displayText}
+          showCaret={showCursor}
+          caretPosition={isEmpty ? 'start' : 'end'}
+          valueStyle={[
+            styles.displayValue,
+            isEmpty ? styles.placeholder : styles.displayValueTyped,
+          ]}
+          caret={
+            <Animated.View
+              style={[
+                styles.cursor,
+                isEmpty && styles.cursorLeading,
+                { opacity: blink },
+              ]}
+            />
+          }
+        />
       </View>
     )
   ) : customDisplay ? (

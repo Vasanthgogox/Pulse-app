@@ -17,6 +17,7 @@ import Animated, {
 import Theme from '@/constants/Theme';
 import { WEB_TOP_NAV_ICON } from '@/components/demo/webTopNavIcon.tokens';
 import { TAB_PRESS_SCALE_ACTIVE, TAB_PRESS_SCALE_REST, TAB_PRESS_TIMING_MS } from '@/lib/mobileTabNav/constants';
+import { PULSE_BOTTOM_TAB_DOCK } from './dockMetrics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -99,13 +100,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     minWidth: 0,
-    paddingTop: 4,
-    paddingBottom: 2,
+    paddingTop: PULSE_BOTTOM_TAB_DOCK.slotPaddingTop,
+    paddingBottom: PULSE_BOTTOM_TAB_DOCK.slotPaddingBottom,
   },
   iconWrap: {
     position: 'relative',
     width: 28,
-    height: 24,
+    height: PULSE_BOTTOM_TAB_DOCK.iconHeight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -134,29 +135,31 @@ const styles = StyleSheet.create({
     lineHeight: 10,
   },
   label: {
-    marginTop: 2,
-    fontSize: 10,
+    marginTop: PULSE_BOTTOM_TAB_DOCK.labelMarginTop,
+    fontSize: PULSE_BOTTOM_TAB_DOCK.labelFontSize,
+    lineHeight: PULSE_BOTTOM_TAB_DOCK.labelLineHeight,
     fontWeight: '500',
     color: WEB_TOP_NAV_ICON.muted,
     letterSpacing: -0.1,
     textAlign: 'center',
   },
   labelCompact: {
-    fontSize: 9,
+    fontSize: PULSE_BOTTOM_TAB_DOCK.labelFontSizeCompact,
+    lineHeight: PULSE_BOTTOM_TAB_DOCK.labelLineHeightCompact,
   },
   labelActive: {
     color: WEB_TOP_NAV_ICON.active,
     fontWeight: '600',
   },
   underline: {
-    marginTop: 4,
+    marginTop: PULSE_BOTTOM_TAB_DOCK.underlineMarginTop,
     width: 22,
-    height: 2,
+    height: PULSE_BOTTOM_TAB_DOCK.underlineHeight,
     borderRadius: 1,
     backgroundColor: WEB_TOP_NAV_ICON.active,
   },
   underlineSpacer: {
-    marginTop: 4,
-    height: 2,
+    marginTop: PULSE_BOTTOM_TAB_DOCK.underlineMarginTop,
+    height: PULSE_BOTTOM_TAB_DOCK.underlineHeight,
   },
 });

@@ -12,8 +12,10 @@ import {
   partyKeypadDisplayMono,
   partyKeypadFlowStyles as flow,
 } from "@/components/party/keypad/partyKeypadFlowStyles";
+import { KeypadDisplayValueWithCaret } from "@/components/party/keypad/KeypadDisplayValueWithCaret";
 import {
   appendIndianDlChar,
+  applyIndianDlKeystroke,
   deleteIndianDlLastChar,
   getIndianDlFormatHint,
   getIndianDlKeyboardKind,
@@ -64,7 +66,7 @@ export const IndianDrivingLicenseKeypadFlow = memo(
           <TextInput
             testID={testID}
             value={value}
-            onChangeText={onChangeText}
+            onChangeText={(next) => onChangeText(applyIndianDlKeystroke(next))}
             autoCapitalize="characters"
             style={flow.hiddenInput}
             accessibilityElementsHidden
@@ -95,20 +97,15 @@ export const IndianDrivingLicenseKeypadFlow = memo(
               color={Theme.iconMuted}
               style={flow.leadingIcon}
             />
-            <View style={flow.displayValueCluster}>
-              <Text
-                style={[
-                  flow.displayValue,
-                  partyKeypadDisplayMono,
-                  !displayValue && flow.displayPlaceholder,
-                ]}
-                numberOfLines={1}
-                accessibilityLabel={displayValue || "Driving licence number"}
-              >
-                {displayValue || "TN01 20200001234"}
-              </Text>
-              {showCursor ? <View style={flow.cursor} /> : null}
-            </View>
+            <KeypadDisplayValueWithCaret
+              value={displayValue}
+              placeholder="TN01 20200001234"
+              showCaret={showCursor}
+              valueStyle={[flow.displayValue, partyKeypadDisplayMono]}
+              placeholderStyle={flow.displayPlaceholder}
+              caretStyle={flow.cursor}
+              accessibilityLabel={displayValue || "Driving licence number"}
+            />
           </View>
         </View>
 
@@ -116,6 +113,7 @@ export const IndianDrivingLicenseKeypadFlow = memo(
           <IndianVehicleRegistrationKeypad
             kind={keyboardKind}
             onKey={handleKey}
+            normalizedLength={Math.min(normLen, 1)}
           />
         </View>
       </View>

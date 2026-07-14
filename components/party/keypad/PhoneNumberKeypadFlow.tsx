@@ -19,6 +19,7 @@ import { useInputPlatform } from "@/components/mobile-input/useInputPlatform";
 import { usePhysicalKeypadInput } from "@/components/mobile-input/usePhysicalKeypadInput";
 import { IndiaFlagIcon } from "@/components/party/IndiaFlagIcon";
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
+import { KeypadDisplayValueWithCaret } from "@/components/party/keypad/KeypadDisplayValueWithCaret";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import Theme from "@/constants/Theme";
 import { formatMobileNumber } from "@/lib/format";
@@ -136,22 +137,17 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
               <IndiaFlagIcon width={22} height={16} />
               <Text style={styles.ccText}>+91</Text>
             </View>
-            <View style={flow.displayValueCluster}>
-              <Text
-                style={[
-                  flow.displayValue,
-                  wizardShell && styles.displayValueWizard,
-                  !digits && flow.displayPlaceholder,
-                ]}
-                numberOfLines={1}
-                accessibilityLabel={digits || placeholder}
-              >
-                {digits || placeholder}
-              </Text>
-              {showCursor ? (
-                <View style={[flow.cursor, wizardShell && styles.cursorWizard]} />
-              ) : null}
-            </View>
+            <KeypadDisplayValueWithCaret
+              value={digits}
+              placeholder={placeholder}
+              showCaret={showCursor}
+              valueStyle={[
+                flow.displayValue,
+                wizardShell && styles.displayValueWizard,
+              ]}
+              placeholderStyle={flow.displayPlaceholder}
+              caretStyle={wizardShell ? styles.cursorWizard : flow.cursor}
+            />
           </Pressable>
         </View>
 

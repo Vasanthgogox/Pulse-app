@@ -23,6 +23,10 @@ import {
   MOBILE_TAB_ICON_SIZE,
   MOBILE_TAB_ICON_SIZE_COMPACT,
 } from './constants';
+import {
+  PULSE_BOTTOM_TAB_DOCK,
+  pulseTabBarBodyHeight,
+} from './dockMetrics';
 import { PulseBottomTabSlot } from './PulseBottomTabSlot';
 
 export type PulseBottomTabBarProps = {
@@ -215,7 +219,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.tabBarBg,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    paddingTop: 4,
+    paddingTop: PULSE_BOTTOM_TAB_DOCK.shellPaddingTop,
     paddingHorizontal: 0,
   },
   shellIos: {
@@ -237,12 +241,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    minHeight: 46,
+    height: pulseTabBarBodyHeight(false),
     paddingHorizontal: 4,
-    paddingTop: 2,
+    paddingTop: PULSE_BOTTOM_TAB_DOCK.barPaddingTop,
   },
   barCompact: {
-    minHeight: 42,
+    height: pulseTabBarBodyHeight(true),
     paddingHorizontal: 2,
   },
 });

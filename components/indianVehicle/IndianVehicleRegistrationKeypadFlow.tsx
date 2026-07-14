@@ -15,6 +15,7 @@ import { Truck } from "lucide-react-native";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
+import { KeypadDisplayValueWithCaret } from "@/components/party/keypad/KeypadDisplayValueWithCaret";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import { IndianVehicleRegistrationKeypad } from "@/components/indianVehicle/IndianVehicleRegistrationKeypad";
 import { useIndianVehiclePhysicalKeypad } from "@/components/indianVehicle/useIndianVehiclePhysicalKeypad";
@@ -119,21 +120,21 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
             }
           >
             <Truck size={20} color={Theme.iconMuted} style={styles.leadingIcon} />
-            <Text
-              style={[
+            <KeypadDisplayValueWithCaret
+              value={displayValue}
+              placeholder="TN 01 CM 2026"
+              showCaret={showCursor}
+              valueStyle={[
                 styles.displayValue,
                 displayMono,
                 groupTop && styles.displayValueCompact,
-                !displayValue && styles.displayPlaceholder,
               ]}
-              numberOfLines={1}
+              placeholderStyle={styles.displayPlaceholder}
+              caretStyle={styles.cursor}
               accessibilityLabel={
                 displayValue || "Vehicle registration number"
               }
-            >
-              {displayValue || "TN 01 CM 2026"}
-            </Text>
-            {showCursor ? <View style={styles.cursor} /> : null}
+            />
           </Pressable>
         </View>
 
@@ -250,8 +251,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   displayValue: {
-    flex: 1,
-    minWidth: 0,
+    flexGrow: 0,
+    flexShrink: 1,
     fontSize: 18,
     fontWeight: "700",
     letterSpacing: 1.2,
@@ -272,6 +273,7 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: Theme.positive,
     marginLeft: 4,
+    flexShrink: 0,
   },
   keypadDock: {
     flexShrink: 0,

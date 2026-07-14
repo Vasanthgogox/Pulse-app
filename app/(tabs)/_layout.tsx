@@ -15,6 +15,7 @@ import {
   resolveRestorableDispatcherRoute,
   saveLastTabRoute,
 } from '@/lib/lastRoute';
+import { PULSE_BOTTOM_TAB_DOCK } from '@/components/navigation/PulseBottomTabBar/dockMetrics';
 import { useLayoutInsets } from '@/lib/layoutInsets';
 import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
 import {
@@ -103,17 +104,18 @@ function DemoCustomTabBar(
       left: 0,
       right: 0,
       bottom: 0,
-      zIndex: 1000,
+      zIndex: PULSE_BOTTOM_TAB_DOCK.tabBarZIndexWeb,
     },
     !isDesktopWeb && Platform.OS !== 'web' && {
       position: 'absolute' as const,
       left: 0,
       right: 0,
       bottom: 0,
-      zIndex: 100,
+      zIndex: PULSE_BOTTOM_TAB_DOCK.tabBarZIndexNative,
       elevation: 100,
       backgroundColor: 'transparent',
-      paddingBottom: layout.bottom > 0 ? 0 : 4,
+      paddingBottom:
+        layout.bottom > 0 ? 0 : PULSE_BOTTOM_TAB_DOCK.nativeZeroInsetShellPad,
     },
     !isDesktopWeb &&
       Platform.OS === 'web' && {
