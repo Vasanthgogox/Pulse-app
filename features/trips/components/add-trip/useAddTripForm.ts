@@ -87,6 +87,9 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
       const nameTrimmed = state.aggregateDriverName.trim();
       if (!nameTrimmed) push('driverName', 'Driver name: required for aggregate trips');
       else if (nameTrimmed.length < 2) push('driverName', 'Driver name: enter at least 2 characters');
+      else if (/^driver$/i.test(nameTrimmed)) {
+        push('driverName', 'Driver name: enter the driver’s real name');
+      }
       const driverPhoneTrimmed = state.driverPhone.trim();
       if (!driverPhoneTrimmed) push('driverPhone', 'Driver for tracking: required for aggregate trips');
     }

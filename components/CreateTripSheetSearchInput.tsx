@@ -77,7 +77,7 @@ export const CreateTripSheetSearchInput = forwardRef<
       {compactChat ? (
         <Search
           size={chatSm ? 11 : 12}
-          color="#94a3b8"
+          color={Theme.textMuted}
           strokeWidth={2}
           style={styles.chatSearchIcon}
         />
@@ -95,7 +95,7 @@ export const CreateTripSheetSearchInput = forwardRef<
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={compactChat ? "#94a3b8" : Theme.placeholder}
+        placeholderTextColor={compactChat ? Theme.textMuted : Theme.placeholder}
         autoFocus={autoFocus}
         autoCapitalize={autoCapitalize}
         autoCorrect={autoCorrect}
@@ -116,7 +116,7 @@ export const CreateTripSheetSearchInput = forwardRef<
           accessibilityLabel="Clear search"
         >
           {compactChat ? (
-            <X size={12} color="#94a3b8" strokeWidth={2.5} />
+            <X size={12} color={Theme.textMuted} strokeWidth={2.5} />
           ) : (
             <View style={styles.clearCircle}>
               <X size={14} color={Theme.iconSlate} strokeWidth={2.5} />
@@ -188,18 +188,18 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 10,
     paddingVertical: 7,
-    borderRadius: 16,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e8ecf1",
-    backgroundColor: "#f8fafc",
-    gap: 5,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    gap: 6,
     shadowOpacity: 0,
     shadowRadius: 0,
     shadowOffset: { width: 0, height: 0 },
     elevation: 0,
   },
   shellChatFocused: {
-    borderColor: "#cbd5e1",
+    borderColor: Theme.borderMedium,
     ...Platform.select({
       web: {
         boxShadow: "0 1px 4px rgba(15,23,42,0.06)",
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 11,
     fontWeight: "500",
-    color: "#334155",
+    color: Theme.textPrimaryDark,
     paddingVertical: Platform.OS === "android" ? 2 : 0,
     borderWidth: 0,
     ...Platform.select({
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 10,
     fontWeight: "500",
-    color: "#334155",
+    color: Theme.textPrimaryDark,
     paddingVertical: Platform.OS === "android" ? 2 : 0,
     borderWidth: 0,
     ...Platform.select({

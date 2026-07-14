@@ -44,10 +44,16 @@ export function SupplyAllocationModeBar({
   const isWizard = variant === "wizard";
 
   const segmentPill = isWizard ? (
-    <View style={fullPageWizardStyles.modeRow}>
+    <View
+      style={[
+        fullPageWizardStyles.modeRow,
+        isInline && styles.modeRowInline,
+      ]}
+    >
       <Pressable
         style={[
           fullPageWizardStyles.modeChip,
+          isInline && styles.modeChipInline,
           isAsset && fullPageWizardStyles.modeChipActive,
         ]}
         onPress={() => onModeChange("asset")}
@@ -69,6 +75,7 @@ export function SupplyAllocationModeBar({
       <Pressable
         style={[
           fullPageWizardStyles.modeChip,
+          isInline && styles.modeChipInline,
           !isAsset && fullPageWizardStyles.modeChipActive,
         ]}
         onPress={() => onModeChange("aggregate")}
@@ -143,7 +150,8 @@ export function SupplyAllocationModeBar({
   const assignLaterRow = isWizard ? (
     <View
       style={[
-        fullPageWizardStyles.shipperMarkCard,
+        fullPageWizardStyles.shipperMarkCardFlat,
+        isInline && styles.assignLaterInlineCard,
         assignLaterDisabled && styles.assignLaterDisabled,
       ]}
     >
@@ -152,8 +160,10 @@ export function SupplyAllocationModeBar({
           <ListChecks size={16} color={Theme.primary} />
         </View>
         <View style={fullPageWizardStyles.partyTextWrap}>
-          <Text style={fullPageWizardStyles.partyName}>Assign later</Text>
-          <Text style={fullPageWizardStyles.blockMeta} numberOfLines={2}>
+          <Text style={fullPageWizardStyles.partyName} numberOfLines={1}>
+            Assign later
+          </Text>
+          <Text style={fullPageWizardStyles.blockMeta} numberOfLines={1}>
             {isAsset
               ? "Pick vehicle & driver on trip detail"
               : "Add vehicle & driver phone on trip detail"}
@@ -224,7 +234,7 @@ export function SupplyAllocationModeBar({
 
 const styles = StyleSheet.create({
   wizardStack: {
-    gap: 10,
+    gap: 12,
     width: "100%",
   },
   wizardChipInner: {
@@ -260,6 +270,24 @@ const styles = StyleSheet.create({
     width: "100%",
     minWidth: 0,
     flexWrap: "nowrap",
+  },
+  modeRowInline: {
+    width: "auto",
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: "center",
+  },
+  modeChipInline: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "auto",
+    paddingHorizontal: 14,
+  },
+  assignLaterInlineCard: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 440,
+    marginLeft: "auto",
   },
   supplySegmentSectionInline: {
     alignItems: "flex-start",

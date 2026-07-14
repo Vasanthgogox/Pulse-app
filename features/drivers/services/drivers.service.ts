@@ -72,13 +72,17 @@ export interface DriverRow {
 }
 
 /**
- * Get all drivers for an organization (dispatcher/fleet owner view).
- * Excludes one-time/tracking-only drivers created only for aggregate trip tracking (assign-by-phone).
- * Filter is applied in code so the list works even when tracking_only column is not yet migrated.
- * Includes drivers who have left the fleet (left_at set) so the org can show them as "Disconnected" with reason/date.
+ * Asset (party) drivers only — excludes one-time / tracking-only stubs from assign-by-phone.
+ * Used by party Drivers list, sync cache, and any fleet roster UI.
+ * Filter is applied in code so lists work even when tracking_only is missing on legacy rows.
  */
-function excludeTrackingOnly(drivers: DriverRow[]): DriverRow[] {
+export function excludeTrackingOnlyDrivers(drivers: DriverRow[]): DriverRow[] {
   return drivers.filter((d) => d.tracking_only !== true);
+}
+
+/** @deprecated Prefer {@link excludeTrackingOnlyDrivers} */
+function excludeTrackingOnly(drivers: DriverRow[]): DriverRow[] {
+  return excludeTrackingOnlyDrivers(drivers);
 }
 
 /**
@@ -238,15 +242,23 @@ export async function syncDriversWithCache(orgId: string, currentRows: DriverRow
         if (res.error) throw res.error;
         return res.delta;
       },
-      merge: (existing, delta) =>
-        mergeDeltaRows({
+      merge: (existing, delta) => {
+        // Delta RPC returns all drivers (including tracking_only). Drop one-time
+        // stubs so they never re-enter the party roster cache after a full sync.
+        const trackingOnlyIds = delta.changed
+          .filter((d) => d.tracking_only === true)
+          .map((d) => d.id);
+        const merged = mergeDeltaRows({
           existing,
-          changed: delta.changed,
-          deletedIds: delta.deletedIds,
-          compare: (a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""),
-        }),
+          changed: excludeTrackingOnlyDrivers(delta.changed),
+          deletedIds: [...delta.deletedIds, ...trackingOnlyIds],
+          compare: (a, b) =>
+            (b.created_at ?? "").localeCompare(a.created_at ?? ""),
+        });
+        return excludeTrackingOnlyDrivers(merged);
+      },
     });
-    return { error: null, drivers };
+    return { error: null, drivers: excludeTrackingOnlyDrivers(drivers) };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), drivers: currentRows };
   }
@@ -1003,6 +1015,45 @@ export interface EnsureDriverRowByPhoneOptions {
   forceUnlinkedForOtp?: boolean;
 }
 
+function isPlaceholderDriverName(value: string | null | undefined): boolean {
+  const v = (value ?? "").trim().toLowerCase();
+  return !v || v === "driver" || v === "—" || v === "-";
+}
+
+function resolveDriverDisplayName(
+  name: string | null | undefined,
+  platformName: string | null | undefined,
+): string | null {
+  const candidates = [(name ?? "").trim(), (platformName ?? "").trim()];
+  for (const c of candidates) {
+    if (c && !isPlaceholderDriverName(c)) return c;
+  }
+  return null;
+}
+
+async function applyDriverNameToRow(
+  driver: DriverRow,
+  name: string | null | undefined,
+): Promise<DriverRow> {
+  const next = resolveDriverDisplayName(name, null);
+  if (!next) return driver;
+  if (!isPlaceholderDriverName(driver.name) && (driver.name ?? "").trim() === next) {
+    return driver;
+  }
+  // Always stamp dispatcher name onto placeholder / tracking_only rows so hub shows the real name.
+  if (!isPlaceholderDriverName(driver.name) && driver.tracking_only !== true) {
+    return driver;
+  }
+  const { data, error } = await supabase()
+    .from("drivers")
+    .update({ name: next, updated_at: new Date().toISOString() })
+    .eq("id", driver.id)
+    .select(DRIVER_COLUMNS)
+    .single();
+  if (error || !data) return driver;
+  return normalizeDriverRow(data as DriverRow);
+}
+
 /**
  * Ensure a driver row exists in the org for the given phone (assign-by-phone / ad-hoc trip).
  * Normalizes phone, looks up platform user by phone, then finds or creates driver row in this org.
@@ -1034,7 +1085,10 @@ export async function ensureDriverRowByPhone(
         .rpc("match_driver_by_phone", { p_org_id: orgId, p_phone: normalized, p_require_unlinked: true })
         .maybeSingle();
       if (unlinkedErr) return { error: new Error(unlinkedErr.message), driver: null };
-      if (unlinkedDriver) return { error: null, driver: unlinkedDriver as DriverRow };
+      if (unlinkedDriver) {
+        const stamped = await applyDriverNameToRow(unlinkedDriver as DriverRow, name);
+        return { error: null, driver: stamped };
+      }
 
       // Step 2: find any driver (possibly linked) — unlink it so driver must claim via OTP
       const { data: anyDriver, error: anyErr } = await supabase()
@@ -1053,7 +1107,10 @@ export async function ensureDriverRowByPhone(
           .eq("id", (anyDriver as DriverRow).id)
           .single();
         if (freshErr) return { error: new Error(freshErr.message), driver: null };
-        if (fresh) return { error: null, driver: fresh as unknown as DriverRow };
+        if (fresh) {
+          const stamped = await applyDriverNameToRow(fresh as unknown as DriverRow, name);
+          return { error: null, driver: stamped };
+        }
       }
     } else {
       // trackingOnly=true, forceUnlinkedForOtp=false: prefer any existing driver for this phone
@@ -1061,7 +1118,10 @@ export async function ensureDriverRowByPhone(
         .rpc("match_driver_by_phone", { p_org_id: orgId, p_phone: normalized, p_require_unlinked: false })
         .maybeSingle();
       if (findError) return { error: new Error(findError.message), driver: null };
-      if (existing) return { error: null, driver: existing as unknown as DriverRow };
+      if (existing) {
+        const stamped = await applyDriverNameToRow(existing as unknown as DriverRow, name);
+        return { error: null, driver: stamped };
+      }
     }
   } else {
     const q = supabase().from("drivers").select(DRIVER_COLUMNS).eq("organization_id", orgId);
@@ -1073,12 +1133,19 @@ export async function ensureDriverRowByPhone(
       .limit(1)
       .maybeSingle();
     if (findError) return { error: new Error(findError.message), driver: null };
-    if (existing) return { error: null, driver: existing as unknown as DriverRow };
+    if (existing) {
+      const stamped = await applyDriverNameToRow(existing as unknown as DriverRow, name);
+      return { error: null, driver: stamped };
+    }
   }
+
+  const resolvedName =
+    resolveDriverDisplayName(name, match?.full_name) ??
+    ((name ?? "").trim() || "Driver");
 
   const insertPayload: Record<string, unknown> = {
     organization_id: orgId,
-    name: (name ?? match?.full_name ?? "Driver").trim() || "Driver",
+    name: resolvedName,
     phone: normalized,
     user_id: options?.trackingOnly === true ? null : (match?.user_id ?? null),
     status: "offline",

@@ -160,6 +160,8 @@ export type AssignerResolutionDeps = {
   assignerDisplayByTripId: Record<string, string>;
   /** SECURITY DEFINER RPC: fleet name for trips.organization_id (drivers may lack org SELECT). */
   assignerTripOrgNameByTripId?: Record<string, string>;
+  /** SECURITY DEFINER RPC: fleet org id when trip.organization_id is blanked in driver view. */
+  assignerTripOrgIdByTripId?: Record<string, string>;
   organizationNamesById: Record<string, string>;
 };
 
@@ -248,8 +250,13 @@ export function buildAssignerDisplayForTrip(
     (inviteForTrip.from_organization_id ?? "").trim() === tripSupplierIdRaw;
   const driverOrgIsSupplier =
     !!tripSupplierIdRaw && !!driverOrgIdRaw && driverOrgIdRaw === tripSupplierIdRaw;
+  const rpcAssignerOrgId = (
+    deps.assignerTripOrgIdByTripId?.[String(trip.id).trim()] ?? ""
+  ).trim();
   const effectiveAssignerOrgId =
-    inviteIsFromSupplier || driverOrgIsSupplier ? tripSupplierIdRaw : tripOrgIdRaw;
+    inviteIsFromSupplier || driverOrgIsSupplier
+      ? tripSupplierIdRaw
+      : tripOrgIdRaw || rpcAssignerOrgId;
 
   const tripAssignedByUserNameCandidates = [
     tripMeta.assigned_by_name,

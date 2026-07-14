@@ -1396,7 +1396,7 @@ function NetworkScreenInner() {
                 >
                   <NetworkProfileModalBody
                     node={selectedProfileNode}
-                    isMobile
+                    isMobile={isMobileLayout}
                     profileStatsLoading={profileStatsLoading}
                     totalTrips={selectedProfileStats.totalTrips ?? 0}
                     onClose={() => setSelectedProfileNode(null)}
@@ -1486,7 +1486,7 @@ function NetworkScreenInner() {
                           accessibilityRole="button"
                           accessibilityLabel={profileNetworkActions.primaryLabel}
                         >
-                          <UserPlus size={12} color={Theme.textOnPrimary} />
+                          <UserPlus size={14} color={Theme.buttonPrimaryText} strokeWidth={2.2} />
                           <Text style={styles.profilePrimaryBtnText}>
                             {profileNetworkActions.primaryLabel}
                           </Text>
@@ -1898,6 +1898,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     maxHeight: "88%",
     backgroundColor: Theme.cardWhite,
+    borderRadius: 20,
     overflow: "hidden",
     alignSelf: "center",
     shadowColor: "#0F172A",
@@ -1913,13 +1914,16 @@ const styles = StyleSheet.create({
     }),
   },
   profileModalCardDesktop: {
-    maxWidth: 560,
+    maxWidth: 440,
     maxHeight: "90%",
+    borderRadius: 20,
   },
   profileModalCardMobile: {
     maxHeight: "94%",
     width: "100%",
     maxWidth: "100%",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     alignSelf: "stretch",
@@ -2263,37 +2267,44 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     alignItems: "stretch",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 4,
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
   profileCtaStackMobile: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 8,
     gap: 10,
   },
   profileCtaStackDesktop: {
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 4,
+    paddingTop: 14,
+    paddingBottom: 8,
     gap: 10,
-    maxWidth: 360,
-    alignSelf: "center",
     width: "100%",
+    alignSelf: "stretch",
+    maxWidth: "100%",
   },
   profilePrimaryBtn: {
     width: "100%",
     alignSelf: "stretch",
-    minHeight: 32,
+    minHeight: 46,
+    borderRadius: 12,
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 8,
   },
   profilePrimaryBtnText: {
-    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.buttonPrimaryText,
+    letterSpacing: 0.2,
   },
   /* "Request sent" CTA row in the profile modal: a CLIENT/SUPPLIER
    *  pill on the left and a tappable "Request sent · Cancel" button

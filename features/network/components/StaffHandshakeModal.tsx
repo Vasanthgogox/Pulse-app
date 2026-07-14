@@ -1293,23 +1293,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     gap: 10,
   },
-  assignEmptyActionBtn: {
-    minHeight: 44,
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    backgroundColor: Theme.buttonPrimary,
-  },
-  assignEmptyActionBtnText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.buttonPrimaryText,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
   assignSummaryBar: {
     backgroundColor: Theme.surfaceLight,
     paddingHorizontal: 14,

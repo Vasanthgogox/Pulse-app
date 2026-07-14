@@ -1,6 +1,6 @@
 import { DriverTripHistoryDetailScreen } from "@/features/driver/components/DriverTripHistoryDetailScreen";
 import { useLocalSearchParams } from "expo-router";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 export default function TripHistoryDetailPage() {
   const params = useLocalSearchParams<{
@@ -32,14 +32,24 @@ export default function TripHistoryDetailPage() {
       : undefined;
 
   if (!id) {
-    return <View />;
+    return <View style={styles.fill} />;
   }
 
   return (
-    <DriverTripHistoryDetailScreen
-      tripId={id}
-      initialTab={initialTab}
-      initialSelectedExpenseId={eventIdRaw || null}
-    />
+    <View style={styles.fill}>
+      <DriverTripHistoryDetailScreen
+        tripId={id}
+        initialTab={initialTab}
+        initialSelectedExpenseId={eventIdRaw || null}
+      />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+  },
+});

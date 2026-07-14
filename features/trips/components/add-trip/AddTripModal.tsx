@@ -4,7 +4,8 @@
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
 import { useEffect, useMemo, useState } from "react";
-import { WIZARD_FULL_PAGE_STEPPED, isDesktopWizardForm } from "@/lib/wizardLayout.util";
+import { WIZARD_FULL_PAGE_STEPPED } from "@/lib/wizardLayout.util";
+import Layout from "@/constants/Layout";
 import {
   Alert,
   Platform,
@@ -14,6 +15,7 @@ import {
 import { showAppAlert } from "@/lib/appAlert";
 import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
+import { CreateTripDesktopStepper } from "./CreateTripDesktopStepper";
 import { AddTripWizardProgress } from "./AddTripWizardProgress";
 import type {
   AddTripCompleteOptions,
@@ -78,17 +80,14 @@ export function AddTripModal({
 }: AddTripModalProps) {
   const { width: winW } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
-  /** Indent-style: wide desktop = enterprise grid; narrow = stepped wizard. */
-  const isDesktopEnterprise = isDesktopWizardForm(winW);
-  const isMobileWizard = !isDesktopEnterprise && WIZARD_FULL_PAGE_STEPPED;
+  /** Desktop + mobile: one wizard step at a time (no multi-card enterprise grid). */
+  const wizardEnabled = WIZARD_FULL_PAGE_STEPPED;
+  /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
+  const webAllocSubSteps = false;
   const form = useAddTripForm();
   const [wizardStep, setWizardStep] = useState<WizardStep>("route");
   const [allocationSubStep, setAllocationSubStep] =
     useState<AllocationSubStep>("supply");
-  /** Stepped wizard only on narrow viewports (matches Create Load / indent). */
-  const wizardEnabled = isMobileWizard;
-  /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
-  const webAllocSubSteps = false;
   const allocationFlowActive =
     (wizardEnabled && wizardStep === "allocation") || webAllocSubSteps;
   /** Hide field errors until the user tries to continue / create (avoids red UI on empty open). */
@@ -190,6 +189,9 @@ export function AddTripModal({
         : "Continue"
     : "Create Trip";
 
+  const isDesktopWizard =
+    isWeb && wizardEnabled && winW >= Layout.wizardDesktopGridMinWidth;
+
   const wizardStepMeta = useMemo(() => {
     if (!wizardEnabled) return null;
     const topSteps = ADD_TRIP_WIZARD_STEPS.map((id) => ({
@@ -207,29 +209,41 @@ export function AddTripModal({
         subtitle: addTripWizardStepSubtitle(wizardStep),
       };
     }
-    const allocSteps = allocationSteps.map((id) => ({
-      id,
-      label: allocationSubStepLabel(id),
-    }));
-    const allocIndex = allocationSteps.indexOf(allocationSubStep);
     return {
-      steps: allocSteps,
-      currentId: allocationSubStep,
-      stepIndex: allocIndex >= 0 ? allocIndex + 1 : 1,
-      stepTotal: allocSteps.length,
+      steps: topSteps,
+      currentId: "allocation",
+      stepIndex: topIndex >= 0 ? topIndex + 1 : topSteps.length,
+      stepTotal: topSteps.length,
       title: "Allocation",
-      subtitle: `Assign supply · ${allocationSubStepLabel(allocationSubStep)}`,
+      subtitle: isDesktopWizard
+        ? form.state.supplySource === "asset"
+          ? "Assign vehicle and driver, or choose Assign later"
+          : form.state.assignLater
+            ? "Partner and rates — assign fleet on trip detail"
+            : "Partner, rates, and fleet details"
+        : `Assign supply · ${allocationSubStepLabel(allocationSubStep)}`,
     };
-  }, [wizardEnabled, wizardStep, allocationSteps, allocationSubStep]);
+  }, [
+    wizardEnabled,
+    wizardStep,
+    allocationSteps,
+    allocationSubStep,
+    isDesktopWizard,
+    form.state.supplySource,
+    form.state.assignLater,
+  ]);
 
-  const allocationFillBody =
+  const saleFillBody = wizardEnabled && wizardStep === "sale" && !isDesktopWizard;
+  const allocationFillBodyModal =
     allocationFlowActive &&
     (allocationSubStep === "rates" ||
       allocationSubStep === "driverPhone" ||
-      allocationSubStep === "vehicle");
-
-  const saleFillBody = wizardEnabled && wizardStep === "sale";
-  const wizardFillBody = saleFillBody || allocationFillBody;
+      allocationSubStep === "vehicle") &&
+    !isDesktopWizard;
+  const desktopAllocationFillBody =
+    isDesktopWizard && wizardEnabled && wizardStep === "allocation";
+  const wizardFillBody =
+    saleFillBody || allocationFillBodyModal || desktopAllocationFillBody;
 
   const handleSubmit = async () => {
     setValidationAttempted(true);
@@ -255,6 +269,7 @@ export function AddTripModal({
       const options: AddTripCompleteOptions = {
         supplySource: form.state.supplySource,
         driverPhone: form.state.driverPhone.trim() || undefined,
+        driverName: form.state.aggregateDriverName.trim() || undefined,
       };
       const result = await Promise.resolve(onComplete(form.buildPayload(), options));
       const typed = result as AddTripCompleteResult | undefined;
@@ -333,6 +348,34 @@ export function AddTripModal({
     }
     if (advanceAllocationSubStep()) return;
     void handleSubmit();
+  };
+
+  const handleWizardBack = () => {
+    if (webAllocSubSteps && !wizardEnabled) {
+      const allocIdx = allocationSteps.indexOf(allocationSubStep);
+      if (allocIdx > 0) {
+        setAllocationSubStep(allocationSteps[allocIdx - 1]!);
+      }
+      return;
+    }
+    if (!wizardEnabled) return;
+    if (wizardStep === "allocation") {
+      const allocIdx = allocationSteps.indexOf(allocationSubStep);
+      if (allocIdx > 0) {
+        setAllocationSubStep(allocationSteps[allocIdx - 1]!);
+        return;
+      }
+      setWizardStep("sale");
+      return;
+    }
+    if (wizardStep === "sale") {
+      setWizardStep("commodityClient");
+      return;
+    }
+    if (wizardStep === "commodityClient") {
+      setWizardStep("route");
+      return;
+    }
   };
 
   const handleWizardBackOrClose = () => {
@@ -414,25 +457,35 @@ export function AddTripModal({
     <AddTripModalLayout
       title={wizardStepMeta?.title ?? "Create Trip"}
       insightPreset="trip"
-      subtitle={
-        wizardStepMeta?.subtitle ??
-        (isDesktopEnterprise
-          ? "Route · commodity & client · sale · allocation"
-          : "Route · commodity & client · sale · allocation")
-      }
+      subtitle={wizardStepMeta?.subtitle}
       stepIndex={wizardStepMeta?.stepIndex}
       stepTotal={wizardStepMeta?.stepTotal}
       submitLabel={wizardSubmitLabel}
       canSubmit={stepCanAdvance}
       submitting={submitting}
-      lockPrimaryUntilValid={steppedFormActive ? validationAttempted : true}
+      lockPrimaryUntilValid={steppedFormActive}
       validationMessage={visibleValidationMessage ?? submitError}
-      onClose={handleWizardBackOrClose}
+      onClose={isDesktopWizard ? onClose : handleWizardBackOrClose}
+      onBack={
+        isDesktopWizard && wizardStepMeta && wizardStepMeta.stepIndex > 1
+          ? handleWizardBack
+          : undefined
+      }
       onSubmit={handleWizardPrimary}
       fillBody={wizardFillBody}
-      scrollBody={(wizardEnabled && !wizardFillBody) || isDesktopEnterprise}
+      scrollBody={wizardEnabled && !wizardFillBody && !isDesktopWizard}
+      steppedLayout={isDesktopWizard}
       progress={
-        wizardEnabled && wizardStepMeta ? (
+        wizardEnabled && isDesktopWizard ? (
+          <CreateTripDesktopStepper
+            steps={ADD_TRIP_WIZARD_STEPS.map((id, idx) => ({
+              id,
+              num: idx + 1,
+              title: addTripWizardStepLabel(id),
+            }))}
+            currentStepId={wizardStep}
+          />
+        ) : wizardStepMeta ? (
           <AddTripWizardProgress
             steps={wizardStepMeta.steps}
             currentStepId={wizardStepMeta.currentId}
@@ -454,7 +507,8 @@ export function AddTripModal({
         validationIssues={visibleIssues}
         validationMessage={visibleValidationMessage}
         wizardSection={wizardEnabled ? wizardStep : undefined}
-        enterpriseFormGrid={isDesktopEnterprise}
+        desktopWizardChrome={isDesktopWizard}
+        enterpriseFormGrid={false}
         mobileWizardMode={wizardEnabled}
         sourceIndent={sourceIndent ?? null}
         allocationSubStep={allocationFlowActive ? allocationSubStep : undefined}

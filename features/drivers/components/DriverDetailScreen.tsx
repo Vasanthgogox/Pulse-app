@@ -11,6 +11,7 @@ import { FinanceFAB } from "@/components/FinanceFAB";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { entityDetailDownloadIconColor } from "@/components/entityDetailPageChrome.styles";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -1383,7 +1384,7 @@ export default function DriverDetailScreen({
             <FontAwesome
               name="cloud-download"
               size={18}
-              color={Theme.textOnPrimary}
+              color={entityDetailDownloadIconColor}
             />
           </TouchableOpacity>
         </View>

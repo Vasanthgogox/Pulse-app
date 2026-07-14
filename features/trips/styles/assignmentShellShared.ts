@@ -3,6 +3,10 @@
  * One visual language with TripAssignmentBlock (slate backdrop, white or slate card, step labels).
  */
 import Theme from "@/constants/Theme";
+import {
+  pulsePillButtonContainerOutlineDefault,
+  pulsePillButtonLabelDefault,
+} from "@/constants/PulsePillButtonChrome";
 import { Platform, StyleSheet } from "react-native";
 
 export const assignmentShellColors = {
@@ -501,22 +505,17 @@ export const assignmentShellStyles = StyleSheet.create({
     lineHeight: 18,
   },
   assignEmptyActionBtn: {
+    ...pulsePillButtonContainerOutlineDefault,
     minHeight: 44,
     alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
     gap: 8,
     paddingHorizontal: 14,
-    backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
   assignEmptyActionBtnText: {
+    ...pulsePillButtonLabelDefault,
     fontSize: 12,
     fontWeight: "800",
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },

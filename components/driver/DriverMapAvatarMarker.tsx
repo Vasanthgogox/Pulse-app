@@ -2,8 +2,9 @@ import Theme from '@/constants/Theme';
 import {
   resolveDriverAvatarImageSource,
 } from '@/constants/DriverLevels';
+import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
 import { useEffect } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -19,6 +20,8 @@ export type DriverMapAvatarMarkerProps = {
   isOnline?: boolean;
   /** Outer diameter including ring (default 48). */
   size?: number;
+  /** Tap the online status chip to focus / view this location. */
+  onPressStatus?: () => void;
 };
 
 function resolveAvatarSource(
@@ -28,11 +31,18 @@ function resolveAvatarSource(
   return resolveDriverAvatarImageSource(avatarUri, avatarSeed);
 }
 
+/** Even pixel size so CSS/border triangles stay visually centered. */
+function evenPx(n: number): number {
+  const r = Math.round(n);
+  return r % 2 === 0 ? r : r + 1;
+}
+
 export function DriverMapAvatarMarker({
   avatarUri,
   avatarSeed,
   isOnline = false,
   size = 48,
+  onPressStatus,
 }: DriverMapAvatarMarkerProps) {
   const ringColor = isOnline ? Theme.darkGreen : Theme.teslaRed;
   const pulse = useSharedValue(0.35);
@@ -59,50 +69,70 @@ export function DriverMapAvatarMarker({
 
   const ring = Math.max(3, Math.round(size * 0.1));
   const inner = size - ring * 2;
-  const tailW = Math.max(10, Math.round(size * 0.22));
+  const tailW = evenPx(Math.max(10, size * 0.22));
   const tailH = Math.max(6, Math.round(size * 0.14));
+  const statusSize = evenPx(Math.max(10, size * 0.22));
+  const pulsePad = 4;
+  const pulseSize = size + pulsePad * 2;
 
   return (
-    <View style={[styles.wrap, { width: size, height: size + tailH }]} pointerEvents="none">
+    <View style={[styles.wrap, { width: size, height: size + tailH - 1 }]}>
       <Animated.View
         style={[
           styles.pulseRing,
           pulseStyle,
           {
-            width: size + 8,
-            height: size + 8,
-            borderRadius: (size + 8) / 2,
+            width: pulseSize,
+            height: pulseSize,
+            borderRadius: pulseSize / 2,
             borderColor: ringColor,
-            top: -4,
-            left: -4,
+            top: -pulsePad,
+            left: -pulsePad,
           },
         ]}
+        pointerEvents="none"
       />
-      <View
-        style={[
-          styles.avatarShell,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            borderWidth: ring,
-            borderColor: ringColor,
-          },
-        ]}
-      >
-        <Image
-          source={resolveAvatarSource(avatarUri, avatarSeed)}
-          style={{
-            width: inner,
-            height: inner,
-            borderRadius: inner / 2,
-          }}
-          resizeMode="cover"
-        />
+      <View style={[styles.avatarWrap, { width: size, height: size }]}>
         <View
           style={[
+            styles.avatarShell,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              borderWidth: ring,
+              borderColor: ringColor,
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Image
+            source={resolveAvatarSource(avatarUri, avatarSeed)}
+            style={{
+              width: inner,
+              height: inner,
+              borderRadius: inner / 2,
+            }}
+            resizeMode="cover"
+          />
+        </View>
+        <Pressable
+          onPress={onPressStatus}
+          disabled={!onPressStatus}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={isOnline ? 'View live location' : 'View location'}
+          style={[
             styles.statusChip,
-            { backgroundColor: ringColor, borderColor: '#fff' },
+            {
+              width: statusSize,
+              height: statusSize,
+              borderRadius: statusSize / 2,
+              backgroundColor: ringColor,
+              borderColor: '#fff',
+              top: -1,
+              right: -1,
+            },
           ]}
         />
       </View>
@@ -114,50 +144,55 @@ export function DriverMapAvatarMarker({
             borderRightWidth: tailW / 2,
             borderTopWidth: tailH,
             borderTopColor: ringColor,
-            marginTop: -1,
           },
         ]}
+        pointerEvents="none"
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  pulseRing: {
-    position: 'absolute',
-    borderWidth: 2,
-    backgroundColor: 'transparent',
-  },
-  avatarShell: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 8,
-    overflow: 'hidden',
-  },
-  statusChip: {
-    position: 'absolute',
-    right: 2,
-    bottom: 2,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
-  },
-  pointer: {
-    width: 0,
-    height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-  },
-});
+const styles = withWebSafeShadows(
+  StyleSheet.create({
+    wrap: {
+      position: 'relative',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+    },
+    pulseRing: {
+      position: 'absolute',
+      borderWidth: 2,
+      backgroundColor: 'transparent',
+    },
+    avatarWrap: {
+      position: 'relative',
+      zIndex: 1,
+    },
+    avatarShell: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#fff',
+      shadowColor: '#0f172a',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.28,
+      shadowRadius: 8,
+      elevation: 8,
+      overflow: 'hidden',
+    },
+    statusChip: {
+      position: 'absolute',
+      borderWidth: 2,
+      zIndex: 2,
+    },
+    pointer: {
+      width: 0,
+      height: 0,
+      backgroundColor: 'transparent',
+      borderStyle: 'solid',
+      borderLeftColor: 'transparent',
+      borderRightColor: 'transparent',
+      alignSelf: 'center',
+      marginTop: -1,
+    },
+  }),
+);

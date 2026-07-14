@@ -101,6 +101,8 @@ export interface AddTripCompleteOptions {
   supplySource: SupplySource;
   /** When set with supplySource === 'aggregate', assign this trip to driver by phone after create. */
   driverPhone?: string;
+  /** Dispatcher-entered name for assign-by-phone (required when driverPhone is set). */
+  driverName?: string;
 }
 
 /** Result when create returns OTP (aggregate trip). */

@@ -15,6 +15,7 @@ import {
 import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import { supabase } from "@/lib/supabase";
+import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
 
 export type TripStatus =
   | "approved"
@@ -438,6 +439,13 @@ export async function executeInvoiceCreation(
 
     if (error) throw error;
 
+    const orgIdByTripId = new Map(
+      rows.map((row) => [
+        (row as { id?: string }).id ?? "",
+        (row as { organization_id?: string | null }).organization_id ?? null,
+      ]),
+    );
+
     await Promise.all(
       sanitizedIds.map(async (id) => {
         const { error: logError } = await supabase().rpc("log_activity", {
@@ -448,6 +456,17 @@ export async function executeInvoiceCreation(
         });
         if (logError) {
           console.warn("[invoicing] log_activity RPC failed for trip", id, logError.message);
+        }
+        const orgId = orgIdByTripId.get(id);
+        if (orgId) {
+          void recordTripWorkflowEvent({
+            tripId: id,
+            orgId,
+            eventType: "invoice.generated",
+            payload: { invoice_no: invoiceNo },
+          }).catch((err) => {
+            console.warn("[invoicing] recordTripWorkflowEvent failed for trip", id, err);
+          });
         }
       }),
     );

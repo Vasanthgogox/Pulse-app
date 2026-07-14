@@ -1,7 +1,6 @@
 /**
  * Direct message CTA in the network profile modal.
  */
-import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import { Mail } from "lucide-react-native";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -62,8 +61,8 @@ const styles = StyleSheet.create({
   button: {
     width: "100%",
     alignSelf: "stretch",
-    minHeight: 36,
-    borderRadius: 10,
+    minHeight: 46,
+    borderRadius: 12,
     backgroundColor: Theme.textPrimaryDark,
     flexDirection: "row",
     alignItems: "center",
@@ -84,20 +83,22 @@ const styles = StyleSheet.create({
     }),
   },
   buttonCompact: {
-    minHeight: 48,
+    minHeight: 46,
     borderRadius: 12,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   label: {
-    ...FinanceTxnTypography.buttonLabel,
-    color: Theme.buttonDarkText,
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.2,
     zIndex: 1,
   },
   labelCompact: {
-    fontWeight: "600",
-    letterSpacing: 0,
+    fontWeight: "700",
+    letterSpacing: 0.2,
     textTransform: "none",
   },
 });

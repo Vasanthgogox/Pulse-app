@@ -208,7 +208,8 @@ export function OnboardingPersonaHub() {
         <PulseBrandMarkLink
           onPress={() => router.push(ROUTES.TERMINAL_WEBSITE)}
           accessibilityLabel={WORKSPACE_SETUP_COPY.pulseWebsiteLink}
-          style={styles.mobileBrandLink}
+          size="lg"
+          linkStyle={styles.mobileBrandAnchor}
         />
         {renderProductHubMain()}
       </ScrollView>
@@ -452,8 +453,9 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 16,
   },
-  mobileBrandLink: {
-    marginBottom: 8,
+  mobileBrandAnchor: {
+    marginBottom: 12,
+    alignSelf: 'flex-start',
   },
   mobileHubFooter: {
     borderTopWidth: StyleSheet.hairlineWidth,

@@ -208,12 +208,14 @@ export default function DriverProfileScreen() {
     loadTrips();
   }, [loadTrips]));
 
+  // Shared with LevelProgressionScreen's identical subscription — same key means the
+  // realtime registry dedupes to one channel instead of two when both screens are mounted.
   useEffect(() => {
     // Shared ref-counted channel (registry) instead of a private static-named
     // channel — same behavior (refetch on any trips change), but reuses one
     // server channel and inherits cap/grace/prune lifecycle.
     return subscribeSharedPostgresChanges(
-      'trips:all',
+      'driver-app:trips:all',
       [{ event: '*', schema: 'public', table: 'trips' }],
       () => { loadTrips(); },
     );

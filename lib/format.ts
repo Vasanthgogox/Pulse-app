@@ -46,6 +46,21 @@ export function formatLedgerDate(dateStr: string): string {
   return `${day} ${month}`;
 }
 
+/** Entity trip table date beside mission id — e.g. "17 APR 2026". */
+export function formatTripTableDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    const day = d.getDate();
+    const month = d.toLocaleString("en-IN", { month: "short" }).toUpperCase();
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  } catch {
+    return "—";
+  }
+}
+
 /** Date + time for ledger PARTY/ITEM e.g. "5 Mar 26, 5:30 PM". */
 export function formatLedgerDateTime(iso: string | null | undefined): string {
   if (!iso || typeof iso !== 'string') return '—';

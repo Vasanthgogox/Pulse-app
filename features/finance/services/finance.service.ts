@@ -25,6 +25,7 @@ import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { VALIDATION, dateISO } from "@/lib/validation";
 import { getTripOperationalDisplay } from "@/features/operations/display";
+import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
 
 /**
  * Join trips via trip_id (not booking_ref).
@@ -269,6 +270,25 @@ function scheduleLedgerInsertSideEffects(
   void syncTripAmountPaidFromLedger(orgId, row.trip_id ?? null);
   void tryNotifyLinkedPartyChatAfterLedgerInsert(orgId, row);
   notifyTripChatMessagesChanged();
+  if (row.trip_id) {
+    if (row.contact_type === "client" && Number(row.amount_in) > 0) {
+      void recordTripWorkflowEvent({
+        tripId: row.trip_id,
+        orgId,
+        eventType: "client.payment_received",
+      }).catch((err) => {
+        console.warn("[finance] recordTripWorkflowEvent (client) failed:", err);
+      });
+    } else if (row.contact_type === "supplier" && Number(row.amount_out) > 0) {
+      void recordTripWorkflowEvent({
+        tripId: row.trip_id,
+        orgId,
+        eventType: "supplier.payment_recorded",
+      }).catch((err) => {
+        console.warn("[finance] recordTripWorkflowEvent (supplier) failed:", err);
+      });
+    }
+  }
 }
 
 async function resolveContactDisplayName(

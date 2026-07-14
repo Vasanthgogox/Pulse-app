@@ -5,6 +5,8 @@ export type SignUpTheme = {
   primaryDark: string;
   primaryLight: string;
   primaryTint: string;
+  /** Label on filled primary buttons (defaults to Theme.buttonPrimaryText). */
+  primaryButtonText?: string;
   canvas: string;
   bg: string;
   text: string;

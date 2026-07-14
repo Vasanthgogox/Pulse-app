@@ -1694,26 +1694,22 @@ export function FinanceScreen() {
             <FinanceFAB
               onPress={onAdd}
               accessibilityLabel={
-                financeSubTab === "cash"
-                  ? t("addTransaction")
-                  : financeSubTab === "customers"
-                    ? t("addClient")
-                    : financeSubTab === "suppliers"
-                      ? t("addSupplier")
-                      : financeSubTab === "garage"
-                        ? t("addVehicle")
-                        : t("addDriver")
+                financeSubTab === "customers"
+                  ? t("addClient")
+                  : financeSubTab === "suppliers"
+                    ? t("addSupplier")
+                    : financeSubTab === "garage"
+                      ? t("addVehicle")
+                      : t("addDriver")
               }
               icon={
-                financeSubTab === "cash"
-                  ? "receipt-text"
-                  : financeSubTab === "customers"
-                    ? "building"
-                    : financeSubTab === "drivers"
-                      ? "user"
-                      : financeSubTab === "suppliers"
-                        ? "warehouse"
-                        : "truck"
+                financeSubTab === "customers"
+                  ? "building"
+                  : financeSubTab === "drivers"
+                    ? "user"
+                    : financeSubTab === "suppliers"
+                      ? "warehouse"
+                      : "truck"
               }
             />
           </View>

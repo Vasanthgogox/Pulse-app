@@ -29,6 +29,8 @@ export type LeafletMarker = {
   isOnline?: boolean;
   /** Active guidance target — subtle pulse on pickup/drop. */
   highlighted?: boolean;
+  /** Tap marker (or online status chip) to focus / open location. */
+  onPress?: () => void;
 };
 
 export type LeafletMapProps = {

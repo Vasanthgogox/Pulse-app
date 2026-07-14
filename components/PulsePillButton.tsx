@@ -5,11 +5,10 @@
 import {
   pulsePillButtonContainerFullWidth,
   pulsePillButtonDisabled,
-  pulsePillButtonPressed,
-  pulsePillButtonSizeStyles,
+  pulsePillButtonVariantStyles,
   type PulsePillButtonSize,
+  type PulsePillButtonVariant,
 } from "@/constants/PulsePillButtonChrome";
-import Theme from "@/constants/Theme";
 import { Plus, type LucideIcon } from "lucide-react-native";
 import { memo, type ReactNode } from "react";
 import {
@@ -29,6 +28,7 @@ export interface PulsePillButtonProps {
   disabled?: boolean;
   loading?: boolean;
   size?: PulsePillButtonSize;
+  variant?: PulsePillButtonVariant;
   fullWidth?: boolean;
   icon?: ReactNode;
   showPlusIcon?: boolean;
@@ -46,6 +46,7 @@ export const PulsePillButton = memo(function PulsePillButton({
   disabled = false,
   loading = false,
   size = "default",
+  variant = "filled",
   fullWidth = false,
   icon,
   showPlusIcon = false,
@@ -57,7 +58,7 @@ export const PulsePillButton = memo(function PulsePillButton({
   labelStyle,
 }: PulsePillButtonProps) {
   const inactive = disabled || loading || !onPress;
-  const sizeStyles = pulsePillButtonSizeStyles(size);
+  const variantStyles = pulsePillButtonVariantStyles(variant, size);
   const resolvedIconSize =
     iconSize ?? (size === "compact" ? 12 : size === "large" ? 15 : 13);
   const resolvedLabel = label ?? accessibilityLabel ?? "Action";
@@ -71,15 +72,15 @@ export const PulsePillButton = memo(function PulsePillButton({
       accessibilityLabel={accessibilityLabel ?? resolvedLabel}
       accessibilityState={{ disabled: inactive, busy: loading }}
       style={({ pressed }) => [
-        sizeStyles.container,
+        variantStyles.container,
         fullWidth && pulsePillButtonContainerFullWidth,
         inactive && pulsePillButtonDisabled,
-        pressed && !inactive && pulsePillButtonPressed,
+        pressed && !inactive && variantStyles.pressed,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
+        <ActivityIndicator color={variantStyles.iconColor} size="small" />
       ) : (
         <View
           style={[
@@ -91,13 +92,13 @@ export const PulsePillButton = memo(function PulsePillButton({
             (showPlusIcon ? (
               <IconComponent
                 size={resolvedIconSize}
-                color={Theme.buttonPrimaryText}
+                color={variantStyles.iconColor}
                 strokeWidth={2.4}
               />
             ) : null)}
           {label ? (
             <Text
-              style={[sizeStyles.label, labelStyle]}
+              style={[variantStyles.label, labelStyle]}
               numberOfLines={1}
             >
               {label}

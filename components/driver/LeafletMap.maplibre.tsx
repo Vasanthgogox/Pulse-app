@@ -4,7 +4,8 @@ import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomContro
 import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
 import MapLibreGL, { type CameraRef } from '@maplibre/maplibre-react-native';
 import React, { useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type {
   LeafletLatLng,
@@ -40,12 +41,14 @@ function MarkerContent({
   avatarUri,
   avatarSeed,
   isOnline,
+  onPress,
 }: {
   markerId: string;
   color?: string;
   avatarUri?: string | null;
   avatarSeed?: string | null;
   isOnline?: boolean;
+  onPress?: () => void;
 }) {
   const role = tripMapMarkerRoleFromId(markerId);
   if (role === 'driver') {
@@ -55,11 +58,16 @@ function MarkerContent({
         avatarSeed={avatarSeed}
         isOnline={isOnline}
         size={48}
+        onPressStatus={onPress}
       />
     );
   }
   return (
-    <View
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? 'View location' : undefined}
       style={[
         styles.markerDot,
         { backgroundColor: color ?? Theme.driverEmerald },
@@ -205,6 +213,7 @@ export const LeafletMapMapLibre = React.forwardRef<
                 avatarUri={m.avatarUri}
                 avatarSeed={m.avatarSeed}
                 isOnline={m.isOnline}
+                onPress={m.onPress}
               />
             </MapLibreGL.PointAnnotation>
           ))}
@@ -220,7 +229,8 @@ export const LeafletMapMapLibre = React.forwardRef<
   },
 );
 
-const styles = StyleSheet.create({
+const styles = withWebSafeShadows(
+  StyleSheet.create({
   mapHost: {
     position: 'relative',
     overflow: 'hidden',
@@ -250,4 +260,5 @@ const styles = StyleSheet.create({
     color: Theme.driverEmeraldDark,
     letterSpacing: 0.2,
   },
-});
+}),
+);

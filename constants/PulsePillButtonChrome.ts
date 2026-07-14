@@ -90,9 +90,26 @@ export const pulsePillButtonPressed: ViewStyle = {
   backgroundColor: Theme.buttonPrimaryPressed,
 };
 
+/** Transparent outline pill — ink border + dark label (empty-state CTAs, secondary adds). */
+export const pulsePillButtonContainerOutline: ViewStyle = {
+  ...pulsePillButtonContainer,
+  backgroundColor: "transparent",
+};
+
+export const pulsePillButtonContainerOutlineDefault: ViewStyle = {
+  ...pulsePillButtonContainerDefault,
+  backgroundColor: "transparent",
+};
+
+export const pulsePillButtonPressedOutline: ViewStyle = {
+  backgroundColor: "rgba(77, 54, 54, 0.06)",
+};
+
 export const pulsePillButtonDisabled: ViewStyle = {
   opacity: 0.5,
 };
+
+export type PulsePillButtonVariant = "filled" | "outline" | "dark";
 
 /** Dark navy CTA — #0f172a fill + white label (Record payout, dark tabs, etc.). */
 export const pulseDarkFilledButtonContainer: ViewStyle = {
@@ -129,13 +146,27 @@ export const pulseDarkFilledButtonLabelCompact: TextStyle = {
   letterSpacing: 0.8,
 };
 
-/** Label color for a filled button background (light pill vs dark ink). */
+/** Label + icon color for a button background (transparent/light → ink, dark fill → white). */
 export function pulseButtonLabelColor(backgroundColor?: string): string {
-  const bg = (backgroundColor ?? "").toLowerCase();
+  const bg = (backgroundColor ?? "").toLowerCase().trim();
+  if (
+    !bg ||
+    bg === "transparent" ||
+    bg === "rgba(0,0,0,0)" ||
+    bg === Theme.buttonPrimary.toLowerCase() ||
+    bg === Theme.buttonPrimaryPressed.toLowerCase() ||
+    bg === "#ffffff" ||
+    bg === "#fff" ||
+    bg === Theme.cardWhite.toLowerCase() ||
+    bg === Theme.screenBackground.toLowerCase()
+  ) {
+    return Theme.buttonPrimaryText;
+  }
   if (
     bg === Theme.buttonDark.toLowerCase() ||
     bg === Theme.buttonMatteBlack.toLowerCase() ||
     bg === Theme.brandBlueInk.toLowerCase() ||
+    bg === Theme.primary.toLowerCase() ||
     bg === "#0f172a" ||
     bg === "#151515" ||
     bg === "#4d3636"
@@ -143,6 +174,44 @@ export function pulseButtonLabelColor(backgroundColor?: string): string {
     return Theme.buttonDarkText;
   }
   return Theme.buttonPrimaryText;
+}
+
+export function pulsePillButtonVariantStyles(
+  variant: PulsePillButtonVariant = "filled",
+  size: PulsePillButtonSize = "default",
+): {
+  container: ViewStyle;
+  label: TextStyle;
+  pressed: ViewStyle;
+  iconColor: string;
+} {
+  const sizeStyles = pulsePillButtonSizeStyles(size);
+  switch (variant) {
+    case "dark":
+      return {
+        container: pulseDarkFilledButtonContainerPill,
+        label: pulseDarkFilledButtonLabel,
+        pressed: { opacity: 0.92 },
+        iconColor: Theme.buttonDarkText,
+      };
+    case "outline":
+      return {
+        container: {
+          ...sizeStyles.container,
+          backgroundColor: "transparent",
+        },
+        label: sizeStyles.label,
+        pressed: pulsePillButtonPressedOutline,
+        iconColor: Theme.buttonPrimaryText,
+      };
+    default:
+      return {
+        container: sizeStyles.container,
+        label: sizeStyles.label,
+        pressed: pulsePillButtonPressed,
+        iconColor: Theme.buttonPrimaryText,
+      };
+  }
 }
 
 /** StyleSheet mirror for screens that prefer StyleSheet.create. */
@@ -156,6 +225,8 @@ export const pulsePillButtonStyles = StyleSheet.create({
   labelCompact: pulsePillButtonLabelCompact,
   labelLarge: pulsePillButtonLabelLarge,
   pressed: pulsePillButtonPressed,
+  containerOutline: pulsePillButtonContainerOutlineDefault,
+  pressedOutline: pulsePillButtonPressedOutline,
   disabled: pulsePillButtonDisabled,
   darkContainer: pulseDarkFilledButtonContainer,
   darkContainerPill: pulseDarkFilledButtonContainerPill,

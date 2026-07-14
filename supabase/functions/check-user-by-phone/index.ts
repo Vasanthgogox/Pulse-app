@@ -1,6 +1,12 @@
 // Check if a phone is already registered (profiles table). Used before sign-up to redirect
-// existing users to sign-in with email prefilled. No auth required; rate-limited by IP.
-// For scale: add in pulse-unified-base an RPC that normalizes phone and returns email (indexed).
+// existing users to sign-in with email prefilled. Optional intent `driver_signin` exchanges
+// a magic link server-side and returns session tokens for the TEMPORARY unverified driver path.
+// No auth required; rate-limited by IP.
+
+import {
+  exchangeMagicLinkForSession,
+  generateDriverMagicLinkToken,
+} from '../_shared/driverSessionExchange.ts';
 
 const corsAllowHeaders = 'authorization, x-client-info, apikey, content-type';
 
@@ -51,16 +57,82 @@ function maskEmail(email: string): string {
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_PER_IP = 30;
+const DRIVER_SIGNIN_RATE_LIMIT_MAX_PER_IP = 10;
 const rateLimitMap = new Map<string, number[]>();
+const driverSigninRateLimitMap = new Map<string, number[]>();
 
-function pruneAndCheckRateLimit(ip: string): boolean {
+function pruneAndCheckRateLimit(
+  ip: string,
+  map: Map<string, number[]>,
+  maxPerWindow: number,
+): boolean {
   const now = Date.now();
-  const list = rateLimitMap.get(ip) ?? [];
-  const kept = list.filter((t) => now - t < RATE_LIMIT_WINDOW_MS).slice(-RATE_LIMIT_MAX_PER_IP);
-  if (kept.length >= RATE_LIMIT_MAX_PER_IP) return false;
+  const list = map.get(ip) ?? [];
+  const kept = list.filter((t) => now - t < RATE_LIMIT_WINDOW_MS).slice(-maxPerWindow);
+  if (kept.length >= maxPerWindow) return false;
   kept.push(now);
-  rateLimitMap.set(ip, kept);
+  map.set(ip, kept);
   return true;
+}
+
+async function createSupabaseAdmin(): Promise<ReturnType<
+  typeof import('npm:@supabase/supabase-js@2').createClient
+> | null> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceRoleKey) return null;
+  const { createClient } = await import('npm:@supabase/supabase-js@2');
+  return createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+}
+
+async function createSupabaseAnon(): Promise<ReturnType<
+  typeof import('npm:@supabase/supabase-js@2').createClient
+> | null> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  if (!supabaseUrl || !anonKey) return null;
+  const { createClient } = await import('npm:@supabase/supabase-js@2');
+  return createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
+}
+
+async function lookupEmailByPhone(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  normalized: string,
+): Promise<string | null> {
+  const { data: emailRpc, error: rpcError } = await supabase.rpc('get_email_by_phone', {
+    p_phone: normalized,
+  });
+
+  if (!rpcError && emailRpc != null && typeof emailRpc === 'string' && emailRpc.trim() !== '') {
+    return emailRpc.trim();
+  }
+  if (!rpcError) {
+    return null;
+  }
+
+  const { data: rows, error } = await supabase
+    .from('profiles')
+    .select('id, email, phone')
+    .not('phone', 'is', null)
+    .limit(10_000);
+
+  if (error) {
+    console.warn('[check-user-by-phone] lookup failed:', error.message);
+    return null;
+  }
+
+  const list = Array.isArray(rows) ? rows : [];
+  for (const row of list) {
+    const stored = row?.phone != null ? String(row.phone) : '';
+    const storedTen = toTenDigits(stored);
+    if (storedTen === normalized) {
+      const email = (row?.email != null ? String(row.email) : '').trim();
+      if (email) return email;
+    }
+  }
+
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -73,15 +145,21 @@ Deno.serve(async (req) => {
   }
 
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? 'unknown';
-  if (!pruneAndCheckRateLimit(ip)) {
-    return jsonResponse({ error: 'Too many requests. Try again in a minute.' }, 429, req);
-  }
 
-  let body: { phone?: string };
+  let body: { phone?: string; intent?: string };
   try {
     body = await req.json();
   } catch {
     return jsonResponse({ error: 'Invalid JSON body' }, 400, req);
+  }
+
+  const intent = body?.intent === 'driver_signin' ? 'driver_signin' : 'exists_check';
+  const rateLimitOk =
+    intent === 'driver_signin'
+      ? pruneAndCheckRateLimit(ip, driverSigninRateLimitMap, DRIVER_SIGNIN_RATE_LIMIT_MAX_PER_IP)
+      : pruneAndCheckRateLimit(ip, rateLimitMap, RATE_LIMIT_MAX_PER_IP);
+  if (!rateLimitOk) {
+    return jsonResponse({ error: 'Too many requests. Try again in a minute.' }, 429, req);
   }
 
   const rawPhone = body?.phone != null ? String(body.phone) : '';
@@ -94,57 +172,56 @@ Deno.serve(async (req) => {
     );
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!supabaseUrl || !serviceRoleKey) {
+  const supabase = await createSupabaseAdmin();
+  if (!supabase) {
     return jsonResponse({ error: 'Server configuration error' }, 503, req);
   }
 
-  const { createClient } = await import('npm:@supabase/supabase-js@2');
-  const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const email = await lookupEmailByPhone(supabase, normalized);
 
-  // Fast path: use RPC get_email_by_phone (single query, no bulk fetch)
-  const { data: emailRpc, error: rpcError } = await supabase.rpc('get_email_by_phone', {
-    p_phone: normalized,
-  });
+  if (intent === 'driver_signin') {
+    if (!email) {
+      return jsonResponse(
+        { error: 'no_account', message: 'No driver account found for this phone number.' },
+        404,
+        req,
+      );
+    }
 
-  if (!rpcError && emailRpc != null && typeof emailRpc === 'string' && emailRpc.trim() !== '') {
-    const email = emailRpc.trim();
+    const anon = await createSupabaseAnon();
+    const session = await exchangeMagicLinkForSession(
+      supabase,
+      email,
+      'check-user-by-phone',
+      anon ? { verifyClient: anon } : undefined,
+    );
+    if (session) {
+      return jsonResponse({ email, session }, 200, req);
+    }
+
+    // Fallback: let the client exchange the hashed token (same pattern as link-driver-phone).
+    const magicLinkToken = await generateDriverMagicLinkToken(
+      supabase,
+      email,
+      'check-user-by-phone',
+    );
+    if (magicLinkToken) {
+      return jsonResponse({ email, magicLinkToken }, 200, req);
+    }
+
+    return jsonResponse(
+      { error: 'Could not complete sign in', message: 'Sign-in session could not be created.' },
+      502,
+      req,
+    );
+  }
+
+  if (email) {
     return jsonResponse(
       { exists: true, email, masked_email: maskEmail(email) },
       200,
-      req
+      req,
     );
-  }
-  if (!rpcError) {
-    return jsonResponse({ exists: false }, 200, req);
-  }
-
-  // Fallback: RPC may not exist (old DB) — fetch profiles and normalize in JS
-  const { data: rows, error } = await supabase
-    .from('profiles')
-    .select('id, email, phone')
-    .not('phone', 'is', null)
-    .limit(10_000);
-
-  if (error) {
-    console.warn('[check-user-by-phone] lookup failed:', error.message);
-    return jsonResponse({ error: 'Lookup failed', detail: error.message }, 502, req);
-  }
-
-  const list = Array.isArray(rows) ? rows : [];
-  for (const row of list) {
-    const stored = row?.phone != null ? String(row.phone) : '';
-    const storedTen = toTenDigits(stored);
-    if (storedTen === normalized) {
-      const email = (row?.email != null ? String(row.email) : '').trim();
-      if (!email) continue;
-      return jsonResponse(
-        { exists: true, email, masked_email: maskEmail(email) },
-        200,
-        req
-      );
-    }
   }
 
   return jsonResponse({ exists: false }, 200, req);

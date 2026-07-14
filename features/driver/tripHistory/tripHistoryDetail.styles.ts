@@ -1,15 +1,21 @@
 import { Platform, StyleSheet } from "react-native";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
+import { withWebSafeShadows } from "@/lib/platformViewStyle.util";
 
 const DETAIL_REF = {
   pageBg: "#ffffff",
   headerTitle: "#18181b",
 } as const;
 
-export const tripHistoryDetailStyles = StyleSheet.create({
+export const tripHistoryDetailStyles = withWebSafeShadows(
+  StyleSheet.create({
   detailWrap: {
     flex: 1,
+    // Allow ScrollView to shrink below content height so it can scroll
+    // (html/body/#root use overflow:hidden on web — see lib/htmlShell.ts).
+    minHeight: 0,
+    width: "100%",
     backgroundColor: DETAIL_REF.pageBg,
   },
   detailLoading: {
@@ -23,6 +29,7 @@ export const tripHistoryDetailStyles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: 1,
     gap: 10,
+    flexShrink: 0,
   },
   detailHeaderStyled: {
     shadowColor: "#000",
@@ -938,11 +945,19 @@ export const tripHistoryDetailStyles = StyleSheet.create({
   },
   detailScrollRef: {
     flex: 1,
+    minHeight: 0,
+    width: "100%",
     backgroundColor: DETAIL_REF.pageBg,
+    ...Platform.select({
+      web: { height: "100%" as unknown as number },
+      default: {},
+    }),
   },
   detailContentRef: {
     paddingTop: 12,
     paddingBottom: 72,
     paddingHorizontal: Layout.screenPaddingHorizontal,
+    flexGrow: 0,
   },
-});
+}),
+);

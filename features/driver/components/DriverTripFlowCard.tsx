@@ -168,6 +168,8 @@ export interface DriverTripFlowCardProps {
   driverLocationLabel?: string | null;
   /** Called after any server write succeeds (so dashboard can refetch). */
   onRefresh?: () => void;
+  /** Optimistic patch so parent trip list (guidance header) updates before refetch. */
+  onTripUpdated?: (trip: tripsService.TripRow) => void;
   /** Optional: collapse/expand toggle (UI only). */
   onToggleCollapse?: () => void;
   /** Optional: whether the card is currently collapsed (for chevron state + disabling actions). */
@@ -273,6 +275,7 @@ export function DriverTripFlowCard({
   driverLongitude = null,
   driverLocationLabel = null,
   onRefresh,
+  onTripUpdated,
   onToggleCollapse,
   collapsed = false,
   onBackToDashboard,
@@ -329,7 +332,21 @@ export function DriverTripFlowCard({
   useEffect(() => {
     setLocalTrip(trip);
     const derived = deriveDriverFlowStepFromTrip(trip);
-    setStep((prev) => (prev === 'lr' && derived === 'pickup' ? prev : derived));
+    setStep((prev) => {
+      // Keep LR sub-step while still on pickup status.
+      if (prev === 'lr' && derived === 'pickup') return prev;
+      // Don't regress past a locally confirmed advance when parent still has stale status.
+      const rank: Record<StepId, number> = {
+        accepted: 0,
+        pickup: 1,
+        lr: 2,
+        transit: 3,
+        reached: 4,
+        completed: 5,
+      };
+      if ((rank[prev] ?? 0) > (rank[derived] ?? 0)) return prev;
+      return derived;
+    });
   }, [trip]);
 
   const tripIsAggregate = useMemo(() => isAggregateTrip(localTrip), [localTrip]);
@@ -594,12 +611,14 @@ export function DriverTripFlowCard({
     setStepError(null);
     setStepLoading(true);
     setStep('pickup');
-    setLocalTrip((prev) => ({
-      ...prev,
+    const optimistic = {
+      ...localTrip,
       status: 'in_progress',
-      started_at: prev.started_at ?? now,
+      started_at: localTrip?.started_at ?? now,
       updated_at: now,
-    }));
+    };
+    setLocalTrip(optimistic);
+    onTripUpdated?.(optimistic);
     const { error, trip: updated } = await tripsService.updateTripStatus(id, {
       status: 'in_progress',
       started_at: localTrip?.started_at ?? now,
@@ -608,10 +627,15 @@ export function DriverTripFlowCard({
     if (error) {
       setStepError(error.message);
       setStep('accepted');
-      setLocalTrip((prev) => ({ ...prev, status: 'assigned' }));
+      const reverted = { ...localTrip, status: 'assigned' };
+      setLocalTrip(reverted);
+      onTripUpdated?.(reverted);
       return;
     }
-    if (updated) setLocalTrip(updated);
+    if (updated) {
+      setLocalTrip(updated);
+      onTripUpdated?.(updated);
+    }
     onRefresh?.();
   };
 
@@ -622,7 +646,9 @@ export function DriverTripFlowCard({
     setStepLoading(true);
     const now = new Date().toISOString();
     setStep('transit');
-    setLocalTrip((prev) => ({ ...prev, status: 'in_transit', updated_at: now }));
+    const optimistic = { ...localTrip, status: 'in_transit', updated_at: now };
+    setLocalTrip(optimistic);
+    onTripUpdated?.(optimistic);
     const { error, trip: updated } = await tripsService.updateTripStatus(id, {
       status: 'in_transit',
     });
@@ -630,9 +656,15 @@ export function DriverTripFlowCard({
     if (error) {
       setStepError(error.message);
       setStep('lr');
+      const reverted = { ...localTrip, status: 'in_progress', updated_at: localTrip.updated_at };
+      setLocalTrip(reverted);
+      onTripUpdated?.(reverted);
       return;
     }
-    if (updated) setLocalTrip(updated);
+    if (updated) {
+      setLocalTrip(updated);
+      onTripUpdated?.(updated);
+    }
     onRefresh?.();
   };
 
@@ -641,21 +673,31 @@ export function DriverTripFlowCard({
     if (!id || stepLoading) return;
     setStepError(null);
     setStepLoading(true);
+    const now = new Date().toISOString();
+    const optimistic = { ...localTrip, status: 'at_drop', updated_at: now };
+    setStep('reached');
+    setLocalTrip(optimistic);
+    onTripUpdated?.(optimistic);
     const { error, trip: updated } = await tripsService.updateTripStatus(id, { status: 'at_drop' });
     setStepLoading(false);
     if (error) {
       const isStatusCheckError = /trips_status_check|check constraint/i.test(error.message);
       if (isStatusCheckError) {
-        setStep('reached');
-        setLocalTrip((prev) => ({ ...prev, updated_at: new Date().toISOString() }));
+        // Constraint blocked write — keep reached UI so driver can still upload POD / retry.
         setStepError(null);
         return;
       }
+      setStep('transit');
+      const reverted = { ...localTrip, status: 'in_transit', updated_at: localTrip.updated_at };
+      setLocalTrip(reverted);
+      onTripUpdated?.(reverted);
       setStepError(error.message);
       return;
     }
-    setStep('reached');
-    if (updated) setLocalTrip(updated);
+    if (updated) {
+      setLocalTrip(updated);
+      onTripUpdated?.(updated);
+    }
     onRefresh?.();
   };
 
@@ -901,7 +943,14 @@ export function DriverTripFlowCard({
     setHoldProgress(0);
     setIsHolding(false);
     setStep('completed');
-    setLocalTrip((prev) => ({ ...prev, status: 'completed', completed_at: now, updated_at: now }));
+    const optimistic = {
+      ...localTrip,
+      status: 'completed',
+      completed_at: now,
+      updated_at: now,
+    };
+    setLocalTrip(optimistic);
+    onTripUpdated?.(optimistic);
     const { error, trip: updated } = await tripsService.updateTripStatus(id, {
       status: 'completed',
       completed_at: now,
@@ -909,9 +958,15 @@ export function DriverTripFlowCard({
     if (error) {
       setStepError(error.message);
       setStep('reached');
+      const reverted = { ...localTrip, status: 'at_drop' };
+      setLocalTrip(reverted);
+      onTripUpdated?.(reverted);
       return;
     }
-    if (updated) setLocalTrip(updated);
+    if (updated) {
+      setLocalTrip(updated);
+      onTripUpdated?.(updated);
+    }
     await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
     onTripCompleted?.();
   };

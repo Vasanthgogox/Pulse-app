@@ -65,6 +65,7 @@ export interface TripFuelEntry {
   reimbursement_notes?: string | null;
   approved_by: string | null;
   approved_at: string | null;
+  idempotency_key?: string | null;
 }
 
 export interface TripTollEntry {
@@ -96,6 +97,7 @@ export interface TripTollEntry {
   reimbursement_notes?: string | null;
   approved_by: string | null;
   approved_at: string | null;
+  idempotency_key?: string | null;
 }
 
 export interface SaveFuelEntryInput {

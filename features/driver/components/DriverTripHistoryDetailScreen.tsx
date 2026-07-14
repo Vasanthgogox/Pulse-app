@@ -16,6 +16,7 @@ import {
 } from "@/features/driver/utils/driverTripSequence.util";
 import { formatLedgerDateTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
+import { withWebSafeShadows } from "@/lib/platformViewStyle.util";
 import { getOptimalRoute } from "@/lib/routingService";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import * as driversService from "@/features/drivers/services/drivers.service";
@@ -501,7 +502,6 @@ export function DriverTripHistoryDetailScreen({
                       styles.tdStatusDot,
                       {
                         backgroundColor: colors.emerald,
-                        shadowColor: colors.emerald,
                       },
                     ]}
                   />
@@ -567,6 +567,9 @@ export function DriverTripHistoryDetailScreen({
                 },
               ]}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              bounces
             >
               <View style={styles.tdHeroOuter}>
                 <LinearGradient
@@ -576,11 +579,9 @@ export function DriverTripHistoryDetailScreen({
                   style={styles.tdHeroCard}
                 >
                   <View style={styles.tdHeroGlow} pointerEvents="none" />
-                  <Route
-                    size={128}
-                    color="rgba(255,255,255,0.08)"
-                    style={styles.tdHeroWatermark}
-                  />
+                  <View style={styles.tdHeroWatermark} pointerEvents="none">
+                    <Route size={128} color="rgba(255,255,255,0.08)" />
+                  </View>
                   <View style={styles.tdHeroInner}>
                     <Text style={styles.tdHeroKicker}>Route Logic History</Text>
                     <View style={styles.tdHeroRouteRow}>
@@ -1177,7 +1178,8 @@ export function DriverTripHistoryDetailScreen({
   );
 }
 
-const histAttrStyles = StyleSheet.create({
+const histAttrStyles = withWebSafeShadows(
+  StyleSheet.create({
   stickyWrap: {
     position: "absolute",
     left: Layout.screenPaddingHorizontal,
@@ -1236,5 +1238,6 @@ const histAttrStyles = StyleSheet.create({
     fontWeight: "600",
     color: "#b45309",
   },
-});
+  }),
+);
 

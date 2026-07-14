@@ -2,17 +2,12 @@
  * Finance empty-state / promo card (borderless, aligned with network grow banner).
  */
 import Theme from "@/constants/Theme";
-import { HubPromoHeroLottie } from "@/components/hub/HubPromoLottie";
+import { PartyAddChip, type PartyAddChipIcon } from "@/components/PartyAddChip";
 import {
   FINANCE_PROMO_PRESETS,
-  fitFinanceIllustration,
   type FinancePromoBullet,
   type FinancePromoVariant,
 } from "@/lib/financePromoAssets";
-import {
-  resolveFinancePromoHeroLottie,
-  resolveFinancePromoHeroVisualScale,
-} from "@/lib/financePromoLottieAssets";
 import { useEffect, useRef } from "react";
 import {
   Animated,
@@ -27,6 +22,14 @@ import {
 } from "react-native";
 
 const USE_NATIVE_DRIVER = Platform.OS !== "web";
+
+const PROMO_PARTY_ICON: Partial<Record<FinancePromoVariant, PartyAddChipIcon>> = {
+  customers: "building",
+  suppliers: "warehouse",
+  drivers: "user",
+  garage: "truck",
+  ledger: "receipt-text",
+};
 
 /** Subtle, staggered float + breathe so the bullet glyphs feel alive without distraction. */
 function AnimatedBulletIcon({
@@ -98,27 +101,19 @@ export function FinancePromoCard({
   style,
 }: FinancePromoCardProps) {
   const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   const preset = FINANCE_PROMO_PRESETS[variant];
-  const heroLottie = resolveFinancePromoHeroLottie(variant);
-  const heroRenderScale = resolveFinancePromoHeroVisualScale(variant);
   const isColumn = layout === "column";
-  const garageVisualBoost = variant === "garage" ? 1.22 : 1;
-  const illusBoxW = Math.round(
-    (isColumn ? 96 : width < 400 ? 108 : 124) * garageVisualBoost,
-  );
-  const illusBoxH = Math.round(
-    (isColumn ? 72 : width < 400 ? 88 : 100) * garageVisualBoost,
-  );
-  const illusSize = fitFinanceIllustration(illusBoxW, illusBoxH, preset.aspect);
 
   const resolvedTitle = title ?? preset.title;
   const resolvedDescription = description ?? preset.description;
   const resolvedCta = ctaLabel ?? preset.ctaLabel;
   const showCta = Boolean(onCtaPress && resolvedCta);
+  const showHeroTextAction = showCta && Boolean(resolvedCta);
 
   return (
     <View style={[styles.card, isColumn && styles.cardColumn, style]}>
-      <View style={[styles.cardBody, isColumn && styles.cardBodyColumn]}>
+      <View style={[styles.cardBody, isColumn && styles.cardBodyColumn, !isDesktop && !isColumn && showHeroTextAction && styles.cardBodyMobileStack]}>
         <View style={styles.textCol}>
           <Text style={[styles.title, isColumn && styles.titleColumn]}>
             {resolvedTitle}
@@ -146,16 +141,27 @@ export function FinancePromoCard({
             ))}
           </View>
         </View>
-        <View style={[styles.illusWrap, isColumn && styles.illusWrapColumn]}>
-          <HubPromoHeroLottie
-            source={heroLottie}
-            width={illusSize.width}
-            height={illusSize.height}
-            renderScale={heroRenderScale}
-          />
-        </View>
+        {showHeroTextAction ? (
+          <View
+            style={[
+              styles.heroTextAction,
+              isColumn && styles.heroTextActionColumn,
+              isDesktop && !isColumn && styles.heroTextActionDesktop,
+              !isDesktop && !isColumn && styles.heroTextActionMobile,
+            ]}
+          >
+            <PartyAddChip
+              label={resolvedCta ?? ""}
+              icon={PROMO_PARTY_ICON[variant]}
+              onPress={onCtaPress}
+              accessibilityLabel={resolvedCta}
+              align={!isDesktop || isColumn ? "start" : "end"}
+              fullWidth={!isDesktop}
+            />
+          </View>
+        ) : null}
       </View>
-      {showCta ? (
+      {showCta && !showHeroTextAction ? (
         <>
           <View style={styles.divider} />
           <Pressable
@@ -187,7 +193,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    gap: 16,
     paddingHorizontal: 16,
     paddingVertical: 18,
     minHeight: 132,
@@ -199,6 +205,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minHeight: 0,
     gap: 10,
+  },
+  cardBodyMobileStack: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 12,
+    minHeight: 0,
+    paddingVertical: 16,
   },
   textCol: {
     flex: 1,
@@ -267,18 +280,29 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 12,
   },
-  illusWrap: {
-    width: 112,
-    height: 96,
-    alignItems: "center",
+  heroTextAction: {
+    alignItems: "flex-end",
     justifyContent: "center",
     flexShrink: 0,
-    overflow: "visible",
+    paddingLeft: 12,
   },
-  illusWrapColumn: {
-    width: "100%",
-    height: 76,
+  heroTextActionDesktop: {
+    paddingLeft: 20,
     alignSelf: "center",
+    justifyContent: "center",
+  },
+  heroTextActionColumn: {
+    alignItems: "flex-start",
+    paddingLeft: 0,
+    paddingTop: 8,
+    alignSelf: "stretch",
+  },
+  heroTextActionMobile: {
+    alignItems: "stretch",
+    alignSelf: "stretch",
+    paddingLeft: 0,
+    paddingTop: 4,
+    width: "100%",
   },
   divider: {
     height: StyleSheet.hairlineWidth,

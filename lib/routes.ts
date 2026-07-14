@@ -42,6 +42,8 @@ export const ROUTES = {
   SIGN_IN: '/sign-in',
   /** Same as {@link ROUTES.SIGN_IN} — kept for existing call sites (logout, guards). */
   SIGN_IN_DIRECT: '/sign-in',
+  /** Phone + OTP entry for existing drivers — verifies number then redirects to {@link ROUTES.SIGN_IN} (email prefilled when known). */
+  DRIVER_SIGN_IN: '/driver-sign-in',
   /** Request a Supabase password reset email; allow-list `/auth/reset-password` on the same origin in Supabase Auth. */
   FORGOT_PASSWORD: '/forgot-password',
   /** Deep link / web URL target after user taps the reset link in email. */
@@ -118,7 +120,7 @@ export const ROUTES = {
     id: string,
     mode: "active" | "archive" = "active",
   ) => {
-    const q = new URLSearchParams({ kind, id, mode });
+    const q = new URLSearchParams({ kind, alertId: id, mode });
     return `/alert-detail?${q.toString()}` as const;
   },
 

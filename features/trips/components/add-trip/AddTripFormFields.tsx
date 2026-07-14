@@ -35,6 +35,13 @@ import {
   clientsToAvatarGridItems,
   clientsToWizardAvatarGridItems,
 } from "@/features/clients/utils/clientAvatarGridItems.util";
+import { ClientSaleKeypadFlow } from "@/features/trips/components/add-trip/ClientSaleKeypadFlow";
+import { CreateTripDesktopRouteStep } from "@/features/trips/components/add-trip/CreateTripDesktopRouteStep";
+import { CreateTripDesktopCommodityClientStep } from "@/features/trips/components/add-trip/CreateTripDesktopCommodityClientStep";
+import { CreateTripDesktopSaleStep } from "@/features/trips/components/add-trip/CreateTripDesktopSaleStep";
+import { CreateTripDesktopPartnerRatesSection } from "@/features/trips/components/add-trip/CreateTripDesktopPartnerRatesSection";
+import { CreateTripDesktopAggregateFields } from "@/features/trips/components/add-trip/CreateTripDesktopAggregateFields";
+import { createTripDesktopStyles } from "@/features/trips/components/add-trip/createTripDesktop.styles";
 import { TripPartnerPickerSection } from "@/features/trips/components/add-trip/TripPartnerPickerSection";
 import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
@@ -102,7 +109,6 @@ import { PartnerRatesKeypadFlow } from "@/features/trips/components/allocation/P
 import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/supplierNumericPartyPreview.util";
 import { useKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
-import { ClientSaleKeypadFlow } from "./ClientSaleKeypadFlow";
 import { DriverPhoneRecommendations } from "./DriverPhoneRecommendations";
 import { lookupDriversByPhoneVariants } from "@/features/trips/utils/driverPhoneLookup.util";
 import { LocationSearchField } from "./LocationSearchField";
@@ -192,6 +198,8 @@ export interface AddTripFormFieldsProps {
   enterpriseFormGrid?: boolean;
   /** Stepped mobile wizard — indent-style flat steps + shell scroll. */
   mobileWizardMode?: boolean;
+  /** Desktop overlay wizard — reference layout (CreateTripDesktopShell). */
+  desktopWizardChrome?: boolean;
   sourceIndent?: AddTripSourceIndent | null;
   /** Mobile allocation sub-step (one screen at a time). */
   allocationSubStep?: AllocationSubStep;
@@ -240,6 +248,7 @@ export function AddTripFormFields({
   wizardSection,
   enterpriseFormGrid = false,
   mobileWizardMode = false,
+  desktopWizardChrome = false,
   allocationSubStep,
   onAllocationSubStepChange,
   sourceIndent = null,
@@ -305,7 +314,7 @@ export function AddTripFormFields({
     (wizardSection == null && desktopFormGrid);
   const showClientPickerOnly = isMergedCommodityClient;
   const showClientSaleOnly = wizardSection === "sale";
-  const hideWizardCardHead = wizardSection != null;
+  const hideWizardCardHead = wizardSection != null || desktopWizardChrome;
   const hideTonsOnRouteStep = wizardSection === "route";
   const showAllocationCard =
     wizardSection == null || wizardSection === "allocation";
@@ -347,19 +356,22 @@ export function AddTripFormFields({
     isAggregateMobileWizard &&
     (aggregateTrackingStep != null || allocationSubStep === "rates");
   /** Keypad steps: flex column in modal body (footer stays below; no ScrollView overlap). */
-  const isWizardSaleKeypad = wizardSection === "sale";
+  const isWizardSaleKeypad = wizardSection === "sale" && !desktopWizardChrome;
   const allocationFillBody =
-    mobileAllocWizard && allocKeypadFullscreen && isWizardAllocationCard;
+    mobileAllocWizard && allocKeypadFullscreen && isWizardAllocationCard && !desktopWizardChrome;
   /** Sale + allocation keypad steps — flex column in modal body. */
   const wizardKeypadFill =
     (wizardSection != null && isWizardSaleKeypad) || allocationFillBody;
   /** Keypad-only steps use fillBody; entity pickers scroll in the shell. */
   const allocationShellFill = allocationFillBody;
-  /** Shell owns scroll on mobile wizard + desktop enterprise (matches Create Load). */
+  /** Shell owns scroll — desktop stepped wizard uses CreateTripDesktopShell scroll (no nested ScrollView). */
   const wizardShellScroll =
+    desktopWizardChrome ||
     mobileWizardMode ||
     desktopFormGrid ||
     (wizardSection != null && !wizardKeypadFill);
+  const desktopAllocFill =
+    desktopWizardChrome && isWizardAllocationCard;
   /** Unified attribution-style labels/inputs on mobile wizard + stepped sections. */
   const isWizardTypography =
     (mobileWizardMode || wizardSection != null) && !wizardKeypadFill;
@@ -881,6 +893,39 @@ export function AddTripFormFields({
     !state.assignLater &&
     !fleetLoading &&
     availableDrivers.length === 0;
+  const busyFleetHintVehicle =
+    supplyIsAsset &&
+    !state.assignLater &&
+    !fleetLoading &&
+    availableVehicles.length === 0;
+  const assetFleetWarningLines = useMemo(() => {
+    if (!supplyIsAsset || state.assignLater || fleetLoading) return [];
+    const lines: string[] = [];
+    if (busyFleetHintAsset) {
+      lines.push(
+        drivers.length === 0
+          ? "No drivers yet — add drivers from Resources first."
+          : "Some drivers are on active trips — pick an available driver or use Assign later.",
+      );
+    }
+    if (busyFleetHintVehicle) {
+      lines.push(
+        vehicles.length === 0
+          ? "No vehicles yet — add vehicles from Resources first."
+          : "Busy vehicles are on trip — pick an available vehicle or use Assign later.",
+      );
+    }
+    return lines;
+  }, [
+    supplyIsAsset,
+    state.assignLater,
+    fleetLoading,
+    busyFleetHintAsset,
+    busyFleetHintVehicle,
+    drivers.length,
+    vehicles.length,
+  ]);
+  const desktopFleetGridMaxHeight = desktopAllocFill ? 280 : 360;
 
   const aggregateDriverFoundByPhone =
     !!(state.driverPhoneName && state.driverPhone.trim());
@@ -1085,7 +1130,13 @@ export function AddTripFormFields({
   ]);
 
   return (
-    <View style={[styles.pageWrap, wizardKeypadFill && styles.pageWrapFill]}>
+    <View
+      style={[
+        styles.pageWrap,
+        (wizardKeypadFill || desktopAllocFill) && styles.pageWrapFill,
+        desktopWizardChrome && styles.pageWrapDesktopWizard,
+      ]}
+    >
       <WizardFormBody
         shellScroll={wizardShellScroll}
         contentContainerStyle={[
@@ -1133,7 +1184,7 @@ export function AddTripFormFields({
         <View
           style={[
             styles.contentMax,
-            wizardKeypadFill && styles.contentMaxFill,
+            (wizardKeypadFill || desktopAllocFill) && styles.contentMaxFill,
             {
               maxWidth: desktopFormGrid
                 ? desktopFormMaxWidth
@@ -1153,16 +1204,30 @@ export function AddTripFormFields({
             },
           ]}
         >
-          <View style={[styles.mainGrid, wizardKeypadFill && styles.mainGridFill]}>
+          <View
+            style={[
+              styles.mainGrid,
+              (wizardKeypadFill || desktopAllocFill) && styles.mainGridFill,
+            ]}
+          >
             <View
               style={[
                 styles.formColumn,
                 desktopFormGrid && styles.formColumnGridWeb,
-                wizardKeypadFill && styles.formColumnFill,
+                (wizardKeypadFill || desktopAllocFill) && styles.formColumnFill,
               ]}
             >
           {/* 01 Route */}
           {showRouteCard ? (
+            desktopWizardChrome && isWizardRouteStep ? (
+              <CreateTripDesktopRouteStep
+                state={state}
+                setters={setters}
+                fieldInvalid={invalid}
+                onPickupDropdownOpenChange={setPickupDropdownOpen}
+                onDropDropdownOpenChange={setDropDropdownOpen}
+              />
+            ) : (
             <View
               style={[
                 isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
@@ -1699,6 +1764,7 @@ export function AddTripFormFields({
               </View>
             ) : null}
           </View>
+            )
           ) : null}
 
           {showCommodityCard ? (
@@ -1766,6 +1832,30 @@ export function AddTripFormFields({
 
           {/* 02 Commodity & Client — indent-style merge (desktop col2 + mobile wizard step) */}
           {showCommodityClientCard ? (
+            desktopWizardChrome ? (
+              <CreateTripDesktopCommodityClientStep
+                vehicleType={state.vehicleType}
+                loadType={state.loadType}
+                tons={state.tons}
+                onVehicleTypeChange={setters.setVehicleType}
+                onLoadTypeChange={setters.setLoadType}
+                onTonsChange={setters.setTons}
+                vehicleTypeError={invalid("vehicleType")}
+                loadTypeError={invalid("loadType")}
+                tonsError={invalid("tons")}
+                indentVehicleType={sourceIndent?.vehicle_type}
+                indentLoadType={sourceIndent?.load_type}
+                clients={clients}
+                clientsLoading={clientsLoading}
+                clientId={state.clientId}
+                clientListExpanded={clientListExpanded}
+                setClientListExpanded={setClientListExpanded}
+                onSelectClient={handleSelectClient}
+                onAddClient={handleAddClientShortcut}
+                clientError={invalid("client")}
+              />
+            ) : (
+            <View style={desktopWizardChrome ? createTripDesktopStyles.nonRouteStepWrap : undefined}>
             <View
               style={[
                 isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
@@ -1773,6 +1863,7 @@ export function AddTripFormFields({
                 desktopFormGrid && styles.cardDesktopEnterprise,
                 desktopFormGrid && styles.cardDesktopStretch,
                 desktopFormGrid && styles.cardGridCommodityClientWeb,
+                desktopWizardChrome && fullPageWizardStyles.wizardStepContentFlat,
               ]}
             >
               {!hideWizardCardHead ? (
@@ -1841,6 +1932,8 @@ export function AddTripFormFields({
                 />
               </View>
             </View>
+            </View>
+            )
           ) : null}
 
           {/* 03 Client & Commercials (legacy narrow desktop — commodity separate) */}
@@ -2022,7 +2115,16 @@ export function AddTripFormFields({
 
           {/* 03 Sale — indent-style full-width row (desktop enterprise grid) */}
           {showSaleCard ? (
-            isWizardSaleKeypad ? (
+            desktopWizardChrome ? (
+              <CreateTripDesktopSaleStep
+                clientPrice={state.clientPrice}
+                onClientPriceChange={(v) => setters.setClientPrice(v)}
+                selectedClient={selectedClientRow}
+                priceError={invalid("clientPrice")}
+              />
+            ) : (
+            <View style={desktopWizardChrome ? createTripDesktopStyles.nonRouteStepWrap : undefined}>
+            {isWizardSaleKeypad ? (
               <ClientSaleKeypadFlow
                 clientPrice={state.clientPrice}
                 onClientPriceChange={(v) => setters.setClientPrice(v)}
@@ -2089,23 +2191,32 @@ export function AddTripFormFields({
                 </View>
               </View>
             )
+            }
+            </View>
+            )
           ) : null}
 
           {/* 04 Supply & Allocation */}
           {showAllocationCard ? (
-            mobileAllocWizard && isWizardAllocationCard ? (
+            <>
+            {mobileAllocWizard && isWizardAllocationCard ? (
             <AllocationMobileWizardShell
               progressSteps={allocationWizardProgressSteps}
               currentStepId={allocationSubStep ?? "supply"}
               fillBody={allocationShellFill}
+              desktop={desktopWizardChrome}
             >
             <View
               style={
                 allocationFillBody
                   ? styles.allocationKeypadBody
-                  : showAssetFleetOnSupply
-                    ? styles.allocationPickerBody
-                    : styles.allocationStepBody
+                  : desktopAllocFill
+                    ? createTripDesktopStyles.allocationStepBody
+                    : desktopWizardChrome
+                      ? createTripDesktopStyles.stepBody
+                      : showAssetFleetOnSupply
+                        ? styles.allocationPickerBody
+                        : styles.allocationStepBody
               }
             >
             {allocationContextRow ? (
@@ -2120,11 +2231,12 @@ export function AddTripFormFields({
             ) : null}
 
             {showAlloc("supply") ? (
-            <>
+            <View style={desktopAllocFill ? createTripDesktopStyles.allocationToolbar : undefined}>
             <SupplyAllocationModeBar
               mode={supplyIsAsset ? "asset" : "aggregate"}
               variant="wizard"
               compact={isCompactMobile}
+              layout={desktopAllocFill ? "inline" : "stack"}
               assignLater={state.assignLater}
               assignLaterDisabled={assignLaterSwitchDisabled}
               onModeChange={(mode) => setters.setSupplySource(mode)}
@@ -2158,12 +2270,26 @@ export function AddTripFormFields({
                 listMaxHeight={300}
               />
             ) : null}
-            </>
+            </View>
             ) : null}
 
             {supplyIsAsset && showAssetFleetOnSupply ? (
-              <>
-                {busyFleetHintAsset ? (
+              <View
+                style={
+                  desktopAllocFill
+                    ? createTripDesktopStyles.allocationFleetPanel
+                    : styles.allocationFleetStack
+                }
+              >
+                {desktopAllocFill && assetFleetWarningLines.length > 0 ? (
+                  <View style={createTripDesktopStyles.allocationWarnCompact}>
+                    <AlertCircle size={13} color={Theme.warning} />
+                    <Text style={createTripDesktopStyles.allocationWarnCompactText}>
+                      {assetFleetWarningLines.join(" ")}
+                    </Text>
+                  </View>
+                ) : null}
+                {!desktopAllocFill && busyFleetHintAsset ? (
                   <View style={styles.warnBanner}>
                     <AlertCircle size={14} color={Theme.warning} />
                     <Text style={styles.warnBannerText}>
@@ -2173,12 +2299,132 @@ export function AddTripFormFields({
                     </Text>
                   </View>
                 ) : null}
+                {!desktopAllocFill &&
+                !state.assignLater &&
+                busyFleetHintVehicle ? (
+                  <View style={styles.warnBanner}>
+                    <AlertCircle size={14} color={Theme.warning} />
+                    <Text style={styles.warnBannerText}>
+                      {vehicles.length === 0
+                        ? "No vehicles yet. Add vehicles from Vehicles first."
+                        : "Vehicles marked 'On trip' are currently busy. Choose an available vehicle or use Assign later."}
+                    </Text>
+                  </View>
+                ) : null}
                 {fleetLoading ? (
-                  <ActivityIndicator color={Theme.iconPrimary} />
+                  <ActivityIndicator color={Theme.iconPrimary} style={styles.allocationFleetLoading} />
+                ) : desktopWizardChrome ? (
+                  <View style={createTripDesktopStyles.allocationColumns}>
+                    <View style={createTripDesktopStyles.allocationColumn}>
+                      {showDriverFleetSummary && selectedDriverRow && !allocationContextRow?.right ? (
+                        <View style={styles.allocationFleetSummary}>
+                          <WizardEntitySummaryCard
+                            label="Driver"
+                            name={selectedDriverRow.name ?? "Driver"}
+                            subtitle={[selectedDriverRow.phone, selectedDriverRow.email]
+                              .filter(Boolean)
+                              .join(" · ")}
+                            entityType="driver"
+                            avatarUrl={
+                              (selectedDriverRow as { avatar_url?: string | null })
+                                .avatar_url ?? null
+                            }
+                            avatarSeed={
+                              (selectedDriverRow as { avatar_seed?: string | null })
+                                .avatar_seed ?? null
+                            }
+                            onPress={() => setDriverListExpanded(true)}
+                          />
+                        </View>
+                      ) : null}
+                      {showDriverFleetList ? (
+                        <AssignmentEntityAvatarGrid
+                          title="Select Driver"
+                          variant="wizard"
+                          embedded
+                          totalCount={driverOptions.length}
+                          errorOutline={invalid("assetDriver")}
+                          selectedId={state.driverId}
+                          onSelect={(id) => {
+                            const row = driverOptions.find((d) => d.id === id);
+                            if (row?.isBusy) return;
+                            const newId = state.driverId === id ? null : id;
+                            const dr = newId ? drivers.find((d) => d.id === newId) : null;
+                            setters.setDriver(newId, dr?.commission_percent ?? null, dr?.commission_per_km ?? null);
+                            setDriverListExpanded(false);
+                          }}
+                          items={driverAvatarGridItems}
+                          emptyMessage="No drivers added yet. Add a driver to continue."
+                          emptyActionLabel="Add driver"
+                          onEmptyAction={handleAddDriverShortcut}
+                          headerActionLabel="Add driver"
+                          onHeaderAction={handleAddDriverShortcut}
+                          footerHint={
+                            !state.driverId ? "Choose an available driver" : undefined
+                          }
+                          scrollMaxHeight={desktopFleetGridMaxHeight}
+                        />
+                      ) : null}
+                    </View>
+                    <View style={createTripDesktopStyles.allocationColumn}>
+                      {showVehicleFleetSummary && selectedVehicleRow ? (
+                        <View style={styles.allocationFleetSummary}>
+                          <WizardEntitySummaryCard
+                            label="Vehicle"
+                            name={
+                              formatIndianVehicleNumber(
+                                selectedVehicleRow.vehicle_number || "",
+                              ) || "—"
+                            }
+                            subtitle={[
+                              selectedVehicleRow.vehicle_body_type ||
+                                selectedVehicleRow.vehicle_type,
+                              [
+                                selectedVehicleRow.vehicle_size,
+                                selectedVehicleRow.vehicle_axle,
+                              ]
+                                .filter(Boolean)
+                                .join(" "),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                            entityType="driver"
+                            onPress={() => setVehicleListExpanded(true)}
+                          />
+                        </View>
+                      ) : null}
+                      {showVehicleFleetList ? (
+                        <AssignmentEntityAvatarGrid
+                          title="Select Vehicle"
+                          variant="wizard"
+                          embedded
+                          totalCount={vehicleOptions.length}
+                          errorOutline={invalid("assetVehicle")}
+                          selectedId={state.vehicleId}
+                          onSelect={(id) => {
+                            const row = vehicleOptions.find((v) => v.id === id);
+                            if (row?.isBusy) return;
+                            setters.setVehicleId(state.vehicleId === id ? null : id);
+                            setVehicleListExpanded(false);
+                          }}
+                          items={vehicleAvatarGridItems}
+                          emptyMessage="No vehicles added yet. Add a vehicle to continue."
+                          emptyActionLabel="Add vehicle"
+                          onEmptyAction={handleAddVehicleShortcut}
+                          headerActionLabel="Add vehicle"
+                          onHeaderAction={handleAddVehicleShortcut}
+                          footerHint={
+                            !state.vehicleId ? "Choose an available vehicle" : undefined
+                          }
+                          scrollMaxHeight={desktopFleetGridMaxHeight}
+                        />
+                      ) : null}
+                    </View>
+                  </View>
                 ) : (
                   <>
                     {showDriverFleetSummary && selectedDriverRow && !allocationContextRow?.right ? (
-                      <View style={{ marginBottom: 10 }}>
+                      <View style={styles.allocationFleetSummary}>
                         <WizardEntitySummaryCard
                           label="Driver"
                           name={selectedDriverRow.name ?? "Driver"}
@@ -2226,31 +2472,8 @@ export function AddTripFormFields({
                         scrollMaxHeight={320}
                       />
                     ) : null}
-                  </>
-                )}
-              </>
-            ) : null}
-
-            {supplyIsAsset && showAssetFleetOnSupply ? (
-              <>
-                {!state.assignLater &&
-                availableVehicles.length === 0 &&
-                !fleetLoading ? (
-                  <View style={styles.warnBanner}>
-                    <AlertCircle size={14} color={Theme.warning} />
-                    <Text style={styles.warnBannerText}>
-                      {vehicles.length === 0
-                        ? "No vehicles yet. Add vehicles from Vehicles first."
-                        : "Vehicles marked 'On trip' are currently busy. Choose an available vehicle or use Assign later."}
-                    </Text>
-                  </View>
-                ) : null}
-                {fleetLoading ? (
-                  <ActivityIndicator color={Theme.iconPrimary} />
-                ) : (
-                  <>
                     {showVehicleFleetSummary && selectedVehicleRow ? (
-                      <View style={{ marginBottom: 10 }}>
+                      <View style={styles.allocationFleetSummary}>
                         <WizardEntitySummaryCard
                           label="Vehicle"
                           name={
@@ -2303,10 +2526,36 @@ export function AddTripFormFields({
                     ) : null}
                   </>
                 )}
-              </>
+              </View>
             ) : null}
 
-            {showAlloc("rates") ? (
+            {(showAlloc("rates") ||
+              (desktopWizardChrome &&
+                state.supplySource === "aggregate" &&
+                Boolean(state.supplierId))) &&
+            !(
+              state.supplySource === "aggregate" &&
+              !state.assignLater &&
+              desktopWizardChrome &&
+              isWizardAllocationCard &&
+              Boolean(state.supplierId)
+            ) ? (
+              desktopWizardChrome ? (
+                <CreateTripDesktopPartnerRatesSection
+                  partnerRate={state.supplierRate}
+                  onPartnerRateChange={(v) => setters.setSupplierRate(v)}
+                  advancePaid={state.advancePaid}
+                  onAdvancePaidChange={(v) => setters.setAdvancePaid(v)}
+                  partyPreview={
+                    selectedSupplierRow
+                      ? supplierToNumericPartyPreview(selectedSupplierRow)
+                      : undefined
+                  }
+                  suppressPartyPreview={Boolean(allocationContextRow?.right)}
+                  rateError={invalid("partnerRate")}
+                  advanceError={invalid("advancePaid")}
+                />
+              ) : (
               <PartnerRatesKeypadFlow
                 partnerRate={state.supplierRate}
                 onPartnerRateChange={(v) => setters.setSupplierRate(v)}
@@ -2320,9 +2569,45 @@ export function AddTripFormFields({
                 suppressPartyPreview={Boolean(allocationContextRow?.right)}
                 wizardShell
               />
+              )
             ) : null}
 
-            {aggregateTrackingStep ? (
+            {state.supplySource === "aggregate" &&
+            !state.assignLater &&
+            desktopWizardChrome &&
+            isWizardAllocationCard &&
+            Boolean(state.supplierId) ? (
+              <CreateTripDesktopAggregateFields
+                partnerRate={state.supplierRate}
+                onPartnerRateChange={(v) => setters.setSupplierRate(v)}
+                advancePaid={state.advancePaid}
+                onAdvancePaidChange={(v) => setters.setAdvancePaid(v)}
+                partyPreview={
+                  selectedSupplierRow
+                    ? supplierToNumericPartyPreview(selectedSupplierRow)
+                    : undefined
+                }
+                suppressPartyPreview={Boolean(allocationContextRow?.right)}
+                rateError={invalid("partnerRate")}
+                advanceError={invalid("advancePaid")}
+                driverName={state.aggregateDriverName}
+                onDriverNameChange={(t) =>
+                  onPadValueChange(setters.setAggregateDriverName, t)
+                }
+                driverPhone={state.driverPhone}
+                onDriverPhoneChange={(v) =>
+                  setters.setDriverPhone(formatMobileNumber(v))
+                }
+                vehicleText={state.aggregateVehicleText}
+                onVehicleTextChange={(v) => setters.setAggregateVehicleText(v)}
+                invalid={invalid}
+                driverPhoneMatches={driverPhoneMatches}
+                driverPhoneLookupLoading={driverPhoneLookupLoading}
+                selectedDriverMatchId={selectedDriverMatchId}
+                onSelectDriverMatch={applyDriverPhoneMatch}
+                driverPhoneInTrip={state.driverPhoneTripConflict}
+              />
+            ) : aggregateTrackingStep ? (
               <AggregateTrackingMobileStep
                 step={aggregateTrackingStep}
                 driverName={state.aggregateDriverName}
@@ -3068,13 +3353,14 @@ export function AddTripFormFields({
                   </View>
                 ) : null}
                 </View>
-                  </View>
-                  ) : null}
-                  </View>
-                </View>
-            )}
+              </View>
+            ) : null}
+          </View>
+        </View>
+      )}
             </View>
-            )
+            )}
+            </>
           ) : null}
 
           {showInlineCta ? (
@@ -3167,8 +3453,12 @@ export function AddTripFormFields({
         </View>
       </Modal>
 
-      <View style={styles.blobA} pointerEvents="none" />
-      <View style={styles.blobB} pointerEvents="none" />
+      {!desktopWizardChrome ? (
+        <>
+          <View style={styles.blobA} pointerEvents="none" />
+          <View style={styles.blobB} pointerEvents="none" />
+        </>
+      ) : null}
     </View>
   );
 }
@@ -3182,6 +3472,11 @@ const styles = StyleSheet.create({
   pageWrapFill: {
     flex: 1,
     minHeight: 0,
+  },
+  pageWrapDesktopWizard: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: Theme.cardWhite,
   },
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: {
@@ -3212,7 +3507,18 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     width: "100%",
     minHeight: 0,
-    gap: 12,
+    gap: 16,
+  },
+  allocationFleetStack: {
+    width: "100%",
+    gap: 20,
+  },
+  allocationFleetSummary: {
+    marginBottom: 2,
+  },
+  allocationFleetLoading: {
+    alignSelf: "center",
+    paddingVertical: 16,
   },
   contentMax: {
     width: "100%",

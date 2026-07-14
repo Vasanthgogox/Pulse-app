@@ -2,11 +2,12 @@
 
 Checks if a phone number is already registered (in `public.profiles`). Used before sign-up so existing users are redirected to sign-in with email prefilled.
 
-- **Auth:** None required (called before sign-up).
-- **Rate limit:** 30 requests per IP per minute.
-- **Body:** `{ "phone": "9876543210" }` (10 digits or +91 + 10 digits; normalized server-side).
-- **Response:** `{ "exists": true, "email": "user@gmail.com", "masked_email": "us***@gmail.com" }` or `{ "exists": false }`.
+- **Auth:** None required (called before sign-up / driver sign-in).
+- **Rate limit:** 30 requests per IP per minute (`exists_check`); 10/min for `driver_signin`.
+- **Body:** `{ "phone": "9876543210" }` or `{ "phone": "9876543210", "intent": "driver_signin" }`.
+- **Response (exists check):** `{ "exists": true, "email": "user@gmail.com", "masked_email": "us***@gmail.com" }` or `{ "exists": false }`.
+- **Response (driver sign-in):** `{ "email": "user@gmail.com", "session": { "access_token": "...", "refresh_token": "..." } }` (magic link exchanged server-side).
 
 Deploy: `supabase functions deploy check-user-by-phone`
 
-**Scale:** This function currently loads profiles with non-null phone (up to 10k) and normalizes in JS. For large deployments, add in pulse-unified-base an RPC that normalizes phone and returns email (with an index on normalized phone), and switch this function to call that RPC. Also add `UNIQUE(phone)` (or unique on normalized phone) in pulse-unified-base so duplicate sign-ups are rejected at the DB.
+Driver sign-in uses `intent: "driver_signin"` on this function (already deployed) instead of the separate `driver-phone-signin-unverified` function.

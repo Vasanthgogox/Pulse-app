@@ -5,9 +5,14 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { FAB_ICON_ASSETS, type FABIconName } from "@/lib/fabIconAssets";
+import {
+  FAB_ICON_ASSETS,
+  PARTY_FAB_ADD_LABELS,
+  type FABIconName,
+} from "@/lib/fabIconAssets";
 import { resolveFabLottie } from "@/lib/fabLottieAssets";
 import { useGlobalFabAnimation } from "@/lib/hooks/useGlobalFabAnimation";
+import { PartyAddChip, type PartyAddChipIcon } from "@/components/PartyAddChip";
 import LottieView from "lottie-react-native";
 import {
   Building2,
@@ -48,6 +53,8 @@ export interface FinanceFABProps {
   style?: StyleProp<ViewStyle>;
   /** Optional larger visible action button size (default 56). */
   size?: number;
+  /** Visible add label (defaults from icon for party adds). */
+  label?: string;
 }
 
 function triggerHapticMedium() {
@@ -83,8 +90,24 @@ function getLucideIcon(name: FABIconName): LucideIcon {
   }
 }
 
-/** Lottie well diameter as a fraction of the FAB diameter. */
-const FAB_LOTTIE_WELL_RATIO = 0.78;
+/** Glyph diameter as a fraction of the FAB diameter (no inner chip). */
+const FAB_GLYPH_RATIO = 0.86;
+
+const PARTY_CHIP_ICONS = new Set<PartyAddChipIcon>([
+  "building",
+  "warehouse",
+  "truck",
+  "user",
+  "user-plus",
+  "receipt-text",
+]);
+
+function toPartyChipIcon(icon: FABIconName): PartyAddChipIcon {
+  if (PARTY_CHIP_ICONS.has(icon as PartyAddChipIcon)) {
+    return icon as PartyAddChipIcon;
+  }
+  return "building";
+}
 
 export function FinanceFAB({
   onPress,
@@ -95,6 +118,7 @@ export function FinanceFAB({
   testID,
   style,
   size = Layout.fabSize,
+  label,
 }: FinanceFABProps) {
   const { shellStyle, ringStyle } = useGlobalFabAnimation();
   const pressScale = React.useRef(new RNAnimated.Value(1)).current;
@@ -125,104 +149,66 @@ export function FinanceFAB({
   const assetGlyph = FAB_ICON_ASSETS[icon];
   const IconComponent = getLucideIcon(icon);
   const lottieGlyph = resolveFabLottie(icon);
-  const shouldShowPlus = showPlusSuffix && icon !== "plus";
+  const partyAddLabel = label ?? PARTY_FAB_ADD_LABELS[icon];
+  const useTextGlyph = Boolean(partyAddLabel);
+  const shouldShowPlus =
+    showPlusSuffix && icon !== "plus" && !useTextGlyph;
 
   const MainIcon = icon === "receipt-text" || icon === "credit-card" ? Receipt : IconComponent;
-  const useLottieGlyph = Boolean(lottieGlyph);
-  const useSvgGlyph = !useLottieGlyph && Boolean(assetGlyph);
-  const useGlyphChrome = useLottieGlyph || useSvgGlyph;
+  const useIllustrationGlyph = !useTextGlyph && Boolean(assetGlyph);
+  const useLottieGlyph =
+    !useTextGlyph && !useIllustrationGlyph && Boolean(lottieGlyph);
+  const useGlyphChrome =
+    useTextGlyph || useIllustrationGlyph || useLottieGlyph;
 
-  const chipSize = Math.round(size * 0.56);
+  const glyphSize = Math.round(size * FAB_GLYPH_RATIO);
   const assetGlyphSize = Math.round(
-    chipSize * (assetGlyph?.glyphScale ?? 0.74),
+    glyphSize * (assetGlyph?.glyphScale ?? 0.88),
   );
-  const lottieWellSize = Math.round(size * FAB_LOTTIE_WELL_RATIO);
   const lottieRenderSize = lottieGlyph
-    ? Math.round(lottieWellSize * lottieGlyph.renderScale)
+    ? Math.round(glyphSize * lottieGlyph.renderScale)
     : 0;
 
-  const mainGlyph = lottieGlyph ? (
-    <View
-      style={[
-        styles.lottieWell,
-        {
-          width: lottieWellSize,
-          height: lottieWellSize,
-          borderRadius: lottieWellSize / 2,
-        },
-      ]}
-    >
-      <LottieView
-        source={lottieGlyph.source}
-        autoPlay
-        loop
-        speed={0.9}
-        resizeMode="contain"
-        style={{
-          width: lottieRenderSize,
-          height: lottieRenderSize,
-          position: "absolute",
-        }}
-      />
-    </View>
-  ) : assetGlyph ? (
-    <View
-      style={[
-        styles.assetChip,
-        {
-          width: chipSize,
-          height: chipSize,
-          borderRadius: chipSize / 2,
-        },
-      ]}
-    >
-      <assetGlyph.Asset width={assetGlyphSize} height={assetGlyphSize} />
-    </View>
+  const mainGlyph = useTextGlyph ? null : useIllustrationGlyph && assetGlyph ? (
+    <assetGlyph.Asset width={assetGlyphSize} height={assetGlyphSize} />
+  ) : useLottieGlyph && lottieGlyph ? (
+    <LottieView
+      source={lottieGlyph.source}
+      autoPlay
+      loop
+      speed={0.9}
+      resizeMode="contain"
+      style={{
+        width: lottieRenderSize,
+        height: lottieRenderSize,
+      }}
+    />
   ) : (
     <MainIcon size={Math.max(18, iconSize)} color={fabIconColor} strokeWidth={2.4} />
   );
 
-  if (useGlyphChrome) {
+  const shellWidth = useTextGlyph ? undefined : size;
+  const shellHeight = useTextGlyph ? undefined : size;
+
+  if (useTextGlyph && partyAddLabel) {
     return (
       <Reanimated.View
         style={[
-          styles.container,
-          styles.containerGlyph,
-          { width: size, height: size },
+          styles.containerPartyChip,
           style,
           shellStyle,
           pe("box-none"),
         ]}
       >
-        <TouchableOpacity
-          testID={testID}
+        <PartyAddChip
+          label={partyAddLabel}
+          icon={toPartyChipIcon(icon)}
           onPress={handlePress}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          activeOpacity={0.92}
           accessibilityLabel={accessibilityLabel}
-        >
-          <RNAnimated.View
-            style={[
-              styles.glyphFabShell,
-              {
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                transform: [{ scale: pressScale }],
-              },
-            ]}
-          >
-            {mainGlyph}
-            {shouldShowPlus ? (
-              <View style={styles.glyphAddBadge}>
-                <View style={styles.glyphAddBadgeInner}>
-                  <Plus size={11} color={Theme.brandBlueInk} strokeWidth={3} />
-                </View>
-              </View>
-            ) : null}
-          </RNAnimated.View>
-        </TouchableOpacity>
+          expandOnHover
+          align="end"
+          testID={testID}
+        />
       </Reanimated.View>
     );
   }
@@ -231,7 +217,10 @@ export function FinanceFAB({
     <Reanimated.View
       style={[
         styles.container,
-        { width: size, height: size },
+        useGlyphChrome && styles.containerGlyph,
+        shellWidth != null && shellHeight != null
+          ? { width: shellWidth, height: shellHeight }
+          : null,
         style,
         shellStyle,
         pe("box-none"),
@@ -242,36 +231,45 @@ export function FinanceFAB({
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        activeOpacity={0.9}
+        activeOpacity={useGlyphChrome ? 0.92 : 0.9}
         accessibilityLabel={accessibilityLabel}
       >
         <RNAnimated.View
           style={[
-            styles.fab,
+            useGlyphChrome ? styles.glyphFabShell : styles.fab,
+            shellWidth != null && shellHeight != null
+              ? {
+                  width: shellWidth,
+                  height: shellHeight,
+                  borderRadius: size / 2,
+                }
+              : null,
             {
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              backgroundColor: fabBgColor,
-              borderColor: Theme.cardWhite,
-              borderWidth: 2.5,
+              backgroundColor: useGlyphChrome ? "transparent" : fabBgColor,
               transform: [{ scale: pressScale }],
             },
           ]}
         >
-          <Reanimated.View
-            style={[
-              styles.innerRing,
-              {
-                width: size - 10,
-                height: size - 10,
-                borderRadius: (size - 10) / 2,
-              },
-              ringStyle,
-              pe("none"),
-            ]}
-          />
+          {!useGlyphChrome ? (
+            <Reanimated.View
+              style={[
+                styles.innerRing,
+                {
+                  width: size - 10,
+                  height: size - 10,
+                  borderRadius: (size - 10) / 2,
+                },
+                ringStyle,
+                pe("none"),
+              ]}
+            />
+          ) : null}
           {mainGlyph}
+          {useGlyphChrome && shouldShowPlus ? (
+            <View style={styles.glyphAddBadge}>
+              <Plus size={11} color={Theme.brandBlueInk} strokeWidth={3} />
+            </View>
+          ) : null}
         </RNAnimated.View>
       </TouchableOpacity>
     </Reanimated.View>
@@ -284,6 +282,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   containerGlyph: {
+    overflow: "visible",
+  },
+  containerPartyChip: {
+    alignItems: "flex-end",
     overflow: "visible",
   },
   fab: {
@@ -305,29 +307,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
     overflow: "visible",
-    backgroundColor: Theme.cardWhite,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#DDE3EA",
-    shadowColor: Theme.darkBackground,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    elevation: 7,
-  },
-  lottieWell: {
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    backgroundColor: Theme.cardWhite,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    shadowOpacity: 0,
+    elevation: 0,
   },
   glyphAddBadge: {
     position: "absolute",
     right: -2,
     bottom: -2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: Theme.cardWhite,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Theme.accentGold,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: Theme.darkBackground,
@@ -336,28 +328,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
-  glyphAddBadgeInner: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: Theme.accentGold,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   innerRing: {
     position: "absolute",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.8)",
-  },
-  assetChip: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.cardWhite,
-    overflow: "hidden",
-    shadowColor: Theme.darkBackground,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 2,
   },
 });

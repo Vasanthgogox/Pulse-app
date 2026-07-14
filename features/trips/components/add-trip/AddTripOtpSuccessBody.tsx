@@ -3,7 +3,6 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
@@ -88,7 +87,7 @@ function OtpMetaTile({
         style={[styles.metaTileIcon, accent ? styles.metaTileIconAccent : styles.metaTileIconMuted]}
       >
         <Icon
-          size={16}
+          size={13}
           color={accent ? Theme.driverEmeraldDark : Theme.textMuted}
           strokeWidth={2}
         />
@@ -162,12 +161,12 @@ export const AddTripOtpSuccessBody = memo(function AddTripOtpSuccessBody({
 
   const digitLayout = useMemo(() => {
     const count = Math.max(digits.length, 1);
-    const innerPad = 28 + 12;
-    const innerW = Math.max(200, cardMaxWidth - innerPad);
-    const gap = count >= 6 ? (winW < 380 ? 4 : 6) : 8;
+    const innerPad = 24 + 8;
+    const innerW = Math.max(180, cardMaxWidth - innerPad);
+    const gap = count >= 6 ? (winW < 380 ? 3 : 4) : 6;
     const cellW = Math.floor((innerW - gap * (count - 1)) / count);
-    const heroSize = Math.min(34, Math.max(26, Math.round(cellW * 0.58)));
-    const cellH = Math.max(cellW + 2, heroSize + 12);
+    const heroSize = Math.min(22, Math.max(17, Math.round(cellW * 0.48)));
+    const cellH = Math.max(36, heroSize + 10);
     return { gap, cellW, cellH, heroSize };
   }, [cardMaxWidth, digits.length, winW]);
 
@@ -203,7 +202,7 @@ export const AddTripOtpSuccessBody = memo(function AddTripOtpSuccessBody({
   return (
     <View style={styles.screen}>
       <LinearGradient
-        colors={["#ecfdf5", "#e0f2fe", "#f5f3ff", "#fafafa"]}
+        colors={["#f8fafc", "#f1f5f9", "#fafafa"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFillObject}
@@ -236,59 +235,54 @@ export const AddTripOtpSuccessBody = memo(function AddTripOtpSuccessBody({
               style={styles.cardGlowTop}
             />
             <View style={styles.cardInner}>
-              <MotiView
-                from={{ scale: 0.85, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", damping: 14, stiffness: 220 }}
-              >
+              <View style={styles.headerRow}>
                 <MotiView
-                  animate={{ scale: [1, 1.05, 1], opacity: [1, 0.92, 1] }}
-                  transition={{ type: "timing", duration: 2600, loop: true }}
-                  style={styles.badgeCircleWrap}
+                  from={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", damping: 16, stiffness: 240 }}
+                  style={styles.badgeCircle}
                 >
-                  <LinearGradient
-                    colors={[Theme.driverEmeraldDark, Theme.driverEmerald]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.badgeCircle}
-                  >
-                    <CheckCircle2 size={22} color={Theme.textOnPrimary} strokeWidth={2.5} />
-                  </LinearGradient>
+                  <CheckCircle2 size={16} color={Theme.textOnPrimary} strokeWidth={2.5} />
                 </MotiView>
-              </MotiView>
+                <View style={styles.headerCopy}>
+                  <Text style={styles.kicker}>Driver OTP</Text>
+                  <Text style={styles.instruction}>Share this code with the driver</Text>
+                  {createdResult.successDetails?.tripNumber ? (
+                    <Text style={styles.tripRef} numberOfLines={1}>
+                      Trip {createdResult.successDetails.tripNumber}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
 
-              <Text style={styles.kicker}>Driver OTP</Text>
-              <Text style={styles.instruction}>Share this code with the driver</Text>
-              {createdResult.successDetails?.tripNumber ? (
-                <Text style={styles.tripRef} numberOfLines={1}>
-                  Trip {createdResult.successDetails.tripNumber}
-                </Text>
-              ) : null}
+              <View style={styles.sectionDivider} />
 
               {hasSummary && ctx ? (
                 <View style={styles.summaryShell}>
-                  <Text style={styles.summaryKicker}>Trip summary</Text>
+                  <View style={styles.summaryHeaderRow}>
+                    <Text style={styles.summaryKicker}>Trip summary</Text>
+                    {ctx.routeLine ? (
+                      <Text style={styles.summaryMetaLine} numberOfLines={1}>
+                        {ctx.routeLine}
+                      </Text>
+                    ) : null}
+                  </View>
                   <View style={styles.summaryRouteRow}>
                     <View style={styles.routeIconCol}>
-                      <MapPinned size={14} color={Theme.iconPrimary} strokeWidth={2} />
+                      <MapPinned size={12} color={Theme.iconPrimary} strokeWidth={2} />
                     </View>
                     <View style={styles.summaryRouteTextCol}>
-                      <Text style={styles.summaryRouteMain} numberOfLines={2}>
+                      <Text style={styles.summaryRouteMain} numberOfLines={1}>
                         {ctx.pickupArea || "—"}
                       </Text>
                       <View style={styles.summaryArrowDivider}>
-                        <ArrowDown size={11} color={Theme.textMuted} strokeWidth={2} />
+                        <ArrowDown size={9} color={Theme.textMuted} strokeWidth={2} />
                       </View>
-                      <Text style={styles.summaryRouteMain} numberOfLines={2}>
+                      <Text style={styles.summaryRouteMain} numberOfLines={1}>
                         {ctx.dropLocation || "—"}
                       </Text>
                     </View>
                   </View>
-                  {ctx.routeLine ? (
-                    <Text style={styles.summaryMetaLine} numberOfLines={1}>
-                      {ctx.routeLine}
-                    </Text>
-                  ) : null}
                   <View style={styles.summaryChips}>
                     {ctx.clientName ? (
                       <View style={[styles.chip, styles.chipFlex]}>
@@ -319,29 +313,26 @@ export const AddTripOtpSuccessBody = memo(function AddTripOtpSuccessBody({
               ) : null}
 
               {ctx?.driverName || ctx?.driverPhone ? (
-                <MotiView
-                  from={{ opacity: 0, translateX: -8 }}
-                  animate={{ opacity: 1, translateX: 0 }}
-                  transition={{ type: "timing", duration: 400, delay: 120 }}
-                  style={styles.driverBanner}
-                >
+                <View style={styles.driverBanner}>
                   <View style={styles.driverIconTile}>
-                    <User size={17} color={Theme.driverEmeraldDark} strokeWidth={2} />
+                    <User size={13} color={Theme.driverEmeraldDark} strokeWidth={2} />
                   </View>
                   <View style={styles.driverTextCol}>
                     <Text style={styles.driverMetaLabel}>Driver</Text>
-                    {ctx.driverName ? (
-                      <Text style={styles.driverNameText} numberOfLines={1}>
-                        {ctx.driverName}
-                      </Text>
-                    ) : null}
-                    {ctx.driverPhone ? (
-                      <Text style={styles.driverPhoneText} numberOfLines={1}>
-                        {ctx.driverPhone}
-                      </Text>
-                    ) : null}
+                    <View style={styles.driverNameRow}>
+                      {ctx.driverName ? (
+                        <Text style={styles.driverNameText} numberOfLines={1}>
+                          {ctx.driverName}
+                        </Text>
+                      ) : null}
+                      {ctx.driverPhone ? (
+                        <Text style={styles.driverPhoneText} numberOfLines={1}>
+                          {ctx.driverPhone}
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
-                </MotiView>
+                </View>
               ) : null}
 
               <Pressable
@@ -411,7 +402,7 @@ export const AddTripOtpSuccessBody = memo(function AddTripOtpSuccessBody({
                     webCursor,
                   ]}
                 >
-                  <Copy size={16} color={Theme.textOnPrimary} strokeWidth={2} />
+                  <Copy size={13} color={Theme.textOnPrimary} strokeWidth={2} />
                   <Text style={styles.actionBtnTextPrimary}>
                     {copied ? "Copied" : "Copy code"}
                   </Text>
@@ -425,7 +416,7 @@ export const AddTripOtpSuccessBody = memo(function AddTripOtpSuccessBody({
                     webCursor,
                   ]}
                 >
-                  <Share2 size={16} color={Theme.primary} strokeWidth={2} />
+                  <Share2 size={13} color={Theme.primary} strokeWidth={2} />
                   <Text style={styles.actionBtnTextSecondary}>Share</Text>
                 </Pressable>
               </View>
@@ -453,7 +444,7 @@ export const AddTripOtpSuccessBody = memo(function AddTripOtpSuccessBody({
                 activeOpacity={0.85}
               >
                 <Animated.View style={{ transform: [{ rotate: spinRotate }] }}>
-                  <RotateCw size={15} color={Theme.primary} strokeWidth={2} />
+                  <RotateCw size={12} color={Theme.textSecondary} strokeWidth={2} />
                 </Animated.View>
                 <Text style={styles.regenerateText}>
                   {regenerating ? "Regenerating…" : "Regenerate OTP"}
@@ -487,100 +478,102 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   card: {
-    borderRadius: 24,
+    borderRadius: 16,
     overflow: "hidden",
     width: "100%",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     ...Platform.select({
       web: {
-        boxShadow:
-          "0 4px 6px rgba(15, 23, 42, 0.04), 0 24px 48px rgba(15, 23, 42, 0.12)",
+        boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
       },
       default: {
         shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 14 },
-        shadowOpacity: 0.12,
-        shadowRadius: 32,
-        elevation: 10,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 20,
+        elevation: 6,
       },
     }),
   },
   cardGlowTop: {
-    height: 4,
+    height: 3,
     width: "100%",
-    opacity: 0.95,
+    opacity: 1,
   },
   cardInner: {
     backgroundColor: Theme.cardWhite,
-    paddingHorizontal: 14,
-    paddingTop: 16,
-    paddingBottom: 14,
-    borderWidth: 1,
-    borderTopWidth: 0,
-    borderColor: Theme.borderLight,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    gap: 10,
   },
-  badgeCircleWrap: {
-    alignSelf: "center",
-    marginBottom: 8,
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    alignSelf: "stretch",
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
   },
   badgeCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    ...Platform.select({
-      web: { boxShadow: "0 12px 32px rgba(4, 120, 87, 0.32)" },
-      default: {
-        shadowColor: Theme.driverEmeraldDark,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.35,
-        shadowRadius: 14,
-        elevation: 8,
-      },
-    }),
+    backgroundColor: Theme.driverEmeraldDark,
+    flexShrink: 0,
+  },
+  sectionDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+    alignSelf: "stretch",
   },
   kicker: {
-    alignSelf: "center",
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.8,
     textTransform: "uppercase",
     color: Theme.textMuted,
-    marginBottom: 3,
-    textAlign: "center",
   },
   instruction: {
-    alignSelf: "center",
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    textAlign: "center",
-    marginBottom: 3,
-    letterSpacing: -0.15,
-    lineHeight: 16,
-    paddingHorizontal: 4,
+    letterSpacing: -0.1,
+    lineHeight: 14,
   },
   tripRef: {
-    alignSelf: "center",
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "500",
     color: Theme.textMuted,
-    marginBottom: 10,
-    textAlign: "center",
+    marginTop: 1,
   },
   summaryShell: {
     alignSelf: "stretch",
-    marginBottom: 10,
     padding: 10,
-    borderRadius: 14,
+    borderRadius: 10,
     backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
+    borderColor: Theme.borderLight,
+    gap: 6,
+  },
+  summaryHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   },
   summaryKicker: {
-    ...FinanceTxnTypography.chipLabel,
-    marginBottom: 2,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
   },
   summaryRouteRow: {
     flexDirection: "row",
@@ -602,122 +595,121 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   summaryRouteMain: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
-    lineHeight: 14,
-    fontStyle: "normal",
+    lineHeight: 12,
   },
   summaryMetaLine: {
-    fontSize: 9,
+    flex: 1,
+    fontSize: 8,
     fontWeight: "500",
     color: Theme.textMuted,
     fontStyle: "italic",
-    marginTop: 2,
+    textAlign: "right",
   },
   summaryChips: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 6,
-    marginTop: 4,
+    marginTop: 2,
   },
   chip: {
-    paddingVertical: 5,
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 4,
     paddingHorizontal: 8,
-    borderRadius: 999,
-    backgroundColor: Theme.surfaceForm,
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
   chipFlex: {
     flexGrow: 1,
     flexShrink: 1,
-    minWidth: "30%",
-    maxWidth: "100%",
   },
   chipLab: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+    fontSize: 7,
+    fontWeight: "700",
+    letterSpacing: 0.4,
     textTransform: "uppercase",
     color: Theme.textMuted,
     marginBottom: 1,
   },
   chipVal: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    fontStyle: "normal",
   },
   driverBanner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     alignSelf: "stretch",
-    marginBottom: 10,
-    paddingVertical: 8,
+    paddingVertical: 7,
     paddingHorizontal: 10,
-    borderRadius: 14,
-    backgroundColor: "rgba(4, 120, 87, 0.06)",
+    borderRadius: 10,
+    backgroundColor: "rgba(4, 120, 87, 0.05)",
     borderWidth: 1,
-    borderColor: "rgba(4, 120, 87, 0.18)",
+    borderColor: "rgba(4, 120, 87, 0.14)",
   },
   driverIconTile: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: "rgba(4, 120, 87, 0.12)",
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(4, 120, 87, 0.1)",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(4, 120, 87, 0.2)",
     flexShrink: 0,
   },
   driverTextCol: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
+  },
+  driverNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
   },
   driverMetaLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.7,
+    fontSize: 7,
+    fontWeight: "700",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
   driverNameText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.15,
-  },
-  driverPhoneText: {
     fontSize: 10,
     fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  driverPhoneText: {
+    fontSize: 9,
+    fontWeight: "500",
     color: Theme.textMuted,
     fontVariant: ["tabular-nums"],
   },
   codeBand: {
     alignSelf: "stretch",
-    marginBottom: 8,
     paddingVertical: 8,
-    paddingHorizontal: 6,
-    borderRadius: 16,
-    backgroundColor: "rgba(4, 120, 87, 0.04)",
+    paddingHorizontal: 4,
+    borderRadius: 12,
+    backgroundColor: "rgba(4, 120, 87, 0.03)",
     borderWidth: 1,
-    borderColor: "rgba(4, 120, 87, 0.12)",
+    borderColor: "rgba(4, 120, 87, 0.1)",
   },
   codeBandPressed: {
     opacity: 0.88,
     backgroundColor: "rgba(4, 120, 87, 0.08)",
   },
   tapCopyHint: {
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "500",
     color: Theme.textMuted,
     textAlign: "center",
-    marginBottom: 6,
-    letterSpacing: 0.15,
+    marginBottom: 5,
+    letterSpacing: 0.1,
   },
   digitsRow: {
     flexDirection: "row",
@@ -728,42 +720,31 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   digitCell: {
-    borderRadius: 12,
+    borderRadius: 8,
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1.5,
-    borderColor: "rgba(4, 120, 87, 0.28)",
+    borderWidth: 1,
+    borderColor: "rgba(4, 120, 87, 0.22)",
     alignItems: "center",
     justifyContent: "center",
-    ...Platform.select({
-      web: { boxShadow: "0 2px 8px rgba(4, 120, 87, 0.12)" },
-      default: {
-        shadowColor: Theme.driverEmeraldDark,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
-        elevation: 2,
-      },
-    }),
   },
   digitChar: {
-    fontSize: 30,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "700",
     color: Theme.driverEmeraldDark,
     fontVariant: ["tabular-nums"],
     textAlign: "center",
   },
   digitFallback: {
-    fontSize: 28,
-    fontWeight: "800",
-    letterSpacing: 8,
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: 6,
     color: Theme.driverEmeraldDark,
     fontVariant: ["tabular-nums"],
     textAlign: "center",
   },
   otpActions: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
     alignSelf: "stretch",
   },
   actionBtn: {
@@ -771,11 +752,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 9,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    minHeight: 40,
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    minHeight: 34,
   },
   actionBtnPrimary: {
     backgroundColor: Theme.driverEmeraldDark,
@@ -790,20 +771,19 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   actionBtnTextPrimary: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.buttonPrimaryText,
-    letterSpacing: 0.2,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.1,
   },
   actionBtnTextSecondary: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "700",
     color: Theme.primary,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   metaGrid: {
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
     alignSelf: "stretch",
   },
   metaGridTwoCol: {
@@ -814,19 +794,19 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
+    borderColor: Theme.borderLight,
     minWidth: 0,
   },
   metaTileIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
+    width: 26,
+    height: 26,
+    borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -847,44 +827,44 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   metaTileLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.65,
+    fontSize: 7,
+    fontWeight: "700",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
     color: Theme.textMuted,
-    marginBottom: 3,
+    marginBottom: 2,
   },
   metaTileValue: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 9,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    lineHeight: 14,
+    lineHeight: 12,
     fontVariant: ["tabular-nums"],
   },
   metaTileValueMuted: {
     color: Theme.textMuted,
-    fontWeight: "600",
-    fontSize: 10,
+    fontWeight: "500",
+    fontSize: 8,
   },
   metaTileSub: {
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "500",
     color: Theme.textMuted,
-    marginTop: 2,
+    marginTop: 1,
   },
   regenerateBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
     alignSelf: "stretch",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Theme.primary,
-    backgroundColor: "rgba(79, 70, 229, 0.05)",
-    minHeight: 42,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    minHeight: 34,
     ...Platform.select({
       web: { cursor: "pointer" } as ViewStyle,
       default: {},
@@ -894,10 +874,10 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   regenerateText: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: Theme.primary,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    color: Theme.textSecondary,
     textTransform: "uppercase",
   },
 });

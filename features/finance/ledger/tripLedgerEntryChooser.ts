@@ -157,21 +157,30 @@ export function pushTripLedgerQuickEntry(
 
   if (tag === "supplier") {
     const sid = (trip.supplier_id ?? "").trim();
-    if (!sid) {
-      alertUser(L.addTransaction, L.missingSupplier);
+    const partyName = (partnerName ?? trip.supplier_name ?? "").trim() || "Supplier";
+    if (sid) {
+      pushLedgerSync(
+        router,
+        {
+          ...base,
+          defaultType: "out",
+          partyContext: "suppliers",
+          partyId: sid,
+          partyName,
+          entityType: "SUPPLIER",
+          entityId: sid,
+        },
+        ledgerSyncExtraParams,
+      );
       return;
     }
-    const partyName = (partnerName ?? trip.supplier_name ?? "").trim() || "—";
     pushLedgerSync(
       router,
       {
         ...base,
         defaultType: "out",
         partyContext: "suppliers",
-        partyId: sid,
-        partyName,
-        entityType: "SUPPLIER",
-        entityId: sid,
+        ...(partyName && partyName !== "Supplier" ? { partyName } : {}),
       },
       ledgerSyncExtraParams,
     );

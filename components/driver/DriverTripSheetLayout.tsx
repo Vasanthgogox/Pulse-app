@@ -100,13 +100,14 @@ export function HeroAssignerBlock({
       <View style={sheetStyles.heroAssignerBlock}>
         <View style={sheetStyles.heroAssignerRow}>
           <PartyAvatar
-            name={primary || assigner.orgName || "Fleet"}
+            name={assigner.orgName || primary || "Fleet"}
             initialsColorSeed={assigner.orgId || assigner.orgName}
             organizationImageUrl={assigner.orgLogoUrl}
             organizationAvatarSeed={assigner.orgAvatarSeed}
             avatarUrl={assigner.orgAvatarUrl}
             entityType="client"
             size={30}
+            style={sheetStyles.heroAvatarFlex}
             borderStyle={sheetStyles.heroAvatarBorder}
           />
           <View style={sheetStyles.heroAssignerTextCol}>
@@ -310,17 +311,20 @@ export const sheetStyles = StyleSheet.create({
     gap: 8,
     minWidth: 0,
   },
+  heroAvatarFlex: {
+    flexShrink: 0,
+  },
   heroAssignerTextCol: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
     justifyContent: "center",
   },
   heroAssignPrimary: {
     fontSize: 12,
     fontWeight: "800",
     color: "#fff",
-    lineHeight: 16,
+    lineHeight: 15,
     letterSpacing: -0.15,
   },
   heroAssignSecondary: {

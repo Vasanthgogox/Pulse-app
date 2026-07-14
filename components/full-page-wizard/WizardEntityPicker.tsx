@@ -60,13 +60,14 @@ export function WizardEntityPicker({
     <View
       style={[
         embedded ? styles.blockFlat : styles.block,
+        embedded && styles.blockFlatEmbedded,
         errorOutline && {
           borderColor: "rgba(232, 33, 39, 0.45)",
           backgroundColor: "rgba(254, 242, 242, 0.35)",
         },
       ]}
     >
-      <View style={styles.wizardPickerHeader}>
+      <View style={[styles.wizardPickerHeader, embedded && styles.wizardPickerHeaderEmbedded]}>
         <Text style={styles.wizardPickerTitle} numberOfLines={2}>
           {title}
         </Text>
@@ -102,7 +103,10 @@ export function WizardEntityPicker({
       />
 
       {onAdd ? (
-        <Pressable style={styles.addClientBtn} onPress={onAdd}>
+        <Pressable
+          style={[styles.addClientBtn, embedded && styles.addClientBtnFlat]}
+          onPress={onAdd}
+        >
           <Text style={styles.addClientBtnText}>{addLabel}</Text>
         </Pressable>
       ) : null}

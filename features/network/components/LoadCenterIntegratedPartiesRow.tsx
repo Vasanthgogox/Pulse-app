@@ -20,7 +20,7 @@ import {
 } from "react-native";
 
 const MAX_VISIBLE = 4;
-const FACE_SIZE = 28;
+const FACE_SIZE = 30;
 const RING_SIZE = FACE_SIZE + 2;
 const SLOT_SIZE = RING_SIZE + 4;
 
@@ -142,13 +142,13 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     minWidth: 0,
     flexShrink: 1,
     flex: 1,
   },
   rowCompact: {
-    gap: 10,
+    gap: 11,
     flexWrap: "wrap",
   },
   stackWrap: {
@@ -158,10 +158,11 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   divider: {
-    width: StyleSheet.hairlineWidth,
+    width: 1,
     backgroundColor: Theme.loadStatusTabTrayBorder,
     flexShrink: 0,
     alignSelf: "center",
+    opacity: 0.7,
   },
   facePressable: {
     width: SLOT_SIZE,

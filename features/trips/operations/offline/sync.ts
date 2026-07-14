@@ -32,10 +32,10 @@ export async function flushOperationsOutbox(): Promise<OperationsSyncResult> {
           ? item.payload.tripId
           : null;
       if (item.kind === "fuel_metadata") {
-        const res = await createTripFuelEntry(item.payload);
+        const res = await createTripFuelEntry({ ...item.payload, queueItemId: item.id });
         if (res.error) throw res.error;
       } else if (item.kind === "toll_metadata") {
-        const res = await createTripTollEntry(item.payload);
+        const res = await createTripTollEntry({ ...item.payload, queueItemId: item.id });
         if (res.error) throw res.error;
       } else if (item.kind === "fuel_photo") {
         if (!item.payload.userId) throw new Error("User missing for fuel photo sync");

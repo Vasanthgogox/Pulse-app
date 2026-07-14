@@ -903,7 +903,7 @@ export default function DriverSignUpScreen() {
                     ? router.replace(
                         `/sign-in?email=${encodeURIComponent(phoneExistsCheck.email)}`,
                       )
-                    : router.replace(ROUTES.SIGN_IN)
+                    : router.replace(ROUTES.DRIVER_SIGN_IN)
                 }
                 style={keypadFooterStyles.signIn}
               >

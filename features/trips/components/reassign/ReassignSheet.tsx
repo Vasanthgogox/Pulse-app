@@ -603,7 +603,12 @@ export function ReassignSheet({
   const wizardSubtitle = useMemo(() => {
     if (isAggregate && driverModeIsPhone) {
       if (wizardStep === 'driverPhone' || wizardStep === 'driverName' || wizardStep === 'vehicle' || wizardStep === 'review') {
-        return tripPhoneWizardSubtitle(wizardStep, true);
+        const stepIndex = TRIP_PHONE_WIZARD_STEPS.findIndex((step) => step.id === wizardStep);
+        return tripPhoneWizardSubtitle(wizardStep, {
+          isReassign: true,
+          stepIndex: stepIndex >= 0 ? stepIndex + 1 : undefined,
+          stepTotal: TRIP_PHONE_WIZARD_STEPS.length,
+        });
       }
     }
     if (wizardStep === 'driver') return 'Step 1 · Choose how to assign the driver';

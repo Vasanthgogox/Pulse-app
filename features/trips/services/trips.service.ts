@@ -1784,6 +1784,8 @@ export interface UpdateTripAssignmentOptions {
   forceOtpClaim?: boolean;
   /** Optimistic lock: PATCH only if trip.updated_at still matches (concurrent dispatcher guard). */
   expectedUpdatedAt?: string | null;
+  /** Dispatcher-entered driver name for assign-by-phone (stored on drivers.name). */
+  driverName?: string | null;
 }
 
 export async function updateTripAssignment(
@@ -2016,7 +2018,7 @@ export async function assignTripDriverByPhone(
   const { error: driverError, driver } = await ensureDriverRowByPhone(
     orgId,
     normalized,
-    undefined,
+    options?.driverName ?? undefined,
     {
       trackingOnly: options?.trackingOnly ?? false,
       forceUnlinkedForOtp: options?.forceOtpClaim ?? false,
@@ -2069,6 +2071,7 @@ export async function assignAggregateTripDriverByPhone(
   vehicleDisplayNumber?: string | null,
   vehicleId?: string | null,
   previousDriverId?: string | null,
+  /** Dispatcher-entered name — stored on drivers.name so hub does not show UNASSIGNED. */
   driverName?: string | null,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const normalized = (phone ?? "").trim().replace(/\s+/g, "");
@@ -2095,6 +2098,14 @@ export async function assignAggregateTripDriverByPhone(
     vehicleDisplayNumber != null && String(vehicleDisplayNumber).trim() !== ""
       ? String(vehicleDisplayNumber).trim()
       : null;
+  const trimmedDriverName =
+    driverName != null && String(driverName).trim() !== ""
+      ? String(driverName).trim()
+      : null;
+  const usableDriverName =
+    trimmedDriverName && !/^driver$/i.test(trimmedDriverName)
+      ? trimmedDriverName
+      : null;
 
   const rpcArgs: Record<string, unknown> = {
     p_trip_id: tripId,
@@ -2102,17 +2113,13 @@ export async function assignAggregateTripDriverByPhone(
     p_driver_phone: normalized,
     p_vehicle_display_number: trimmedVehicleDisplay,
   };
+  if (usableDriverName) {
+    rpcArgs.p_driver_name = usableDriverName;
+  }
   const fleetVehicleId =
     vehicleId != null && String(vehicleId).trim() !== "" ? vehicleId : null;
   if (fleetVehicleId) {
     rpcArgs.p_vehicle_id = fleetVehicleId;
-  }
-  const trimmedDriverName =
-    driverName != null && String(driverName).trim() !== ""
-      ? String(driverName).trim()
-      : null;
-  if (trimmedDriverName) {
-    rpcArgs.p_driver_name = trimmedDriverName;
   }
 
   let { data, error } = await supabase().rpc(
@@ -2121,8 +2128,20 @@ export async function assignAggregateTripDriverByPhone(
   );
   if (
     error &&
-    (fleetVehicleId || trimmedDriverName) &&
-    /p_vehicle_id|p_driver_name|Could not find the function/i.test(String(error.message ?? ""))
+    usableDriverName &&
+    /p_driver_name|Could not find the function/i.test(String(error.message ?? ""))
+  ) {
+    const withoutName = { ...rpcArgs };
+    delete withoutName.p_driver_name;
+    ({ data, error } = await supabase().rpc(
+      "assign_aggregate_trip_driver",
+      withoutName,
+    ));
+  }
+  if (
+    error &&
+    fleetVehicleId &&
+    /p_vehicle_id|Could not find the function/i.test(String(error.message ?? ""))
   ) {
     // Stale RPC (pre-name / pre-vehicle-id signature): retry without the newer args.
     const legacyArgs = { ...rpcArgs };
@@ -2149,6 +2168,7 @@ export async function assignAggregateTripDriverByPhone(
       {
         trackingOnly: true,
         forceOtpClaim: true,
+        driverName: usableDriverName,
       },
     );
     if (assignError || !trip) {
@@ -2179,6 +2199,9 @@ export async function assignAggregateTripDriverByPhone(
     };
   }
   const resultTrip = (obj.trip ?? null) as TripRow | null;
+  if (resultTrip && usableDriverName) {
+    resultTrip.driver_display_name = usableDriverName;
+  }
   if (resultTrip) {
     const { postAggregateAssignmentMessage } = await import(
       "@/features/chat/services/chatAssignmentBridge.service"
@@ -2467,15 +2490,44 @@ export async function updateTripStatus(
     .select()
     .maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
-  if (row == null) {
-    return {
-      error: new Error(
-        'Trip could not be updated. You may not have permission to update this trip, or the trip was not found. Ensure the "Drivers can update own trips" RLS policy is applied (run migrations).',
-      ),
-      trip: null,
-    };
+  // UPDATE can succeed while RETURNING is empty (SELECT RLS). Verify before failing.
+  let updatedTrip = row as TripRow | null;
+  if (updatedTrip == null) {
+    const verified = await supabase()
+      .from("trips")
+      .select("*")
+      .eq("id", tripId)
+      .maybeSingle();
+    const verifiedStatus = String(
+      (verified.data as { status?: string | null } | null)?.status ?? "",
+    )
+      .trim()
+      .toLowerCase();
+    if (!verified.error && verified.data && verifiedStatus === status) {
+      updatedTrip = verified.data as TripRow;
+    } else {
+      const driverView = await supabase()
+        .from("trips_driver_view")
+        .select("*")
+        .eq("id", tripId)
+        .maybeSingle();
+      const viewStatus = String(
+        (driverView.data as { status?: string | null } | null)?.status ?? "",
+      )
+        .trim()
+        .toLowerCase();
+      if (!driverView.error && driverView.data && viewStatus === status) {
+        updatedTrip = driverRowToTripRow(driverView.data as DriverTripRow);
+      } else {
+        return {
+          error: new Error(
+            'Trip could not be updated. You may not have permission to update this trip, or the trip was not found. Ensure the "Drivers can update own trips" RLS policy is applied (run migrations).',
+          ),
+          trip: null,
+        };
+      }
+    }
   }
-  const updatedTrip = row as TripRow;
   if (COMPLETED_STATUS_SET.has(status) && !wasAlreadyCompleted) {
     await ensureAssetCompletionAutoEntries(updatedTrip);
     // TripDelivered (docs/architecture/10-platform-event-catalog.md) — reuses the same
@@ -2519,6 +2571,40 @@ export async function updateTripStatus(
       });
   }
   return { error: null, trip: updatedTrip };
+}
+
+export interface ForceSetTripStatusSimulatedData {
+  status: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  statusChangeOrigin: string;
+}
+
+/**
+ * Business-simulation-only escape hatch for the admin "Simulate"/"Revoke simulation"
+ * UI (TripDetailScreen): unconditionally sets trip status, bypassing updateTripStatus()'s
+ * validation (e.g. the supplier-link check on completion). Only called when updateTripStatus()
+ * itself has already rejected the transition — never a normal driver/ops codepath.
+ */
+export async function forceSetTripStatusSimulated(
+  tripId: string,
+  data: ForceSetTripStatusSimulatedData,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const updates: Record<string, unknown> = {
+    status: data.status,
+    status_change_origin: data.statusChangeOrigin,
+    updated_at: new Date().toISOString(),
+  };
+  if (data.startedAt !== undefined) updates.started_at = data.startedAt ?? null;
+  if (data.completedAt !== undefined) updates.completed_at = data.completedAt ?? null;
+  const { data: row, error } = await supabase()
+    .from("trips")
+    .update(updates)
+    .eq("id", tripId)
+    .select()
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  return { error: null, trip: row as TripRow | null };
 }
 
 export interface TripDriverOnlineState {

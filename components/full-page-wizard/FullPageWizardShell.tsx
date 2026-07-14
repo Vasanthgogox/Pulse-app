@@ -40,6 +40,8 @@ export interface FullPageWizardShellProps {
   insightPreset?: WizardInsightPreset;
   /** Trip summary or step context shown in the right rail on desktop. */
   contextPanel?: ReactNode;
+  /** When true, use stepped wizard chrome on wide desktop (not enterprise multi-card grid). */
+  steppedLayout?: boolean;
 }
 
 export function FullPageWizardShell({
@@ -56,23 +58,27 @@ export function FullPageWizardShell({
   scrollBody = false,
   insightPreset = "trip",
   contextPanel,
+  steppedLayout = false,
 }: FullPageWizardShellProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { keyboardVisible } = useKeyboardVisible();
   const isDesktopRails = width >= Layout.wizardDesktopGridMinWidth;
-  const isDesktopForm = isDesktopWizardForm(width);
-  const isMobileWizardLayout = width < Layout.wizardDesktopGridMinWidth;
-  const isKeypadStep = fillBody;
+  const isDesktopForm = steppedLayout ? false : isDesktopWizardForm(width);
+  const isMobileWizardLayout =
+    steppedLayout ? false : width < Layout.wizardDesktopGridMinWidth;
+  const isSteppedDesktop = steppedLayout && width >= 768;
+  const isKeypadStep = fillBody && !isSteppedDesktop;
   const stepLabel =
     stepIndex != null && stepTotal != null && stepTotal > 0
       ? `Step ${stepIndex} of ${stepTotal}`
       : null;
 
-  const { left: leftInsights, right: rightInsights } = wizardInsightCardsForPreset(
-    insightPreset,
-    { desktopForm: isDesktopForm },
-  );
+  const { left: leftInsights, right: rightInsights } = isKeypadStep
+    ? { left: [] as const, right: [] as const }
+    : steppedLayout
+      ? { left: [] as const, right: [] as const }
+      : wizardInsightCardsForPreset(insightPreset, { desktopForm: isDesktopForm });
 
   const body = fillBody ? (
     <View style={styles.bodyFill}>{children}</View>
@@ -99,9 +105,10 @@ export function FullPageWizardShell({
         isDesktopForm && styles.pageRootDesktopForm,
         isMobileWizardLayout && styles.pageRootMobileFull,
         isKeypadStep && styles.pageRootKeypad,
+        isSteppedDesktop && styles.pageRootSteppedDesktop,
         {
-          paddingTop: insets.top + (isKeypadStep ? 4 : 6),
-          paddingBottom: Math.max(insets.bottom, isKeypadStep ? 6 : 10),
+          paddingTop: insets.top + (isKeypadStep || isSteppedDesktop ? 4 : 6),
+          paddingBottom: Math.max(insets.bottom, isKeypadStep || isSteppedDesktop ? 6 : 10),
         },
       ]}
     >

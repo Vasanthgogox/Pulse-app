@@ -182,7 +182,7 @@ export function AssignmentEntityAvatarGrid({
               onPress={onEmptyAction}
               activeOpacity={0.9}
             >
-              <FontAwesome name="plus" size={12} color={Theme.textOnPrimary} />
+              <FontAwesome name="plus" size={12} color={Theme.buttonPrimaryText} />
               <Text style={assignmentShellStyles.assignEmptyActionBtnText}>
                 {emptyActionLabel}
               </Text>

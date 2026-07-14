@@ -29,7 +29,11 @@ import { aggregateDrivers, type DriverOfferForAggregation, type TripPartyMap } f
 import { useDriversQuery } from '@/lib/queries/useDriversQuery';
 import { useTripsQuery } from '@/lib/queries/useTripsQuery';
 import { usePaginatedScroll } from '@/lib/usePaginatedScroll';
-import type { DriverRow, DriverOffer } from '../services/drivers.service';
+import {
+  excludeTrackingOnlyDrivers,
+  type DriverRow,
+  type DriverOffer,
+} from '../services/drivers.service';
 import type { VehicleRow } from '@/features/vehicles/services/vehicles.service';
 import { FleetDriverAnalyticsTab } from "./analytics/FleetDriverAnalyticsTab";
 import type { FleetDriverRow } from "./analytics/FleetDriverAnalyticsTab";
@@ -111,7 +115,12 @@ export function DriversTab({
     isControlled ? null : organizationId
   );
 
-  const drivers = isControlled ? (driversProp ?? []) : driversFromQuery;
+  const driversRaw = isControlled ? (driversProp ?? []) : driversFromQuery;
+  /** Party roster only — never show one-time assign-by-phone (tracking_only) stubs. */
+  const drivers = useMemo(
+    () => excludeTrackingOnlyDrivers(driversRaw),
+    [driversRaw],
+  );
   const trips = isControlled ? (tripsProp ?? []) : tripsFromQuery;
   const transactions = transactionsProp ?? [];
   const loading = isControlled ? false : (driversLoading || tripsLoading);

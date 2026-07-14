@@ -33,7 +33,7 @@ const DISMISS_DRAG_PX = 72;
 const DISMISS_VELOCITY = 0.65;
 
 const VERIFICATION_LOTTIE = {
-  overdue: require('@/assets/Animated folder/security.json'),
+  overdue: require('@/assets/Animated folder/web-security.json'),
   calm: require('@/assets/Animated folder/conversation-verified.json'),
 } as const;
 
@@ -46,26 +46,45 @@ type Props = {
 
 function VerificationLottieIcon({
   overdue,
-  chipBg,
-  chipBorder,
+  wash,
+  ring,
 }: {
   overdue: boolean;
-  chipBg: string;
-  chipBorder: string;
+  wash: string;
+  ring: string;
 }) {
-  const slot = 64;
-  const glyph = Math.round(slot * 1.28);
+  const breathe = useSharedValue(1);
+  const glyph = 52;
+
+  useEffect(() => {
+    breathe.value = withRepeat(
+      withSequence(
+        withTiming(1.06, { duration: 2000, easing: Easing.inOut(Easing.quad) }),
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+      false,
+    );
+  }, [breathe]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: breathe.value }],
+    opacity: 0.28 + (breathe.value - 1) * 2.4,
+  }));
 
   return (
-    <View style={[styles.lottieChip, { backgroundColor: chipBg, borderColor: chipBorder }]}>
-      <LottieView
-        source={overdue ? VERIFICATION_LOTTIE.overdue : VERIFICATION_LOTTIE.calm}
-        autoPlay
-        loop
-        speed={overdue ? 1.05 : 0.9}
-        resizeMode="contain"
-        style={{ width: glyph, height: glyph }}
-      />
+    <View style={styles.lottieStage}>
+      <Reanimated.View style={[styles.lottieRing, { backgroundColor: ring }, ringStyle]} />
+      <View style={[styles.lottieWell, { backgroundColor: wash }]}>
+        <LottieView
+          source={overdue ? VERIFICATION_LOTTIE.overdue : VERIFICATION_LOTTIE.calm}
+          autoPlay
+          loop
+          speed={overdue ? 0.95 : 0.85}
+          resizeMode="contain"
+          style={{ width: glyph, height: glyph }}
+        />
+      </View>
     </View>
   );
 }
@@ -220,6 +239,9 @@ export function OrgVerificationReminderModal({ visible, copy, onVerify, onLater 
     transform: [{ translateY: sheetLift.value }, { scale: sheetScale.value }],
   }));
 
+  const iconWash = copy.overdue ? 'rgba(220, 38, 38, 0.06)' : 'rgba(43, 49, 113, 0.06)';
+  const iconRing = copy.overdue ? 'rgba(220, 38, 38, 0.12)' : 'rgba(43, 49, 113, 0.1)';
+
   if (!shellVisible && !visible) return null;
 
   return (
@@ -287,11 +309,7 @@ export function OrgVerificationReminderModal({ visible, copy, onVerify, onLater 
             </View>
 
             <View style={styles.heroBody}>
-              <VerificationLottieIcon
-                overdue={copy.overdue}
-                chipBg={Theme.cardWhite}
-                chipBorder={copy.tone.border}
-              />
+              <VerificationLottieIcon overdue={copy.overdue} wash={iconWash} ring={iconRing} />
               <Text style={styles.heroTitle}>{copy.title}</Text>
               <Text style={styles.heroSub}>{copy.sub}</Text>
             </View>
@@ -329,7 +347,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15,23,42,0.76)',
+    backgroundColor: 'rgba(15,23,42,0.72)',
   },
   backdropTouch: {
     ...StyleSheet.absoluteFillObject,
@@ -360,7 +378,7 @@ const styles = StyleSheet.create({
   },
   sheetDesktopWrap: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 380,
     alignSelf: 'center',
   },
   sheetMobileWrap: {
@@ -383,12 +401,12 @@ const styles = StyleSheet.create({
     }),
   },
   sheetWebDesktop: {
-    borderRadius: 22,
+    borderRadius: 24,
     width: '100%',
   },
   sheetMobile: {
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     alignSelf: 'stretch',
   },
   sheetDragging: {
@@ -407,9 +425,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.borderLight,
   },
   hero: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 12,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -428,9 +446,9 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   heroEyebrow: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.1,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.85,
   },
   closeBtn: {
     width: 30,
@@ -448,44 +466,58 @@ const styles = StyleSheet.create({
   },
   heroBody: {
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingTop: 4,
-    paddingBottom: 14,
+    gap: 10,
+    paddingHorizontal: 22,
+    paddingTop: 2,
+    paddingBottom: 18,
     backgroundColor: Theme.cardWhite,
   },
-  lottieChip: {
-    width: 68,
-    height: 68,
-    borderRadius: 18,
-    borderWidth: 1,
+  lottieStage: {
+    width: 84,
+    height: 84,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  lottieRing: {
+    position: 'absolute',
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+  },
+  lottieWell: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(77, 54, 54, 0.06)',
   },
   heroTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
+    fontSize: 18,
+    fontWeight: '700',
+    color: Theme.brandBlueInk,
     textAlign: 'center',
-    letterSpacing: -0.25,
+    letterSpacing: -0.35,
   },
   heroSub: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 19,
     color: Theme.textMuted,
     textAlign: 'center',
-    maxWidth: 280,
+    maxWidth: 300,
   },
   actions: {
-    paddingHorizontal: 18,
-    paddingTop: 2,
-    paddingBottom: 16,
-    gap: 8,
+    paddingHorizontal: 20,
+    paddingTop: 0,
+    paddingBottom: 18,
+    gap: 10,
     backgroundColor: Theme.cardWhite,
   },
   primaryBtn: {
-    minHeight: 42,
+    minHeight: 44,
     borderRadius: 999,
     flexDirection: 'row',
     alignItems: 'center',
@@ -494,12 +526,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   primaryBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
     color: Theme.textOnPrimary,
   },
   secondaryBtn: {
-    minHeight: 38,
+    minHeight: 40,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -509,8 +541,8 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   secondaryBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '500',
     color: Theme.textSecondary,
   },
 });

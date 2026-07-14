@@ -70,6 +70,7 @@ import MapView, {
     Polyline,
 } from "@/lib/reactNativeMapsCompat";
 import { supabase } from "@/lib/supabase";
+import { withWebSafeShadows } from "@/lib/platformViewStyle.util";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import {
@@ -466,6 +467,22 @@ export default function DriverRadarScreen() {
     lastTripsSyncKeyRef.current = null;
     if (uid) void invalidateDriverHome(uid);
   }, [uid, invalidateDriverHome]);
+  const patchTripInDashboard = useCallback((updated: tripsService.TripRow) => {
+    setAllTrips((prev) =>
+      prev.map((t) =>
+        t.id === updated.id
+          ? {
+              ...t,
+              ...updated,
+              status: updated.status ?? t.status,
+              updated_at: updated.updated_at ?? t.updated_at,
+              started_at: updated.started_at ?? t.started_at,
+              completed_at: updated.completed_at ?? t.completed_at,
+            }
+          : t,
+      ),
+    );
+  }, []);
   const linkedDriversQuery = useDriverHomeDriversQuery(uid);
   const linkedDriver = linkedDriversQuery.primaryDriver;
   const pendingOtpQuery = usePendingOtpTripsQuery(uid);
@@ -549,6 +566,9 @@ export default function DriverRadarScreen() {
     Record<string, string>
   >({});
   const [assignerTripOrgNameByTripId, setAssignerTripOrgNameByTripId] = useState<
+    Record<string, string>
+  >({});
+  const [assignerTripOrgIdByTripId, setAssignerTripOrgIdByTripId] = useState<
     Record<string, string>
   >({});
   const [organizationNamesById, setOrganizationNamesById] = useState<
@@ -840,10 +860,16 @@ export default function DriverRadarScreen() {
         if (cancelled || tripsSyncGenRef.current !== gen) return;
 
         const trips = tRes.trips ?? [];
-        const tripIdsKey = trips
-          .map((t) => t.id)
-          .sort()
-          .join(",");
+        // Include status/updated_at so in-place progress (e.g. in_transit → at_drop)
+        // is not dropped when the trip id set is unchanged.
+        const tripSyncFingerprint = (list: tripsService.TripRow[]) =>
+          list
+            .map(
+              (t) =>
+                `${t.id}:${String(t.status ?? "").toLowerCase()}:${t.updated_at ?? ""}`,
+            )
+            .sort()
+            .join("|");
 
         const seqByTrip = buildDriverTripNumberMap(trips);
         previousTripsRef.current = new Map(
@@ -853,13 +879,9 @@ export default function DriverRadarScreen() {
         setDriver((prev) =>
           prev?.id === primaryDriver.id ? prev : primaryDriver,
         );
-        setAllTrips((prev) => {
-          const prevKey = prev
-            .map((t) => t.id)
-            .sort()
-            .join(",");
-          return prevKey === tripIdsKey ? prev : trips;
-        });
+        setAllTrips((prev) =>
+          tripSyncFingerprint(prev) === tripSyncFingerprint(trips) ? prev : trips,
+        );
 
         const normalizedDriverStatus = String(primaryDriver.status ?? "").toLowerCase();
         const hasActiveTrip = trips.some((t) => isTripInProgress(t));
@@ -1390,6 +1412,17 @@ export default function DriverRadarScreen() {
       String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
     );
   }, [incomingTrips, pendingOtpTrips, declinedTripId]);
+  /** Incoming + active mission — assigner RPC must not clear when inbox is empty mid-trip. */
+  const tripsNeedingAssignerDisplay = useMemo(() => {
+    const byId = new Map<string, tripsService.TripRow>();
+    for (const trip of mergedIncomingTrips) {
+      if (trip?.id) byId.set(String(trip.id), trip);
+    }
+    if (activeMission?.id) {
+      byId.set(String(activeMission.id), activeMission);
+    }
+    return Array.from(byId.values());
+  }, [mergedIncomingTrips, activeMission]);
   const notificationHistoryTripIds = useMemo(
     () => new Set(notificationHistory.map((entry) => entry.tripId)),
     [notificationHistory],
@@ -1662,6 +1695,7 @@ export default function DriverRadarScreen() {
             assignerOrgNameByUserId,
             assignerDisplayByTripId,
             assignerTripOrgNameByTripId,
+            assignerTripOrgIdByTripId,
             organizationNamesById: mergedOrganizationNamesById,
           },
         );
@@ -1709,6 +1743,7 @@ export default function DriverRadarScreen() {
       assignerOrgNameByUserId,
       assignerDisplayByTripId,
       assignerTripOrgNameByTripId,
+      assignerTripOrgIdByTripId,
       mergedOrganizationNamesById,
       effectiveAssignmentActorByTripId,
     ],
@@ -1769,6 +1804,7 @@ export default function DriverRadarScreen() {
                 assignerOrgNameByUserId,
                 assignerDisplayByTripId,
                 assignerTripOrgNameByTripId,
+                assignerTripOrgIdByTripId,
                 organizationNamesById: mergedOrganizationNamesById,
               },
             );
@@ -1804,6 +1840,7 @@ export default function DriverRadarScreen() {
       assignerOrgNameByUserId,
       assignerDisplayByTripId,
       assignerTripOrgNameByTripId,
+      assignerTripOrgIdByTripId,
       mergedOrganizationNamesById,
       organizationLogoById,
     ],
@@ -1845,6 +1882,7 @@ export default function DriverRadarScreen() {
         assignerOrgNameByUserId,
         assignerDisplayByTripId,
         assignerTripOrgNameByTripId,
+        assignerTripOrgIdByTripId,
         organizationNamesById: mergedOrganizationNamesById,
       },
     ).assignedByName;
@@ -1858,6 +1896,7 @@ export default function DriverRadarScreen() {
     assignerOrgNameByUserId,
     assignerDisplayByTripId,
     assignerTripOrgNameByTripId,
+    assignerTripOrgIdByTripId,
     mergedOrganizationNamesById,
   ]);
   useEffect(() => {
@@ -1885,13 +1924,14 @@ export default function DriverRadarScreen() {
   useEffect(() => {
     let cancelled = false;
     const loadAssignmentSources = async () => {
-      const trips = mergedIncomingTrips;
+      const trips = tripsNeedingAssignerDisplay;
       if (trips.length === 0) {
         if (!cancelled) {
           setAssignerNamesByUserId({});
           setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
           setAssignerTripOrgNameByTripId({});
+          setAssignerTripOrgIdByTripId({});
           setOrganizationNamesById({});
           setOrganizationLogoById({});
         }
@@ -1906,26 +1946,45 @@ export default function DriverRadarScreen() {
         { p_trip_ids: tripIdsForRpc },
       );
       const rpcAssignerUserIdByTrip: Record<string, string> = {};
+      const rpcOrgIdByTrip: Record<string, string> = {};
       if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
         const byTrip: Record<string, string> = {};
         const orgByTrip: Record<string, string> = {};
+        const logosById: Record<string, string> = {};
+        const namesById: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
           assigner_user_id?: string | null;
           assigning_organization_name?: string | null;
+          assigning_organization_id?: string | null;
+          assigning_organization_logo_url?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : "";
           const dn = String(row.display_name ?? "").trim();
           const uid = String(row.assigner_user_id ?? "").trim();
           const orgName = String(row.assigning_organization_name ?? "").trim();
+          const orgId = String(row.assigning_organization_id ?? "").trim();
+          const logo = String(row.assigning_organization_logo_url ?? "").trim();
           if (tid && dn) byTrip[tid] = dn;
           if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
           if (tid && orgName) orgByTrip[tid] = orgName;
+          if (tid && orgId) {
+            rpcOrgIdByTrip[tid] = orgId;
+            if (orgName) namesById[orgId] = orgName;
+            if (logo) logosById[orgId] = logo;
+          }
         }
         setAssignerDisplayByTripId(byTrip);
         setRpcAssignerUserIdByTripId(rpcAssignerUserIdByTrip);
         setAssignerTripOrgNameByTripId(orgByTrip);
+        setAssignerTripOrgIdByTripId(rpcOrgIdByTrip);
+        if (Object.keys(namesById).length > 0) {
+          setOrganizationNamesById((prev) => ({ ...prev, ...namesById }));
+        }
+        if (Object.keys(logosById).length > 0) {
+          setOrganizationLogoById((prev) => ({ ...prev, ...logosById }));
+        }
       }
 
       const userIds = Array.from(
@@ -1942,8 +2001,8 @@ export default function DriverRadarScreen() {
       );
       const organizationIds = Array.from(
         new Set(
-          trips
-            .flatMap((trip) => {
+          [
+            ...trips.flatMap((trip) => {
               const tripMeta = trip as tripsService.TripRow &
                 Record<string, string | number | boolean | null | undefined>;
               return [
@@ -1953,7 +2012,10 @@ export default function DriverRadarScreen() {
                 ).trim(),
                 ((tripMeta.from_org_id as string | null | undefined) ?? "").trim(),
               ];
-            })
+            }),
+            ...Object.values(rpcOrgIdByTrip),
+          ]
+            .map((id) => String(id ?? "").trim())
             .filter((id) => id.length > 0),
         ),
       );
@@ -2058,23 +2120,20 @@ export default function DriverRadarScreen() {
             const logo = (row.logo_url ?? "").trim();
             if (logo) logosById[row.id] = logo;
           }
-          setOrganizationNamesById(byId);
-          setOrganizationLogoById(logosById);
+          setOrganizationNamesById((prev) => ({ ...prev, ...byId }));
+          setOrganizationLogoById((prev) => ({ ...prev, ...logosById }));
         }
-      } else if (!cancelled) {
-        setOrganizationNamesById({});
-        setOrganizationLogoById({});
       }
     };
     void loadAssignmentSources();
     return () => {
       cancelled = true;
     };
-  }, [mergedIncomingTrips, assignmentActorByTripId]);
+  }, [tripsNeedingAssignerDisplay, assignmentActorByTripId]);
   useEffect(() => {
     let cancelled = false;
     const loadAssignmentActors = async () => {
-      const tripIds = mergedIncomingTrips.map((trip) => trip.id).filter(Boolean);
+      const tripIds = tripsNeedingAssignerDisplay.map((trip) => trip.id).filter(Boolean);
       if (tripIds.length === 0) {
         if (!cancelled) setAssignmentActorByTripId({});
         return;
@@ -2092,7 +2151,7 @@ export default function DriverRadarScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mergedIncomingTrips]);
+  }, [tripsNeedingAssignerDisplay]);
   const activeGuidanceTrip =
     activeMission ??
     (effectiveFirstIncoming &&
@@ -3663,6 +3722,10 @@ export default function DriverRadarScreen() {
         avatarUri,
         avatarSeed: optionalDriverAvatar?.avatarSeed,
         isOnline,
+        onPress: () => {
+          const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
+          leafRef.current?.focusCurrentLocation(driverMapPosition, 16);
+        },
       });
     }
     if (pickup) {
@@ -3683,12 +3746,29 @@ export default function DriverRadarScreen() {
         highlighted: highlightedTarget === "drop",
       });
     }
-    // DEV: last 3 pinned location dots
+    // DEV: recent pins — skip ones sitting on the avatar so the green status stays tappable.
     recentPinPoints.forEach((pt, i) => {
+      if (driverMapPosition) {
+        const gapM = distanceMeters(
+          pt.latitude,
+          pt.longitude,
+          driverMapPosition.latitude,
+          driverMapPosition.longitude,
+        );
+        if (gapM < 45) return;
+      }
       leafletMarkers.push({
         id: `pin-${i}`,
         coordinate: { latitude: pt.latitude, longitude: pt.longitude },
-        color: '#94a3b8',
+        color: "#94a3b8",
+        label: "View location",
+        onPress: () => {
+          const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
+          leafRef.current?.focusCurrentLocation(
+            { latitude: pt.latitude, longitude: pt.longitude },
+            17,
+          );
+        },
       });
     });
 
@@ -3934,6 +4014,7 @@ export default function DriverRadarScreen() {
                     avatarSeed={optionalDriverAvatar?.avatarSeed}
                     isOnline={isOnline}
                     size={48}
+                    onPressStatus={handleZoomToDriver}
                   />
                 </Reanimated.View>
                 <MapCallout>
@@ -3968,16 +4049,46 @@ export default function DriverRadarScreen() {
               </OlaAnimatedMarker>
             ) : null}
 
-            {/* DEV: last 3 pinned location dots */}
-            {recentPinPoints.map((pt, i) => (
-              <MapMarker
-                key={`pin-${i}`}
-                coordinate={{ latitude: pt.latitude, longitude: pt.longitude }}
-                anchor={{ x: 0.5, y: 0.5 }}
-              >
-                <View style={styles.pinHistoryDot} />
-              </MapMarker>
-            ))}
+            {/* DEV: recent pins far from current avatar — tap to view that fix */}
+            {recentPinPoints.map((pt, i) => {
+              if (driverMapPosition) {
+                const gapM = distanceMeters(
+                  pt.latitude,
+                  pt.longitude,
+                  driverMapPosition.latitude,
+                  driverMapPosition.longitude,
+                );
+                if (gapM < 45) return null;
+              }
+              return (
+                <MapMarker
+                  key={`pin-${i}`}
+                  coordinate={{ latitude: pt.latitude, longitude: pt.longitude }}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  onPress={() => {
+                    nativeMapZoomRef.current = 17;
+                    const map = targetRef.current;
+                    try {
+                      map?.animateCamera?.(
+                        {
+                          center: {
+                            latitude: pt.latitude,
+                            longitude: pt.longitude,
+                          },
+                          zoom: 17,
+                          pitch: 0,
+                        },
+                        { duration: 450 },
+                      );
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                >
+                  <View style={styles.pinHistoryDot} />
+                </MapMarker>
+              );
+            })}
 
             {shouldShowMap && routeContextTrip && (
               <>
@@ -4594,6 +4705,7 @@ export default function DriverRadarScreen() {
               driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
               driverLocationLabel={locationLabel}
               onRefresh={refreshDashboard}
+              onTripUpdated={patchTripInDashboard}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
                 setSelectedIncomingTripId(null);
@@ -4636,6 +4748,7 @@ export default function DriverRadarScreen() {
               driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
               driverLocationLabel={locationLabel}
               onRefresh={refreshDashboard}
+              onTripUpdated={patchTripInDashboard}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
                 setSelectedIncomingTripId(null);
@@ -5567,7 +5680,8 @@ export default function DriverRadarScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = withWebSafeShadows(
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Theme.driverBackground,
@@ -8053,4 +8167,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 4,
   },
-});
+}),
+);

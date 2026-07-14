@@ -48,6 +48,8 @@ export interface LocationSearchFieldProps {
   onDropdownOpenChange?: (open: boolean) => void;
   /** Tighter field height and typography for native / narrow create-trip forms. */
   compact?: boolean;
+  /** `overlay` — icon inside field padding; `inline` — icon in left rail (desktop wizard). */
+  leadingIconLayout?: "overlay" | "inline";
   /** Signup/office flows — lighter typography aligned with Pulse onboarding. */
   sheetVariant?: "default" | "signup";
   sheetTitle?: string;
@@ -56,6 +58,14 @@ export interface LocationSearchFieldProps {
 
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
+
+function splitPlaceLabel(displayName: string): { primary: string; secondary?: string } {
+  const comma = displayName.indexOf(",");
+  if (comma === -1) return { primary: displayName };
+  const primary = displayName.slice(0, comma).trim();
+  const secondary = displayName.slice(comma + 1).trim();
+  return secondary ? { primary, secondary } : { primary: displayName };
+}
 
 export function LocationSearchField({
   label,
@@ -68,6 +78,7 @@ export function LocationSearchField({
   labelStyle,
   onDropdownOpenChange,
   compact = false,
+  leadingIconLayout = "overlay",
   sheetVariant = "default",
   sheetTitle,
   sheetSubtitle,
@@ -76,7 +87,7 @@ export function LocationSearchField({
   const { width: winW } = useWindowDimensions();
   const horizontalPad = Layout.screenPaddingHorizontal * 2;
   /** Explicit width avoids RN Web % layout quirks so the sheet stays visually centered on mobile. */
-  const sheetWidth = Math.min(winW - horizontalPad, 520);
+  const sheetWidth = Math.min(winW - horizontalPad, 440);
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -186,7 +197,7 @@ export function LocationSearchField({
     : compact
       ? sheetTypography.compact
       : sheetTypography.default;
-  const rowIconSize = isSignupSheet ? 14 : compact ? 15 : 16;
+  const rowIconSize = isSignupSheet ? 14 : compact ? 13 : 14;
   const resolvedSheetTitle =
     sheetTitle ?? (isSignupSheet ? "Pick area on map" : "Pick a place in India");
   const resolvedSheetSubtitle =
@@ -199,8 +210,8 @@ export function LocationSearchField({
       ? "Suggestions"
       : "Popular areas"
     : query
-      ? "Suggestions"
-      : "Popular places — tap or type to search";
+      ? "Matching places"
+      : "Popular places";
 
   const dropdownListContent = (
     <>
@@ -222,9 +233,12 @@ export function LocationSearchField({
       )}
       {!loading && listToShow.length > 0 && (
         <>
-          <Text style={sheetType.sectionLabel}>{popularSectionLabel}</Text>
+          <View style={sheetType.sectionLabelWrap}>
+            <Text style={sheetType.sectionLabel}>{popularSectionLabel}</Text>
+          </View>
           {listToShow.map((place) => {
             const selected = draft === place.displayName;
+            const { primary, secondary } = splitPlaceLabel(place.displayName);
             return (
               <TouchableOpacity
                 key={place.placeId}
@@ -248,13 +262,20 @@ export function LocationSearchField({
                 >
                   <MapPin
                     size={rowIconSize}
-                    color={isSignupSheet ? SIGNUP_SHEET.muted : Theme.iconPrimary}
-                    strokeWidth={isSignupSheet ? 2 : 2.5}
+                    color={isSignupSheet ? SIGNUP_SHEET.muted : Theme.textMuted}
+                    strokeWidth={2}
                   />
                 </View>
-                <Text style={sheetType.placeRowText} numberOfLines={3}>
-                  {place.displayName}
-                </Text>
+                <View style={styles.placeRowTextCol}>
+                  <Text style={sheetType.placeRowPrimary} numberOfLines={1}>
+                    {primary}
+                  </Text>
+                  {secondary ? (
+                    <Text style={sheetType.placeRowSecondary} numberOfLines={1}>
+                      {secondary}
+                    </Text>
+                  ) : null}
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -293,11 +314,20 @@ export function LocationSearchField({
     </>
   );
 
+  const inlineIcon = leadingIconLayout === "inline" && leadingIcon;
+
   return (
     <View style={[styles.wrapper, compact && styles.wrapperCompact]} collapsable={false}>
       <Text style={labelStyle}>{label}</Text>
-      <View style={styles.inputRow}>
-        {leadingIcon ? (
+      <View
+        style={[
+          styles.inputRow,
+          inlineIcon && styles.inputRowInline,
+        ]}
+      >
+        {inlineIcon ? (
+          <View style={styles.leadingIconInline}>{leadingIcon}</View>
+        ) : leadingIcon ? (
           <View
             style={[styles.leadingIconWrap, compact && styles.leadingIconWrapCompact]}
             pointerEvents="none"
@@ -313,8 +343,9 @@ export function LocationSearchField({
             compact && styles.inputCompact,
             inputStyle,
             styles.inputPressable,
-            leadingIcon ? styles.inputWithLeadingIcon : null,
-            leadingIcon && compact ? styles.inputWithLeadingIconCompact : null,
+            inlineIcon && styles.inputInlineRail,
+            !inlineIcon && leadingIcon ? styles.inputWithLeadingIcon : null,
+            !inlineIcon && leadingIcon && compact ? styles.inputWithLeadingIconCompact : null,
           ]}
         >
           <Text
@@ -406,9 +437,9 @@ export function LocationSearchField({
                     accessibilityLabel="Close"
                   >
                     <X
-                      size={isSignupSheet ? 16 : compact ? 16 : 17}
-                      color={isSignupSheet ? SIGNUP_SHEET.muted : Theme.primary}
-                      strokeWidth={isSignupSheet ? 2 : 2.5}
+                      size={14}
+                      color={Theme.textMuted}
+                      strokeWidth={2.5}
                     />
                   </TouchableOpacity>
                 </View>
@@ -426,28 +457,38 @@ export function LocationSearchField({
                     autoFocus
                   />
                 ) : (
-                  <CreateTripSheetSearchInput
-                    ref={modalInputRef}
-                    value={draft}
-                    onChangeText={(t) => {
-                      setDraft(t);
-                      onChangeText(t);
-                    }}
-                    placeholder={placeholder}
-                    autoCapitalize="words"
-                    spellCheck={false}
-                    autoComplete="off"
-                    autoFocus
-                    compactChat
-                    compactChatSize={compact ? "sm" : "md"}
-                    shellStyle={styles.searchShell}
-                    accessibilityLabel="Search places"
-                  />
+                  <View
+                    style={[
+                      styles.sheetSearchBand,
+                      compact && styles.sheetSearchBandCompact,
+                    ]}
+                  >
+                    <CreateTripSheetSearchInput
+                      ref={modalInputRef}
+                      value={draft}
+                      onChangeText={(t) => {
+                        setDraft(t);
+                        onChangeText(t);
+                      }}
+                      placeholder={placeholder}
+                      autoCapitalize="words"
+                      spellCheck={false}
+                      autoComplete="off"
+                      autoFocus
+                      compactChat
+                      compactChatSize="sm"
+                      shellStyle={styles.searchShellInner}
+                      accessibilityLabel="Search places"
+                    />
+                  </View>
                 )}
 
                 <ScrollView
                   style={styles.sheetScroll}
-                  contentContainerStyle={styles.sheetScrollContent}
+                  contentContainerStyle={[
+                    styles.sheetScrollContent,
+                    compact && styles.sheetScrollContentCompact,
+                  ]}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator
                   bounces
@@ -475,6 +516,28 @@ const styles = StyleSheet.create({
   inputRow: {
     position: "relative",
     marginBottom: 4,
+  },
+  inputRowInline: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  leadingIconInline: {
+    width: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRightWidth: 0,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+    flexShrink: 0,
+  },
+  inputInlineRail: {
+    flex: 1,
+    minWidth: 0,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
   },
   leadingIconWrap: {
     position: "absolute",
@@ -578,125 +641,178 @@ const styles = StyleSheet.create({
     }),
   },
   sheet: {
-    maxHeight: "82%",
+    maxHeight: "78%",
     backgroundColor: Theme.cardWhite,
-    borderRadius: 20,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     overflow: "hidden",
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 16,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 12px 40px rgba(15, 23, 42, 0.12)",
+      } as object,
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.12,
+        shadowRadius: 20,
+        elevation: 12,
+      },
+    }),
   },
   sheetHead: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
   },
   sheetTitles: {
     flex: 1,
-    paddingRight: 12,
+    minWidth: 0,
+    paddingRight: 10,
+    gap: 2,
   },
   sheetHeadCompact: {
-    paddingTop: 12,
-    paddingBottom: 6,
+    paddingTop: 14,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
   },
   sheetTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    fontStyle: "normal",
-    letterSpacing: 0,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: -0.15,
     color: Theme.textPrimaryDark,
   },
   sheetSubtitle: {
-    fontSize: 11,
-    fontWeight: "400",
-    fontStyle: "normal",
-    marginTop: 2,
-    color: Theme.textSecondary,
-    lineHeight: 15,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 14,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
+    flexShrink: 0,
   },
   closeBtnCompact: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  searchShell: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-  },
-  sheetScroll: {
-    maxHeight: 340,
-    minHeight: 120,
-  },
-  sheetScrollContent: {
-    paddingBottom: 16,
-  },
-  placeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    gap: 10,
-  },
-  placeRowCompact: {
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    gap: 8,
-  },
-  placeRowSelected: {
-    backgroundColor: Theme.surfaceLight,
-  },
-  rowIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowIconCircleCompact: {
     width: 28,
     height: 28,
     borderRadius: 14,
   },
+  sheetSearchBand: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+  },
+  sheetSearchBandCompact: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+  },
+  searchShellInner: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderRadius: 10,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    minHeight: 40,
+    paddingVertical: 6,
+  },
+  sheetScroll: {
+    maxHeight: 320,
+    minHeight: 100,
+    backgroundColor: Theme.cardWhite,
+  },
+  sheetScrollContent: {
+    paddingBottom: 12,
+  },
+  sheetScrollContentCompact: {
+    paddingBottom: 10,
+  },
+  sectionLabelWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
+    backgroundColor: Theme.cardWhite,
+  },
+  placeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    gap: 10,
+    backgroundColor: Theme.cardWhite,
+  },
+  placeRowCompact: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  placeRowSelected: {
+    backgroundColor: Theme.surface,
+  },
+  placeRowTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  rowIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  rowIconCircleCompact: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+  },
   customIconCircle: {
     backgroundColor: Theme.positiveMuted,
   },
-  placeRowText: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "500",
-    fontStyle: "normal",
+  placeRowPrimary: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
+  },
+  placeRowSecondary: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "500",
+    color: Theme.textMuted,
   },
   customAddressRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 8,
+    paddingVertical: 9,
     paddingHorizontal: 16,
-    marginTop: 4,
+    marginTop: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceLight,
+    backgroundColor: Theme.surface,
   },
   customAddressRowCompact: {
     paddingVertical: 7,
@@ -705,47 +821,36 @@ const styles = StyleSheet.create({
   },
   customAddressText: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.primary,
   },
   loadingWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  loadingText: {
-    fontSize: 12,
-    color: Theme.textSecondary,
-  },
-  emptyListWrap: {
-    paddingHorizontal: 20,
+    gap: 8,
+    paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  emptyListText: {
-    fontSize: 13,
-    color: Theme.textSecondary,
-  },
-  emptyListSubtext: {
+  loadingText: {
     fontSize: 11,
     color: Theme.textMuted,
-    marginBottom: 4,
+  },
+  emptyListWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  emptyListSubtext: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    lineHeight: 14,
   },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    fontStyle: "normal",
-    letterSpacing: 0.35,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.6,
     textTransform: "uppercase",
     color: Theme.textMuted,
-    paddingHorizontal: 16,
-    paddingTop: 5,
-    paddingBottom: 5,
-    backgroundColor: Theme.surfaceGray,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
   },
 });
 
@@ -754,60 +859,66 @@ const sheetTypography = {
   default: StyleSheet.create({
     sheetTitle: styles.sheetTitle,
     sheetSubtitle: styles.sheetSubtitle,
+    sectionLabelWrap: styles.sectionLabelWrap,
     sectionLabel: styles.sectionLabel,
-    placeRowText: styles.placeRowText,
+    placeRowPrimary: styles.placeRowPrimary,
+    placeRowSecondary: styles.placeRowSecondary,
     customAddressText: styles.customAddressText,
     loadingText: styles.loadingText,
     emptyListSubtext: styles.emptyListSubtext,
   }),
   compact: StyleSheet.create({
     sheetTitle: {
-      fontSize: 14,
-      fontWeight: "600",
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: -0.1,
       color: Theme.textPrimaryDark,
     },
     sheetSubtitle: {
-      fontSize: 10,
-      fontWeight: "400",
-      marginTop: 2,
-      color: Theme.textSecondary,
-      lineHeight: 14,
+      fontSize: 9,
+      fontWeight: "500",
+      color: Theme.textMuted,
+      lineHeight: 13,
+    },
+    sectionLabelWrap: {
+      paddingHorizontal: 14,
+      paddingTop: 8,
+      paddingBottom: 4,
+      backgroundColor: Theme.cardWhite,
     },
     sectionLabel: {
-      fontSize: 9,
-      fontWeight: "600",
-      letterSpacing: 0.3,
+      fontSize: 8,
+      fontWeight: "700",
+      letterSpacing: 0.55,
       textTransform: "uppercase",
       color: Theme.textMuted,
-      paddingHorizontal: 14,
-      paddingTop: 4,
-      paddingBottom: 4,
-      backgroundColor: Theme.surfaceGray,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: Theme.borderLight,
     },
-    placeRowText: {
-      flex: 1,
-      minWidth: 0,
-      fontSize: 12,
-      lineHeight: 17,
-      fontWeight: "500",
+    placeRowPrimary: {
+      fontSize: 11,
+      lineHeight: 15,
+      fontWeight: "600",
       color: Theme.textPrimaryDark,
+    },
+    placeRowSecondary: {
+      fontSize: 9,
+      lineHeight: 13,
+      fontWeight: "500",
+      color: Theme.textMuted,
     },
     customAddressText: {
       flex: 1,
-      fontSize: 11,
-      fontWeight: "700",
+      fontSize: 10,
+      fontWeight: "600",
       color: Theme.primary,
     },
     loadingText: {
-      fontSize: 11,
-      color: Theme.textSecondary,
-    },
-    emptyListSubtext: {
       fontSize: 10,
       color: Theme.textMuted,
-      marginBottom: 4,
+    },
+    emptyListSubtext: {
+      fontSize: 9,
+      color: Theme.textMuted,
+      lineHeight: 13,
     },
   }),
 };
@@ -897,26 +1008,30 @@ const signupSheetTypography = StyleSheet.create({
     color: SIGNUP_SHEET.muted,
     lineHeight: 18,
   },
+  sectionLabelWrap: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 6,
+    backgroundColor: SIGNUP_SHEET.white,
+  },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: "500",
-    letterSpacing: 0.55,
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
     color: SIGNUP_SHEET.faint,
-    paddingHorizontal: 20,
-    paddingTop: 6,
-    paddingBottom: 8,
-    backgroundColor: SIGNUP_SHEET.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: SIGNUP_SHEET.border,
   },
-  placeRowText: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 13,
-    lineHeight: 19,
+  placeRowPrimary: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
+    color: SIGNUP_SHEET.title,
+  },
+  placeRowSecondary: {
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "400",
-    color: SIGNUP_SHEET.body,
+    color: SIGNUP_SHEET.muted,
   },
   customAddressText: {
     flex: 1,

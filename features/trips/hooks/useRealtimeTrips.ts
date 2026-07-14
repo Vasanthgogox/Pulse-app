@@ -57,6 +57,33 @@ export function useRealtimeTrip(
   }, [tripId]);
 }
 
+/** Subscribe to trip_documents for a single trip; fires onChange on any insert/update/delete. */
+export function useRealtimeTripDocuments(
+  tripId: string | null,
+  onChange: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void,
+) {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    if (!tripId) return;
+    return subscribeSharedPostgresChanges(
+      `trip-documents:${tripId}`,
+      [
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trip_documents',
+          filter: `trip_id=eq.${tripId}`,
+        },
+      ],
+      (payload) => {
+        onChangeRef.current(payload);
+      }
+    );
+  }, [tripId]);
+}
+
 /**
  * Subscribe to driver location INSERTs for a specific trip (and optional driver fallback).
  *

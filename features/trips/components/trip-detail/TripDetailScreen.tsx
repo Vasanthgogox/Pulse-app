@@ -72,6 +72,7 @@ import {
 } from "../../services/tripAdjustments";
 import { regenerateTripOtp } from "../../services/tripOtp.service";
 import {
+    forceSetTripStatusSimulated,
     getTripDisplayNumber,
     isTripCompleted,
     updateTripStatus,
@@ -1548,19 +1549,6 @@ export default function TripDetailScreen({
   const payoutModeLc = String(trip.trip_payout_mode ?? "")
     .trim()
     .toLowerCase();
-  /**
-   * "Record supplier payout" is for **market / aggregate supply** (dispatcher pays an external supplier).
-   * Integrated load **asset execution** (partner org is the supplier of record, roster / own fleet) must not
-   * show this — those rows still often carry `supplier_id`, which wrongly made `resolveTripLedgerTripType`
-   * infer `market` when `trip_payout_mode` was unset.
-   */
-  const showRecordSupplierPayoutCta =
-    payoutModeLc !== "asset" &&
-    entryContext !== "supplier" &&
-    !isPartnerSettlementView &&
-    (payoutModeLc === "market" || isTripOwner) &&
-    resolveTripLedgerTripType(trip) === "market" &&
-    !!(trip.supplier_id ?? "").trim();
   const customerSales = Number(trip.client_price ?? 0);
   const supplierCost = Number(trip.supplier_rate ?? 0);
   const sales = isPartnerSettlementView ? supplierCost : customerSales;
@@ -1875,19 +1863,12 @@ export default function TripDetailScreen({
         // Simulation fallback: allow final completion even when strict business validation
         // (e.g. supplier-link checks) blocks status transition in normal flows.
         if (simConfirmStep.targetStatus === "completed") {
-          const fallbackUpdate: Record<string, unknown> = {
+          const { error: fallbackError } = await forceSetTripStatusSimulated(trip.id, {
             status: "completed",
-            completed_at: simConfirmStep.completed_at ?? new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            status_change_origin: "business_simulated",
-          };
-          if (simConfirmStep.started_at) {
-            fallbackUpdate.started_at = simConfirmStep.started_at;
-          }
-          const { error: fallbackError } = await supabase()
-            .from("trips")
-            .update(fallbackUpdate)
-            .eq("id", trip.id);
+            completedAt: simConfirmStep.completed_at ?? new Date().toISOString(),
+            startedAt: simConfirmStep.started_at || undefined,
+            statusChangeOrigin: "business_simulated",
+          });
           if (fallbackError) {
             setSimError(fallbackError.message);
             setSimulating(false);
@@ -1935,14 +1916,10 @@ export default function TripDetailScreen({
       };
       const { error } = await updateTripStatus(trip.id, revertPayload);
       if (error) {
-        const fallbackUpdate: Record<string, unknown> = {
-          ...revertPayload,
-          updated_at: new Date().toISOString(),
-        };
-        const { error: fallbackError } = await supabase()
-          .from("trips")
-          .update(fallbackUpdate)
-          .eq("id", trip.id);
+        const { error: fallbackError } = await forceSetTripStatusSimulated(trip.id, {
+          status: revertPayload.status,
+          statusChangeOrigin: revertPayload.status_change_origin,
+        });
         if (fallbackError) {
           setSimError(fallbackError.message);
           return;
@@ -2058,8 +2035,32 @@ export default function TripDetailScreen({
   const clientPartyIntegrated = detail.clientPartyRes?.integrated ?? false;
   const supplierPartyIntegrated = detail.supplierPartyRes?.integrated ?? false;
   const hasLinkedClient = Boolean((clientIdFromContext ?? trip.client_id)?.trim());
+  const hasLinkedSupplier = Boolean((trip.supplier_id ?? "").trim());
+  const tripLedgerType = resolveTripLedgerTripType(trip);
+  const hasNamedSupplierParty =
+    hasLinkedSupplier ||
+    (!!supplierNameForParty.trim() &&
+      supplierNameForParty !== awaitingDataLabel);
+  /**
+   * Market payable lane — show whenever there is supplier cost to settle (even when opened
+   * from supplier detail with `entryContext=supplier`). Recording is gated to trip owner.
+   */
+  const hasMarketSupplierPayable =
+    !isAssetTripFinance &&
+    tripLedgerType === "market" &&
+    payoutModeLc !== "asset" &&
+    (adjCost > 0 || cost > 0 || hasNamedSupplierParty);
+  const showRecordSupplierPayoutCta =
+    hasMarketSupplierPayable &&
+    !isPartnerSettlementView &&
+    isTripOwner;
+  const showRecordDriverPayoutCta =
+    isAssetTripFinance &&
+    !isPartnerSettlementView &&
+    isTripOwner &&
+    (adjCost > 0 || cost > 0);
   const showPayableSettlementLane =
-    showRecordSupplierPayoutCta || isAssetTripFinance;
+    hasMarketSupplierPayable || isAssetTripFinance;
   const tripLedgerNavContext = {
     trip,
     router,
@@ -2227,6 +2228,46 @@ export default function TripDetailScreen({
                 Record supplier payout
               </Text>
             </TouchableOpacity>
+          ) : showRecordDriverPayoutCta ? (
+            <TouchableOpacity
+              style={[
+                neoStyles.laneActionBtn,
+                neoStyles.laneActionBtnDark,
+                financeLayout === "mobile" && neoStyles.laneActionBtnMobile,
+              ]}
+              onPress={() => {
+                const dueOut = Math.max(0, Math.round(supplierDueAfterAdjustments));
+                pushTripLedgerQuickEntry(
+                  {
+                    ...tripLedgerNavContext,
+                    ledgerSyncExtraParams: {
+                      dueAmountOut: String(dueOut),
+                    },
+                  },
+                  "driver",
+                );
+              }}
+              activeOpacity={0.88}
+            >
+              <Feather name="arrow-up-right" size={financeLayout === "mobile" ? 13 : 14} color="#fff" />
+              <Text
+                style={[
+                  neoStyles.laneActionBtnText,
+                  neoStyles.laneActionBtnDarkText,
+                  financeLayout === "mobile" && neoStyles.laneActionBtnTextMobile,
+                ]}
+                numberOfLines={2}
+              >
+                Record driver payout
+              </Text>
+            </TouchableOpacity>
+          ) : null
+        }
+        payableActionHint={
+          showRecordSupplierPayoutCta && !hasLinkedSupplier ? (
+            <Text style={neoStyles.laneActionHint}>
+              Link a supplier to pre-fill payout
+            </Text>
           ) : null
         }
       />

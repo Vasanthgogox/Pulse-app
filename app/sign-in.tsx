@@ -255,7 +255,7 @@ export default function SignIn() {
         maxLength={128}
         editable={!formDisabled}
         trailing={
-          <Pressable onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
+          <Pressable onPress={() => setShowPass((v) => !v)} hitSlop={8}>
             {showPass ? (
               <EyeOff size={18} color={PULSE_SIGNUP.muted} />
             ) : (
@@ -339,6 +339,15 @@ export default function SignIn() {
           }}
         >
           <Text style={styles.signUpLink}>{signInCopy.footerLink}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.sectionDivider} />
+
+      <View style={styles.signUpRow}>
+        <Text style={styles.signUpMuted}>Driver? </Text>
+        <Pressable onPress={() => router.push(ROUTES.DRIVER_SIGN_IN as Href)}>
+          <Text style={styles.signUpLink}>Sign in with your phone number</Text>
         </Pressable>
       </View>
     </View>
@@ -512,10 +521,6 @@ const styles = StyleSheet.create({
   formActions: {
     width: '100%',
     marginTop: 12,
-  },
-  eyeBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
   },
   errorText: {
     ...pulseText.error,

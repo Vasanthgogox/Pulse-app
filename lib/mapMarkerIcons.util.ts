@@ -20,24 +20,29 @@ export function resolveDriverMapAvatarSrc(
 let driverMapMarkerStylesInjected = false;
 
 function ensureDriverMapMarkerStyles(): void {
-  if (typeof document === 'undefined' || driverMapMarkerStylesInjected) return;
-  const id = 'pulse-driver-map-marker-styles';
+  if (typeof document === 'undefined') return;
+  const id = 'pulse-driver-map-marker-styles-v4';
   if (document.getElementById(id)) {
     driverMapMarkerStylesInjected = true;
     return;
   }
+  // Drop legacy stylesheets so hot reloads pick up clickable status + alignment.
+  document.getElementById('pulse-driver-map-marker-styles')?.remove();
+  document.getElementById('pulse-driver-map-marker-styles-v2')?.remove();
+  document.getElementById('pulse-driver-map-marker-styles-v3')?.remove();
   const el = document.createElement('style');
   el.id = id;
   el.textContent = `
 @keyframes pulseDriverMapPulse{0%,100%{transform:scale(1);opacity:0.55;}50%{transform:scale(1.22);opacity:0.18;}}
-.pulse-driver-map-marker{position:relative;display:flex;flex-direction:column;align-items:center;width:52px;filter:drop-shadow(0 4px 10px rgba(15,23,42,0.35));pointer-events:none;}
-.pulse-driver-map-pulse{position:absolute;top:2px;left:50%;width:48px;height:48px;margin-left:-24px;border-radius:50%;border:2px solid var(--ring);box-sizing:border-box;}
+.pulse-driver-map-marker{position:relative;display:flex;flex-direction:column;align-items:center;width:44px;filter:drop-shadow(0 4px 10px rgba(15,23,42,0.35));pointer-events:auto;cursor:pointer;}
+.pulse-driver-map-pulse{position:absolute;top:-4px;left:50%;width:52px;height:52px;margin-left:-26px;border-radius:50%;border:2px solid var(--ring);box-sizing:border-box;pointer-events:none;transform-origin:center center;}
 .pulse-driver-map-pulse.on{animation:pulseDriverMapPulse 1.8s ease-in-out infinite;}
 .pulse-driver-map-pulse.off{opacity:0.32;}
-.pulse-driver-map-avatar{position:relative;width:44px;height:44px;border-radius:50%;border:3px solid var(--ring);background:#fff;overflow:hidden;z-index:1;}
+.pulse-driver-map-avatar-wrap{position:relative;width:44px;height:44px;z-index:1;pointer-events:none;flex-shrink:0;}
+.pulse-driver-map-avatar{width:100%;height:100%;border-radius:50%;border:3px solid var(--ring);background:#fff;overflow:hidden;box-sizing:border-box;}
 .pulse-driver-map-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
-.pulse-driver-map-dot{position:absolute;right:2px;bottom:2px;width:10px;height:10px;border-radius:50%;background:var(--ring);border:2px solid #fff;}
-.pulse-driver-map-pointer{width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:10px solid var(--ring);margin-top:-1px;}
+.pulse-driver-map-dot{position:absolute;top:-1px;right:-1px;width:12px;height:12px;border-radius:50%;background:var(--ring);border:2px solid #fff;box-sizing:border-box;z-index:2;pointer-events:auto;cursor:pointer;}
+.pulse-driver-map-pointer{width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:9px solid var(--ring);margin-top:-1px;align-self:center;pointer-events:none;flex-shrink:0;}
 `;
   document.head.appendChild(el);
   driverMapMarkerStylesInjected = true;
@@ -53,11 +58,14 @@ export function buildDriverAvatarMarkerHtml(
   const ring = isOnline ? Theme.darkGreen : Theme.teslaRed;
   const pulseClass = isOnline ? 'on' : 'off';
   const safeSrc = src.replace(/"/g, '&quot;');
-  return `<div class="pulse-driver-map-marker" style="--ring:${ring};">
+  const statusTitle = isOnline ? 'View live location' : 'View location';
+  return `<div class="pulse-driver-map-marker" style="--ring:${ring};" title="${statusTitle}">
   <div class="pulse-driver-map-pulse ${pulseClass}"></div>
-  <div class="pulse-driver-map-avatar">
-    <img src="${safeSrc}" alt="" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <span class="pulse-driver-map-dot"></span>
+  <div class="pulse-driver-map-avatar-wrap">
+    <div class="pulse-driver-map-avatar">
+      <img src="${safeSrc}" alt="" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    </div>
+    <span class="pulse-driver-map-dot" aria-hidden="true" title="${statusTitle}"></span>
   </div>
   <div class="pulse-driver-map-pointer"></div>
 </div>`;

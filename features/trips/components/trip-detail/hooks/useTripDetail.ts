@@ -65,7 +65,7 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
-import { useRealtimeDriverLocations, useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
+import { useRealtimeDriverLocations, useRealtimeTrip, useRealtimeTripDocuments } from "../../../hooks/useRealtimeTrips";
 import { useTrackingTripBroadcast } from "@/features/tracking/hooks/useTrackingTripBroadcast";
 import { isTrackingBroadcastV1Enabled } from "@/features/tracking/trackingFeatureFlags";
 import {
@@ -1505,6 +1505,11 @@ export function useTripDetail({
         else setTripDocuments(documents ?? []);
       });
   }, [tripId]);
+
+  // Ops has no other signal for a driver-uploaded document (e.g. POD) — trip_documents
+  // has no org-scoped realtime coverage elsewhere, so this per-trip subscription is the
+  // only way this screen learns about a new upload without a manual refresh.
+  useRealtimeTripDocuments(tripId ?? null, loadTripDocuments);
 
   const fetchDriverLocationFromDb = useCallback(async () => {
     if (!trip?.id) return;

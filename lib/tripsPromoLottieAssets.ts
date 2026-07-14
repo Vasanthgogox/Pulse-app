@@ -52,7 +52,7 @@ export function resolveTripsPromoHeroVisualScale(
 
 /** Fixed square slot — all trip tabs share the same outer frame. */
 export const TRIPS_PROMO_HERO_SLOT = {
-  compact: 200,
-  mobile: 228,
-  desktop: 256,
+  compact: 140,
+  mobile: 160,
+  desktop: 180,
 } as const;

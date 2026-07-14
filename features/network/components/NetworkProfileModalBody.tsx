@@ -2,6 +2,7 @@
  * Network profile modal body — hub hex hero layout (aligned with org network page).
  */
 import { NetworkProfileHubHero } from "@/features/network/components/NetworkProfileHubHero";
+import Theme from "@/constants/Theme";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import {
   Building2,
@@ -57,6 +58,20 @@ function entityTypeFromRole(
   return "client";
 }
 
+function shouldShowRegisteredAddress(
+  location: string,
+  registeredAddress: string | null | undefined,
+): boolean {
+  const address = registeredAddress?.trim();
+  if (!address) return false;
+  const loc = location.trim().toLowerCase();
+  const addr = address.toLowerCase();
+  if (!loc) return true;
+  if (addr === loc) return false;
+  if (addr.includes(loc) || loc.includes(addr)) return false;
+  return true;
+}
+
 export function NetworkProfileModalBody({
   node,
   isMobile = false,
@@ -72,9 +87,13 @@ export function NetworkProfileModalBody({
   const inApp =
     node.is_integrated ?? (node.status === "CONNECTED" || node.status === "LIVE");
   const memberSinceYear = node.member_since_year ?? null;
+  const showRegisteredAddress = shouldShowRegisteredAddress(
+    node.location,
+    node.registered_address,
+  );
 
   const hasEnrichedData =
-    node.registered_address ||
+    showRegisteredAddress ||
     (node.branch_count ?? 0) > 0 ||
     node.sector ||
     node.website ||
@@ -96,7 +115,7 @@ export function NetworkProfileModalBody({
         memberSinceYear={memberSinceYear}
         connectionStatus={connectionLabel}
         onClose={onClose}
-        compact={isMobile}
+        compact
         stats={[
           { value: tripsValue, label: "trips" },
           { value: ratingValue, label: "rating" },
@@ -129,11 +148,11 @@ export function NetworkProfileModalBody({
               </Text>
             </View>
           ) : null}
-          {node.registered_address ? (
+          {showRegisteredAddress ? (
             <View style={s.enrichedRow}>
               <MapPin size={13} color={METRONIC.muted} strokeWidth={2} />
               <Text style={s.enrichedLabel}>Address</Text>
-              <Text style={[s.enrichedValue, { flex: 1 }]} numberOfLines={2}>
+              <Text style={[s.enrichedValue, { flex: 1 }]} numberOfLines={3}>
                 {node.registered_address}
               </Text>
             </View>
@@ -162,31 +181,35 @@ export function NetworkProfileModalBody({
 
 const s = StyleSheet.create({
   enrichedSection: {
-    backgroundColor: "#FAFAFA",
+    backgroundColor: Theme.cardWhite,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: METRONIC.border,
+    borderTopColor: Theme.borderLight,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 10,
+    paddingVertical: 14,
+    gap: 12,
   },
   enrichedRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
+    gap: 10,
+    width: "100%",
   },
   enrichedLabel: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
     color: METRONIC.muted,
-    width: 56,
+    width: 64,
     flexShrink: 0,
     marginTop: 1,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
   },
   enrichedValue: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
     color: METRONIC.text,
+    flex: 1,
     flexShrink: 1,
-    lineHeight: 17,
+    lineHeight: 18,
   },
 });

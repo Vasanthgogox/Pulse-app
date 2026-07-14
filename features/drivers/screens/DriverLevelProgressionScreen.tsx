@@ -86,11 +86,11 @@ export default function LevelProgressionScreen() {
   }, [load]));
 
   // Supabase Realtime: re-fetch trips count whenever any of the driver's trips change.
-  // Uses the shared registry channel ('trips:all') so this and DriverProfileScreen
+  // Uses the shared registry channel ('driver-app:trips:all') so this and DriverProfileScreen
   // reuse ONE server channel instead of two private static-named channels.
   useEffect(() => {
     return subscribeSharedPostgresChanges(
-      'trips:all',
+      'driver-app:trips:all',
       [{ event: '*', schema: 'public', table: 'trips' }],
       () => { load(false); },
     );

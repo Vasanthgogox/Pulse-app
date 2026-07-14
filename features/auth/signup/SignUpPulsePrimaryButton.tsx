@@ -78,12 +78,15 @@ export const SignUpPulsePrimaryButton = memo(function SignUpPulsePrimaryButton({
       accessibilityState={{ disabled: inactive, busy: loading }}
     >
       {loading ? (
-        <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
+        <ActivityIndicator color={theme.primaryButtonText ?? Theme.buttonPrimaryText} size="small" />
       ) : (
         <Text
           style={[
             pulsePillButtonLabelLarge,
             isMobile && styles.labelMobile,
+            !inactive && theme.primaryButtonText
+              ? { color: theme.primaryButtonText }
+              : null,
             inactive && { color: theme.disabledText },
           ]}
         >

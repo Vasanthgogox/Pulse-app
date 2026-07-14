@@ -39,83 +39,94 @@ export function FullPageWizardFooter({
   const isRegistry = actionVariant === "registry";
   const actionStyles = alertRegistryActionStyles;
 
+  const footerBarStyle = isRegistry
+    ? actionStyles.footerBar
+    : summary
+      ? styles.footerBarWithSummary
+      : styles.footerBar;
+
   return (
     <View>
-      {summary ? (
-        <Text
-          style={isRegistry ? actionStyles.footerSummary : styles.footerSummary}
-          numberOfLines={2}
-        >
-          {summary}
-        </Text>
-      ) : null}
-      <View style={isRegistry ? actionStyles.footerBar : styles.footerBar}>
-        {onSecondaryPress ? (
-          <Pressable
+      <View style={footerBarStyle}>
+        {summary ? (
+          <Text
             style={
-              isRegistry ? actionStyles.footerGhostBtn : styles.cancelBtn
+              isRegistry ? actionStyles.footerSummary : styles.footerSummaryInline
             }
-            onPress={onSecondaryPress}
+            numberOfLines={2}
           >
-            <Text
-              style={
-                isRegistry
-                  ? actionStyles.footerGhostBtnText
-                  : styles.cancelBtnText
-              }
-            >
-              {secondaryLabel}
-            </Text>
-          </Pressable>
+            {summary}
+          </Text>
         ) : null}
-        {tertiaryLabel && onTertiaryPress ? (
+        <View style={styles.footerActions}>
+          {onSecondaryPress ? (
+            <Pressable
+              style={
+                isRegistry ? actionStyles.footerGhostBtn : styles.cancelBtn
+              }
+              onPress={onSecondaryPress}
+            >
+              <Text
+                style={
+                  isRegistry
+                    ? actionStyles.footerGhostBtnText
+                    : styles.cancelBtnText
+                }
+              >
+                {secondaryLabel}
+              </Text>
+            </Pressable>
+          ) : null}
+          {tertiaryLabel && onTertiaryPress ? (
+            <Pressable
+              style={[
+                isRegistry ? actionStyles.footerTertiaryBtn : styles.tertiaryBtn,
+                !isRegistry && tertiaryDisabled && styles.tertiaryBtnDisabled,
+                isRegistry &&
+                  tertiaryDisabled &&
+                  actionStyles.btnDisabled,
+              ]}
+              onPress={onTertiaryPress}
+              disabled={tertiaryDisabled}
+            >
+              <Text
+                style={
+                  isRegistry
+                    ? actionStyles.footerTertiaryBtnText
+                    : styles.tertiaryBtnText
+                }
+              >
+                {tertiaryLabel}
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable
             style={[
-              isRegistry ? actionStyles.footerTertiaryBtn : styles.tertiaryBtn,
-              !isRegistry && tertiaryDisabled && styles.tertiaryBtnDisabled,
-              isRegistry &&
-                tertiaryDisabled &&
-                actionStyles.btnDisabled,
+              isRegistry ? actionStyles.footerPrimaryBtn : styles.submitBtn,
+              summary && !isRegistry && styles.submitBtnWithSummary,
+              disabled &&
+                (isRegistry
+                  ? actionStyles.btnDisabled
+                  : styles.submitBtnDisabled),
             ]}
-            onPress={onTertiaryPress}
-            disabled={tertiaryDisabled}
+            onPress={onPrimaryPress}
+            disabled={disabled}
           >
-            <Text
-              style={
-                isRegistry
-                  ? actionStyles.footerTertiaryBtnText
-                  : styles.tertiaryBtnText
-              }
-            >
-              {tertiaryLabel}
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text
+                style={
+                  isRegistry
+                    ? actionStyles.footerPrimaryBtnText
+                    : styles.submitBtnText
+                }
+              >
+                {primaryLabel}
+              </Text>
+            )}
           </Pressable>
-        ) : null}
-        <Pressable
-          style={[
-            isRegistry ? actionStyles.footerPrimaryBtn : styles.submitBtn,
-            disabled &&
-              (isRegistry
-                ? actionStyles.btnDisabled
-                : styles.submitBtnDisabled),
-          ]}
-          onPress={onPrimaryPress}
-          disabled={disabled}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text
-              style={
-                isRegistry
-                  ? actionStyles.footerPrimaryBtnText
-                  : styles.submitBtnText
-              }
-            >
-              {primaryLabel}
-            </Text>
-          )}
-        </Pressable>
+        </View>
       </View>
       {hint ? (
         <Text style={isRegistry ? actionStyles.footerHint : styles.footerHint}>
