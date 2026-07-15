@@ -25,7 +25,19 @@ export interface SignUpPulseFormStepContextValue {
   unregisterField: (id: number) => void;
   handleFieldSubmit: (id: number) => void;
   isLastSingleLineField: (id: number) => boolean;
+  /**
+   * Scroll a field wrapper into the form ScrollView.
+   * Non-SignUpPulseField edits (map search, city picker) should call this on focus/open.
+   */
   scrollFieldIntoView?: (
+    fieldRef: RefObject<View | null>,
+    options?: ScrollFieldIntoViewOptions,
+  ) => void;
+  /**
+   * Alias for map / custom editables — same as scrollFieldIntoView.
+   * Prefer this name at LocationSearchField call sites.
+   */
+  onWebEditableFocus?: (
     fieldRef: RefObject<View | null>,
     options?: ScrollFieldIntoViewOptions,
   ) => void;
@@ -124,8 +136,16 @@ export function SignUpPulseFormStepProvider({
       handleFieldSubmit,
       isLastSingleLineField,
       scrollFieldIntoView,
+      onWebEditableFocus: scrollFieldIntoView,
     }),
-    [revision, registerField, unregisterField, handleFieldSubmit, isLastSingleLineField, scrollFieldIntoView],
+    [
+      revision,
+      registerField,
+      unregisterField,
+      handleFieldSubmit,
+      isLastSingleLineField,
+      scrollFieldIntoView,
+    ],
   );
 
   return (

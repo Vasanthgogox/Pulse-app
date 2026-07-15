@@ -1,4 +1,5 @@
 import { MapPin } from 'lucide-react-native';
+import { useRef } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { LocationSearchField } from '@/features/trips/components/add-trip/LocationSearchField';
@@ -7,20 +8,61 @@ import { VALIDATION } from '@/lib/validation';
 
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { CityPicker } from '../components/CityPicker';
+import { useSignUpPulseFormStepContext } from '../SignUpPulseFormStepContext';
 import { SignUpPulseField } from '../SignUpPulseField';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
 import { SignUpPulseSubtitle } from '../SignUpPulseSubtitle';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS } from '../signUpPulseTheme';
 import { SIGNUP_TEXT } from '../signUpTypography';
 
+function OfficeMapSearchField({ flow }: { flow: SignUpFlow }) {
+  const form = useSignUpPulseFormStepContext();
+  const wrapRef = useRef<View>(null);
+
+  return (
+    <View ref={wrapRef} style={styles.locationFieldWrap} collapsable={false}>
+      <LocationSearchField
+        label="Area / locality on map"
+        placeholder="Search area, landmark, or neighbourhood"
+        value={flow.officePlaceLabel}
+        onChangeText={(text) => {
+          flow.setOfficePlaceLabel(text);
+          if (!text.trim()) flow.clearOfficePlace();
+        }}
+        onSelectPlace={(name, coords) => {
+          void flow.applyOfficePlaceFromMap(name, coords.lat, coords.lon, {
+            pincode: coords.pincode,
+            city: coords.city,
+            state: coords.state,
+          });
+        }}
+        leadingIcon={<MapPin size={14} color={PULSE_SIGNUP.primaryDark} strokeWidth={2} />}
+        inputStyle={styles.locationInput}
+        labelStyle={SIGNUP_TEXT.fieldLabel}
+        compact
+        sheetVariant="signup"
+        onFocusScroll={() => form?.onWebEditableFocus?.(wrapRef)}
+      />
+      {flow.officePlaceResolving ? (
+        <View style={styles.hintRow}>
+          <ActivityIndicator size="small" color={Theme.primary} />
+          <Text style={SIGNUP_TEXT.captionMedium}>Filling city, state & PIN…</Text>
+        </View>
+      ) : flow.officeLatitude != null &&
+        flow.officeLongitude != null &&
+        (flow.officeLatitude !== 0 || flow.officeLongitude !== 0) ? (
+        <Text style={SIGNUP_TEXT.caption}>
+          City, state & PIN filled from map — enter door no. and area below
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
   const showStreetError = flow.step4Attempted ? flow.step4Errors.street : null;
   const showLocalityError = flow.step4Attempted ? flow.step4Errors.locality : null;
   const showPincodeError = flow.step4Attempted ? flow.step4Errors.pincode : null;
-  const hasPinnedCoords =
-    flow.officeLatitude != null &&
-    flow.officeLongitude != null &&
-    (flow.officeLatitude !== 0 || flow.officeLongitude !== 0);
 
   return (
     <SignUpPulseFormStep
@@ -34,39 +76,7 @@ export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
       keyboardAware
       scrollRef={flow.locationScrollRef}
     >
-      <View style={styles.locationFieldWrap}>
-        <LocationSearchField
-          label="Area / locality on map"
-          placeholder="Search area, landmark, or neighbourhood"
-          value={flow.officePlaceLabel}
-          onChangeText={(text) => {
-            flow.setOfficePlaceLabel(text);
-            if (!text.trim()) flow.clearOfficePlace();
-          }}
-          onSelectPlace={(name, coords) => {
-            void flow.applyOfficePlaceFromMap(name, coords.lat, coords.lon, {
-              pincode: coords.pincode,
-              city: coords.city,
-              state: coords.state,
-            });
-          }}
-          leadingIcon={<MapPin size={14} color={PULSE_SIGNUP.primaryDark} strokeWidth={2} />}
-          inputStyle={styles.locationInput}
-          labelStyle={SIGNUP_TEXT.fieldLabel}
-          compact
-          sheetVariant="signup"
-        />
-        {flow.officePlaceResolving ? (
-          <View style={styles.hintRow}>
-            <ActivityIndicator size="small" color={Theme.primary} />
-            <Text style={SIGNUP_TEXT.captionMedium}>Filling city, state & PIN…</Text>
-          </View>
-        ) : hasPinnedCoords ? (
-          <Text style={SIGNUP_TEXT.caption}>
-            City, state & PIN filled from map — enter door no. and area below
-          </Text>
-        ) : null}
-      </View>
+      <OfficeMapSearchField flow={flow} />
 
       <SignUpPulseField
         label="Door / building & street"
@@ -118,6 +128,7 @@ export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
 const styles = StyleSheet.create({
   locationFieldWrap: {
     marginBottom: 10,
+    width: '100%',
   },
   locationInput: {
     borderWidth: 1,

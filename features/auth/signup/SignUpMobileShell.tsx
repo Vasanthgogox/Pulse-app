@@ -2,6 +2,7 @@ import { memo, type ReactNode, type RefObject } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
+import { signupMobileWebScrollGestureProps } from '@/lib/signupMobileWebFormScroll';
 
 import { SignUpPulseShell } from './SignUpPulseShell';
 import { DRIVER_SIGNUP } from './signUpDriverTheme';
@@ -52,6 +53,11 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
   const layout = useMobileWebStepLayout({
     extraScrollPadding: bodyMode === 'scroll' ? scrollBottomPad : 0,
   });
+  const isMobileWeb = Platform.OS === 'web' && !isDesktop;
+  const gestureProps = signupMobileWebScrollGestureProps({
+    enabled: isMobileWeb && bodyMode === 'scroll',
+    keyboardVisible: layout.keyboardVisible,
+  });
 
   const body =
     bodyMode === 'scroll' ? (
@@ -63,8 +69,8 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
           { paddingBottom: layout.scrollPaddingBottom },
         ]}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
         showsVerticalScrollIndicator={false}
+        {...gestureProps}
       >
         {children}
       </ScrollView>

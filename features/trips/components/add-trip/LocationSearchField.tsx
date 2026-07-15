@@ -54,6 +54,11 @@ export interface LocationSearchFieldProps {
   sheetVariant?: "default" | "signup";
   sheetTitle?: string;
   sheetSubtitle?: string;
+  /**
+   * When set (e.g. signup form step), used instead of document scrollIntoView
+   * so mobile-web keyboard scroll stays on the parent RN ScrollView.
+   */
+  onFocusScroll?: () => void;
 }
 
 const DEBOUNCE_MS = 300;
@@ -82,6 +87,7 @@ export function LocationSearchField({
   sheetVariant = "default",
   sheetTitle,
   sheetSubtitle,
+  onFocusScroll,
 }: LocationSearchFieldProps) {
   const isSignupSheet = sheetVariant === "signup";
   const { width: winW } = useWindowDimensions();
@@ -108,9 +114,10 @@ export function LocationSearchField({
     setDraft(value);
     setDropdownOpen(true);
     onDropdownOpenChange?.(true);
+    onFocusScroll?.();
     // Ensure modal's input focuses after modal is visible.
     setTimeout(() => modalInputRef.current?.focus(), 0);
-  }, [onDropdownOpenChange, value]);
+  }, [onDropdownOpenChange, onFocusScroll, value]);
 
   const query = draft.trim();
   const popularForDisplay =
@@ -455,6 +462,7 @@ export function LocationSearchField({
                     placeholder={placeholder}
                     shellStyle={signupSheetStyles.searchShell}
                     autoFocus
+                    onFocusScroll={onFocusScroll}
                   />
                 ) : (
                   <View
@@ -1059,11 +1067,13 @@ type SignupSheetSearchInputProps = {
   placeholder: string;
   shellStyle?: ViewStyle;
   autoFocus?: boolean;
+  /** Prefer form ScrollView scroll; skip document scrollIntoView when provided. */
+  onFocusScroll?: () => void;
 };
 
 const SignupSheetSearchInput = forwardRef<TextInput, SignupSheetSearchInputProps>(
   function SignupSheetSearchInput(
-    { value, onChangeText, placeholder, shellStyle, autoFocus },
+    { value, onChangeText, placeholder, shellStyle, autoFocus, onFocusScroll },
     ref,
   ) {
     const [focused, setFocused] = useState(false);
@@ -1093,6 +1103,10 @@ const SignupSheetSearchInput = forwardRef<TextInput, SignupSheetSearchInputProps
           autoComplete="off"
           onFocus={() => {
             setFocused(true);
+            if (onFocusScroll) {
+              onFocusScroll();
+              return;
+            }
             if (Platform.OS === "web") scrollFocusedWebInputIntoView();
           }}
           onBlur={() => setFocused(false)}

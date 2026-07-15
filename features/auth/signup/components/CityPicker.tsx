@@ -1,6 +1,6 @@
 import INDIA_LOCATIONS from '@/lib/data/indiaLocations.json';
 import { ChevronDown, MapPin, Search, X } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Platform,
   ScrollView,
@@ -14,6 +14,7 @@ import {
   type TextStyle,
 } from 'react-native';
 
+import { useSignUpPulseFormStepContext } from '../SignUpPulseFormStepContext';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS } from '../signUpPulseTheme';
 import { PULSE_SIGNUP_TYPO, SIGNUP_TEXT } from '../signUpTypography';
 
@@ -128,6 +129,8 @@ export function CityPicker({
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const { height: windowHeight } = useWindowDimensions();
+  const form = useSignUpPulseFormStepContext();
+  const wrapRef = useRef<View>(null);
   // Responsive cap instead of a fixed pixel height: a fixed 240px list left no
   // room for the picker on short devices once the keyboard and the fields
   // above it (locality search, street, area, PIN) are accounted for. 32% of
@@ -161,17 +164,23 @@ export function CityPicker({
     setQuery('');
   };
 
+  const openPicker = () => {
+    setOpen(true);
+    setQuery('');
+    // Bring the expanding panel into the form ScrollView (no document scrollIntoView).
+    requestAnimationFrame(() => {
+      form?.scrollFieldIntoView?.(wrapRef);
+    });
+  };
+
   return (
-    <View style={styles.wrap}>
+    <View ref={wrapRef} style={styles.wrap} collapsable={false}>
       {!open ? (
         value ? (
           <View style={[styles.selectedCard, hasError && styles.fieldShellError]}>
             <TouchableOpacity
               style={styles.selectedBody}
-              onPress={() => {
-                setOpen(true);
-                setQuery('');
-              }}
+              onPress={openPicker}
               activeOpacity={0.85}
             >
               <Text style={styles.selectedCity}>{value.city}</Text>
@@ -196,7 +205,7 @@ export function CityPicker({
         ) : (
           <TouchableOpacity
             style={[styles.trigger, hasError && styles.fieldShellError]}
-            onPress={() => setOpen(true)}
+            onPress={openPicker}
             activeOpacity={0.85}
           >
             <MapPin size={15} color={PULSE_SIGNUP.muted} strokeWidth={2} />
@@ -221,7 +230,10 @@ export function CityPicker({
               onChangeText={setQuery}
               autoCapitalize="words"
               autoFocus={Platform.OS !== 'web'}
-              onFocus={() => setSearchFocused(true)}
+              onFocus={() => {
+                setSearchFocused(true);
+                form?.scrollFieldIntoView?.(wrapRef);
+              }}
               onBlur={() => setSearchFocused(false)}
             />
             {query.length > 0 ? (

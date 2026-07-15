@@ -2,6 +2,7 @@ import { memo, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
+import { signupMobileWebScrollGestureProps } from '@/lib/signupMobileWebFormScroll';
 
 import { SignUpPulsePrimaryButton } from '../SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from '../SignUpPulseTitle';
@@ -35,6 +36,11 @@ export const SignUpBrandingStepLayout = memo(function SignUpBrandingStepLayout({
   theme = PULSE_SIGNUP,
 }: SignUpBrandingStepLayoutProps) {
   const layout = useMobileWebStepLayout();
+  const isMobileWeb = Platform.OS === 'web' && !layout.isDesktop;
+  const gestureProps = signupMobileWebScrollGestureProps({
+    enabled: isMobileWeb,
+    keyboardVisible: layout.keyboardVisible,
+  });
 
   return (
     <View style={[styles.root, layout.rootStyle]}>
@@ -46,7 +52,7 @@ export const SignUpBrandingStepLayout = memo(function SignUpBrandingStepLayout({
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
+        {...gestureProps}
       >
         <SignUpPulseTitle title={title} subtitle={subtitle} />
         {children}

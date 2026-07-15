@@ -91,13 +91,55 @@ export function readWebVisualViewportMetrics(): WebVisualViewportMetrics {
  * useKeyboardVisible's web sync() on every visualViewport/focus event — that is
  * the single place this runs on an ongoing basis, so the pin and the React
  * keyboard-inset state always update in the same synchronous pass.
+ *
+ * While the soft keyboard has shrunk visualViewport.height, keep `--app-vt` at 0.
+ * Chasing `offsetTop` mid-gesture moves the whole `#root` shell while an RN
+ * ScrollView is also scrolling (Org name / onboarding fields) and reads as
+ * "scroll cuts off". Document pan is cancelled via `window.scrollTo(0, 0)`.
  */
 export function applyIOSWebSafariViewportPin(): void {
   if (!isIOSWeb() || typeof document === 'undefined') return;
-  const { height, offsetTop } = readWebVisualViewportMetrics();
+  const { height, offsetTop, keyboardInset } = readWebVisualViewportMetrics();
+  const keyboardOpenByHeight = keyboardInset >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
   document.documentElement.style.setProperty('--app-vh', `${height}px`);
-  document.documentElement.style.setProperty('--app-vt', `${offsetTop}px`);
+  document.documentElement.style.setProperty(
+    '--app-vt',
+    `${keyboardOpenByHeight ? 0 : offsetTop}px`,
+  );
   window.scrollTo(0, 0);
+}
+
+/** True when `node` is (or is inside) a web editable control. */
+export function isWebEditableDomTarget(target: EventTarget | null): boolean {
+  if (typeof HTMLElement === 'undefined' || !(target instanceof Node)) {
+    return false;
+  }
+  let node: Node | null = target;
+  while (node) {
+    if (node instanceof HTMLElement) {
+      const tag = node.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (node.isContentEditable) return true;
+    }
+    node = node.parentNode;
+  }
+  return false;
+}
+
+/**
+ * Blur the focused web input/textarea so iOS dismisses the keyboard and the
+ * viewport pin can expand again. Safe no-op on native / no focus.
+ */
+export function blurActiveWebEditable(): boolean {
+  if (typeof document === 'undefined') return false;
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement)) return false;
+  const tag = el.tagName;
+  if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !el.isContentEditable) {
+    return false;
+  }
+  el.blur();
+  return true;
 }
 
 /**
@@ -112,6 +154,8 @@ export function shouldApplyWebKeyboardScrollInset(): boolean {
 
 /**
  * Scroll the focused editable into view after the virtual keyboard animates.
+ * iOS: nearest + auto only — smooth multi-pass scrollIntoView flickers against
+ * the signup ScrollView (City / office fields).
  */
 export function scrollFocusedWebInputIntoView(): void {
   if (typeof document === 'undefined') return;
@@ -121,16 +165,20 @@ export function scrollFocusedWebInputIntoView(): void {
   const tag = el.tagName;
   if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !el.isContentEditable) return;
 
-  const block: ScrollLogicalPosition = isIOSWebSafari() ? 'nearest' : 'center';
+  const ios = isIOSWeb();
+  const block: ScrollLogicalPosition = ios || isIOSWebSafari() ? 'nearest' : 'center';
 
   const run = () => {
     try {
-      el.scrollIntoView({ block, behavior: 'smooth' });
+      el.scrollIntoView({ block, behavior: ios ? 'auto' : 'smooth' });
     } catch {
       el.scrollIntoView({ block });
     }
   };
 
-  requestAnimationFrame(() => requestAnimationFrame(run));
-  setTimeout(run, 320);
+  requestAnimationFrame(run);
+  if (!ios) {
+    requestAnimationFrame(() => requestAnimationFrame(run));
+    setTimeout(run, 320);
+  }
 }

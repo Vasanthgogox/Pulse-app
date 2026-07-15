@@ -18,7 +18,6 @@ import {
   type ResolvedTeamInvitation,
 } from '@/features/organization/services/teamInvitationResolver.service';
 import { shadowCheckPlatformIdentity } from '@/features/organization/utils/platformIdentityShadowCheck.util';
-import { scrollFocusedWebInputIntoView } from '@/lib/webKeyboard';
 import { validateEmail } from '@/lib/emailValidation';
 import { formatMobileNumber } from '@/lib/format';
 import { ROUTES } from '@/lib/routes';
@@ -1442,20 +1441,16 @@ export function useBusinessSignUpFlow() {
   };
 
   const scrollAccountFieldIntoView = () => {
-    if (Platform.OS === 'web') {
-      scrollFocusedWebInputIntoView();
-      return;
-    }
+    // Mobile web: SignUpPulseFormStep owns focus scroll — do not call document scrollIntoView.
+    if (Platform.OS === 'web') return;
     setTimeout(() => {
       accountScrollRef.current?.scrollToEnd({ animated: true });
     }, CONFIRM_SCROLL_DELAY_MS);
   };
 
   const scrollLocationFieldIntoView = () => {
-    if (Platform.OS === 'web') {
-      scrollFocusedWebInputIntoView();
-      return;
-    }
+    // Mobile web: SignUpPulseFormStep owns focus scroll — do not call document scrollIntoView.
+    if (Platform.OS === 'web') return;
     setTimeout(() => {
       locationScrollRef.current?.scrollToEnd({ animated: true });
     }, CONFIRM_SCROLL_DELAY_MS);

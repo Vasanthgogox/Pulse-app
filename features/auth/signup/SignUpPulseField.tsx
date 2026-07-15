@@ -117,6 +117,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
 
   const handleFocus = (event: NativeSyntheticEvent<TextInputFocusEventData>) => {
     onFocus?.(event);
+    // Inside a form step: only use ScrollView scroll — never document scrollIntoView.
     if (scrollFieldIntoView) {
       const extraBottomPad =
         passwordField === 'confirm'
@@ -128,7 +129,9 @@ export const SignUpPulseField = memo(function SignUpPulseField({
         wrapRef,
         extraBottomPad != null ? { extraBottomPad } : undefined,
       );
-    } else if (Platform.OS === 'web') {
+      return;
+    }
+    if (Platform.OS === 'web' && !formStep) {
       scrollFocusedWebInputIntoView();
     }
   };

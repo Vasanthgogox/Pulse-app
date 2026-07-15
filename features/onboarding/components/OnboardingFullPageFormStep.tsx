@@ -1,12 +1,14 @@
 import { memo, type ReactNode } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
-import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
 import { OperationalButton } from '@/components/operational';
+import { space } from '@/design-system/spacing';
+import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
+import { signupMobileWebScrollGestureProps } from '@/lib/signupMobileWebFormScroll';
+
+import { onboardingLayout } from '../styles/onboardingLayout';
 import { OnboardingFullPageFooter } from './OnboardingFullPageFooter';
 import { OnboardingFullPageTitle } from './OnboardingFullPageTitle';
-import { onboardingLayout } from '../styles/onboardingLayout';
-import { space } from '@/design-system/spacing';
 
 export interface OnboardingFullPageFormStepProps {
   title: string;
@@ -38,6 +40,11 @@ export const OnboardingFullPageFormStep = memo(function OnboardingFullPageFormSt
   secondaryAction,
 }: OnboardingFullPageFormStepProps) {
   const layout = useMobileWebStepLayout();
+  const isMobileWeb = Platform.OS === 'web' && !layout.isDesktop;
+  const gestureProps = signupMobileWebScrollGestureProps({
+    enabled: isMobileWeb,
+    keyboardVisible: layout.keyboardVisible,
+  });
 
   return (
     <View style={[styles.root, layout.rootStyle]}>
@@ -49,7 +56,7 @@ export const OnboardingFullPageFormStep = memo(function OnboardingFullPageFormSt
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
+        {...gestureProps}
       >
         <OnboardingFullPageTitle title={title} subtitle={subtitle} eyebrow={eyebrow} />
         {children}

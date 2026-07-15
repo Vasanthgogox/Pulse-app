@@ -12,12 +12,15 @@ import {
 } from 'react-native';
 
 import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
-import { scrollFocusedFieldIntoView } from '@/lib/scrollFocusedFieldIntoView.util';
+import {
+  scrollSignupFormFieldIntoView,
+  signupMobileWebScrollGestureProps,
+} from '@/lib/signupMobileWebFormScroll';
 
 import { SignUpPulseFormStepProvider, type ScrollFieldIntoViewOptions } from './SignUpPulseFormStepContext';
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
-import { DESKTOP_BREAKPOINT, DESKTOP_SIGNUP_FORM_WIDTH } from './signUpConstants';
+import { DESKTOP_BREAKPOINT } from './signUpConstants';
 import { PULSE_SIGNUP, type SignUpTheme } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles } from './signUpTypography';
 
@@ -63,7 +66,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   centerContent = false,
   titleCentered = false,
   scrollPaddingBottom = 0,
-  scrollRef,
+  scrollRef: scrollRefProp,
   theme = PULSE_SIGNUP,
   secondaryAction,
   customFooter,
@@ -77,36 +80,54 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
     inlinePrimary,
   });
 
+  const internalScrollRef = useRef<ScrollView>(null);
+  const scrollRef = scrollRefProp ?? internalScrollRef;
+
   const lastFocusedFieldRef = useRef<RefObject<RNView | null> | null>(null);
   const lastScrollPadRef = useRef<number | undefined>(undefined);
 
   const scrollFieldIntoView = useCallback(
     (fieldRef: RefObject<RNView | null>, options?: ScrollFieldIntoViewOptions) => {
-      if (!scrollRef) return;
       lastFocusedFieldRef.current = fieldRef;
       const extraBottomPad = options?.extraBottomPad ?? (isDesktop ? 16 : 48);
       lastScrollPadRef.current = extraBottomPad;
-      scrollFocusedFieldIntoView(scrollRef, fieldRef, {
+      scrollSignupFormFieldIntoView(scrollRef, fieldRef, {
         keyboardHeight: layout.keyboardInset,
         headerOffset: isDesktop ? 20 : 72,
         extraBottomPad,
-        animated: true,
+        animated: isDesktop,
       });
     },
     [scrollRef, layout.keyboardInset, isDesktop],
   );
 
   useEffect(() => {
-    if (!layout.keyboardVisible || !scrollRef || !lastFocusedFieldRef.current) {
+    // Only re-scroll when the keyboard *opens* — not on every keyboardInset tick.
+    if (!layout.keyboardVisible || !lastFocusedFieldRef.current) {
       return;
     }
-    scrollFocusedFieldIntoView(scrollRef, lastFocusedFieldRef.current, {
+    scrollSignupFormFieldIntoView(scrollRef, lastFocusedFieldRef.current, {
       keyboardHeight: layout.keyboardInset,
       headerOffset: isDesktop ? 20 : 72,
       extraBottomPad: lastScrollPadRef.current ?? (isDesktop ? 16 : 48),
-      animated: true,
+      animated: false,
     });
-  }, [layout.keyboardVisible, layout.keyboardInset, scrollRef, isDesktop]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyboard open edge only
+  }, [layout.keyboardVisible, scrollRef, isDesktop]);
+
+  const clearLastFocused = useCallback(() => {
+    lastFocusedFieldRef.current = null;
+  }, []);
+
+  const gestureProps = useMemo(
+    () =>
+      signupMobileWebScrollGestureProps({
+        enabled: Platform.OS === 'web' && !isDesktop,
+        keyboardVisible: layout.keyboardVisible,
+        onDismiss: clearLastFocused,
+      }),
+    [isDesktop, layout.keyboardVisible, clearLastFocused],
+  );
 
   const cta = customFooter ?? (
     <View style={styles.ctaBlock}>
@@ -139,7 +160,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       ]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
-      keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
+      {...gestureProps}
     >
       <SignUpPulseTitle title={title} subtitle={subtitle} centered={titleCentered} />
       {children}

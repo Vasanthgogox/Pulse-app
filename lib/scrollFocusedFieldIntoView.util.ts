@@ -1,12 +1,15 @@
 import { Dimensions, Platform, ScrollView, View, type RefObject } from 'react-native';
 
+import { isIOSWeb, shouldApplyWebKeyboardScrollInset } from '@/lib/webKeyboard';
+
 const DEFAULT_HEADER_OFFSET = 76;
 const DEFAULT_BOTTOM_PAD = 20;
 const IOS_FORM_ACCESSORY_PAD = 52;
-const SCROLL_RETRY_MS = [100, 150, 320, 480] as const;
+/** First pass only; retries use instant scroll to avoid focus-flicker. */
+const SCROLL_RETRY_MS = [160, 320] as const;
 
 /**
- * Each call to scrollFocusedFieldIntoView schedules up to 4 delayed retries
+ * Each call to scrollFocusedFieldIntoView schedules delayed retries
  * (see SCROLL_RETRY_MS). Tapping a second field before the first field's
  * retries finish left those retries pending — they fired later, measured
  * whatever field's wrapper View now sat at the old target position (layout
@@ -16,6 +19,11 @@ const SCROLL_RETRY_MS = [100, 150, 320, 480] as const;
  * focused, so only the most recently focused field's retries can ever run.
  */
 let scrollRequestGeneration = 0;
+
+/** Invalidate in-flight scroll-into-view retries (call when blurring the field). */
+export function cancelPendingFocusedFieldScroll(): void {
+  scrollRequestGeneration += 1;
+}
 
 type ScrollFieldOptions = {
   keyboardHeight?: number;
@@ -43,6 +51,27 @@ function findScrollParent(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
+function readVisualViewportKeyboardInset(): number {
+  if (typeof window === 'undefined') return 0;
+  const vv = window.visualViewport;
+  if (!vv) return 0;
+  return Math.max(0, Math.round(window.innerHeight - vv.height - (vv.offsetTop ?? 0)));
+}
+
+/**
+ * Keyboard occlusion to subtract from the visible bottom edge.
+ * iOS web pins `#root` to visualViewport.height already — subtracting
+ * `--keyboard-height` again over-scrolls and flickers on every focus (City step).
+ */
+function measuredKeyboardOcclusion(keyboardHeight: number): number {
+  if (!shouldApplyWebKeyboardScrollInset()) return 0;
+  return Math.max(
+    keyboardHeight,
+    readCssKeyboardHeight(),
+    readVisualViewportKeyboardInset(),
+  );
+}
+
 /** Returns true if the field was already within the visible area (no scroll applied). */
 function scrollWebFieldIntoView(
   field: View,
@@ -55,41 +84,45 @@ function scrollWebFieldIntoView(
   if (!el?.getBoundingClientRect) return true;
 
   const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-  // Always prefer the live CSS var / visualViewport read over the keyboardHeight
-  // param: the param is a React-render-time snapshot passed in once per focus,
-  // but this function is called again by each of the SCROLL_RETRY_MS retries up
-  // to 480ms later — by then the snapshot can be stale relative to the actual
-  // keyboard/viewport geometry (useKeyboardVisible's sync() keeps the CSS var
-  // fresh on every visualViewport event, so it's the more reliable source here).
-  const measuredKb = Math.max(
-    keyboardHeight,
-    readCssKeyboardHeight(),
-    readVisualViewportKeyboardInset(),
-  );
+  const measuredKb = measuredKeyboardOcclusion(keyboardHeight);
+  const applyKbInset = shouldApplyWebKeyboardScrollInset();
 
   const rect = el.getBoundingClientRect();
-  const viewportTop = vv?.offsetTop ?? 0;
-  const viewportHeight = vv?.height ?? (typeof window !== 'undefined' ? window.innerHeight : 0);
-  const visibleBottom =
-    viewportTop + viewportHeight - measuredKb - IOS_FORM_ACCESSORY_PAD - extraBottomPad;
-  const visibleTop = viewportTop + headerOffset;
-
   const scrollParent = findScrollParent(el);
+
+  // Prefer the ScrollView's own box: signup docks a sticky footer via
+  // marginBottom, so client rect already ends above the CTA. Falling back to
+  // visualViewport double-counts the keyboard on iOS and causes focus flicker.
+  let visibleTop: number;
+  let visibleBottom: number;
+  if (scrollParent) {
+    const parentRect = scrollParent.getBoundingClientRect();
+    visibleTop = parentRect.top + 8;
+    visibleBottom =
+      parentRect.bottom -
+      (applyKbInset ? measuredKb + IOS_FORM_ACCESSORY_PAD + extraBottomPad : 12);
+  } else {
+    const viewportTop = vv?.offsetTop ?? 0;
+    const viewportHeight = vv?.height ?? (typeof window !== 'undefined' ? window.innerHeight : 0);
+    visibleTop = viewportTop + headerOffset;
+    visibleBottom =
+      viewportTop +
+      viewportHeight -
+      measuredKb -
+      (applyKbInset ? IOS_FORM_ACCESSORY_PAD + extraBottomPad : 12);
+  }
+
   if (!scrollParent) {
-    el.scrollIntoView?.({ block: 'center', behavior: animated ? 'smooth' : 'auto' });
+    el.scrollIntoView?.({
+      block: isIOSWeb() ? 'nearest' : 'center',
+      behavior: animated ? 'smooth' : 'auto',
+    });
     return true;
   }
 
-  // Already visible — this happens on the retry passes below once an earlier
-  // pass already corrected the position. Skipping avoids re-nudging the scroll
-  // position on every retry as the iOS Safari keyboard/viewport settles, which
-  // read as the field "scrolling on its own" after the user had already stopped.
+  // Already visible — skip so retries don't nudge (focus flicker on City step).
   if (rect.bottom <= visibleBottom && rect.top >= visibleTop) return true;
 
-  // Compute an absolute target from the field's current position rather than
-  // adding a delta on top of whatever the last retry already applied — deltas
-  // compound across the retries below if the viewport geometry shifts between
-  // them (exactly what happens while the keyboard is animating open).
   if (rect.bottom > visibleBottom) {
     const target = scrollParent.scrollTop + (rect.bottom - visibleBottom) + 12;
     scrollParent.scrollTo({ top: target, behavior: animated ? 'smooth' : 'auto' });
@@ -98,13 +131,6 @@ function scrollWebFieldIntoView(
     scrollParent.scrollTo({ top: Math.max(0, target), behavior: animated ? 'smooth' : 'auto' });
   }
   return false;
-}
-
-function readVisualViewportKeyboardInset(): number {
-  if (typeof window === 'undefined') return 0;
-  const vv = window.visualViewport;
-  if (!vv) return 0;
-  return Math.max(0, Math.round(window.innerHeight - vv.height - (vv.offsetTop ?? 0)));
 }
 
 function scrollNativeFieldIntoView(
@@ -165,10 +191,16 @@ export function scrollFocusedFieldIntoView(
   // can nudge the scroll position again, which reads as the field "scrolling
   // on its own" after the user stopped interacting.
   let settled = false;
-  const run = () => {
+  const run = (useAnimation: boolean) => {
     if (settled || generation !== scrollRequestGeneration) return;
     if (Platform.OS === 'web') {
-      settled = scrollWebFieldIntoView(field, keyboardHeight, headerOffset, extraBottomPad, animated);
+      settled = scrollWebFieldIntoView(
+        field,
+        keyboardHeight,
+        headerOffset,
+        extraBottomPad,
+        useAnimation,
+      );
       return;
     }
     scrollNativeFieldIntoView(
@@ -177,12 +209,13 @@ export function scrollFocusedFieldIntoView(
       headerOffset,
       keyboardHeight,
       extraBottomPad,
-      animated,
+      useAnimation,
     );
   };
 
-  run();
+  // Instant first paint on iOS web — smooth + retries stacked = City-step flicker.
+  run(Platform.OS === 'web' && isIOSWeb() ? false : animated);
   for (const delay of SCROLL_RETRY_MS) {
-    setTimeout(run, delay);
+    setTimeout(() => run(false), delay);
   }
 }
