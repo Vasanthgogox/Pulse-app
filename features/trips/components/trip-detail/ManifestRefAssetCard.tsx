@@ -1,11 +1,13 @@
 import { EntityAvatar as PartyAvatar } from "@/components/EntityAvatar";
 import Theme from "@/constants/Theme";
 import { formatIndianVehicleNumber } from "@/lib/format";
+import { formatPhoneForDisplay } from "@/lib/phoneLookup";
 import { formatChatPartyInboxLine } from "@/features/chat/utils/partyDisplay";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Feather } from "@expo/vector-icons";
 import {
   ActivityIndicator,
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -25,6 +27,8 @@ type Props = {
   variant: "driver" | "vehicle";
   /** Shown under plate on vehicle cards (tiny). */
   vehicleType?: string | null;
+  /** Driver contact number under name / rating. */
+  phone?: string | null;
   ratingAvg?: number | null;
   docsIssue?: boolean;
   insightsLoading?: boolean;
@@ -176,6 +180,7 @@ export function ManifestRefAssetCard({
   primaryText,
   variant,
   vehicleType = null,
+  phone = null,
   ratingAvg = null,
   docsIssue = false,
   insightsLoading = false,
@@ -191,6 +196,9 @@ export function ManifestRefAssetCard({
     variant === "driver"
       ? formatDriverDisplayName(primaryText)
       : formatVehiclePlateOnly(primaryText);
+  const phoneDisplay =
+    variant === "driver" ? formatPhoneForDisplay(phone) : "";
+  const phoneDigits = (phone ?? "").replace(/[^\d+]/g, "");
   const displayVehicleType = (() => {
     if (variant !== "vehicle") return null;
     const explicit = vehicleType?.trim();
@@ -260,6 +268,25 @@ export function ManifestRefAssetCard({
           >
             {displayPrimary}
           </Text>
+
+          {isDriver && phoneDisplay ? (
+            <TouchableOpacity
+              onPress={() => {
+                if (phoneDigits) void Linking.openURL(`tel:${phoneDigits}`);
+              }}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={`Call ${displayPrimary} at ${phoneDisplay}`}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Text
+                style={[styles.phoneText, desktop && styles.phoneTextDesktop]}
+                numberOfLines={1}
+              >
+                {phoneDisplay}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           {isDriver ? (
             <RatingMetaRow
@@ -392,6 +419,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 21,
     letterSpacing: -0.2,
+  },
+  phoneText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.driverEmerald,
+    letterSpacing: 0.1,
+  },
+  phoneTextDesktop: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   metaRow: {
     flexDirection: "row",

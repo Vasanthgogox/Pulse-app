@@ -27,6 +27,7 @@ import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import { ROUTES, tripExpenseEntryEditRoute } from "@/lib/routes";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
+import { formatPhoneForDisplay } from "@/lib/phoneLookup";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { getOptimalRoute } from "@/lib/routingService";
@@ -379,6 +380,7 @@ const manifestHeroBridgePartyStyles = StyleSheet.create({
 function ManifestHeroBridgePartyEnd({
   roleLabel,
   partyName,
+  partyPhone,
   entityType,
   avatarSize,
   avatarUrl,
@@ -391,6 +393,7 @@ function ManifestHeroBridgePartyEnd({
 }: {
   roleLabel: string;
   partyName: string;
+  partyPhone?: string | null;
   entityType: "driver" | "supplier";
   avatarSize: number;
   avatarUrl?: string | null;
@@ -407,6 +410,8 @@ function ManifestHeroBridgePartyEnd({
   const badgeSize = Math.max(10, Math.round(avatarSize * 0.42));
   const stackSize = avatarSize + (showVehicleBadge ? 6 : 0);
   const iconWrapSize = stackSize;
+  const phoneDisplay = formatPhoneForDisplay(partyPhone);
+  const phoneDigits = (partyPhone ?? "").replace(/[^\d+]/g, "");
 
   return (
     <View style={[styles.refHeroBridgeCol, styles.refHeroBridgeColRight]}>
@@ -424,6 +429,27 @@ function ManifestHeroBridgePartyEnd({
         >
           {partyName.toUpperCase()}
         </Text>
+        {phoneDisplay ? (
+          <TouchableOpacity
+            onPress={() => {
+              if (phoneDigits) void Linking.openURL(`tel:${phoneDigits}`);
+            }}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`Call ${partyName} at ${phoneDisplay}`}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Text
+              style={[
+                styles.refHeroBridgePhone,
+                styles.refHeroBridgeValueRight,
+              ]}
+              numberOfLines={1}
+            >
+              {phoneDisplay}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
       <View
         style={[
@@ -472,6 +498,7 @@ function ManifestHeroBridgePartyEnd({
 function NeoManifestHeroBridgePartyEnd({
   roleLabel,
   partyName,
+  partyPhone,
   entityType,
   avatarSize,
   avatarUrl,
@@ -486,6 +513,7 @@ function NeoManifestHeroBridgePartyEnd({
 }: {
   roleLabel: string;
   partyName: string;
+  partyPhone?: string | null;
   entityType: "driver" | "supplier";
   avatarSize: number;
   avatarUrl?: string | null;
@@ -502,6 +530,7 @@ function NeoManifestHeroBridgePartyEnd({
     heroKicker: object;
     alignRight: object;
     heroPartyName: object;
+    heroPartyPhone: object;
     heroVehicleBadge: object;
   };
   partyStyles: typeof manifestHeroBridgePartyStyles;
@@ -510,6 +539,8 @@ function NeoManifestHeroBridgePartyEnd({
     entityType === "driver" && !!String(vehicleLabel ?? "").trim();
   const badgeSize = Math.max(10, Math.round(avatarSize * 0.42));
   const stackSize = avatarSize + (showVehicleBadge ? 6 : 0);
+  const phoneDisplay = formatPhoneForDisplay(partyPhone);
+  const phoneDigits = (partyPhone ?? "").replace(/[^\d+]/g, "");
 
   return (
     <View style={[neo.heroParty, neo.heroPartyRight]}>
@@ -524,6 +555,24 @@ function NeoManifestHeroBridgePartyEnd({
         >
           {partyName.toUpperCase()}
         </Text>
+        {phoneDisplay ? (
+          <TouchableOpacity
+            onPress={() => {
+              if (phoneDigits) void Linking.openURL(`tel:${phoneDigits}`);
+            }}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`Call ${partyName} at ${phoneDisplay}`}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Text
+              style={[neo.heroPartyPhone, neo.alignRight]}
+              numberOfLines={1}
+            >
+              {phoneDisplay}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
       <View
         style={[
@@ -2611,6 +2660,23 @@ export default function TripDetailScreen({
               </View>
             </View>
             <View style={neoStyles.manifestNavActions}>
+              {detail.driverPhone?.trim() ? (
+                <TouchableOpacity
+                  style={neoStyles.manifestPhoneBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    const digits = detail.driverPhone!.replace(/[^\d+]/g, "");
+                    if (digits) void Linking.openURL(`tel:${digits}`);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Call driver ${formatPhoneForDisplay(detail.driverPhone)}`}
+                >
+                  <Feather name="phone" size={14} color={Theme.driverEmerald} />
+                  <Text style={neoStyles.manifestPhoneBtnText} numberOfLines={1}>
+                    {formatPhoneForDisplay(detail.driverPhone)}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity
                 style={neoStyles.auditBtn}
                 activeOpacity={0.85}
@@ -2787,6 +2853,7 @@ export default function TripDetailScreen({
                   <ManifestHeroBridgePartyEnd
                     roleLabel="DRIVER"
                     partyName={allocatedDriverName}
+                    partyPhone={detail.driverPhone}
                     entityType="driver"
                     avatarSize={MANIFEST_HERO_AVATAR_MOBILE}
                     avatarUrl={detail.driverAvatarUri}
@@ -2905,6 +2972,7 @@ export default function TripDetailScreen({
                 roleLabel="Driver"
                 primaryText={allocatedDriverName}
                 variant="driver"
+                phone={detail.driverPhone}
                 ratingAvg={manifestDriverInsights.ratingAvg}
                 docsIssue={manifestDriverInsights.docsIssue}
                 insightsLoading={manifestRefAssetInsights.isLoading}
@@ -3391,6 +3459,7 @@ export default function TripDetailScreen({
                       <NeoManifestHeroBridgePartyEnd
                         roleLabel="DRIVER"
                         partyName={allocatedDriverName}
+                        partyPhone={detail.driverPhone}
                         entityType="driver"
                         avatarSize={MANIFEST_HERO_AVATAR_DESKTOP}
                         avatarUrl={detail.driverAvatarUri}
@@ -4578,6 +4647,7 @@ export default function TripDetailScreen({
                       roleLabel="Driver"
                       primaryText={allocatedDriverName}
                       variant="driver"
+                      phone={detail.driverPhone}
                       ratingAvg={manifestDriverInsights.ratingAvg}
                       docsIssue={manifestDriverInsights.docsIssue}
                       insightsLoading={manifestRefAssetInsights.isLoading}
@@ -6944,6 +7014,24 @@ const neoStyles = StyleSheet.create({
     alignItems: "center",
     gap: 18,
   },
+  manifestPhoneBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "rgba(4,120,87,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(4,120,87,0.22)",
+    maxWidth: 220,
+  },
+  manifestPhoneBtnText: {
+    color: Theme.driverEmerald,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
   auditBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -7131,6 +7219,13 @@ const neoStyles = StyleSheet.create({
     color: "#fff",
     textTransform: "uppercase",
     letterSpacing: -0.25,
+  },
+  heroPartyPhone: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#86efac",
+    letterSpacing: 0.2,
   },
   swapIcon: {
     width: 28,
@@ -9581,6 +9676,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     textTransform: "uppercase",
     alignSelf: "stretch",
+  },
+  refHeroBridgePhone: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#86efac",
+    letterSpacing: 0.15,
+    alignSelf: "stretch",
+    textTransform: "none",
   },
   refHeroBridgeValueRight: {
     textAlign: "right",
