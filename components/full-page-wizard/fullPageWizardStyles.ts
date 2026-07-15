@@ -370,20 +370,23 @@ export const fullPageWizardStyles = StyleSheet.create({
     minWidth: 88,
     alignItems: "center",
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderWidth: 1.5,
+    borderColor: Theme.borderMedium,
   },
   cancelBtnText: {
-    color: Theme.textSecondary,
+    color: Theme.textPrimaryDark,
     fontSize: 12,
     fontWeight: "700",
   },
+  /** Match OperationalButton primary — pastel fill + ink border (not borderless wash). */
   submitBtn: {
     flexGrow: 0,
     flexShrink: 0,
     minWidth: 132,
     maxWidth: 220,
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
     paddingHorizontal: 20,
     paddingVertical: 11,
     alignItems: "center",
@@ -395,12 +398,17 @@ export const fullPageWizardStyles = StyleSheet.create({
     flexShrink: 0,
   },
   submitBtnDisabled: {
-    opacity: 0.55,
+    opacity: 1,
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderMedium,
   },
   submitBtnText: {
     color: Theme.buttonPrimaryText,
     fontSize: 12,
     fontWeight: "800",
+  },
+  submitBtnTextDisabled: {
+    color: Theme.textMuted,
   },
   tertiaryBtn: {
     backgroundColor: Theme.cardWhite,

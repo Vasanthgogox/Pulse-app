@@ -36,8 +36,9 @@ export function useDriverMapLivePositionWatch(opts: {
         watchHandle = await startForegroundPositionWatch(
           {
             accuracy: Location.Accuracy.Balanced,
-            timeInterval: 3000,
-            distanceInterval: 2,
+            timeInterval: 5000,
+            // Higher than before so map UI / approach keys are not spammed every 2m.
+            distanceInterval: 25,
           },
           (location) => {
             if (cancelled) return;

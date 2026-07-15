@@ -17,18 +17,18 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
     const nativeRef = useRef<LeafletMapRef>(null);
 
     useImperativeHandle(ref, () => ({
-      focusCurrentLocation: (currentCenter, currentZoom = 15) => {
+      focusCurrentLocation: (currentCenter, currentZoom) => {
         if (Platform.OS === "web") {
           webRef.current?.focusCurrentLocation(currentCenter, currentZoom);
         } else {
           nativeRef.current?.focusCurrentLocation(currentCenter, currentZoom);
         }
       },
-      fitBounds: (ne, sw, paddingPx) => {
+      fitBounds: (ne, sw, paddingPx, maxZoom) => {
         if (Platform.OS === "web") {
-          webRef.current?.fitBounds(ne, sw, paddingPx);
+          webRef.current?.fitBounds(ne, sw, paddingPx, maxZoom);
         } else {
-          nativeRef.current?.fitBounds(ne, sw, paddingPx);
+          nativeRef.current?.fitBounds(ne, sw, paddingPx, maxZoom);
         }
       },
       zoomIn: () => {

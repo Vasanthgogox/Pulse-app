@@ -110,7 +110,7 @@ export function AddTripModalLayout({
       subtitle={subtitle}
       stepIndex={stepIndex}
       stepTotal={stepTotal}
-      onBack={onClose}
+      onBack={onBack ?? onClose}
       backLabel={
         stepIndex != null && stepIndex > 1 ? "← Back" : "← Close"
       }
@@ -126,7 +126,7 @@ export function AddTripModalLayout({
             secondaryLabel={
               stepIndex != null && stepIndex > 1 ? "Back" : "Close"
             }
-            onSecondaryPress={onClose}
+            onSecondaryPress={onBack ?? onClose}
             tertiaryLabel={tertiaryLabel}
             onTertiaryPress={onTertiaryPress}
             tertiaryDisabled={tertiaryDisabled || submitting}

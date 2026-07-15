@@ -59,8 +59,17 @@ export type LeafletMapProps = {
 };
 
 export type LeafletMapRef = {
+  /**
+   * Center on a location. When `zoom` is omitted, keep the current zoom
+   * (follow mode must not reset user/route overview zoom).
+   */
   focusCurrentLocation: (center: LeafletLatLng, zoom?: number) => void;
-  fitBounds: (ne: LeafletLatLng, sw: LeafletLatLng, paddingPx?: number) => void;
+  fitBounds: (
+    ne: LeafletLatLng,
+    sw: LeafletLatLng,
+    paddingPx?: number,
+    maxZoom?: number,
+  ) => void;
   zoomIn: () => void;
   zoomOut: () => void;
 };

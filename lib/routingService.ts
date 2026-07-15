@@ -18,23 +18,29 @@ export interface RouteResult {
 const ROUTE_FETCH_KEY_SEPARATOR = "|";
 const ROUTE_FETCH_KEY_COORD_SEPARATOR = ",";
 
-function formatKeyCoord(value: number): string {
-  return Number.isFinite(value) ? value.toFixed(6) : "0.000000";
+function formatKeyCoord(value: number, decimals: number): string {
+  return Number.isFinite(value) ? value.toFixed(decimals) : (0).toFixed(decimals);
 }
 
 /**
  * Stable key for memoized route fetches.
+ * @param coordDecimals — use 6 for fixed stop-to-stop legs; use ~3 (~100m)
+ *   when `from`/`to` includes live GPS so every meter of jitter does not refetch.
  */
 export function buildRouteFetchKey(
   tripId: string,
   from: LatLon,
   to: LatLon,
+  coordDecimals = 6,
 ): string {
   const normalizedTripId = (tripId ?? "").trim();
+  const decimals = Number.isFinite(coordDecimals)
+    ? Math.min(6, Math.max(2, Math.floor(coordDecimals)))
+    : 6;
   return [
     normalizedTripId,
-    `${formatKeyCoord(from.latitude)}${ROUTE_FETCH_KEY_COORD_SEPARATOR}${formatKeyCoord(from.longitude)}`,
-    `${formatKeyCoord(to.latitude)}${ROUTE_FETCH_KEY_COORD_SEPARATOR}${formatKeyCoord(to.longitude)}`,
+    `${formatKeyCoord(from.latitude, decimals)}${ROUTE_FETCH_KEY_COORD_SEPARATOR}${formatKeyCoord(from.longitude, decimals)}`,
+    `${formatKeyCoord(to.latitude, decimals)}${ROUTE_FETCH_KEY_COORD_SEPARATOR}${formatKeyCoord(to.longitude, decimals)}`,
   ].join(ROUTE_FETCH_KEY_SEPARATOR);
 }
 

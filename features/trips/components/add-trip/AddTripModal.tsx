@@ -467,7 +467,7 @@ export function AddTripModal({
       validationMessage={visibleValidationMessage ?? submitError}
       onClose={isDesktopWizard ? onClose : handleWizardBackOrClose}
       onBack={
-        isDesktopWizard && wizardStepMeta && wizardStepMeta.stepIndex > 1
+        wizardEnabled && wizardStepMeta && wizardStepMeta.stepIndex > 1
           ? handleWizardBack
           : undefined
       }

@@ -144,7 +144,7 @@ export function CreateTripDesktopShell({
               accessibilityRole="button"
               accessibilityLabel="Back to previous step"
             >
-              <ArrowLeft size={14} color={Theme.textSecondary} strokeWidth={2.5} />
+              <ArrowLeft size={14} color={Theme.textPrimaryDark} strokeWidth={2.5} />
               <Text style={s.footerBackBtnText}>Back</Text>
             </Pressable>
           ) : (
@@ -162,9 +162,17 @@ export function CreateTripDesktopShell({
               accessibilityState={{ disabled: primaryDisabled || primaryLoading }}
             >
               {primaryLoading ? (
-                <ActivityIndicator color={Theme.textOnPrimary} size="small" />
+                <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
               ) : (
-                <Text style={s.footerPrimaryBtnText}>{primaryLabel}</Text>
+                <Text
+                  style={[
+                    s.footerPrimaryBtnText,
+                    (primaryDisabled || primaryLoading) &&
+                      s.footerPrimaryBtnTextDisabled,
+                  ]}
+                >
+                  {primaryLabel}
+                </Text>
               )}
             </Pressable>
             {hint && primaryDisabled && !primaryLoading ? (

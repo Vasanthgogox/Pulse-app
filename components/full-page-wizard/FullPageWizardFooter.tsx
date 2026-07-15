@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { alertRegistryActionStyles } from "@/components/AlertRegistryCardActions";
+import Theme from "@/constants/Theme";
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
 
 export type FullPageWizardFooterActionVariant = "wizard" | "registry";
@@ -113,13 +114,19 @@ export function FullPageWizardFooter({
             disabled={disabled}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <ActivityIndicator
+                color={isRegistry ? "#fff" : Theme.buttonPrimaryText}
+                size="small"
+              />
             ) : (
               <Text
                 style={
                   isRegistry
                     ? actionStyles.footerPrimaryBtnText
-                    : styles.submitBtnText
+                    : [
+                        styles.submitBtnText,
+                        disabled && styles.submitBtnTextDisabled,
+                      ]
                 }
               >
                 {primaryLabel}

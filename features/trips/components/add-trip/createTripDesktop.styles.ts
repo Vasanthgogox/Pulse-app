@@ -159,15 +159,19 @@ export const createTripDesktopStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     minWidth: 72,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.cardWhite,
     ...Platform.select({ web: { cursor: "pointer" as const }, default: {} }),
   },
   footerBackBtnText: {
     fontSize: 13,
-    fontWeight: "600",
-    color: Theme.textSecondary,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
   },
   footerSecondary: {
     paddingHorizontal: 16,
@@ -178,7 +182,7 @@ export const createTripDesktopStyles = StyleSheet.create({
   footerSecondaryText: {
     fontSize: 14,
     fontWeight: "700",
-    color: Theme.textSecondary,
+    color: Theme.textPrimaryDark,
   },
   footerPrimaryWrap: {
     maxWidth: 280,
@@ -186,24 +190,31 @@ export const createTripDesktopStyles = StyleSheet.create({
     flexShrink: 0,
     alignItems: "stretch",
   },
+  /** Same chrome as OperationalButton / mobile FullPageWizardFooter — all steps. */
   footerPrimaryBtn: {
     width: "100%",
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
     alignItems: "center",
     justifyContent: "center",
     minHeight: 44,
     ...Platform.select({ web: { cursor: "pointer" as const }, default: {} }),
   },
   footerPrimaryBtnDisabled: {
-    opacity: 0.38,
-    backgroundColor: Theme.borderMedium,
+    opacity: 1,
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderMedium,
   },
   footerPrimaryBtnText: {
     fontSize: 14,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
+  },
+  footerPrimaryBtnTextDisabled: {
+    color: Theme.textMuted,
   },
   footerSpacer: {
     width: 72,

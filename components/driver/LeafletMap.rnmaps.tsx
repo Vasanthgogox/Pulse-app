@@ -138,7 +138,7 @@ export const LeafletMapRnMaps = React.forwardRef<
 
     const animateToZoom = useCallback(
       (next: number) => {
-        const clamped = Math.max(3, Math.min(19, next));
+        const clamped = Math.max(3, Math.min(16, next));
         zoomLevelRef.current = clamped;
         const { lat, lng } = zoomToRegionDeltas(clamped);
         const duration = lowPower ? 0 : 280;
@@ -157,8 +157,14 @@ export const LeafletMapRnMaps = React.forwardRef<
     );
 
     useImperativeHandle(ref, () => ({
-      focusCurrentLocation: (currentCenter, currentZoom = 15) => {
-        const z = Math.max(3, Math.min(19, currentZoom));
+      focusCurrentLocation: (currentCenter, currentZoom) => {
+        const z = Math.max(
+          3,
+          Math.min(
+            16,
+            currentZoom !== undefined ? currentZoom : zoomLevelRef.current,
+          ),
+        );
         zoomLevelRef.current = z;
         const { lat, lng } = zoomToRegionDeltas(z);
         const duration = lowPower ? 0 : 450;
@@ -172,7 +178,7 @@ export const LeafletMapRnMaps = React.forwardRef<
           duration,
         );
       },
-      fitBounds: (_ne, _sw, _paddingPx) => {},
+      fitBounds: (_ne, _sw, _paddingPx, _maxZoom) => {},
       zoomIn: () => animateToZoom(zoomLevelRef.current + 1),
       zoomOut: () => animateToZoom(zoomLevelRef.current - 1),
     }));

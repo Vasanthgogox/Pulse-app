@@ -329,6 +329,9 @@ export function DriverTripFlowCard({
   // Quick update panel state
   const [stagePhotoUploading, setStagePhotoUploading] = useState(false);
 
+  // Sync from parent on identity/status changes only — not every new object
+  // reference from dashboard invalidate / GPS-driven parent re-renders.
+  const tripSyncKey = `${trip.id}|${trip.status}|${trip.updated_at ?? ''}|${trip.started_at ?? ''}|${trip.completed_at ?? ''}|${trip.distance ?? ''}|${trip.estimated_duration ?? ''}`;
   useEffect(() => {
     setLocalTrip(trip);
     const derived = deriveDriverFlowStepFromTrip(trip);
@@ -347,7 +350,8 @@ export function DriverTripFlowCard({
       if ((rank[prev] ?? 0) > (rank[derived] ?? 0)) return prev;
       return derived;
     });
-  }, [trip]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tripSyncKey gates identity
+  }, [tripSyncKey]);
 
   const tripIsAggregate = useMemo(() => isAggregateTrip(localTrip), [localTrip]);
 
@@ -506,10 +510,11 @@ export function DriverTripFlowCard({
 
   const detailsStatLeft = useMemo(() => {
     if (
-      (step === 'accepted' || step === 'transit') &&
+      (step === 'accepted' || step === 'pickup' || step === 'transit') &&
       distanceToTargetKm != null
     ) {
-      const suffix = step === 'accepted' ? ' to pickup' : ' to drop';
+      const suffix =
+        step === 'accepted' || step === 'pickup' ? ' to pickup' : ' to drop';
       return `${fmtKm(distanceToTargetKm)}${suffix}`;
     }
     return tripDistanceLabel;

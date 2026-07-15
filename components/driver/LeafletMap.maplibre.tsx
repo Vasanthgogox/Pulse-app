@@ -101,7 +101,7 @@ export const LeafletMapMapLibre = React.forwardRef<
 
     const setCameraZoom = useCallback(
       (next: number, animationDuration = lowPower ? 0 : 280) => {
-        const clamped = Math.max(3, Math.min(19, next));
+        const clamped = Math.max(3, Math.min(16, next));
         zoomLevelRef.current = clamped;
         cameraRef.current?.setCamera({
           zoomLevel: clamped,
@@ -112,8 +112,14 @@ export const LeafletMapMapLibre = React.forwardRef<
     );
 
     useImperativeHandle(ref, () => ({
-      focusCurrentLocation: (currentCenter, currentZoom = 15) => {
-        const z = Math.max(3, Math.min(19, currentZoom));
+      focusCurrentLocation: (currentCenter, currentZoom) => {
+        const z = Math.max(
+          3,
+          Math.min(
+            16,
+            currentZoom !== undefined ? currentZoom : zoomLevelRef.current,
+          ),
+        );
         zoomLevelRef.current = z;
         cameraRef.current?.setCamera({
           centerCoordinate: toLngLat(currentCenter),
@@ -121,7 +127,7 @@ export const LeafletMapMapLibre = React.forwardRef<
           animationDuration: lowPower ? 0 : 450,
         });
       },
-      fitBounds: (ne, sw, paddingPx = 80) => {
+      fitBounds: (ne, sw, paddingPx = 80, _maxZoom) => {
         cameraRef.current?.fitBounds?.(
           [ne.longitude, ne.latitude],
           [sw.longitude, sw.latitude],

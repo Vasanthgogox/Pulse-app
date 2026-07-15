@@ -1,5 +1,6 @@
 import Theme from "@/constants/Theme";
 import { LeafletMapZoomControls } from "@/components/driver/LeafletMapZoomControls";
+import { boundsFromCoordinates } from "@/features/trips/utils/mapRouteViewport.util";
 import {
   createRouteDistanceLabelElement,
   createTripMapMarkerElement,
@@ -17,31 +18,46 @@ import type {
 
 export type { LeafletLatLng, LeafletMapRef, LeafletMarker } from "./LeafletMap.types";
 
-// Inline OSM raster style avoids external style/sprite/glyph failures on web.
-const MAP_STYLE = {
-  version: 8,
-  sources: {
-    osm: {
-      type: "raster",
-      tiles: [
-        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      ],
-      tileSize: 256,
-      attribution: "© OpenStreetMap contributors",
-    },
-  },
-  layers: [
-    {
-      id: "osm-base",
-      type: "raster",
-      source: "osm",
-      minzoom: 0,
-      maxzoom: 19,
-    },
-  ],
-} as const;
+/** Keep fits/user zoom below where basemaps look empty. */
+const OSM_USEFUL_MAX_ZOOM = 16;
+const DEFAULT_FIT_MAX_ZOOM = 14;
+
+/**
+ * Same Carto Positron style as native LeafletMap.maplibre.
+ * Raw OSM raster + MapLibre leaves a black WebGL clear-color when tiles
+ * fail/overzoom (exact "black map" symptom). Positron paints a light land
+ * background immediately and serves reliable India tiles.
+ */
+const MAP_STYLE =
+  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+/** Critical layout rules if CDN CSS is slow/blocked — without these the
+ *  canvas often stays 0×0 (blank white) inside RN Web absolute hosts. */
+const MAPLIBRE_CRITICAL_CSS = `
+.maplibregl-map{position:relative;width:100%;height:100%}
+.maplibregl-canvas-container,.maplibregl-canvas-container canvas{
+  position:absolute;top:0;left:0;width:100%!important;height:100%!important
+}
+.maplibregl-ctrl-attrib{display:none!important}
+`;
+
+function ensureMapLibreCss(): void {
+  if (typeof document === "undefined") return;
+  if (!document.getElementById("maplibre-critical-css")) {
+    const style = document.createElement("style");
+    style.id = "maplibre-critical-css";
+    style.textContent = MAPLIBRE_CRITICAL_CSS;
+    document.head.appendChild(style);
+  }
+  if (!document.getElementById("maplibre-css")) {
+    const link = document.createElement("link");
+    link.id = "maplibre-css";
+    link.rel = "stylesheet";
+    // Match installed maplibre-gl major so layout classes stay compatible.
+    link.href = "https://unpkg.com/maplibre-gl@5.23.0/dist/maplibre-gl.css";
+    document.head.appendChild(link);
+  }
+}
 
 type GeoJsonLine = {
   type: "Feature";
@@ -70,7 +86,7 @@ type MapLibreMapLike = {
   removeSource?: (id: string) => void;
   fitBounds: (
     bounds: [[number, number], [number, number]],
-    options?: { padding?: number; duration?: number },
+    options?: { padding?: number; duration?: number; maxZoom?: number },
   ) => void;
   easeTo: (options: {
     center: [number, number];
@@ -306,20 +322,21 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         return;
       }
 
-      if (!document.getElementById("maplibre-css")) {
-        const link = document.createElement("link");
-        link.id = "maplibre-css";
-        link.rel = "stylesheet";
-        link.href = "https://unpkg.com/maplibre-gl@5.11.0/dist/maplibre-gl.css";
-        document.head.appendChild(link);
-      }
+      ensureMapLibreCss();
 
       let cancelled = false;
       let rafId = 0;
 
       const mountMap = () => {
         if (cancelled || !isMountedRef.current || mapRef.current) return;
-        if (!mapContainerRef.current) {
+        const el = mapContainerRef.current;
+        if (!el) {
+          rafId = requestAnimationFrame(mountMap);
+          return;
+        }
+        // Wait for a non-zero box before constructing — 0×0 WebGL frame
+        // paints solid black/empty and often never recovers without a gesture.
+        if (el.clientWidth === 0 || el.clientHeight === 0) {
           rafId = requestAnimationFrame(mountMap);
           return;
         }
@@ -331,8 +348,14 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
             ((MapLibreModule as unknown) as { default?: MapLibreModuleLike }).default ??
             (MapLibreModule as unknown as MapLibreModuleLike);
 
+          const container = mapContainerRef.current;
+          if (container.clientWidth === 0 || container.clientHeight === 0) {
+            rafId = requestAnimationFrame(mountMap);
+            return;
+          }
+
           const map = new maplibregl.Map({
-            container: mapContainerRef.current,
+            container,
             style: MAP_STYLE,
             center: [center.longitude, center.latitude],
             zoom,
@@ -479,69 +502,43 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
           if (shouldFitBounds) {
             try {
-              if (allRoutePts.length >= 2) {
-                const bounds = allRoutePts.reduce(
-                  (acc, [lng, lat]) => {
-                    acc.minLng = Math.min(acc.minLng, lng);
-                    acc.maxLng = Math.max(acc.maxLng, lng);
-                    acc.minLat = Math.min(acc.minLat, lat);
-                    acc.maxLat = Math.max(acc.maxLat, lat);
-                    return acc;
-                  },
-                  {
-                    minLng: Infinity,
-                    maxLng: -Infinity,
-                    minLat: Infinity,
-                    maxLat: -Infinity,
-                  },
-                );
+              const routeCoords = allRoutePts.map(([lng, lat]) => ({
+                latitude: lat,
+                longitude: lng,
+              }));
+              const markerCoords = (Array.isArray(markers) ? markers : [])
+                .filter((m) => m?.coordinate)
+                .map((m) => m.coordinate);
+              const expanded =
+                boundsFromCoordinates(
+                  routeCoords.length >= 2 ? routeCoords : markerCoords,
+                ) ?? null;
+
+              if (expanded) {
                 mapInstance.fitBounds(
                   [
-                    [bounds.minLng, bounds.minLat],
-                    [bounds.maxLng, bounds.maxLat],
+                    [expanded.sw.longitude, expanded.sw.latitude],
+                    [expanded.ne.longitude, expanded.ne.latitude],
                   ],
-                  { padding: 80, duration: lowPower ? 0 : 600 },
-                );
-              } else {
-                const currentMarkersForBounds = Array.isArray(markers)
-                  ? markers.filter((m) => m?.coordinate)
-                  : [];
-                if (currentMarkersForBounds.length >= 2) {
-                  const mBounds = currentMarkersForBounds.reduce(
-                    (acc, m) => {
-                      acc.minLng = Math.min(acc.minLng, m.coordinate.longitude);
-                      acc.maxLng = Math.max(acc.maxLng, m.coordinate.longitude);
-                      acc.minLat = Math.min(acc.minLat, m.coordinate.latitude);
-                      acc.maxLat = Math.max(acc.maxLat, m.coordinate.latitude);
-                      return acc;
-                    },
-                    {
-                      minLng: Infinity,
-                      maxLng: -Infinity,
-                      minLat: Infinity,
-                      maxLat: -Infinity,
-                    },
-                  );
-                  mapInstance.fitBounds(
-                    [
-                      [mBounds.minLng, mBounds.minLat],
-                      [mBounds.maxLng, mBounds.maxLat],
-                    ],
-                    { padding: 100, duration: lowPower ? 0 : 600 },
-                  );
-                } else if (currentMarkersForBounds.length === 1) {
-                  const m = currentMarkersForBounds[0];
-                  mapInstance.easeTo({
-                    center: [m.coordinate.longitude, m.coordinate.latitude],
-                    zoom: 8,
-                    duration: lowPower ? 0 : 500,
-                  });
-                } else {
-                  mapInstance.fitBounds(INDIA_BOUNDS, {
-                    padding: 40,
+                  {
+                    padding: routeCoords.length >= 2 ? 80 : 100,
                     duration: lowPower ? 0 : 600,
-                  });
-                }
+                    maxZoom: DEFAULT_FIT_MAX_ZOOM,
+                  },
+                );
+              } else if (markerCoords.length === 1) {
+                const m = markerCoords[0];
+                mapInstance.easeTo({
+                  center: [m.longitude, m.latitude],
+                  zoom: 8,
+                  duration: lowPower ? 0 : 500,
+                });
+              } else {
+                mapInstance.fitBounds(INDIA_BOUNDS, {
+                  padding: 40,
+                  duration: lowPower ? 0 : 600,
+                  maxZoom: DEFAULT_FIT_MAX_ZOOM,
+                });
               }
             } catch (e) {
               console.warn("[LeafletMap.web] Error fitting bounds:", e);
@@ -633,7 +630,9 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           mapRef.current.off("load", loadListener);
         }
       };
-    }, [center, zoom, markers, polylines, routeLabels, polyline, polylineColor, maxBounds, lowPower]);
+      // Do NOT depend on `center` / `zoom` — GPS ticks would tear down every marker
+      // and look like a full map reload. Camera follows via focusCurrentLocation.
+    }, [markers, polylines, routeLabels, polyline, polylineColor, maxBounds, lowPower]);
 
     const adjustZoom = useCallback(
       (delta: number) => {
@@ -641,7 +640,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         if (!map || interactionLockedRef.current) return;
         const current =
           typeof map.getZoom === "function" ? map.getZoom() : zoomLevelRef.current;
-        const next = Math.max(3, Math.min(19, current + delta));
+        const next = Math.max(3, Math.min(OSM_USEFUL_MAX_ZOOM, current + delta));
         zoomLevelRef.current = next;
         const mapCenter = map.getCenter?.();
         const lng = mapCenter?.lng ?? center.longitude;
@@ -659,25 +658,56 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       [center.latitude, center.longitude, lowPower],
     );
 
+    const syncCanvasAfterLayout = useCallback(() => {
+      const m = mapRef.current;
+      const el = mapContainerRef.current;
+      if (!m || !el) return;
+      if (el.clientWidth === 0 || el.clientHeight === 0) return;
+      try {
+        m.resize();
+        m.triggerRepaint?.();
+        m.redraw?.();
+      } catch {
+        // ignore
+      }
+    }, []);
+
     React.useImperativeHandle(ref, () => ({
-      focusCurrentLocation: (currentCenter, currentZoom = 15) => {
+      focusCurrentLocation: (currentCenter, currentZoom) => {
+        const map = mapRef.current;
         const boundedCenter = clampToBounds(currentCenter, maxBounds);
-        zoomLevelRef.current = currentZoom;
-        mapRef.current?.easeTo({
+        const rawZoom =
+          currentZoom !== undefined
+            ? currentZoom
+            : typeof map?.getZoom === "function"
+              ? map.getZoom()
+              : zoomLevelRef.current;
+        const resolvedZoom = Math.max(
+          3,
+          Math.min(OSM_USEFUL_MAX_ZOOM, rawZoom ?? 15),
+        );
+        zoomLevelRef.current = resolvedZoom;
+        map?.easeTo({
           center: [boundedCenter.longitude, boundedCenter.latitude],
-          zoom: currentZoom,
+          zoom: resolvedZoom,
           duration: lowPower ? 0 : 450,
         });
       },
-      fitBounds: (ne, sw, paddingPx = 80) => {
+      fitBounds: (ne, sw, paddingPx = 80, maxZoom = DEFAULT_FIT_MAX_ZOOM) => {
         if (!mapRef.current) return;
+        const expanded = boundsFromCoordinates([ne, sw]);
+        if (!expanded) return;
         try {
           mapRef.current.fitBounds(
             [
-              [Math.min(sw.longitude, ne.longitude), Math.min(sw.latitude, ne.latitude)],
-              [Math.max(sw.longitude, ne.longitude), Math.max(sw.latitude, ne.latitude)],
+              [expanded.sw.longitude, expanded.sw.latitude],
+              [expanded.ne.longitude, expanded.ne.latitude],
             ],
-            { padding: paddingPx, duration: lowPower ? 0 : 600 },
+            {
+              padding: paddingPx,
+              duration: lowPower ? 0 : 600,
+              maxZoom: Math.min(OSM_USEFUL_MAX_ZOOM, maxZoom),
+            },
           );
         } catch {
           // Map may not be ready
@@ -690,7 +720,10 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
     const showZoom = showZoomControls && !interactionLocked;
 
     return (
-      <View style={[style, styles.mapHost]}>
+      <View
+        style={[style, styles.mapHost]}
+        onLayout={syncCanvasAfterLayout}
+      >
         {/* Absolute-fill (not height:100%) so the canvas gets a resolved pixel
             size even when the host's flex height settles a frame after mount —
             percentage height against an unresolved parent reads 0 and paints a
@@ -703,6 +736,10 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
             left: 0,
             right: 0,
             bottom: 0,
+            width: "100%",
+            height: "100%",
+            // Light fill while style/tiles load — matches Positron, avoids black void.
+            backgroundColor: "#e8eef2",
           }}
         />
         {showZoom ? (
@@ -720,6 +757,9 @@ const styles = StyleSheet.create({
   mapHost: {
     position: "relative",
     overflow: "hidden",
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#e8eef2",
   },
 });
 

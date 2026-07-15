@@ -49,11 +49,18 @@ export function routeMidpoint(coords: LatLon[]): LatLon | null {
   return coords[mid] ?? null;
 }
 
-/** Driver is en route to pickup — show dashed approach leg until pickup is reached. */
+/** Driver is en route to pickup — dashed approach until package is collected. */
 export function shouldShowDriverApproachRoute(
   step: string | null | undefined,
 ): boolean {
-  return step === 'accepted';
+  return step === 'accepted' || step === 'pickup';
+}
+
+/** After package collected — navigate driver → drop on roads. */
+export function shouldShowDriverToDropRoute(
+  step: string | null | undefined,
+): boolean {
+  return step === 'transit' || step === 'reached' || step === 'completed';
 }
 
 export async function fetchUsableRouteForKey(
