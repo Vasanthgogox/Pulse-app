@@ -2,7 +2,7 @@
  * Supplier profile panels — all 10 tab content components.
  * Each panel receives the SupplierManagementBundle and renders its section.
  */
-import { formatINR, formatRelative } from "@/lib/format";
+import { formatINR, formatRelative, formatMobileNumber } from "@/lib/format";
 import Theme from "@/constants/Theme";
 import {
   METRONIC,
@@ -73,6 +73,7 @@ import { createSupplierComplianceDoc, deleteSupplierComplianceDoc, type Supplier
 import { createSupplierContract } from "@/features/suppliers/services/supplierContracts.service";
 import { createSupplierVehicle } from "@/features/suppliers/services/supplierFleet.service";
 import { createSupplierWarehouse } from "@/features/suppliers/services/supplierWarehouses.service";
+import { updateSupplier } from "@/features/suppliers/services/suppliers.service";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -196,14 +197,49 @@ function SupplierPanelShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function SupplierProfileOverviewPanel({ bundle, isIntegrated, linkedOrgId, onImportFromProfile }: BundleProps & {
+export function SupplierProfileOverviewPanel({
+  bundle,
+  orgId,
+  onRefresh,
+  isIntegrated,
+  linkedOrgId,
+  onImportFromProfile,
+}: BundleProps & {
   isIntegrated?: boolean;
   linkedOrgId?: string | null;
   onImportFromProfile?: () => Promise<void>;
 }) {
   const compact = useProfileHubCompact();
   const [importing, setImporting] = useState(false);
+  const [identityEditing, setIdentityEditing] = useState(false);
+  const [savingIdentity, setSavingIdentity] = useState(false);
   const { supplier, trips, transactions, performance } = bundle;
+  const canEditIdentity = Boolean(orgId && onRefresh && !isIntegrated);
+  const [identityForm, setIdentityForm] = useState({
+    name: (supplier.company_name ?? supplier.name ?? "").trim(),
+    contact_person: (supplier.contact_person ?? "").trim(),
+    phone: (supplier.phone ?? "").trim(),
+    email: (supplier.email ?? "").trim(),
+  });
+
+  const handleIdentitySave = async () => {
+    if (!orgId || !onRefresh || !canEditIdentity) return;
+    setSavingIdentity(true);
+    const { error } = await updateSupplier(orgId, supplier.id, {
+      name: identityForm.name.trim(),
+      contact_person: identityForm.contact_person.trim(),
+      phone: identityForm.phone.trim(),
+      email: identityForm.email.trim(),
+    });
+    setSavingIdentity(false);
+    if (error) {
+      Alert.alert("Save failed", error.message);
+      return;
+    }
+    setIdentityEditing(false);
+    onRefresh();
+  };
+
   const completed = trips.filter((t) =>
     ["completed", "done", "delivered"].includes(t.status ?? ""),
   );
@@ -338,18 +374,106 @@ export function SupplierProfileOverviewPanel({ bundle, isIntegrated, linkedOrgId
 
           {!compact ? (
             <View style={[spStyles.dataCard, { marginTop: 16 }]}>
-              <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>
-                Supplier details
-              </Text>
-              {detailRows.map(([l, v], idx) => (
-                <InfoRow
-                  key={l}
-                  label={l}
-                  value={v}
-                  compact={false}
-                  last={idx === detailRows.length - 1}
-                />
-              ))}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
+                  Supplier details
+                </Text>
+                {canEditIdentity && !identityEditing ? (
+                  <Pressable
+                    onPress={() => {
+                      setIdentityForm({
+                        name: (supplier.company_name ?? supplier.name ?? "").trim(),
+                        contact_person: (supplier.contact_person ?? "").trim(),
+                        phone: (supplier.phone ?? "").trim(),
+                        email: (supplier.email ?? "").trim(),
+                      });
+                      setIdentityEditing(true);
+                    }}
+                    hitSlop={8}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: METRONIC.link }}>Edit</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              {identityEditing && canEditIdentity ? (
+                <View style={{ gap: 10 }}>
+                  <View>
+                    <Text style={spStyles.fieldLabel}>Company</Text>
+                    <TextInput
+                      style={spStyles.fieldInput}
+                      value={identityForm.name}
+                      onChangeText={(v) => setIdentityForm((f) => ({ ...f, name: v }))}
+                      placeholder="Company name"
+                      placeholderTextColor={METRONIC.muted}
+                    />
+                  </View>
+                  <View>
+                    <Text style={spStyles.fieldLabel}>Contact person</Text>
+                    <TextInput
+                      style={spStyles.fieldInput}
+                      value={identityForm.contact_person}
+                      onChangeText={(v) => setIdentityForm((f) => ({ ...f, contact_person: v }))}
+                      placeholder="Contact person"
+                      placeholderTextColor={METRONIC.muted}
+                    />
+                  </View>
+                  <View>
+                    <Text style={spStyles.fieldLabel}>Phone</Text>
+                    <TextInput
+                      style={spStyles.fieldInput}
+                      value={identityForm.phone}
+                      onChangeText={(v) => setIdentityForm((f) => ({ ...f, phone: formatMobileNumber(v) }))}
+                      placeholder="+91 98765 43210"
+                      placeholderTextColor={METRONIC.muted}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                  <View>
+                    <Text style={spStyles.fieldLabel}>Email</Text>
+                    <TextInput
+                      style={spStyles.fieldInput}
+                      value={identityForm.email}
+                      onChangeText={(v) => setIdentityForm((f) => ({ ...f, email: v }))}
+                      placeholder="supplier@example.com"
+                      placeholderTextColor={METRONIC.muted}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                    <Pressable
+                      onPress={() => setIdentityEditing(false)}
+                      style={spStyles.onboardingCancelBtn}
+                      disabled={savingIdentity}
+                    >
+                      <Text style={spStyles.onboardingCancelText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        void handleIdentitySave();
+                      }}
+                      style={spStyles.addBtn}
+                      disabled={savingIdentity}
+                    >
+                      {savingIdentity ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={spStyles.addBtnText}>Save</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                detailRows.map(([l, v], idx) => (
+                  <InfoRow
+                    key={l}
+                    label={l}
+                    value={v}
+                    compact={false}
+                    last={idx === detailRows.length - 1}
+                  />
+                ))
+              )}
             </View>
           ) : null}
         </View>

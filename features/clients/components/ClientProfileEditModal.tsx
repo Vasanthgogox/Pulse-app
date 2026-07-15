@@ -19,6 +19,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { isIntegratedClientRow } from '@/features/trips/visibility/tripVisibility';
+import { formatMobileNumber } from '@/lib/format';
 import type { ClientRow, UpdateClientData } from '../services/clients.service';
 import { updateClient } from '../services/clients.service';
 import type { ClientContract, UpdateContractData } from '../services/clientContracts.service';
@@ -171,6 +173,11 @@ function BasicInfoPanel({
   client: ClientRow;
   organizationId: string;
 }) {
+  const isLocal = !isIntegratedClientRow(client);
+  const [organizationName, setOrganizationName] = useState(client.name ?? '');
+  const [contactPerson, setContactPerson] = useState(client.contact_person ?? '');
+  const [phone, setPhone] = useState(client.phone ?? '');
+  const [email, setEmail] = useState(client.email ?? '');
   const [gstin, setGstin] = useState(client.gstin ?? '');
   const [pan, setPan] = useState(client.pan_number ?? '');
   const [billingAddress, setBillingAddress] = useState(client.address ?? '');
@@ -183,6 +190,12 @@ function BasicInfoPanel({
       pan_number: pan.trim() || undefined,
       address: billingAddress.trim() || undefined,
     };
+    if (isLocal) {
+      patch.organization_name = organizationName.trim();
+      patch.contact_person = contactPerson.trim();
+      patch.phone = phone.trim();
+      patch.email = email.trim();
+    }
     const { error } = await updateClient(organizationId, client.id, patch);
     setSaving(false);
     if (error) {
@@ -196,15 +209,67 @@ function BasicInfoPanel({
     <ScrollView style={styles.panelScroll} contentContainerStyle={styles.panelContent}>
       <Text style={styles.panelTitle}>Basic Information</Text>
 
-      <View style={styles.fieldGroup}>
-        <Text style={styles.fieldLabel}>Legal Name</Text>
-        <View style={styles.readonlyField}>
-          <Text style={styles.readonlyText}>
-            {(client.name || client.contact_person || '').trim() || '—'}
+      {isLocal ? (
+        <>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Organization / legal name</Text>
+            <TextInput
+              style={styles.input}
+              value={organizationName}
+              onChangeText={setOrganizationName}
+              placeholder="Company or organization"
+              placeholderTextColor={Theme.placeholder}
+            />
+          </View>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Contact person</Text>
+            <TextInput
+              style={styles.input}
+              value={contactPerson}
+              onChangeText={setContactPerson}
+              placeholder="Contact person name"
+              placeholderTextColor={Theme.placeholder}
+            />
+          </View>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Phone</Text>
+            <TextInput
+              style={styles.input}
+              value={phone}
+              onChangeText={(t) => setPhone(formatMobileNumber(t))}
+              placeholder="+91 98765 43210"
+              placeholderTextColor={Theme.placeholder}
+              keyboardType="phone-pad"
+            />
+          </View>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="client@example.com"
+              placeholderTextColor={Theme.placeholder}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        </>
+      ) : (
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Legal Name</Text>
+          <View style={styles.readonlyField}>
+            <Text style={styles.readonlyText}>
+              {(client.name || client.contact_person || '').trim() || '—'}
+            </Text>
+          </View>
+          <Text style={styles.fieldHint}>
+            Name, phone, email, and contact person are managed by the connected
+            client account.
           </Text>
         </View>
-        <Text style={styles.fieldHint}>Legal name is managed via the client record.</Text>
-      </View>
+      )}
 
       <View style={styles.fieldGroup}>
         <Text style={styles.fieldLabel}>GSTIN</Text>

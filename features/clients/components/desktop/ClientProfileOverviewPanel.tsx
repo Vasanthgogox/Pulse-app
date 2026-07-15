@@ -7,6 +7,7 @@ import {
 } from "@/features/clients/constants/clientReference.constants";
 import Theme from "@/constants/Theme";
 import { updateClientHubProfile } from "@/features/clients/services/clientProfile.service";
+import { updateClient } from "@/features/clients/services/clients.service";
 import type { ClientManagementBundle } from "@/features/clients/types/clientManagement.types";
 import { formatClientPhoneDisplay } from "@/features/clients/utils/clientManagement.util";
 import { NetworkDesktopHeadquarterMap } from "@/features/network/components/desktop/NetworkDesktopHeadquarterMap";
@@ -17,7 +18,7 @@ import { profileHubLayoutStyles as mobile } from "@/features/party/components/pr
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import { clientToPublicEntity } from "@/features/public-profile/mappers";
 import type { ClientRow } from "@/features/clients/services/clients.service";
-import { formatINR } from "@/lib/format";
+import { formatINR, formatMobileNumber } from "@/lib/format";
 import { CheckCircle2, ChevronDown, Download, Globe, Mail, MapPin, Phone, Save, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
@@ -139,6 +140,7 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh,
   const billingContacts = bundle.contacts.filter((ct) => ct.is_billing);
 
   const canEdit = Boolean(orgId && clientId && onRefresh);
+  const canEditIdentity = canEdit && !isIntegrated;
   const [importing, setImporting] = useState(false);
   const [kamEditing, setKamEditing] = useState(false);
   const [commercialEditing, setCommercialEditing] = useState(false);
@@ -148,6 +150,9 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh,
   const [highlightsForm, setHighlightsForm] = useState({
     legal_name: emptyStr(c.legal_name ?? c.name),
     trade_name: emptyStr(c.trade_name ?? c.name),
+    contact_person: emptyStr(c.contact_person),
+    phone: emptyStr(c.phone),
+    email: emptyStr(c.email),
     client_code: emptyStr(c.client_code),
     gstin: emptyStr(c.gstin),
     pan_number: emptyStr(c.pan_number),
@@ -220,6 +225,19 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh,
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+    if (canEditIdentity) {
+      const { error: identityError } = await updateClient(orgId, clientId, {
+        organization_name: highlightsForm.legal_name.trim() || highlightsForm.trade_name.trim(),
+        contact_person: highlightsForm.contact_person.trim(),
+        phone: highlightsForm.phone.trim(),
+        email: highlightsForm.email.trim(),
+      });
+      if (identityError) {
+        setSaving(false);
+        Alert.alert("Save failed", identityError.message);
+        return;
+      }
+    }
     const { error } = await updateClientHubProfile(orgId, clientId, {
       legal_name: highlightsForm.legal_name,
       trade_name: highlightsForm.trade_name,
@@ -250,6 +268,13 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh,
   const highlightItems = [
     { key: "legal_name", label: "Legal name", value: String(c.legal_name ?? c.name ?? "—") },
     { key: "trade_name", label: "Trade name", value: tradeName },
+    ...(canEditIdentity
+      ? [
+          { key: "contact_person", label: "Contact", value: str(c.contact_person) },
+          { key: "phone", label: "Phone", value: formatClientPhoneDisplay(String(c.phone ?? "")) },
+          { key: "email", label: "Email", value: str(c.email) },
+        ]
+      : []),
     { key: "client_code", label: "Client code", value: str(c.client_code) },
     { key: "gstin", label: "GST", value: String(c.gstin ?? "—") },
     { key: "pan_number", label: "PAN", value: String(c.pan_number ?? "—") },
@@ -293,13 +318,52 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh,
                 <View style={ov.twoCol}>
                   <View style={ov.fieldGroup}>
                     <Text style={ov.fieldLabel}>Legal name</Text>
-                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.legal_name} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, legal_name: v })} placeholder="Legal entity name" placeholderTextColor={METRONIC.muted} />
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.legal_name} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, legal_name: v })} placeholder="Legal entity name" placeholderTextColor={METRONIC.muted} editable={!isIntegrated} />
                   </View>
                   <View style={ov.fieldGroup}>
                     <Text style={ov.fieldLabel}>Trade name</Text>
                     <TextInput style={ov.fieldInputPlain} value={highlightsForm.trade_name} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, trade_name: v })} placeholder="Trading / brand name" placeholderTextColor={METRONIC.muted} />
                   </View>
                 </View>
+                {canEditIdentity ? (
+                  <>
+                    <View style={ov.fieldGroup}>
+                      <Text style={ov.fieldLabel}>Contact person</Text>
+                      <TextInput
+                        style={ov.fieldInputPlain}
+                        value={highlightsForm.contact_person}
+                        onChangeText={(v) => setHighlightsForm({ ...highlightsForm, contact_person: v })}
+                        placeholder="Contact person"
+                        placeholderTextColor={METRONIC.muted}
+                      />
+                    </View>
+                    <View style={ov.twoCol}>
+                      <View style={ov.fieldGroup}>
+                        <Text style={ov.fieldLabel}>Phone</Text>
+                        <TextInput
+                          style={ov.fieldInputPlain}
+                          value={highlightsForm.phone}
+                          onChangeText={(v) => setHighlightsForm({ ...highlightsForm, phone: formatMobileNumber(v) })}
+                          placeholder="+91 98765 43210"
+                          placeholderTextColor={METRONIC.muted}
+                          keyboardType="phone-pad"
+                        />
+                      </View>
+                      <View style={ov.fieldGroup}>
+                        <Text style={ov.fieldLabel}>Email</Text>
+                        <TextInput
+                          style={ov.fieldInputPlain}
+                          value={highlightsForm.email}
+                          onChangeText={(v) => setHighlightsForm({ ...highlightsForm, email: v })}
+                          placeholder="client@example.com"
+                          placeholderTextColor={METRONIC.muted}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                        />
+                      </View>
+                    </View>
+                  </>
+                ) : null}
                 <View style={ov.twoCol}>
                   <View style={ov.fieldGroup}>
                     <Text style={ov.fieldLabel}>Client code</Text>

@@ -332,6 +332,8 @@ export function SupplierProfileHub({
         return (
           <SupplierProfileOverviewPanel
             bundle={bundle}
+            orgId={orgId}
+            onRefresh={onRefresh}
             isIntegrated={isIntegrated}
             linkedOrgId={supplier.linked_organization_id}
             onImportFromProfile={isIntegrated && supplier.linked_organization_id ? async () => {
@@ -372,6 +374,8 @@ export function SupplierProfileHub({
         return (
           <SupplierProfileOverviewPanel
             bundle={bundle}
+            orgId={orgId}
+            onRefresh={onRefresh}
             isIntegrated={isIntegrated}
             linkedOrgId={supplier.linked_organization_id}
             onImportFromProfile={isIntegrated && supplier.linked_organization_id ? async () => {

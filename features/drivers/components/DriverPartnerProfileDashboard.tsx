@@ -304,6 +304,18 @@ export function DriverPartnerProfileDashboard({
             <View style={styles.sectionHeadingRow}>
               <View style={styles.accentIndigo} />
               <Text style={styles.sectionHeading}>Contact Registry</Text>
+              {!isIntegrated && onEditPress ? (
+                <TouchableOpacity
+                  onPress={onEditPress}
+                  hitSlop={12}
+                  style={{ marginLeft: "auto" }}
+                  accessibilityLabel="Edit contact"
+                >
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: Theme.primary }}>
+                    Edit
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
             <View style={styles.registryCard}>
               {[
