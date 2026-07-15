@@ -32,6 +32,8 @@ import {
   useDriverLocationStream,
 } from "@/features/driver/communication";
 import { useDriverMapLivePositionWatch } from "@/features/driver/hooks/useDriverMapLivePositionWatch";
+import { useDriverHomePerfMarks } from "@/features/driver/hooks/useDriverHomePerfMarks";
+import { markDriverPerfPhase } from "@/lib/driverPerfMetrics";
 import { claimTripByOtp } from "@/features/trips/services/tripOtp.service";
 import { useDriverHomeDriversQuery } from "@/lib/queries/useDriverHomeDriversQuery";
 import { useInvalidateDriverHomeDashboard } from "@/lib/queries/useInvalidateDriverHomeDashboard";
@@ -1035,6 +1037,7 @@ export default function DriverRadarScreen() {
   }, []);
 
   const fetchLocation = useCallback(async () => {
+    markDriverPerfPhase("gps_request_start");
     try {
       const expoLocation = await getExpoLocation();
       if (!expoLocation) {
@@ -1147,15 +1150,17 @@ export default function DriverRadarScreen() {
     }, []),
   );
 
-  /** Invalidate only on true background → foreground resume (not every focus/render). */
+  /** Invalidate only on true background → foreground resume (not every focus/render).
+   *  On web, Chrome tab switches fire inactive→active; treating that as resume made the
+   *  trip sheet re-fetch/remount on every tab change. Only `background` counts on web. */
   useEffect(() => {
     const sub = AppState.addEventListener("change", (nextState) => {
       const prev = appStateForInvalidateRef.current;
       appStateForInvalidateRef.current = nextState;
-      const resumed =
-        nextState === "active" &&
-        (prev === "background" || prev === "inactive");
-      if (resumed && uid) {
+      if (nextState !== "active" || !uid) return;
+      const resumedFromBackground = prev === "background";
+      const resumedFromInactive = prev === "inactive" && Platform.OS !== "web";
+      if (resumedFromBackground || resumedFromInactive) {
         lastTripsSyncKeyRef.current = null;
         void invalidateDriverHome(uid);
       }
@@ -2343,6 +2348,17 @@ export default function DriverRadarScreen() {
   /** Idle dashboard map card — preview current area when not in trip map mode. */
   const showDashboardMapPreview = !shouldShowMap && Boolean(driver);
 
+  useDriverHomePerfMarks({
+    loading,
+    tripsSyncing,
+    driversFetched: linkedDriversQuery.isFetched,
+    driversFetching: linkedDriversQuery.isFetching,
+    hasDriverRows: linkedDriversQuery.activeLinkedDrivers.length > 0,
+    shouldShowMap,
+    showDashboardMapPreview,
+    activeTripId: activeGuidanceTrip?.id ?? null,
+  });
+
   /** Map-only GPS stream when not in full follow mode (follow mode has its own watch). DB cadence unchanged. */
   useDriverMapLivePositionWatch({
     enabled: Boolean(
@@ -2705,32 +2721,10 @@ export default function DriverRadarScreen() {
     );
   }, [shouldShowMap, routeContextTrip, routeContextPickup, routeContextDrop]);
 
-  const approachRouteKey = useMemo(() => {
-    if (!shouldShowMap || !shouldShowDriverApproachRoute(activeGuidanceStep)) {
-      return null;
-    }
-    const start = truckPosition ?? driverMapPosition;
-    if (!start || !routeContextPickup || !routeContextTrip) return null;
-    // 3 decimals ≈ 100m — GPS ticks must not refetch approach every meter.
-    return buildRouteFetchKey(
-      `${routeContextTrip.id}:approach`,
-      start,
-      routeContextPickup,
-      3,
-    );
-  }, [
-    shouldShowMap,
-    activeGuidanceStep,
-    truckPosition,
-    driverMapPosition,
-    routeContextPickup,
-    routeContextTrip,
-  ]);
-
   /**
    * Start for active navigation polyline.
-   * After Package collected (transit+), if GPS isn't ready yet, use pickup —
-   * driver is still there, so we can fetch/draw driver→drop immediately.
+   * - Approach (→ pickup): live GPS only.
+   * - After Package collected (→ drop): live GPS, else pickup (driver is still there).
    */
   const navStartCoordinate = useMemo(() => {
     const live = truckPosition ?? driverMapPosition;
@@ -2747,6 +2741,30 @@ export default function DriverRadarScreen() {
     driverMapPosition,
     activeGuidanceStep,
     routeContextPickup,
+  ]);
+
+  // Current location → pickup (road) while heading to / at pickup.
+  const approachRouteKey = useMemo(() => {
+    if (!shouldShowMap || !shouldShowDriverApproachRoute(activeGuidanceStep)) {
+      return null;
+    }
+    const start = navStartCoordinate ?? truckPosition ?? driverMapPosition;
+    if (!start || !routeContextPickup || !routeContextTrip) return null;
+    // 3 decimals ≈ 100m — GPS ticks must not refetch approach every meter.
+    return buildRouteFetchKey(
+      `${routeContextTrip.id}:approach`,
+      start,
+      routeContextPickup,
+      3,
+    );
+  }, [
+    shouldShowMap,
+    activeGuidanceStep,
+    navStartCoordinate,
+    truckPosition,
+    driverMapPosition,
+    routeContextPickup,
+    routeContextTrip,
   ]);
 
   // Active guidance road route: driver (or pickup fallback) → current target.
@@ -3397,7 +3415,7 @@ export default function DriverRadarScreen() {
         if (shouldShowDriverApproachRoute(activeGuidanceStep)) {
           pushCoords(approachRoute?.coordinates);
           if (merged.length >= 2) return merged;
-          const live = truckPosition ?? driverMapPosition;
+          const live = navStartCoordinate ?? truckPosition ?? driverMapPosition;
           if (live && pickup) return [live, pickup];
         }
         pushCoords(tripLegRoute?.coordinates);
@@ -3506,28 +3524,37 @@ export default function DriverRadarScreen() {
     isFollowingLocation,
   ]);
 
-  // After Package collected: show remaining driver→drop road corridor + ETA card.
+  // Active leg: one overview fit when the step changes — never depend on
+  // fitMapToActiveContext identity or it re-fires on GPS and undoes Focus/follow.
+  const fitMapToActiveContextRef = useRef(fitMapToActiveContext);
+  fitMapToActiveContextRef.current = fitMapToActiveContext;
+  const lastNavFocusStepKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!shouldShowMap) return;
-    if (!shouldShowDriverToDropRoute(activeGuidanceStep)) return;
     if (!activeGuidanceTrip?.id) return;
+    const onApproach = shouldShowDriverApproachRoute(activeGuidanceStep);
+    const onToDrop = shouldShowDriverToDropRoute(activeGuidanceStep);
+    if (!onApproach && !onToDrop) return;
+
+    const stepKey = `${activeGuidanceTrip.id}:${activeGuidanceStep ?? ""}`;
+    if (lastNavFocusStepKeyRef.current === stepKey) return;
+    lastNavFocusStepKeyRef.current = stepKey;
+
     setShowRouteSummary(false);
+    // Keep ETA card visible for the active leg — Focus button stays inactive until tapped
+    // (green = live follow on me, not "card open").
     setShowTrackingInfoCard(true);
     setIsFollowingLocation(false);
     const t = setTimeout(() => {
       try {
-        fitMapToActiveContext(mapRef, { force: true });
+        fitMapToActiveContextRef.current(mapRef, { force: true });
       } catch {
         /* ignore */
       }
     }, 280);
     return () => clearTimeout(t);
-  }, [
-    activeGuidanceStep,
-    activeGuidanceTrip?.id,
-    shouldShowMap,
-    fitMapToActiveContext,
-  ]);
+  }, [activeGuidanceStep, activeGuidanceTrip?.id, shouldShowMap]);
 
   // Pulsating circle when searching for assignments (online, no mission, nothing to decide).
   // When multiple assignments exist, incoming is surfaced via notifications only — do not treat as "searching".
@@ -3568,110 +3595,160 @@ export default function DriverRadarScreen() {
   const driverName =
     profile?.full_name?.trim() || profile?.displayName?.trim() || "Pilot";
 
-  const handleFocusCurrentLocation = useCallback(async (): Promise<boolean> => {
-    try {
-      setIsFetchingLocation(true);
-      // Let the next follow pass center immediately (user explicitly asked to snap here).
+  const applyCameraToCoordinate = useCallback(
+    (
+      currentPos: { latitude: number; longitude: number },
+      zoom = DRIVER_MAP_MY_LOCATION_ZOOM,
+    ): boolean => {
       lastCameraCenterRef.current = null;
       lastCameraAnimTsRef.current = 0;
-
-      // Fetch the latest accurate location
-      const expoLocation = await getExpoLocation();
-      let currentPos = driverMapPosition;
-
-      if (expoLocation) {
-        let { status } = await expoLocation.getForegroundPermissionsAsync();
-        if (status !== "granted") {
-          const req = await expoLocation.requestForegroundPermissionsAsync();
-          status = req.status;
-        }
-        if (status === "granted") {
-          const current = await expoLocation.getCurrentPositionAsync({
-            accuracy: expoLocation.Accuracy.High,
-          });
-
-          currentPos = {
-            latitude: current.coords.latitude,
-            longitude: current.coords.longitude,
-          };
-
-          // Update state so the "You" marker jumps there
-          setDriverMapPosition(currentPos);
-          // Keep the animated marker in sync (it is driven by shared values).
-          youLatSv.value = withTiming(currentPos.latitude, { duration: 450 });
-          youLonSv.value = withTiming(currentPos.longitude, { duration: 450 });
-        }
-      }
-
-      if (!currentPos) return false;
-
       const showLeaflet =
         Platform.OS === "web" || useLeafletFallback || leafLetForced;
-
       if (showLeaflet) {
         const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
-        if (targetRef.current) {
-          targetRef.current.focusCurrentLocation(
-            currentPos,
-            DRIVER_MAP_MY_LOCATION_ZOOM,
-          );
-        }
+        targetRef.current?.focusCurrentLocation(currentPos, zoom);
         return true;
       }
-
       const targetRef = isFullMapVisible ? fullMapRef : mapRef;
-      const runCamera = (): boolean => {
-        const map = targetRef.current;
-        if (!map) return false;
-        try {
-          if (map.animateCamera) {
-            map.animateCamera(
-              {
-                center: {
-                  latitude: currentPos.latitude,
-                  longitude: currentPos.longitude,
-                },
-                zoom: DRIVER_MAP_MY_LOCATION_ZOOM,
-                pitch: 0,
-                heading: Number(youHeadingSv.value) || 0,
-              },
-              { duration: 500 },
-            );
-          } else if (map.animateToRegion) {
-            map.animateToRegion(
-              {
+      const map = targetRef.current;
+      if (!map) return false;
+      try {
+        if (map.animateCamera) {
+          map.animateCamera(
+            {
+              center: {
                 latitude: currentPos.latitude,
                 longitude: currentPos.longitude,
-                latitudeDelta: 0.02,
-                longitudeDelta: 0.02,
               },
-              500,
-            );
-          }
-        } catch {
+              zoom,
+              pitch: 0,
+              heading: Number(youHeadingSv.value) || 0,
+            },
+            { duration: 500 },
+          );
+        } else if (map.animateToRegion) {
+          map.animateToRegion(
+            {
+              latitude: currentPos.latitude,
+              longitude: currentPos.longitude,
+              latitudeDelta: 0.02,
+              longitudeDelta: 0.02,
+            },
+            500,
+          );
+        } else {
           return false;
         }
-        return true;
-      };
-
-      if (!runCamera()) {
-        await new Promise<void>((r) => setTimeout(r, 120));
-        if (!runCamera()) return false;
+      } catch {
+        return false;
       }
       lastCameraCenterRef.current = currentPos;
       lastCameraAnimTsRef.current = Date.now();
       return true;
+    },
+    [isFullMapVisible, leafLetForced, useLeafletFallback, youHeadingSv],
+  );
+
+  const handleFocusCurrentLocation = useCallback(async (): Promise<boolean> => {
+    // Instant focus if we already know you (avatar on map) — never wait on GPS for UI.
+    const known = truckPosition ?? driverMapPosition;
+    if (known) {
+      setDriverMapPosition(known);
+      youLatSv.value = withTiming(known.latitude, { duration: 450 });
+      youLonSv.value = withTiming(known.longitude, { duration: 450 });
+      applyCameraToCoordinate(known, DRIVER_MAP_MY_LOCATION_ZOOM);
+    }
+
+    // Optional GPS refresh — capped timeout so the spinner cannot hang.
+    const GPS_BUDGET_MS = 4_000;
+    // Only show spinner when we have nowhere to center yet.
+    if (!known) setIsFetchingLocation(true);
+    let refreshed: { latitude: number; longitude: number } | null = null;
+    try {
+      const withBudget = <T,>(p: Promise<T>): Promise<T | null> =>
+        Promise.race([
+          p,
+          new Promise<null>((resolve) => {
+            setTimeout(() => resolve(null), GPS_BUDGET_MS);
+          }),
+        ]);
+
+      if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.geolocation) {
+        refreshed = await withBudget(
+          new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
+            let settled = false;
+            const done = (v: { latitude: number; longitude: number } | null) => {
+              if (settled) return;
+              settled = true;
+              resolve(v);
+            };
+            const timer = setTimeout(() => done(null), GPS_BUDGET_MS);
+            try {
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  clearTimeout(timer);
+                  done({
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude,
+                  });
+                },
+                () => {
+                  clearTimeout(timer);
+                  done(null);
+                },
+                {
+                  enableHighAccuracy: false,
+                  maximumAge: 30_000,
+                  timeout: GPS_BUDGET_MS,
+                },
+              );
+            } catch {
+              clearTimeout(timer);
+              done(null);
+            }
+          }),
+        );
+      } else {
+        const expoLocation = await getExpoLocation();
+        if (expoLocation) {
+          refreshed = await withBudget(
+            (async () => {
+              let { status } = await expoLocation.getForegroundPermissionsAsync();
+              if (status !== "granted") {
+                const req = await expoLocation.requestForegroundPermissionsAsync();
+                status = req.status;
+              }
+              if (status !== "granted") return null;
+              const current = await expoLocation.getCurrentPositionAsync({
+                accuracy: expoLocation.Accuracy.Balanced,
+              });
+              return {
+                latitude: current.coords.latitude,
+                longitude: current.coords.longitude,
+              };
+            })(),
+          );
+        }
+      }
     } catch {
-      return false;
+      refreshed = null;
     } finally {
       setIsFetchingLocation(false);
     }
+
+    if (refreshed) {
+      setDriverMapPosition(refreshed);
+      youLatSv.value = withTiming(refreshed.latitude, { duration: 450 });
+      youLonSv.value = withTiming(refreshed.longitude, { duration: 450 });
+      applyCameraToCoordinate(refreshed, DRIVER_MAP_MY_LOCATION_ZOOM);
+      return true;
+    }
+
+    return Boolean(known);
   }, [
+    applyCameraToCoordinate,
     driverMapPosition,
-    isFullMapVisible,
-    leafLetForced,
-    useLeafletFallback,
-    youHeadingSv,
+    truckPosition,
     youLatSv,
     youLonSv,
   ]);
@@ -3842,7 +3919,10 @@ export default function DriverRadarScreen() {
     const toDropNav = shouldShowDriverToDropRoute(activeGuidanceStep);
     const showApproachRoute = shouldShowDriverApproachRoute(activeGuidanceStep);
     const youCoordinate =
-      truckPosition ?? driverMapPosition ?? (toDropNav ? pickup : null);
+      truckPosition ??
+      driverMapPosition ??
+      navStartCoordinate ??
+      (toDropNav ? pickup : null);
     const mapCenter =
       youCoordinate ?? pickup ?? drop ?? DEFAULT_MAP_REGION;
 
@@ -3865,14 +3945,14 @@ export default function DriverRadarScreen() {
         },
       });
     }
-    // After package collected, keep pickup dim/unhighlighted — destination is the hero.
-    if (pickup && !toDropNav) {
+    // Approach: Pickup is the hero. Transit+: Drop is the hero (pickup muted).
+    if (pickup && showApproachRoute) {
       leafletMarkers.push({
         id: "pickup",
         coordinate: pickup,
         label: "Pickup",
         color: Theme.driverEmerald,
-        highlighted: highlightedTarget === "pickup",
+        highlighted: true,
       });
     } else if (pickup && toDropNav) {
       const youAtPickup =
@@ -3892,14 +3972,25 @@ export default function DriverRadarScreen() {
           highlighted: false,
         });
       }
+    } else if (pickup) {
+      leafletMarkers.push({
+        id: "pickup",
+        coordinate: pickup,
+        label: "Pickup",
+        color: Theme.driverEmerald,
+        highlighted: highlightedTarget === "pickup",
+      });
     }
     if (drop) {
       leafletMarkers.push({
         id: "drop",
         coordinate: drop,
         label: "Drop",
-        color: Theme.driverGold,
-        highlighted: highlightedTarget === "drop" || toDropNav,
+        // Dim drop while navigating to pickup so Pickup reads as the hero.
+        color: showApproachRoute
+          ? Theme.driverEmeraldMutedText2
+          : Theme.driverGold,
+        highlighted: toDropNav || (!showApproachRoute && highlightedTarget === "drop"),
       });
     }
     // DEV: recent pins — skip ones sitting on the avatar so the green status stays tappable.
@@ -3974,6 +4065,7 @@ export default function DriverRadarScreen() {
         });
       }
     } else if (showApproachRoute) {
+      // Muted full trip corridor underneath when it adds context.
       if (pickupDropSpanM > 400) {
         if (tripLegRoute?.coordinates && tripLegRoute.coordinates.length >= 2) {
           mapPolylines.push({
@@ -3992,23 +4084,32 @@ export default function DriverRadarScreen() {
           });
         }
       }
+      // Hero: current location → pickup road (same weight as to-drop nav).
       if (approachRoute?.coordinates && approachRoute.coordinates.length >= 2) {
         mapPolylines.push({
-          id: "approach",
+          id: "to-pickup",
           coordinates: approachRoute.coordinates,
           color: Theme.driverEmerald,
           dashed: true,
-          width: 5,
-          glowWidth: 10,
+          width: 6,
+          glowWidth: 12,
         });
       } else if (youCoordinate && pickup) {
-        mapPolylines.push({
-          id: "approach-fallback",
-          coordinates: [youCoordinate, pickup],
-          color: Theme.driverEmerald,
-          dashed: true,
-          width: 4,
-        });
+        const spanM = distanceMeters(
+          youCoordinate.latitude,
+          youCoordinate.longitude,
+          pickup.latitude,
+          pickup.longitude,
+        );
+        if (spanM > 25) {
+          mapPolylines.push({
+            id: "to-pickup-fallback",
+            coordinates: [youCoordinate, pickup],
+            color: Theme.driverEmerald,
+            dashed: true,
+            width: 5,
+          });
+        }
       }
     } else {
       if (tripLegRoute?.coordinates && tripLegRoute.coordinates.length >= 2) {
@@ -4048,11 +4149,14 @@ export default function DriverRadarScreen() {
             )
           : null);
       const approachMid = approachCoords ? routeMidpoint(approachCoords) : null;
-      if (approachMid && approachDistanceM != null) {
+      if (approachMid && approachDistanceM != null && approachDistanceM > 25) {
+        const eta = formatEtaFromRouteSeconds(approachRoute?.duration);
         mapRouteLabels.push({
-          id: "approach-distance",
+          id: "to-pickup-distance",
           coordinate: approachMid,
-          text: formatRoadDistanceM(approachDistanceM),
+          text: eta
+            ? `${formatRoadDistanceM(approachDistanceM)} · ${eta}`
+            : formatRoadDistanceM(approachDistanceM),
         });
       }
     } else if (toDropNav) {
@@ -4230,6 +4334,7 @@ export default function DriverRadarScreen() {
             lowPower={false}
             interactionLocked={mapViewportLocked}
             showZoomControls={false}
+            autoFitBoundsOnRouteChange={false}
           />
         ) : (
           <MapView
@@ -4400,15 +4505,20 @@ export default function DriverRadarScreen() {
                     <View
                       style={[
                         styles.customMapMarkerPickup,
-                        highlightedTarget === "pickup" &&
-                          !toDropNav &&
+                        (showApproachRoute ||
+                          (highlightedTarget === "pickup" && !toDropNav)) &&
                           styles.customMapMarkerActive,
                         toDropNav && { opacity: 0.55 },
                       ]}
                     >
                       <FontAwesome
                         name="map-marker"
-                        size={highlightedTarget === "pickup" && !toDropNav ? 14 : 12}
+                        size={
+                          showApproachRoute ||
+                          (highlightedTarget === "pickup" && !toDropNav)
+                            ? 14
+                            : 12
+                        }
                         color="white"
                       />
                     </View>
@@ -4421,6 +4531,7 @@ export default function DriverRadarScreen() {
                         styles.customMapMarkerDrop,
                         (highlightedTarget === "drop" || toDropNav) &&
                           styles.customMapMarkerActive,
+                        showApproachRoute && { opacity: 0.5 },
                       ]}
                     >
                       <FontAwesome
@@ -4629,31 +4740,33 @@ export default function DriverRadarScreen() {
                   style={[
                     styles.mapTopIconBtn,
                     {
-                      backgroundColor:
-                        showTrackingInfoCard || isFollowingLocation
-                          ? colors.emerald
-                          : colors.surface,
-                      borderColor:
-                        showTrackingInfoCard || isFollowingLocation
-                          ? colors.emerald
-                          : colors.border,
+                      // Green only while live-following YOU (not just because ETA card is open).
+                      backgroundColor: isFollowingLocation
+                        ? colors.emerald
+                        : colors.surface,
+                      borderColor: isFollowingLocation
+                        ? colors.emerald
+                        : colors.border,
                     },
                   ]}
-                  onPress={async () => {
+                  onPress={() => {
                     setShowRouteSummary(false);
-                    if (showTrackingInfoCard) {
-                      setShowTrackingInfoCard(false);
+                    if (isFollowingLocation) {
                       setIsFollowingLocation(false);
+                      setIsFetchingLocation(false);
                       return;
                     }
+                    // Always zoom camera to current position + enable live follow.
                     setShowTrackingInfoCard(true);
-                    const ok = await handleFocusCurrentLocation();
-                    if (ok) setIsFollowingLocation(true);
+                    setIsFollowingLocation(true);
+                    void handleFocusCurrentLocation().then((ok) => {
+                      if (!ok) setIsFollowingLocation(false);
+                    });
                   }}
                   accessibilityLabel={
-                    showTrackingInfoCard
-                      ? "Close live route details"
-                      : "Show live route details"
+                    isFollowingLocation
+                      ? "Stop following my location"
+                      : "Focus and follow my location"
                   }
                   accessibilityRole="button"
                   disabled={isFetchingLocation}
@@ -4664,11 +4777,7 @@ export default function DriverRadarScreen() {
                     <FontAwesome
                       name="crosshairs"
                       size={12}
-                      color={
-                        showTrackingInfoCard || isFollowingLocation
-                          ? "#fff"
-                          : colors.text
-                      }
+                      color={isFollowingLocation ? "#fff" : colors.text}
                     />
                   )}
                 </TouchableOpacity>

@@ -300,6 +300,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       lowPower = false,
       interactionLocked = false,
       showZoomControls = true,
+      autoFitBoundsOnRouteChange = true,
     },
     ref,
   ) => {
@@ -308,6 +309,8 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
     zoomLevelRef.current = zoom;
     const interactionLockedRef = useRef(interactionLocked);
     interactionLockedRef.current = interactionLocked;
+    const autoFitBoundsRef = useRef(autoFitBoundsOnRouteChange);
+    autoFitBoundsRef.current = autoFitBoundsOnRouteChange;
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const markersRef = useRef<MapLibreMarkerLike[]>([]);
     const routeLayerIdsRef = useRef<string[]>([]);
@@ -500,7 +503,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
             });
           }
 
-          if (shouldFitBounds) {
+          if (shouldFitBounds && autoFitBoundsRef.current) {
             try {
               const routeCoords = allRoutePts.map(([lng, lat]) => ({
                 latitude: lat,

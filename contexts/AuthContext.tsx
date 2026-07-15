@@ -37,6 +37,7 @@ import {
   type AuthStatus,
   type UserProfile,
 } from "@/lib/authEngine";
+import { noteDriverLoginAttempt, resetDriverPerfMetrics } from "@/lib/driverPerfMetrics";
 import { clearStaleAuthOnFirstLaunch } from "@/lib/firstLaunch";
 import { resetIndexBootRedirect } from "@/lib/indexBootRedirect.util";
 import { getKeepSignedIn, setKeepSignedIn } from "@/lib/keepSignedInPreference";
@@ -253,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // false, so no router.replace fires and the app hangs on the splash until a
     // hard refresh discards the module. See lib/indexBootRedirect.util.ts.
     resetIndexBootRedirect();
+    resetDriverPerfMetrics();
     setUser(null);
     setProfile(null);
     setRoleVerified(false);
@@ -648,6 +650,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     keepSignedIn: boolean = true,
   ) => {
+    noteDriverLoginAttempt();
     const signInAttemptId = beginAuthAttempt();
     const result = await authService.signInWithPassword(email, password);
     if (!result.error) {
@@ -662,6 +665,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const signInWithGoogle = useCallback(async (keepSignedIn: boolean = true) => {
+    noteDriverLoginAttempt();
     const signInAttemptId = beginAuthAttempt();
     const result = await authService.signInWithGoogle();
     if (!result.error) {

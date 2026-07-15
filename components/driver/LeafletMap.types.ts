@@ -50,6 +50,9 @@ export type LeafletMapProps = {
     southWest: LeafletLatLng;
     northEast: LeafletLatLng;
   };
+  /** When false, route/marker updates never call fitBounds — parent owns the camera
+   *  (driver follow / focus). Default true for standalone maps. */
+  autoFitBoundsOnRouteChange?: boolean;
   /** Prefer compact tiles and lower motion for low-end devices. */
   lowPower?: boolean;
   /** When true, disable drag/zoom so the viewport stays locked while driver-tracking. */

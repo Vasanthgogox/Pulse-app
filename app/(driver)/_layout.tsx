@@ -16,6 +16,7 @@ import {
   consumePendingDriverInviteAfterAuth,
 } from '@/lib/driverInviteDeepLink.util';
 import { ROUTES } from '@/lib/routes';
+import { beginDriverPerfSession } from '@/lib/driverPerfMetrics';
 import {
   hydrateDriverSignupSuccessFlag,
   isDriverSignupSuccessActiveSync,
@@ -145,6 +146,12 @@ export default function DriverAppLayout() {
     !user ||
     !profile ||
     profile.role !== 'driver';
+
+  // Phase 0 perf: session origin when driver shell becomes interactive.
+  useEffect(() => {
+    if (gate) return;
+    beginDriverPerfSession();
+  }, [gate]);
 
   if (gate) {
     return (
