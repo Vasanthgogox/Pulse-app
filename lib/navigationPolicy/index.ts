@@ -1,0 +1,67 @@
+/**
+ * Navigation Policy System (RFC) — public exports.
+ *
+ * Navigation ≠ Authorization. Supabase RLS remains the data boundary.
+ *
+ * Phase 1: Foundation only — do NOT mount NavigationPolicyProvider from app/
+ * until Phase 3 (shadow) / Phase 5 (enforce) is approved.
+ */
+
+export type {
+  CanonicalPath,
+  Decision,
+  Experience,
+  Grant,
+  GrantSet,
+  OnDenyTarget,
+  PlatformKind,
+  PolicyRecord,
+  PolicySnapshot,
+  Principal,
+  SessionPosture,
+} from '@/lib/navigationPolicy/types';
+
+export {
+  DRIVER_HOME_PATH,
+  FAIL_CLOSED_HOME_PATH,
+  ORG_HOME_PATH,
+  SIGN_IN_PATH,
+  TERMINAL_WEBSITE_PATH,
+} from '@/lib/navigationPolicy/types';
+
+export {
+  canonicalizePath,
+  matchPattern,
+  stripExpoGroups,
+} from '@/lib/navigationPolicy/pathCanonicalize';
+
+export {
+  buildGrantSet,
+  buildPrincipal,
+  grantsSatisfy,
+} from '@/lib/navigationPolicy/grants';
+
+export {
+  evaluate,
+  evaluateNavigationPolicy,
+} from '@/lib/navigationPolicy/evaluate';
+
+export { getRegistry, findMatchingPolicy } from '@/lib/navigationPolicy/registry';
+
+export {
+  NavigationActor,
+  type NavigateFn,
+  type ActorApplyResult,
+} from '@/lib/navigationPolicy/NavigationActor';
+
+export {
+  emitNavigationDecision,
+  subscribeNavigationDecisions,
+  type NavigationDecisionEvent,
+} from '@/lib/navigationPolicy/telemetry';
+
+export {
+  NavigationPolicyProvider,
+  useNavigationPolicyDecision,
+  type NavigationPolicyProviderProps,
+} from '@/lib/navigationPolicy/NavigationPolicyProvider';
