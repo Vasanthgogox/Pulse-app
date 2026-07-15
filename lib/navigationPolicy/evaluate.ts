@@ -119,6 +119,28 @@ function redirect(
   return { type: 'redirect', to, reason, replace: true, policyId };
 }
 
+/**
+ * Expo Web strips `(driver)` from usePathname (same as tabs groups in the URL).
+ * Registry keys keep `/(driver)/…`. When an authenticated driver hits a
+ * group-stripped path that matches a driver policy under the prefix, rematch.
+ */
+export function expandDriverGroupStrippedPath(
+  canonicalPath: string,
+  registry: readonly PolicyRecord[],
+): string {
+  if (canonicalPath === '/(driver)' || canonicalPath.startsWith('/(driver)/')) {
+    return canonicalPath;
+  }
+  if (canonicalPath === '/') {
+    return '/(driver)';
+  }
+  const prefixed = `/(driver)${canonicalPath}`;
+  if (findMatchingPolicy(prefixed, registry)) {
+    return prefixed;
+  }
+  return canonicalPath;
+}
+
 export type EvaluateInput = {
   rawPathname: string;
   snapshot: PolicySnapshot;
@@ -131,7 +153,14 @@ export type EvaluateInput = {
  */
 export function evaluateNavigationPolicy(input: EvaluateInput): Decision {
   const { rawPathname, snapshot, registry = getRegistry() } = input;
-  const { path: canonicalPath } = canonicalizePath(rawPathname);
+  let { path: canonicalPath } = canonicalizePath(rawPathname);
+
+  if (
+    snapshot.sessionPosture === 'authenticated' &&
+    snapshot.principal?.role === 'driver'
+  ) {
+    canonicalPath = expandDriverGroupStrippedPath(canonicalPath, registry);
+  }
 
   if (snapshot.sessionPosture === 'restoring') {
     return { type: 'wait' };

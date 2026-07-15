@@ -49,9 +49,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const SCREEN_PAD = Layout.screenPaddingHorizontal;
+
+/**
+ * Clear absolute DriverTabBar footer on web/native.
+ * Footer = padTop(6) + dock (tabBarHeight+5) + padBottom(max(inset*0.35, 10)).
+ */
+function driverTabBarScrollInset(bottomInset: number): number {
+  const footerPadTop = 6;
+  const dockHeight = Layout.tabBarHeight + 5;
+  const footerPadBottom = Math.max(Math.round(bottomInset * 0.35), 10);
+  return footerPadTop + dockHeight + footerPadBottom + 24;
+}
 
 /** Reference palette — heroes stay slate-900 for brand match; page bg uses theme. */
 const SLATE_900 = '#0f172a';
@@ -85,7 +95,6 @@ function formatShortDate(iso?: string | null) {
 
 export default function DriverProfileScreen() {
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { theme } = useDriverTheme();
   const isDark = theme === 'dark';
@@ -103,6 +112,8 @@ export default function DriverProfileScreen() {
   const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
   const [loadingDriverRatings, setLoadingDriverRatings] = useState(false);
   const [kycUploadedCount, setKycUploadedCount] = useState(0);
+
+  const scrollBottomPad = driverTabBarScrollInset(insets.bottom);
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -564,7 +575,7 @@ export default function DriverProfileScreen() {
         style={styles.scroll}
         contentContainerStyle={{
           paddingTop: 12,
-          paddingBottom: tabBarHeight + 16,
+          paddingBottom: scrollBottomPad,
           paddingHorizontal: SCREEN_PAD,
         }}
         showsVerticalScrollIndicator={false}
