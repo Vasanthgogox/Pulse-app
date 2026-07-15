@@ -64,7 +64,13 @@ import {
 } from "@/features/drivers/utils/driverUtils.util";
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
+import {
+  setDriverLivePosition,
+  shouldCommitDriverMapPosition,
+  subscribeDriverLivePosition,
+} from "@/lib/driverLivePositionBus";
 import { darkMapStyle } from "@/lib/mapStyles";
+import { subscribeSignificantAppResume } from "@/lib/significantAppResume";
 import { getPopularPlacesInIndia, type PlaceResult } from "@/lib/placesService";
 import type { MapViewRef } from "@/lib/mapViewRef.types";
 import MapView, {
@@ -672,7 +678,10 @@ export default function DriverRadarScreen() {
   const [inlineMapViewportHeight, setInlineMapViewportHeight] = useState(0);
   const [toastMessage, setToastMessage] = useState("You are online now.");
   const pingMapUiRef = useRef<{
-    setDriverMapPosition: (p: { latitude: number; longitude: number } | null) => void;
+    commitMapPosition: (
+      p: { latitude: number; longitude: number } | null,
+      opts?: { force?: boolean },
+    ) => void;
     youLatSv: typeof youLatSv;
     youLonSv: typeof youLonSv;
     youHeadingSv: typeof youHeadingSv;
@@ -776,7 +785,45 @@ export default function DriverRadarScreen() {
   }, []);
 
   const tripsSyncGenRef = useRef(0);
-  const appStateForInvalidateRef = useRef(AppState.currentState);
+  const lastDriverMapCommitAtRef = useRef(0);
+  const driverMapPositionRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const lastCommittedMapPosRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+
+  const commitMapPosition = useCallback(
+    (
+      p: { latitude: number; longitude: number } | null,
+      opts?: { force?: boolean },
+    ) => {
+      driverMapPositionRef.current = p;
+      setDriverLivePosition(p);
+      if (p == null) {
+        lastCommittedMapPosRef.current = null;
+        lastDriverMapCommitAtRef.current = Date.now();
+        setDriverMapPosition(null);
+        return;
+      }
+      if (
+        !shouldCommitDriverMapPosition({
+          prev: lastCommittedMapPosRef.current,
+          next: p,
+          lastCommitAt: lastDriverMapCommitAtRef.current,
+          force: opts?.force === true,
+        })
+      ) {
+        return;
+      }
+      lastCommittedMapPosRef.current = p;
+      lastDriverMapCommitAtRef.current = Date.now();
+      setDriverMapPosition(p);
+    },
+    [],
+  );
 
   const driverIdsKey = linkedDriversQuery.driverIdsKey;
   const driversDataUpdatedAt = linkedDriversQuery.dataUpdatedAt;
@@ -1130,22 +1177,13 @@ export default function DriverRadarScreen() {
     }, []),
   );
 
-  /** Invalidate only on true background → foreground resume (not every focus/render).
-   *  On web, Chrome tab switches fire inactive→active; treating that as resume made the
-   *  trip sheet re-fetch/remount on every tab change. Only `background` counts on web. */
+  /** Invalidate only on significant resume (not every web tab flick). */
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (nextState) => {
-      const prev = appStateForInvalidateRef.current;
-      appStateForInvalidateRef.current = nextState;
-      if (nextState !== "active" || !uid) return;
-      const resumedFromBackground = prev === "background";
-      const resumedFromInactive = prev === "inactive" && Platform.OS !== "web";
-      if (resumedFromBackground || resumedFromInactive) {
-        lastTripsSyncKeyRef.current = null;
-        void invalidateDriverHome(uid);
-      }
+    if (!uid) return;
+    return subscribeSignificantAppResume(() => {
+      lastTripsSyncKeyRef.current = null;
+      void invalidateDriverHome(uid);
     });
-    return () => sub.remove();
   }, [uid, invalidateDriverHome]);
 
   // Clear declinedTripId once the declined trip is no longer present in any assignment source.
@@ -1168,7 +1206,9 @@ export default function DriverRadarScreen() {
     lastTripsSyncKeyRef.current = null;
     setLocationStatus("loading");
     Promise.all([
-      uid ? invalidateDriverHome(uid) : Promise.resolve(),
+      uid
+        ? invalidateDriverHome(uid, { syncLinkedDrivers: true })
+        : Promise.resolve(),
       fetchLocation(),
     ]).finally(() => {
       isRefreshingRef.current = false;
@@ -2188,7 +2228,7 @@ export default function DriverRadarScreen() {
   );
 
   pingMapUiRef.current = {
-    setDriverMapPosition,
+    commitMapPosition,
     youLatSv,
     youLonSv,
     youHeadingSv,
@@ -2200,12 +2240,14 @@ export default function DriverRadarScreen() {
       latitude: number;
       longitude: number;
       accuracy: number | null;
-      position: { coords: { latitude: number; longitude: number; heading?: number | null } };
+      position: {
+        coords: { latitude: number; longitude: number; heading?: number | null };
+      };
     }) => {
       const r = pingMapUiRef.current;
       if (!r) return;
       const { latitude, longitude, position } = args;
-      r.setDriverMapPosition({ latitude, longitude });
+      r.commitMapPosition({ latitude, longitude });
       r.youLatSv.value = withTiming(latitude, { duration: 450 });
       r.youLonSv.value = withTiming(longitude, { duration: 450 });
       const rawHeading = (
@@ -2614,65 +2656,63 @@ export default function DriverRadarScreen() {
   } | null>(null);
 
   // Smoothly follow the driver marker with `animateCamera` (avoid jitter from `fitToCoordinates`).
+  // Subscribes to the live position bus so follow works without React commits every GPS tick.
   useEffect(() => {
     if (!shouldShowMap) return;
     if (!isFollowingLocation) return;
-    if (!driverMapPosition) return;
 
     const showLeaflet =
       Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
     const activeNativeMapRef = isFullMapVisible ? fullMapRef : mapRef;
 
-    if (!showLeaflet && !activeNativeMapRef.current) return;
+    return subscribeDriverLivePosition((driverMapPosition) => {
+      if (!driverMapPosition) return;
+      if (!showLeaflet && !activeNativeMapRef.current) return;
 
-    const now = Date.now();
-    // Throttle to prevent over-animating on frequent GPS updates.
-    if (now - lastCameraAnimTsRef.current < 350) return;
+      const now = Date.now();
+      if (now - lastCameraAnimTsRef.current < 350) return;
 
-    // Also require meaningful movement from the last camera center.
-    if (lastCameraCenterRef.current) {
-      const movedM = distanceMeters(
-        lastCameraCenterRef.current.latitude,
-        lastCameraCenterRef.current.longitude,
-        driverMapPosition.latitude,
-        driverMapPosition.longitude,
-      );
-      if (movedM < 120) return;
-    }
-
-    lastCameraAnimTsRef.current = now;
-    lastCameraCenterRef.current = driverMapPosition;
-
-    if (showLeaflet) {
-      const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
-      if (targetRef.current) {
-        // Preserve current zoom while following so +/- sticks.
-        targetRef.current.focusCurrentLocation(driverMapPosition);
+      if (lastCameraCenterRef.current) {
+        const movedM = distanceMeters(
+          lastCameraCenterRef.current.latitude,
+          lastCameraCenterRef.current.longitude,
+          driverMapPosition.latitude,
+          driverMapPosition.longitude,
+        );
+        if (movedM < 120) return;
       }
-      return;
-    }
 
-    try {
-      const map = activeNativeMapRef.current;
-      const heading = Number(youHeadingSv.value);
-      map?.animateCamera?.(
-        {
-          center: {
-            latitude: driverMapPosition.latitude,
-            longitude: driverMapPosition.longitude,
+      lastCameraAnimTsRef.current = now;
+      lastCameraCenterRef.current = driverMapPosition;
+
+      if (showLeaflet) {
+        const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
+        if (targetRef.current) {
+          targetRef.current.focusCurrentLocation(driverMapPosition);
+        }
+        return;
+      }
+
+      try {
+        const map = activeNativeMapRef.current;
+        const heading = Number(youHeadingSv.value);
+        map?.animateCamera?.(
+          {
+            center: {
+              latitude: driverMapPosition.latitude,
+              longitude: driverMapPosition.longitude,
+            },
+            pitch: 0,
+            heading: Number.isFinite(heading) ? heading : 0,
           },
-          pitch: 0,
-          heading: Number.isFinite(heading) ? heading : 0,
-        },
-        { duration: 450 },
-      );
-    } catch {
-      // ignore camera animation failures
-    }
+          { duration: 450 },
+        );
+      } catch {
+        // ignore camera animation failures
+      }
+    });
   }, [
-    driverMapPosition?.latitude,
-    driverMapPosition?.longitude,
     shouldShowMap,
     isFollowingLocation,
     isFullMapVisible,
@@ -2915,7 +2955,7 @@ export default function DriverRadarScreen() {
   // When map or dashboard preview is shown, get current position for center and "You" marker.
   useEffect(() => {
     if (!shouldShowMap && !showDashboardMapPreview) {
-      setDriverMapPosition(null);
+      commitMapPosition(null, { force: true });
       return;
     }
     let cancelled = false;
@@ -2926,14 +2966,17 @@ export default function DriverRadarScreen() {
           navigator.geolocation.getCurrentPosition(
             (pos) => {
               if (cancelled) return;
-              setDriverMapPosition({
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude,
-              });
+              commitMapPosition(
+                {
+                  latitude: pos.coords.latitude,
+                  longitude: pos.coords.longitude,
+                },
+                { force: true },
+              );
             },
             () => {
               // Keep null so fallback/route guards handle no-position state cleanly.
-              if (!cancelled) setDriverMapPosition(null);
+              if (!cancelled) commitMapPosition(null, { force: true });
             },
             {
               enableHighAccuracy: true,
@@ -2951,18 +2994,21 @@ export default function DriverRadarScreen() {
         if (status !== "granted" || cancelled) return;
         const pos = await expoLocation.getCurrentPositionAsync({});
         if (cancelled) return;
-        setDriverMapPosition({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        });
+        commitMapPosition(
+          {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          },
+          { force: true },
+        );
       } catch {
-        if (!cancelled) setDriverMapPosition(null);
+        if (!cancelled) commitMapPosition(null, { force: true });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [shouldShowMap, showDashboardMapPreview]);
+  }, [shouldShowMap, showDashboardMapPreview, commitMapPosition]);
 
   // Web/permission fallback: recover last known driver position from DB so routing can still render.
   useEffect(() => {
@@ -2991,15 +3037,18 @@ export default function DriverRadarScreen() {
         }
         return;
       }
-      setDriverMapPosition({
-        latitude: location.latitude,
-        longitude: location.longitude,
-      });
+      commitMapPosition(
+        {
+          latitude: location.latitude,
+          longitude: location.longitude,
+        },
+        { force: true },
+      );
     })();
     return () => {
       cancelled = true;
     };
-  }, [shouldShowMap, driverMapPosition, activeGuidanceTrip?.id, driver?.id]);
+  }, [shouldShowMap, driverMapPosition, activeGuidanceTrip?.id, driver?.id, commitMapPosition]);
 
   // If we switch to a different trip, reset the truck marker so it starts from current GPS.
   useEffect(() => {
@@ -3642,7 +3691,7 @@ export default function DriverRadarScreen() {
     // Instant focus if we already know you (avatar on map) — never wait on GPS for UI.
     const known = truckPosition ?? driverMapPosition;
     if (known) {
-      setDriverMapPosition(known);
+      commitMapPosition(known, { force: true });
       youLatSv.value = withTiming(known.latitude, { duration: 450 });
       youLonSv.value = withTiming(known.longitude, { duration: 450 });
       applyCameraToCoordinate(known, DRIVER_MAP_MY_LOCATION_ZOOM);
@@ -3724,7 +3773,7 @@ export default function DriverRadarScreen() {
     }
 
     if (refreshed) {
-      setDriverMapPosition(refreshed);
+      commitMapPosition(refreshed, { force: true });
       youLatSv.value = withTiming(refreshed.latitude, { duration: 450 });
       youLonSv.value = withTiming(refreshed.longitude, { duration: 450 });
       applyCameraToCoordinate(refreshed, DRIVER_MAP_MY_LOCATION_ZOOM);
@@ -3734,6 +3783,7 @@ export default function DriverRadarScreen() {
     return Boolean(known);
   }, [
     applyCameraToCoordinate,
+    commitMapPosition,
     driverMapPosition,
     truckPosition,
     youLatSv,
@@ -3750,7 +3800,7 @@ export default function DriverRadarScreen() {
 
     const applyFollowPosition = (latitude: number, longitude: number) => {
       const next = { latitude, longitude };
-      setDriverMapPosition(next);
+      commitMapPosition(next);
       youLatSv.value = withTiming(next.latitude, { duration: 450 });
       youLonSv.value = withTiming(next.longitude, { duration: 450 });
 
@@ -3849,6 +3899,7 @@ export default function DriverRadarScreen() {
     shouldShowMap,
     useLeafletFallback,
     youHeadingSv,
+    commitMapPosition,
   ]);
 
   useEffect(() => {

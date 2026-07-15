@@ -8,6 +8,8 @@ import {
   useDriverInvitesQuery,
 } from '@/lib/queries/useDriverInvitesQuery';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
+import { subscribeSignificantAppResume } from '@/lib/significantAppResume';
+import { syncAndInvalidateLinkedDrivers } from '@/lib/syncLinkedDriversForDriverHome';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
@@ -85,7 +87,7 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
     console.warn('[DriverInviteModal] invites query:', msg);
   }, [isError, error]);
 
-  /** Foreground resume: show snoozed invites again + one cache invalidation (no pathname / setInterval). */
+  /** Brief tab return: clear snooze only. Significant resume: invalidate invites. */
   useEffect(() => {
     if (!uid) return;
 
@@ -94,14 +96,18 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
       appStateRef.current = nextState;
       const becameActive =
         nextState === 'active' && (prev === 'background' || prev === 'inactive');
-      if (becameActive) {
-        clearSessionSnooze();
-        invalidateInvites();
-      }
+      if (becameActive) clearSessionSnooze();
     };
 
     const sub = AppState.addEventListener('change', onAppStateChange);
-    return () => sub.remove();
+    const unsubResume = subscribeSignificantAppResume(() => {
+      clearSessionSnooze();
+      invalidateInvites();
+    });
+    return () => {
+      sub.remove();
+      unsubResume();
+    };
   }, [uid, clearSessionSnooze, invalidateInvites]);
 
   /** Event-driven refresh when fleet sends or updates an invitation. */
@@ -168,7 +174,15 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
     });
     invalidateInvites();
     bumpFleetConnectionRevision();
-  }, [activeInvite, invalidateInvites, bumpFleetConnectionRevision]);
+    // Phase 2: sync linked driver rows after invite accept (not inside drivers queryFn).
+    if (uid) void syncAndInvalidateLinkedDrivers(queryClient, uid);
+  }, [
+    activeInvite,
+    invalidateInvites,
+    bumpFleetConnectionRevision,
+    uid,
+    queryClient,
+  ]);
 
   const runDecline = useCallback(
     async (invite: DriverInviteRow) => {

@@ -17,6 +17,7 @@ import {
 } from '@/lib/driverInviteDeepLink.util';
 import { ROUTES } from '@/lib/routes';
 import { beginDriverPerfSession } from '@/lib/driverPerfMetrics';
+import { syncAndInvalidateLinkedDrivers } from '@/lib/syncLinkedDriversForDriverHome';
 import {
   hydrateDriverSignupSuccessFlag,
   isDriverSignupSuccessActiveSync,
@@ -29,8 +30,9 @@ import {
   PlusJakartaSans_800ExtraBold,
   useFonts as usePlusJakartaFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
+import { useQueryClient } from '@tanstack/react-query';
 import { Tabs, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
 function DriverTabsNavigator() {
@@ -90,6 +92,8 @@ export default function DriverAppLayout() {
 
   // ✅ Keep roleVerified from deepak/main
   const { user, profile, loading } = useAuth();
+  const queryClient = useQueryClient();
+  const linkedDriversSyncedRef = useRef(false);
 
   const router = useRouter();
   const logDriverGate = (event: string, details: Record<string, unknown>) => {
@@ -152,6 +156,17 @@ export default function DriverAppLayout() {
     if (gate) return;
     beginDriverPerfSession();
   }, [gate]);
+
+  // Phase 2: sync linked drivers once per driver session (login / cold restore), not on poll.
+  useEffect(() => {
+    if (gate) {
+      linkedDriversSyncedRef.current = false;
+      return;
+    }
+    if (!profile?.uid || linkedDriversSyncedRef.current) return;
+    linkedDriversSyncedRef.current = true;
+    void syncAndInvalidateLinkedDrivers(queryClient, profile.uid);
+  }, [gate, profile?.uid, queryClient]);
 
   if (gate) {
     return (

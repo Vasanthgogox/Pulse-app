@@ -1,12 +1,11 @@
 /**
  * Driver app home: linked driver rows for the authenticated user (GET drivers?user_id=).
  * Distinct from org-scoped {@link useDriversQuery} in useDriversQuery.ts (dispatcher fleet list).
+ *
+ * Linked-row sync is NOT in queryFn — see syncLinkedDriversForDriverHome (login / invite / refresh).
  */
 import type { DriverRow } from '@/features/drivers/services/drivers.service';
-import {
-  getLinkedDriversForCurrentUser,
-  syncLinkedDriverRowsForCurrentUser,
-} from '@/features/drivers/services/drivers.service';
+import { getLinkedDriversForCurrentUser } from '@/features/drivers/services/drivers.service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppStateIsActive } from '@/lib/hooks/useAppStateIsActive';
 import { queryKeys } from '@/lib/queryKeys';
@@ -33,7 +32,6 @@ export function useDriverHomeDriversQuery(userId: string | null) {
   const query = useQuery({
     queryKey: driverHomeLinkedDriversQueryKey(uid),
     queryFn: async () => {
-      await syncLinkedDriverRowsForCurrentUser();
       const { error, drivers } = await getLinkedDriversForCurrentUser(uid);
       if (error) throw error;
       return drivers ?? [];

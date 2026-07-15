@@ -77,7 +77,7 @@ export function DriverCommunicationProvider({
     [
       communicationActive,
       uid,
-      activeLinkedDrivers,
+      driverIds,
       driverIdsKey,
       lastPaymentEvent,
     ],
