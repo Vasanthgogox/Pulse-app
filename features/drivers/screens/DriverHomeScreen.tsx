@@ -23,10 +23,10 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDriverHomeInvites } from "@/features/driver/hooks/useDriverHomeInvites";
 import {
-    useDriverTheme,
-    useDriverThemeColors,
+  useDriverTheme,
+  useDriverThemeColors,
 } from "@/contexts/DriverThemeContext";
-import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
+import { computeDriverTripEstEarningsInr } from "@/features/finance/selectors/assetTripProvisionSelectors";
 import {
   useDriverCommunication,
   useDriverLocationStream,
@@ -1704,7 +1704,8 @@ export default function DriverRadarScreen() {
     [rpcAssignerUserIdByTripId, assignmentActorByTripId],
   );
 
-  // Use driver's accepted offer (commission % or per km) for this org so commission matches control screen
+  // Use driver's accepted offer (salary + commission) for this org so EST. EARNINGS
+  // matches Finance Hub labor (commission + pro-rata salary).
   const acceptedInviteForOrg =
     effectiveFirstIncoming &&
     (invites.find(
@@ -1714,22 +1715,28 @@ export default function DriverRadarScreen() {
         String(i.status ?? "").toLowerCase() === "accepted",
     ) ??
       null);
-  const offerForCommission = acceptedInviteForOrg
-    ? {
-        commissionPercent: acceptedInviteForOrg.commission_percent ?? null,
-        commissionPerKm: acceptedInviteForOrg.commission_per_km ?? null,
-      }
-    : null;
+  const offerForCommission = {
+    payableAmount:
+      acceptedInviteForOrg?.payable_amount ?? driver?.payable_amount ?? null,
+    commissionPercent:
+      acceptedInviteForOrg?.commission_percent ??
+      driver?.commission_percent ??
+      null,
+    commissionPerKm:
+      acceptedInviteForOrg?.commission_per_km ??
+      driver?.commission_per_km ??
+      null,
+  };
   const newAssignmentCommission =
     effectiveFirstIncoming != null
-      ? computeDriverCommissionForTrip(
+      ? computeDriverTripEstEarningsInr(
           effectiveFirstIncoming,
           offerForCommission,
         )
       : 0;
   const activeMissionCommission =
     activeMission != null
-      ? computeDriverCommissionForTrip(activeMission, offerForCommission)
+      ? computeDriverTripEstEarningsInr(activeMission, offerForCommission)
       : 0;
   const incomingNotificationsWithMeta = useMemo(
     () =>
@@ -1774,9 +1781,17 @@ export default function DriverRadarScreen() {
               )
             : undefined) ??
           null;
-        const commissionForTrip = computeDriverCommissionForTrip(trip, {
-          commissionPercent: acceptedInviteForTrip?.commission_percent ?? null,
-          commissionPerKm: acceptedInviteForTrip?.commission_per_km ?? null,
+        const commissionForTrip = computeDriverTripEstEarningsInr(trip, {
+          payableAmount:
+            acceptedInviteForTrip?.payable_amount ?? driver?.payable_amount ?? null,
+          commissionPercent:
+            acceptedInviteForTrip?.commission_percent ??
+            driver?.commission_percent ??
+            null,
+          commissionPerKm:
+            acceptedInviteForTrip?.commission_per_km ??
+            driver?.commission_per_km ??
+            null,
         });
         return {
           trip,
@@ -1794,6 +1809,9 @@ export default function DriverRadarScreen() {
       visibleIncomingTrips,
       invites,
       driver?.organization_id,
+      driver?.payable_amount,
+      driver?.commission_percent,
+      driver?.commission_per_km,
       pendingOtpTripsRequiringOtp,
       assignerNamesByUserId,
       assignerOrgNameByUserId,

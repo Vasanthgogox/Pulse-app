@@ -15,7 +15,7 @@ import {
     STEPS,
     useTripControl
 } from "@/features/drivers/hooks/useTripControl";
-import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
+import { computeDriverTripEstEarningsInr } from "@/features/finance/selectors/assetTripProvisionSelectors";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
     buildDriverTripNumberMap,
@@ -444,15 +444,16 @@ export default function DriverControlScreen() {
   }, [router, trip?.id]);
   const commission = tripIsAggregate
     ? 0
-    : computeDriverCommissionForTrip(
-        trip,
-        acceptedOffer
-          ? {
-              commissionPercent: acceptedOffer.commissionPercent,
-              commissionPerKm: acceptedOffer.commissionPerKm,
-            }
-          : null,
-      );
+    : computeDriverTripEstEarningsInr(trip, {
+        payableAmount:
+          acceptedOffer?.payableAmount ?? tripDriver?.payable_amount ?? null,
+        commissionPercent:
+          acceptedOffer?.commissionPercent ??
+          tripDriver?.commission_percent ??
+          null,
+        commissionPerKm:
+          acceptedOffer?.commissionPerKm ?? tripDriver?.commission_per_km ?? null,
+      });
   const effectiveEta =
     trip.estimated_duration?.trim() || routeMetricsFallback?.estimated_duration || null;
   const effectiveDistance = trip.distance ?? routeMetricsFallback?.distance ?? null;

@@ -11,7 +11,7 @@ import {
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
-import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
+import { computeDriverTripEstEarningsInr } from '@/features/finance/selectors/assetTripProvisionSelectors';
 import { getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { getLatestAssignmentAuditByTripIds } from '@/features/trips/services/trip-assignment-audit.service';
 import { TripListAssignerRow } from '@/components/driver/TripListAssignerRow';
@@ -463,9 +463,17 @@ export default function DriverNotificationsScreen() {
                 (trip.organization_id ?? '').trim() &&
               String(i.status ?? '').toLowerCase() === 'accepted',
           ) ?? null;
-        const commissionForTrip = computeDriverCommissionForTrip(trip, {
-          commissionPercent: acceptedInviteForTrip?.commission_percent ?? null,
-          commissionPerKm: acceptedInviteForTrip?.commission_per_km ?? null,
+        const commissionForTrip = computeDriverTripEstEarningsInr(trip, {
+          payableAmount:
+            acceptedInviteForTrip?.payable_amount ?? driver?.payable_amount ?? null,
+          commissionPercent:
+            acceptedInviteForTrip?.commission_percent ??
+            driver?.commission_percent ??
+            null,
+          commissionPerKm:
+            acceptedInviteForTrip?.commission_per_km ??
+            driver?.commission_per_km ??
+            null,
         });
 
         const inviteForTrip =
@@ -515,6 +523,9 @@ export default function DriverNotificationsScreen() {
       mergedIncomingTrips,
       invites,
       driver?.organization_id,
+      driver?.payable_amount,
+      driver?.commission_percent,
+      driver?.commission_per_km,
       pendingOtpTripsRequiringOtp,
       assignerNamesByUserId,
       assignerOrgNameByUserId,

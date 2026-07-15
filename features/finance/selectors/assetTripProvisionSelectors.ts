@@ -268,6 +268,24 @@ export function selectAssetTripProvisionCostBreakdown(input: {
   };
 }
 
+/**
+ * Driver-facing estimated earnings for one trip — same labor basis as Finance Hub
+ * revised trip cost labor (commission + pro-rata salary). Excludes posted expenses.
+ */
+export function computeDriverTripEstEarningsInr(
+  trip: TripRow,
+  driverOffer?: DriverOfferForAggregation | null,
+): number {
+  const breakdown = selectAssetTripProvisionCostBreakdown({
+    trip,
+    events: [],
+    driverOffer: driverOffer ?? null,
+  });
+  return roundCurrency(
+    breakdown.driverCommissionInr + breakdown.salaryAllocationInr,
+  );
+}
+
 export function selectAssetTripAdjustedNetMargin(input: {
   adjustedSaleInr: number;
   adjustedCostInr: number;
