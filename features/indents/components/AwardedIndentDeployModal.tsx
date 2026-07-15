@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Check } from "lucide-react-native";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import Theme from "@/constants/Theme";
 import { AwardedIndentDeployModalPage } from "@/features/indents/components/AwardedIndentDeployModalPage";
@@ -198,6 +198,16 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
     isScrollingRef.current = true;
   }, []);
 
+  const goToPage = useCallback(
+    (index: number) => {
+      const next = clampPageIndex(index, pageTotal);
+      if (next === safeIndex) return;
+      onPageChange(next);
+      syncScrollToIndex(next, true);
+    },
+    [onPageChange, pageTotal, safeIndex, syncScrollToIndex],
+  );
+
   if ((!shellVisible && !visible) || items.length === 0) return null;
 
   const pagerContent = items.map((item, index) => (
@@ -274,12 +284,64 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
 
           {showPager ? (
             <View style={styles.pageDots}>
-              {items.map((item, index) => (
-                <View
-                  key={item.indent.id}
-                  style={[styles.pageDot, index === safeIndex ? styles.pageDotActive : null]}
+              <TouchableOpacity
+                style={[
+                  styles.pageNavBtn,
+                  safeIndex <= 0 ? styles.pageNavBtnDisabled : null,
+                ]}
+                onPress={() => goToPage(safeIndex - 1)}
+                disabled={safeIndex <= 0}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel="Previous awarded trip"
+              >
+                <ChevronLeft
+                  size={18}
+                  color={safeIndex <= 0 ? Theme.borderMedium : Theme.buttonMatteBlack}
+                  strokeWidth={2.4}
                 />
-              ))}
+              </TouchableOpacity>
+
+              {items.map((item, index) => {
+                const active = index === safeIndex;
+                return (
+                  <TouchableOpacity
+                    key={item.indent.id}
+                    style={styles.pageDotHit}
+                    onPress={() => goToPage(index)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Awarded trip ${index + 1} of ${pageTotal}`}
+                    accessibilityState={{ selected: active }}
+                  >
+                    <View
+                      style={[styles.pageDot, active ? styles.pageDotActive : null]}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+
+              <TouchableOpacity
+                style={[
+                  styles.pageNavBtn,
+                  safeIndex >= pageTotal - 1 ? styles.pageNavBtnDisabled : null,
+                ]}
+                onPress={() => goToPage(safeIndex + 1)}
+                disabled={safeIndex >= pageTotal - 1}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel="Next awarded trip"
+              >
+                <ChevronRight
+                  size={18}
+                  color={
+                    safeIndex >= pageTotal - 1
+                      ? Theme.borderMedium
+                      : Theme.buttonMatteBlack
+                  }
+                  strokeWidth={2.4}
+                />
+              </TouchableOpacity>
             </View>
           ) : null}
 
