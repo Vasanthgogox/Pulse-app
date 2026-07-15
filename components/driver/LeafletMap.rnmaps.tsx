@@ -178,6 +178,9 @@ export const LeafletMapRnMaps = React.forwardRef<
           duration,
         );
       },
+      setMarkerCoordinate: (_id, _coordinate) => {
+        // rnmaps Marker is prop-driven; home screen uses Reanimated for native You.
+      },
       fitBounds: (_ne, _sw, _paddingPx, _maxZoom) => {},
       zoomIn: () => animateToZoom(zoomLevelRef.current + 1),
       zoomOut: () => animateToZoom(zoomLevelRef.current - 1),

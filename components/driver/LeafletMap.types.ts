@@ -67,6 +67,8 @@ export type LeafletMapRef = {
    * (follow mode must not reset user/route overview zoom).
    */
   focusCurrentLocation: (center: LeafletLatLng, zoom?: number) => void;
+  /** Move an existing marker without rebuilding overlay layers (live GPS / truck anim). */
+  setMarkerCoordinate: (id: string, coordinate: LeafletLatLng) => void;
   fitBounds: (
     ne: LeafletLatLng,
     sw: LeafletLatLng,

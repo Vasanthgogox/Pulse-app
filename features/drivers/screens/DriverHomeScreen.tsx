@@ -2655,6 +2655,16 @@ export default function DriverRadarScreen() {
     longitude: number;
   } | null>(null);
 
+  // Phase 4b: move the Leaflet "you" marker from the live bus without React commits.
+  useEffect(() => {
+    if (!shouldShowMap) return;
+    return subscribeDriverLivePosition((pos) => {
+      if (!pos) return;
+      const leaf = isFullMapVisible ? fullLeafletRef : leafletRef;
+      leaf.current?.setMarkerCoordinate?.("you", pos);
+    });
+  }, [shouldShowMap, isFullMapVisible]);
+
   // Smoothly follow the driver marker with `animateCamera` (avoid jitter from `fitToCoordinates`).
   // Subscribes to the live position bus so follow works without React commits every GPS tick.
   useEffect(() => {
@@ -3201,10 +3211,43 @@ export default function DriverRadarScreen() {
       ) => {
         const token = truckAnimTokenRef.current;
         const travel = Math.max(0, endDist - startDist);
+        const publishTruckVisual = (
+          p: { latitude: number; longitude: number },
+          opts?: { forceReact?: boolean },
+        ) => {
+          youLatSv.value = p.latitude;
+          youLonSv.value = p.longitude;
+          setDriverLivePosition(p);
+          driverMapPositionRef.current = p;
+          if (opts?.forceReact) {
+            const now = Date.now();
+            truckLastUpdateMsRef.current = now;
+            lastDriverMapCommitAtRef.current = now;
+            lastCommittedMapPosRef.current = p;
+            setTruckPosition(p);
+            return;
+          }
+          if (
+            shouldCommitDriverMapPosition({
+              prev: lastCommittedMapPosRef.current,
+              next: p,
+              lastCommitAt: lastDriverMapCommitAtRef.current,
+              minDisplacementM: 25,
+              minIntervalMs: 1000,
+            })
+          ) {
+            const now = Date.now();
+            truckLastUpdateMsRef.current = now;
+            lastDriverMapCommitAtRef.current = now;
+            lastCommittedMapPosRef.current = p;
+            setTruckPosition(p);
+          }
+        };
+
         if (travel <= 0) {
           const finalPos = interpolateAtDistance(pts, cum, endDist);
           if (finalPos && token === truckAnimTokenRef.current)
-            setTruckPosition(finalPos);
+            publishTruckVisual(finalPos, { forceReact: true });
           return;
         }
 
@@ -3218,10 +3261,29 @@ export default function DriverRadarScreen() {
           const t = Math.min(1, elapsed / Math.max(1, durationMs));
           const dist = startDist + travel * t;
 
-          // Throttle state updates to keep UI smooth.
-          if (now - truckLastUpdateMsRef.current >= 70) {
+          // Visual updates every ~70ms via shared values + live bus (imperative Leaflet).
+          if (now - truckLastUpdateMsRef.current >= 70 || t >= 1) {
             const p = interpolateAtDistance(pts, cum, dist);
-            if (p) setTruckPosition(p);
+            if (p) {
+              youLatSv.value = p.latitude;
+              youLonSv.value = p.longitude;
+              setDriverLivePosition(p);
+              driverMapPositionRef.current = p;
+              // Do not stamp truckLastUpdateMsRef here — that gates React commits.
+              if (
+                shouldCommitDriverMapPosition({
+                  prev: lastCommittedMapPosRef.current,
+                  next: p,
+                  lastCommitAt: lastDriverMapCommitAtRef.current,
+                  minDisplacementM: 25,
+                  minIntervalMs: 1000,
+                })
+              ) {
+                lastCommittedMapPosRef.current = p;
+                lastDriverMapCommitAtRef.current = now;
+                setTruckPosition(p);
+              }
+            }
             truckLastUpdateMsRef.current = now;
           }
 
@@ -3230,7 +3292,7 @@ export default function DriverRadarScreen() {
           } else {
             const finalPos = interpolateAtDistance(pts, cum, endDist);
             if (finalPos && token === truckAnimTokenRef.current)
-              setTruckPosition(finalPos);
+              publishTruckVisual(finalPos, { forceReact: true });
           }
         };
 

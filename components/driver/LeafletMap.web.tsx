@@ -313,6 +313,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
     autoFitBoundsRef.current = autoFitBoundsOnRouteChange;
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const markersRef = useRef<MapLibreMarkerLike[]>([]);
+    const markersByIdRef = useRef(new Map<string, MapLibreMarkerLike>());
     const routeLayerIdsRef = useRef<string[]>([]);
     const lastPolylineStrRef = useRef<string>("");
     const mapStyleLoadedRef = useRef(false);
@@ -446,6 +447,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         if (mapRef.current) {
           markersRef.current.forEach((m) => m.remove?.());
           markersRef.current = [];
+          markersByIdRef.current.clear();
           mapRef.current.remove?.();
           mapRef.current = null;
         }
@@ -472,6 +474,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         try {
           markersRef.current.forEach((m) => m.remove?.());
           markersRef.current = [];
+          markersByIdRef.current.clear();
 
           let shouldFitBounds = false;
           const activeLayers = resolvePolylineLayers(polylines, polyline, polylineColor);
@@ -586,6 +589,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
               .setLngLat([lng, lat])
               .addTo(mapInstance);
             markersRef.current.push(marker);
+            if (m.id) markersByIdRef.current.set(String(m.id), marker);
           }
 
           for (const label of routeLabels ?? []) {
@@ -695,6 +699,15 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           zoom: resolvedZoom,
           duration: lowPower ? 0 : 450,
         });
+      },
+      setMarkerCoordinate: (id, coordinate) => {
+        const marker = markersByIdRef.current.get(String(id));
+        if (!marker || typeof marker.setLngLat !== "function") return;
+        try {
+          marker.setLngLat([coordinate.longitude, coordinate.latitude]);
+        } catch {
+          // marker may have been removed mid-sync
+        }
       },
       fitBounds: (ne, sw, paddingPx = 80, maxZoom = DEFAULT_FIT_MAX_ZOOM) => {
         if (!mapRef.current) return;

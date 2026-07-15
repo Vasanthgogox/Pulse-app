@@ -127,6 +127,10 @@ export const LeafletMapMapLibre = React.forwardRef<
           animationDuration: lowPower ? 0 : 450,
         });
       },
+      setMarkerCoordinate: (_id, _coordinate) => {
+        // Native MapLibre path rebuilds PointAnnotations from props; live bus
+        // still updates shared values / React throttle on the home screen.
+      },
       fitBounds: (ne, sw, paddingPx = 80, _maxZoom) => {
         cameraRef.current?.fitBounds?.(
           [ne.longitude, ne.latitude],
