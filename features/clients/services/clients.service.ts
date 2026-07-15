@@ -4,6 +4,7 @@
  * Connection RPCs (detail bundle, linked org profiles) remain here until Phase 3.
  */
 import { enrichConnectionPartnerAvatars } from '@/lib/enrichConnectionPartnerAvatars';
+import { isIntegratedClientRow } from '@/features/trips/visibility/tripVisibility';
 import { CustomerService } from '@/lib/platform';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
@@ -442,6 +443,13 @@ export interface UpdateClientData {
   pan_number?: string;
 }
 
+const CLIENT_IDENTITY_FIELDS = [
+  "contact_person",
+  "phone",
+  "organization_name",
+  "email",
+] as const satisfies ReadonlyArray<keyof UpdateClientData>;
+
 export async function updateClient(
   orgId: string,
   clientId: string,
@@ -456,6 +464,34 @@ export async function updateClient(
     patch.pan_number !== undefined ||
     patch.organization_name !== undefined;
   if (!hasPatch) return { error: null, client: null };
+
+  const touchesIdentity = CLIENT_IDENTITY_FIELDS.some(
+    (key) => patch[key] !== undefined,
+  );
+  if (touchesIdentity) {
+    const { data: existing, error: existingError } = await supabase()
+      .from("clients")
+      .select("id, is_integrated, linked_organization_id")
+      .eq("organization_id", orgId)
+      .eq("id", clientId)
+      .maybeSingle();
+    if (existingError) {
+      return { error: new Error(existingError.message), client: null };
+    }
+    if (
+      existing &&
+      isIntegratedClientRow(
+        existing as Pick<ClientRow, "is_integrated" | "linked_organization_id">,
+      )
+    ) {
+      return {
+        error: new Error(
+          "Name, phone, email, and contact person are managed by the connected client account and cannot be edited.",
+        ),
+        client: null,
+      };
+    }
+  }
 
   const name =
     (patch.organization_name ?? '').trim() ||

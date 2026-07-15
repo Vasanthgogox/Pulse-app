@@ -7,6 +7,7 @@ import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { DriverPartnerProfileDashboard } from "@/features/drivers/components/DriverPartnerProfileDashboard";
+import { EditLocalDriverModal } from "@/features/drivers/components/EditLocalDriverModal";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
@@ -99,6 +100,8 @@ import {
     type DriverRow,
     type DriverSignupMatchStatus,
     type DriverTenureRow,
+    isLocalDriverRow,
+    type UpdateDriverData,
 } from "../services/drivers.service";
 import {
   DriverFleetInviteSalaryModal,
@@ -355,6 +358,8 @@ export default function DriverDetailScreen({
   const [tripsDateRangeModalVisible, setTripsDateRangeModalVisible] =
     useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showEditLocalDriverModal, setShowEditLocalDriverModal] =
+    useState(false);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [driverReportKind, setDriverReportKind] = useState<"payable" | "ledger">(
@@ -1107,6 +1112,31 @@ export default function DriverDetailScreen({
     ]);
   };
 
+  const driverIsLocal = isLocalDriverRow(driver);
+  const driverHasLeft = Boolean(driver.left_at);
+
+  const handleEditLocalDriverSave = async (patch: UpdateDriverData) => {
+    if (!currentOrganization?.id || !driver) return;
+    const { error: updateError, driver: updated } = await updateDriver(
+      currentOrganization.id,
+      driver.id,
+      patch,
+    );
+    if (updateError) throw updateError;
+    if (updated) setDriver(updated);
+  };
+
+  const handleProfileEditPress = () => {
+    if (driverIsLocal) {
+      setShowEditLocalDriverModal(true);
+      return;
+    }
+    Alert.alert(
+      "Managed by driver app",
+      "Name, email, and phone sync from this driver’s app profile and cannot be edited here. You can still manage compensation from fleet invite flows.",
+    );
+  };
+
   const handleSendMatchedInvite = () => {
     setInviteSalaryModalMode("signup_match");
     setInviteSalaryModalVisible(true);
@@ -1841,6 +1871,15 @@ export default function DriverDetailScreen({
       >
         <DriverPartnerProfileDashboard
           onClose={() => setShowProfileModal(false)}
+          onEditPress={handleProfileEditPress}
+          editProfileLabel={
+            driverIsLocal
+              ? "Edit Profile"
+              : driverHasLeft
+                ? "Edit Profile"
+                : "View identity"
+          }
+          hideEditProfile={driverHasLeft}
           driver={driver}
           profileAvatarUri={profileAvatarUri}
           businessVolumeLabel={formatINR(totalDriverEarnings)}
@@ -1921,6 +1960,14 @@ export default function DriverDetailScreen({
           ) : null}
         </DriverPartnerProfileDashboard>
       </Modal>
+
+      <EditLocalDriverModal
+        visible={showEditLocalDriverModal}
+        driver={driver}
+        organizationId={currentOrganization?.id ?? ""}
+        onClose={() => setShowEditLocalDriverModal(false)}
+        onSave={handleEditLocalDriverSave}
+      />
 
       {driverDetailTab === "trips" && (
         <ScrollView

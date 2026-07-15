@@ -6,6 +6,7 @@ import { syncDomainRows } from '@/lib/cache/domainSync';
 import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
 import type { DeltaResponse } from '@/lib/cache/deltaTypes';
 import { enrichConnectionPartnerAvatars } from '@/lib/enrichConnectionPartnerAvatars';
+import { isIntegratedSupplierRow } from '@/features/trips/visibility/tripVisibility';
 import { supabase } from '@/lib/supabase';
 
 export interface SupplierRow {
@@ -404,6 +405,38 @@ export async function updateSupplier(
   supplierId: string,
   patch: UpdateSupplierData
 ): Promise<{ error: Error | null; supplier: SupplierRow | null }> {
+  const touchesIdentity =
+    patch.name !== undefined ||
+    patch.company_name !== undefined ||
+    patch.contact_person !== undefined ||
+    patch.phone !== undefined ||
+    patch.email !== undefined;
+
+  if (touchesIdentity) {
+    const { data: existing, error: existingError } = await supabase()
+      .from("suppliers")
+      .select("id, supplier_type, linked_organization_id")
+      .eq("organization_id", orgId)
+      .eq("id", supplierId)
+      .maybeSingle();
+    if (existingError) {
+      return { error: new Error(existingError.message), supplier: null };
+    }
+    if (
+      existing &&
+      isIntegratedSupplierRow(
+        existing as Pick<SupplierRow, "supplier_type" | "linked_organization_id">,
+      )
+    ) {
+      return {
+        error: new Error(
+          "Name, phone, email, and contact person are managed by the connected supplier account and cannot be edited.",
+        ),
+        supplier: null,
+      };
+    }
+  }
+
   const updates: Record<string, unknown> = {};
   // Resolve display name: accept either `name` or deprecated `company_name`
   const incomingName = patch.name ?? patch.company_name;

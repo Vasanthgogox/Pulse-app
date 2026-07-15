@@ -6,6 +6,7 @@ import type {
   SupplierRow,
   UpdateSupplierData,
 } from "@/features/suppliers/services/suppliers.service";
+import { isIntegratedSupplierRow } from "@/features/trips/visibility/tripVisibility";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useState } from "react";
 import {
@@ -125,7 +126,7 @@ export function EditSupplierModal({
     }
   }, [supplier, initialLinkedProfile]);
 
-  const isIntegrated = supplier?.supplier_type === "integrated";
+  const isIntegrated = isIntegratedSupplierRow(supplier);
 
   // For integrated suppliers, platform profile (contact, phone) lives on the linked org, not in the supplier row.
   // Auto-fetch and prefill when modal opens so the user sees data without tapping "Sync latest details".
@@ -158,11 +159,17 @@ export function EditSupplierModal({
   }, [visible, supplier?.id, isIntegrated, hasEmptyContactOrPhone, onSyncLatest]);
 
   if (!visible || !supplier) return null;
-  const canEditCompany = !isIntegrated;
-  const canEditPhone = !isIntegrated;
+  const canEditIdentity = !isIntegrated;
+  const canEditCompany = canEditIdentity;
+  const canEditPhone = canEditIdentity;
+  const canEditContact = canEditIdentity;
+  const canEditEmail = canEditIdentity;
 
   const canSubmit =
-    contactPerson.trim().length > 0 && !submitting && (!!companyName || isIntegrated);
+    !submitting &&
+    (isIntegrated
+      ? true
+      : contactPerson.trim().length > 0 && !!companyName.trim());
   const useSingleColumnFields = windowWidth < 390;
 
   const handleSyncLatest = async () => {
@@ -196,8 +203,12 @@ export function EditSupplierModal({
     setSubmitting(true);
     setError(null);
     const patch: UpdateSupplierData = {};
-    patch.contact_person = contactPerson.trim();
-    patch.email = email.trim();
+    if (canEditContact) {
+      patch.contact_person = contactPerson.trim();
+    }
+    if (canEditEmail) {
+      patch.email = email.trim();
+    }
     patch.address = address.trim();
     patch.gstin = gstin.trim();
     patch.pan_number = panNumber.trim();
@@ -282,9 +293,10 @@ export function EditSupplierModal({
                 <View style={styles.screenStatusCard}>
                   <Text style={styles.screenStatusTitle}>Integrated supplier</Text>
                   <Text style={styles.screenStatusText}>
-                    Core details like company name and phone sync from the supplier&apos;s
-                    own account and cannot be edited here. You can still update your
-                    local contact person and email.
+                    Name, phone, email, and contact person sync from the
+                    supplier&apos;s own account and cannot be edited here. You can
+                    still update address, tax, and capability fields for fleet
+                    paperwork.
                   </Text>
                   {onSyncLatest ? (
                     <TouchableOpacity
@@ -322,15 +334,22 @@ export function EditSupplierModal({
               >
                 <Pressable style={styles.screenFieldCard}>
                   <Text style={styles.screenInputLabel}>
-                    Name <Text style={styles.screenRequiredMark}>*</Text>
+                    Name{" "}
+                    {canEditContact ? (
+                      <Text style={styles.screenRequiredMark}>*</Text>
+                    ) : null}
                   </Text>
                   <TextInput
-                    style={styles.screenInput}
+                    style={[
+                      styles.screenInput,
+                      !canEditContact && styles.readonlyInput,
+                    ]}
                     placeholder={t("contactName")}
                     placeholderTextColor={Theme.textMutedDemo}
                     value={contactPerson}
                     onChangeText={setContactPerson}
                     autoCapitalize="words"
+                    editable={canEditContact}
                   />
                 </Pressable>
 
@@ -355,13 +374,17 @@ export function EditSupplierModal({
               <Pressable style={styles.screenInputCard}>
                 <Text style={styles.screenInputLabel}>Email</Text>
                 <TextInput
-                  style={styles.screenInput}
+                  style={[
+                    styles.screenInput,
+                    !canEditEmail && styles.readonlyInput,
+                  ]}
                   placeholder={t("email")}
                   placeholderTextColor={Theme.textMutedDemo}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  editable={canEditEmail}
                 />
               </Pressable>
 

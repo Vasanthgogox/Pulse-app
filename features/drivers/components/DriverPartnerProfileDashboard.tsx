@@ -88,6 +88,10 @@ function Badge({
 export type DriverPartnerProfileDashboardProps = {
   onClose: () => void;
   onEditPress?: () => void;
+  /** Header CTA label; default "Edit Profile". Use "View identity" when connected. */
+  editProfileLabel?: string;
+  /** When true, hide the edit / view identity CTA (e.g. left stints). */
+  hideEditProfile?: boolean;
   driver: DriverRow;
   profileAvatarUri: string | null;
   /** Formatted total earnings / contract exposure for the KPI strip */
@@ -112,6 +116,8 @@ export type DriverPartnerProfileDashboardProps = {
 export function DriverPartnerProfileDashboard({
   onClose,
   onEditPress,
+  editProfileLabel = "Edit Profile",
+  hideEditProfile = false,
   driver,
   profileAvatarUri,
   businessVolumeLabel,
@@ -189,14 +195,16 @@ export function DriverPartnerProfileDashboard({
         </View>
         <View style={styles.viewStickyRight}>
           <Badge variant="gray">Driver</Badge>
-          <TouchableOpacity
-            style={styles.editProfileBtn}
-            onPress={handleEdit}
-            activeOpacity={0.9}
-          >
-            <FontAwesome name="pencil" size={14} color={Theme.textOnPrimary} />
-            <Text style={styles.editProfileBtnText}>Edit Profile</Text>
-          </TouchableOpacity>
+          {!hideEditProfile ? (
+            <TouchableOpacity
+              style={styles.editProfileBtn}
+              onPress={handleEdit}
+              activeOpacity={0.9}
+            >
+              <FontAwesome name="pencil" size={14} color={Theme.textOnPrimary} />
+              <Text style={styles.editProfileBtnText}>{editProfileLabel}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 

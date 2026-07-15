@@ -72,6 +72,28 @@ export interface DriverRow {
 }
 
 /**
+ * Local / manual directory driver — fleet owns name/email/phone until app link.
+ * Excludes connected (`user_id`), left stints, and tracking-only stubs.
+ */
+export function isLocalDriverRow(
+  driver:
+    | Pick<DriverRow, "user_id" | "left_at" | "tracking_only">
+    | null
+    | undefined,
+): boolean {
+  if (!driver) return false;
+  if (driver.tracking_only === true) return false;
+  if (driver.user_id) return false;
+  if (driver.left_at) return false;
+  return true;
+}
+
+/** Identity fields owned by the driver app once connected (or after leave). */
+export const DRIVER_IDENTITY_FIELDS = ["name", "phone", "email"] as const;
+
+export type DriverIdentityField = (typeof DRIVER_IDENTITY_FIELDS)[number];
+
+/**
  * Asset (party) drivers only — excludes one-time / tracking-only stubs from assign-by-phone.
  * Used by party Drivers list, sync cache, and any fleet roster UI.
  * Filter is applied in code so lists work even when tracking_only is missing on legacy rows.
@@ -371,6 +393,90 @@ export async function updateDriver(
   driverId: string,
   patch: UpdateDriverData,
 ): Promise<{ error: Error | null; driver: DriverRow | null }> {
+  const touchesIdentity =
+    patch.name !== undefined ||
+    patch.phone !== undefined ||
+    patch.email !== undefined;
+  const reconnecting = patch.left_at === null;
+
+  if (touchesIdentity) {
+    const { data: existing, error: existingError } = await supabase()
+      .from("drivers")
+      .select("id, user_id, left_at, tracking_only")
+      .eq("organization_id", orgId)
+      .eq("id", driverId)
+      .maybeSingle();
+    if (existingError) {
+      return { error: new Error(existingError.message), driver: null };
+    }
+    if (!existing) {
+      return { error: new Error("Driver not found"), driver: null };
+    }
+    const row = existing as Pick<
+      DriverRow,
+      "user_id" | "left_at" | "tracking_only"
+    >;
+    // Reconnect (clear left_at) may coalesce name/phone/email onto a prior stint.
+    if (!reconnecting) {
+      if (row.user_id) {
+        return {
+          error: new Error(
+            "Name, email, and phone are managed by the driver’s app and cannot be edited.",
+          ),
+          driver: null,
+        };
+      }
+      if (row.tracking_only === true) {
+        return {
+          error: new Error(
+            "Tracking-only driver contacts cannot be edited from the fleet directory.",
+          ),
+          driver: null,
+        };
+      }
+      if (row.left_at) {
+        return {
+          error: new Error(
+            "Contact details for a left driver cannot be edited. Use reconnect or reinvite.",
+          ),
+          driver: null,
+        };
+      }
+    }
+
+    if (!reconnecting && patch.phone !== undefined) {
+      const phoneNorm = (patch.phone ?? "").replace(/\D/g, "").slice(-10);
+      if (phoneNorm.length >= 8) {
+        const { data: peers, error: peersError } = await supabase()
+          .from("drivers")
+          .select("id, name, phone")
+          .eq("organization_id", orgId)
+          .is("left_at", null)
+          .neq("id", driverId)
+          .limit(200);
+        if (peersError) {
+          return { error: new Error(peersError.message), driver: null };
+        }
+        const conflict = (peers ?? []).find((peer) => {
+          const peerDigits = String(
+            (peer as { phone?: string | null }).phone ?? "",
+          )
+            .replace(/\D/g, "")
+            .slice(-10);
+          return peerDigits.length >= 8 && peerDigits === phoneNorm;
+        });
+        if (conflict) {
+          return {
+            error: new Error(
+              "Another active driver in this fleet already uses this phone number.",
+            ),
+            driver: null,
+          };
+        }
+      }
+    }
+  }
+
   const updates: Record<string, unknown> = {};
   if (patch.name !== undefined) updates.name = (patch.name ?? '').trim() || '—';
   if (patch.phone !== undefined) updates.phone = (patch.phone ?? '').trim() || null;
@@ -390,6 +496,92 @@ export async function updateDriver(
     .single();
   if (error) return { error: new Error(error.message), driver: null };
   return { error: null, driver: data as DriverRow };
+}
+
+export type DriverContactCollision = {
+  kind: "driver_profile_phone" | "driver_profile_email" | "org_roster_phone";
+  label: string;
+  detail: string;
+};
+
+/**
+ * Pre-save checks for local driver contact edits. Warns when phone/email may
+ * auto-link a driver app account, or collide with another active roster row.
+ */
+export async function findLocalDriverContactCollisions(
+  orgId: string,
+  driverId: string,
+  contact: { phone?: string | null; email?: string | null },
+): Promise<{ error: Error | null; collisions: DriverContactCollision[] }> {
+  const collisions: DriverContactCollision[] = [];
+  const phoneRaw = (contact.phone ?? "").trim();
+  const emailRaw = (contact.email ?? "").trim();
+
+  if (phoneRaw) {
+    const invitee = await getDriverInviteeByPhone(phoneRaw);
+    if (invitee.error) {
+      return { error: invitee.error, collisions: [] };
+    }
+    if (invitee.user_id) {
+      collisions.push({
+        kind: "driver_profile_phone",
+        label: invitee.full_name?.trim() || "Driver account",
+        detail:
+          "This phone matches an existing driver app account. Saving can link that account to this roster row when they sign in.",
+      });
+    }
+
+    const phoneNorm = phoneRaw.replace(/\D/g, "").slice(-10);
+    if (phoneNorm.length >= 8) {
+      const { data: peers, error: peersError } = await supabase()
+        .from("drivers")
+        .select("id, name, phone")
+        .eq("organization_id", orgId)
+        .is("left_at", null)
+        .neq("id", driverId)
+        .limit(200);
+      if (peersError) {
+        return { error: new Error(peersError.message), collisions: [] };
+      }
+      const conflict = (peers ?? []).find((row) => {
+        const peerDigits = String((row as { phone?: string | null }).phone ?? "")
+          .replace(/\D/g, "")
+          .slice(-10);
+        return peerDigits.length >= 8 && peerDigits === phoneNorm;
+      }) as { id: string; name?: string | null } | undefined;
+      if (conflict) {
+        collisions.push({
+          kind: "org_roster_phone",
+          label: (conflict.name ?? "").trim() || "Another driver",
+          detail:
+            "Another active driver in this fleet already uses this phone number.",
+        });
+      }
+    }
+  }
+
+  if (emailRaw) {
+    const { data: profile, error: profileError } = await supabase()
+      .from("profiles")
+      .select("id, full_name, email")
+      .eq("role", "driver")
+      .ilike("email", emailRaw)
+      .maybeSingle();
+    if (profileError) {
+      // Profiles may be RLS-restricted; skip soft-warn rather than blocking save.
+    } else if (profile?.id) {
+      collisions.push({
+        kind: "driver_profile_email",
+        label:
+          ((profile as { full_name?: string | null }).full_name ?? "").trim() ||
+          emailRaw,
+        detail:
+          "This email matches an existing driver app account. Saving can attach that account to this roster row on next sync / sign-in.",
+      });
+    }
+  }
+
+  return { error: null, collisions };
 }
 
 /**

@@ -6,6 +6,7 @@ import type {
   ClientRow,
   UpdateClientData,
 } from "@/features/clients/services/clients.service";
+import { isIntegratedClientRow } from "@/features/trips/visibility/tripVisibility";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useState } from "react";
 import {
@@ -96,9 +97,12 @@ export function EditClientModal({
     }
   }, [client]);
 
-  const isIntegrated = Boolean(client?.is_integrated);
-  const canEditOrg = !isIntegrated;
-  const canEditPhone = !isIntegrated;
+  const isIntegrated = isIntegratedClientRow(client);
+  const canEditIdentity = !isIntegrated;
+  const canEditOrg = canEditIdentity;
+  const canEditPhone = canEditIdentity;
+  const canEditContact = canEditIdentity;
+  const canEditEmail = canEditIdentity;
 
   const hasEmptyContactOrPhone =
     isIntegrated &&
@@ -136,7 +140,10 @@ export function EditClientModal({
   if (!visible || !client) return null;
 
   const canSubmit =
-    contactPerson.trim().length > 0 && !submitting && (!!organizationName || isIntegrated);
+    !submitting &&
+    (isIntegrated
+      ? true
+      : contactPerson.trim().length > 0 && !!organizationName.trim());
   const useSingleColumnFields = windowWidth < 390;
 
   const handleSyncLatest = async () => {
@@ -177,8 +184,12 @@ export function EditClientModal({
     setSubmitting(true);
     setError(null);
     const patch: UpdateClientData = {};
-    patch.contact_person = contactPerson.trim();
-    patch.email = email.trim();
+    if (canEditContact) {
+      patch.contact_person = contactPerson.trim();
+    }
+    if (canEditEmail) {
+      patch.email = email.trim();
+    }
     if (canEditOrg) {
       patch.organization_name = organizationName.trim();
     }
@@ -252,9 +263,10 @@ export function EditClientModal({
                 <View style={styles.screenStatusCard}>
                   <Text style={styles.screenStatusTitle}>Integrated client</Text>
                   <Text style={styles.screenStatusText}>
-                    Core details like name and phone sync from the client&apos;s own
-                    account and cannot be edited here. You can still update your
-                    local contact person, email, and billing / tax fields.
+                    Name, phone, email, and contact person sync from the
+                    client&apos;s own account and cannot be edited here. You can
+                    still update billing address and tax fields for fleet
+                    paperwork.
                   </Text>
                   {onSyncLatest ? (
                     <TouchableOpacity
@@ -291,14 +303,21 @@ export function EditClientModal({
               >
                 <Pressable style={styles.screenFieldCard}>
                   <Text style={styles.screenInputLabel}>
-                    Contact <Text style={styles.screenRequiredMark}>*</Text>
+                    Contact{" "}
+                    {canEditContact ? (
+                      <Text style={styles.screenRequiredMark}>*</Text>
+                    ) : null}
                   </Text>
                   <TextInput
-                    style={styles.screenInput}
+                    style={[
+                      styles.screenInput,
+                      !canEditContact && styles.readonlyInput,
+                    ]}
                     placeholder="Contact person name"
                     placeholderTextColor={Theme.textMutedDemo}
                     value={contactPerson}
                     onChangeText={setContactPerson}
+                    editable={canEditContact}
                   />
                 </Pressable>
                 <Pressable style={styles.screenFieldCard}>
@@ -322,13 +341,17 @@ export function EditClientModal({
               <Pressable style={styles.screenInputCard}>
                 <Text style={styles.screenInputLabel}>Email</Text>
                 <TextInput
-                  style={styles.screenInput}
+                  style={[
+                    styles.screenInput,
+                    !canEditEmail && styles.readonlyInput,
+                  ]}
                   placeholder={t("email")}
                   placeholderTextColor={Theme.textMutedDemo}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  editable={canEditEmail}
                 />
               </Pressable>
 
