@@ -1,6 +1,6 @@
+// Auto-generated Phase 2 registry — driver experience
 import type { PolicyRecord } from '@/lib/navigationPolicy/types';
 
-/** Phase 1 placeholders — driver experience. Paths keep `(driver)` group (RFC §4.7). */
 export const DRIVER_POLICIES: readonly PolicyRecord[] = [
   {
     id: 'driver.home',
@@ -14,6 +14,111 @@ export const DRIVER_POLICIES: readonly PolicyRecord[] = [
     pattern: '/(driver)/wallet',
     experience: 'driver',
     priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.chat',
+    pattern: '/(driver)/chat',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.control',
+    pattern: '/(driver)/control',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.documents',
+    pattern: '/(driver)/documents',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.level-progression',
+    pattern: '/(driver)/level-progression',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.notifications',
+    pattern: '/(driver)/notifications',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.pending-earnings',
+    pattern: '/(driver)/pending-earnings',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.profile',
+    pattern: '/(driver)/profile',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.requests',
+    pattern: '/(driver)/requests',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.settings',
+    pattern: '/(driver)/settings',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.passbook-history',
+    pattern: '/(driver)/passbook/history',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.passbook-org',
+    pattern: '/(driver)/passbook/:orgId',
+    experience: 'driver',
+    priority: 80,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.salary-request',
+    pattern: '/(driver)/salary-request',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.salary-request-id',
+    pattern: '/(driver)/salary-request/:id',
+    experience: 'driver',
+    priority: 80,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.trip-history',
+    pattern: '/(driver)/trip-history',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.trip-history-id',
+    pattern: '/(driver)/trip-history/:tripId',
+    experience: 'driver',
+    priority: 80,
     onDeny: { type: 'experience_home', experience: 'driver' },
   },
 ];

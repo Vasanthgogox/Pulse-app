@@ -1,23 +1,26 @@
+// Phase 2 aliases — inherit target policy at merge
 import type { PolicyRecord } from '@/lib/navigationPolicy/types';
 
-/**
- * Alias policies: pattern inherits from `targetPattern` at merge time.
- * Phase 1 placeholders only.
- */
 export type AliasRecord = {
   id: string;
   pattern: string;
-  /** Pattern of the policy to inherit (must exist in merged set). */
   targetPattern: string;
   priority: number;
 };
 
 export const ALIAS_RECORDS: readonly AliasRecord[] = [
+  { id: 'alias.account', pattern: '/account', targetPattern: '/network/hub', priority: 95 },
   {
-    id: 'alias.network',
-    pattern: '/network',
-    targetPattern: '/trips',
-    priority: 70,
+    id: 'alias.branding-settings',
+    pattern: '/branding-settings',
+    targetPattern: '/workspace',
+    priority: 95,
+  },
+  {
+    id: 'alias.business-verify',
+    pattern: '/business-verify',
+    targetPattern: '/workspace',
+    priority: 95,
   },
 ];
 

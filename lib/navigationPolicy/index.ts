@@ -46,7 +46,14 @@ export {
   evaluateNavigationPolicy,
 } from '@/lib/navigationPolicy/evaluate';
 
-export { getRegistry, findMatchingPolicy } from '@/lib/navigationPolicy/registry';
+export {
+  getRegistry,
+  findMatchingPolicy,
+  findUnmappedRoutes,
+  buildRegistryCoverageReport,
+  ROUTE_INVENTORY,
+} from '@/lib/navigationPolicy/registry';
+export type { RouteInventoryEntry } from '@/lib/navigationPolicy/registry';
 
 export {
   NavigationActor,

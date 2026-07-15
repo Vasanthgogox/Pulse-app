@@ -4,7 +4,6 @@ import { NavigationActor } from '@/lib/navigationPolicy/NavigationActor';
 import type { PolicySnapshot } from '@/lib/navigationPolicy/types';
 import {
   DRIVER_HOME_PATH,
-  ORG_HOME_PATH,
   SIGN_IN_PATH,
 } from '@/lib/navigationPolicy/types';
 
@@ -97,21 +96,7 @@ describe('evaluateNavigationPolicy', () => {
     }
   });
 
-  it('authenticated org without finance grant → redirect from /finance', () => {
-    const d = evaluateNavigationPolicy({
-      rawPathname: '/finance',
-      snapshot: snap({
-        sessionPosture: 'authenticated',
-        principal: buildPrincipal({
-          role: 'user',
-          aggregated: false,
-          asset: true,
-        }),
-      }),
-    });
-    // asset gets finance_manage from capabilities — so this may allow.
-    // Use principal with empty grants by forcing driver-empty then org with no flags:
-    // aggregated: false and asset: false → empty caps from getCapabilitiesFromProfile
+  it('authenticated org without finance grant → soft allow when softDeny', () => {
     const d2 = evaluateNavigationPolicy({
       rawPathname: '/finance',
       snapshot: snap({
@@ -123,12 +108,11 @@ describe('evaluateNavigationPolicy', () => {
         }),
       }),
     });
-    expect(d2.type).toBe('redirect');
-    if (d2.type === 'redirect') {
-      expect(d2.reason).toBe('grants_denied');
-      expect(d2.to).toBe(ORG_HOME_PATH);
+    expect(d2.type).toBe('allow');
+    if (d2.type === 'allow') {
+      expect(d2.soft).toBe(true);
+      expect(d2.reason).toBe('grants_soft_deny');
     }
-    void d;
   });
 
   it('canonical /(tabs)/finance matches org.finance', () => {
