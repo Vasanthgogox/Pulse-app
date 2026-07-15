@@ -1,22 +1,4 @@
--- Rewrite fn_enqueue_chat_push_outbox() from a per-participant loop (one INSERT
--- + one correlated subquery per participant, inside the sender's message-insert
--- transaction) into a single set-based INSERT ... SELECT.
---
--- Why: the loop ran O(participants) INSERTs and O(participants) chat_conversations
--- subqueries synchronously inside every message-write transaction. For large
--- group conversations this lengthened the message-insert transaction (a
--- contributor to idle-in-transaction / transaction-duration pressure) and
--- amplified rows. The trigger fires on every chat message insert (active user
--- flow), independent of downstream push delivery.
---
--- Behavior preserved exactly:
---   * skip soft-deleted messages
---   * system action_card title/body vs. normal message title/body
---   * only participants other than the sender
---   * only participants that have a push token
---   * same columns and payload shape
--- The trip_id lookup is now evaluated once (scalar subquery in the SELECT),
--- not once per participant.
+-- Restored from remote schema_migrations (version 20260714075208)
 
 CREATE OR REPLACE FUNCTION "public"."fn_enqueue_chat_push_outbox"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
@@ -66,5 +48,3 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
-ALTER FUNCTION "public"."fn_enqueue_chat_push_outbox"() OWNER TO "postgres";
