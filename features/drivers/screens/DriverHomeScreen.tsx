@@ -709,6 +709,8 @@ export default function DriverRadarScreen() {
   const [showRouteSummary, setShowRouteSummary] = useState(false);
   const locationWatchRef = useRef<{ remove: () => void } | null>(null);
   const gpsFallbackWarnedKeyRef = useRef<string | null>(null);
+  /** Phase 1: FG location requested once per active mission (resume / mid-session start). */
+  const fgLocationRequestedForMissionRef = useRef<string | null>(null);
   const initialLoadDoneRef = useRef(false);
   const isRefreshingRef = useRef(false);
 
@@ -1036,6 +1038,7 @@ export default function DriverRadarScreen() {
     });
   }, []);
 
+  /** Foreground-only location bootstrap (Go Online / active-trip resume / pull-refresh). */
   const fetchLocation = useCallback(async () => {
     markDriverPerfPhase("gps_request_start");
     try {
@@ -1046,7 +1049,6 @@ export default function DriverRadarScreen() {
         return;
       }
 
-      // 1. Request foreground first (mandatory)
       const { status: foregroundStatus } =
         await ExpoLocation.requestForegroundPermissionsAsync();
       if (foregroundStatus !== "granted") {
@@ -1055,33 +1057,15 @@ export default function DriverRadarScreen() {
         return;
       }
 
-      // 2. Get current position with explicit timeout to prevent hanging in APK
       const current = await ExpoLocation.getCurrentPositionAsync({
         accuracy: ExpoLocation.Accuracy.Balanced,
       });
 
       const { latitude, longitude } = current.coords;
 
-      // Show a ready location state immediately after GPS resolves,
-      // then refine with reverse geocode when available.
       setLocationStatus("success");
       setLocationLabel("Current location");
 
-      // 3. Background permission request (Defensive: separate check)
-      if (Platform.OS === "android") {
-        const { status: backgroundStatus } =
-          await ExpoLocation.getBackgroundPermissionsAsync();
-        if (backgroundStatus !== "granted") {
-          // Note: On Android 11+, you must explain to the user why background
-          // permission is needed before calling requestBackgroundPermissionsAsync.
-          // For now, we call it safely to avoid crashing.
-          void ExpoLocation.requestBackgroundPermissionsAsync().catch(() => {});
-        }
-      } else {
-        void ExpoLocation.requestBackgroundPermissionsAsync().catch(() => {});
-      }
-
-      // 4. Refine label via Mapbox/Nominatim (all platforms; expo is fallback inside util)
       try {
         const cityState = await reverseGeocodeCityStateLabel(latitude, longitude);
         if (cityState) setLocationLabel(cityState);
@@ -1094,10 +1078,6 @@ export default function DriverRadarScreen() {
       setLocationLabel(null);
     }
   }, []);
-
-  useEffect(() => {
-    fetchLocation();
-  }, [fetchLocation]);
 
   // Coarse city label only — full GPS precision caused reverse-geocode spam.
   const liveDriverGeocodeCoord = useMemo(() => {
@@ -1421,6 +1401,18 @@ export default function DriverRadarScreen() {
     () => allTrips.find((t) => isTripInProgress(t)),
     [allTrips],
   );
+
+  // Active-trip resume (and first time a mission becomes active): request FG location.
+  // Startup offline dashboard must not request permissions.
+  useEffect(() => {
+    const missionId = activeMission?.id ?? null;
+    if (!missionId) return;
+    if (fgLocationRequestedForMissionRef.current === missionId) return;
+    fgLocationRequestedForMissionRef.current = missionId;
+    setLocationStatus("loading");
+    void fetchLocation();
+  }, [activeMission?.id, fetchLocation]);
+
   const incomingTrips = useMemo(
     () => allTrips.filter((t) => isAssignedNotStarted(t.status)),
     [allTrips],
@@ -2954,11 +2946,8 @@ export default function DriverRadarScreen() {
 
         const expoLocation = await getExpoLocation();
         if (!expoLocation) return;
-        let { status } = await expoLocation.getForegroundPermissionsAsync();
-        if (status !== "granted") {
-          const req = await expoLocation.requestForegroundPermissionsAsync();
-          status = req.status;
-        }
+        // Do not prompt here — FG is requested on Go Online / active-trip resume.
+        const { status } = await expoLocation.getForegroundPermissionsAsync();
         if (status !== "granted" || cancelled) return;
         const pos = await expoLocation.getCurrentPositionAsync({});
         if (cancelled) return;
@@ -3713,11 +3702,9 @@ export default function DriverRadarScreen() {
         if (expoLocation) {
           refreshed = await withBudget(
             (async () => {
-              let { status } = await expoLocation.getForegroundPermissionsAsync();
-              if (status !== "granted") {
-                const req = await expoLocation.requestForegroundPermissionsAsync();
-                status = req.status;
-              }
+              // Do not prompt here — FG is requested on Go Online / active-trip resume.
+              const { status } =
+                await expoLocation.getForegroundPermissionsAsync();
               if (status !== "granted") return null;
               const current = await expoLocation.getCurrentPositionAsync({
                 accuracy: expoLocation.Accuracy.Balanced,
@@ -3812,11 +3799,8 @@ export default function DriverRadarScreen() {
         const expoLocation =
           Platform.OS === "web" ? await getExpoLocation() : ExpoLocation;
         if (!expoLocation || cancelled) return;
-        let { status } = await expoLocation.getForegroundPermissionsAsync();
-        if (status !== "granted") {
-          const req = await expoLocation.requestForegroundPermissionsAsync();
-          status = req.status;
-        }
+        // Do not prompt here — FG is requested on Go Online / active-trip resume.
+        const { status } = await expoLocation.getForegroundPermissionsAsync();
         if (status !== "granted" || cancelled) return;
 
         locationWatchRef.current?.remove?.();
