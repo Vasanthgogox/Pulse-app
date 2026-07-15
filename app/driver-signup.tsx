@@ -798,9 +798,19 @@ export default function DriverSignUpScreen() {
     if (!uploaded.license && !uploaded.aadhaar && !uploaded.pan) return { error: null };
 
     if (uploaded.license) {
-      await supabase()
+      const { error: profileError } = await supabase()
         .from('driver_profiles')
-        .upsert({ user_id: uid, license_photo_url: uploaded.license }, { onConflict: 'user_id' });
+        .upsert(
+          { user_id: uid, license_photo_url: uploaded.license },
+          { onConflict: 'user_id' },
+        );
+      if (profileError) {
+        return {
+          error: new Error(
+            profileError.message || 'Failed to save license on driver profile',
+          ),
+        };
+      }
     }
 
     const {

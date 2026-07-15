@@ -104,13 +104,13 @@ export default function DocumentsScreen() {
           ? (user.user_metadata.driver_documents as Record<string, unknown>)
           : {};
 
-      const { data: profileRow } = await supabase()
-        .from('profiles')
+      const { data: driverProfileRow } = await supabase()
+        .from('driver_profiles')
         .select('license_photo_url')
-        .eq('id', profile.uid)
+        .eq('user_id', profile.uid)
         .maybeSingle();
       const licensePath =
-        (profileRow as { license_photo_url?: string | null } | null)?.license_photo_url
+        (driverProfileRow as { license_photo_url?: string | null } | null)?.license_photo_url
         ?? (typeof metadata.license === 'string' ? metadata.license : null);
 
       const aadhaarPath = typeof metadata.aadhaar === 'string' ? metadata.aadhaar : null;
@@ -244,10 +244,18 @@ export default function DocumentsScreen() {
       }
 
       if (doc.key === 'license') {
-        await supabase()
-          .from('profiles')
-          .update({ license_photo_url: path })
-          .eq('id', profile.uid);
+        const { error: profileError } = await supabase()
+          .from('driver_profiles')
+          .upsert(
+            { user_id: profile.uid, license_photo_url: path },
+            { onConflict: 'user_id' },
+          );
+        if (profileError) {
+          Alert.alert(
+            'Uploaded with warning',
+            'File uploaded, but license profile sync failed. Refresh and try again.',
+          );
+        }
       }
 
       const {
