@@ -34,14 +34,14 @@
 
 | ID | Steps | Expected | Evidence |
 |----|--------|----------|----------|
-| A1 | Incognito → open staging root `/` | Web: land on `/terminal-website` (or replace toward it). No org/driver shell. | Pass/Fail · Screenshot · Console |
-| A2 | Anon open `/sign-in` | Sign-in UI. No bounce loop. | Pass/Fail · Screenshot |
-| A3 | Sign in as Org | Lands org home (last tab or `/trips`). Splash ≤ restore time. No flash of driver shell. | Pass/Fail · Screenshot · Console |
-| A4 | Soft refresh (F5) on `/trips` | Stay org trips (or last org tab). Brief splash OK. No sign-in. | Pass/Fail · Screenshot |
-| A5 | Sign out from org UI | Land public auth or marketing. Protected URLs denied. | Pass/Fail · Screenshot |
-| A6 | Sign in as Driver | `/(driver)` (or driver home). No org tabs chrome. | Pass/Fail · Screenshot |
-| A7 | Soft refresh on driver home | Stay driver. No org bounce. | Pass/Fail · Screenshot |
-| A8 | Sign out as Driver | Public / sign-in. Anon. | Pass/Fail |
+| A1 | Incognito → open staging root `/` | Web: land on `/terminal-website` (or replace toward it). No org/driver shell. | Pass/Fail · Screenshot · Console | - pass
+| A2 | Anon open `/sign-in` | Sign-in UI. No bounce loop. | Pass/Fail · Screenshot | - when reloaded flicker 1 time 
+| A3 | Sign in as Org | Lands org home (last tab or `/trips`). Splash ≤ restore time. No flash of driver shell. | Pass/Fail · Screenshot · Console | pass
+| A4 | Soft refresh (F5) on `/trips` | Stay org trips (or last org tab). Brief splash OK. No sign-in. | Pass/Fail · Screenshot | pass
+| A5 | Sign out from org UI | Land public auth or marketing. Protected URLs denied. | Pass/Fail · Screenshot | pass
+| A6 | Sign in as Driver | `/(driver)` (or driver home). No org tabs chrome. | Pass/Fail · Screenshot | pass
+| A7 | Soft refresh on driver home | Stay driver. No org bounce. | Pass/Fail · Screenshot | pass 
+| A8 | Sign out as Driver | Public / sign-in. Anon. | Pass/Fail | pass
 | A9 | Simulate expired session (force expire / wait TTL if tooling exists) on `/finance` | Redirect `/sign-in` with `returnTo` toward finance (or sign-in). No app crash. | Pass/Fail · Console · Network |
 | A10 | Cold open staging after prior login (token restore) | Restore → persona home without wrong shell flash longer than splash. | Pass/Fail · Video preferred |
 | A11 | Login Org → logout → login Driver (same browser) | Ends driver; no stuck org splash. | Pass/Fail · Console |
