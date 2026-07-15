@@ -24,12 +24,7 @@ import {
 } from '@/lib/preloadRoutes';
 import { preloadChatRoute } from '@/lib/preloadChatWarmup';
 import { ROUTES } from '@/lib/routes';
-import {
-  hydrateSignupFlowFlags,
-  isBusinessSignupBrandingActiveSync,
-  isDriverSignupSuccessActiveSync,
-} from '@/lib/onboarding/businessSignupBranding.util';
-import { isOwnerBusinessProfileRequiredSync } from '@/lib/onboarding/incompleteOwnerOrg.util';
+import { hydrateSignupFlowFlags } from '@/lib/onboarding/businessSignupBranding.util';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -201,29 +196,6 @@ export default function TabLayout() {
       clearTimeout(t1);
     };
   }, [isDesktopWeb]);
-
-  useEffect(() => {
-    if (loading) return;
-    if (isDriverSignupSuccessActiveSync()) {
-      router.replace('/driver-signup');
-      return;
-    }
-    if (isBusinessSignupBrandingActiveSync() || isOwnerBusinessProfileRequiredSync()) {
-      router.replace(ROUTES.ONBOARDING.BUSINESS);
-      return;
-    }
-    if (!user) {
-      router.replace(ROUTES.SIGN_IN_DIRECT);
-      return;
-    }
-    if (!profile) {
-      router.replace(ROUTES.SIGN_IN_DIRECT);
-      return;
-    }
-    if (profile.role === 'driver') {
-      router.replace(ROUTES.DRIVER_ROOT);
-    }
-  }, [loading, user, profile, router]);
 
   if (!loading && user && profile && profile.role !== 'driver') {
     tabsUnlockedRef.current = true;

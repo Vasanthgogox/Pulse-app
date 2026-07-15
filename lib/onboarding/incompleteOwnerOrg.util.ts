@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { bumpPredicateSignals } from '@/lib/navigationPolicy/predicateSignals';
 import { supabase } from '@/lib/supabase';
 
 const OWNER_BUSINESS_PROFILE_FLAG_KEY = '@pulse_owner_business_profile_required_v1';
@@ -33,6 +34,7 @@ export function setOwnerBusinessProfileRequired(active: boolean): void {
   if (!active) {
     void AsyncStorage.removeItem(OWNER_BUSINESS_PROFILE_STEP_KEY);
   }
+  bumpPredicateSignals();
 }
 
 export function isOwnerBusinessProfileRequiredSync(): boolean {

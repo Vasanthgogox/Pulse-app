@@ -15,12 +15,10 @@ import { DriverCommunicationProvider } from '@/features/driver/communication';
 import {
   consumePendingDriverInviteAfterAuth,
 } from '@/lib/driverInviteDeepLink.util';
-import { ROUTES } from '@/lib/routes';
 import { beginDriverPerfSession } from '@/lib/driverPerfMetrics';
 import { syncAndInvalidateLinkedDrivers } from '@/lib/syncLinkedDriversForDriverHome';
 import {
   hydrateDriverSignupSuccessFlag,
-  isDriverSignupSuccessActiveSync,
 } from '@/lib/onboarding/businessSignupBranding.util';
 import {
   PlusJakartaSans_400Regular,
@@ -31,7 +29,7 @@ import {
   useFonts as usePlusJakartaFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { useQueryClient } from '@tanstack/react-query';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
@@ -95,12 +93,6 @@ export default function DriverAppLayout() {
   const queryClient = useQueryClient();
   const linkedDriversSyncedRef = useRef(false);
 
-  const router = useRouter();
-  const logDriverGate = (event: string, details: Record<string, unknown>) => {
-    if (!__DEV__) return;
-    console.info('[RouteGuard:driver]', event, details);
-  };
-
   useEffect(() => {
     void hydrateDriverSignupSuccessFlag();
   }, []);
@@ -109,30 +101,6 @@ export default function DriverAppLayout() {
     if (loading || !user || profile?.role !== 'driver') return;
     void consumePendingDriverInviteAfterAuth();
   }, [loading, user, profile?.role]);
-
-  useEffect(() => {
-    if (loading) return;
-
-    if (isDriverSignupSuccessActiveSync()) {
-      logDriverGate('redirect_driver_signup_success', {});
-      router.replace('/driver-signup');
-      return;
-    }
-
-    if (!user) {
-      logDriverGate('redirect_sign_in_missing_user', {});
-      router.replace(ROUTES.SIGN_IN_DIRECT);
-      return;
-    }
-
-    if (profile && profile.role !== 'driver') {
-      logDriverGate('redirect_tabs_non_driver', {
-        uid: user.uid,
-        role: profile.role,
-      });
-      router.replace(ROUTES.TABS.TRIPS as '/');
-    }
-  }, [loading, user, profile, router]);
 
   useEffect(() => {
     if (fontError && __DEV__ && Platform.OS === 'web') {

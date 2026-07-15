@@ -55,3 +55,18 @@ jobs:
           count=$(find lib -maxdepth 1 \( -name "*.ts" -o -name "*.tsx" \) | wc -l | tr -d ' ')
           echo "lib/ root has $count files (limit: 60)"
           [ "$count" -le 60 ] || (echo "❌ lib/ root exceeds 60 files — move domain-specific files to features/" && exit 1)
+
+  navigation-policy:
+    name: Navigation policy gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Coverage, overlap, auth-replace ban, evaluate
+        run: npm run test:navigation-policy
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'

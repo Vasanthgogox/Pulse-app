@@ -1,9 +1,7 @@
 /**
- * NavigationPolicyProvider — wires Snapshot → evaluate → telemetry → Actor.
+ * NavigationPolicyProvider — Snapshot → evaluate → telemetry → Actor.
  *
- * Phase 3: mounted via NavigationPolicyShadowHost with enforce=false (evaluate only).
- * Phase 5: enforce=true enables NavigationActor redirects.
- * Legacy layouts remain authoritative until Phase 5 removals.
+ * Phase 5: enforce=true + navigate → Actor is navigation authority for session/role.
  */
 
 import React, {
@@ -30,6 +28,8 @@ import type {
   SessionPosture,
 } from '@/lib/navigationPolicy/types';
 
+export type { NavigateFn };
+
 export type NavigationPolicyProviderProps = {
   children: ReactNode;
   pathname: string;
@@ -41,10 +41,7 @@ export type NavigationPolicyProviderProps = {
   } | null;
   predicates?: Readonly<Record<string, boolean>>;
   platform?: PlatformKind;
-  /**
-   * When false (default Phase 1–4), evaluate + emit only — Actor never navigates.
-   * Phase 5 sets enforce=true.
-   */
+  /** When true, Actor applies redirect decisions. */
   enforce?: boolean;
   navigate?: NavigateFn;
 };
@@ -68,9 +65,24 @@ export function NavigationPolicyProvider({
   navigate,
 }: NavigationPolicyProviderProps) {
   const actorRef = useRef<NavigationActor | null>(null);
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+
+  const epochKey = `${sessionPosture}:${profile?.role ?? ''}`;
+  const epochKeyRef = useRef(epochKey);
+
   if (enforce && navigate && !actorRef.current) {
-    actorRef.current = new NavigationActor(navigate);
+    actorRef.current = new NavigationActor((opts) => {
+      navigateRef.current?.(opts);
+    });
   }
+
+  useEffect(() => {
+    if (!actorRef.current) return;
+    if (epochKeyRef.current === epochKey) return;
+    epochKeyRef.current = epochKey;
+    actorRef.current.bumpEpoch();
+  }, [epochKey]);
 
   const snapshot: PolicySnapshot = useMemo(
     () => ({

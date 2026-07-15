@@ -3,6 +3,7 @@ import {
   hydrateOwnerBusinessProfileFlag,
   isOwnerBusinessProfileRequiredSync,
 } from '@/lib/onboarding/incompleteOwnerOrg.util';
+import { bumpPredicateSignals } from '@/lib/navigationPolicy/predicateSignals';
 
 const BUSINESS_BRANDING_FLAG_KEY = '@pulse_business_signup_branding_v1';
 const BUSINESS_BRANDING_STEP_KEY = '@pulse_business_signup_branding_step_v1';
@@ -33,6 +34,7 @@ export function setBusinessSignupBrandingActive(active: boolean): void {
   if (!active) {
     void AsyncStorage.removeItem(BUSINESS_BRANDING_STEP_KEY);
   }
+  bumpPredicateSignals();
 }
 
 export function isBusinessSignupBrandingActiveSync(): boolean {
@@ -42,6 +44,7 @@ export function isBusinessSignupBrandingActiveSync(): boolean {
 export function setDriverSignupSuccessActive(active: boolean): void {
   driverSuccessActive = active;
   void AsyncStorage.setItem(DRIVER_SUCCESS_FLAG_KEY, active ? '1' : '0');
+  bumpPredicateSignals();
 }
 
 export function isDriverSignupSuccessActiveSync(): boolean {
@@ -83,6 +86,7 @@ export async function hydrateSignupFlowFlags(): Promise<void> {
     hydrateDriverSignupSuccessFlag(),
     hydrateOwnerBusinessProfileFlag(),
   ]);
+  bumpPredicateSignals();
 }
 
 export async function persistBusinessSignupBrandingStep(step: number): Promise<void> {

@@ -36,6 +36,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:oms": "tsc --noEmit -p oms/tsconfig.app.json",
     "test": "jest",
+    "test:navigation-policy": "jest lib/navigationPolicy --no-coverage",
     "test:e2e": "detox test -c ios.sim.debug",
     "test:e2e:build": "detox build -c ios.sim.debug",
     "test:web": "playwright test",

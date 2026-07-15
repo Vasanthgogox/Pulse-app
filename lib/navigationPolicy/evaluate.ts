@@ -10,6 +10,7 @@ import {
   getRegistry,
   type MatchedPolicy,
 } from '@/lib/navigationPolicy/registry';
+import { buildSignInHrefWithReturnTo } from '@/lib/navigationPolicy/returnTo';
 import type {
   Decision,
   Experience,
@@ -86,6 +87,30 @@ function predicatesPass(
   return true;
 }
 
+function resolveOnboardingRedirect(
+  predicates: Readonly<Record<string, boolean>>,
+  canonicalPath: string,
+): string | null {
+  // Already on destinations — do not bounce (public_process / completion flows).
+  if (
+    canonicalPath === '/driver-signup' ||
+    canonicalPath.startsWith('/onboarding') ||
+    canonicalPath === '/sign-up'
+  ) {
+    return null;
+  }
+  if (predicates.driver_signup_success === true) {
+    return '/driver-signup';
+  }
+  if (
+    predicates.signup_branding_active === true ||
+    predicates.owner_org_incomplete === true
+  ) {
+    return '/onboarding/business';
+  }
+  return null;
+}
+
 function redirect(
   to: string,
   reason: string,
@@ -113,23 +138,40 @@ export function evaluateNavigationPolicy(input: EvaluateInput): Decision {
   }
 
   if (snapshot.sessionPosture === 'expired') {
-    return redirect(SIGN_IN_PATH, 'session_expired');
+    return redirect(
+      buildSignInHrefWithReturnTo(rawPathname),
+      'session_expired',
+    );
   }
 
   const matched: MatchedPolicy | null = findMatchingPolicy(canonicalPath, registry);
 
   if (!matched) {
     if (snapshot.sessionPosture === 'anonymous') {
-      return redirect(SIGN_IN_PATH, 'unknown_path_anonymous');
+      return redirect(
+        buildSignInHrefWithReturnTo(rawPathname),
+        'unknown_path_anonymous',
+      );
     }
     return redirect(FAIL_CLOSED_HOME_PATH, 'unknown_path_fail_closed');
   }
 
   const { policy } = matched;
 
+  // Authenticated onboarding predicates — first-class (before public allow / experience).
+  if (snapshot.sessionPosture === 'authenticated') {
+    const onboardingTo = resolveOnboardingRedirect(
+      snapshot.predicates,
+      canonicalPath,
+    );
+    if (onboardingTo) {
+      return redirect(onboardingTo, 'predicate_onboarding', policy.id);
+    }
+  }
+
   // Anonymous
   if (snapshot.sessionPosture === 'anonymous') {
-    // Boot `/` — match app/index web vs native cold start
+    // Boot `/` — marketing (web) or sign-in (native)
     if (canonicalPath === '/' && policy.id === 'public.root-boot') {
       const to =
         snapshot.platform === 'web' ? TERMINAL_WEBSITE_PATH : SIGN_IN_PATH;
@@ -147,57 +189,27 @@ export function evaluateNavigationPolicy(input: EvaluateInput): Decision {
       };
     }
 
-    // Web-only trip detail session gate (native trip index is ungated)
-    const tripRoot =
-      canonicalPath.split('/').filter(Boolean).length === 2 &&
-      canonicalPath.startsWith('/trip/');
-    if (tripRoot && snapshot.platform === 'web') {
-      return redirect(SIGN_IN_PATH, 'anonymous_trip_web', policy.id);
-    }
-    if (tripRoot && snapshot.platform !== 'web') {
-      return {
-        type: 'allow',
-        soft: true,
-        policyId: policy.id,
-        reason: 'parity_legacy_unguarded',
-      };
-    }
-
-    if (policy.anonymousAccess === 'legacy_open') {
-      return {
-        type: 'allow',
-        soft: true,
-        policyId: policy.id,
-        reason: 'parity_legacy_unguarded',
-      };
-    }
-
-    return redirect(SIGN_IN_PATH, 'anonymous_protected', policy.id);
+    return redirect(
+      buildSignInHrefWithReturnTo(rawPathname),
+      'anonymous_protected',
+      policy.id,
+    );
   }
 
   // authenticated
   if (!experienceAllows(policy.experience, snapshot.principal, snapshot.sessionPosture)) {
     const pe = principalExperience(snapshot.principal);
-    // Phase 4: org stack historically unguarded for drivers except tabs
-    if (
-      pe === 'driver' &&
-      policy.experience === 'org' &&
-      policy.driverAccess !== 'deny'
-    ) {
-      return {
-        type: 'allow',
-        soft: true,
-        policyId: policy.id,
-        reason: 'parity_driver_org_stack_open',
-      };
-    }
     if (pe === 'driver') {
       return redirect(DRIVER_HOME_PATH, 'experience_mismatch_driver', policy.id);
     }
     if (pe === 'org') {
       return redirect(ORG_HOME_PATH, 'experience_mismatch_org', policy.id);
     }
-    return redirect(SIGN_IN_PATH, 'experience_mismatch_no_principal', policy.id);
+    return redirect(
+      SIGN_IN_PATH,
+      'experience_mismatch_no_principal',
+      policy.id,
+    );
   }
 
   // Public routes for authenticated users: allow (optional bounce handled later / soft)

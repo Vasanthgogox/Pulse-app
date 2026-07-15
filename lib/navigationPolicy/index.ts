@@ -3,9 +3,10 @@
  *
  * Navigation ≠ Authorization. Supabase RLS remains the data boundary.
  *
- * Phase 3: Shadow host mounted in app/_layout (enforce=false). Never redirects.
- * Phase 4: Parity matrix vs legacyPredict — soft flags for ungated stack.
- * Phase 5: enable enforce + remove legacy auth replaces.
+ * Runtime: `NavigationPolicyShadowHost` in `app/_layout.tsx`.
+ * Kill switch: EXPO_PUBLIC_NAV_POLICY_ENFORCE=0|false|off
+ * Authenticated cold boot (suite / last-tab) remains in `app/index.tsx`.
+ * Onboarding resumes: policy predicates → Actor.
  */
 
 export type {
@@ -78,25 +79,15 @@ export { NavigationPolicyShadowHost } from '@/lib/navigationPolicy/NavigationPol
 
 export { authStatusToSessionPosture } from '@/lib/navigationPolicy/sessionPosture';
 
-export {
-  clearShadowObservations,
-  getShadowMismatchReport,
-  recordShadowDecision,
-  settleShadowIfStable,
-  settleShadowPath,
-  type ShadowMismatchKind,
-  type ShadowMismatchReport,
-  type ShadowObservation,
-} from '@/lib/navigationPolicy/shadowMismatch';
-export {
-  predictLegacyNavigation,
-  legacyPredictionToComparable,
-  type LegacyPrediction,
-} from '@/lib/navigationPolicy/legacyPredict';
+export { isNavigationPolicyEnforceEnabled } from '@/lib/navigationPolicy/enforceFlag';
 
 export {
-  compareParityCase,
-  runParityMatrix,
-  type ParityCase,
-  type ParityMismatch,
-} from '@/lib/navigationPolicy/parityCompare';
+  buildSignInHrefWithReturnTo,
+  sanitizeReturnTo,
+} from '@/lib/navigationPolicy/returnTo';
+
+export {
+  bumpPredicateSignals,
+  getPredicateSignalVersion,
+  subscribePredicateSignals,
+} from '@/lib/navigationPolicy/predicateSignals';

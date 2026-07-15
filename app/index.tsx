@@ -24,7 +24,7 @@ import {
   setOwnerBusinessProfileRequired,
 } from '@/lib/onboarding/incompleteOwnerOrg.util';
 import { hasPendingOAuthMetadata } from '@/features/auth/services/auth.service';
-import { DEFAULT_DRIVER_ROUTE, ROUTES } from '@/lib/routes';
+import { DEFAULT_DRIVER_ROUTE } from '@/lib/routes';
 import {
   finalizeSuiteNavigationIntent,
   isSuiteExternalAppPath,
@@ -44,8 +44,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const SIGN_IN_BOOT_KEY = '__sign_in__';
 
 export default function Index() {
   const insets = useSafeAreaInsets();
@@ -76,32 +74,18 @@ export default function Index() {
       return;
     }
 
+    // Onboarding resumes: NavigationPolicy predicates (Actor) — do not replace here.
     if (isBusinessSignupBrandingActiveSync() || isOwnerBusinessProfileRequiredSync()) {
-      if (pathname === '/' || pathname === '') {
-        logRouteDecision('redirect_business_signup_resume', {
-          uid,
-          pathname,
-          branding: isBusinessSignupBrandingActiveSync(),
-          ownerProfile: isOwnerBusinessProfileRequiredSync(),
-        });
-        router.replace(ROUTES.ONBOARDING.BUSINESS);
-      }
       return;
     }
 
     if (isDriverSignupSuccessActiveSync()) {
-      if (pathname === '/' || pathname === '') {
-        logRouteDecision('redirect_driver_signup_success_resume', { uid, pathname });
-        router.replace('/driver-signup' as '/');
-      }
       return;
     }
 
     if (!uid) {
       resetIndexBootRedirect();
-      if (!claimIndexBootRedirect(SIGN_IN_BOOT_KEY)) return;
-      logRouteDecision('redirect_sign_in', { pathname });
-      router.replace(Platform.OS === 'web' ? '/terminal-website' : '/sign-in');
+      // Phase 5: NavigationPolicy owns anonymous boot redirect.
       return;
     }
 
@@ -140,10 +124,7 @@ export default function Index() {
 
     if (profile.role === 'driver') {
       if (isDriverSignupSuccessActiveSync()) {
-        logRouteDecision('block_driver_redirect_signup_success', { uid, pathname });
-        if (pathname === '/' || pathname === '') {
-          router.replace('/driver-signup' as '/');
-        }
+        // Policy Actor owns redirect to /driver-signup.
         return;
       }
       if (!claimIndexBootRedirect(uid)) return;
@@ -161,8 +142,8 @@ export default function Index() {
         const pendingMeta = await hasPendingOAuthMetadata();
         if (pendingMeta) {
           setOwnerBusinessProfileRequired(true);
-          logRouteDecision('redirect_pending_oauth_metadata', { uid });
-          router.replace(ROUTES.ONBOARDING.BUSINESS);
+          logRouteDecision('flag_pending_oauth_metadata', { uid });
+          // Predicate signal → Actor redirects to /onboarding/business.
           return;
         }
         const isGoogle = await sessionHasGoogleProvider();
@@ -170,8 +151,7 @@ export default function Index() {
           const { incomplete } = await detectIncompleteOwnerOrgForSession();
           if (incomplete) {
             setOwnerBusinessProfileRequired(true);
-            logRouteDecision('redirect_incomplete_owner_org', { uid });
-            router.replace(ROUTES.ONBOARDING.BUSINESS);
+            logRouteDecision('flag_incomplete_owner_org', { uid });
             return;
           }
         }

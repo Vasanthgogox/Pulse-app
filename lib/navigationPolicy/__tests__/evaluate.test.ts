@@ -36,7 +36,8 @@ describe('evaluateNavigationPolicy', () => {
     });
     expect(d.type).toBe('redirect');
     if (d.type === 'redirect') {
-      expect(d.to).toBe(SIGN_IN_PATH);
+      expect(d.to.startsWith(SIGN_IN_PATH)).toBe(true);
+      expect(d.to).toContain('returnTo=');
       expect(d.replace).toBe(true);
     }
   });
@@ -70,15 +71,29 @@ describe('evaluateNavigationPolicy', () => {
     }
   });
 
-  it('anonymous + ungated org stack → soft allow (parity)', () => {
+  it('anonymous + org stack → redirect sign_in (fail-closed)', () => {
     const d = evaluateNavigationPolicy({
       rawPathname: '/workspace',
       snapshot: snap({ sessionPosture: 'anonymous' }),
     });
-    expect(d.type).toBe('allow');
-    if (d.type === 'allow') {
-      expect(d.soft).toBe(true);
-      expect(d.reason).toBe('parity_legacy_unguarded');
+    expect(d.type).toBe('redirect');
+    if (d.type === 'redirect') {
+      expect(d.to).toBe(`${SIGN_IN_PATH}?returnTo=${encodeURIComponent('/workspace')}`);
+      expect(d.reason).toBe('anonymous_protected');
+    }
+  });
+
+  it('anonymous + trip → redirect sign_in', () => {
+    for (const platform of ['web', 'ios'] as const) {
+      const d = evaluateNavigationPolicy({
+        rawPathname: '/trip/abc',
+        snapshot: snap({ sessionPosture: 'anonymous', platform }),
+      });
+      expect(d.type).toBe('redirect');
+      if (d.type === 'redirect') {
+        expect(d.to.startsWith(SIGN_IN_PATH)).toBe(true);
+        expect(d.reason).toBe('anonymous_protected');
+      }
     }
   });
 
@@ -89,7 +104,7 @@ describe('evaluateNavigationPolicy', () => {
     });
     expect(d.type).toBe('redirect');
     if (d.type === 'redirect') {
-      expect(d.to).toBe(SIGN_IN_PATH);
+      expect(d.to).toBe(`${SIGN_IN_PATH}?returnTo=${encodeURIComponent('/trips')}`);
       expect(d.reason).toBe('anonymous_protected');
     }
   });
@@ -109,7 +124,7 @@ describe('evaluateNavigationPolicy', () => {
     }
   });
 
-  it('authenticated driver + ungated org stack → soft allow (parity)', () => {
+  it('authenticated driver + org stack → driver home', () => {
     const d = evaluateNavigationPolicy({
       rawPathname: '/workspace',
       snapshot: snap({
@@ -117,10 +132,10 @@ describe('evaluateNavigationPolicy', () => {
         principal: buildPrincipal({ role: 'driver' }),
       }),
     });
-    expect(d.type).toBe('allow');
-    if (d.type === 'allow') {
-      expect(d.soft).toBe(true);
-      expect(d.reason).toBe('parity_driver_org_stack_open');
+    expect(d.type).toBe('redirect');
+    if (d.type === 'redirect') {
+      expect(d.to).toBe(DRIVER_HOME_PATH);
+      expect(d.reason).toBe('experience_mismatch_driver');
     }
   });
   it('authenticated org with dispatch → allow /trips', () => {
@@ -160,9 +175,25 @@ describe('evaluateNavigationPolicy', () => {
     }
   });
 
-  it('canonical /(tabs)/finance matches org.finance', () => {
+  it('authenticated + driver_signup_success → /driver-signup (not experience home)', () => {
     const d = evaluateNavigationPolicy({
-      rawPathname: '/(tabs)/finance',
+      rawPathname: '/trips',
+      snapshot: snap({
+        sessionPosture: 'authenticated',
+        principal: buildPrincipal({ role: 'driver' }),
+        predicates: { driver_signup_success: true },
+      }),
+    });
+    expect(d.type).toBe('redirect');
+    if (d.type === 'redirect') {
+      expect(d.to).toBe('/driver-signup');
+      expect(d.reason).toBe('predicate_onboarding');
+    }
+  });
+
+  it('authenticated + branding → /onboarding/business', () => {
+    const d = evaluateNavigationPolicy({
+      rawPathname: '/',
       snapshot: snap({
         sessionPosture: 'authenticated',
         principal: buildPrincipal({
@@ -170,10 +201,29 @@ describe('evaluateNavigationPolicy', () => {
           aggregated: true,
           asset: false,
         }),
+        predicates: { signup_branding_active: true },
+      }),
+    });
+    expect(d.type).toBe('redirect');
+    if (d.type === 'redirect') {
+      expect(d.to).toBe('/onboarding/business');
+    }
+  });
+
+  it('authenticated on /onboarding/business with branding → allow', () => {
+    const d = evaluateNavigationPolicy({
+      rawPathname: '/onboarding/business',
+      snapshot: snap({
+        sessionPosture: 'authenticated',
+        principal: buildPrincipal({
+          role: 'user',
+          aggregated: true,
+          asset: false,
+        }),
+        predicates: { signup_branding_active: true },
       }),
     });
     expect(d.type).toBe('allow');
-    if (d.type === 'allow') expect(d.policyId).toBe('org.finance');
   });
 });
 
