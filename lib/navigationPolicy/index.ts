@@ -4,6 +4,7 @@
  * Navigation ≠ Authorization. Supabase RLS remains the data boundary.
  *
  * Phase 3: Shadow host mounted in app/_layout (enforce=false). Never redirects.
+ * Phase 4: Parity matrix vs legacyPredict — soft flags for ungated stack.
  * Phase 5: enable enforce + remove legacy auth replaces.
  */
 
@@ -87,3 +88,15 @@ export {
   type ShadowMismatchReport,
   type ShadowObservation,
 } from '@/lib/navigationPolicy/shadowMismatch';
+export {
+  predictLegacyNavigation,
+  legacyPredictionToComparable,
+  type LegacyPrediction,
+} from '@/lib/navigationPolicy/legacyPredict';
+
+export {
+  compareParityCase,
+  runParityMatrix,
+  type ParityCase,
+  type ParityMismatch,
+} from '@/lib/navigationPolicy/parityCompare';

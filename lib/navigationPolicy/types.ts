@@ -57,6 +57,20 @@ export type PolicyRecord = {
   onDeny?: OnDenyTarget;
   /** If grants fail, still allow mount (soft UI). Prefer false for new routes. */
   softDeny?: boolean;
+  /**
+   * Phase 4 parity: legacy Stack/Modal had no session gate.
+   * `legacy_open` → anonymous may stay (matches today's ungated routes).
+   * `require_auth` → anonymous redirects to sign-in (tabs, pulse-loads, driver).
+   * Default: `require_auth`.
+   */
+  anonymousAccess?: 'require_auth' | 'legacy_open';
+  /**
+   * Phase 4 parity: legacy Stack had no driver bounce (only tabs layout does).
+   * `legacy_open` → drivers may stay on org stack routes.
+   * `deny` → redirect to driver home (tabs routes).
+   * Default for org: `legacy_open`. Driver experience routes always deny non-drivers.
+   */
+  driverAccess?: 'deny' | 'legacy_open';
   /** Higher wins when multiple patterns match. Exact typically higher than param. */
   priority: number;
 };

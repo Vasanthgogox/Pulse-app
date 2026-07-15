@@ -127,8 +127,15 @@ export function evaluateNavigationPolicy(input: EvaluateInput): Decision {
 
   const { policy } = matched;
 
-  // Anonymous: only public experiences
+  // Anonymous
   if (snapshot.sessionPosture === 'anonymous') {
+    // Boot `/` — match app/index web vs native cold start
+    if (canonicalPath === '/' && policy.id === 'public.root-boot') {
+      const to =
+        snapshot.platform === 'web' ? TERMINAL_WEBSITE_PATH : SIGN_IN_PATH;
+      return redirect(to, 'boot_anonymous', policy.id);
+    }
+
     if (
       policy.experience === 'public_content' ||
       policy.experience === 'public_process'
@@ -139,16 +146,51 @@ export function evaluateNavigationPolicy(input: EvaluateInput): Decision {
         reason: 'public_anonymous',
       };
     }
-    return redirect(
-      resolveOnDeny(policy.onDeny ?? { type: 'sign_in' }, snapshot),
-      'anonymous_protected',
-      policy.id,
-    );
+
+    // Web-only trip detail session gate (native trip index is ungated)
+    const tripRoot =
+      canonicalPath.split('/').filter(Boolean).length === 2 &&
+      canonicalPath.startsWith('/trip/');
+    if (tripRoot && snapshot.platform === 'web') {
+      return redirect(SIGN_IN_PATH, 'anonymous_trip_web', policy.id);
+    }
+    if (tripRoot && snapshot.platform !== 'web') {
+      return {
+        type: 'allow',
+        soft: true,
+        policyId: policy.id,
+        reason: 'parity_legacy_unguarded',
+      };
+    }
+
+    if (policy.anonymousAccess === 'legacy_open') {
+      return {
+        type: 'allow',
+        soft: true,
+        policyId: policy.id,
+        reason: 'parity_legacy_unguarded',
+      };
+    }
+
+    return redirect(SIGN_IN_PATH, 'anonymous_protected', policy.id);
   }
 
   // authenticated
   if (!experienceAllows(policy.experience, snapshot.principal, snapshot.sessionPosture)) {
     const pe = principalExperience(snapshot.principal);
+    // Phase 4: org stack historically unguarded for drivers except tabs
+    if (
+      pe === 'driver' &&
+      policy.experience === 'org' &&
+      policy.driverAccess !== 'deny'
+    ) {
+      return {
+        type: 'allow',
+        soft: true,
+        policyId: policy.id,
+        reason: 'parity_driver_org_stack_open',
+      };
+    }
     if (pe === 'driver') {
       return redirect(DRIVER_HOME_PATH, 'experience_mismatch_driver', policy.id);
     }

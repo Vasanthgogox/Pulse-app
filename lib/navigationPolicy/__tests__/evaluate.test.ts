@@ -41,8 +41,8 @@ describe('evaluateNavigationPolicy', () => {
     }
   });
 
-  it('anonymous + public → allow', () => {
-    for (const path of ['/sign-in', '/terminal-website', '/']) {
+  it('anonymous + public process/content → allow (except boot `/`)', () => {
+    for (const path of ['/sign-in', '/terminal-website']) {
       const d = evaluateNavigationPolicy({
         rawPathname: path,
         snapshot: snap({ sessionPosture: 'anonymous' }),
@@ -51,9 +51,40 @@ describe('evaluateNavigationPolicy', () => {
     }
   });
 
-  it('anonymous + org → redirect sign_in', () => {
+  it('anonymous + boot `/` → marketing (web) or sign-in (native)', () => {
+    const web = evaluateNavigationPolicy({
+      rawPathname: '/',
+      snapshot: snap({ sessionPosture: 'anonymous', platform: 'web' }),
+    });
+    expect(web.type).toBe('redirect');
+    if (web.type === 'redirect') {
+      expect(web.to).toBe('/terminal-website');
+    }
+    const native = evaluateNavigationPolicy({
+      rawPathname: '/',
+      snapshot: snap({ sessionPosture: 'anonymous', platform: 'ios' }),
+    });
+    expect(native.type).toBe('redirect');
+    if (native.type === 'redirect') {
+      expect(native.to).toBe(SIGN_IN_PATH);
+    }
+  });
+
+  it('anonymous + ungated org stack → soft allow (parity)', () => {
     const d = evaluateNavigationPolicy({
       rawPathname: '/workspace',
+      snapshot: snap({ sessionPosture: 'anonymous' }),
+    });
+    expect(d.type).toBe('allow');
+    if (d.type === 'allow') {
+      expect(d.soft).toBe(true);
+      expect(d.reason).toBe('parity_legacy_unguarded');
+    }
+  });
+
+  it('anonymous + tabs → redirect sign_in', () => {
+    const d = evaluateNavigationPolicy({
+      rawPathname: '/trips',
       snapshot: snap({ sessionPosture: 'anonymous' }),
     });
     expect(d.type).toBe('redirect');
@@ -63,7 +94,7 @@ describe('evaluateNavigationPolicy', () => {
     }
   });
 
-  it('authenticated driver + org path → driver home', () => {
+  it('authenticated driver + tabs → driver home', () => {
     const d = evaluateNavigationPolicy({
       rawPathname: '/trips',
       snapshot: snap({
@@ -78,6 +109,20 @@ describe('evaluateNavigationPolicy', () => {
     }
   });
 
+  it('authenticated driver + ungated org stack → soft allow (parity)', () => {
+    const d = evaluateNavigationPolicy({
+      rawPathname: '/workspace',
+      snapshot: snap({
+        sessionPosture: 'authenticated',
+        principal: buildPrincipal({ role: 'driver' }),
+      }),
+    });
+    expect(d.type).toBe('allow');
+    if (d.type === 'allow') {
+      expect(d.soft).toBe(true);
+      expect(d.reason).toBe('parity_driver_org_stack_open');
+    }
+  });
   it('authenticated org with dispatch → allow /trips', () => {
     const d = evaluateNavigationPolicy({
       rawPathname: '/(tabs)/trips',
