@@ -3,8 +3,8 @@
  *
  * Navigation ≠ Authorization. Supabase RLS remains the data boundary.
  *
- * Phase 1: Foundation only — do NOT mount NavigationPolicyProvider from app/
- * until Phase 3 (shadow) / Phase 5 (enforce) is approved.
+ * Phase 3: Shadow host mounted in app/_layout (enforce=false). Never redirects.
+ * Phase 5: enable enforce + remove legacy auth replaces.
  */
 
 export type {
@@ -72,3 +72,18 @@ export {
   useNavigationPolicyDecision,
   type NavigationPolicyProviderProps,
 } from '@/lib/navigationPolicy/NavigationPolicyProvider';
+
+export { NavigationPolicyShadowHost } from '@/lib/navigationPolicy/NavigationPolicyShadowHost';
+
+export { authStatusToSessionPosture } from '@/lib/navigationPolicy/sessionPosture';
+
+export {
+  clearShadowObservations,
+  getShadowMismatchReport,
+  recordShadowDecision,
+  settleShadowIfStable,
+  settleShadowPath,
+  type ShadowMismatchKind,
+  type ShadowMismatchReport,
+  type ShadowObservation,
+} from '@/lib/navigationPolicy/shadowMismatch';

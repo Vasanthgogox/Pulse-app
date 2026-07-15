@@ -79,6 +79,7 @@ import { PendingOnboardingProvider } from '@/contexts/PendingOnboardingContext';
 import { PendingInviteResumeGate } from '@/components/PendingInviteResumeGate';
 import { PushTokenRegistration } from '@/components/PushTokenRegistration';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import { NavigationPolicyShadowHost } from '@/lib/navigationPolicy/NavigationPolicyShadowHost';
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { OrganizationProvider, useOptionalOrganization } from '@/contexts/OrganizationContext';
@@ -438,6 +439,7 @@ function RootLayoutNav() {
   }, []);
 
   return (
+    <NavigationPolicyShadowHost>
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <DemoTabBarScrollProvider>
         {/*
@@ -500,6 +502,7 @@ function RootLayoutNav() {
         </LazyChatProviders>
       </DemoTabBarScrollProvider>
     </ThemeProvider>
+    </NavigationPolicyShadowHost>
   );
 }
 

@@ -1,8 +1,9 @@
 /**
  * NavigationPolicyProvider — wires Snapshot → evaluate → telemetry → Actor.
  *
- * Phase 1: NOT mounted in app/. Legacy routing remains authoritative.
- * Do not import this from app/ until Phase 3+ (shadow) / Phase 5 (enforce).
+ * Phase 3: mounted via NavigationPolicyShadowHost with enforce=false (evaluate only).
+ * Phase 5: enforce=true enables NavigationActor redirects.
+ * Legacy layouts remain authoritative until Phase 5 removals.
  */
 
 import React, {
