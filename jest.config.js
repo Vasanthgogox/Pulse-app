@@ -21,7 +21,17 @@ module.exports = {
         '<rootDir>/**/*.test.ts',
         '<rootDir>/**/*.test.tsx',
       ],
-      testPathIgnorePatterns: ['<rootDir>/lib/platform/'],
+      // Vitest packages (packages/, analytics/, oms/, tools/) own their runners —
+      // do not pull them into the app Jest project.
+      testPathIgnorePatterns: [
+        '<rootDir>/node_modules/',
+        '<rootDir>/lib/platform/',
+        '<rootDir>/packages/',
+        '<rootDir>/analytics/',
+        '<rootDir>/oms/',
+        '<rootDir>/tools/',
+        '<rootDir>/_reference/',
+      ],
       setupFiles: ['./__mocks__/expo.ts'],
       moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/$1',

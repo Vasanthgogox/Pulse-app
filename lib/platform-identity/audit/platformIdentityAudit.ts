@@ -36,10 +36,27 @@ export function recordPlatformIdentityAudit(
   if (__DEV__) {
     console.log('[platform-identity:audit]', record.type, record);
   }
-  void import('./platformIdentityAuditPersistence').then(({ persistPlatformIdentityAuditEvent }) =>
-    persistPlatformIdentityAuditEvent(record),
-  );
+  scheduleAuditPersist(record);
   return record;
+}
+
+/**
+ * Best-effort async DB persist. Skipped under Jest — dynamic `import()` throws
+ * in Jest's CJS VM without `--experimental-vm-modules` and kills the worker.
+ */
+function scheduleAuditPersist(record: PlatformIdentityAuditEvent): void {
+  if (typeof process !== 'undefined' && process.env.JEST_WORKER_ID != null) {
+    return;
+  }
+  try {
+    void import('./platformIdentityAuditPersistence')
+      .then(({ persistPlatformIdentityAuditEvent }) =>
+        persistPlatformIdentityAuditEvent(record),
+      )
+      .catch(() => undefined);
+  } catch {
+    // Dynamic import unavailable in this runtime — buffer-only is fine.
+  }
 }
 
 export function getPlatformIdentityAuditBuffer(): readonly PlatformIdentityAuditEvent[] {
