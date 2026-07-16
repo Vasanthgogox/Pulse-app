@@ -12,7 +12,11 @@
 -- SupplierRow and every write path. Only the GST column changes; all other
 -- columns and the avatar-branding logic are preserved verbatim.
 
-CREATE OR REPLACE FUNCTION public.get_suppliers_with_profiles(p_org_id uuid)
+-- Renaming a RETURNS TABLE output column changes the function's return type,
+-- which CREATE OR REPLACE cannot do (SQLSTATE 42P13) — drop first, then recreate.
+DROP FUNCTION IF EXISTS public.get_suppliers_with_profiles(uuid);
+
+CREATE FUNCTION public.get_suppliers_with_profiles(p_org_id uuid)
 RETURNS TABLE (
   id uuid,
   organization_id uuid,
