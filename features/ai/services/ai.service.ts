@@ -88,7 +88,6 @@ export async function getCashflowForecast(
 ): Promise<{ error: Error | null; data: CashflowForecastDay[] }> {
   try {
     const { data, error } = await supabase()
-      .schema('reporting')
       .from('cashflow_forecast')
       .select('*')
       .eq('organization_id', organizationId)
