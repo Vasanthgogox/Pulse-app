@@ -1,6 +1,7 @@
--- Allow admin approve/reject on orgs shown in the console queue as "Pending"
--- (verification_status = unverified) as well as user-submitted pending rows.
--- The admin console maps unverified → Pending; the RPC previously required pending only.
+-- Applied on remote as 20260716063044.
+-- Follow-up to 20260716062940: ensure status checks use kyc_verification_status
+-- enum values ('pending', 'unverified') safely and re-assert grants.
+-- Idempotent — matches live remote function bodies.
 
 CREATE OR REPLACE FUNCTION public.admin_approve_profile(
   p_org_id    uuid,
