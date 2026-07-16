@@ -14,6 +14,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 
 import { isIgnorableSupabaseAuthLockError } from "@/lib/supabaseAuthLock.util";
+import { invalidateFleetDriverConnectionCaches } from "@/lib/invalidateFleetDriverConnectionCaches";
 
 export function useInboundProtocolInviteActions(orgId: string | null) {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
           // everything so "Your connections" reflects the new connection immediately.
           qc.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
           qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
-          qc.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
+          void invalidateFleetDriverConnectionCaches(qc, orgId);
           qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(orgId) });
           qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(orgId) });
         }

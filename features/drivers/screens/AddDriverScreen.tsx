@@ -6,6 +6,7 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { PartyRegistrationPortal } from '@/features/finance/components/PartyRegistrationPortal';
 import { usePartyPortalRouteHandlers } from '@/features/finance/hooks/usePartyPortalRouteHandlers';
 import { type DriverFormData, inviteDriver } from '@/features/drivers';
+import { invalidateFleetDriverConnectionCaches } from '@/lib/invalidateFleetDriverConnectionCaches';
 import { queryKeys } from '@/lib/queryKeys';
 import { closeModal } from '@/app/(modals)/add-driver-closeModal';
 
@@ -49,7 +50,7 @@ export default function AddDriverScreen() {
       currentOrganization.name ?? undefined
     );
     if (error) throw error;
-    await queryClient.refetchQueries({ queryKey: queryKeys.drivers.all(orgId) });
+    await invalidateFleetDriverConnectionCaches(queryClient, orgId);
     if (!inviteSent) {
       if (inviteAlreadyExists) {
         await new Promise<void>((resolve) => {

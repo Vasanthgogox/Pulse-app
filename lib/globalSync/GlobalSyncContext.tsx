@@ -21,6 +21,7 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { queryKeys } from '@/lib/queryKeys';
+import { invalidateFleetDriverConnectionCaches } from '@/lib/invalidateFleetDriverConnectionCaches';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import { useGlobalSyncStore } from './useGlobalSyncStore';
 
@@ -122,6 +123,26 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
           table:  'connection_requests',
           filter: `to_organization_id=eq.${orgId}`,
         },
+        // Fleet driver invites — refresh roster when driver accepts/declines.
+        {
+          event:  '*',
+          schema: 'public',
+          table:  'driver_invites',
+          filter: `from_organization_id=eq.${orgId}`,
+        },
+        // New/updated driver rows after invite accept (or manual roster edits).
+        {
+          event:  'INSERT',
+          schema: 'public',
+          table:  'drivers',
+          filter: `organization_id=eq.${orgId}`,
+        },
+        {
+          event:  'UPDATE',
+          schema: 'public',
+          table:  'drivers',
+          filter: `organization_id=eq.${orgId}`,
+        },
       ],
       (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
         const table     = payload.table;
@@ -146,6 +167,19 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
           if (eventType === 'UPDATE' && row.status === 'approved') {
             queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.finite(orgId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.clients.finite(orgId) });
+          }
+          return;
+        }
+
+        if (table === 'driver_invites' || table === 'drivers') {
+          void invalidateFleetDriverConnectionCaches(queryClient, orgId);
+          if (table === 'driver_invites') {
+            void useGlobalSyncStore
+              .getState()
+              .refreshInboundProtocol(orgId)
+              .catch(() => {});
           }
           return;
         }
@@ -153,7 +187,7 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
         useGlobalSyncStore.getState().routeRealtimeEvent(table, eventType, row, orgId);
       },
     );
-  }, [orgId]);
+  }, [orgId, queryClient]);
 
   return (
     <GlobalSyncContext.Provider value={{ refresh }}>

@@ -18,6 +18,7 @@ import type { SupplierFormData } from "@/features/suppliers/components/AddSuppli
 import { createVehicle } from "@/features/vehicles/services/vehicles.service";
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
 import { showAppAlert } from "@/lib/appAlert";
+import { invalidateFleetDriverConnectionCaches } from "@/lib/invalidateFleetDriverConnectionCaches";
 import { queryKeys } from "@/lib/queryKeys";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
@@ -200,7 +201,7 @@ export function useFinanceAddEntityHandlers(
         organizationName,
       );
       if (error) throw error;
-      await queryClient.refetchQueries({ queryKey: queryKeys.drivers.all(organizationId) });
+      await invalidateFleetDriverConnectionCaches(queryClient, organizationId);
       setEntitiesRefreshKey((k) => k + 1);
       setShowAddDriverModal(false);
       if (!inviteSent) {
@@ -231,7 +232,7 @@ export function useFinanceAddEntityHandlers(
       if (!organizationId) throw new Error(NO_ORG_MESSAGE);
       const { error } = await createDriver(organizationId, data);
       if (error) throw error;
-      await queryClient.refetchQueries({ queryKey: queryKeys.drivers.all(organizationId) });
+      await invalidateFleetDriverConnectionCaches(queryClient, organizationId);
       setEntitiesRefreshKey((k) => k + 1);
       setShowAddDriverModal(false);
     },

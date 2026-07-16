@@ -9,6 +9,7 @@ export {
 } from '@/lib/hooks/useConnectionRequestsFromGlobalSync';
 
 import { getDriverInvitesSent } from '@/features/drivers/services/drivers.service';
+import { invalidateFleetDriverConnectionCaches } from '@/lib/invalidateFleetDriverConnectionCaches';
 import { useQueryBootDefer } from '@/lib/hooks/useQueryBootDefer';
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
@@ -52,15 +53,14 @@ export function useInvalidateNetwork(orgId: string | null) {
     void import('@/lib/globalSync/useGlobalSyncStore').then(({ useGlobalSyncStore }) => {
       void useGlobalSyncStore.getState().refreshInboundProtocol(orgId);
     });
+    void invalidateFleetDriverConnectionCaches(qc, orgId);
     qc.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
-    qc.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
     qc.invalidateQueries({
       queryKey: queryKeys.connectionRequests.received(orgId),
     });
     qc.invalidateQueries({
       queryKey: queryKeys.connectionRequests.sent(orgId),
     });
-    qc.invalidateQueries({ queryKey: queryKeys.driverInvites.sent(orgId) });
   };
 }
