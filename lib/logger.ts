@@ -1,3 +1,5 @@
+import { captureException, captureMessage } from '@/lib/crashReporter';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 const LOG_LEVEL_ORDER: Record<LogLevel, number> = {
@@ -23,6 +25,15 @@ function format(message: string, context?: Record<string, unknown>) {
   return `[${timestamp}] ${message}`;
 }
 
+/** Pull the first Error out of the context bag, if present, for crash reporting. */
+function extractError(context?: Record<string, unknown>): Error | undefined {
+  if (!context) return undefined;
+  for (const value of Object.values(context)) {
+    if (value instanceof Error) return value;
+  }
+  return undefined;
+}
+
 export const logger = {
   debug: (message: string, context?: Record<string, unknown>) => {
     if (!shouldLog('debug')) return;
@@ -38,11 +49,18 @@ export const logger = {
     if (!shouldLog('warn')) return;
     // eslint-disable-next-line no-console
     console.warn(format(message, context));
+    captureMessage(message, 'warning', context);
   },
   error: (message: string, context?: Record<string, unknown>) => {
     if (!shouldLog('error')) return;
     // eslint-disable-next-line no-console
     console.error(format(message, context));
+    const err = extractError(context);
+    if (err) {
+      captureException(err, { message, ...context });
+    } else {
+      captureMessage(message, 'error', context);
+    }
   },
 };
 

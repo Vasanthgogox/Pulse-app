@@ -77,6 +77,7 @@ const WIZARD_REVIEW_MAX_WIDTH = 480;
 
 function stepMeta(
   step: TripAdjustmentWizardStep,
+  type: TripAdjustmentType,
   isAssetDriverCost?: boolean,
   isEditing?: boolean,
 ): { title: string; hint?: string } {
@@ -100,7 +101,7 @@ function stepMeta(
         : {
             title: "Credit or debit?",
             hint:
-              props.type === "revenue"
+              type === "revenue"
                 ? "CN reduces income · DN increases income"
                 : "CN reduces cost · DN increases cost",
           };
@@ -208,7 +209,7 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   const effectiveStep =
     currentStep === "reason" && otherReasonMode ? ("otherReason" as const) : currentStep;
   const isAssetDriverCost = props.isAssetDriverCost === true;
-  const { title, hint } = stepMeta(effectiveStep, isAssetDriverCost, props.isEditing);
+  const { title, hint } = stepMeta(effectiveStep, props.type, isAssetDriverCost, props.isEditing);
   const canAdvance = canAdvanceStep(effectiveStep, props);
   const reasonOptions = getAdjustmentReasonOptions({
     type: props.type,

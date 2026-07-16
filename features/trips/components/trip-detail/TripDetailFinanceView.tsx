@@ -4,6 +4,7 @@
  * Supplier Sync bar, Associated Handshakes.
  */
 import { ProvisionCnDnImpactTag } from "@/features/trips/components/trip-detail/adjustment/ProvisionCnDnImpactTag";
+import { TripFinancialCard } from "@/components/TripFinancialCard";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";

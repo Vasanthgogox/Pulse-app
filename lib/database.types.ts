@@ -10749,7 +10749,7 @@ export type Database = {
           contact_person: string
           created_at: string
           email: string
-          gst_number: string
+          gstin: string
           id: string
           is_active: boolean
           is_verified: boolean

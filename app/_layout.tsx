@@ -7,6 +7,8 @@ import { ensureWebShellParity } from '@/lib/htmlShell';
 import '@/lib/tracking/backgroundTasks';
 import { markStartupPhase, dumpStartupMetrics } from '@/lib/startupMetrics';
 import { AppAlertHost } from '@/components/AppAlertHost';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
+import { initCrashReporter } from '@/lib/crashReporter';
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
 import { DemoTabBar } from '@/components/demo/DemoTabBar';
@@ -91,6 +93,9 @@ import { isFloatingChatHostRoute } from '@/lib/floatingChatHostRoute.util';
 import { GlobalSyncProvider } from '@/lib/globalSync/GlobalSyncContext';
 
 markStartupPhase('js_parse_start');
+
+// Wire crash reporting as early as possible (no-op in dev / when no DSN is set).
+initCrashReporter();
 
 // Dev (web.output "single") skips app/+html.tsx — inject its shell CSS/JS at runtime.
 ensureWebShellParity();
@@ -351,6 +356,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <LanguageProvider>
+        <AppErrorBoundary>
         <GestureHandlerRootView style={styles.ghRoot}>
           <PersistQueryClientProvider
             client={queryClient}
@@ -394,6 +400,7 @@ export default function RootLayout() {
             </NetworkProvider>
           </PersistQueryClientProvider>
         </GestureHandlerRootView>
+        </AppErrorBoundary>
       </LanguageProvider>
     </SafeAreaProvider>
   );

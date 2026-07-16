@@ -67,7 +67,7 @@ export function SupplierProfileHubHero({
   const contactPerson = supplier.contact_person?.trim();
   const isIntegrated = supplier.supplier_type === "integrated";
   const isVerified = supplier.is_verified;
-  const gstin = supplier.gst_number?.trim();
+  const gstin = supplier.gstin?.trim();
   const phone = supplier.phone?.trim();
   const email = supplier.email?.trim();
   const address = supplier.address?.trim();

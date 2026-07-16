@@ -76,6 +76,7 @@ import { Alert, Platform, ScrollView, useWindowDimensions } from 'react-native';
 
 import type { IndiaLocation } from '../components/CityPicker';
 import {
+  CONFIRM_SCROLL_DELAY_MS,
   DEBOUNCE_MS,
   DESKTOP_BREAKPOINT,
   DESKTOP_MAX_PANEL_WIDTH,
@@ -100,6 +101,7 @@ import {
   matchIndiaLocation,
   parsePlaceDisplayName,
 } from '../utils/matchIndiaLocation.util';
+import { legacyTeamInviteToIdentityInvitation } from '@/lib/onboarding/invitationModel.util';
 
 export { STEP_LABELS };
 export type { InvitePhase, SignupTrack } from '../signupInviteTypes';

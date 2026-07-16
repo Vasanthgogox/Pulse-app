@@ -137,7 +137,7 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
         .map((s) => ({
           id: s.id,
           name: (s.name ?? s.company_name ?? s.contact_person ?? "Supplier").trim(),
-          meta: s.phone?.trim() || s.gst_number?.trim() || "Supplier",
+          meta: s.phone?.trim() || s.gstin?.trim() || "Supplier",
           entityType: "supplier" as const,
           avatarUrl: s.avatar_url,
           avatarSeed: s.avatar_seed,

@@ -5,6 +5,7 @@
  * The provider is a thin adapter around this engine.
  */
 import type { AuthProfile, AuthUser } from "@/features/auth/services/auth.service";
+import { captureMessage } from "@/lib/crashReporter";
 
 // ---------------------------------------------------------------------------
 // AuthStatus — single source of truth replaces loading + sessionExpired
@@ -204,11 +205,13 @@ export function logAuth(
     return;
   }
 
-  // Production: error/warn only — structured signal until Sentry/Datadog is wired.
+  // Production: error/warn only — funnel through the crash reporter.
   if (severity === "error") {
     console.error("[AuthGuard]", payload);
+    captureMessage(`[AuthGuard] ${event}`, "error", payload);
   } else if (severity === "warn") {
     console.warn("[AuthGuard]", payload);
+    captureMessage(`[AuthGuard] ${event}`, "warning", payload);
   }
 }
 

@@ -345,7 +345,7 @@ export function SupplierProfileHub({
                 phone: profile.phone || undefined,
                 email: profile.email || undefined,
               };
-              if (profile.gstin && !supplier.gst_number) patch.gstin = profile.gstin;
+              if (profile.gstin && !supplier.gstin) patch.gstin = profile.gstin;
               if (profile.address && !supplier.address) patch.address = profile.address;
               await updateSupplier(orgId, supplier.id, patch);
               onRefresh?.();
@@ -387,7 +387,7 @@ export function SupplierProfileHub({
                 phone: profile.phone || undefined,
                 email: profile.email || undefined,
               };
-              if (profile.gstin && !supplier.gst_number) patch.gstin = profile.gstin;
+              if (profile.gstin && !supplier.gstin) patch.gstin = profile.gstin;
               if (profile.address && !supplier.address) patch.address = profile.address;
               await updateSupplier(orgId, supplier.id, patch);
               onRefresh?.();

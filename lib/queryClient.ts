@@ -8,9 +8,10 @@
  *   moderate  — rarely mutated (suppliers, clients, org members)
  *   slow      — almost never changes (org profile, capabilities)
  */
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryCache, MutationCache } from '@tanstack/react-query';
 import type { QueryCacheNotifyEvent } from '@tanstack/react-query';
 import { isWithinAppQueryBootQuietPeriod } from '@/lib/hooks/appQueryGateState';
+import { logger } from '@/lib/logger';
 
 /** Shared stale-time constants — import in query hooks to apply per-query tiers. */
 export const STALE = {
@@ -94,6 +95,21 @@ function attachDevObserver(client: QueryClient): void {
 
 export function makeQueryClient() {
   const client = new QueryClient({
+    queryCache: new QueryCache({
+      onError: (error, query) => {
+        logger.error('[query] fetch failed', {
+          error: error instanceof Error ? error : new Error(String(error)),
+          queryKey: JSON.stringify(query.queryKey),
+        });
+      },
+    }),
+    mutationCache: new MutationCache({
+      onError: (error) => {
+        logger.error('[mutation] failed', {
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
+      },
+    }),
     defaultOptions: {
       queries: {
         staleTime: STALE.moderate,
