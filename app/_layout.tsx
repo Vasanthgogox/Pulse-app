@@ -8,7 +8,7 @@ import '@/lib/tracking/backgroundTasks';
 import { markStartupPhase, dumpStartupMetrics } from '@/lib/startupMetrics';
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
-import { initCrashReporter, maybeRunSentryPilotProbe } from '@/lib/crashReporter';
+import { initCrashReporter } from '@/lib/crashReporter';
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
 import { DemoTabBar } from '@/components/demo/DemoTabBar';
@@ -96,8 +96,6 @@ markStartupPhase('js_parse_start');
 
 // Wire crash reporting as early as possible (no-op in dev / when no DSN is set).
 initCrashReporter();
-// TEMPORARY: ?sentry_probe=1 → one captureException; remove after pilot verify.
-maybeRunSentryPilotProbe();
 
 // Dev (web.output "single") skips app/+html.tsx — inject its shell CSS/JS at runtime.
 ensureWebShellParity();

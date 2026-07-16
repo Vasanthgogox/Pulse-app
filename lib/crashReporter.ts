@@ -27,28 +27,6 @@ export function initCrashReporter(): void {
   initialized = true;
 }
 
-/**
- * TEMPORARY pilot probe — remove after Sentry ingest is confirmed.
- * Open: https://gx-pulse.netlify.app/?sentry_probe=1
- * Fires once per browser session; no-op without DSN / in __DEV__.
- */
-export function maybeRunSentryPilotProbe(): void {
-  if (__DEV__ || !initialized || typeof window === 'undefined') return;
-  try {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('sentry_probe') !== '1') return;
-    const key = 'pulse_sentry_probe_v1';
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, '1');
-    Sentry.captureException(new Error('sentry-pilot-probe'), {
-      tags: { probe: 'pilot' },
-      extra: { href: window.location.href },
-    });
-  } catch {
-    // ignore — probe must never break boot
-  }
-}
-
 export function captureException(
   error: Error,
   context?: Record<string, unknown>,
