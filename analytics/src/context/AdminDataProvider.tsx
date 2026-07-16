@@ -112,6 +112,12 @@ function mapOrg(
     { id: 'ai_dispatch', label: 'AI Dispatch',   description: 'AI-powered dispatch suggestions',   enabled: dbFlags['ai_dispatch'] ?? false },
   ];
 
+  const auditTrail = auditByOrg[row.id as string] ?? [];
+  const approval_notes = [...auditTrail]
+    .reverse()
+    .find((a) => a.event_type === 'approved')
+    ?.detail;
+
   return {
     id:                   row.id as string,
     company_name:         (row.name as string) ?? 'Unnamed',
@@ -144,7 +150,8 @@ function mapOrg(
       row.registration_type as string | null,
       !!row.gst_not_applicable,
     ),
-    audit_trail:          auditByOrg[row.id as string] ?? [] as AuditEntry[],
+    approval_notes,
+    audit_trail:          auditTrail,
     billing_tier:         'Starter' as BillingTier,
     api_usage:            0,
     users,
@@ -411,6 +418,10 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
       });
       if (error) throw error;
       await loadData();
+    } catch (e) {
+      const message = (e as Error).message ?? 'Approval failed';
+      alert(message);
+      throw e;
     } finally { setIsActing(false); }
   }, [loadData]);
 
@@ -425,20 +436,48 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
       });
       if (error) throw error;
       await loadData();
+    } catch (e) {
+      const message = (e as Error).message ?? 'Rejection failed';
+      alert(message);
+      throw e;
     } finally { setIsActing(false); }
   }, [loadData]);
 
-  const escalateApp = useCallback(async (id: string, _reason: string) => {
+  const escalateApp = useCallback(async (id: string, reason: string) => {
     setIsActing(true);
     try {
-      const { error } = await supabase
+      const org = applications.find((a) => a.id === id);
+      const previousStatus =
+        org?.status === 'Under Review' ? 'pending' : 'unverified';
+
+      const { error: updateErr } = await supabase
         .from('organizations')
-        .update({ verification_status: 'pending', updated_at: new Date().toISOString() })
+        .update({
+          verification_status: 'pending',
+          submitted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', id);
-      if (error) throw error;
+      if (updateErr) throw updateErr;
+
+      const { error: auditErr } = await supabase
+        .from('verification_audit_logs')
+        .insert({
+          org_id: id,
+          changed_by: null,
+          previous_status: previousStatus,
+          new_status: 'pending',
+          notes: reason.trim(),
+        });
+      if (auditErr) throw auditErr;
+
       await loadData();
+    } catch (e) {
+      const message = (e as Error).message ?? 'Escalation failed';
+      alert(message);
+      throw e;
     } finally { setIsActing(false); }
-  }, [loadData]);
+  }, [applications, loadData]);
 
   const suspendUser = useCallback(async (_orgId: string, userId: string) => {
     setIsActing(true);

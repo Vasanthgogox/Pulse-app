@@ -46,22 +46,34 @@ export function VerificationActionPanel() {
 
   async function handleApprove() {
     setLocalBusy(true);
-    await approveApp(id, approvalNotes.trim() || undefined);   // isActing held true during the entire network round-trip
-    reset();                // called after API responds (or after alert on error)
+    try {
+      await approveApp(id, approvalNotes.trim() || undefined);
+      reset();
+    } catch {
+      setLocalBusy(false);
+    }
   }
 
   async function handleReject() {
     if (!rejectionReason || !rejectionNotes.trim()) return;
     setLocalBusy(true);
-    await rejectApp(id, rejectionReason, rejectionNotes.trim());
-    reset();
+    try {
+      await rejectApp(id, rejectionReason, rejectionNotes.trim());
+      reset();
+    } catch {
+      setLocalBusy(false);
+    }
   }
 
   async function handleEscalate() {
     if (!escalationReason.trim()) return;
     setLocalBusy(true);
-    await escalateApp(id, escalationReason.trim());
-    reset();
+    try {
+      await escalateApp(id, escalationReason.trim());
+      reset();
+    } catch {
+      setLocalBusy(false);
+    }
   }
 
   return (
