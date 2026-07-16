@@ -2,6 +2,7 @@
  * Home header — colourful layered SVG icons with float / swing motion (3D-style).
  */
 import LottieView from "lottie-react-native";
+import type { LottieSource } from "@/lib/lottieSource";
 import { MotiView } from "moti";
 import { useEffect, useId } from "react";
 import { StyleSheet, View } from "react-native";
@@ -66,7 +67,7 @@ function HeaderLottieIcon({
   glyphScale = 1.08,
   active = false,
 }: {
-  source: object;
+  source: LottieSource;
   size?: number;
   glyphScale?: number;
   active?: boolean;

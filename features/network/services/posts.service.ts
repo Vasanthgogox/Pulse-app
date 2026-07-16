@@ -151,17 +151,18 @@ export async function getNetworkFeed(
     .filter((p) => p.organization_id === orgId && isPostExpired(p))
     .map((p) => p.id);
   if (expiredOwnIds.length > 0) {
-    supabase()
-      .from('posts')
-      .update({ is_active: false })
-      .in('id', expiredOwnIds)
-      .eq('organization_id', orgId)
-      .then(({ error }) => {
-        if (error && __DEV__) console.warn('[posts] auto-deactivate expired posts failed:', error.message);
-      })
-      .catch((err) => {
-        if (__DEV__) console.warn('[posts] auto-deactivate unexpected error:', err);
-      });
+    Promise.resolve(
+      supabase()
+        .from('posts')
+        .update({ is_active: false })
+        .in('id', expiredOwnIds)
+        .eq('organization_id', orgId)
+        .then(({ error }) => {
+          if (error && __DEV__) console.warn('[posts] auto-deactivate expired posts failed:', error.message);
+        }),
+    ).catch((err: unknown) => {
+      if (__DEV__) console.warn('[posts] auto-deactivate unexpected error:', err);
+    });
   }
 
   const posts = activePosts.map(normalizeFeedPost);

@@ -1,4 +1,5 @@
-import { Dimensions, Platform, ScrollView, View, type RefObject } from 'react-native';
+import { Dimensions, Platform, ScrollView, View } from 'react-native';
+import type { RefObject } from 'react';
 
 import { isIOSWeb, shouldApplyWebKeyboardScrollInset } from '@/lib/webKeyboard';
 

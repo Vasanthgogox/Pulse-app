@@ -259,7 +259,7 @@ const DriverSlackDocumentRow = memo(function DriverSlackDocumentRow({
             </Text>
           </View>
         ) : null}
-        <DocumentShareCard message={message} isOwn={own} embedSlack />
+        <DocumentShareCard message={message} isOwn={own} />
       </View>
     </View>
   );
@@ -845,7 +845,6 @@ export function DriverChatSlackThread({
       ) : null}
       <ChatMobileComposer
         variant="slack"
-        contentPaddingHorizontal={DRIVER_CHAT_EDGE}
         value={messageInput}
         onChangeText={setMessageInput}
         onSend={onSend}

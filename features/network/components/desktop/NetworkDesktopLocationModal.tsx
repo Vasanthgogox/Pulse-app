@@ -25,7 +25,6 @@ import {
   Text,
   TextInput,
   View,
-  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
@@ -164,7 +163,7 @@ export function NetworkDesktopLocationModal({
           style={[
             styles.sheet,
             { paddingBottom: insets.bottom + 16 },
-            Platform.OS === 'web' ? ({ cursor: 'default' } as ViewStyle) : null,
+            Platform.OS === 'web' ? ({ cursor: 'default' } as object) : null,
           ]}
           onPress={(e) => e.stopPropagation()}
         >

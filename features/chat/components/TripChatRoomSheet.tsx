@@ -87,7 +87,7 @@ function MessageBubble({
 function shellStyle(embedded: boolean): ViewStyle[] {
   const base: ViewStyle[] = [styles.root];
   if (Platform.OS === "web") {
-    base.push(WEB_APP_VIEWPORT_STYLE as ViewStyle);
+    base.push(WEB_APP_VIEWPORT_STYLE as object as ViewStyle);
   }
   if (embedded) {
     base.push(styles.rootEmbedded);
@@ -125,7 +125,8 @@ export function TripChatRoomSheet({
     assignmentAuditRows,
     {
       driver_display_name: composeTrip?.driver_display_name ?? null,
-      vehicle_display_number: composeTrip?.vehicle_display_number ?? null,
+      // TripForCompose carries no vehicle number; always null here (never populated at runtime).
+      vehicle_display_number: null,
     },
   );
 

@@ -69,10 +69,10 @@ function SupplierPartyDetailSidebar({ bundle, kycScore, perfScore, onTabChange, 
   const email = supplier.email?.trim() || null;
   const contactPerson = supplier.contact_person?.trim() || null;
 
-  const onboardingStatus = (supplier as Record<string, unknown>).onboarding_agreement_status as string | null | undefined;
-  const onboardingSignedAt = (supplier as Record<string, unknown>).onboarding_agreement_signed_at as string | null | undefined;
-  const vehicleTypes = (supplier as Record<string, unknown>).vehicle_types as string[] | null | undefined;
-  const operatingAreas = (supplier as Record<string, unknown>).operating_areas as string[] | null | undefined;
+  const onboardingStatus = supplier.onboarding_agreement_status;
+  const onboardingSignedAt = supplier.onboarding_agreement_signed_at;
+  const vehicleTypes = supplier.vehicle_types;
+  const operatingAreas = supplier.operating_areas;
 
   const integrationLabel = isIntegrated ? "INTEGRATED" : (supplier.supplier_type ?? "OFFLINE").toUpperCase();
   const integrationBg = isIntegrated ? "#E8FFF3" : "#F1F1F4";
@@ -286,7 +286,7 @@ export function SupplierProfileHub({
       setChatOpen(true);
       return;
     }
-    const phoneDigits = String(supplier.phone ?? supplier.contact_phone ?? "").replace(/\D/g, "");
+    const phoneDigits = String(supplier.phone ?? "").replace(/\D/g, "");
     if (phoneDigits.length >= 8) {
       Alert.alert(
         "Direct contact",

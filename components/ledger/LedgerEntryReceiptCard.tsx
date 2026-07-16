@@ -1,4 +1,5 @@
 import LottieView from "lottie-react-native";
+import type { LottieSource } from "@/lib/lottieSource";
 import { memo, useMemo } from "react";
 import {
   Pressable,
@@ -21,7 +22,7 @@ function ReceiptLottieGlyph({
   loop = false,
   speed = 1,
 }: {
-  source: object;
+  source: LottieSource;
   size?: number;
   loop?: boolean;
   speed?: number;

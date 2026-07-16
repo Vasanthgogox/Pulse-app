@@ -2,6 +2,7 @@
  * Live bids hub — small Lottie + pulse glyphs for headers, cards, and alert lines.
  */
 import LottieView from "lottie-react-native";
+import type { LottieSource } from "@/lib/lottieSource";
 import { useEffect, useRef, type ReactNode } from "react";
 import { AlertTriangle, Clock3 } from "lucide-react-native";
 import { Animated, Platform, StyleSheet, View } from "react-native";
@@ -18,7 +19,7 @@ const LOTTIE = {
 const RENDER_SCALE = 1.65;
 
 type LottieGlyphProps = {
-  source: object;
+  source: LottieSource;
   size?: number;
   speed?: number;
   loop?: boolean;

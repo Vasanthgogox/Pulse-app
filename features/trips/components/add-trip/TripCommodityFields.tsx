@@ -11,6 +11,7 @@ import {
   View,
   type StyleProp,
   type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ChevronRight, Plus, X } from "lucide-react-native";
@@ -198,7 +199,9 @@ export const TripCommodityFields = memo(function TripCommodityFields({
         <Pressable
           style={[
             useFormChrome ? styles.pickerBtn : wizardChrome.wizardPickerBtn,
-            fieldInputStyle,
+            // Shared input layout style (padding/height/border) applied to a
+            // Pressable container; the layout props are valid on ViewStyle too.
+            fieldInputStyle as StyleProp<ViewStyle>,
             useFormChrome && styles.pickerBtnForm,
             vehicleTypeError && styles.pickerBtnError,
           ]}
@@ -240,7 +243,8 @@ export const TripCommodityFields = memo(function TripCommodityFields({
         <Pressable
           style={[
             useFormChrome ? styles.pickerBtn : wizardChrome.wizardPickerBtn,
-            fieldInputStyle,
+            // Shared input layout style applied to a Pressable container.
+            fieldInputStyle as StyleProp<ViewStyle>,
             useFormChrome && styles.pickerBtnForm,
             loadTypeError && styles.pickerBtnError,
           ]}

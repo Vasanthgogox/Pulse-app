@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
+  type ViewStyle,
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ExistingDriverMatch } from "@/features/drivers/services/drivers.service";
@@ -680,9 +681,11 @@ export function TripPhoneAssignmentWizard({
               {useSteppedWizard ? (
                 <View
                   style={
-                    reassignRailDesktop
+                    // `styles` is a plain object literal (not StyleSheet.create),
+                    // so string-literal props widen to `string`; narrow to ViewStyle.
+                    (reassignRailDesktop
                       ? styles.reassignDesktopRow
-                      : styles.reassignMobileColumn
+                      : styles.reassignMobileColumn) as ViewStyle
                   }
                 >
                   {showReassignRail ? (

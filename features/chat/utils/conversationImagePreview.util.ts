@@ -1,5 +1,6 @@
 import type {
   ConversationPartyType,
+  MessageType,
   TripMessageRow,
 } from "@/features/chat/types/chat.types";
 import { chatListThumbFetch } from "./chatPreviewTransform.util";
@@ -76,7 +77,7 @@ export function collectTrailingImagePreviews(
     partyType?: ConversationPartyType;
     manualDriverOnly?: boolean;
     isMessageVisible?: (
-      messageType: string,
+      messageType: MessageType,
       partyType: ConversationPartyType,
     ) => boolean;
     isManualDriverMessage?: (message: TripMessageRow) => boolean;

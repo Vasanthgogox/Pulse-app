@@ -97,13 +97,13 @@ async function runOcrExtractor(
 
   onProgress?.("preparing");
   const response = await fetch(input.localUri);
-  const buffer = await response.arrayBuffer();
+  const blob = await response.blob();
   onProgress?.("analyzing");
   const podResult = (await runOCR(
-    buffer,
+    blob,
     input.storagePath?.split("/").pop() ?? "document.jpg",
     () => undefined,
-  )) as PODExtraction;
+  )) as unknown as PODExtraction;
   return {
     result_json: { kind: "pod_document", extraction: podResult },
     raw_model_json: podResult as unknown as Record<string, unknown>,

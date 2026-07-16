@@ -700,10 +700,10 @@ export async function signInDriverByPhoneUnverified(phone: string): Promise<Sign
 
   try {
     const payload = await invokeDriverPhoneSignInEdgeFunction(normalized);
-    if (payload.error) {
+    if ("error" in payload) {
       return { error: payload.error };
     }
-    if (payload.session) {
+    if ("session" in payload) {
       return applyDriverAuthSession(payload.session);
     }
     return completeDriverMagicLinkSignIn(payload.email, payload.magicLinkToken);

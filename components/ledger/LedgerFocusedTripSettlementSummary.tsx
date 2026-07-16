@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from "react-native";
+import { StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 
 import { LedgerSyncPalette } from "@/constants/LedgerSyncPalette";
 import Theme from "@/constants/Theme";
@@ -131,8 +131,8 @@ function AlignedAmountRow({
 }: {
   label: string;
   value: string;
-  labelStyle?: TextStyle | TextStyle[];
-  valueStyle?: TextStyle | TextStyle[];
+  labelStyle?: StyleProp<TextStyle>;
+  valueStyle?: StyleProp<TextStyle>;
   compact?: boolean;
   nested?: boolean;
   labelLines?: number;

@@ -20,6 +20,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
@@ -35,7 +36,7 @@ export type TripClientPickerSectionProps = {
   hasError?: boolean;
   /** Stepped mobile wizard — flat picker / summary card only. */
   wizardMode?: boolean;
-  fieldLabelStyle?: TextStyle | TextStyle[];
+  fieldLabelStyle?: StyleProp<TextStyle>;
   isDenseForm?: boolean;
 };
 

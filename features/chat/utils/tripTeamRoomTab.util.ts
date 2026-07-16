@@ -7,7 +7,7 @@ export type TripDetailTabId = ConversationPartyType | typeof TRIP_DETAIL_TEAM_TA
 
 /** Team room tab only when 2+ party lanes — solo-lane trips stay party-only. */
 export function isTripTeamRoomTabEligible(
-  visiblePartyTypes: ConversationPartyType[],
+  visiblePartyTypes: readonly unknown[],
 ): boolean {
   return visiblePartyTypes.length >= 2;
 }

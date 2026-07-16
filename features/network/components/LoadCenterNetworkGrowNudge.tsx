@@ -88,7 +88,7 @@ function FlowPill({
   label: string;
   Icon: LucideIcon;
   active: boolean;
-  palette: typeof GIVE_ACTIVE;
+  palette: { bg: string; border: string; text: string; icon: string };
   compact: boolean;
 }) {
   const colors = active ? palette : IDLE;

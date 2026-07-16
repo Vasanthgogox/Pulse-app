@@ -95,11 +95,13 @@ function AnimatedPress({
   children,
   style,
   onPress,
+  onPressIn,
   activeOpacity = 0.9,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
+  onPressIn?: () => void;
   activeOpacity?: number;
 }) {
   const scale = useSharedValue(1);
@@ -114,6 +116,7 @@ function AnimatedPress({
         onPress={onPress}
         activeOpacity={activeOpacity}
         onPressIn={() => {
+          onPressIn?.();
           scale.value = withTiming(0.96, {
             duration: 120,
             easing: Easing.out(Easing.quad),

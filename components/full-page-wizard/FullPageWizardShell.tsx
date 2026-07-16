@@ -15,6 +15,7 @@ import { dockPaddingBottom, useKeyboardVisible } from "@/lib/hooks/useKeyboardVi
 import { isDesktopWizardForm } from "@/lib/wizardLayout.util";
 
 import { WizardDesktopFrame } from "./WizardDesktopFrame";
+import type { WizardInsightCard } from "./WizardInsightRail";
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
 import {
   wizardInsightCardsForPreset,
@@ -75,9 +76,9 @@ export function FullPageWizardShell({
       : null;
 
   const { left: leftInsights, right: rightInsights } = isKeypadStep
-    ? { left: [] as const, right: [] as const }
+    ? { left: [] as WizardInsightCard[], right: [] as WizardInsightCard[] }
     : steppedLayout
-      ? { left: [] as const, right: [] as const }
+      ? { left: [] as WizardInsightCard[], right: [] as WizardInsightCard[] }
       : wizardInsightCardsForPreset(insightPreset, { desktopForm: isDesktopForm });
 
   const body = fillBody ? (

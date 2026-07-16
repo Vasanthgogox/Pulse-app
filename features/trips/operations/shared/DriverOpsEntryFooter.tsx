@@ -40,7 +40,7 @@ export function DriverOpsEntryFooter({
         onPress={onCancel}
         disabled={saving}
       >
-        <Text style={[ops.skipText, { color: colors.textSecondary }]}>{cancelLabel}</Text>
+        <Text style={[ops.skipText, { color: colors.textMuted }]}>{cancelLabel}</Text>
       </Pressable>
       <Pressable
         style={[ops.saveBtn, { backgroundColor: colors.emeraldDark }, disabled && { opacity: 0.5 }]}

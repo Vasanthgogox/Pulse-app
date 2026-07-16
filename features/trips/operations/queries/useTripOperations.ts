@@ -103,7 +103,11 @@ async function fetchTripLedgerBySource(tripId: string): Promise<{
   toll: Record<string, string>;
   other: Record<string, string>;
 }> {
-  const empty = { fuel: {}, toll: {}, other: {} };
+  const empty: {
+    fuel: Record<string, string>;
+    toll: Record<string, string>;
+    other: Record<string, string>;
+  } = { fuel: {}, toll: {}, other: {} };
   const { data: ledgerRows, error: ledgerError } = await supabase()
     .from("vehicle_ledger_entries")
     .select("id,source_type,source_id")

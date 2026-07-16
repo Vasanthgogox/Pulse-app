@@ -321,7 +321,7 @@ export function LocationSearchField({
     </>
   );
 
-  const inlineIcon = leadingIconLayout === "inline" && leadingIcon;
+  const inlineIcon = leadingIconLayout === "inline" && !!leadingIcon;
 
   return (
     <View style={[styles.wrapper, compact && styles.wrapperCompact]} collapsable={false}>
@@ -571,13 +571,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 15,
-    fontWeight: "400",
-    fontStyle: "normal",
+    // Font props live on the child `<Text style={inputValueText}>` (same
+    // values); kept off this View container so the style is a valid ViewStyle.
     minHeight: 44,
     paddingRight: 44,
     ...Platform.select({
-      web: { outlineStyle: "none" } as unknown as TextStyle,
+      web: { outlineStyle: "none" } as unknown as ViewStyle,
     }),
   },
   inputCompact: {

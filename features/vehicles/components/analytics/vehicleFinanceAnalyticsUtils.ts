@@ -110,7 +110,9 @@ export function filterTripsByDateRange(
 export function computeVehicleFinancialMetrics(
   rows: readonly MissionRow[],
 ): VehicleFinancialMetrics {
-  const kpi = computeKpiSummary(rows);
+  // No vehicle context here; this caller reads only the aggregate KPI fields
+  // (revenue/expense/profit/margin/utilization), not vehicle-dependent renewals.
+  const kpi = computeKpiSummary([...rows], null);
   return {
     revenue: kpi.totalRevenue,
     expense: kpi.totalExpense,
@@ -218,7 +220,7 @@ export function computeVehicleLoadTypeBreakdown(
   const topN = options.topN ?? 5;
   const map = new Map<string, VehicleLoadTypeBreakdown>();
   for (const t of trips) {
-    const label = (t.material ?? t.vehicle_type ?? "General freight").trim() || "General freight";
+    const label = (t.load_type ?? "General freight").trim() || "General freight";
     const entry = map.get(label) ?? { label, trips: 0, revenue: 0 };
     entry.trips += 1;
     entry.revenue += Number(t.client_price ?? t.supplier_rate ?? 0);
@@ -230,7 +232,7 @@ export function computeVehicleLoadTypeBreakdown(
 }
 
 export function computeVehicleExpenseBuckets(rows: readonly MissionRow[]) {
-  const cats = computeExpenseCategories(rows);
+  const cats = computeExpenseCategories([...rows]);
   return {
     bucket0_30: cats.find((c) => c.label.toLowerCase().includes("fuel"))?.amount ?? 0,
     bucket31_60: cats.find((c) => c.label.toLowerCase().includes("toll"))?.amount ?? 0,

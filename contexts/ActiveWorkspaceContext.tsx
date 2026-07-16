@@ -47,6 +47,8 @@ interface WorkspaceMemberRow {
     logo_url: string | null;
     operating_model: string | null;
     address_line: string | null;
+    locality: string | null;
+    pincode: string | null;
     city: string | null;
     state: string | null;
     zone: string | null;
@@ -91,6 +93,8 @@ function mapRowToWorkspace(
       logo_url: o.logo_url ?? null,
       operating_model: operatingModel,
       address_line: o.address_line ?? null,
+      locality: o.locality ?? null,
+      pincode: o.pincode ?? null,
       city: o.city ?? null,
       state: o.state ?? null,
       zone: o.zone ?? null,
@@ -206,7 +210,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
               status,
               organizations (
                 id, name, slug, logo_url, operating_model,
-                address_line, city, state, zone,
+                address_line, locality, pincode, city, state, zone,
                 business_pan, gstin, cin,
                 verification_status, verified_at, kyc_rejected_reason
               )

@@ -1,4 +1,5 @@
-import type { DirectQuoteRow, IndentRow } from "@/features/indents/services/indents.service";
+import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
+import type { IndentRow } from "@/features/indents/services/indents.service";
 
 export type IndentDeployQuoteResolution =
   | { mode: "direct_quote"; quote: DirectQuoteRow }

@@ -339,7 +339,7 @@ export function DriverExpenseEntryLayout({
           onPress={onBack}
           disabled={saving}
         >
-          <Text style={[ops.skipText, { color: colors.textSecondary }]}>{skipLabel}</Text>
+          <Text style={[ops.skipText, { color: colors.textMuted }]}>{skipLabel}</Text>
         </Pressable>
         <Pressable
           style={[ops.saveBtn, { backgroundColor: colors.emeraldDark }]}
@@ -410,7 +410,9 @@ export function DriverExpenseTextInput(
       {...rest}
       placeholderTextColor={colors.placeholder}
       onFocus={(event) => {
-        scrollAssist?.scrollToInput(event);
+        scrollAssist?.scrollToInput(
+          event as unknown as NativeSyntheticEvent<TextInputFocusEventData>,
+        );
         onFocus?.(event);
       }}
       style={[

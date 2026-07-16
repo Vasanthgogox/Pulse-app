@@ -22,7 +22,6 @@ export function FinanceCashLedgerPanel({
   linkedOrgDisplayMap,
   topContent,
   embedInParentScroll = false,
-  isAnyFilterActive = false,
 }: FinanceTabBodyProps) {
   const header =
     topContent ??

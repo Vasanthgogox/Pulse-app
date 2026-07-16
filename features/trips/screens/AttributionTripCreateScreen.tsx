@@ -267,7 +267,12 @@ export default function AttributionTripCreateModal() {
         notes: buildAttributedFleetTripNotes(source.trip_number ?? source.id),
         owner_user_id: userId,
         created_by_user_id: userId,
-        trip_payout_mode: source.trip_payout_mode ?? "asset",
+        // Source TripRow types this as widened `string`; the create input only
+        // accepts the "asset" | "market" literals. Runtime values are already
+        // one of these, so narrow without changing behavior.
+        trip_payout_mode: (source.trip_payout_mode ?? "asset") as
+          | "asset"
+          | "market",
       });
       if (createRes.error || !createRes.trip) {
         throw createRes.error ?? new Error("Could not create attributed trip.");
@@ -895,4 +900,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
+  // TODO(types): these keys were referenced but never defined — the button
+  // rendered unstyled at runtime. Kept empty to preserve current behavior;
+  // supply real styling if/when the design intent is confirmed.
+  addClientBtn: {},
+  addClientBtnText: {},
 });

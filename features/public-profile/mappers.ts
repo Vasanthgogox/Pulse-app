@@ -215,10 +215,7 @@ export function vehicleToPublicEntity(
   v: import("@/features/vehicles/services/vehicles.service").VehicleRow,
   tripCount: number,
 ): PublicProfileEntity {
-  const display =
-    v.registration_number?.trim() ||
-    v.vehicle_number?.trim() ||
-    "Vehicle";
+  const display = v.vehicle_number?.trim() || "Vehicle";
   const tenureYears = yearsSinceIsoVehicle(v.created_at);
   const docCount = [
     v.documents?.rc?.expiryDate,
@@ -252,8 +249,8 @@ export function vehicleToPublicEntity(
   if (v.capacity?.trim()) {
     facts.push({ icon: "briefcase", label: "Capacity", value: v.capacity });
   }
-  if (v.registration_number?.trim()) {
-    facts.push({ icon: "id", label: "Registration", value: v.registration_number });
+  if (v.vehicle_number?.trim()) {
+    facts.push({ icon: "id", label: "Registration", value: v.vehicle_number });
   }
   const joined = formatMonthYearVehicle(v.created_at);
   if (joined) {

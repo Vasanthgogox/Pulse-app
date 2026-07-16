@@ -5,7 +5,7 @@ import Theme from '@/constants/Theme';
 import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import type { PulseProduct } from '@/lib/onboarding/productCatalog';
 
-import { PULSE_PRODUCT_VISUALS } from './onboardingPersonaAssets';
+import { PULSE_PRODUCT_VISUALS, type PulseProductVisual } from './onboardingPersonaAssets';
 import { OnboardingPersonaLottieIcon } from './OnboardingPersonaLottieIcon';
 
 export interface PulseProductOptionProps {
@@ -19,7 +19,9 @@ export const PulseProductOption = memo(function PulseProductOption({
   onPress,
   compact = false,
 }: PulseProductOptionProps) {
-  const visual = PULSE_PRODUCT_VISUALS[product.id];
+  // Widen from the `as const` narrow (all-lottie today) to the declared union so
+  // the image branch below stays valid for future image-type visuals.
+  const visual = PULSE_PRODUCT_VISUALS[product.id] as PulseProductVisual;
   const iconSize = compact ? 28 : 36;
 
   return (

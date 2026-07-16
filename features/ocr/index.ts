@@ -30,6 +30,7 @@ export type {
   OcrJobStatus,
   OcrMetricsSummary,
   EnqueueOcrJobInput,
+  ExpenseOcrKind,
   VehicleOdometerEventRow,
 } from "@/features/ocr/types/ocr.types";
 export {

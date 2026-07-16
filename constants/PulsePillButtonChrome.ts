@@ -266,6 +266,12 @@ export function pulsePillButtonSizeStyles(size: PulsePillButtonSize = "default")
 
 /** Upgrade legacy primary button style objects to illustration pill chrome. */
 export function asPulsePillButtonStyle(style: ViewStyle): ViewStyle {
+  const webCursor =
+    Platform.OS === "web"
+      ? ({
+          cursor: style.opacity === 0.5 ? "not-allowed" : "pointer",
+        } as ViewStyle)
+      : null;
   return {
     ...pulsePillButtonContainerDefault,
     ...style,
@@ -273,9 +279,6 @@ export function asPulsePillButtonStyle(style: ViewStyle): ViewStyle {
     borderWidth: PULSE_PILL_BUTTON_BORDER_WIDTH,
     borderColor: Theme.buttonPrimaryBorder,
     backgroundColor: style.backgroundColor ?? Theme.buttonPrimary,
-    ...Platform.select({
-      web: { cursor: style.opacity === 0.5 ? "not-allowed" : "pointer" },
-      default: {},
-    }),
+    ...webCursor,
   };
 }

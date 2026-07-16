@@ -28,8 +28,8 @@ function toEnqueueInput(input: PulseScanEnqueueInput): EnqueueOcrJobInput {
     sourceKind: fields.sourceKind,
     sourceSubtype:
       input.scanType === "odometer"
-        ? input.odometerSide ?? input.sourceSubtype
-        : fields.sourceSubtype ?? input.sourceSubtype,
+        ? input.odometerSide
+        : fields.sourceSubtype,
   };
 }
 

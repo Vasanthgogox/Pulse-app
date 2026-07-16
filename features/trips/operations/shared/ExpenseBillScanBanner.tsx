@@ -202,7 +202,7 @@ export function ExpenseBillScanBanner({ scan, onApplyPending, onDismissPending, 
               ) : null}
             </View>
 
-            <Text style={[styles.message, { color: colors.textSecondary }]}>{scan.message}</Text>
+            <Text style={[styles.message, { color: colors.textMuted }]}>{scan.message}</Text>
 
             {isAnalyzing || isComplete ? (
               <View style={styles.pipelineRow}>
@@ -237,7 +237,7 @@ export function ExpenseBillScanBanner({ scan, onApplyPending, onDismissPending, 
                     <View style={styles.updateValues}>
                       {hasPendingUpdates ? (
                         <>
-                          <Text style={[styles.updateFrom, { color: colors.textSecondary }]} numberOfLines={1}>
+                          <Text style={[styles.updateFrom, { color: colors.textMuted }]} numberOfLines={1}>
                             {update.fromDisplay}
                           </Text>
                           <Feather name="arrow-right" size={10} color={accent} />
@@ -261,7 +261,7 @@ export function ExpenseBillScanBanner({ scan, onApplyPending, onDismissPending, 
                   accessibilityLabel="Review and edit OCR fills"
                 >
                   <Feather name="edit-3" size={11} color={accent} />
-                  <Text style={[styles.confirmBtnGhostText, { color: colors.textSecondary }]}>
+                  <Text style={[styles.confirmBtnGhostText, { color: colors.textMuted }]}>
                     Review & edit OCR fills
                   </Text>
                 </Pressable>
@@ -287,7 +287,7 @@ export function ExpenseBillScanBanner({ scan, onApplyPending, onDismissPending, 
                   accessibilityRole="button"
                   accessibilityLabel="Skip OCR fills and keep manual entry"
                 >
-                  <Text style={[styles.confirmBtnGhostText, { color: colors.textSecondary }]}>Skip OCR fills</Text>
+                  <Text style={[styles.confirmBtnGhostText, { color: colors.textMuted }]}>Skip OCR fills</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -303,7 +303,7 @@ export function ExpenseBillScanBanner({ scan, onApplyPending, onDismissPending, 
                       style={[styles.chip, { backgroundColor: colors.surface, borderColor: border }]}
                     >
                       <Feather name="check" size={10} color={accent} />
-                      <Text style={[styles.chipText, { color: colors.textSecondary }]}>{field}</Text>
+                      <Text style={[styles.chipText, { color: colors.textMuted }]}>{field}</Text>
                     </View>
                   </Animated.View>
                 ))}

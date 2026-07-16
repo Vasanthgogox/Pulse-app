@@ -144,7 +144,12 @@ export function tripRowToDriverTripRow(
     client_price: row.client_price ?? null,
     supplier_rate: row.supplier_rate ?? null,
     driver_commission: row.driver_commission ?? null,
-    distance: row.distance ?? null,
+    distance: (() => {
+      const raw = row.distance;
+      if (raw == null) return null;
+      const n = typeof raw === 'number' ? raw : Number(raw);
+      return Number.isFinite(n) ? n : null;
+    })(),
     supplier_id: row.supplier_id ?? null,
   };
 }

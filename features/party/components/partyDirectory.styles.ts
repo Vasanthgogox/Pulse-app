@@ -12,7 +12,7 @@ import {
 } from "@/components/profile/workspaceHubMenu.styles";
 import { Platform, StyleSheet } from "react-native";
 
-export { HUB_PURPLE, METRONIC };
+export { HUB_PURPLE, HUB_PURPLE_VIVID, METRONIC };
 
 export const PARTY_GRID_COLUMNS = 2;
 export const PARTY_GRID_COLUMNS_DESKTOP = 4;

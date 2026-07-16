@@ -1,4 +1,7 @@
-import { Platform, type ViewStyle } from "react-native";
+import { Platform, type ImageStyle, type TextStyle, type ViewStyle } from "react-native";
+
+/** Any RN style object — view, text, or image. Named styles in a StyleSheet mix all three. */
+type AnyStyle = ViewStyle | TextStyle | ImageStyle;
 
 /** Hex (#rgb / #rrggbb) or rgb/rgba string → rgba() for CSS box-shadow. */
 function colorWithAlpha(color: string, alpha: number): string {
@@ -57,14 +60,20 @@ export function adaptShadowPropsForWeb(style: ViewStyle): ViewStyle {
   };
 }
 
-/** Map shadow* styles to boxShadow for web before `StyleSheet.create`. */
-export function withWebSafeShadows<T extends Record<string, ViewStyle>>(
+/**
+ * Map shadow* styles to boxShadow for web before `StyleSheet.create`.
+ *
+ * The generic accepts sheets that mix view/text/image styles (a StyleSheet's
+ * named entries commonly include Text styles), so styles pulled from a wrapped
+ * sheet stay assignable to `<Text>`/`<Image>` — not just `<View>`.
+ */
+export function withWebSafeShadows<T extends Record<string, AnyStyle>>(
   styles: T,
 ): T {
   if (Platform.OS !== "web") return styles;
   const out = {} as T;
   for (const key of Object.keys(styles) as (keyof T)[]) {
-    out[key] = adaptShadowPropsForWeb(styles[key]) as T[keyof T];
+    out[key] = adaptShadowPropsForWeb(styles[key] as ViewStyle) as T[keyof T];
   }
   return out;
 }

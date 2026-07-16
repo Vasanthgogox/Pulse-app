@@ -196,6 +196,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
+import type { LottieSource } from "@/lib/lottieSource";
 import {
   ArrowLeft,
   Briefcase,
@@ -559,7 +560,17 @@ function resolveDriverSwapListPreview(
   };
   if (!isDriverSwapPreviewMessage(probe)) return null;
 
-  const driverSwap = resolveDriverSwapAvatars(probe, { composeTrip, driverProfiles });
+  const driverSwap = resolveDriverSwapAvatars(probe, {
+    composeTrip: composeTrip
+      ? {
+          driver_id: composeTrip.driver_id ?? null,
+          driver_display_name: composeTrip.driver_display_name ?? null,
+          driver_avatar_url: composeTrip.driver_avatar_url,
+          driver_avatar_seed: composeTrip.driver_avatar_seed,
+        }
+      : composeTrip,
+    driverProfiles,
+  });
   if (!driverSwap) return null;
 
   return {
@@ -4756,7 +4767,7 @@ function CompactChatAnimation({
   source = NEW_DETAIL_EMPTY_ANIMATION,
 }: {
   size?: number;
-  source?: object;
+  source?: LottieSource;
 }) {
   return (
     <View
@@ -4782,7 +4793,8 @@ function CompactChatAnimation({
 
 function EmptyList({
   label,
-  variant = "trip",
+  // Default "detail" resolves to the same illustration/size as the prior "trip" fallthrough; all call sites pass variant explicitly.
+  variant = "detail",
   subtitle,
   iconSizeOverride,
   actionLabel,
@@ -7436,7 +7448,7 @@ function ChatInputBar({
         <Animated.View style={{ transform: [{ scale: sendScale }] }}>
           <TouchableOpacity
             style={[s.sendBtn, !canSend && s.sendBtnOff]}
-            onPress={onSend}
+            onPress={() => onSend()}
             disabled={!canSend}
             activeOpacity={0.85}
             onPressIn={() => {
@@ -7967,7 +7979,7 @@ function TripConversationDetailLoaded({
         senderKey: (m) =>
           isMessageFromSelf(m)
             ? "__self__"
-            : `${m.sender_role ?? ""}:${m.sender_id ?? ""}:${m.sender_name ?? ""}`,
+            : `${m.sender_role ?? ""}:${m.sender_user_id ?? ""}:${m.sender_name ?? ""}`,
         createdAt: (m) => m.created_at,
       }),
     [displayMessages, liveConv.party_type, isMessageFromSelf],
@@ -7979,7 +7991,7 @@ function TripConversationDetailLoaded({
         senderKey: (m) =>
           isMessageFromSelf(m)
             ? "__self__"
-            : `${m.sender_role ?? ""}:${m.sender_id ?? ""}:${m.sender_name ?? ""}`,
+            : `${m.sender_role ?? ""}:${m.sender_user_id ?? ""}:${m.sender_name ?? ""}`,
       }),
     [displayMessages, isMessageFromSelf],
   );

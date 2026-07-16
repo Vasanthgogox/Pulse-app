@@ -129,7 +129,7 @@ function extractNestedAmount(container: unknown): OcrScalarField<number> | null 
 }
 
 /** Best-effort total amount — checks many common receipt field names. */
-export function resolveOcrAmount(result: ExpenseReceiptOcrResult): number | null {
+export function resolveOcrAmount(result: Pick<ExpenseReceiptOcrResult, "amountInr">): number | null {
   const primary = result.amountInr?.value;
   if (primary != null && primary > 0) return primary;
   return null;

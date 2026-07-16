@@ -881,7 +881,7 @@ const kf = StyleSheet.create({
     paddingVertical: 7,
     backgroundColor: Theme.screenBackground,
     minHeight: 34,
-    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as const } : null),
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null),
   },
   actionRow: {
     flexDirection: 'row',

@@ -6,8 +6,6 @@ import {
   TextInput,
   View,
   useWindowDimensions,
-  type NativeSyntheticEvent,
-  type TextInputFocusEventData,
   type TextInputProps,
 } from 'react-native';
 
@@ -115,7 +113,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
     }
   };
 
-  const handleFocus = (event: NativeSyntheticEvent<TextInputFocusEventData>) => {
+  const handleFocus: TextInputProps['onFocus'] = (event) => {
     onFocus?.(event);
     // Inside a form step: only use ScrollView scroll — never document scrollIntoView.
     if (scrollFieldIntoView) {

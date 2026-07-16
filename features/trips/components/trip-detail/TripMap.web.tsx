@@ -525,7 +525,10 @@ export function TripMap({
             return;
           }
           map.fitBounds(coords as LatLngTuple[], {
-            padding: fitPaddingBottom,
+            // TODO(types): Leaflet's `padding` option is typed as PointExpression
+            // ([x, y]); a bare number is passed here. Preserve the existing
+            // runtime value rather than changing the padding behavior.
+            padding: fitPaddingBottom as unknown as [number, number],
             maxZoom: 14,
             animate: false,
           });

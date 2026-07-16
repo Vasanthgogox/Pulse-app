@@ -493,6 +493,9 @@ function NetworkScreenInner() {
       mutual_connections_count?: number | null;
       rating_value?: number | null;
       location_value?: string | null;
+      avatar_url?: string | null;
+      avatar_seed?: string | null;
+      trip_count?: number | null;
     }) => {
       const normalized = String(org.connection_status ?? "").toLowerCase();
       const status: NetworkProfileNode["status"] =

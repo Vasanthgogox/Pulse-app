@@ -15,7 +15,7 @@ export function usePushTokenRegistration(enabled: boolean = true) {
   const lastTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!enabled || !user?.id) return;
+    if (!enabled || !user?.uid) return;
     if (Platform.OS === "android" && Constants.executionEnvironment === "storeClient") {
       return;
     }
@@ -51,5 +51,5 @@ export function usePushTokenRegistration(enabled: boolean = true) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, user?.id]);
+  }, [enabled, user?.uid]);
 }

@@ -6,6 +6,7 @@ import { LedgerSyncPalette } from "@/constants/LedgerSyncPalette";
 import Theme from "@/constants/Theme";
 import { LEDGER_RECON_LOTTIE } from "@/lib/ledgerReconLottieAssets";
 import LottieView from "lottie-react-native";
+import type { LottieSource } from "@/lib/lottieSource";
 import { useMemo } from "react";
 import {
   ActivityIndicator,
@@ -30,7 +31,7 @@ function ReconLottieGlyph({
   loop = true,
   speed = 0.85,
 }: {
-  source: object;
+  source: LottieSource;
   size?: number;
   loop?: boolean;
   speed?: number;

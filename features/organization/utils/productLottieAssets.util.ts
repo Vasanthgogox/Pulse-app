@@ -1,7 +1,9 @@
+import type { AnimationObject } from "lottie-react-native";
+
 import type { ProductId } from "@/lib/productRegistry";
 
 export type ProductLottieAsset = {
-  source: object;
+  source: AnimationObject;
   /** Compensates for transparent padding inside the Lottie canvas. */
   glyphScale?: number;
   /** Playback speed — matches chat empty-state animations when set. */

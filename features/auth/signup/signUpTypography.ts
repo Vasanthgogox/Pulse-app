@@ -378,6 +378,11 @@ export function createPulseSignUpTextStyles(theme: SignUpTheme = PULSE_SIGNUP) {
       ...PULSE_SIGNUP_TYPO.body,
       color: theme.text,
     },
+    // TODO(types): themed variant referenced by CityPicker/InviteExpiredStep but absent from this factory
+    bodyMedium: {
+      ...PULSE_SIGNUP_TYPO.bodyMedium,
+      color: theme.text,
+    },
     bodyMuted: {
       ...PULSE_SIGNUP_TYPO.body,
       color: theme.muted,

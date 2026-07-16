@@ -298,7 +298,7 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh,
   ];
 
   const publicEntity = useMemo(
-    () => clientToPublicEntity(bundle.client as ClientRow),
+    () => clientToPublicEntity(bundle.client as unknown as ClientRow),
     [bundle.client],
   );
 

@@ -85,7 +85,7 @@ export function InviteExistingAccountStep({ flow }: { flow: SignUpFlow }) {
         secureTextEntry={!flow.showPassword}
         editable={!flow.loading}
         errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.password : null}
-        rightAccessory={
+        trailing={
           <Pressable onPress={flow.toggleShowPassword} hitSlop={8}>
             {flow.showPassword ? (
               <EyeOff size={18} color={Theme.textMuted} />

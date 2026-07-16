@@ -33,6 +33,9 @@ export interface SupplierRow {
   updated_at: string;
   /** integrated = platform-linked; offline | marketplace = not. */
   supplier_type?: 'integrated' | 'offline' | 'marketplace';
+  /** Optional convenience flag mirroring `supplier_type === 'integrated'`; may be
+   *  populated by profile-enriched queries (parallels `ClientRow.is_integrated`). */
+  is_integrated?: boolean;
   /** When set, this supplier is another platform org (for shared ledger / compare & verify). */
   linked_organization_id?: string | null;
   /** Avatar for the linked org, populated by `get_suppliers_with_profiles`.

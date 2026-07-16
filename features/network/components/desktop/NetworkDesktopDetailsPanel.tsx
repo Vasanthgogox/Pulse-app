@@ -777,7 +777,7 @@ export function NetworkDesktopDetailsPanel({
               const openGap = (gap: (typeof gaps)[number]) => {
                 if (gap.section === 'kyc') {
                   router.push({
-                    pathname: ROUTES.WORKSPACE as Parameters<typeof router.push>[0],
+                    pathname: ROUTES.WORKSPACE,
                     params: { panel: 'kyc' },
                   });
                   return;
@@ -1197,6 +1197,8 @@ export function NetworkDesktopDetailsPanel({
               id: orgId,
               name: orgName,
               address_line: derived.addressLine || null,
+              locality: null,
+              pincode: null,
               city: derived.city || null,
               state: derived.state || null,
               zone: null,

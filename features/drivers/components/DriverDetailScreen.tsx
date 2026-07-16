@@ -2165,7 +2165,6 @@ export default function DriverDetailScreen({
             <LedgerTransactionListView
               transactions={cashFlowRows}
               tripDetailsMap={driverTripDetailsMap}
-              tripOptions={tripOptions}
               useTimelineLayout={true}
               showFiscalSubTabs={false}
               showTitle={false}

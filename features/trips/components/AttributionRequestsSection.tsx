@@ -17,6 +17,7 @@ import {
 } from "@/components/AlertRegistryCardActions";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import {
   getTripDisplayNumber,
@@ -98,7 +99,7 @@ function pendingCountLabel(count: number): string {
 
 function renderRequestCard(
   req: SalaryRequestWithDriverRow,
-  driversById: Map<string, { id: string; name?: string | null }>,
+  driversById: Map<string, DriverRow>,
   tripsById: Map<string, TripRow>,
   orgId: string | null,
   busySalaryId: string | null,

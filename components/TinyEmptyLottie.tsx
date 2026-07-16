@@ -1,11 +1,12 @@
 import LottieView from "lottie-react-native";
 import { StyleSheet, View } from "react-native";
+import type { LottieSource } from "@/lib/lottieSource";
 
 /** Empty-state Lottie JSONs have large transparent margins — overscale the render. */
 const EMPTY_LOTTIE_RENDER_SCALE = 1.7;
 
 type TinyEmptyLottieProps = {
-  source: object;
+  source: LottieSource;
   size?: number;
   speed?: number;
   renderScale?: number;

@@ -181,7 +181,7 @@ export const TripCard = React.memo(function TripCard({
                   <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
                     {lastActivityPartyLabel}:{" "}
                   </Text>
-                  {renderChatInlineMarkdown(lastMessagePreview)}
+                  {renderChatInlineMarkdown(lastMessagePreview ?? "")}
                 </>
               )}
             </Text>

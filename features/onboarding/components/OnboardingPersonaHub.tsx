@@ -175,7 +175,7 @@ export function OnboardingPersonaHub() {
       <View
         style={[
           styles.desktopShell,
-          Platform.OS === 'web' ? (WEB_APP_VIEWPORT_STYLE as ViewStyle) : null,
+          Platform.OS === 'web' ? (WEB_APP_VIEWPORT_STYLE as object) : null,
         ]}
       >
         <View style={[styles.desktopCol, styles.desktopLeftCol]}>

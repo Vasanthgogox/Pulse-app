@@ -55,6 +55,15 @@ export function renderChatInlineMarkdown(text: string): React.ReactNode[] {
   return nodes;
 }
 
+/** Removes inline markdown markers (**bold**, _italic_, `code`) for plain-text previews. */
+export function stripChatInlineMarkdown(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/\*\*([^*\n]+?)\*\*/g, "$1")
+    .replace(/`([^`\n]+?)`/g, "$1")
+    .replace(/_([^_\n]+?)_/g, "$1");
+}
+
 const HIDDEN_MARKER: TextStyle = { color: "transparent" };
 
 /**

@@ -165,7 +165,8 @@ function driverEventStatusLabel(event: TripCostEvent): string {
   if (event.approvalState === "pending") return "Awaiting fleet approval";
   if (event.approvalState === "rejected") return "Cancelled";
   if (event.settlementState === "settled") return "Reimbursed";
-  if (event.approvalState === "approved" && event.settlementState !== "settled") {
+  // settlementState is narrowed to non-"settled" here (guarded above)
+  if (event.approvalState === "approved") {
     return "Approved · payout pending";
   }
   return eventStatusLabel(event);
@@ -177,7 +178,8 @@ function driverReimbursementHint(event: TripCostEvent): string | null {
   }
   if (event.approvalState === "rejected") return "Request cancelled";
   if (event.settlementState === "settled") return "Fleet marked this reimbursed";
-  if (event.approvalState === "approved" && event.settlementState !== "settled") {
+  // settlementState is narrowed to non-"settled" here (guarded above)
+  if (event.approvalState === "approved") {
     return "Approved by fleet · payout pending";
   }
   return formatReimbursedHint(event);

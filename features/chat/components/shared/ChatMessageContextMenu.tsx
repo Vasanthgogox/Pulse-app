@@ -232,8 +232,10 @@ export function ChatMessageHoverActions({
   onHoverIn?: () => void;
   onHoverOut?: () => void;
 }) {
+  // onHoverIn/onHoverOut are RN Web View responders not present in RN View types.
+  const hoverProps = { onHoverIn, onHoverOut } as object;
   return (
-    <View style={hover.wrap} onHoverIn={onHoverIn} onHoverOut={onHoverOut}>
+    <View style={hover.wrap} {...hoverProps}>
       {/* Quick reaction buttons */}
       {CHAT_QUICK_REACTION_EMOJIS.slice(0, 3).map((emoji) => (
         <TouchableOpacity

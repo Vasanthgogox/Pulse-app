@@ -1,3 +1,5 @@
+import type { LottieSource } from "@/lib/lottieSource";
+
 /** Lottie glyphs for payment / ledger system cards in chat. */
 export const CHAT_PAYMENT_LOTTIE = {
   incoming: require("@/assets/Animated folder/revenue.json"),
@@ -15,7 +17,7 @@ export function resolveChatPaymentLottieSource(
   paymentMode: string,
   isAcknowledged: boolean,
   isDisputed: boolean,
-): object {
+): LottieSource {
   if (isDisputed) return CHAT_PAYMENT_LOTTIE.dispute;
   if (isAcknowledged) return CHAT_PAYMENT_LOTTIE.synced;
   const mode = paymentMode.toLowerCase();

@@ -273,7 +273,7 @@ function ResponsiveDataTable({
 
 function usePanelWrapStyle() {
   const compact = useProfileHubCompact();
-  return [styles.panel, compact && mobile.panelCompact] as const;
+  return [styles.panel, compact && mobile.panelCompact];
 }
 
 // ── TAB: Contacts ──────────────────────────────────────────────────────────────

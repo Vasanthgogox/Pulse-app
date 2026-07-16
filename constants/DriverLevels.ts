@@ -67,11 +67,6 @@ export function getPresetAvatarUri(av: PresetAvatar): string {
   const source = av.image as ImageSourcePropType;
   if (!source) return '';
 
-  if (typeof source === 'string') {
-    const uri = source.trim();
-    if (uri) return absolutizeWebUri(uri);
-  }
-
   if (typeof source === 'number') {
     try {
       const asset = Asset.fromModule(source);
@@ -82,7 +77,7 @@ export function getPresetAvatarUri(av: PresetAvatar): string {
     }
   }
 
-  if (typeof source === 'object' && source !== null) {
+  if (typeof source === 'object' && source !== null && !Array.isArray(source)) {
     if ('uri' in source) {
       const uri = typeof source.uri === 'string' ? source.uri.trim() : '';
       if (uri) return absolutizeWebUri(uri);
@@ -111,14 +106,6 @@ export function getPresetAvatarUri(av: PresetAvatar): string {
     if (resolved?.uri) {
       return absolutizeWebUri(resolved.uri.trim());
     }
-  }
-
-  try {
-    const asset = Asset.fromModule(source);
-    const uri = (asset?.uri ?? asset?.localUri ?? '').trim();
-    if (uri) return absolutizeWebUri(uri);
-  } catch {
-    return '';
   }
 
   return '';

@@ -2,7 +2,8 @@
  * Single entry point for business-signup / onboarding mobile-web form scroll +
  * keyboard dismiss. Call sites must not also call document scrollIntoView.
  */
-import { Platform, type RefObject, type ScrollView, type View } from 'react-native';
+import { Platform, type ScrollView, type View } from 'react-native';
+import type { RefObject } from 'react';
 
 import {
   cancelPendingFocusedFieldScroll,

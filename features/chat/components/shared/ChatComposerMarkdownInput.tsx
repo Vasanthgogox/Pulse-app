@@ -28,6 +28,9 @@ const TRANSPARENT_INPUT: TextStyle =
       } as TextStyle)
     : { color: "transparent" };
 
+// `caretColor` is a web-only prop RN Web forwards to the input; not present in RN TextInput types.
+const CARET_PROP: Record<string, unknown> = { caretColor: Theme.primary };
+
 type ChatComposerMarkdownInputProps = {
   value: string;
   onChangeText: (text: string) => void;
@@ -85,7 +88,8 @@ export const ChatComposerMarkdownInput = React.forwardRef<
         onChangeText={onChangeText}
         style={[flatStyle, showPreview && styles.inputLayer, showPreview && TRANSPARENT_INPUT]}
         placeholderTextColor={placeholderTextColor}
-        caretColor={Theme.primary}
+        // caretColor is a web-only CSS prop RN Web forwards via TextInput; not in RN types.
+        {...(CARET_PROP as object)}
         selectionColor="rgba(91, 94, 244, 0.22)"
         underlineColorAndroid="transparent"
       />

@@ -174,7 +174,7 @@ export function computeDriverOperationalMetrics(
     completionPct: total > 0 ? Math.round((completed / total) * 100) : 0,
     vehiclesOperated: vehicles.size,
     totalKm: Math.round(km),
-    driverRating: averageScore(ratings),
+    driverRating: averageScore(ratings) ?? 0,
   };
 }
 
@@ -249,7 +249,7 @@ export function computeDriverLoadTypeBreakdown(
   const topN = options.topN ?? 5;
   const map = new Map<string, { label: string; trips: number; revenue: number }>();
   for (const t of trips) {
-    const label = (t.material ?? t.vehicle_type ?? "General freight").trim() || "General freight";
+    const label = (t.load_type ?? "General freight").trim() || "General freight";
     const entry = map.get(label) ?? { label, trips: 0, revenue: 0 };
     entry.trips += 1;
     entry.revenue += Number(t.client_price ?? 0);

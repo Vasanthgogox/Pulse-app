@@ -7,6 +7,8 @@
  */
 import Theme from "@/constants/Theme";
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
+// TODO(types): react-dom 19 ships no bundled types and @types/react-dom is not installed.
+// @ts-expect-error - untyped react-dom module
 import { createPortal } from "react-dom";
 import { Platform, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 

@@ -261,7 +261,7 @@ export function kycMandatoryDocumentsComplete(
 
 export type MissingKycRequirements = {
   fields: string[];
-  docs: string[];
+  docs: OrganizationKycDocType[];
 };
 
 /**
@@ -276,7 +276,7 @@ export function listMissingKycRequirements(
   }
 
   const fields: string[] = [];
-  const docs: string[] = [];
+  const docs: OrganizationKycDocType[] = [];
 
   const resolvedType = effectiveKycRegistrationType(kyc);
   if (!resolvedType) fields.push('registration_type');

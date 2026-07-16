@@ -11083,7 +11083,6 @@ const styles = StyleSheet.create({
   },
   refInlineSaveBtn: {
     marginTop: 2,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
@@ -12715,10 +12714,7 @@ const styles = StyleSheet.create({
     color: Theme.negative,
   },
   financeAdjustmentsBtn: {
-    borderRadius: 999,
     backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
     borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -13264,7 +13260,6 @@ const elStyles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,

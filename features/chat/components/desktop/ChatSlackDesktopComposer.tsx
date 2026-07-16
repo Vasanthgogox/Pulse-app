@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
     ...(Platform.OS === "web"
-      ? ({ userSelect: "none", lineHeight: "16px" } as TextStyle)
+      ? ({ userSelect: "none", lineHeight: "16px" } as unknown as TextStyle)
       : {}),
   },
   fmtGlyphBold: {

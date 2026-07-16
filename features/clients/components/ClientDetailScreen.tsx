@@ -2522,12 +2522,6 @@ export default function ClientDetailScreen({
               transactions={cashFlowTransactionRows}
               fullWidth
               tripDetailsMap={clientTripDetailsMap}
-              tripOptions={tripOptions.map((t) => ({
-                id: t.id,
-                trip_number: t.trip_number,
-                route: t.route_label ?? undefined,
-                trip_date: t.trip_date ?? undefined,
-              }))}
               useTimelineLayout={true}
               showFiscalSubTabs={false}
               showTitle={false}

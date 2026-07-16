@@ -41,7 +41,7 @@ function installWebStyleSheetFlattenPatch(): void {
     }
     return adaptShadowPropsForWeb(flat as ViewStyle) as typeof flat;
   };
-  patchedFlatten[FLATTEN_PATCHED] = true;
+  (patchedFlatten as typeof patchedFlatten & { [FLATTEN_PATCHED]?: boolean })[FLATTEN_PATCHED] = true;
   StyleSheet.flatten = patchedFlatten;
 }
 

@@ -70,3 +70,18 @@ jobs:
         run: npm run test:navigation-policy
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+
+  typecheck:
+    name: App TypeScript (strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: tsc --noEmit
+        run: npm run typecheck
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'

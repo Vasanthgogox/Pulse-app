@@ -21,6 +21,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
@@ -36,7 +37,7 @@ export type TripPartnerPickerSectionProps = {
   onAddPartner: () => void;
   hasError?: boolean;
   wizardMode?: boolean;
-  fieldLabelStyle?: TextStyle | TextStyle[];
+  fieldLabelStyle?: StyleProp<TextStyle>;
   isDenseForm?: boolean;
   suppressCollapsedSummary?: boolean;
   listMaxHeight?: number;

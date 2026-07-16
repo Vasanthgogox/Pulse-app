@@ -1,4 +1,4 @@
-import MapLibreGL from "@maplibre/maplibre-react-native";
+import * as MapLibreGL from "@maplibre/maplibre-react-native";
 import React, {
     Children,
     Fragment,
@@ -171,67 +171,63 @@ const CompatMapView = forwardRef<CompatMapRef, CompatMapProps>(
 
         const lats = valid.map((c) => c.latitude);
         const lngs = valid.map((c) => c.longitude);
-        const ne: [number, number] = [Math.max(...lngs), Math.max(...lats)];
-        const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)];
+        const west = Math.min(...lngs);
+        const south = Math.min(...lats);
+        const east = Math.max(...lngs);
+        const north = Math.max(...lats);
         const p = options?.edgePadding ?? {};
-        const padding: [number, number, number, number] = [
-          p.top ?? 24,
-          p.right ?? 24,
-          p.bottom ?? 24,
-          p.left ?? 24,
-        ];
 
-        cameraRef.current.fitBounds(
-          ne,
-          sw,
-          padding,
-          options?.animated === false ? 0 : 450,
-        );
+        cameraRef.current.fitBounds([west, south, east, north], {
+          padding: {
+            top: p.top ?? 24,
+            right: p.right ?? 24,
+            bottom: p.bottom ?? 24,
+            left: p.left ?? 24,
+          },
+          duration: options?.animated === false ? 0 : 450,
+        });
       },
       animateCamera: (camera, options) => {
-        if (!cameraRef.current) return;
-        const centerCoordinate = camera.center
-          ? toLngLat(camera.center)
-          : undefined;
-        cameraRef.current.setCamera({
-          centerCoordinate,
-          heading: camera.heading,
+        if (!cameraRef.current || !camera.center) return;
+        cameraRef.current.easeTo({
+          center: toLngLat(camera.center),
+          bearing: camera.heading,
           pitch: camera.pitch,
-          zoomLevel: camera.zoom,
-          animationDuration: options?.duration ?? 450,
+          zoom: camera.zoom,
+          duration: options?.duration ?? 450,
         });
       },
       animateToRegion: (region, duration = 450) => {
         if (!cameraRef.current) return;
-        cameraRef.current.setCamera({
-          centerCoordinate: toLngLat(region),
-          zoomLevel: toZoomFromDelta(
+        cameraRef.current.easeTo({
+          center: toLngLat(region),
+          zoom: toZoomFromDelta(
             region.longitudeDelta ?? region.latitudeDelta,
           ),
-          animationDuration: duration,
+          duration,
         });
       },
     }));
 
     const initialCenter = initialRegion
       ? toLngLat(initialRegion)
-      : [78.9629, 20.5937];
+      : ([78.9629, 20.5937] as [number, number]);
     const initialZoom = toZoomFromDelta(
       initialRegion?.longitudeDelta ?? initialRegion?.latitudeDelta ?? 0.02,
     );
 
     return (
       <View style={style}>
-        <MapLibreGL.MapView
+        <MapLibreGL.Map
           style={StyleSheet.absoluteFill}
           mapStyle={MAP_STYLE}
-          logoEnabled={false}
-          attributionEnabled={false}
-          compassEnabled={false}
-          scrollEnabled={scrollEnabled}
-          zoomEnabled={zoomEnabled}
-          rotateEnabled={rotateEnabled}
-          pitchEnabled={pitchEnabled}
+          logo={false}
+          attribution={false}
+          compass={false}
+          dragPan={scrollEnabled}
+          touchZoom={zoomEnabled}
+          touchRotate={rotateEnabled}
+          touchPitch={pitchEnabled}
           onDidFinishLoadingMap={() => {
             if (!mapReady) {
               setMapReady(true);
@@ -241,14 +237,14 @@ const CompatMapView = forwardRef<CompatMapRef, CompatMapProps>(
         >
           <MapLibreGL.Camera
             ref={cameraRef}
-            defaultSettings={{
-              centerCoordinate: initialCenter as [number, number],
-              zoomLevel: initialZoom,
+            initialViewState={{
+              center: initialCenter,
+              zoom: initialZoom,
               padding: {
-                paddingTop: mapPadding?.top ?? 0,
-                paddingRight: mapPadding?.right ?? 0,
-                paddingBottom: mapPadding?.bottom ?? 0,
-                paddingLeft: mapPadding?.left ?? 0,
+                top: mapPadding?.top ?? 0,
+                right: mapPadding?.right ?? 0,
+                bottom: mapPadding?.bottom ?? 0,
+                left: mapPadding?.left ?? 0,
               },
             }}
           />
@@ -260,10 +256,10 @@ const CompatMapView = forwardRef<CompatMapRef, CompatMapProps>(
             );
             if (coords.length < 2) return null;
             return (
-              <MapLibreGL.ShapeSource
+              <MapLibreGL.GeoJSONSource
                 id={`${line.id}-src`}
                 key={line.id}
-                shape={{
+                data={{
                   type: "Feature",
                   geometry: {
                     type: "LineString",
@@ -272,8 +268,9 @@ const CompatMapView = forwardRef<CompatMapRef, CompatMapProps>(
                   properties: {},
                 }}
               >
-                <MapLibreGL.LineLayer
+                <MapLibreGL.Layer
                   id={`${line.id}-layer`}
+                  type="line"
                   style={{
                     lineColor: line.strokeColor ?? "#2563eb",
                     lineWidth: line.strokeWidth ?? 4,
@@ -281,25 +278,24 @@ const CompatMapView = forwardRef<CompatMapRef, CompatMapProps>(
                     lineJoin: line.lineJoin ?? "round",
                   }}
                 />
-              </MapLibreGL.ShapeSource>
+              </MapLibreGL.GeoJSONSource>
             );
           })}
 
           {extracted.markers.map((marker) => (
-            <MapLibreGL.PointAnnotation
+            <MapLibreGL.Marker
               key={marker.id}
               id={marker.id}
-              coordinate={toLngLat(marker.coordinate)}
-              anchor={marker.anchor}
+              lngLat={toLngLat(marker.coordinate)}
             >
               {marker.children ? (
                 <View>{marker.children}</View>
               ) : (
                 <View style={styles.defaultMarker} />
               )}
-            </MapLibreGL.PointAnnotation>
+            </MapLibreGL.Marker>
           ))}
-        </MapLibreGL.MapView>
+        </MapLibreGL.Map>
       </View>
     );
   },

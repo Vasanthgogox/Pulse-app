@@ -1243,7 +1243,7 @@ async function applyDriverNameToRow(
     .select(DRIVER_COLUMNS)
     .single();
   if (error || !data) return driver;
-  return normalizeDriverRow(data as DriverRow);
+  return normalizeDriverRow(data as unknown as DriverRow);
 }
 
 /**

@@ -201,7 +201,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     minWidth: 0,
     ...Platform.select({
-      web: { flexGrow: 1, flexBasis: "min(100%, 280px)" } as ViewStyle,
+      // TODO(types): flexBasis uses a web CSS min() string that RN's ViewStyle
+      // type does not model; double-cast to keep the web-only value.
+      web: { flexGrow: 1, flexBasis: "min(100%, 280px)" } as unknown as ViewStyle,
       default: {},
     }),
   },

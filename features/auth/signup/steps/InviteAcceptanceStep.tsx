@@ -77,7 +77,7 @@ export function InviteAcceptanceStep({ flow }: { flow: SignUpFlow }) {
         secureTextEntry={!flow.showPassword}
         editable={!flow.loading}
         errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.password : null}
-        rightAccessory={
+        trailing={
           <Pressable onPress={flow.toggleShowPassword} hitSlop={8}>
             {flow.showPassword ? (
               <EyeOff size={18} color={Theme.textMuted} />
@@ -96,7 +96,7 @@ export function InviteAcceptanceStep({ flow }: { flow: SignUpFlow }) {
         secureTextEntry={!flow.showConfirmPassword}
         editable={!flow.loading}
         errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.confirmPassword : null}
-        rightAccessory={
+        trailing={
           <Pressable onPress={flow.toggleShowConfirmPassword} hitSlop={8}>
             {flow.showConfirmPassword ? (
               <EyeOff size={18} color={Theme.textMuted} />

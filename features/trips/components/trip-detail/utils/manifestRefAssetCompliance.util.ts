@@ -3,7 +3,8 @@ import {
   type DocumentRow,
 } from "@/features/compliance";
 import { computeDocExpiry } from "@/features/vehicles/components/analytics/analyticsUtils";
-import type { VehicleDocuments } from "@/features/vehicles/services/vehicles.service";
+import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
+import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 
 export function hasEntityDocsIssue(
   entityType: "driver" | "vehicle",
@@ -21,7 +22,7 @@ export function hasEntityDocsIssue(
 
   const legacyRows = computeDocExpiry({
     documents: vehicleLegacyDocs,
-  } as { documents: VehicleDocuments });
+  } as Pick<VehicleRow, "documents"> as VehicleRow);
   return legacyRows.some(
     (row) => row.status === "missing" || row.status === "expired",
   );

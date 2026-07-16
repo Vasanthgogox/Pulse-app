@@ -227,20 +227,18 @@ export function ChatSlackMirrorToggle({
               <View style={styles.partyTextCol}>
                 {item.label ? (
                   <Text
-                    style={[styles.partyName, active && styles.partyNameActive]}
+                    style={[styles.partyName, active && styles.partyNameActive, { includeFontPadding: false }]}
                     numberOfLines={1}
                     ellipsizeMode="tail"
-                    includeFontPadding={false}
                   >
                     {item.label}
                   </Text>
                 ) : null}
                 {item.subLabel ? (
                   <Text
-                    style={[styles.partyRole, active && styles.partyRoleActive]}
+                    style={[styles.partyRole, active && styles.partyRoleActive, { includeFontPadding: false }]}
                     numberOfLines={1}
                     ellipsizeMode="tail"
-                    includeFontPadding={false}
                   >
                     {item.subLabel}
                   </Text>

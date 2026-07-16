@@ -1,4 +1,5 @@
-import * as FileSystem from "expo-file-system";
+// expo-file-system SDK 54 moved readAsStringAsync/EncodingType to the legacy entry.
+import * as FileSystem from "expo-file-system/legacy";
 
 import { sha256Hex } from "./sha256.util";
 

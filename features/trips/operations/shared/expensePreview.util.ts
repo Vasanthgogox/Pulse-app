@@ -154,7 +154,9 @@ export async function loadExpensePreviewDetail(
     ({
       id: costEventId,
       tripId: entry.trip_id,
-      category: "other",
+      // "misc" is the valid TripCostCategory literal; category is not read by
+      // canEditTripCostEvent (the only consumer of this synthetic event).
+      category: "misc",
       amount: Number(entry.amount_inr ?? 0),
       approvalState: "pending",
       postingState: "unposted",

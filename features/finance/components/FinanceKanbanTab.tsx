@@ -427,7 +427,7 @@ export function FinanceKanbanTab({
     if (contactType === "supplier") return "suppliers";
     if (contactType === "driver" || driverName !== "") return "drivers";
 
-    let resolvedContactType = contactType;
+    let resolvedContactType: LedgerRow["contact_type"] = contactType;
     if (!resolvedContactType && row.trip_id && tripPartyMap[row.trip_id]) {
       const pm = tripPartyMap[row.trip_id];
       if (hasAmtIn && pm.client_id) resolvedContactType = 'client';

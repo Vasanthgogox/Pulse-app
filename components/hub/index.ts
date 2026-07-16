@@ -1,7 +1,7 @@
 export { HubScreenShell } from "./HubScreenShell";
 export { HubListPaginationBar } from "./HubListPaginationBar";
 export { HubScreenBottomBar } from "./HubScreenBottomBar";
-export { HubGridCardToolbar } from "./HubGridCardToolbar";
+export * from "./HubGridCardToolbar";
 export { useHubGridPagination } from "./useHubGridPagination";
 export * from "./hubGridCardLayout";
 

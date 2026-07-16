@@ -209,7 +209,7 @@ export function buildLocationPingCardCopy(params: {
   tripHint?: LocationPingTripHint;
 }): {
   title: string;
-  subLine: string;
+  subLine: string | null;
   captureClock: string;
 } {
   const { place, city } = resolveLocationPlaceAndCity(

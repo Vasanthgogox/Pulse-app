@@ -383,8 +383,9 @@ export function DriverTripFlowCard({
       const driverId = localTrip.driver_id;
       const uid = profile?.uid;
       if (!tripId || !orgId || !driverId || !uid) return;
-      const convId = await ensureDriverTripConversation(tripId);
-      if (!convId) return;
+      const conversation = await ensureDriverTripConversation(tripId);
+      if (!conversation) return;
+      const convId = conversation.convId;
       const senderName =
         (profile as { full_name?: string; displayName?: string })?.full_name ||
         (profile as { displayName?: string })?.displayName ||

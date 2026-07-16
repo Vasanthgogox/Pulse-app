@@ -556,7 +556,7 @@ export function resolveSystemUpdateDriverAvatar(
     composeName;
 
   if (displayName && /^(driver|assigned|the driver)$/i.test(displayName)) {
-    displayName = contentName || profile?.displayName;
+    displayName = contentName || profile?.displayName || null;
   }
 
   if (!driverId && !displayName) return null;

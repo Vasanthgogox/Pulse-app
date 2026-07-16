@@ -266,6 +266,7 @@ function NetworkDesktopChatFlexPanelBody({
     void initiateNetworkConversation({
       org_id: partner.orgId,
       name: partner.name,
+      party_type: partner.role === "SUPPLIER" ? "supplier" : "client",
       logo_url: partner.logoUrl ?? null,
       avatar_seed: partner.avatarSeed ?? null,
     }).then((convId) => {
@@ -545,6 +546,7 @@ function NetworkDesktopChatFlexPanelBody({
               void initiateNetworkConversation({
                 org_id: partner.orgId,
                 name: partner.name,
+                party_type: partner.role === "SUPPLIER" ? "supplier" : "client",
                 logo_url: partner.logoUrl ?? null,
                 avatar_seed: partner.avatarSeed ?? null,
               }).then((convId) => {

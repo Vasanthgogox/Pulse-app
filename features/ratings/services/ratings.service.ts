@@ -185,7 +185,7 @@ export async function getRatingsForDrivers(driverIds: string[]): Promise<{
   return { error: null, byDriverId };
 }
 
-export function averageScore(ratings: { score: number }[]): number | null {
+export function averageScore(ratings: readonly { score: number }[]): number | null {
   if (ratings.length === 0) return null;
   const sum = ratings.reduce((s, r) => s + r.score, 0);
   return Math.round((sum / ratings.length) * 100) / 100;

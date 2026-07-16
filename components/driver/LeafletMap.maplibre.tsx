@@ -2,6 +2,10 @@ import Theme from '@/constants/Theme';
 import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker';
 import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomControls';
 import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
+// TODO(types): this native-only variant targets an older @maplibre/maplibre-react-native
+// API (MapView/PointAnnotation/setCamera). The installed v11 renamed these (Map/Marker/setStop);
+// a full API migration is out of scope for a type-only pass and needs on-device verification.
+// @ts-expect-error - default import kept for the legacy namespace usage below (MapView/Camera/etc.)
 import MapLibreGL, { type CameraRef } from '@maplibre/maplibre-react-native';
 import React, { useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
@@ -103,6 +107,7 @@ export const LeafletMapMapLibre = React.forwardRef<
       (next: number, animationDuration = lowPower ? 0 : 280) => {
         const clamped = Math.max(3, Math.min(16, next));
         zoomLevelRef.current = clamped;
+        // @ts-expect-error - legacy setCamera API (v11 renamed to setStop); see import TODO
         cameraRef.current?.setCamera({
           zoomLevel: clamped,
           animationDuration,
@@ -121,6 +126,7 @@ export const LeafletMapMapLibre = React.forwardRef<
           ),
         );
         zoomLevelRef.current = z;
+        // @ts-expect-error - legacy setCamera API (v11 renamed to setStop); see import TODO
         cameraRef.current?.setCamera({
           centerCoordinate: toLngLat(currentCenter),
           zoomLevel: z,
@@ -135,6 +141,7 @@ export const LeafletMapMapLibre = React.forwardRef<
         cameraRef.current?.fitBounds?.(
           [ne.longitude, ne.latitude],
           [sw.longitude, sw.latitude],
+          // @ts-expect-error - legacy 4-arg fitBounds signature (v11 uses (bounds, options?)); see import TODO
           paddingPx,
           lowPower ? 0 : 600,
         );

@@ -13,7 +13,7 @@ import {
 
 import Theme from "@/constants/Theme";
 import type { AddTripFormState } from "@/features/trips/components/add-trip/types";
-import type { useAddTripForm } from "@/features/trips/components/add-trip/useAddTripForm";
+import type { AddTripIssueField, useAddTripForm } from "@/features/trips/components/add-trip/useAddTripForm";
 
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
 import { LocationSearchField } from "./LocationSearchField";
@@ -64,7 +64,7 @@ const desktopLocationInputStyle = {
 export type CreateTripDesktopRouteStepProps = {
   state: AddTripFormState;
   setters: ReturnType<typeof useAddTripForm>["setters"];
-  fieldInvalid: (field: string) => boolean;
+  fieldInvalid: (field: AddTripIssueField) => boolean;
   onPickupDropdownOpenChange: (open: boolean) => void;
   onDropDropdownOpenChange: (open: boolean) => void;
 };

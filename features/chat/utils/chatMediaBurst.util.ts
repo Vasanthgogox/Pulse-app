@@ -181,5 +181,5 @@ export function resolveTrailingMediaBurstSummary(
 }
 
 export function tripChatMessageSenderKey(message: TripMessageRow): string {
-  return `${message.sender_role ?? ""}:${message.sender_id ?? ""}:${message.sender_name ?? ""}`;
+  return `${message.sender_role ?? ""}:${message.sender_user_id ?? ""}:${message.sender_name ?? ""}`;
 }

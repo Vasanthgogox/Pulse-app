@@ -308,7 +308,7 @@ export function WorkspaceHubMenu({
   const renderHubSection = (
     title: string,
     sectionRows: HubRow[],
-    accentColor = HUB_PURPLE,
+    accentColor: string = HUB_PURPLE,
   ) => (
     <View style={hubStyles.sectionCard}>
       <View style={hubStyles.sectionHeader}>
@@ -372,7 +372,7 @@ export function WorkspaceHubMenu({
   const renderPartyGridSection = (
     title: string,
     sectionRows: HubRow[],
-    accentColor = HUB_PURPLE,
+    accentColor: string = HUB_PURPLE,
   ) => (
     <View style={hubStyles.sectionCard}>
       <View style={hubStyles.sectionHeader}>
