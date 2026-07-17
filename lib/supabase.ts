@@ -64,6 +64,61 @@ function isAuthTokenRequest(input: RequestInfo | URL): boolean {
   return url.includes('/auth/v1/token');
 }
 
+// --- JWT-expiry recovery at the network frontier -----------------------------
+// Data (PostgREST / RPC) calls that race ahead of the auto-refresh/SIGNED_OUT
+// cycle fire with an already-expired JWT and get rejected — wasting a round-trip
+// and adding 42501 log noise. We detect a *true expiry* response, trigger ONE
+// deduped refresh, and retry the request once. We intentionally do NOT act on
+// bare 42501 (permission) codes without an expiry string: those are legitimate
+// cross-org RLS denials by a valid session and should return 403 immediately.
+//
+// Dead-session handling is deliberately left to GoTrue's SIGNED_OUT event, which
+// AuthContext.onAuthStateChange already turns into clear-state + route-to-login +
+// "expired" flash. We add NO second auth listener here (see the note at the end
+// of getSupabase()).
+
+/** True only for genuine token-expiry responses — not for plain permission (42501) denials. */
+async function isJwtExpiryResponse(res: Response): Promise<boolean> {
+  if (res.status !== 401 && res.status !== 403) return false;
+  try {
+    const body = await res.clone().json();
+    const code = body?.code ?? body?.error_code;
+    const msg = String(body?.message ?? body?.msg ?? body?.error_description ?? '').toLowerCase();
+    // PGRST301 = PostgREST "JWT expired". GoTrue/PostgREST also surface expiry as text.
+    // Bare 42501 (RLS/permission) is excluded unless it carries an expiry string.
+    return (
+      code === 'PGRST301' ||
+      /jwt expired|token (has )?expired|token.*expired|invalid (jwt|token)|jwt.*invalid/.test(msg)
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Dedupe concurrent refreshes so a burst of expired requests triggers ONE refresh.
+let inflightAuthRecovery: Promise<boolean> | null = null;
+/** Refresh the session at most once for a burst of racing callers. Returns true if a live session was obtained. */
+function recoverAuthOnce(): Promise<boolean> {
+  if (!inflightAuthRecovery) {
+    inflightAuthRecovery = (async () => {
+      try {
+        const { data, error } = await supabase().auth.refreshSession();
+        // false → session is truly dead; GoTrue fires SIGNED_OUT and AuthContext handles it.
+        return !error && !!data.session;
+      } catch {
+        return false;
+      } finally {
+        // Release on the next tick so tightly-racing callers share this attempt,
+        // but a subsequent, later expiry can start a fresh recovery.
+        setTimeout(() => {
+          inflightAuthRecovery = null;
+        }, 0);
+      }
+    })();
+  }
+  return inflightAuthRecovery;
+}
+
 /** Fetch with timeout and retry to cope with flaky networks and backend outages. */
 async function fetchWithTimeoutAndRetry(
   input: RequestInfo | URL,
@@ -91,6 +146,17 @@ async function fetchWithTimeoutAndRetry(
       if (isRetryableHttpResponse(res) && attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, delayForAttempt(attempt)));
         continue;
+      }
+      // JWT-expiry recovery: on the FIRST attempt of a non-auth request, if the
+      // response is a true token-expiry, refresh once (deduped) and retry once so
+      // the SDK re-sends with the rotated token. attempt===0 + single continue
+      // bounds this to exactly one extra attempt — no loop. Never runs for
+      // /auth/v1/token requests, so refreshSession() cannot recurse into itself.
+      if (!isAuthToken && attempt === 0 && (await isJwtExpiryResponse(res))) {
+        const recovered = await recoverAuthOnce();
+        if (recovered) continue;
+        // Not recovered → return the expiry response; GoTrue's SIGNED_OUT →
+        // AuthContext does clear-state + route-to-login + "expired" flash.
       }
       return res;
     } catch (e) {
