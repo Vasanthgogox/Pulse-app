@@ -19,12 +19,15 @@ export interface FinanceTabRowProps {
    * apply horizontal inset so pills align with the summary card content.
    */
   treasuryInset?: boolean;
+  /** RBAC-filtered tabs; defaults to all fiscal tabs. */
+  tabs?: readonly { id: FinanceSubTab; label: string }[];
 }
 
 export function FinanceTabRow({
   activeTab,
   onTabPress,
   treasuryInset = false,
+  tabs = TABS,
 }: FinanceTabRowProps) {
   const { t } = useLanguage();
 
@@ -38,7 +41,7 @@ export function FinanceTabRow({
         treasuryInset && styles.financeHeroPillsRowTreasuryInset,
       ]}
     >
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
           <TouchableOpacity

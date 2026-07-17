@@ -49,8 +49,12 @@ import type { CustomersViewTab } from "@/features/clients/components/CustomersTa
 import type { SuppliersViewTab } from "@/features/suppliers/components/SuppliersTab";
 import {
     canAccessFinance,
-    getCapabilitiesFromProfile,
+    canAccessFinanceSubTab,
+    canAccessLedgerCategory,
+    canUseAggregateSupply,
+    canUseAssetSupply,
 } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
@@ -82,6 +86,7 @@ import { useFinanceTransactionSubmit } from "../hooks/useFinanceTransactionSubmi
 import type { LedgerRow } from "../services/finance.service";
 import { createReportRow } from "../lib/reportRow.util";
 import type { FinanceSubTab } from "../types";
+import { TABS } from "../types";
 import type { TripEntryContext } from "./EntityDetailOverlay";
 import { EntityListCategoryModal } from "./EntityListCategoryModal";
 import { FinanceModalsGate } from "./FinanceModalsGate";
@@ -121,16 +126,14 @@ export function FinanceScreen() {
   const router = useRouter();
   const { t } = useLanguage();
   const { profile } = useAuth();
-  const capabilities = getCapabilitiesFromProfile(
-    profile
-      ? {
-          role: profile.role,
-          aggregated: profile.aggregated,
-          asset: profile.asset,
-        }
-      : null,
-  );
+  const capabilities = useCapabilities();
   const canAccess = canAccessFinance(capabilities);
+  const canAssetSupply = canUseAssetSupply(capabilities);
+  const canAggregateSupply = canUseAggregateSupply(capabilities);
+  const visibleFinanceTabs = useMemo(
+    () => TABS.filter((tab) => canAccessFinanceSubTab(capabilities, tab.id)),
+    [capabilities],
+  );
   const {
     currentOrganization,
     refreshOrganization,
@@ -257,6 +260,33 @@ export function FinanceScreen() {
     ledgerPageLoading,
   } = ledger;
 
+  useEffect(() => {
+    if (!canAssetSupply && !canAggregateSupply) return;
+    if (canAssetSupply && !canAggregateSupply && sourceSupplyFilter !== "asset") {
+      setSourceSupplyFilter("asset");
+    } else if (
+      canAggregateSupply &&
+      !canAssetSupply &&
+      sourceSupplyFilter !== "aggregate"
+    ) {
+      setSourceSupplyFilter("aggregate");
+    }
+  }, [
+    canAssetSupply,
+    canAggregateSupply,
+    sourceSupplyFilter,
+    setSourceSupplyFilter,
+  ]);
+
+  useEffect(() => {
+    if (!canAccessLedgerCategory(capabilities, selectedLedgerCategory)) {
+      setSelectedLedgerCategory("all");
+    }
+  }, [capabilities, selectedLedgerCategory, setSelectedLedgerCategory]);
+
+  const showSourceSupplyFilter =
+    financeSubTab === "cash" && canAssetSupply && canAggregateSupply;
+
   const financeDateOpts = useMemo(
     () => ({
       customFrom: financeCustomRangeFrom,
@@ -351,6 +381,7 @@ export function FinanceScreen() {
 
   const openAddPartyForSubTab = useCallback(
     (subTab: "customers" | "suppliers" | "garage" | "drivers") => {
+      if (!canAccessFinanceSubTab(capabilities, subTab)) return;
       const partyKind = financeSubTabToPartyKind(subTab);
       const routeAdd =
         subTab === "customers"
@@ -371,7 +402,7 @@ export function FinanceScreen() {
       }
       routeAdd();
     },
-    [router, usePartyPortalOnWeb],
+    [capabilities, router, usePartyPortalOnWeb],
   );
 
   const handleAddPartyPress = useCallback(() => {
@@ -1072,21 +1103,23 @@ export function FinanceScreen() {
 
   const supplierPartyOptions = useMemo(
     (): PartyOption[] =>
-      supplierRows.map((s) => ({
-        id: s.id,
-        name:
-          (
-            s.name ||
-            s.company_name ||
-            s.contact_person ||
-            t("supplier")
-          ).trim() || t("supplier"),
-        linked_organization_id: s.linked_organization_id ?? null,
-        supplier_type: s.supplier_type ?? null,
-        avatar_url: s.avatar_url ?? null,
-        avatar_seed: s.avatar_seed ?? null,
-      })),
-    [supplierRows, t],
+      canAggregateSupply
+        ? supplierRows.map((s) => ({
+            id: s.id,
+            name:
+              (
+                s.name ||
+                s.company_name ||
+                s.contact_person ||
+                t("supplier")
+              ).trim() || t("supplier"),
+            linked_organization_id: s.linked_organization_id ?? null,
+            supplier_type: s.supplier_type ?? null,
+            avatar_url: s.avatar_url ?? null,
+            avatar_seed: s.avatar_seed ?? null,
+          }))
+        : [],
+    [canAggregateSupply, supplierRows, t],
   );
 
   const supplierLinkedOrgIds = useMemo(() => {
@@ -1126,11 +1159,13 @@ export function FinanceScreen() {
 
   const vehicleOptions = useMemo(
     () =>
-      vehicleRows.map((v) => ({
-        id: v.id,
-        vehicle_number: v.vehicle_number || v.id,
-      })),
-    [vehicleRows],
+      canAssetSupply
+        ? vehicleRows.map((v) => ({
+            id: v.id,
+            vehicle_number: v.vehicle_number || v.id,
+          }))
+        : [],
+    [canAssetSupply, vehicleRows],
   );
 
   const defaultPartyId =
@@ -1282,10 +1317,17 @@ export function FinanceScreen() {
   }, [selectedEntity, selectedEntityTrips, ledgerTransactions]);
 
   const handleTabPress = useCallback((tabId: FinanceSubTab) => {
+    if (!canAccessFinanceSubTab(capabilities, tabId)) return;
     setFinanceSubTab(tabId);
     // When switching to Ledger, close entity detail overlay so only one "detail" (expand row) is in view
     if (tabId === "cash") setSelectedEntity(null);
-  }, []);
+  }, [capabilities]);
+
+  useEffect(() => {
+    if (!canAccessFinanceSubTab(capabilities, financeSubTab)) {
+      setFinanceSubTab(visibleFinanceTabs[0]?.id ?? "cash");
+    }
+  }, [capabilities, financeSubTab, visibleFinanceTabs]);
 
   const handleLedgerRowSelect = useCallback(
     (data: FinancialRowData) => {
@@ -1479,6 +1521,13 @@ export function FinanceScreen() {
         onLedgerCategoryChange={
           financeSubTab === "cash" ? setSelectedLedgerCategory : undefined
         }
+        allowedLedgerCategories={
+          financeSubTab === "cash"
+            ? (["all", "customers", "suppliers", "vehicle", "driver"] as const).filter(
+                (c) => canAccessLedgerCategory(capabilities, c),
+              )
+            : undefined
+        }
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder={
@@ -1536,9 +1585,9 @@ export function FinanceScreen() {
           customTo: financeCustomRangeTo,
         }}
         onQuickCustomRange={setFinanceCustomRange}
-        sourceFilter={financeSubTab === "cash" ? sourceSupplyFilter : undefined}
+        sourceFilter={showSourceSupplyFilter ? sourceSupplyFilter : undefined}
         onSourceFilterChange={
-          financeSubTab === "cash" ? setSourceSupplyFilter : undefined
+          showSourceSupplyFilter ? setSourceSupplyFilter : undefined
         }
         ledgerViewMode={financeSubTab === "cash" ? "transaction" : undefined}
         onLedgerViewModeChange={undefined}
@@ -1548,6 +1597,7 @@ export function FinanceScreen() {
         auditedTotalOut={bannerTotals.totalOut}
         desktopCardMetrics={desktopCardMetrics}
         omitTabRow={useMobileUnifiedScroll}
+        visibleTabs={visibleFinanceTabs}
       />
   );
 
@@ -1555,6 +1605,12 @@ export function FinanceScreen() {
             <FinanceTabBody
               embedInParentScroll={useMobileUnifiedScroll}
               financeSubTab={financeSubTab}
+              visibleTabs={visibleFinanceTabs}
+              kanbanVisibleColumns={
+                (
+                  ["customers", "suppliers", "garage", "drivers"] as const
+                ).filter((col) => canAccessFinanceSubTab(capabilities, col))
+              }
               organizationId={orgId}
               ledgerLoading={ledgerLoading}
               ledgerTransactions={ledgerTransactions}
@@ -1621,6 +1677,7 @@ export function FinanceScreen() {
               treasuryInset
               activeTab={financeSubTab}
               onTabPress={handleTabPress}
+              tabs={visibleFinanceTabs}
             />
           </View>
           <ScrollView
@@ -1782,7 +1839,9 @@ export function FinanceScreen() {
             ? "customers"
             : financeSubTab === "suppliers"
               ? "suppliers"
-              : "all"
+              : canAggregateSupply
+                ? "all"
+                : "customers"
         }
         initialEntry={editingEntry}
         lockedAmount={
@@ -1990,6 +2049,11 @@ export function FinanceScreen() {
           setShowEntityListModal(false);
         }}
         insetsTop={insets.top}
+        allowedCategories={
+          (["all", "customers", "suppliers", "vehicle", "driver"] as const).filter(
+            (c) => canAccessLedgerCategory(capabilities, c),
+          )
+        }
       />
     </View>
   );

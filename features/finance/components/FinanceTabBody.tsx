@@ -30,6 +30,7 @@ const TAB_COMPONENTS: Partial<
 
 export function FinanceTabBody(props: FinanceTabBodyProps) {
   const activeTab = props.financeSubTab;
+  const tabs = props.visibleTabs ?? TABS;
   const [mountedTabs, setMountedTabs] = useState<Set<FinanceSubTab>>(
     () => new Set([activeTab]),
   );
@@ -55,7 +56,7 @@ export function FinanceTabBody(props: FinanceTabBodyProps) {
           : { flex: 1, minHeight: 0 }
       }
     >
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const TabPanel = TAB_COMPONENTS[tab.id];
         if (!TabPanel || !mountedTabs.has(tab.id)) return null;
         return (

@@ -12,6 +12,8 @@ import {
   indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { canAccessSuppliers } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { IndentBidAmountEntry } from "@/features/indents/components/bidding/IndentBidAmountEntry";
 import { IndentGiveLoadPartiesStrip } from "@/features/indents/components/IndentGiveLoadPartiesStrip";
 import { IndentLinkedTripCard } from "@/features/indents/components/IndentLinkedTripCard";
@@ -161,6 +163,8 @@ export function IndentDetailScreen({
   const footerReserve = compactHub ? 52 : 64;
   const router = useRouter();
   const { currentOrganization } = useOrganization();
+  const capabilities = useCapabilities();
+  const canUseSuppliers = canAccessSuppliers(capabilities);
   const orgId = currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
   const invalidateIndents = useInvalidateIndents();
@@ -168,7 +172,9 @@ export function IndentDetailScreen({
   const { data: trips = [] } = useTripsQuery(orgId);
   const { data: drivers = [] } = useDriversQuery(orgId);
   const { data: vehicles = [] } = useVehiclesQuery(orgId);
-  const { data: suppliers = [] } = useSuppliersQuery(orgId);
+  const { data: suppliers = [] } = useSuppliersQuery(
+    canUseSuppliers ? orgId : null,
+  );
   const { data: clients = [] } = useClientsQuery(orgId);
   const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
   const integratedSuppliers = useMemo(
@@ -719,6 +725,7 @@ export function IndentDetailScreen({
     : "ALLOCATE VEHICLE";
 
   const showGiveLoadPartiesStrip =
+    canUseSuppliers &&
     isOwner &&
     !["awarded", "completed", "deployed", "cancelled", "closed", "expired"].includes(
       statusLower,

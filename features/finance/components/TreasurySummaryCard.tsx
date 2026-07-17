@@ -103,6 +103,8 @@ export interface TreasurySummaryCardProps {
   /** Cash tab: filter by ledger party category (All / Customers / Suppliers / Vehicle / Driver). */
   ledgerCategory?: LedgerCategory;
   onLedgerCategoryChange?: (c: LedgerCategory) => void;
+  /** RBAC-allowed ledger categories for the type filter. */
+  allowedLedgerCategories?: readonly LedgerCategory[];
   /** When entity filter row is shown, optional content to render on the right (e.g. view mode icons). */
   filterRowRight?: ReactNode;
   /**
@@ -331,6 +333,7 @@ export function TreasurySummaryCard({
   onCashOutPress,
   ledgerCategory = 'all',
   onLedgerCategoryChange,
+  allowedLedgerCategories,
   filterRowRight,
   amountAnimationResetKey,
   cashNetworkLayout = false,
@@ -342,6 +345,8 @@ export function TreasurySummaryCard({
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   /** Stack search + filters; horizontal scroll for filters on narrow widths */
+  const ledgerCategoryOptions = allowedLedgerCategories ??
+    (['all', 'customers', 'suppliers', 'vehicle', 'driver'] as const);
   const compactToolbar = windowWidth < 560;
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
@@ -737,7 +742,7 @@ export function TreasurySummaryCard({
                               <FontAwesome name="users" size={11} color={Theme.teslaRed} style={styles.filterModalSectionIcon} />
                               <Text style={styles.filterModalSectionLabel}>Type</Text>
                             </View>
-                            {(['all', 'customers', 'suppliers', 'vehicle', 'driver'] as const).map((c) => (
+                            {ledgerCategoryOptions.map((c) => (
                               <TouchableOpacity
                                 key={c}
                                 style={[styles.dropdownItem, ledgerCategory === c && styles.dropdownItemActive]}
@@ -789,7 +794,7 @@ export function TreasurySummaryCard({
                           <FontAwesome name="users" size={11} color={Theme.teslaRed} style={styles.filterModalSectionIcon} />
                           <Text style={styles.filterModalSectionLabel}>Type</Text>
                         </View>
-                        {(['all', 'customers', 'suppliers', 'vehicle', 'driver'] as const).map((c) => (
+                        {ledgerCategoryOptions.map((c) => (
                           <TouchableOpacity
                             key={c}
                             style={[styles.dropdownItem, ledgerCategory === c && styles.dropdownItemActive]}

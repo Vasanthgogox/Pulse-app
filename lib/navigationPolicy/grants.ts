@@ -13,18 +13,24 @@ export type ProfileForGrants = ProfileForCapabilities & {
   role: string;
 };
 
-export function buildGrantSet(profile: ProfileForGrants | null): GrantSet {
+export function buildGrantSet(
+  profile: ProfileForGrants | null,
+  operatingModel?: string | null,
+): GrantSet {
   if (!profile) return new Set();
   if (profile.role === 'driver') return new Set();
-  return new Set(getCapabilitiesFromProfile(profile));
+  return new Set(getCapabilitiesFromProfile(profile, operatingModel));
 }
 
-export function buildPrincipal(profile: ProfileForGrants | null): Principal | null {
+export function buildPrincipal(
+  profile: ProfileForGrants | null,
+  operatingModel?: string | null,
+): Principal | null {
   if (!profile) return null;
   const role = profile.role === 'driver' ? 'driver' : 'user';
   return {
     role,
-    grants: buildGrantSet(profile),
+    grants: buildGrantSet(profile, operatingModel),
   };
 }
 

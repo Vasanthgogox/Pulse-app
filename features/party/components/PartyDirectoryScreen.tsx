@@ -20,6 +20,10 @@ import {
 } from "@/features/party/types/partyDirectory.types";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
+  canAccessPartyKind,
+} from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
+import {
   useClientsQuery,
   useDriversQuery,
   useSuppliersQuery,
@@ -36,7 +40,7 @@ import {
   User,
   type LucideIcon,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -86,14 +90,39 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
       ? PARTY_GRID_COLUMNS_DESKTOP
       : PARTY_GRID_COLUMNS;
   const router = useRouter();
+  const capabilities = useCapabilities();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   const [query, setQuery] = useState("");
 
+  const visiblePartyKinds = useMemo(
+    () =>
+      PARTY_DIRECTORY_TAB_ORDER.filter((k) =>
+        canAccessPartyKind(capabilities, k),
+      ),
+    [capabilities],
+  );
+
+  useEffect(() => {
+    if (!canAccessPartyKind(capabilities, kind) && visiblePartyKinds[0]) {
+      router.replace(
+        ROUTES.partyDirectory(visiblePartyKinds[0]) as Parameters<
+          typeof router.replace
+        >[0],
+      );
+    }
+  }, [capabilities, kind, router, visiblePartyKinds]);
+
   const clientsQ = useClientsQuery(orgId);
-  const suppliersQ = useSuppliersQuery(orgId);
-  const driversQ = useDriversQuery(orgId);
-  const vehiclesQ = useVehiclesQuery(orgId);
+  const suppliersQ = useSuppliersQuery(
+    canAccessPartyKind(capabilities, "suppliers") ? orgId : null,
+  );
+  const driversQ = useDriversQuery(
+    canAccessPartyKind(capabilities, "drivers") ? orgId : null,
+  );
+  const vehiclesQ = useVehiclesQuery(
+    canAccessPartyKind(capabilities, "vehicles") ? orgId : null,
+  );
 
   const tabCounts = useMemo(
     () => ({
@@ -210,7 +239,7 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabCardRow}
         >
-          {PARTY_DIRECTORY_TAB_ORDER.map((tabKind) => {
+          {visiblePartyKinds.map((tabKind) => {
             const active = tabKind === kind;
             const Icon = TAB_ICONS[tabKind];
             const count = tabCounts[tabKind];

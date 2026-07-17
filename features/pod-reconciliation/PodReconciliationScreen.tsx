@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
@@ -43,9 +43,9 @@ import type {
 
 function canAccessPodManagement(
   profile: ReturnType<typeof useAuth>["profile"],
+  caps: import("@/lib/capabilities").Capability[],
 ): boolean {
   if (!profile || profile.role === "driver") return false;
-  const caps = getCapabilitiesFromProfile(profile);
   return (
     caps.includes("finance_view") ||
     caps.includes("finance_manage") ||
@@ -56,6 +56,7 @@ function canAccessPodManagement(
 
 export function PodReconciliationScreen() {
   const insets = useSafeAreaInsets();
+  const caps = useCapabilities();
   const layout = useLayoutInsets();
   const { t: tr } = useLanguage();
   const tabBarScrollProps = useTabBarAwareScrollProps();
@@ -118,7 +119,7 @@ export function PodReconciliationScreen() {
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 1024;
   const isMediumScreen = width >= 768;
-  const allowed = canAccessPodManagement(profile);
+  const allowed = canAccessPodManagement(profile, caps);
 
   useEffect(() => {
     if (!isMediumScreen && viewMode === "table") {

@@ -79,6 +79,7 @@ export interface FinanceSummarySectionProps {
   /** Cash tab: party category filter (All / Customers / Suppliers / Vehicle / Driver). */
   ledgerCategory?: LedgerCategory;
   onLedgerCategoryChange?: (c: LedgerCategory) => void;
+  allowedLedgerCategories?: readonly LedgerCategory[];
   onClearFilters?: () => void;
   isAnyFilterActive?: boolean;
   auditedTotalIn?: number;
@@ -97,6 +98,8 @@ export interface FinanceSummarySectionProps {
   >;
   /** Mobile unified scroll: tab pills render in FinanceScreen fixed dock. */
   omitTabRow?: boolean;
+  /** RBAC-filtered fiscal tabs. */
+  visibleTabs?: readonly { id: FinanceSubTab; label: string }[];
 }
 
 function formatAmount(value: number): string {
@@ -207,6 +210,7 @@ export function FinanceSummarySection({
   onSourceFilterChange,
   ledgerCategory,
   onLedgerCategoryChange,
+  allowedLedgerCategories,
   onClearFilters,
   isAnyFilterActive,
   datePreset,
@@ -215,6 +219,7 @@ export function FinanceSummarySection({
   onQuickCustomRange,
   desktopCardMetrics,
   omitTabRow = false,
+  visibleTabs,
 }: FinanceSummarySectionProps) {
   void desktopCardMetrics;
   const auditedIn = auditedTotalIn ?? totalIn;
@@ -271,6 +276,7 @@ export function FinanceSummarySection({
                     treasuryInset
                     activeTab={activeTab}
                     onTabPress={onTabPress}
+                    tabs={visibleTabs}
                   />
                 )
               }
@@ -283,6 +289,7 @@ export function FinanceSummarySection({
               onCashOutPress={onCashOutPress}
               ledgerCategory={ledgerCategory}
               onLedgerCategoryChange={onLedgerCategoryChange}
+              allowedLedgerCategories={allowedLedgerCategories}
               searchQuery={searchQuery}
               onSearchChange={onSearchChange}
               searchPlaceholder={searchPlaceholder}
@@ -500,7 +507,11 @@ export function FinanceSummarySection({
                     </View>
                   </View>
                   <View style={styles.financeHeroPillsDockInline}>
-                    <FinanceTabRow activeTab={activeTab} onTabPress={onTabPress} />
+                    <FinanceTabRow
+                      activeTab={activeTab}
+                      onTabPress={onTabPress}
+                      tabs={visibleTabs}
+                    />
                   </View>
                 </View>
               </View>
@@ -537,6 +548,7 @@ export function FinanceSummarySection({
             onSourceFilterChange={onSourceFilterChange}
             ledgerCategory={ledgerCategory}
             onLedgerCategoryChange={onLedgerCategoryChange}
+            allowedLedgerCategories={allowedLedgerCategories}
             cashNetworkLayout
             onClearFilters={onClearFilters}
             isAnyFilterActive={isAnyFilterActive}

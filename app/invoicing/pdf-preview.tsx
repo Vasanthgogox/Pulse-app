@@ -13,7 +13,7 @@ import { getInvoiceBrandingSettings } from '@/features/invoicing/services/invoic
 import { useInvoiceCalc } from '@/features/invoicing/hooks/useInvoiceCalc';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
-import { getCapabilitiesFromProfile } from '@/lib/capabilities';
+import { useCapabilities } from "@/lib/useCapabilities";
 import type { InvoicePdfData } from '@/components/InvoicePdf.types';
 
 import InvoicePdf from '@/components/InvoicePdf';
@@ -30,9 +30,11 @@ interface InvoicePreviewParams extends Record<string, string | undefined> {
   additionalCharges: string;
 }
 
-function canAccessInvoicing(profile: ReturnType<typeof useAuth>['profile']): boolean {
+function canAccessInvoicing(
+  profile: ReturnType<typeof useAuth>['profile'],
+  caps: import('@/lib/capabilities').Capability[],
+): boolean {
   if (!profile || profile.role === 'driver') return false;
-  const caps = getCapabilitiesFromProfile(profile);
   return (
     caps.includes('finance_view') ||
     caps.includes('finance_manage') ||
@@ -80,6 +82,7 @@ export default function InvoicePdfPreviewScreen() {
   const router = useRouter();
   const params = useLocalSearchParams() as InvoicePreviewParams;
   const { profile } = useAuth();
+  const caps = useCapabilities();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
 
@@ -122,7 +125,7 @@ export default function InvoicePdfPreviewScreen() {
   };
 
   const calculations = useInvoiceCalc(selectedTrips, invoiceConfig);
-  const allowed = canAccessInvoicing(profile);
+  const allowed = canAccessInvoicing(profile, caps);
 
   useEffect(() => {
     let mounted = true;

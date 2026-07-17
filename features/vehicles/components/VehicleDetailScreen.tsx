@@ -34,7 +34,8 @@ import {
   type LedgerRow,
 } from "@/features/finance";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { canAccessFinance, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { canAccessFinance } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { pickAndUploadVehicleAvatar } from "@/lib/avatarUpload";
 import { formatINR, formatLedgerDate, formatRelative, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { useInvalidateVehicles } from "@/lib/queries";
@@ -85,9 +86,7 @@ export default function VehicleDetailScreen({
   const { width: windowWidth } = useWindowDimensions();
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const router = useRouter();
-  const capabilities = getCapabilitiesFromProfile(
-    profile ? { role: profile.role, aggregated: profile.aggregated, asset: profile.asset } : null,
-  );
+  const capabilities = useCapabilities();
   const canAddTransaction = canAccessFinance(capabilities);
   const [vehicle, setVehicle] = useState<VehicleRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);

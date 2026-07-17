@@ -15,7 +15,8 @@ import {
   getSupplierDetails,
 } from "@/features/suppliers/services/suppliers.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
-import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { canAssignTrip } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
@@ -79,13 +80,7 @@ export function TripExpandableCard({
   const opensNewPage = !!onPressProp;
   const { profile, user } = useAuth();
 
-  const capabilities = useMemo(
-    () =>
-      getCapabilitiesFromProfile(
-        profile ? { role: profile.role, aggregated: profile.aggregated, asset: profile.asset } : null,
-      ),
-    [profile],
-  );
+  const capabilities = useCapabilities();
   const canAssign = canAssignTrip(capabilities);
   const currentUserId = user?.uid ?? null;
   const { currentOrganization } = useOrganization();

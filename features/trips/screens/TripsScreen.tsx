@@ -69,7 +69,8 @@ import {
 } from "@/features/trips/hooks/useTripHubInTransitPings";
 import { buildTripHubPartyMetaByTripId } from "@/features/trips/utils/tripHubPartyMeta";
 import { tripNonSupplierOutflowTotal } from "@/features/trips/utils/tripManifestFreightCost";
-import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { canAccessTrips } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import {
   compareTripsByScheduleAsc,
   compareTripsByScheduleDesc,
@@ -290,15 +291,7 @@ export default function TripsScreen() {
     ? "cards"
     : listLayout;
 
-  const capabilities = getCapabilitiesFromProfile(
-    profile
-      ? {
-          role: profile.role,
-          aggregated: profile.aggregated,
-          asset: profile.asset,
-        }
-      : null,
-  );
+  const capabilities = useCapabilities();
   const canAccess = canAccessTrips(capabilities);
   const attributionRequests = useMemo(
     () =>

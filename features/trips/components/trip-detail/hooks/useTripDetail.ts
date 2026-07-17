@@ -32,7 +32,8 @@ import {
     DOCUMENT_LABELS,
 } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { canAssignTrip } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import {
   isIntegratedClientRow,
@@ -401,10 +402,7 @@ export function useTripDetail({
   const tripCompleted = trip != null && isTripCompleted(trip);
   const currentUserId = user?.uid ?? null;
 
-  const capabilities = useMemo(
-    () => getCapabilitiesFromProfile(profile),
-    [profile],
-  );
+  const capabilities = useCapabilities();
   const canAssign = useMemo(
     () => (trip ? canAssignTrip(capabilities) : false),
     [capabilities, trip],

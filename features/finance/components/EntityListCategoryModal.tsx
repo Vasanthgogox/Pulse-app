@@ -31,6 +31,8 @@ export interface EntityListCategoryModalProps {
   ledgerCategoryCounts: Record<LedgerCategory, number>;
   onSelectCategory: (key: LedgerCategory) => void;
   insetsTop: number;
+  /** RBAC-allowed categories; defaults to all. */
+  allowedCategories?: readonly LedgerCategory[];
 }
 
 export function EntityListCategoryModal({
@@ -40,8 +42,12 @@ export function EntityListCategoryModal({
   ledgerCategoryCounts,
   onSelectCategory,
   insetsTop,
+  allowedCategories,
 }: EntityListCategoryModalProps) {
   const { t } = useLanguage();
+  const categories = allowedCategories
+    ? CATEGORY_KEYS.filter((c) => allowedCategories.includes(c.key))
+    : CATEGORY_KEYS;
   return (
     <Modal
       visible={visible}
@@ -66,7 +72,7 @@ export function EntityListCategoryModal({
                 showsVerticalScrollIndicator={true}
                 keyboardShouldPersistTaps="handled"
               >
-                {CATEGORY_KEYS.map(({ key, labelKey, icon }) => {
+                {categories.map(({ key, labelKey, icon }) => {
                   const label = t(labelKey);
                   const isSelected = selectedLedgerCategory === key;
                   const count = ledgerCategoryCounts[key];

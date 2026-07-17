@@ -18,7 +18,7 @@ import {
 } from "@/features/ratings/services/ratings.service";
 import { getSignedAvatarUrl, pickAndUploadOrgLogo, updateOrganizationLogo } from "@/lib/avatarUpload";
 import { PartyAvatar } from "@/components/PartyAvatar";
-import { getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
@@ -396,7 +396,7 @@ export default function ProfileScreen() {
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
   const [orgLogoUploading, setOrgLogoUploading] = useState(false);
 
-  const capabilities = getCapabilitiesFromProfile(profile);
+  const capabilities = useCapabilities();
   const hasDispatcherOrFleetAccess =
     capabilities.includes("finance_view") ||
     capabilities.includes("finance_manage") ||

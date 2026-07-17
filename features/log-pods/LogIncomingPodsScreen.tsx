@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { PodAttachmentModal } from "@/features/log-pods/components/PodAttachmentModal";
-import { getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import {
     useAddCourierPartnerMutation,
     useCourierPartnersQuery,
@@ -66,9 +66,9 @@ function supplierLabel(value?: string | null): string {
 
 function canAccessLogPods(
   profile: ReturnType<typeof useAuth>["profile"],
+  caps: import("@/lib/capabilities").Capability[],
 ): boolean {
   if (!profile || profile.role === "driver") return false;
-  const caps = getCapabilitiesFromProfile(profile);
   return (
     caps.includes("finance_view") ||
     caps.includes("finance_manage") ||
@@ -87,6 +87,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { profile } = useAuth();
+  const caps = useCapabilities();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
 
@@ -121,7 +122,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
   const isLargeScreen = width >= 1024;
   const isMediumScreen = width >= 768;
 
-  const allowed = canAccessLogPods(profile);
+  const allowed = canAccessLogPods(profile, caps);
 
   const handleAddCustomCourier = async () => {
     const name = courierSearch.trim();

@@ -27,6 +27,8 @@ export type SupplyAllocationModeBarProps = {
   layout?: "stack" | "inline";
   /** Light wizard chips — matches attribution / create trip. */
   variant?: "classic" | "wizard";
+  /** When set, only these modes are selectable (asset-only / aggregate-only RBAC). */
+  allowedModes?: readonly SupplyAllocationMode[];
 };
 
 export function SupplyAllocationModeBar({
@@ -38,12 +40,54 @@ export function SupplyAllocationModeBar({
   compact = false,
   layout = "stack",
   variant = "classic",
+  allowedModes = ["asset", "aggregate"],
 }: SupplyAllocationModeBarProps) {
   const isAsset = mode === "asset";
   const isInline = layout === "inline";
   const isWizard = variant === "wizard";
+  const showAsset = allowedModes.includes("asset");
+  const showAggregate = allowedModes.includes("aggregate");
+  const showModeToggle = showAsset && showAggregate;
 
-  const segmentPill = isWizard ? (
+  /** Single-mode orgs: show affirmative label (own fleet / partner) — not a locked toggle. */
+  const singleModeBanner =
+    !showModeToggle && (showAsset || showAggregate) ? (
+      <View
+        style={[
+          isWizard ? fullPageWizardStyles.modeRow : assignmentShellStyles.supplySegmentSection,
+          isInline && (isWizard ? styles.modeRowInline : styles.supplySegmentSectionInline),
+        ]}
+      >
+        <View
+          style={
+            isWizard
+              ? [fullPageWizardStyles.modeChip, fullPageWizardStyles.modeChipActive, isInline && styles.modeChipInline]
+              : [assignmentShellStyles.supplySegBtn, assignmentShellStyles.supplySegBtnActive]
+          }
+        >
+          <View style={styles.wizardChipInner}>
+            {showAsset ? (
+              <Truck size={isWizard ? 13 : 14} color={isWizard ? Theme.primary : "#ffffff"} />
+            ) : (
+              <Building2 size={isWizard ? 13 : 14} color={isWizard ? Theme.primary : "#ffffff"} />
+            )}
+            <Text
+              style={
+                isWizard
+                  ? [fullPageWizardStyles.modeChipText, fullPageWizardStyles.modeChipTextActive]
+                  : [assignmentShellStyles.supplySegBtnText, assignmentShellStyles.supplySegBtnTextActive]
+              }
+            >
+              {showAsset ? "Own fleet" : "Partner fleet"}
+            </Text>
+          </View>
+        </View>
+      </View>
+    ) : null;
+
+  const segmentPill = !showModeToggle
+    ? singleModeBanner
+    : isWizard ? (
     <View
       style={[
         fullPageWizardStyles.modeRow,

@@ -100,6 +100,15 @@ export interface FinanceTabBodyProps {
   bottomInset?: number;
   /** Mobile finance: parent ScrollView owns vertical scroll (header + body). */
   embedInParentScroll?: boolean;
+  /** RBAC-filtered fiscal tabs to mount. */
+  visibleTabs?: readonly { id: FinanceSubTab; label: string }[];
+  /** Cash kanban columns (customers / suppliers / garage / drivers). */
+  kanbanVisibleColumns?: readonly (
+    | "customers"
+    | "suppliers"
+    | "garage"
+    | "drivers"
+  )[];
   profileImages: Record<string, string>;
   linkedOrgDisplayMap: Record<string, LinkedOrgDisplay>;
   tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;

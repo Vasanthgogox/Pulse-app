@@ -17,6 +17,7 @@ export function FinanceCashKanbanPanel({
   linkedOrgDisplayMap,
   onTripSelect,
   onKanbanPartyAddPress,
+  kanbanVisibleColumns,
 }: FinanceTabBodyProps) {
   return (
     <View style={styles.tableBodyWrap}>
@@ -38,6 +39,7 @@ export function FinanceCashKanbanPanel({
           profileImages={profileImages}
           showPartyPromosInColumns
           onKanbanPartyAddPress={onKanbanPartyAddPress}
+          visibleColumns={kanbanVisibleColumns}
         />
       )}
     </View>

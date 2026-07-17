@@ -1,3 +1,4 @@
+import { ModelAccessGate } from '@/components/ModelAccessGate';
 import SupplierDetailScreen from '@/features/suppliers/components/SupplierDetailScreen';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { useLocalSearchParams } from 'expo-router';
@@ -21,11 +22,13 @@ export default function SupplierDetailRoute() {
   const autoOpenProfile = profile === '1';
 
   return (
-    <SupplierDetailScreen
-      supplierId={supplierId}
-      onBack={safeBack}
-      autoOpenProfile={autoOpenProfile}
-      initialDetailSubTab={parseDetailSubTab(tabRaw)}
-    />
+    <ModelAccessGate kind="suppliers">
+      <SupplierDetailScreen
+        supplierId={supplierId}
+        onBack={safeBack}
+        autoOpenProfile={autoOpenProfile}
+        initialDetailSubTab={parseDetailSubTab(tabRaw)}
+      />
+    </ModelAccessGate>
   );
 }

@@ -49,9 +49,8 @@ import {
   LEGACY_AVATAR_BUCKET,
 } from "@/lib/avatarUpload";
 import {
-    canAccessFinance,
-    getCapabilitiesFromProfile,
-} from "@/lib/capabilities";
+    canAccessFinance } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import {
@@ -306,15 +305,7 @@ export default function DriverDetailScreen({
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const router = useRouter();
-  const capabilities = getCapabilitiesFromProfile(
-    profile
-      ? {
-          role: profile.role,
-          aggregated: profile.aggregated,
-          asset: profile.asset,
-        }
-      : null,
-  );
+  const capabilities = useCapabilities();
   const canAddTransaction = canAccessFinance(capabilities);
   const [driver, setDriver] = useState<DriverRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);

@@ -34,6 +34,15 @@ describe('grants', () => {
     expect(asset.has('dispatch')).toBe(false);
   });
 
+  it('prefers operatingModel over stale profile flags', () => {
+    const asset = buildGrantSet(
+      { role: 'user', aggregated: true, asset: true },
+      'ASSET_BASED',
+    );
+    expect(asset.has('fleet_management')).toBe(true);
+    expect(asset.has('dispatch')).toBe(false);
+  });
+
   it('grantsSatisfy allOf / anyOf', () => {
     const grants = new Set(['dispatch', 'finance_view']);
     expect(grantsSatisfy(grants, { allOf: ['dispatch'] })).toBe(true);

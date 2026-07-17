@@ -57,9 +57,8 @@ import {
     VEHICLE_CATEGORY_LABELS,
 } from "@/features/vehicles/utils/vehicleFormOptions.util";
 import {
-    getCapabilitiesFromProfile,
-    getEffectivePermissions,
-} from "@/lib/capabilities";
+    getEffectivePermissions } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { ROUTES } from "@/lib/routes";
 import { useSafeBack } from "@/lib/useSafeBack";
@@ -392,15 +391,7 @@ export default function CreateIndentScreen() {
     if (loadTypePickerOpen) setLoadTypePickerQuery("");
   }, [loadTypePickerOpen]);
 
-  const capabilities = getCapabilitiesFromProfile(
-    profile
-      ? {
-          role: profile.role,
-          aggregated: profile.aggregated,
-          asset: profile.asset,
-        }
-      : null,
-  );
+  const capabilities = useCapabilities();
   const permissions = getEffectivePermissions(capabilities);
   const canCreate = permissions.indents.create;
 

@@ -39,6 +39,8 @@ import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { withBundledActiveProducts, type ProductId } from "@/lib/productRegistry";
 import { useWorkspaceProductsQuery } from "@/lib/queries/useWorkspaceProductsQuery";
 import { ROUTES } from "@/lib/routes";
+import { canAccessPartyKind } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { buildPulseCommerceUrl, openSuiteProductApp, openSuiteProductAppInNewTab } from "@/lib/suite/suiteAuth";
 import { useRouter } from "expo-router";
 import {
@@ -117,6 +119,7 @@ export function WorkspaceHubMenu({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, profile, signOut } = useAuth();
+  const capabilities = useCapabilities();
   const { locale } = useLanguage();
   const { currentOrganization } = useOrganization();
   const [workspaceRegion, setWorkspaceRegion] = useState<
@@ -273,32 +276,52 @@ export function WorkspaceHubMenu({
     [openCommerce],
   );
 
-  const partyRows: HubRow[] = [
-    {
-      id: "party-customers",
-      label: "Customer",
-      icon: hubLucideIcon(Building2),
-      route: ROUTES.partyDirectory("customers"),
-    },
-    {
-      id: "party-suppliers",
-      label: "Supplier",
-      icon: hubLucideIcon(Truck),
-      route: ROUTES.partyDirectory("suppliers"),
-    },
-    {
-      id: "party-drivers",
-      label: "Driver",
-      icon: hubLucideIcon(User),
-      route: ROUTES.partyDirectory("drivers"),
-    },
-    {
-      id: "party-vehicles",
-      label: "Vehicle",
-      icon: hubLucideIcon(Car),
-      route: ROUTES.partyDirectory("vehicles"),
-    },
-  ];
+  const partyRows: HubRow[] = useMemo(() => {
+    const all: {
+      kind: "customers" | "suppliers" | "drivers" | "vehicles";
+      row: HubRow;
+    }[] = [
+      {
+        kind: "customers",
+        row: {
+          id: "party-customers",
+          label: "Customer",
+          icon: hubLucideIcon(Building2),
+          route: ROUTES.partyDirectory("customers"),
+        },
+      },
+      {
+        kind: "suppliers",
+        row: {
+          id: "party-suppliers",
+          label: "Supplier",
+          icon: hubLucideIcon(Truck),
+          route: ROUTES.partyDirectory("suppliers"),
+        },
+      },
+      {
+        kind: "drivers",
+        row: {
+          id: "party-drivers",
+          label: "Driver",
+          icon: hubLucideIcon(User),
+          route: ROUTES.partyDirectory("drivers"),
+        },
+      },
+      {
+        kind: "vehicles",
+        row: {
+          id: "party-vehicles",
+          label: "Vehicle",
+          icon: hubLucideIcon(Car),
+          route: ROUTES.partyDirectory("vehicles"),
+        },
+      },
+    ];
+    return all
+      .filter(({ kind }) => canAccessPartyKind(capabilities, kind))
+      .map(({ row }) => row);
+  }, [capabilities]);
 
   const navigate = (path: string) => {
     router.replace(path as Parameters<typeof router.replace>[0]);

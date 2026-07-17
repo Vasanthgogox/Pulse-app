@@ -13,6 +13,11 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { showAppAlert } from "@/lib/appAlert";
+import {
+  canUseAggregateSupply,
+  canUseAssetSupply,
+} from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
 import { CreateTripDesktopStepper } from "./CreateTripDesktopStepper";
@@ -84,7 +89,22 @@ export function AddTripModal({
   const wizardEnabled = WIZARD_FULL_PAGE_STEPPED;
   /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
   const webAllocSubSteps = false;
-  const form = useAddTripForm();
+  const capabilities = useCapabilities();
+  const canAsset = canUseAssetSupply(capabilities);
+  const canAggregate = canUseAggregateSupply(capabilities);
+  const allowedSupplyModes = useMemo(() => {
+    const modes: ("asset" | "aggregate")[] = [];
+    if (canAsset) modes.push("asset");
+    if (canAggregate) modes.push("aggregate");
+    return modes.length > 0 ? modes : (["asset", "aggregate"] as const);
+  }, [canAsset, canAggregate]);
+  const initialSupplySource =
+    canAsset && !canAggregate
+      ? "asset"
+      : canAggregate && !canAsset
+        ? "aggregate"
+        : "asset";
+  const form = useAddTripForm({ initialSupplySource });
   const [wizardStep, setWizardStep] = useState<WizardStep>("route");
   const [allocationSubStep, setAllocationSubStep] =
     useState<AllocationSubStep>("supply");
@@ -513,6 +533,7 @@ export function AddTripModal({
         sourceIndent={sourceIndent ?? null}
         allocationSubStep={allocationFlowActive ? allocationSubStep : undefined}
         onAllocationSubStepChange={setAllocationSubStep}
+        allowedSupplyModes={allowedSupplyModes}
         showInlineCta={false}
         submitting={submitting}
       />

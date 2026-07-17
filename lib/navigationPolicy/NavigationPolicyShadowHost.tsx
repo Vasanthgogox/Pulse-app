@@ -4,6 +4,7 @@
  */
 
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { isNavigationPolicyEnforceEnabled } from '@/lib/navigationPolicy/enforceFlag';
 import {
   NavigationPolicyProvider,
@@ -28,8 +29,10 @@ export function NavigationPolicyShadowHost({ children }: { children: ReactNode }
   const pathname = usePathname() ?? '/';
   const router = useRouter();
   const auth = useOptionalAuth();
+  const organization = useOptionalOrganization();
   const status = auth?.status ?? 'restoring';
   const profile = auth?.profile ?? null;
+  const operatingModel = organization?.currentOrganization?.operatingModel ?? null;
   const [predicateVersion, setPredicateVersion] = useState(getPredicateSignalVersion);
   const enforce = isNavigationPolicyEnforceEnabled();
 
@@ -85,6 +88,7 @@ export function NavigationPolicyShadowHost({ children }: { children: ReactNode }
       pathname={pathname}
       sessionPosture={sessionPosture}
       profile={profileForPolicy}
+      operatingModel={operatingModel}
       predicates={predicates}
       platform={platform}
       enforce={enforce}

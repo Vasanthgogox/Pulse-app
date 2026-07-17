@@ -39,6 +39,9 @@ import { LedgerTransactionPreviewModal } from "./LedgerTransactionPreviewModal";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
+const COLUMN_TYPES = ['customers', 'suppliers', 'garage', 'drivers'] as const;
+type ColumnType = typeof COLUMN_TYPES[number];
+
 export interface FinanceKanbanTabProps {
   transactions: LedgerRow[];
   onRowSelect?: (data: LedgerRow) => void;
@@ -77,10 +80,9 @@ export interface FinanceKanbanTabProps {
   /** When true, empty columns show full party promo cards (ledger empty on cash desktop). */
   showPartyPromosInColumns?: boolean;
   onKanbanPartyAddPress?: (column: FinanceKanbanColumnType) => void;
+  /** RBAC: hide suppliers (asset-only) or garage (aggregate-only). */
+  visibleColumns?: readonly ColumnType[];
 }
-
-const COLUMN_TYPES = ['customers', 'suppliers', 'garage', 'drivers'] as const;
-type ColumnType = typeof COLUMN_TYPES[number];
 
 const MONTHS_SHORT = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
 
@@ -351,9 +353,11 @@ export function FinanceKanbanTab({
   linkedOrgDisplayMap = {},
   showPartyPromosInColumns = false,
   onKanbanPartyAddPress,
+  visibleColumns = COLUMN_TYPES,
 }: FinanceKanbanTabProps) {
   const { t } = useLanguage();
   const [previewTransaction, setPreviewTransaction] = useState<LedgerRow | null>(null);
+  const columnTypes = visibleColumns;
 
   const clientById = useMemo(() => new Map(clientRows.map(c => [c.id, c])), [clientRows]);
   const supplierById = useMemo(() => new Map(supplierRows.map(s => [s.id, s])), [supplierRows]);
@@ -546,7 +550,7 @@ export function FinanceKanbanTab({
     <>
       <View style={styles.wrapper}>
         <View style={styles.kanbanContainer}>
-          {COLUMN_TYPES.map((type) => (
+          {columnTypes.map((type) => (
               <KanbanColumn 
                 key={type}
                 type={type}

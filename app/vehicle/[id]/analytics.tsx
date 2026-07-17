@@ -1,3 +1,4 @@
+import { ModelAccessGate } from "@/components/ModelAccessGate";
 import { useLocalSearchParams } from "expo-router";
 import { VehicleAnalyticsFullScreen } from "@/features/vehicles/components/VehicleAnalyticsFullScreen";
 
@@ -6,5 +7,9 @@ export default function VehicleAnalyticsRoute() {
   const vehicleId =
     typeof id === "string" ? id : Array.isArray(id) ? id[0] ?? "" : "";
 
-  return <VehicleAnalyticsFullScreen vehicleId={vehicleId} />;
+  return (
+    <ModelAccessGate kind="vehicles">
+      <VehicleAnalyticsFullScreen vehicleId={vehicleId} />
+    </ModelAccessGate>
+  );
 }

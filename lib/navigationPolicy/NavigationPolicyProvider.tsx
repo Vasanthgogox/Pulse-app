@@ -39,6 +39,8 @@ export type NavigationPolicyProviderProps = {
     aggregated?: boolean;
     asset?: boolean;
   } | null;
+  /** Org operating model overrides stale profile aggregated/asset flags. */
+  operatingModel?: string | null;
   predicates?: Readonly<Record<string, boolean>>;
   platform?: PlatformKind;
   /** When true, Actor applies redirect decisions. */
@@ -59,6 +61,7 @@ export function NavigationPolicyProvider({
   pathname,
   sessionPosture,
   profile,
+  operatingModel = null,
   predicates = {},
   platform = 'web',
   enforce = false,
@@ -87,11 +90,11 @@ export function NavigationPolicyProvider({
   const snapshot: PolicySnapshot = useMemo(
     () => ({
       sessionPosture,
-      principal: buildPrincipal(profile),
+      principal: buildPrincipal(profile, operatingModel),
       predicates,
       platform,
     }),
-    [sessionPosture, profile, predicates, platform],
+    [sessionPosture, profile, operatingModel, predicates, platform],
   );
 
   const canonicalPath = canonicalizePath(pathname).path;

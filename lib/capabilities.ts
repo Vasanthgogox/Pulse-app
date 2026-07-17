@@ -73,8 +73,10 @@ export function getEffectivePermissions(
         p.suppliers = true;
         break;
       case "dispatch_for_own_fleet":
+        // Own-fleet dispatch still bills customers; no suppliers (aggregation).
         p.indents = { view: true, create: true, edit: true };
         p.trips = { view: true, create: true, assign: true };
+        p.clients = true;
         break;
       case "marketplace_post":
         p.marketplacePost = true;
@@ -132,23 +134,127 @@ export function canAccessFinance(capabilities: Capability[]): boolean {
   return p.financeView || p.financeManage;
 }
 
+/** Asset / own-fleet supply path (garage, asset trips). */
+export function canUseAssetSupply(capabilities: Capability[]): boolean {
+  return (
+    capabilities.includes("fleet_management") ||
+    capabilities.includes("dispatch_for_own_fleet")
+  );
+}
+
+/** Aggregation supply path (suppliers / partner trips). */
+export function canUseAggregateSupply(capabilities: Capability[]): boolean {
+  return capabilities.includes("dispatch");
+}
+
+/**
+ * Finance fiscal tabs visible for this org model.
+ * Asset-only: no suppliers. Aggregate-only: no garage (vehicles).
+ */
+export function canAccessFinanceSubTab(
+  capabilities: Capability[],
+  tab: "cash" | "customers" | "suppliers" | "garage" | "drivers",
+): boolean {
+  if (tab === "cash") return true;
+  const p = getEffectivePermissions(capabilities);
+  switch (tab) {
+    case "customers":
+      return p.clients;
+    case "suppliers":
+      return p.suppliers;
+    case "garage":
+      return p.vehicles;
+    case "drivers":
+      return p.drivers;
+    default:
+      return false;
+  }
+}
+
+/** Ledger cash-tab party filters. */
+export function canAccessLedgerCategory(
+  capabilities: Capability[],
+  category: "all" | "customers" | "suppliers" | "vehicle" | "driver",
+): boolean {
+  if (category === "all") return true;
+  const p = getEffectivePermissions(capabilities);
+  switch (category) {
+    case "customers":
+      return p.clients;
+    case "suppliers":
+      return p.suppliers;
+    case "vehicle":
+      return p.vehicles;
+    case "driver":
+      return p.drivers;
+    default:
+      return false;
+  }
+}
+
+/** Party directory / hub rows. */
+export function canAccessPartyKind(
+  capabilities: Capability[],
+  kind: "customers" | "suppliers" | "drivers" | "vehicles",
+): boolean {
+  const p = getEffectivePermissions(capabilities);
+  switch (kind) {
+    case "customers":
+      return p.clients;
+    case "suppliers":
+      return p.suppliers;
+    case "drivers":
+      return p.drivers;
+    case "vehicles":
+      return p.vehicles;
+    default:
+      return false;
+  }
+}
+
 export interface ProfileForCapabilities {
   role: string;
   aggregated?: boolean;
   asset?: boolean;
 }
 
+export type OperatingModelForCapabilities =
+  | "ASSET_BASED"
+  | "NON_ASSET"
+  | "HYBRID";
+
+/** Map org operating_model → aggregated / asset flags. */
+export function flagsFromOperatingModel(
+  operatingModel: OperatingModelForCapabilities | string | null | undefined,
+): { aggregated: boolean; asset: boolean } | null {
+  if (operatingModel === "ASSET_BASED") return { aggregated: false, asset: true };
+  if (operatingModel === "NON_ASSET") return { aggregated: true, asset: false };
+  if (operatingModel === "HYBRID") return { aggregated: true, asset: true };
+  return null;
+}
+
 export function getCapabilitiesFromProfile(
   profile: ProfileForCapabilities | null,
+  operatingModel?: OperatingModelForCapabilities | string | null,
 ): Capability[] {
   if (!profile) return [];
   if (profile.role === "driver") return [];
+
+  const fromOrg = flagsFromOperatingModel(operatingModel);
+  const aggregated = fromOrg ? fromOrg.aggregated : profile.aggregated !== false;
+  const asset = fromOrg ? fromOrg.asset : profile.asset !== false;
+
   const caps: Capability[] = [];
-  if (profile.aggregated !== false) {
+  if (aggregated) {
     caps.push("dispatch", "marketplace_post", "finance_view", "finance_manage");
   }
-  if (profile.asset !== false) {
-    caps.push("fleet_management", "dispatch_for_own_fleet", "marketplace_bid", "finance_manage");
+  if (asset) {
+    caps.push(
+      "fleet_management",
+      "dispatch_for_own_fleet",
+      "marketplace_bid",
+      "finance_manage",
+    );
   }
   return [...new Set(caps)];
 }

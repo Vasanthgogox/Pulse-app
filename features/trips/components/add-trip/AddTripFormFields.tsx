@@ -184,6 +184,8 @@ export interface AddTripFormFieldsProps {
   allocationSubStep?: AllocationSubStep;
   /** Jump back to a prior allocation sub-step (e.g. change partner from rates). */
   onAllocationSubStepChange?: (step: AllocationSubStep) => void;
+  /** RBAC: which supply modes the org may use. */
+  allowedSupplyModes?: readonly ("asset" | "aggregate")[];
 }
 
 function allocationProgressTabLabel(
@@ -231,6 +233,7 @@ export function AddTripFormFields({
   allocationSubStep,
   onAllocationSubStepChange,
   sourceIndent = null,
+  allowedSupplyModes = ["asset", "aggregate"] as const,
 }: AddTripFormFieldsProps) {
   void refetchClients;
   const invalidSet = useMemo(
@@ -2211,6 +2214,7 @@ export function AddTripFormFields({
               assignLaterDisabled={assignLaterSwitchDisabled}
               onModeChange={(mode) => setters.setSupplySource(mode)}
               onAssignLaterChange={setters.setAssignLater}
+              allowedModes={allowedSupplyModes}
             />
             {assignLaterSwitchDisabled ? (
               <Text style={styles.assignLaterLockedHintBelow}>
@@ -2667,6 +2671,7 @@ export function AddTripFormFields({
               assignLaterDisabled={assignLaterSwitchDisabled}
               onModeChange={(mode) => setters.setSupplySource(mode)}
               onAssignLaterChange={setters.setAssignLater}
+              allowedModes={allowedSupplyModes}
             />
             <View style={{ marginBottom: assignLaterSwitchDisabled ? 12 : 0 }}>
               {assignLaterSwitchDisabled ? (

@@ -9,7 +9,7 @@ import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { InvoicePreviewPanel } from "@/features/invoicing/components/InvoicePreviewPanel";
 import type { InvoicingTripView } from "@/features/invoicing/services/invoicing.service";
-import { getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import {
     useExecuteInvoiceMutation,
     useInvoicingExecuteTripsQuery,
@@ -37,9 +37,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function canAccessInvoicing(
   profile: ReturnType<typeof useAuth>["profile"],
+  caps: import("@/lib/capabilities").Capability[],
 ): boolean {
   if (!profile || profile.role === "driver") return false;
-  const caps = getCapabilitiesFromProfile(profile);
   return (
     caps.includes("finance_view") ||
     caps.includes("finance_manage") ||
@@ -54,6 +54,7 @@ export function InvoicingExecuteScreen() {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { profile } = useAuth();
+  const caps = useCapabilities();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
 
@@ -82,7 +83,7 @@ export function InvoicingExecuteScreen() {
   /** Below this width: stacked mobile wizard (matches POD / preview column split). */
   const INVOICING_DESKTOP_MIN = 1024;
   const isLargeScreen = width >= INVOICING_DESKTOP_MIN;
-  const allowed = canAccessInvoicing(profile);
+  const allowed = canAccessInvoicing(profile, caps);
   const mobileBottomPad = layout.scrollBottomPadding(16);
 
   const formatCurrencySimple = (amount: number) => {

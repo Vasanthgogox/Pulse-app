@@ -1054,6 +1054,17 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
     const e164 = normalizeIndianPhoneForMetadata(pending.phone);
     if (e164) profileUpdates.phone = e164;
   }
+  // Keep profiles.aggregated/asset aligned with org operating model (RBAC source).
+  if (pending.operatingModel === "ASSET_BASED") {
+    profileUpdates.aggregated = false;
+    profileUpdates.asset = true;
+  } else if (pending.operatingModel === "NON_ASSET") {
+    profileUpdates.aggregated = true;
+    profileUpdates.asset = false;
+  } else if (pending.operatingModel === "HYBRID") {
+    profileUpdates.aggregated = true;
+    profileUpdates.asset = true;
+  }
   const orgUpdates: Record<string, unknown> = {};
   if (createsOrganization(pendingOnboardingType)) {
     if (pending.companyName?.trim()) orgUpdates.name = pending.companyName.trim();
@@ -1503,9 +1514,20 @@ export async function refreshSession(): Promise<{
 
       if (profile) {
         const dbProfile = mapDbProfileToAuth(profile);
+        const meta = user.user_metadata ?? {};
+        const opModel = meta.operating_model as string | undefined;
+        // Prefer auth metadata operating_model over stale profiles.aggregated/asset.
+        const preferMetaModel =
+          opModel === "ASSET_BASED" ||
+          opModel === "NON_ASSET" ||
+          opModel === "HYBRID";
         const merged: AuthProfile = {
           ...base.profile,
           ...dbProfile,
+          aggregated: preferMetaModel
+            ? base.profile.aggregated
+            : dbProfile.aggregated,
+          asset: preferMetaModel ? base.profile.asset : dbProfile.asset,
           avatar_url: dbProfile.avatar_url ?? base.profile.avatar_url,
           avatar_seed: dbProfile.avatar_seed ?? base.profile.avatar_seed,
           status_text: dbProfile.status_text ?? base.profile.status_text,

@@ -64,10 +64,8 @@ import {
 } from "@/features/trips/visibility/tripVisibility";
 import { computeClientPaidSeed } from "@/features/clients/utils/clientPaidSeed.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import {
-    canAccessFinance,
-    getCapabilitiesFromProfile,
-} from "@/lib/capabilities";
+import { canAccessFinance } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate, formatTripTableDate } from "@/lib/format";
 import {
@@ -225,15 +223,7 @@ export default function ClientDetailScreen({
   const { profile } = useAuth();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const queryClient = useQueryClient();
-  const capabilities = getCapabilitiesFromProfile(
-    profile
-      ? {
-          role: profile.role,
-          aggregated: profile.aggregated,
-          asset: profile.asset,
-        }
-      : null,
-  );
+  const capabilities = useCapabilities();
   const canAddTransaction = canAccessFinance(capabilities);
   const [client, setClient] = useState<ClientRow | null>(null);
   const clientName = client?.name || client?.contact_person || t("client");

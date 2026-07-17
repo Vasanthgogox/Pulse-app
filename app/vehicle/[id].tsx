@@ -1,3 +1,4 @@
+import { ModelAccessGate } from '@/components/ModelAccessGate';
 import { useLocalSearchParams } from 'expo-router';
 import { VehicleDetailScreen } from '@/features/vehicles';
 import { useSafeBack } from '@/lib/useSafeBack';
@@ -14,11 +15,13 @@ export default function VehicleDetailRoute() {
   const initialLedgerTripId = typeof tripId === 'string' ? tripId : undefined;
 
   return (
-    <VehicleDetailScreen
-      vehicleId={vehicleId}
-      onBack={safeBack}
-      openAddEntryOnLoad={shouldOpenAddEntry}
-      initialLedgerTripId={initialLedgerTripId}
-    />
+    <ModelAccessGate kind="vehicles">
+      <VehicleDetailScreen
+        vehicleId={vehicleId}
+        onBack={safeBack}
+        openAddEntryOnLoad={shouldOpenAddEntry}
+        initialLedgerTripId={initialLedgerTripId}
+      />
+    </ModelAccessGate>
   );
 }

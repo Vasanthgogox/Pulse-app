@@ -63,9 +63,8 @@ import {
 } from "@/features/trips/visibility/tripVisibility";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
-    canAccessFinance,
-    getCapabilitiesFromProfile,
-} from "@/lib/capabilities";
+    canAccessFinance } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate, formatTripTableDate } from "@/lib/format";
 import {
@@ -159,15 +158,7 @@ export default function SupplierDetailScreen({
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const queryClient = useQueryClient();
-  const capabilities = getCapabilitiesFromProfile(
-    profile
-      ? {
-          role: profile.role,
-          aggregated: profile.aggregated,
-          asset: profile.asset,
-        }
-      : null,
-  );
+  const capabilities = useCapabilities();
   const canAddTransaction = canAccessFinance(capabilities);
   const [supplier, setSupplier] = useState<SupplierRow | null>(null);
   const supplierName =

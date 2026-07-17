@@ -192,8 +192,19 @@ const initialState: AddTripFormState = {
   aggregateVehicleText: '',
 };
 
-export function useAddTripForm() {
-  const [state, setState] = useState<AddTripFormState>(initialState);
+export function useAddTripForm(options?: {
+  initialSupplySource?: AddTripFormState["supplySource"];
+}) {
+  const [state, setState] = useState<AddTripFormState>(() => ({
+    ...initialState,
+    supplySource: options?.initialSupplySource ?? initialState.supplySource,
+  }));
+
+  useEffect(() => {
+    const next = options?.initialSupplySource;
+    if (!next) return;
+    setState((s) => (s.supplySource === next ? s : { ...s, supplySource: next }));
+  }, [options?.initialSupplySource]);
 
   const setPickupArea = useCallback((v: string) => setState((s) => ({
     ...s,

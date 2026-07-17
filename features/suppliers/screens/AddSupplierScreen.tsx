@@ -1,4 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { PartyRegistrationPortal } from "@/features/finance/components/PartyRegistrationPortal";
 import { usePartyPortalRouteHandlers } from "@/features/finance/hooks/usePartyPortalRouteHandlers";
@@ -7,17 +9,32 @@ import {
   getConnectionInviteeByPhone,
   createConnectionRequest,
 } from "@/features/connections/services/connectionRequests.service";
+import { canAccessSuppliers } from "@/lib/capabilities";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { ROUTES } from "@/lib/routes";
 
 export default function AddSupplierScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const partyPortal = usePartyPortalRouteHandlers();
+  const { profile } = useAuth();
+  const capabilities = useCapabilities();
   const { currentOrganization } = useOrganization();
   const returnToParam = Array.isArray(params.returnTo)
     ? params.returnTo[0]
     : params.returnTo;
   const returnTo = returnToParam?.startsWith("/") ? returnToParam : undefined;
+
+  useEffect(() => {
+    if (profile && !canAccessSuppliers(capabilities)) {
+      if (router.canGoBack()) router.back();
+      else router.replace(ROUTES.TABS.FINANCE as "/");
+    }
+  }, [capabilities, profile, router]);
+
+  if (profile && !canAccessSuppliers(capabilities)) {
+    return null;
+  }
 
   const closeModal = () => {
     if (router.canGoBack()) {
