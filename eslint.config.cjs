@@ -5,6 +5,7 @@ const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const importPlugin = require('eslint-plugin-import');
 const boundariesPlugin = require('eslint-plugin-boundaries');
 const unusedImports = require('eslint-plugin-unused-imports');
+const reactHooks = require('eslint-plugin-react-hooks');
 
 // Custom project-specific rules
 const pulse = {
@@ -86,6 +87,7 @@ module.exports = [
       '@typescript-eslint': tsPlugin,
       import: importPlugin,
       'unused-imports': unusedImports,
+      'react-hooks': reactHooks,
       pulse,
     },
     rules: {
@@ -110,6 +112,15 @@ module.exports = [
       '@typescript-eslint/no-require-imports': ['error', {
         allow: ['\\.(png|jpg|jpeg|gif|webp|svg|ttf|otf|woff2?|mp4|lottie|json)$'],
       }],
+
+      // React Hooks safety net, registered so inline disable-directives resolve and
+      // new code is checked. Both are `warn` (not error) for now: the codebase has
+      // pre-existing findings (deps arrays + apparent conditional-hook patterns,
+      // some of which are v7 false positives around _use*-prefixed helpers) that
+      // must be triaged individually before this can be promoted to `error`.
+      // TODO(hardening): triage react-hooks findings, then flip rules-of-hooks to error.
+      'react-hooks/rules-of-hooks': 'warn',
+      'react-hooks/exhaustive-deps': 'warn',
 
       // Enforce feature-level file naming for services and utils
       'pulse/file-naming': 'error',

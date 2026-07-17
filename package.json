@@ -159,6 +159,7 @@
     "eslint": "^9.39.3",
     "eslint-plugin-boundaries": "^6.0.2",
     "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-unused-imports": "^4.4.1",
     "expo-detox-config-plugin": "^12.0.0",
     "expo-dev-client": "^56.0.20",
