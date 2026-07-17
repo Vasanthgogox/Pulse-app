@@ -72,6 +72,9 @@ import {
   selectOperationsShelfItems,
 } from './priorityEngine.util';
 
+/** Prevents duplicate concurrent get_global_app_bootstrap (Strict Mode / remounts). */
+let globalBootstrapInFlightFor: string | null = null;
+
 // ── Default values ────────────────────────────────────────────────────────────
 
 const DEFAULT_NETWORK_STATUS: GlobalNetworkStatus = {
@@ -434,7 +437,11 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
       ) {
         return;
       }
+      if (!force && globalBootstrapInFlightFor === orgId) {
+        return;
+      }
 
+      globalBootstrapInFlightFor = orgId;
       set({ bootstrapStatus: 'loading', bootstrapError: null });
       const t0 = Date.now();
 
@@ -514,11 +521,16 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
           bootstrapDuration: Date.now() - t0,
           bootstrapError:    err instanceof Error ? err.message : String(err),
         });
+      } finally {
+        if (globalBootstrapInFlightFor === orgId) {
+          globalBootstrapInFlightFor = null;
+        }
       }
     },
 
     // ── reset ─────────────────────────────────────────────────────────────────
-    reset: () =>
+    reset: () => {
+      globalBootstrapInFlightFor = null;
       set({
         bootstrapStatus:         'idle',
         bootstrappedOrgId:       null,
@@ -542,7 +554,8 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         partnerOwnerIdByOrgId:      {},
         alertRows:               [],
         networkStatus:           { ...DEFAULT_NETWORK_STATUS },
-      }),
+      });
+    },
 
     patchSalaryRequestStatusLocal: (requestId, status) => {
       set((s) => applySalaryStatusToSlices(s, requestId, status));

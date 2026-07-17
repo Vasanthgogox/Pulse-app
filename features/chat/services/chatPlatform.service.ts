@@ -49,7 +49,7 @@ export async function getChatInbox(
 ): Promise<ChatInboxItem[]> {
   const { data, error } = await supabase().rpc("get_chat_inbox", {
     p_organization_id: organizationId,
-    p_limit: options?.limit ?? 30,
+    p_limit: Math.min(Math.max(options?.limit ?? 30, 1), 50),
     p_before: options?.before ?? null,
   });
   if (error) throw new Error(`Failed to load chat inbox: ${error.message}`);
@@ -67,7 +67,7 @@ export async function getChatMessages(
   const { data, error } = await supabase().rpc("get_chat_messages", {
     p_conversation_id: conversationId,
     p_before: options?.before ?? null,
-    p_limit: options?.limit ?? 30,
+    p_limit: Math.min(Math.max(options?.limit ?? 30, 1), 50),
   });
   if (error) throw new Error(`Failed to load messages: ${error.message}`);
   return (data ?? []) as ChatPlatformMessageRow[];

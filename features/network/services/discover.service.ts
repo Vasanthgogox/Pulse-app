@@ -79,11 +79,12 @@ export async function discoverOrganizations(
   limit = 20,
   offset = 0,
 ): Promise<{ error: Error | null; orgs: DiscoverOrg[] }> {
+  const cappedLimit = Math.min(Math.max(limit, 1), 40);
   const { data, error } = await supabase().rpc('discover_organizations', {
     p_org_id: orgId,
     p_search: search,
-    p_limit: limit,
-    p_offset: offset,
+    p_limit: cappedLimit,
+    p_offset: Math.max(offset, 0),
   });
 
   if (error) return { error: new Error(error.message), orgs: [] };

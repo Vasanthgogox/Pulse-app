@@ -737,8 +737,8 @@ export function useTripDetail({
   );
 
   // Phase 3b: single-RPC bundle replacing 18-24 serial calls.
-  // bundleActive is false for all orgs not in BUNDLE_ENABLED_ORG_IDS and when global flag is off —
-  // all guards below become no-ops, preserving existing behavior for those orgs.
+  // When ENABLE_TRIP_DETAIL_BUNDLE is true (global), bundleActive is true for all orgs.
+  // Legacy load effects below are no-ops on the bundle path.
   const { bundle } = useTripDetailBundleQuery(tripId, currentOrganization?.id ?? null);
   const bundleActive = isBundleEnabled(currentOrganization?.id ?? null);
 
@@ -1005,19 +1005,23 @@ export function useTripDetail({
         return;
       }
       isRefreshingRef.current = true;
-      load();
-      loadAssignmentAudit();
       setFinanceRefreshKey((k) => k + 1);
       refetchTransactionsRef.current();
+      if (bundleActive && tripId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
+      } else {
+        load();
+        loadAssignmentAudit();
+      }
     },
-    [tripId, load, loadAssignmentAudit],
+    [tripId, load, loadAssignmentAudit, bundleActive, queryClient],
   );
 
   useRealtimeTrip(tripId ?? null, handleRealtimeTripUpdate);
 
   /** Resolve audit row IDs to labels. Skipped on bundle path — names are already inlined by the RPC. */
   useEffect(() => {
-    if (bundleActive && bundleSeededRef.current) return;
+    if (bundleActive) return;
     const orgId = trip?.organization_id;
     if (!orgId || assignmentAuditRows.length === 0) {
       setAssignmentDriverNames({});
@@ -1112,7 +1116,7 @@ export function useTripDetail({
 
   /** Primary driver card + vehicle label. Skipped on bundle path — driver/vehicle seeded from RPC. */
   useEffect(() => {
-    if (bundleActive && bundleSeededRef.current) return;
+    if (bundleActive) return;
     if (!trip?.organization_id) {
       setDriverName(null);
       setDriverPhone(null);
@@ -1282,7 +1286,8 @@ export function useTripDetail({
     setSupplierAvatarUri(null);
     setClientPartyAvatarFields(null);
     setSupplierPartyAvatarFields(null);
-    if (!bundleActive || !bundleSeededRef.current) {
+    // Do not wipe party names seeded by the bundle RPC while resolving avatars.
+    if (!bundleActive) {
       setClientPartyRes(null);
       setSupplierPartyRes(null);
       setPartnerName(null);
@@ -1336,17 +1341,19 @@ export function useTripDetail({
           setClientPartyAvatarFields(fields);
           setClientAvatarUri(uri);
         }
-        let clientRow = details.client;
-        if (!clientRow) {
-          const { client } = await getClientById(ownerOrg, trip.client_id);
-          clientRow = client;
-        }
-        if (!cancelled && clientRow) {
-          setClientPartyRes({
-            name: pickClientDisplayName(clientRow),
-            integrated: isIntegratedClientRow(clientRow),
-            orgId: nStr(clientRow.linked_organization_id),
-          });
+        if (!bundleActive) {
+          let clientRow = details.client;
+          if (!clientRow) {
+            const { client } = await getClientById(ownerOrg, trip.client_id);
+            clientRow = client;
+          }
+          if (!cancelled && clientRow) {
+            setClientPartyRes({
+              name: pickClientDisplayName(clientRow),
+              integrated: isIntegratedClientRow(clientRow),
+              orgId: nStr(clientRow.linked_organization_id),
+            });
+          }
         }
       }
 
@@ -1404,35 +1411,37 @@ export function useTripDetail({
           setSupplierAvatarUri(uri);
         }
 
-        const pick = pickSupplierDisplayName;
-        let supplierRow = details.supplier;
-        if (!supplierRow) {
-          const { supplier, error: errOwner } = await getSupplierById(ownerOrg, trip.supplier_id);
-          if (!errOwner) supplierRow = supplier;
-        }
-        if (!supplierRow && viewerOrgId && viewerOrgId !== ownerOrg) {
-          const { supplier, error: errViewer } = await getSupplierById(
-            viewerOrgId,
-            trip.supplier_id,
-          );
-          if (!errViewer) supplierRow = supplier;
-        }
-        const fallback = (trip.supplier_name ?? "").trim() || null;
-        const supplierName = supplierRow ? pick(supplierRow) ?? fallback : fallback;
-        if (!cancelled) {
-          setPartnerName(supplierName);
-          if (supplierRow || supplierName) {
-            setSupplierPartyRes({
-              name: supplierName,
-              integrated: supplierRow
-                ? isIntegratedSupplierRow(supplierRow)
-                : false,
-              orgId: supplierRow
-                ? nStr(supplierRow.linked_organization_id)
-                : null,
-            });
-          } else {
-            setSupplierPartyRes(null);
+        if (!bundleActive) {
+          const pick = pickSupplierDisplayName;
+          let supplierRow = details.supplier;
+          if (!supplierRow) {
+            const { supplier, error: errOwner } = await getSupplierById(ownerOrg, trip.supplier_id);
+            if (!errOwner) supplierRow = supplier;
+          }
+          if (!supplierRow && viewerOrgId && viewerOrgId !== ownerOrg) {
+            const { supplier, error: errViewer } = await getSupplierById(
+              viewerOrgId,
+              trip.supplier_id,
+            );
+            if (!errViewer) supplierRow = supplier;
+          }
+          const fallback = (trip.supplier_name ?? "").trim() || null;
+          const supplierName = supplierRow ? pick(supplierRow) ?? fallback : fallback;
+          if (!cancelled) {
+            setPartnerName(supplierName);
+            if (supplierRow || supplierName) {
+              setSupplierPartyRes({
+                name: supplierName,
+                integrated: supplierRow
+                  ? isIntegratedSupplierRow(supplierRow)
+                  : false,
+                orgId: supplierRow
+                  ? nStr(supplierRow.linked_organization_id)
+                  : null,
+              });
+            } else {
+              setSupplierPartyRes(null);
+            }
           }
         }
       }
@@ -1546,31 +1555,33 @@ export function useTripDetail({
   const handleRefresh = useCallback(() => {
     isRefreshingRef.current = true;
     setRefreshing(true);
-    load();
-    loadAdjustments();
-    loadAssignmentAudit();
-    loadTripDocuments();
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
     if (bundleActive && tripId) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
+    } else {
+      load();
+      loadAdjustments();
+      loadAssignmentAudit();
+      loadTripDocuments();
     }
-  }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments, tripId, queryClient]);
+  }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments, tripId, queryClient, bundleActive]);
 
 
   /** Immediate refresh after assignment/reassignment actions. */
   const handleAssignmentUpdated = useCallback(() => {
-    load();
-    loadAssignmentAudit();
-    loadAdjustments();
-    loadTripDocuments();
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
-    loadTripOtp();
     if (bundleActive && tripId) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
+    } else {
+      load();
+      loadAssignmentAudit();
+      loadAdjustments();
+      loadTripDocuments();
+      loadTripOtp();
     }
-  }, [load, loadAssignmentAudit, loadAdjustments, loadTripDocuments, loadTripOtp, tripId, queryClient]);
+  }, [load, loadAssignmentAudit, loadAdjustments, loadTripDocuments, loadTripOtp, tripId, queryClient, bundleActive]);
 
   // ── Reconciliation actions ────────────────────────────────────────────────
   const refreshTripDispute = useCallback(() => {
@@ -2153,31 +2164,32 @@ export function useTripDetail({
     load();
   }, [load]);
 
-  // Supplier retry when org becomes available
+  // Supplier retry when org becomes available — skipped on bundle path
   useEffect(() => {
+    if (bundleActive) return;
     if (!tripId || !currentOrganization?.id || trip !== null || loading) return;
     if (supplierRetryForTripIdRef.current === tripId) return;
     supplierRetryForTripIdRef.current = tripId;
     setLoading(true);
     load();
-  }, [tripId, currentOrganization?.id, trip, loading, load]);
+  }, [tripId, currentOrganization?.id, trip, loading, load, bundleActive]);
 
   // Adjustments + audit on mount — skipped on bundle path (bundle seeding effect provides both)
   useEffect(() => {
     if (bundleActive) return;
     if (tripId) loadAdjustments();
-  }, [tripId, loadAdjustments]);
+  }, [tripId, loadAdjustments, bundleActive]);
   useEffect(() => {
     if (bundleActive) return;
     if (tripId) loadAssignmentAudit();
-  }, [tripId, loadAssignmentAudit]);
+  }, [tripId, loadAssignmentAudit, bundleActive]);
 
   // Trip documents — skipped on bundle path (bundle seeding effect provides documents)
   useEffect(() => {
-    if (bundleActive && bundleSeededRef.current) return;
+    if (bundleActive) return;
     if (trip?.id) loadTripDocuments();
     else setTripDocuments([]);
-  }, [trip?.id, loadTripDocuments]);
+  }, [trip?.id, loadTripDocuments, bundleActive]);
 
   useEffect(() => {
     if (!selectedDoc) {
@@ -2271,13 +2283,13 @@ export function useTripDetail({
 
   // OTP — skipped on bundle path (bundle seeding effect provides otp or null)
   useEffect(() => {
-    if (bundleActive && bundleSeededRef.current) return;
+    if (bundleActive) return;
     if (trip?.id && (isAggregateTrip(trip) || (!!trip.driver_id && !driverLinked))) {
       loadTripOtp();
     } else {
       setTripOtp(null);
     }
-  }, [trip?.id, trip?.supplier_id, trip?.driver_id, driverLinked, loadTripOtp]);
+  }, [trip?.id, trip?.supplier_id, trip?.driver_id, driverLinked, loadTripOtp, bundleActive]);
 
   // Driver_locations history + latest fix (mobile app pings) — always for assigned / in-transit trips.
   useEffect(() => {
@@ -2408,7 +2420,7 @@ export function useTripDetail({
     let cancelled = false;
     Promise.all(
       partnerKeys.map((partnerKey) =>
-        getSharedLedgerEntriesForPartner(orgId, partnerKey).then((res) => ({
+        getSharedLedgerEntriesForPartner(orgId, partnerKey, trip.id).then((res) => ({
           partnerKey,
           entries: res.entries ?? [],
         })),
@@ -2416,14 +2428,8 @@ export function useTripDetail({
     )
       .then((results) => {
         if (cancelled) return;
-        const tripRef2 = String(trip.id).trim().toLowerCase();
         const merged = results.flatMap((result) =>
-          result.entries
-            .filter(
-              (entry) =>
-                String(entry.reference_id ?? "").trim().toLowerCase() === tripRef2,
-            )
-            .map((entry) => ({
+          result.entries.map((entry) => ({
               id: entry.id,
               partnerKey: result.partnerKey,
               amount: Number(entry.amount ?? 0),

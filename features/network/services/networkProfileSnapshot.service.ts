@@ -216,15 +216,12 @@ export async function getOrgProfileSnapshot(
     return { error: null, snapshot: null };
   }
 
-  // 1) Partner display RPCs first — SECURITY DEFINER, readable for Discover orgs
-  //    the viewer does not belong to. Direct `organizations` SELECT is blocked by
-  //    RLS ("Users can read orgs they belong to") for those profiles.
-  const [partnerDisplayRes, partnerProfileRes, orgLoadRes] = await Promise.all([
+  // 1) Partner display — prefer batch (avoids redundant single RPC). SECURITY DEFINER
+  //    so Discover orgs remain readable when direct `organizations` SELECT is RLS-blocked.
+  //    Fall back to single RPC only when batch misses this org.
+  const [partnerDisplayRes, orgLoadRes] = await Promise.all([
     supabase().rpc("get_connection_partner_display_batch", {
       p_linked_organization_ids: [targetOrgId],
-    }),
-    supabase().rpc("get_connection_partner_display", {
-      p_linked_organization_id: targetOrgId,
     }),
     loadOrganizationRow(targetOrgId),
   ]);
@@ -237,9 +234,16 @@ export async function getOrgProfileSnapshot(
     ? null
     : (partnerDisplayRes.data as Record<string, PartnerDisplayBatchRow> | null);
   const partnerBatch = partnerBatchMap?.[targetOrgId] ?? null;
-  const partnerProfile = partnerProfileRes.error
-    ? null
-    : ((partnerProfileRes.data ?? null) as PartnerDisplaySingleRow | null);
+
+  let partnerProfile: PartnerDisplaySingleRow | null = null;
+  if (!partnerBatch) {
+    const partnerProfileRes = await supabase().rpc("get_connection_partner_display", {
+      p_linked_organization_id: targetOrgId,
+    });
+    partnerProfile = partnerProfileRes.error
+      ? null
+      : ((partnerProfileRes.data ?? null) as PartnerDisplaySingleRow | null);
+  }
 
   let orgRow =
     orgLoadRes.row ??

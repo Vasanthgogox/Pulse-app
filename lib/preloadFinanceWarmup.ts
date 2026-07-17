@@ -17,7 +17,9 @@ export function preloadFinanceRouteChunk(): void {
   preloadTabScreen('finance');
 }
 
-/** Prefetch trips + ledger so phase-2 splash clears faster after the chunk loads. */
+/** Prefetch trips + ledger so phase-2 splash clears faster after the chunk loads.
+ * Trips use the same query key as useTripsQuery so TanStack dedupes in-flight / cached fetches.
+ */
 export function prefetchFinanceQueries(
   queryClient: QueryClient,
   orgId: string,
@@ -25,6 +27,7 @@ export function prefetchFinanceQueries(
   void queryClient.prefetchQuery({
     queryKey: queryKeys.trips.finite(orgId),
     queryFn: async () => {
+      // Same RPC as useTripsQuery — shared cache key avoids a second get_trips_for_org.
       const { data, error } = await supabase().rpc('get_trips_for_org', {
         p_org_id: orgId,
       });

@@ -2,8 +2,7 @@
  * Phase 3a: Trip Detail Bundle Query
  *
  * Replaces 18-24 serial DB round trips with one RPC call to get_trip_detail_bundle().
- * Feature-flagged: set ENABLE_TRIP_DETAIL_BUNDLE = true after validating bundle output
- * against the legacy 20-call path on representative trips.
+ * Feature-flagged: set ENABLE_TRIP_DETAIL_BUNDLE = false to roll back to the legacy path.
  *
  * Rollback: set flag to false — the hook returns undefined and callers fall back
  * to the existing direct-service code path. No schema changes required for rollback.

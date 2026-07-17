@@ -23,6 +23,7 @@ import {
 import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
+import { IdempotencyService } from "@/lib/idempotencyService";
 import type { ChatLanes } from "../utils/laneMultiplexer.util";
 import {
   buildChatLanesFromConversations,
@@ -901,7 +902,7 @@ export async function getNetworkConversationsDelta(
   const { data, error } = await supabase().rpc("get_network_conversations_delta", {
     p_org_id: organizationId,
     p_since: since.updatedAt,
-    p_limit: 500,
+    p_limit: 100,
   });
   if (error) {
     return {
@@ -1914,7 +1915,11 @@ export interface ProcessB2BEventResult {
  *   ledger / ledger_event  → client + supplier conversations only
  *   tracking               → driver conversation only
  *   status_change / system → all conversations (broadcast)
+ *
+ * Concurrent identical calls are single-flighted; retries use IdempotencyService.
  */
+const b2bEventInFlight = new Map<string, Promise<ProcessB2BEventResult>>();
+
 export async function processB2BEvent(params: {
   organizationId: string;
   tripId:         string;
@@ -1932,30 +1937,81 @@ export async function processB2BEvent(params: {
   if (params.payload.conversationId != null) rpcPayload.conversation_id = params.payload.conversationId;
   if (params.payload.extraMeta)   rpcPayload.extra_meta  = params.payload.extraMeta;
 
-  const { data, error } = await supabase().rpc('process_b2b_event', {
-    p_organization_id: params.organizationId,
-    p_trip_id:         params.tripId,
-    p_event_type:      params.eventType,
-    p_payload:         rpcPayload,
-  });
-  if (error) throw error;
+  const flightKey = [
+    params.organizationId,
+    params.tripId,
+    params.eventType,
+    JSON.stringify(rpcPayload),
+  ].join('|');
 
-  const r = data as {
-    ok:          boolean;
-    message_ids: string[];
-    trip_state:  import('../types/chat.types').B2BTripState;
-    prev_status: string;
-    new_status:  string;
-    event_type:  string;
-  };
-  return {
-    ok:         r.ok,
-    messageIds: r.message_ids,
-    tripState:  r.trip_state,
-    prevStatus: r.prev_status,
-    newStatus:  r.new_status,
-    eventType:  r.event_type,
-  };
+  const existing = b2bEventInFlight.get(flightKey);
+  if (existing) return existing;
+
+  const run = (async (): Promise<ProcessB2BEventResult> => {
+    const idemKey = `b2b:${flightKey}`.slice(0, 200);
+    const guard = await IdempotencyService.acquire(
+      'b2b_event',
+      idemKey,
+      params.organizationId,
+      params.payload.userId ?? null,
+      { tripId: params.tripId, eventType: params.eventType, ...rpcPayload },
+    );
+    if (guard.ok === false && guard.replay && guard.result) {
+      return guard.result as unknown as ProcessB2BEventResult;
+    }
+    if (guard.ok === false && 'pending' in guard && guard.pending) {
+      throw new Error(guard.error);
+    }
+    if (guard.ok === false && 'conflict' in guard && guard.conflict) {
+      throw new Error(guard.error);
+    }
+
+    try {
+      const { data, error } = await supabase().rpc('process_b2b_event', {
+        p_organization_id: params.organizationId,
+        p_trip_id:         params.tripId,
+        p_event_type:      params.eventType,
+        p_payload:         rpcPayload,
+      });
+      if (error) throw error;
+
+      const r = data as {
+        ok:          boolean;
+        message_ids: string[];
+        trip_state:  import('../types/chat.types').B2BTripState;
+        prev_status: string;
+        new_status:  string;
+        event_type:  string;
+      };
+      const result: ProcessB2BEventResult = {
+        ok:         r.ok,
+        messageIds: r.message_ids,
+        tripState:  r.trip_state,
+        prevStatus: r.prev_status,
+        newStatus:  r.new_status,
+        eventType:  r.event_type,
+      };
+      await IdempotencyService.complete(
+        idemKey,
+        result.messageIds?.[0] ?? params.tripId,
+        result as unknown as Record<string, unknown>,
+      );
+      return result;
+    } catch (err) {
+      await IdempotencyService.fail(
+        idemKey,
+        err instanceof Error ? err.message : String(err),
+      );
+      throw err;
+    }
+  })();
+
+  b2bEventInFlight.set(flightKey, run);
+  try {
+    return await run;
+  } finally {
+    b2bEventInFlight.delete(flightKey);
+  }
 }
 
 // ── submitBusinessEvent ───────────────────────────────────────────────────────
@@ -1986,39 +2042,102 @@ export interface SubmitBusinessEventResult {
  * trips.status, and inserts one message per conversation (or just the targeted
  * conversation when conversationId is provided).  Returns enriched metadata
  * so the caller can patch the store without a follow-up fetch.
+ *
+ * Concurrent identical calls are single-flighted; retries use IdempotencyService.
  */
+const businessEventInFlight = new Map<string, Promise<SubmitBusinessEventResult>>();
+
 export async function submitBusinessEvent(
   params: SubmitBusinessEventParams,
 ): Promise<SubmitBusinessEventResult> {
-  const { data, error } = await supabase().rpc('submit_business_event', {
-    p_organization_id: params.organizationId,
-    p_trip_id:         params.tripId,
-    p_event_type:      params.eventType,
-    p_content:         params.content,
-    p_metadata:        params.metadata ?? {},
-    p_new_trip_status: params.newTripStatus ?? null,
-    p_user_id:         params.userId ?? null,
-    p_user_name:       params.userName ?? 'System',
-    p_conversation_id: params.conversationId ?? null,
-  });
-  if (error) throw error;
+  const flightKey = [
+    params.organizationId,
+    params.tripId,
+    params.eventType,
+    params.content,
+    params.newTripStatus ?? '',
+    params.conversationId ?? '',
+    JSON.stringify(params.metadata ?? {}),
+  ].join('|');
 
-  const result = data as {
-    ok:          boolean;
-    message_ids: string[];
-    updated_at:  string;
-    prev_status: string;
-    new_status:  string;
-    event_type:  string;
-  };
-  return {
-    ok:         result.ok,
-    messageIds: result.message_ids,
-    updatedAt:  result.updated_at,
-    prevStatus: result.prev_status,
-    newStatus:  result.new_status,
-    eventType:  result.event_type,
-  };
+  const existing = businessEventInFlight.get(flightKey);
+  if (existing) return existing;
+
+  const run = (async (): Promise<SubmitBusinessEventResult> => {
+    const idemKey = `biz:${flightKey}`.slice(0, 200);
+    const guard = await IdempotencyService.acquire(
+      'business_event',
+      idemKey,
+      params.organizationId,
+      params.userId ?? null,
+      {
+        tripId: params.tripId,
+        eventType: params.eventType,
+        content: params.content,
+        metadata: params.metadata ?? {},
+      },
+    );
+    if (guard.ok === false && guard.replay && guard.result) {
+      return guard.result as unknown as SubmitBusinessEventResult;
+    }
+    if (guard.ok === false && 'pending' in guard && guard.pending) {
+      throw new Error(guard.error);
+    }
+    if (guard.ok === false && 'conflict' in guard && guard.conflict) {
+      throw new Error(guard.error);
+    }
+
+    try {
+      const { data, error } = await supabase().rpc('submit_business_event', {
+        p_organization_id: params.organizationId,
+        p_trip_id:         params.tripId,
+        p_event_type:      params.eventType,
+        p_content:         params.content,
+        p_metadata:        params.metadata ?? {},
+        p_new_trip_status: params.newTripStatus ?? null,
+        p_user_id:         params.userId ?? null,
+        p_user_name:       params.userName ?? 'System',
+        p_conversation_id: params.conversationId ?? null,
+      });
+      if (error) throw error;
+
+      const resultRaw = data as {
+        ok:          boolean;
+        message_ids: string[];
+        updated_at:  string;
+        prev_status: string;
+        new_status:  string;
+        event_type:  string;
+      };
+      const result: SubmitBusinessEventResult = {
+        ok:         resultRaw.ok,
+        messageIds: resultRaw.message_ids,
+        updatedAt:  resultRaw.updated_at,
+        prevStatus: resultRaw.prev_status,
+        newStatus:  resultRaw.new_status,
+        eventType:  resultRaw.event_type,
+      };
+      await IdempotencyService.complete(
+        idemKey,
+        result.messageIds?.[0] ?? params.tripId,
+        result as unknown as Record<string, unknown>,
+      );
+      return result;
+    } catch (err) {
+      await IdempotencyService.fail(
+        idemKey,
+        err instanceof Error ? err.message : String(err),
+      );
+      throw err;
+    }
+  })();
+
+  businessEventInFlight.set(flightKey, run);
+  try {
+    return await run;
+  } finally {
+    businessEventInFlight.delete(flightKey);
+  }
 }
 
 /**

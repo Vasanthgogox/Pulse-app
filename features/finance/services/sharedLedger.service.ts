@@ -168,19 +168,24 @@ export async function getSharedLedgerConnections(orgId: string): Promise<{
 /**
  * Get transaction-level shared ledger entries for a partner (dispute audit).
  * RPC get_shared_ledger_entries(org_id, partner_key).
+ * Prefer getSharedLedgerTripSummary for aggregates; use this for entry lists.
+ * Caps payload size — pass referenceId for trip-scoped fetches (limit 10).
  */
 export async function getSharedLedgerEntriesForPartner(
   orgId: string,
   partnerKey: string,
   referenceId?: string,
+  opts?: { limit?: number },
 ): Promise<{
   error: Error | null;
   entries: SharedLedgerEntry[];
 }> {
+  const defaultLimit = referenceId ? 10 : 100;
+  const limit = Math.min(Math.max(opts?.limit ?? defaultLimit, 1), 200);
   const rpc = supabase().rpc('get_shared_ledger_entries', {
     org_id: orgId,
     partner_key: partnerKey,
-  }).limit(referenceId ? 10 : 500);
+  }).limit(limit);
   const { data, error } = await (referenceId ? rpc.eq('reference_id', referenceId) : rpc);
   if (error) return { error: new Error(error.message), entries: [] };
   const rows = (Array.isArray(data) ? data : []) as Array<{

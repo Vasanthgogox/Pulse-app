@@ -130,10 +130,11 @@ export async function getNetworkFeed(
   limit = 30,
   offset = 0,
 ): Promise<{ error: Error | null; posts: PostRow[] }> {
+  const cappedLimit = Math.min(Math.max(limit, 1), 50);
   const { data, error } = await supabase().rpc('get_network_feed', {
     p_org_id: orgId,
-    p_limit: limit,
-    p_offset: offset,
+    p_limit: cappedLimit,
+    p_offset: Math.max(offset, 0),
   });
   if (error) return { error: new Error(error.message), posts: [] };
   const rawPosts = (data ?? []) as PostRow[];

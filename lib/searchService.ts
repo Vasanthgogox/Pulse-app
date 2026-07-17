@@ -66,8 +66,8 @@ class _GlobalSearchService {
         p_query:  query.trim(),
         p_org_id: options.orgId ?? null,
         p_types:  options.types ?? null,
-        p_limit:  options.limit ?? 20,
-        p_offset: options.offset ?? 0,
+        p_limit:  Math.min(Math.max(options.limit ?? 20, 1), 40),
+        p_offset: Math.max(options.offset ?? 0, 0),
       });
 
       if (error) return { results: [], error: new Error(error.message) };

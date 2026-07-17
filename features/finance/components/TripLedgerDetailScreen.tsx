@@ -281,13 +281,11 @@ export function TripLedgerDetailScreen({
           return;
         }
         const [entriesRes, summaryRes] = await Promise.all([
-          getSharedLedgerEntriesForPartner(orgId, entityId),
+          getSharedLedgerEntriesForPartner(orgId, entityId, trip.id),
           getSharedLedgerTripSummary(orgId, entityId),
         ]);
         if (cancelled) return;
-        const tripScoped = (entriesRes.entries ?? []).filter(
-          (e) => e.reference_id === trip.id,
-        );
+        const tripScoped = entriesRes.entries ?? [];
         setPartnerEntries(tripScoped);
         const tripSummary =
           (summaryRes.rows ?? []).find((r) => r.trip_id === trip.id) ?? null;

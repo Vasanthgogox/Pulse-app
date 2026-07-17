@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getTransactionsByOrganization, type LedgerRow } from "@/features/finance";
@@ -11,12 +12,14 @@ import {
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { supabase } from "@/lib/supabase";
+import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function useClientAnalyticsData(clientId: string) {
   const { t } = useLanguage();
   const { currentOrganization } = useOrganization();
   const { status } = useAuth();
+  const queryClient = useQueryClient();
   const [client, setClient] = useState<ClientRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
@@ -35,14 +38,21 @@ export function useClientAnalyticsData(clientId: string) {
     setError(null);
     const orgId = currentOrganization.id;
 
+    // Reuse Trips tab cache — avoid a second get_trips_for_org round-trip.
+    const tripsPromise = queryClient.ensureQueryData({
+      queryKey: queryKeys.trips.finite(orgId),
+      queryFn: async () => {
+        const { data, error: tripsError } = await supabase().rpc("get_trips_for_org", {
+          p_org_id: orgId,
+        });
+        if (tripsError) throw new Error(tripsError.message);
+        return (data ?? []) as TripRow[];
+      },
+    });
+
     Promise.all([
       getClientDetailBundle(orgId, clientId),
-      supabase()
-        .rpc("get_trips_for_org", { p_org_id: orgId })
-        .then(({ data, error: tripsError }) => {
-          if (tripsError) throw new Error(tripsError.message);
-          return (data ?? []) as TripRow[];
-        }),
+      tripsPromise,
       getTransactionsByOrganization(orgId),
       getClientsByOrganization(orgId),
     ])
@@ -112,7 +122,7 @@ export function useClientAnalyticsData(clientId: string) {
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
-  }, [clientId, currentOrganization?.id, status]);
+  }, [clientId, currentOrganization?.id, status, queryClient]);
 
   useEffect(() => {
     load();
