@@ -115,7 +115,6 @@ export function ClientProfileHub({
     [bundle.client?.state, bundle.client?.country].filter(Boolean).join(", ") ||
     bundle.warehouses[0]?.city ||
     null;
-  const contactPerson = client.contact_person?.trim();
   const isIntegrated =
     client.is_integrated ?? Boolean(client.linked_organization_id);
   const chatPartner = useMemo(

@@ -17,9 +17,7 @@ interface InvoicePdfDocumentProps {
 export const renderInvoiceToHtml = ({ 
   activeClient,
   selectedTrips,
-  paymentTerms,
   notes,
-  gstRate,
   fuelRate,
   additionalCharges,
   calculations,

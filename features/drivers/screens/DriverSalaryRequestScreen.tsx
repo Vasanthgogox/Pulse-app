@@ -71,13 +71,7 @@ function formatLedgerDate(dateStr: string) {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
-const MONTH_SHORT_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const KEYPAD_KEYS: string[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'delete'];
 const SALARY_REQUEST_DRAFT_KEY = 'driver_salary_request_draft_v1';
-
-function formatSalaryDateDisplay(d: Date): string {
-  return `${MONTH_SHORT_NAMES[d.getMonth()]} ${d.getFullYear()}`;
-}
 
 function toISODate(d: Date): string {
   const y = d.getFullYear();
@@ -91,12 +85,6 @@ function formatRequestRefDisplay(id: string): string {
   const hex = id.replace(/-/g, '');
   if (hex.length >= 14) return `${hex.slice(0, 14).toUpperCase()}`;
   return id;
-}
-
-function formatRupeeDisplay(raw: string): string {
-  const cleaned = raw.replace(/[^0-9]/g, '');
-  const amount = Number(cleaned || '0');
-  return amount.toLocaleString('en-IN');
 }
 
 /** Parsed integer ₹ from keypad / TextInput (non-digits stripped). Empty → 0 (invalid for submit). */
@@ -158,12 +146,12 @@ export default function SalaryRequestScreen() {
   const [salaryRequestSubmitting, setSalaryRequestSubmitting] = useState(false);
   const [selectedSalaryTripIds, setSelectedSalaryTripIds] = useState<string[]>([]);
   const [salaryRequestDate, setSalaryRequestDate] = useState<Date | null>(null);
-  const [showSalaryMonthDropdown, setShowSalaryMonthDropdown] = useState(false);
+  const [_showSalaryMonthDropdown, setShowSalaryMonthDropdown] = useState(false);
   const [showRequestTypeMenu, setShowRequestTypeMenu] = useState(false);
   const [neededByDate, setNeededByDate] = useState<Date | null>(null);
   const [showNeededByPicker, setShowNeededByPicker] = useState(false);
   const [showTripsDropdown, setShowTripsDropdown] = useState(false);
-  const [blink, setBlink] = useState(true);
+  const [_blink, setBlink] = useState(true);
   const [widgetPage, setWidgetPage] = useState<0 | 1>(0);
 
   const reasonMax = 500;
@@ -506,7 +494,7 @@ export default function SalaryRequestScreen() {
     );
   }, []);
 
-  const handleAmountKeyPress = useCallback((key: string) => {
+  const _handleAmountKeyPress = useCallback((key: string) => {
     if (salaryRequestType === 'trip_based') return;
     if (key === '.') return;
     if (key === 'delete') {
@@ -521,7 +509,7 @@ export default function SalaryRequestScreen() {
     });
   }, [salaryRequestType]);
 
-  const selectAllSalaryTrips = useCallback(() => {
+  const _selectAllSalaryTrips = useCallback(() => {
     setSelectedSalaryTripIds(pendingTripsForSalaryOrg.map((t) => t.id));
     setSalaryRequestAmount(String(pendingTotalForSalaryOrg));
   }, [pendingTripsForSalaryOrg, pendingTotalForSalaryOrg]);
@@ -531,7 +519,7 @@ export default function SalaryRequestScreen() {
     setSalaryRequestAmount('');
   }, []);
 
-  const saveDraft = useCallback(async () => {
+  const _saveDraft = useCallback(async () => {
     const payload = {
       version: 1,
       requestType: salaryRequestType,
@@ -547,11 +535,6 @@ export default function SalaryRequestScreen() {
       showAppAlert('Error', 'Could not save draft.');
     }
   }, [salaryRequestType, salaryRequestAmount, neededByDate, salaryRequestReason]);
-
-  const isAllTripsSelected =
-    salaryRequestType === 'trip_based' &&
-    pendingTripsForSalaryOrg.length > 0 &&
-    selectedSalaryTripIds.length === pendingTripsForSalaryOrg.length;
 
   const submitSalaryRequest = useCallback(async () => {
     if (!isOnline) {

@@ -32,7 +32,6 @@ function walk(dir, exts) {
 }
 
 async function optimizeFile(filePath) {
-  const name    = path.basename(filePath);
   const before  = fs.statSync(filePath).size;
   const ext     = path.extname(filePath).toLowerCase();
   const tmp     = filePath + '.tmp';

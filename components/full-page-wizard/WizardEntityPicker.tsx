@@ -125,7 +125,6 @@ export function WizardEntitySummaryCard({
   avatarUrl,
   avatarSeed,
   entityType = "client",
-  initialsColorSeed,
   organizationImageUrl,
   organizationAvatarSeed,
   onPress,

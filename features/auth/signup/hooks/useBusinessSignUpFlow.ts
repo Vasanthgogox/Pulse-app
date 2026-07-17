@@ -75,7 +75,6 @@ import { Alert, Platform, ScrollView, useWindowDimensions } from 'react-native';
 
 import type { IndiaLocation } from '../components/CityPicker';
 import {
-  CONFIRM_SCROLL_DELAY_MS,
   DEBOUNCE_MS,
   DESKTOP_BREAKPOINT,
   DESKTOP_MAX_PANEL_WIDTH,
@@ -190,7 +189,7 @@ export function useBusinessSignUpFlow() {
   // Step 7 — profile photo (post-auth)
   const [profileAvatarSeed, setProfileAvatarSeed] = useState<string | null>(null);
   const [profilePreviewUri, setProfilePreviewUri] = useState<string | null>(null);
-  const [profileLocalBase64, setProfileLocalBase64] = useState<string | null>(null);
+  const [profileLocalBase64, _setProfileLocalBase64] = useState<string | null>(null);
   const [profileAvatarPath, setProfileAvatarPath] = useState<string | null>(null);
   const [profileUploading, setProfileUploading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -201,7 +200,7 @@ export function useBusinessSignUpFlow() {
   const [step5Attempted, setStep5Attempted] = useState(false);
   const [inviteAccountAttempted, setInviteAccountAttempted] = useState(false);
   const [inviteEmailMasked, setInviteEmailMasked] = useState<string | null>(null);
-  const [inviteUseAlternateEmail, setInviteUseAlternateEmail] = useState(false);
+  const [_inviteUseAlternateEmail, setInviteUseAlternateEmail] = useState(false);
 
   // Invitation resolver (post-OTP, pre-org onboarding)
   const [signupTrack, setSignupTrack] = useState<SignupTrack>('owner');
@@ -1441,21 +1440,6 @@ export function useBusinessSignUpFlow() {
     if (ok) goToPage(8);
   };
 
-  const scrollAccountFieldIntoView = () => {
-    // Mobile web: SignUpPulseFormStep owns focus scroll — do not call document scrollIntoView.
-    if (Platform.OS === 'web') return;
-    setTimeout(() => {
-      accountScrollRef.current?.scrollToEnd({ animated: true });
-    }, CONFIRM_SCROLL_DELAY_MS);
-  };
-
-  const scrollLocationFieldIntoView = () => {
-    // Mobile web: SignUpPulseFormStep owns focus scroll — do not call document scrollIntoView.
-    if (Platform.OS === 'web') return;
-    setTimeout(() => {
-      locationScrollRef.current?.scrollToEnd({ animated: true });
-    }, CONFIRM_SCROLL_DELAY_MS);
-  };
 
   const showIntro = !introDismissed && signupTrack === 'owner' && step === 0;
 

@@ -456,7 +456,7 @@ interface WaitlistModalProps {
 const FLEET_SIZES = ["1-5 trucks", "6-20 trucks", "21-50 trucks", "50+ trucks"];
 
 function WaitlistModal({ product, onClose, onSubmit, submitting }: WaitlistModalProps) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [email, setEmail] = useState(user?.email ?? "");
   const [fleetSize, setFleetSize] = useState("");
   const [useCase, setUseCase] = useState("");

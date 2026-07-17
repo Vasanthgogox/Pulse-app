@@ -229,7 +229,6 @@ function buildReconciledRows(
     }
   }
   const results: ReconciledRow[] = [];
-  const norm = (id: string) => String(id).trim().toLowerCase();
 
   for (const [key, int] of internalMap) {
     const ext = sharedMap.get(key);
@@ -333,17 +332,11 @@ export function EntityCompareVerifyView({
   integrated = false,
   sharedTrips: sharedTripsProp,
   onRefresh,
-  viewAsPartner = false,
   embeddedInOverlay = false,
   onRequestInvite,
   onRequestConnection,
   onInviteToApp,
 }: EntityCompareVerifyViewProps) {
-  const myBookLabel = viewAsPartner ? entity.name : "My Book";
-  const partnerLabel = viewAsPartner ? "Your Company" : entity.name;
-  /** Short labels for compact table headers so column names are not truncated */
-  const myBookShort = "MY";
-  const partnerShort = "PTNR";
   const [sharedTrips, setSharedTrips] = useState<SharedTripData[] | undefined>(
     sharedTripsProp,
   );
@@ -1432,8 +1425,6 @@ export function EntityCompareVerifyView({
                       // Net Trip Due: sales minus what has moved in this relationship.
                       // For both client and supplier, use the same relationship-paid figure shown above.
                       const netInt = row.intSales - intPaidDisplay;
-                      const netExt = row.extSales - row.extPaid;
-                      const netVar = netExt - netInt;
                       const rowKey = String(row.tripId).trim().toLowerCase();
                       const hasDisputeSent = disputeSentByTripId.has(rowKey);
                       const hasDisputeReceived =

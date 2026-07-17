@@ -91,7 +91,7 @@ export function subtitleForRequest(
   row: ConnectionRequestRow,
   direction: 'received' | 'sent',
   partnerDisplay: Record<string, InboundPartnerDisplay>,
-  displayName: string,
+  _displayName: string,
 ): string | undefined {
   const partnerId = partnerOrgIdForRequest(row, direction);
   const profile = partnerDisplay[partnerId];

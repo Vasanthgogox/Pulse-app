@@ -656,7 +656,7 @@ export function NetworkDesktopDetailsPanel({
                   {emptyFields.length > 0 ? (
                     <>
                       {showEmptyHighlights ? (
-                        emptyFields.map((f, i) => (
+                        emptyFields.map((f) => (
                           <Pressable key={f.key} onPress={f.onFill} style={overviewStyles.emptyRow} hitSlop={4}>
                             <Text style={overviewStyles.emptyLabel}>{f.label}</Text>
                             <Text style={overviewStyles.emptyAction}>+ Add →</Text>

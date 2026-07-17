@@ -505,8 +505,6 @@ export default function DriverRadarScreen() {
   const pendingOtpTrips = pendingOtpQuery.pendingTrips;
   const {
     invites,
-    presentPendingInvite,
-    pendingCount: pendingInviteModalCount,
   } = useDriverHomeInvites();
   const { avatarUri } = useDriverAvatarUri();
   const optionalDriverAvatar = useOptionalDriverAvatar();
@@ -532,7 +530,7 @@ export default function DriverRadarScreen() {
   const newAssignmentBlinkAnim = useRef(new Animated.Value(0)).current;
   const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [showNotification, setShowNotification] = useState(false);
+  const [_showNotification, setShowNotification] = useState(false);
   const [invitationAccepted, setInvitationAccepted] = useState(false);
   const [invitationDeclined, setInvitationDeclined] = useState(false);
   const [invitationDismissed, setInvitationDismissed] = useState(false);
@@ -2751,13 +2749,13 @@ export default function DriverRadarScreen() {
   const [optimalRoute, setOptimalRoute] = useState<RouteResult | null>(null);
   const [tripLegRoute, setTripLegRoute] = useState<RouteResult | null>(null);
   const [approachRoute, setApproachRoute] = useState<RouteResult | null>(null);
-  const [optimalRouteLoading, setOptimalRouteLoading] = useState(false);
+  const [_optimalRouteLoading, setOptimalRouteLoading] = useState(false);
   const [tripLegRouteLoading, setTripLegRouteLoading] = useState(false);
-  const [approachRouteLoading, setApproachRouteLoading] = useState(false);
+  const [_approachRouteLoading, setApproachRouteLoading] = useState(false);
   const optimalRouteKeyRef = useRef<string | null>(null);
   const tripLegRouteKeyRef = useRef<string | null>(null);
   const approachRouteKeyRef = useRef<string | null>(null);
-  const [showRouteFallback, setShowRouteFallback] = useState(false);
+  const [_showRouteFallback, setShowRouteFallback] = useState(false);
 
   const routeContextPickup = useMemo(
     () =>

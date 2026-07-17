@@ -208,7 +208,6 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
       // Keep original if resize fails
     }
 
-    const path = `${userId}/avatar-${Date.now()}.jpg`;
     // Prefer ImagePicker base64 payload because it is stable across Expo runtimes.
     // Fallback to File.arrayBuffer() if base64 is unavailable on the current device.
     const uploadBytes = await readUploadBytes(uri, asset.base64);

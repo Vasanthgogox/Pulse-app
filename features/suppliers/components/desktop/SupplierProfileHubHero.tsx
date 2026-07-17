@@ -185,7 +185,7 @@ export function SupplierProfileHubHero({
                 { value: inr(totalPayable), label: "PAYABLE", lottie: "payment" as ProfileHubLottieKey },
                 { value: String(performanceScore), label: "SCORE", lottie: "signals" as ProfileHubLottieKey },
               ] as const
-            ).map((stat, idx, arr) => (
+            ).map((stat, idx) => (
               <View key={stat.label} style={{ flex: 1, flexDirection: "row", alignItems: "stretch" }}>
                 {idx > 0 ? <View style={spStyles.heroStatDivider} /> : null}
                 <View style={[spStyles.heroStatItem, { flex: 1 }]}>

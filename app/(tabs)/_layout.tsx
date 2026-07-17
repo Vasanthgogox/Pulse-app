@@ -38,15 +38,13 @@ function DemoCustomTabBar(
 ) {
   const router = useRouter();
   const pathname = usePathname();
-  const queryClient = useQueryClient();
-  const org = useOptionalOrganization();
-  const orgId = org?.currentOrganization?.id ?? null;
+  const _queryClient = useQueryClient();
+  const _org = useOptionalOrganization();
   const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
   const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
-  const isMobileWeb = Platform.OS === 'web' && !isDesktopWeb;
   const routeName = state.routes[state.index]?.name;
   const activeTab: DemoTabId =
     routeName === 'finance' ? 'finance'
@@ -144,7 +142,7 @@ export default function TabLayout() {
   const { user, profile, loading } = useAuth();
   const org = useOptionalOrganization();
   const queryClient = useQueryClient();
-  const router = useRouter();
+  const _router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
   const orgId = org?.currentOrganization?.id ?? null;
@@ -160,7 +158,7 @@ export default function TabLayout() {
       tabMountMarked.current = true;
       markStartupPhase('tab_mount');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   useEffect(() => {

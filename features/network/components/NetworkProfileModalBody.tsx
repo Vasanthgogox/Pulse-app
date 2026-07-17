@@ -74,7 +74,6 @@ function shouldShowRegisteredAddress(
 
 export function NetworkProfileModalBody({
   node,
-  isMobile = false,
   profileStatsLoading,
   totalTrips,
   onClose,

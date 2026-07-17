@@ -9,9 +9,6 @@ const DIRECT_DB_PATTERNS = [
   /createClient\s*\(/,
 ];
 
-const ALLOWED_DB_IMPORT = "from '../db/client'";
-const ALLOWED_DB_IMPORT_ALT = 'from "../db/client"';
-
 export interface RepositoryIsolationViolation {
   file:     string;
   pattern:  string;

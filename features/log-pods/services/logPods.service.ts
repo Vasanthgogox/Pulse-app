@@ -504,7 +504,6 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
 
   const attachmentInserts = mappedAttachments.map(
     (att) => {
-      const trip = allTrips.find(t => t.internal_id === att.trip_id); // the modal will return tripInternalId since we mapped them
       return {
         trip_id: att.trip_id,
         lr_number: att.lr_number === "N/A" ? null : att.lr_number,

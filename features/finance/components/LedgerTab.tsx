@@ -9,7 +9,6 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import {
-    buildFinancialRowDataForLedgerRow,
     formatLedgerEntryDate,
     resolveLedgerPartyName,
 } from "@/features/finance/components/ledger/buildFinancialRowDataForLedgerRow";
@@ -96,7 +95,6 @@ export function LedgerTab({
   onAddTransactionPress,
   refreshKey = 0,
   transactions: transactionsProp,
-  onRowSelect,
   onEntitySelect,
   getVehicleNumberForTripId,
   tripDetailsMap = {},
@@ -127,7 +125,7 @@ export function LedgerTab({
    * Stable serialized key of connected partner org ids (both sides).
    * Prevents re-fetch on every render when parent creates new array refs.
    */
-  const partnerOrgIdsKey = useMemo(() => {
+  const _partnerOrgIdsKey = useMemo(() => {
     const set = new Set<string>();
     clientRows.forEach((c) => {
       if (c.linked_organization_id) set.add(c.linked_organization_id);
@@ -138,7 +136,7 @@ export function LedgerTab({
     return Array.from(set).sort().join("|");
   }, [clientRows, supplierRows]);
 
-  const { disputesByTripId } = useDisputeMapQuery(organizationId);
+  const { disputesByTripId: _disputesByTripId } = useDisputeMapQuery(organizationId);
   const [previewLedgerRow, setPreviewLedgerRow] =
     useState<financeService.LedgerRow | null>(null);
 
@@ -207,27 +205,6 @@ export function LedgerTab({
         />
       </View>
     );
-  }
-
-  function buildFinancialRowDataForRow(
-    row: financeService.LedgerRow,
-  ): FinancialRowData {
-    return buildFinancialRowDataForLedgerRow(row, {
-      allRows: rows,
-      tripDetailsMap,
-      tripPartyMap,
-      clientById,
-      supplierById,
-      driverById,
-      getVehicleNumberForTripId,
-      linkedOrgDisplayMap,
-      profileImages,
-      driverProfileImageUrls: {
-        ...driverProfileImageUrls,
-        ...profileImages,
-      },
-      disputesByTripId,
-    });
   }
 
   function openLedgerDetail(row: financeService.LedgerRow) {
@@ -308,8 +285,6 @@ export function LedgerTab({
         const isDriverPayment =
           row.contact_type === "driver" ||
           (row.driver_name ?? "").trim() !== "";
-        const isClientOrSupplier =
-          row.contact_type === "client" || row.contact_type === "supplier";
         const vehicleNum =
           row.vehicle_number ??
           (row.trip_id != null && !isDriverPayment

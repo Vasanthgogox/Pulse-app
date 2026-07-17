@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 
 declare module '@tanstack/react-table' {
    
-  interface ColumnMeta<TData extends RowData, TValue> {
+  interface ColumnMeta<TData extends RowData, _TValue> {
     headerTitle?: string;
     headerClassName?: string;
     cellClassName?: string;

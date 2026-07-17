@@ -51,7 +51,6 @@ import {
 } from "@/features/trips/services/trips.service";
 import { VehicleHealthBadge } from "@/features/ai";
 import { buildTripPnL, getExpenseLinesForTripPnL } from "@/features/vehicles/pnl";
-import { getVehicleTypeImage } from "../utils/trucks.util";
 import { getVehicleById, updateVehicle, type VehicleRow } from "../services/vehicles.service";
 import {
   AddVehicleEntryModal,
@@ -350,7 +349,7 @@ export default function VehicleDetailScreen({
     const orgId = currentOrganization?.id;
     if (!orgId || !vehicle) return;
     setVehiclePhotoUploading(true);
-    const { path, previewUri, error: pickErr } = await pickAndUploadVehicleAvatar(vehicle.id);
+    const { path, error: pickErr } = await pickAndUploadVehicleAvatar(vehicle.id);
     if (pickErr) {
       setVehiclePhotoUploading(false);
       Alert.alert("Photo upload failed", pickErr.message);
@@ -483,7 +482,6 @@ export default function VehicleDetailScreen({
     .filter((value): value is string => Boolean(value && value !== "—"))
     .join(" • ") || "—";
 
-  const truckImage = getVehicleTypeImage(vehicle.vehicle_type);
   const heroDecorAnimatedStyle = isWebDesktop
     ? {
         opacity: heroDecorProgress.interpolate({

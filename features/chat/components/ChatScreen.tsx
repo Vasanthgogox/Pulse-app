@@ -749,33 +749,6 @@ function formatTripRouteDate(iso: string | null | undefined): string {
   }
 }
 
-function normalizePartyLabelKey(s: string | null | undefined): string {
-  return (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-/**
- * When the viewer is the linked client on a shipper-hosted trip, the **client** lane is their own
- * thread — show "You" on the tab/header instead of repeating "DEEPAK ORG" as if it were a counterparty.
- */
-function resolveViewerClientTabPrimaryName(params: {
-  partyType: ConversationPartyType;
-  convPartyName: string | null | undefined;
-  viewerOrgId: string;
-  viewerOrgName: string | null | undefined;
-  tripHostOrgId: string | null | undefined;
-  composeClientLinkedOrgId: string | null | undefined;
-}): string | null {
-  if (params.partyType !== "client") return null;
-  const v = params.viewerOrgId.trim();
-  const host = (params.tripHostOrgId ?? "").trim();
-  if (!v || !host || v === host) return null;
-  const linked = (params.composeClientLinkedOrgId ?? "").trim();
-  if (linked && v === linked) return "You";
-  const pn = normalizePartyLabelKey(params.convPartyName);
-  const on = normalizePartyLabelKey(params.viewerOrgName);
-  if (pn.length > 0 && on.length > 0 && pn === on) return "You";
-  return null;
-}
 
 /** Manual hub: trip has an assigned driver (same trip / driver lane as detail). */
 function manualHubTripHasAssignedDriver(
@@ -1205,7 +1178,6 @@ export function ChatScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const isMobileChatUi = isChatMobileLayout(isDesktop);
-  const isNativeMobile = isChatNativeMobile(isDesktop);
   const { keyboardVisible: mobileKeyboardOpen } = useKeyboardVisible();
   /** Trip hub cards (alerts + party row) on every viewport — one list UX for native + web. */
   const useGroupedTripHub = true;
@@ -1311,7 +1283,7 @@ export function ChatScreen() {
   const [desktopDmCollapsed, setDesktopDmCollapsed] = useState(false);
   const [desktopDmShowAll, setDesktopDmShowAll] = useState(false);
   /** Web desktop: bubble LATE_RISK / indent-linked trips in the hub list. */
-  const [webCommandPriorityFilter, setWebCommandPriorityFilter] = useState(false);
+  const [webCommandPriorityFilter, _setWebCommandPriorityFilter] = useState(false);
   const activeTripsForCommandPriority = useGlobalSyncStore((s) => s.activeTrips);
   const [visibleTripCount, setVisibleTripCount] = useState(10);
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
@@ -7613,7 +7585,6 @@ function TripConversationDetailPanel({
 
 function TripConversationDetailLoaded({
   selectedConv,
-  conversations,
   composeTrips,
   linkedOrgBranding,
   messagesRef,
@@ -7772,7 +7743,7 @@ function TripConversationDetailLoaded({
     }
   }, [mergeHistoryPage]);
 
-  const loadLatestHistoryPage = useCallback(() => {
+  const _loadLatestHistoryPage = useCallback(() => {
     void runLatestHistoryPage();
   }, [runLatestHistoryPage]);
 
@@ -8278,7 +8249,7 @@ function TripConversationDetailLoaded({
     linkedSupplierSuppressSupplierTab,
     detailVisiblePartyTypes,
   ]);
-  const partyToggleTabs = useMemo((): HubPartyTab[] => {
+  const _partyToggleTabs = useMemo((): HubPartyTab[] => {
     const deduped = missionBarPartyTypes.filter(
       (tab, idx, arr) => arr.findIndex((p) => p.rowType === tab.rowType) === idx,
     );
@@ -8873,10 +8844,6 @@ function TripConversationDetailLoaded({
 
   const nativeMobileDetail = isChatMobileLayout(isDesktop);
   const slackThreadUi = isDesktop || nativeMobileDetail;
-  const singleLaneRoleTag =
-    !teamTabEligible && missionBarPartyTypes.length === 1
-      ? partyLabelReadable(missionBarPartyTypes[0]!.displayType)
-      : undefined;
 
   const detailMirrorTabItems = useMemo(() => {
     const partyItems = missionBarPartyTypes.map((tab) => {

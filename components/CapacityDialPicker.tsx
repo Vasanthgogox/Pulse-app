@@ -44,7 +44,7 @@ function CapacityDialPickerNative({ value, onChange }: Props) {
       scrollRef.current?.scrollTo({ y: idx * ITEM_H, animated: false });
     }, 50);
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [resolvedValue]);
 
   useEffect(() => {

@@ -207,15 +207,6 @@ function supplierPartyAvatarProps(
   return { name: displayName };
 }
 
-/** Treat linked-org placeholder (linked-<uuid>) as empty for display. */
-function isPlaceholderPhone(value: string | null | undefined): boolean {
-  const s = (value ?? "").trim();
-  if (!s) return true;
-  if (/^linked-/i.test(s)) return true;
-  if (s.toLowerCase().includes("linked-")) return true;
-  return false;
-}
-
 export interface ClientDetailScreenProps {
   clientId: string;
   onBack: () => void;
@@ -558,7 +549,7 @@ export default function ClientDetailScreen({
     suppliers,
   );
 
-  const { disputesByTripId } = useDisputeMapQuery(
+  const { disputesByTripId: _disputesByTripId } = useDisputeMapQuery(
     currentOrganization?.id ?? null,
   );
 
@@ -890,7 +881,7 @@ export default function ClientDetailScreen({
     };
   }, [client?.linked_organization_id]);
 
-  const tripOptions = useMemo(
+  const _tripOptions = useMemo(
     () =>
       trips.map((t) => ({
         id: t.id,
@@ -949,7 +940,7 @@ export default function ClientDetailScreen({
     return m;
   }, [trips]);
 
-  const getVehicleNumberForTripId = useCallback(
+  const _getVehicleNumberForTripId = useCallback(
     (tripId: string | null) => {
       if (!tripId) return null;
       const t = trips.find((x) => String(x.id) === String(tripId));

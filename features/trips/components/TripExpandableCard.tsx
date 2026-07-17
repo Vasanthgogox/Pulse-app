@@ -97,12 +97,6 @@ export function TripExpandableCard({
   const showAssignByPhone = isAggregate && !isRosterFromLoadHub;
   /** For UI pill: show "Asset" when roster-from-LoadHub (asset-based assignment) or when no supplier. */
   const displayAsAsset = !isAggregate || isRosterFromLoadHub;
-  /** Load creator (shipper) flag — trip-based flow keeps full assignment/OTP controls, so this is informational only. */
-  const isLoadCreatorViewOnly =
-    !!currentOrganization?.id &&
-    !!trip?.organization_id &&
-    !!trip?.supplier_id &&
-    currentOrganization.id === trip.organization_id;
   /** Non-owner + indent: supplier_rate (we're the supplier). Otherwise: client_price (owner/shipper or non-indent). */
   const isOwner =
     currentOrganization?.id != null &&

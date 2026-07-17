@@ -507,7 +507,6 @@ export const FleetDriverAnalyticsTab = memo(function FleetDriverAnalyticsTab({
     totalPaid,
     totalPending,
     settlementRate,
-    totalTrips,
     avgTripsPerDriver,
   } = useMemo(() => {
     const totalDrivers = rows.length;

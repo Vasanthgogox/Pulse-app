@@ -153,10 +153,6 @@ function useLedgerViewportWidth(): number {
   return winW;
 }
 
-/** Brand logos for ledger payment mode tiles. */
-function ledgerPaymentModeLogo(modeId: string, size = 20) {
-  return <PaymentModeLogo modeId={modeId} size={size} />;
-}
 
 function ledgerIsoFromDate(d: Date): string {
   const y = d.getFullYear();
@@ -181,21 +177,6 @@ const LEDGER_DATE_PICKER_MIN = new Date(2000, 0, 1);
 const LEDGER_DATE_PICKER_MAX = new Date(2037, 11, 31);
 const LEDGER_DATE_PICKER_MIN_ISO = "2000-01-01";
 const LEDGER_DATE_PICKER_MAX_ISO = "2037-12-31";
-
-function parseLedgerDateDraftToIso(text: string): string | null {
-  const t = text.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
-  const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!m) return null;
-  const d = parseInt(m[1], 10);
-  const mo = parseInt(m[2], 10);
-  const y = parseInt(m[3], 10);
-  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-  const dt = new Date(y, mo - 1, d);
-  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d)
-    return null;
-  return ledgerIsoFromDate(dt);
-}
 
 /** Default smart-tag for trip tap / IN·OUT toggle (matches mission due chips). */
 function resolveDefaultTripSmartTag(
@@ -707,7 +688,6 @@ export function AddTransactionModal({
   defaultTripId,
   defaultType,
   defaultContactId,
-  defaultContactType,
   defaultDriverPaymentType,
   tripLocked = false,
   lockedTripDisplay,
@@ -726,7 +706,6 @@ export function AddTransactionModal({
   ledgerTransactions = null,
   driverOffersByDriverId = null,
   tripAdjustmentsByTripId: tripAdjustmentsByTripIdProp,
-  ledgerWorkspaceSubtitle,
 }: AddTransactionModalProps) {
   const insets = useSafeAreaInsets();
   const bottomInset = useEffectiveBottomInset();
@@ -823,7 +802,7 @@ export function AddTransactionModal({
   const [ledgerMissionRegistryExpanded, setLedgerMissionRegistryExpanded] =
     useState(true);
   /** Desktop full-page: 1 = sync mode & category, 2 = amount & date. */
-  const [ledgerDesktopWizardStep, setLedgerDesktopWizardStep] = useState<1 | 2>(1);
+  const [_ledgerDesktopWizardStep, setLedgerDesktopWizardStep] = useState<1 | 2>(1);
   /** Full-page ledger: show reconciliation summary in a confirm overlay before save. */
   const [ledgerSubmitConfirmVisible, setLedgerSubmitConfirmVisible] =
     useState(false);
@@ -886,7 +865,7 @@ export function AddTransactionModal({
   const effectivePartyId = isPartyLocked ? lockedPartyId : partyId;
 
   /** Today as short label for tag (e.g. "11 Mar"). */
-  const todayTagLabel = useMemo(() => {
+  const _todayTagLabel = useMemo(() => {
     const d = new Date();
     const day = d.getDate();
     const months = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
@@ -1115,7 +1094,7 @@ export function AddTransactionModal({
   }, [amountStr, smartTagHighlight, smartTagSuggestedAmount]);
 
   /** Counterparty for trip row avatar (client on IN, supplier/driver on OUT). */
-  const getLedgerTripPartyVisual = useCallback(
+  const _getLedgerTripPartyVisual = useCallback(
     (t: TripOption) => {
       if (type === "in") {
         const cid = t.client_id?.trim() || null;
@@ -2372,14 +2351,6 @@ export function AddTransactionModal({
     !supplierNeedsTrip &&
     !entryDateError;
 
-  const canAdvanceDesktopLedgerWizard =
-    hasValidParty &&
-    hasValidCategory &&
-    hasValidTrip &&
-    !supplierNeedsTrip;
-
-  const ledgerDesktopWizardActive = ledgerFullPageViewportFit && !isEditMode;
-
   const ledgerMobileFlow = fullPage && stackTripFinancialBand;
   /** Opened from trip detail — desktop single-page; mobile uses 2-step wizard. */
   const ledgerTripDirectCapture =
@@ -3415,20 +3386,6 @@ export function AddTransactionModal({
       paymentMode: paymentModeId,
       paymentReference: paymentReference.trim() || null,
     };
-    const modeName = data.paymentMode
-      ? data.paymentMode === "UPI"
-        ? "UPI"
-        : data.paymentMode === "BANK"
-          ? "Bank Transfer"
-          : data.paymentMode === "CHEQUE"
-            ? "Cheque"
-            : data.paymentMode === "CASH"
-              ? "Cash"
-              : data.paymentMode
-      : null;
-    const tripSummary =
-      ledgerReconDetailRows.find((r) => r.label === "Voyage Identity")?.value ?? null;
-
     void (async () => {
       if (ledgerSubmitting) return;
       setLedgerSubmitting(true);
@@ -3723,7 +3680,6 @@ export function AddTransactionModal({
           }));
 
     /** Mode / category tiles: inner width uses actual full-page horizontal padding + column gap (matches panel). */
-    const ledgerBandGap = 12;
     const pagePadTotal = ledgerFullPagePadH * 2;
     const ledgerProtocolRowColGap = 10;
     const topBandWrapInnerW = winW - pagePadTotal - ledgerProtocolSplitWrapPad;
@@ -3741,9 +3697,6 @@ export function AddTransactionModal({
             LEDGER_TRIP_PANE_PAD * 2 -
             ledgerProtocolSplitWrapPad,
         )
-      : topBandColInnerW;
-    const ledgerProtocolStripInnerW = ledgerTripDesktopSplit
-      ? desktopRightPaneInnerW
       : topBandColInnerW;
     const ledgerProtocolTileWidthMobile = Math.max(
       32,
@@ -4272,20 +4225,6 @@ export function AddTransactionModal({
         )}
           {entryDateError ? <Text style={styles.fieldErrorText}>{entryDateError}</Text> : null}
         </View>
-    );
-
-    const ledgerSyncHeroDateRow = (
-      <View
-        style={[
-          styles.syncHeroDateRow,
-          styles.syncHeroDateRowInTripBand,
-          ledgerSyncHeroStack && styles.syncHeroDateRowStack,
-          ledgerTripDesktopSplit && styles.syncHeroDateRowDesktopStack,
-        ]}
-      >
-        {ledgerSyncAmountHero}
-        {ledgerSyncDatePanel}
-      </View>
     );
 
     const needsLedgerPaymentReference = !isLedgerCashPaymentMode(paymentModeId);

@@ -1151,7 +1151,7 @@ export async function signOut(): Promise<void> {
     console.error("Sign out exception:", e);
     try {
       await supabase().auth.signOut({ scope: "local" });
-    } catch (localErr) {
+    } catch (_localErr) {
       // ignore
     }
   }

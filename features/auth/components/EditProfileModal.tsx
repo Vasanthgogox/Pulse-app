@@ -46,7 +46,6 @@ const DEFAULT_AVATAR_SEED = DEFAULT_DRIVER_AVATAR_SEED;
 
 /** Driver edit screen — cool white page (reference: #FDFEFF). */
 const DRIVER_EDIT_PAGE_BG = '#F6FAFC';
-const DRIVER_SCREEN_BG = DRIVER_EDIT_PAGE_BG;
 /** Accent for photo actions should match app primary theme. */
 const DRIVER_FOREST = Theme.primary;
 const DRIVER_INPUT_BG = Theme.liquidPillBg;

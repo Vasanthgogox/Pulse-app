@@ -544,7 +544,6 @@ export const FleetAnalyticsTab = memo(function FleetAnalyticsTab({
   const {
     assigned,
     totalRevenue,
-    totalExpense,
     fleetMargin,
     activeVehicles,
     profitableVehicles,

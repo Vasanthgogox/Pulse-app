@@ -907,11 +907,6 @@ function convFromEntry(
   };
 }
 
-/** Sum unread across all party lanes (internal / DB parity). */
-function sumUnread(parties: Partial<Record<ConversationPartyType, PartyConv>>): number {
-  return Object.values(parties).reduce((s, p) => s + (p?.unreadCount ?? 0), 0);
-}
-
 /**
  * Hub list + FAB preview lanes. private_trip defaults to driver, but surfaces lanes
  * that hold unread (e.g. client ledger toasts) so badges match visible rows.

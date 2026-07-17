@@ -58,7 +58,7 @@ function globalRef(entityType) {
 function formatNumber(n) { return n.toLocaleString(); }
 function pad(s, n) { return String(s).padStart(n); }
 
-async function runLoadTest(concurrency, entityType = 'trip') {
+async function runLoadTest(concurrency, _entityType = 'trip') {
   const ids   = new Set();
   const refs  = new Set();
   const times = [];

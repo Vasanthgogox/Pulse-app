@@ -23,11 +23,6 @@ const EMPTY_PARTY: ManifestRefAssetPartyInsights = {
   docsIssue: false,
 };
 
-const EMPTY: ManifestRefAssetInsights = {
-  driver: EMPTY_PARTY,
-  vehicle: EMPTY_PARTY,
-};
-
 type Params = {
   orgId: string | null | undefined;
   driverId: string | null | undefined;

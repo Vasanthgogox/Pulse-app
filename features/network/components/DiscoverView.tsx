@@ -195,7 +195,6 @@ function discoverOrgLocationFallback(org: DiscoverOrg) {
 function OrgCard({
   org,
   locationFallback,
-  totalTrips,
   ratingValue,
   onConnect,
   onCancel,
@@ -206,10 +205,6 @@ function OrgCard({
   viewerOrgId,
   onDismiss,
   pendingRole = null,
-  compact,
-  desktopPane,
-  mobileGrid,
-  nativeListRow,
 }: {
   org: ScoredOrg;
   locationFallback?: { city?: string | null; state?: string | null; address_line?: string | null } | null;
@@ -280,7 +275,6 @@ const DISCOVER_ROWS_MOBILE = 3;
 const DISCOVER_ROWS_NATIVE = 6;
 /** Matches discoverOrganizations fetch limit — show full result set inside embedded scroll. */
 const EMBEDDED_SCROLL_ITEM_CAP = 40;
-const DISCOVER_GRID_GAP_PX = 8;
 export function DiscoverView({
   orgId,
   embedded,
@@ -460,7 +454,7 @@ export function DiscoverView({
       : DISCOVER_ROWS_MOBILE;
   const discoverMaxVisible = discoverColumnCount * discoverRowCap;
 
-  const embeddedScrollMaxHeight = useMemo(() => {
+  const _embeddedScrollMaxHeight = useMemo(() => {
     if (embeddedScrollMaxHeightProp != null && embeddedScrollMaxHeightProp > 0) {
       return embeddedScrollMaxHeightProp;
     }

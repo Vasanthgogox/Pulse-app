@@ -53,7 +53,6 @@ import {
 import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
 import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
-import { resolveSharedActionKind } from "@/lib/sharedLedger/registryLabels";
 import { usePathname, useRouter } from "expo-router";
 import { DollarSign, Inbox, LineChart, MessageSquare, Signpost, Truck } from "lucide-react-native";
 import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -301,7 +300,6 @@ export function DemoTabBar({
   const handleSharedAction = useCallback(
     async (item: SharedLedgerNotificationRow) => {
       const payload = item.payload_json ?? {};
-      const actionKind = resolveSharedActionKind(item.event_type, payload);
       const tripId = typeof payload.trip_id === "string" ? payload.trip_id : null;
       const entityType =
         typeof payload.entity_type === "string"
@@ -502,7 +500,6 @@ export function DemoTabBar({
     isWeb,
     isDesktopWeb,
   });
-  const footerPadTop = 4;
   const footerPadBottom = tabBarFooterPadding(bottomInset, tabBarPlatform);
   const collapseNetworkDock = useCallback(() => {
     setIsNetworkExpanded((open) => {
@@ -534,17 +531,6 @@ export function DemoTabBar({
     return () => setMobileNetworkDockExpanded(false);
   }, [isDesktopWeb, networkDockOpen]);
 
-  const openNetworkInvitations = () => {
-    runNetworkDockAction(() => {
-      router.push("/(tabs)/network?view=requests" as const);
-    });
-  };
-
-  const openNetworkLoads = () => {
-    runNetworkDockAction(() => {
-      onTabChange("loadCenter");
-    });
-  };
   const openMessages = () => {
     runNetworkDockAction(() => {
       router.push(ROUTES.CHAT);
@@ -553,7 +539,7 @@ export function DemoTabBar({
   const openMessagesFromPressIn = () => {
     warmChatRoute();
   };
-  const mobileNetworkSubDockVisibilityStyle = useAnimatedStyle(() => {
+  const _mobileNetworkSubDockVisibilityStyle = useAnimatedStyle(() => {
     const p = dockVisibilityProgress.value;
     if (!networkDockOpenSV.value) {
       return {
@@ -858,9 +844,6 @@ export function DemoTabBar({
     />
   );
 }
-
-/** @deprecated Use WEB_TOP_NAV_ICON — kept for any external imports. */
-const WEB_HEADER_ICON = WEB_TOP_NAV_ICON;
 
 const styles = StyleSheet.create({
   staticIconWrap: {

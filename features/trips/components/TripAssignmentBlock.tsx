@@ -153,7 +153,7 @@ export function TripAssignmentBlock({
   /** No assign/reassign when trip is completed or when view-only (e.g. load creator monitoring). */
   const effectiveCanAssign = canAssign && !isTripCompleted(trip) && !viewOnly;
 
-  const [showPicker, setShowPicker] = useState(false);
+  const [_showPicker, setShowPicker] = useState(false);
   const [assignMode, setAssignMode] = useState<"driver" | "vehicle" | null>(
     null,
   );
@@ -182,11 +182,11 @@ export function TripAssignmentBlock({
   const [phoneDriverNameInput, setPhoneDriverNameInput] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [phoneName, setPhoneName] = useState<string | null>(null);
-  const [phoneDriverBusy, setPhoneDriverBusy] = useState(false);
-  const [phoneBusyTripLabel, setPhoneBusyTripLabel] = useState<string | null>(
+  const [_phoneDriverBusy, setPhoneDriverBusy] = useState(false);
+  const [_phoneBusyTripLabel, setPhoneBusyTripLabel] = useState<string | null>(
     null,
   );
-  const [pickPhoneVehicleId, setPickPhoneVehicleId] = useState<string | null>(
+  const [_pickPhoneVehicleId, _setPickPhoneVehicleId] = useState<string | null>(
     null,
   );
   const [phoneVehicleInput, setPhoneVehicleInput] = useState("");
@@ -197,11 +197,11 @@ export function TripAssignmentBlock({
     null,
   );
 
-  const [otpCode, setOtpCode] = useState<string | null>(null);
-  const [otpExpiresAt, setOtpExpiresAt] = useState<string | null>(null);
-  const [otpLoading, setOtpLoading] = useState(false);
+  const [_otpCode, setOtpCode] = useState<string | null>(null);
+  const [_otpExpiresAt, setOtpExpiresAt] = useState<string | null>(null);
+  const [_otpLoading, setOtpLoading] = useState(false);
   const [otpRegenerating, setOtpRegenerating] = useState(false);
-  const [otpError, setOtpError] = useState<string | null>(null);
+  const [_otpError, setOtpError] = useState<string | null>(null);
 
   const normalizeVehicleNumber = useCallback(
     (s: string) => (s || "").replace(/\s+/g, "").toUpperCase().trim(),
@@ -215,15 +215,15 @@ export function TripAssignmentBlock({
   const [activeDriverTripLabelById, setActiveDriverTripLabelById] = useState<Record<string, string>>({});
   const [activeVehicleTripLabelById, setActiveVehicleTripLabelById] = useState<Record<string, string>>({});
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
-  const [pickDriverId, setPickDriverId] = useState<string | null>(
+  const [_pickDriverId, setPickDriverId] = useState<string | null>(
     trip.driver_id,
   );
-  const [pickVehicleId, setPickVehicleId] = useState<string | null>(
+  const [_pickVehicleId, setPickVehicleId] = useState<string | null>(
     trip.vehicle_id,
   );
   const [pickerVehicleInput, setPickerVehicleInput] = useState("");
   const [cardVehicleInput, setCardVehicleInput] = useState("");
-  const [cardVehicleSaving, setCardVehicleSaving] = useState(false);
+  const [_cardVehicleSaving, setCardVehicleSaving] = useState(false);
   const [phoneModalIsReassign, setPhoneModalIsReassign] = useState(false);
   /** After aggregate assign-by-phone, show OTP before dismissing (same flow as inline OTP card). */
   const [phoneAssignOtpReveal, setPhoneAssignOtpReveal] = useState<{
@@ -334,7 +334,7 @@ export function TripAssignmentBlock({
     [normalizeVehicleNumber],
   );
 
-  const handleCardVehicleBlur = useCallback(async () => {
+  const _handleCardVehicleBlur = useCallback(async () => {
     if (!showAssignByPhone || !effectiveCanAssign) return;
     const trimmed = cardVehicleInput.trim();
     if (!trimmed) return;
@@ -485,7 +485,6 @@ export function TripAssignmentBlock({
       forceOtpClaim: phoneModalIsReassign,
       driverName: driverNameTrimmed,
     };
-    const vehicleNumNorm = normalizeVehicleNumber(phoneVehicleInput);
     const existingVehicleDisplay = (
       trip.vehicle_display_number ??
       propsVehicleLabel ??
@@ -674,7 +673,7 @@ export function TripAssignmentBlock({
     onUpdated,
   ]);
 
-  const handleRegenerateOtp = useCallback(async () => {
+  const _handleRegenerateOtp = useCallback(async () => {
     if (!trip?.id || otpRegenerating || !canGenerateOtpNow || otpLockedByTripProgress) return;
     setOtpError(null);
     setOtpRegenerating(true);
@@ -691,7 +690,7 @@ export function TripAssignmentBlock({
     }
   }, [trip?.id, otpRegenerating, canGenerateOtpNow, otpLockedByTripProgress]);
 
-  const handleGenerateOtp = useCallback(async () => {
+  const _handleGenerateOtp = useCallback(async () => {
     if (!trip?.id || otpRegenerating || !canGenerateOtpNow || otpLockedByTripProgress) return;
     setOtpError(null);
     setOtpRegenerating(true);

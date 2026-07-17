@@ -69,18 +69,6 @@ const ROLE_STYLES: Record<
   },
 };
 
-function seedColor(id: string): string {
-  const tones = [Theme.textRouteCard, Theme.textPrimaryDark, Theme.primary];
-  let idx = 0;
-  for (let i = 0; i < id.length; i += 1)
-    idx = (idx + id.charCodeAt(i)) % tones.length;
-  return tones[idx];
-}
-
-function subtleAvatarBg(id: string): string {
-  return id.length % 2 === 0 ? Theme.surface : Theme.surfaceGray;
-}
-
 /** Min height for horizontal hub connection row (carousel / side-scroll). Kept exported for callers & stable bundles. */
 export const HUB_CAROUSEL_MIN_HEIGHT = NETWORK_PROFILE_CARD_HEIGHT;
 export const HUB_CAROUSEL_CARD_WIDTH = 152;

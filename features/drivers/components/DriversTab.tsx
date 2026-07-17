@@ -97,7 +97,7 @@ export function DriversTab({
   bottomInset = 100,
   hideSummaryRow = false,
   viewTab = "list" as DriversViewTab,
-  onViewTabChange,
+  onViewTabChange: _onViewTabChange,
   embedInParentScroll = false,
   onAddPartyPress,
 }: DriversTabProps) {

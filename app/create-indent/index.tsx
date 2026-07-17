@@ -310,7 +310,7 @@ export default function CreateIndentScreen() {
   const indentActionsHostRef = useRef<View>(null);
   const vehicleTypeInputRef = useRef<TextInput>(null);
   const clientPriceInputRef = useRef<TextInput>(null);
-  const supplierTargetInputRef = useRef<TextInput>(null);
+  const _supplierTargetInputRef = useRef<TextInput>(null);
   const weightInputRef = useRef<TextInput>(null);
 
   const focusField = useCallback((ref: { current: TextInput | null }) => {

@@ -63,12 +63,6 @@ const STEPS_FULL_KEYS = [
   { id: 'review', titleKey: 'review', descriptionKey: 'sendInvite' },
 ];
 
-const STEPS_SALARIED_ONLY_KEYS = [
-  { id: 'driver', titleKey: 'driverStep', descriptionKey: 'dlNamePhone' },
-  { id: 'salary', titleKey: 'salarySplit', descriptionKey: 'fixedSalaryCommission' },
-  { id: 'review', titleKey: 'review', descriptionKey: 'sendInvitation' },
-];
-
 const defaultFormData: DriverFormData = {
   driverSource: 'organization',
   name: '',

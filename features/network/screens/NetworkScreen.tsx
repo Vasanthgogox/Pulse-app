@@ -176,15 +176,6 @@ type NetworkProfileNode = {
   member_since_year?: number | null;
 };
 
-function getNetworkNodeLocation(item: ConnectedOrg): string {
-  const cityState = [item.city, item.state]
-    .map((value) => value?.trim())
-    .filter((value): value is string => Boolean(value))
-    .join(", ");
-  const direct = item.business_location ?? item.location ?? item.headquarters ?? null;
-  return cityState || direct?.trim() || "Not available";
-}
-
 function useAnimatedCount(target: number, durationMs = 720): number {
   const [displayValue, setDisplayValue] = useState(target);
   const previousValueRef = React.useRef(target);
@@ -224,7 +215,6 @@ function NetworkScreenInner() {
   const searchParams = useLocalSearchParams<{ view?: string; hub?: string; hubTab?: string; tab?: string }>();
   const segments = useSegments();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
-  const isDesktopMatrix = width >= 1100;
   const isMobileLayout = width < 820;
   /** Org welcome bar — mobile + tablet only; hidden on desktop web. */
   const showHomePageHeader = Platform.OS !== "web" || width < 1180;

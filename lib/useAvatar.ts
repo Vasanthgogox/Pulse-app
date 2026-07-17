@@ -263,7 +263,7 @@ export function useAvatar(
   context: AvatarContext = 'personal',
 ): UseAvatarResult {
   const key = useMemo(() => cacheKey(party, context), [
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     party.type, party.name,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     ...rawUrlCandidates(party, context).map((u) => u ?? ''),

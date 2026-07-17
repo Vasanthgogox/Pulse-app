@@ -89,10 +89,6 @@ function parseJson(text: string): Record<string, unknown> {
   return JSON.parse(raw) as Record<string, unknown>;
 }
 
-function num(value: unknown): number | null {
-  return parseIndianAmount(value);
-}
-
 function str(value: unknown): string | null {
   return strField(value);
 }

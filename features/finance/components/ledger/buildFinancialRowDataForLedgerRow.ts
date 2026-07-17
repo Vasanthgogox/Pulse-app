@@ -352,8 +352,6 @@ export function buildFinancialRowDataForLedgerRow(
       ? rows
           .filter((r) => r.trip_id != null && r.trip_id === row.trip_id)
           .map((r) => {
-            const isDr =
-              r.contact_type === "driver" || (r.driver_name ?? "").trim() !== "";
             const party = getResolvedPartyName(r);
             return {
               id: r.id,

@@ -81,7 +81,6 @@ export function AddClientModal({
   onClose,
   onComplete,
   visible,
-  organizationId,
   noOrganizationMessage,
   onRefreshOrganization,
   searchInviteeByPhone,
@@ -279,7 +278,6 @@ export function AddClientModal({
     }
   };
 
-  const isPopup = visible === true;
   const useSingleColumnFields = windowWidth < 390;
 
   /** Popup: exact Ledger (Add Entry) layout — header row, field blocks, submit. */

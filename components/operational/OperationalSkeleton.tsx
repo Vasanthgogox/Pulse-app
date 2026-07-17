@@ -94,7 +94,7 @@ export const OperationalMetricSkeleton = memo(function OperationalMetricSkeleton
   columns = 3,
   density: densityTier = 'medium',
 }: OperationalMetricSkeletonProps) {
-  const d = useOperationalDensity(densityTier);
+  const _d = useOperationalDensity(densityTier);
 
   return (
     <View style={[styles.metricRow, { paddingHorizontal: layout.screenPaddingX, gap: space[3] }]}>

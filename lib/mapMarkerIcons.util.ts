@@ -17,13 +17,13 @@ export function resolveDriverMapAvatarSrc(
   return resolveDriverAvatarUriForSeed(avatarSeed);
 }
 
-let driverMapMarkerStylesInjected = false;
+let _driverMapMarkerStylesInjected = false;
 
 function ensureDriverMapMarkerStyles(): void {
   if (typeof document === 'undefined') return;
   const id = 'pulse-driver-map-marker-styles-v4';
   if (document.getElementById(id)) {
-    driverMapMarkerStylesInjected = true;
+    _driverMapMarkerStylesInjected = true;
     return;
   }
   // Drop legacy stylesheets so hot reloads pick up clickable status + alignment.
@@ -45,7 +45,7 @@ function ensureDriverMapMarkerStyles(): void {
 .pulse-driver-map-pointer{width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:9px solid var(--ring);margin-top:-1px;align-self:center;pointer-events:none;flex-shrink:0;}
 `;
   document.head.appendChild(el);
-  driverMapMarkerStylesInjected = true;
+  _driverMapMarkerStylesInjected = true;
 }
 
 export function buildDriverAvatarMarkerHtml(

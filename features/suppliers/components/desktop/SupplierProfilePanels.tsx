@@ -1364,7 +1364,7 @@ export function SupplierProfileWarehousesPanel({ bundle, orgId, supplierId, onRe
 // ── TAB 8: Performance ────────────────────────────────────────────────────────
 
 export function SupplierProfilePerformancePanel({ bundle }: BundleProps) {
-  const { performance, trips } = bundle;
+  const { performance } = bundle;
 
   if (!performance) {
     return (

@@ -14,7 +14,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
     FlatList,
     Modal,
     Platform,
@@ -145,8 +144,6 @@ export function PodReconciliationScreen() {
     if (amount >= 100000) return `₹${(amount / 100000).toFixed(2)} L`;
     return "₹" + amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
   };
-  const totalPending = formatCurrencySimple(summaryData?.pod_pending_sum || 0);
-  const totalInvoiced = formatCurrencySimple(summaryData?.invoiced_sum || 0);
 
   const safeDateText = (value: string | null | undefined): string => {
     if (!value) return "—";
@@ -293,55 +290,6 @@ export function PodReconciliationScreen() {
       invoice_status_1: [],
     });
     setPage(1);
-  };
-
-  const handleExportCsv = () => {
-    const rows = sortedTrips.map((item) => ({
-      trip_id: item.id || "",
-      trip_date: safeDateText(item.trip_date || item.date),
-      client_name: item.client_name || "",
-      vendor_name: item.vendor_name || "",
-      lr_no: item.lr_numbers?.join(" | ") || "",
-      pp_location: item.pp_location || "",
-      drop_point: item.drop_point || "",
-      value_inr: item.amount || 0,
-      trip_status: item.trip_status || "",
-      pod_status: item.pod_status || "",
-      pod_date: safeDateText(item.pod_received_date),
-      inv_status_1: item.invoice_status_1 || "",
-      invoice_no: item.invoice_no || "",
-      queue_status: item.invoice_status_display || "",
-    }));
-    const headers = Object.keys(rows[0] || {});
-    if (headers.length === 0) {
-      Alert.alert("Export", "No rows available for export.");
-      return;
-    }
-    const csv = [
-      headers.join(","),
-      ...rows.map((r) =>
-        headers
-          .map((h) => {
-            const value = String((r as Record<string, unknown>)[h] ?? "");
-            return `"${value.replace(/"/g, '""')}"`;
-          })
-          .join(","),
-      ),
-    ].join("\n");
-
-    if (Platform.OS === "web" && typeof document !== "undefined") {
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `pod_reconciliation_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      return;
-    }
-    Alert.alert("Export", "CSV export is available on web.");
   };
 
   if (!allowed) {
@@ -1676,19 +1624,6 @@ function MetricCard({
   );
 }
 
-function TabButton({ active, label, onPress }: any) {
-  return (
-    <Pressable
-      style={[styles.tabBtn, active && styles.tabBtnActive]}
-      onPress={onPress}
-    >
-      <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
-        {label}
-      </Text>
-      {active ? <View style={styles.tabBtnUnderline} /> : null}
-    </Pressable>
-  );
-}
 
 function TripRowItem({
   trip,

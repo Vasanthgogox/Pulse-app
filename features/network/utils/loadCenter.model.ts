@@ -82,7 +82,6 @@ export function resolveGetLoadMobileCardLabels(
   indentIdsWithTrip: ReadonlySet<string>,
 ): { statusLabel: string; rightFooter: string } {
   const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
-  const indentStatus = (load.status || "").toLowerCase();
   const loadTypeDetail = (load.load_type || "—").toUpperCase();
   const hasTrip = indentIdsWithTrip.has(load.id);
 
@@ -197,8 +196,6 @@ export function resolveGiveLoadMobileDisplayStatus(
   indentId: string,
 ): string {
   const status = indentStatus.toLowerCase();
-  const terminalForQuotePill =
-    status === "awarded" || statusMatchesFilter(status, "DONE");
   if (statusFilterTab === "DONE") {
     if (indentIdsWithTrip.has(indentId) || status === "completed") {
       return "completed";

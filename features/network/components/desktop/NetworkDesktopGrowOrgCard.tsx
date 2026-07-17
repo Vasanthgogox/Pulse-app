@@ -81,7 +81,6 @@ function pendingRoleLabel(
 function GrowActionButton({
   isConnected,
   isPending,
-  pendingRole,
   connecting,
   compact,
   onConnect,

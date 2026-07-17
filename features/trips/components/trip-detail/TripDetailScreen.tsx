@@ -1564,28 +1564,6 @@ export default function TripDetailScreen({
     d_out: trip.drop_location?.trim() || undefined,
   };
 
-  // ── Expense rows ──────────────────────────────────────────────────────────────
-  const expenseRows: ExpenseRow[] = detail.tripLedgerEntries
-    .filter((e) => Number(e.amount_out ?? 0) > 0)
-    .map((e) => ({
-      id: e.id,
-      date: new Date(e.transaction_date).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }),
-      expenseId: e.id.replace(/-/g, "").slice(0, 10).toUpperCase(),
-      category: e.primary_category ?? "Petty Cash",
-      type: e.contact_type ?? e.party_name ?? "—",
-      description: e.description ?? "—",
-      amount: Number(e.amount_out),
-      status: (e.reconciliation_status === "reconciled"
-        ? "Paid"
-        : e.reconciliation_status === "mismatch"
-          ? "Requested"
-          : "Pending") as ExpenseRow["status"],
-    }));
-
   // ── Finance numbers ───────────────────────────────────────────────────────────
   // Keep POV parity with TripDetailFinanceView: supplier-side indent view should
   // use supplier settlement amounts, not client billing amounts.
@@ -1636,9 +1614,6 @@ export default function TripDetailScreen({
     !!(trip.supplier_id ?? "").trim() &&
     supplierCost === 0;
   const baseFreight = sales;
-  const totalExpenses = isAssetTripFinance
-    ? 0
-    : expenseRows.reduce((s, r) => s + r.amount, 0);
   const incomeAdjustmentRows = adjustmentsCountingAsIncome(detail.adjustments);
   const deductionAdjustmentRows = adjustmentsCountingAsDeductions(
     detail.adjustments,
@@ -1666,7 +1641,6 @@ export default function TripDetailScreen({
   });
   const collectedFromClient = tripSettlement.clientReceived;
   const supplierPaid = tripSettlement.payablePaid;
-  const supplierDue = tripSettlement.payableDue;
 
   type FinanceHistoryRow = {
     key: string;
@@ -2054,14 +2028,6 @@ export default function TripDetailScreen({
     String(tripExtra.vehicle_type ?? "").trim() ||
     String(tripExtra.truck_type ?? "").trim() ||
     "";
-  const vehicleCapacityLabel =
-    String(tripExtra.capacity ?? "").trim() ||
-    String(tripExtra.vehicle_capacity ?? "").trim() ||
-    "";
-  const vehicleSpecsMeta = [vehicleTypeLabel, vehicleCapacityLabel]
-    .filter(Boolean)
-    .join(" · ") || null;
-
   const adjSales = adjustedRevenue(sales, detail.adjustments);
   const adjCost = adjustedCost(cost, detail.adjustments);
   const netManifestYield = selectTripManifestMargin({

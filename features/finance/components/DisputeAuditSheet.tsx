@@ -59,7 +59,7 @@ export interface DisputeAuditSheetProps {
 function buildDisputedItems(
   internalTxs: LedgerRow[],
   sharedEntries: SharedLedgerEntry[],
-  isSupplier: boolean
+  _isSupplier: boolean
 ): DisputedItem[] {
   const internalMap = new Map<string, { amount: number; date: string }>();
   for (const tx of internalTxs) {

@@ -8,7 +8,7 @@ import { computeDriverCommissionForTrip } from './aggregateDrivers';
 import type { TripForDriver } from './types';
 
 /** driver_ledger.type from DB. */
-const LEDGER_TYPES = [
+const _LEDGER_TYPES = [
   'salary',
   'settlement',
   'advance',
@@ -16,7 +16,7 @@ const LEDGER_TYPES = [
   'adjustment',
   'deduction',
 ] as const;
-export type DriverLedgerType = (typeof LEDGER_TYPES)[number];
+export type DriverLedgerType = (typeof _LEDGER_TYPES)[number];
 
 export interface DriverLedgerEntryForStatement {
   id: string;

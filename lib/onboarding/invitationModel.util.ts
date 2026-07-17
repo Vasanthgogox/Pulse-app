@@ -1,6 +1,6 @@
 import type { ResolvedTeamInvitation } from '@/features/organization/services/teamInvitationResolver.service';
 
-import type { EmailIdentity, IdentityInvitation, InvitationIdentity, PhoneIdentity } from './identityTypes';
+import type { EmailIdentity, IdentityInvitation, InvitationIdentity } from './identityTypes';
 import { emailIdentity, phoneIdentity } from './identityTypes';
 import { proposedRelationshipTypeFromTeamInvite } from './membershipTypes';
 
@@ -45,7 +45,6 @@ export function legacyTeamInviteToIdentityInvitation(
 export function identityInvitationToLegacy(
   invite: IdentityInvitation,
 ): ResolvedTeamInvitation {
-  const phone = invite.identities.find((i): i is PhoneIdentity => i.type === 'phone')?.value;
   const email =
     invite.identities.find((i): i is EmailIdentity => i.type === 'email')?.value ?? null;
 

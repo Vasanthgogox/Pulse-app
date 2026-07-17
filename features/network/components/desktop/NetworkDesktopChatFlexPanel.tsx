@@ -156,7 +156,6 @@ function ChatBubbleRow({
 }
 
 function NetworkDesktopChatFlexPanelBody({
-  orgId,
   orgName,
   onClose,
   joinRequest,

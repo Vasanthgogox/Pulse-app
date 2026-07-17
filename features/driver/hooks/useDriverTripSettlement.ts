@@ -388,9 +388,6 @@ export function useDriverTripSettlement(trip: TripRow | null) {
   const shareSettlementReceipt = useCallback(async () => {
     if (!trip || !settlementView?.settlementLedger) return;
     const ledger = settlementView.settlementLedger;
-    const capturedAt = phonePeMetaDate(
-      ledger.created_at ?? trip.completed_at ?? trip.updated_at ?? trip.created_at,
-    );
     const msg = buildSettlementShareMessage({
       fleetName: settlementView.fleetName,
       tripId: settlementView.displayId,

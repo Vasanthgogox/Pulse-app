@@ -54,18 +54,6 @@ import {
 import { Pressable as HoldPressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/** Format "Updated X min ago" for live tracking card. */
-function formatLocationUpdatedAt(recordedAt: string): string {
-  const then = new Date(recordedAt).getTime();
-  const now = Date.now();
-  const diffM = Math.floor((now - then) / 60000);
-  if (diffM < 1) return "Updated just now";
-  if (diffM === 1) return "Updated 1 min ago";
-  if (diffM < 60) return `Updated ${diffM} min ago`;
-  const diffH = Math.floor(diffM / 60);
-  return diffH === 1 ? "Updated 1 hr ago" : `Updated ${diffH} hr ago`;
-}
-
 function formatTripDistanceForControl(
   distance: string | number | null | undefined,
 ): string {
@@ -128,7 +116,6 @@ export default function DriverControlScreen() {
     setStepError,
     acceptedOffer,
     tripDriver,
-    load,
     confirmArrival,
     engageTransit,
     confirmReached,
@@ -136,7 +123,7 @@ export default function DriverControlScreen() {
   } = useTripControl(tripId);
 
   // 2. Hold Button Hook (Hold-to-complete logic)
-  const { holdProgress, isHolding, startHold, cancelHold, resetHold } =
+  const { holdProgress, isHolding, startHold, cancelHold } =
     useHoldButton(completeTrip);
 
   // 3. POD Documents Hook (Upload, View, Skip)
@@ -156,7 +143,6 @@ export default function DriverControlScreen() {
 
   const {
     lrDocuments,
-    lrLoading,
     lrUploading,
     lrViewUrls,
     setLrViewUrls,
@@ -179,14 +165,9 @@ export default function DriverControlScreen() {
   });
 
   // 4. Driver Location Hook (Live Tracking)
-  const {
-    driverLocation,
-    driverLocationAddress,
-    tripLocationPoints,
-    fetchDriverLocationFromDb,
-  } = useDriverLocation(tripId);
+  useDriverLocation(tripId);
 
-  const [completedTripsCount, setCompletedTripsCount] = useState(0);
+  const [_completedTripsCount, setCompletedTripsCount] = useState(0);
   const [driverTripNumberById, setDriverTripNumberById] = useState<
     Record<string, string>
   >({});

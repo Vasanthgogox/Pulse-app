@@ -1638,7 +1638,7 @@ export async function createOpeningBalance(
   },
 ): Promise<{ error: Error | null }> {
   const isReceivable = params.direction === 'receivable';
-  const { data, error } = await supabase()
+  const { error } = await supabase()
     .from('transactions')
     .insert({
       organization_id: orgId,

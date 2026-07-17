@@ -94,8 +94,6 @@ export function SuppliersTab({
   bottomInset = 100,
   tripFinanceAdjustmentsByTripId,
   hideSummaryRow = false,
-  viewTab,
-  onViewTabChange,
   embedInParentScroll = false,
   onAddPartyPress,
 }: SuppliersTabProps) {

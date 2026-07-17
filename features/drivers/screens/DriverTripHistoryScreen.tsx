@@ -26,8 +26,6 @@ import {
   getDriverTripDisplayNumber,
 } from "@/features/driver/utils/driverTripSequence.util";
 import { isAggregateTrip, isRosterTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
-import { formatTime } from "@/lib/format";
-import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { supabase } from "@/lib/supabase";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as tripsService from "@/features/trips/services/trips.service";
@@ -39,7 +37,7 @@ import {
     Search as SearchIcon,
 } from "lucide-react-native";
 import { FlashList } from "@shopify/flash-list";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AppState,
     Image,
@@ -51,11 +49,8 @@ import {
     View,
 } from "react-native";
 import Animated, {
-    cancelAnimation,
     useAnimatedStyle,
     useSharedValue,
-    withRepeat,
-    withSequence,
     withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -109,11 +104,6 @@ function isTransitStatus(status: string) {
   return s === "in_transit" || s === "transit";
 }
 
-function isPickupProgressStatus(status: string) {
-  const s = (status || "").toLowerCase();
-  return s === "in_progress" || s === "pickup" || s === "picked_up" || s === "started";
-}
-
 function isAtDropStatus(status: string) {
   const s = (status || "").toLowerCase();
   return s === "at_drop";
@@ -135,17 +125,6 @@ function getTripStageBadgeLabel(trip: tripsService.TripRow): string {
     return "IN TRANSIT";
   }
   return "PICKUP";
-}
-
-function getTripProgressTitle(trip: tripsService.TripRow): string {
-  if (isCompleted(trip.status)) return "DELIVERED SUCCESSFULLY";
-  if (isAssignedNotStarted(trip.status) && !trip.started_at) return "AWAITING ACCEPTANCE";
-  if (isAtDropStatus(trip.status)) return "AT DROP-OFF LOCATION";
-  if (isTransitStatus(trip.status) || (String(trip.status || "").toLowerCase() === "in_progress" && !!trip.started_at)) {
-    return "TRIP IN PROGRESS";
-  }
-  if (isPickupProgressStatus(trip.status)) return "AT PICKUP STAGE";
-  return "ACTIVE TRIP";
 }
 
 function formatDate(dateStr: string | null) {
@@ -178,148 +157,6 @@ function splitLocationPrimarySecondary(location: string | null | undefined): {
   const primary = raw.slice(0, commaIndex).trim() || raw;
   const secondary = raw.slice(commaIndex + 1).trim() || null;
   return { primary, secondary };
-}
-
-/** Duration from started_at→completed_at, or estimated_duration, or "—". Never returns "0 H". */
-function formatDurationForTrip(trip: tripsService.TripRow): string {
-  const estimated = trip.estimated_duration?.trim();
-  if (trip.started_at && trip.completed_at) {
-    const start = new Date(trip.started_at).getTime();
-    const end = new Date(trip.completed_at).getTime();
-    const hours = (end - start) / (1000 * 60 * 60);
-    if (hours < 0 || hours < 0.05) {
-      // If lifecycle timestamps are too close/noisy, prefer DB ETA.
-      if (estimated) return formatEstimatedDuration(estimated);
-      return "—";
-    }
-    if (hours >= 24) {
-      const d = Math.floor(hours / 24);
-      const h = Math.round(hours % 24);
-      return h > 0 ? `${d}D ${h}H` : `${d}D`;
-    }
-    const hRounded = Math.round(hours * 10) / 10;
-    if (hRounded > 0) return `${hRounded}H`;
-    if (estimated) return formatEstimatedDuration(estimated);
-    return "—";
-  }
-  if (estimated) {
-    const asNum = parseFloat(estimated.replace(/[^0-9.]/g, ""));
-    if (Number.isNaN(asNum) || asNum <= 0) return "—";
-    return formatEstimatedDuration(estimated);
-  }
-  return "—";
-}
-
-function toEtaInterval(durationSeconds: number): string {
-  const totalSeconds = Math.max(0, Math.round(durationSeconds));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-}
-
-function parseTripCoordinate(value: unknown): number | null {
-  if (value == null) return null;
-  if (typeof value === "string" && value.trim() === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-interface MissionLogEntry {
-  time: string;
-  status: string;
-  loc: string;
-  details: string;
-  /** ISO timestamp for expanded row (full date/time display). */
-  atIso: string | null;
-}
-
-function isInTransitStatus(status: string): boolean {
-  return status.trim().toLowerCase() === "in transit";
-}
-
-/** Pulse the timeline node when the row is expanded (draws attention without clipping). */
-function TimelinePulseIcon({
-  expanded,
-  children,
-  style,
-}: {
-  expanded: boolean;
-  children: ReactNode;
-  style?: object;
-}) {
-  const scale = useSharedValue(1);
-  useEffect(() => {
-    cancelAnimation(scale);
-    if (expanded) {
-      scale.value = withRepeat(
-        withSequence(withTiming(1.07, { duration: 700 }), withTiming(1, { duration: 700 })),
-        -1,
-        false,
-      );
-    } else {
-      scale.value = withTiming(1, { duration: 220 });
-    }
-  }, [expanded, scale]);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  return <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>;
-}
-
-/** Trip log from trip timestamps (Assigned → Pickup → In-transit → Delivered). */
-function buildMissionLog(trip: tripsService.TripRow): MissionLogEntry[] {
-  const entries: MissionLogEntry[] = [];
-  if (trip.created_at) {
-    entries.push({
-      time: formatTime(trip.created_at),
-      status: "Assigned",
-      loc: trip.pickup_area || "—",
-      details:
-        "Trip ID assigned to pilot. Vehicle ready for pickup at the scheduled origin.",
-      atIso: trip.created_at,
-    });
-  }
-  if (trip.started_at) {
-    entries.push({
-      time: formatTime(trip.started_at),
-      status: "Pickup",
-      loc: trip.pickup_area || "—",
-      details:
-        "Cargo verified at origin. Load confirmed and departure logged for this trip.",
-      atIso: trip.started_at,
-    });
-    entries.push({
-      time: formatTime(trip.started_at),
-      status: "In transit",
-      loc: trip.pickup_area || "—",
-      details:
-        "Route progress updated. Movement tracked toward the destination.",
-      atIso: trip.started_at,
-    });
-  }
-  if (trip.completed_at) {
-    entries.push({
-      time: formatTime(trip.completed_at),
-      status: "Delivered",
-      loc: trip.drop_location || "—",
-      details:
-        "Handed over at destination. Trip marked complete and eligible for settlement.",
-      atIso: trip.completed_at,
-    });
-  }
-  if (entries.length === 0 && trip.created_at) {
-    entries.push({
-      time: formatTime(trip.created_at),
-      status: "Assigned",
-      loc: trip.pickup_area || "—",
-      details:
-        "Trip ID assigned to pilot. Vehicle ready for pickup at the scheduled origin.",
-      atIso: trip.created_at,
-    });
-  }
-  return entries;
 }
 
 interface TripSettlementBreakdown {
@@ -464,7 +301,7 @@ export default function DriverTripsScreen() {
   const [, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
-  const [routeMetricsByTripId, setRouteMetricsByTripId] = useState<
+  const [_routeMetricsByTripId, _setRouteMetricsByTripId] = useState<
     Record<string, { distance: number; estimated_duration: string }>
   >({});
   const [pressedCardId, setPressedCardId] = useState<string | null>(null);
@@ -866,15 +703,6 @@ export default function DriverTripsScreen() {
     if (amount <= 0) return isAggregateTrip(trip) ? "SALARY" : "—";
     return `₹${Math.round(amount).toLocaleString()}`;
   };
-
-  const getEarningAmount = (trip: tripsService.TripRow): number =>
-    tripEarningsForDriver(trip);
-
-  const getGrossRevenue = (trip: tripsService.TripRow): "SALARY" | number => {
-    if (isAggregateTrip(trip)) return "SALARY";
-    return Number(trip.client_price ?? 0) || 0;
-  };
-
 
   const driverTripNumberById = useMemo(
     () => buildDriverTripNumberMap(trips),

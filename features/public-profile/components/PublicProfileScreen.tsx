@@ -42,8 +42,6 @@ interface PublicProfileScreenProps {
 }
 
 /** Hero block height (excludes status bar; identity overlaps scroll content). */
-const HERO_HEIGHT = 256;
-const METRICS_OVERLAP = 56;
 
 function asDisplay(value: string | null | undefined): string {
   const normalized = (value ?? "").trim();

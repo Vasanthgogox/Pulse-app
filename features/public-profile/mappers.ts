@@ -195,14 +195,6 @@ export function supplierToPublicEntity(s: SupplierRow): PublicProfileEntity {
 
 /* ───────────────────────────────────────────── Vehicle ───────────────────────────────────────────── */
 
-function yearsSinceIsoVehicle(iso: string | null | undefined): number | null {
-  if (!iso) return null;
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return null;
-  const years = (Date.now() - t) / (365.25 * 24 * 60 * 60 * 1000);
-  return Math.max(0, Math.round(years * 10) / 10);
-}
-
 function formatMonthYearVehicle(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -216,7 +208,6 @@ export function vehicleToPublicEntity(
   tripCount: number,
 ): PublicProfileEntity {
   const display = v.vehicle_number?.trim() || "Vehicle";
-  const tenureYears = yearsSinceIsoVehicle(v.created_at);
   const docCount = [
     v.documents?.rc?.expiryDate,
     v.documents?.insurance?.expiryDate,

@@ -23,7 +23,6 @@ import {
   patchKamAssignment,
   patchQuarterlyTarget,
   previousMonthKey,
-  quarterKeyFromMonthKey,
   saveNetworkGoalsStore,
   yearFromMonthKey,
   yearQuarterKeys,
@@ -927,7 +926,6 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
 
   // Yearly / quarterly computed values for hierarchy target section
   const selectedYear = yearFromMonthKey(selectedMonthKey);
-  const selectedQuarterKey = quarterKeyFromMonthKey(selectedMonthKey);
   const quarterKeys = yearQuarterKeys(selectedYear);
   const quarterlyTargets = useMemo(
     () => Object.fromEntries(quarterKeys.map((qk) => [qk, getQuarterlyTarget(goalsStore, qk)])),

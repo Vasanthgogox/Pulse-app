@@ -101,7 +101,6 @@ export function TripChatRoomSheet({
   composeTrip,
   organizationId,
   onClose,
-  onViewTrip,
   embedded = false,
   chromeless = false,
 }: TripChatRoomSheetProps) {

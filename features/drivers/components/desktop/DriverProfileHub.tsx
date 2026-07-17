@@ -40,8 +40,8 @@ export function DriverProfileHub({
   driver,
   tripCount,
   vehicleLabel,
-  ratingCount,
-  tenureCount,
+  ratingCount: _ratingCount,
+  tenureCount: _tenureCount,
   onBack,
 }: Props) {
   const router = useRouter();

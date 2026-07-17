@@ -32,7 +32,6 @@ function capacityForVehicle(vehicle: string): { weight: number; volume: number }
 
 export function buildDefaultConstraints(orders: Order[]): ExecutionConstraints {
   const weight = orders.reduce((s, o) => s + o.total_weight_kg, 0);
-  const volume = orders.reduce((s, o) => s + o.total_volume_m3, 0);
   const vehicle = suggestVehicle(weight);
   const cap = capacityForVehicle(vehicle);
   const fragile = orders.some(o => o.line_items.some(li => li.product_name.toLowerCase().includes('aid') || li.sku.startsWith('PHAR')));
@@ -68,7 +67,6 @@ export function computeOptimizationMetrics(orders: Order[]): MergeOptimizationMe
   const cap     = capacityForVehicle(vehicle);
 
   const pickups = new Set(orders.map(o => o.pickup_address.pincode));
-  const drops   = new Set(orders.map(o => o.drop_address.pincode));
 
   const distanceFactor    = Math.min(100, (orders.length - 1) * 14 + (orders.length - pickups.size) * 18);
   const weightFactor      = Math.min(100, (weight / cap.weight) * 100);

@@ -48,11 +48,6 @@ function seedColor(id: string): string {
   return ACCENT_TOKENS[h];
 }
 
-function withAlpha(hex: string, alpha: string): string {
-  if (hex.length === 7) return `${hex}${alpha}`;
-  return hex;
-}
-
 function timeAgo(d: string): string {
   const diff = Date.now() - new Date(d).getTime();
   const m = Math.floor(diff / 60000);
@@ -121,7 +116,7 @@ function UpdateCard({ post, color, onPress }: { post: PostRow; color: string; on
 
 // ─── Load Card ────────────────────────────────────────────────────────────────
 
-function LoadCard({ post, color, isOwner, onBid, onPress }: {
+function LoadCard({ post, isOwner, onBid, onPress }: {
   post: PostRow;
   color: string;
   isOwner: boolean;

@@ -8,8 +8,6 @@ import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
 import { HubScreenBottomBar } from "@/components/hub/HubScreenBottomBar";
 import { HubScreenShell } from "@/components/hub/HubScreenShell";
 import { useHubGridPagination } from "@/components/hub/useHubGridPagination";
-import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
-import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
 import {
   ClaimedIndentCardActions,
   GetLoadIndentCardActions,
@@ -47,7 +45,6 @@ import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indent
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import {
     DONE_SUB_TABS,
-    formatIndentCardDate,
     getLoadCenterStatusTabLabel,
     resolveGetLoadTicketCommerce,
     resolveGiveLoadMobileDisplayStatus,
@@ -84,7 +81,6 @@ import { formatINR } from "@/lib/format";
 import { ROUTES } from "@/lib/routes";
 import { resolveLoadCenterPromoVariant } from "@/lib/loadCenterPromoAssets";
 import { useRouter, useFocusEffect } from "expo-router";
-import { getTripOperationalDisplay } from "@/features/operations/display";
 import {
     useIndentOfferCountsQuery,
     useDriversQuery,
@@ -101,10 +97,8 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { type FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
-import {
-    Package,
-    Share2,
-} from "lucide-react-native";
+
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -147,7 +141,7 @@ export function LoadCenterView({
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
@@ -168,8 +162,6 @@ export function LoadCenterView({
   const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
     Record<string, { amount: number; updatedAt: string }[]>
   >({});
-  const isCompactModalLayout = Platform.OS === "web" && width < 920;
-
   const { data: indents = [], isLoading } = useIndentsQuery(orgId);
   const {
     data: marketIndents = [],
@@ -182,7 +174,7 @@ export function LoadCenterView({
     useMyDirectQuotesQuery(orgId);
   const { data: trips = [] } = useTripsQuery(orgId);
   const { data: drivers = [] } = useDriversQuery(orgId);
-  const { data: vehicles = [] } = useVehiclesQuery(orgId);
+  useVehiclesQuery(orgId);
   const { data: suppliers = [] } = useSuppliersQuery(orgId);
   const { data: clients = [] } = useClientsQuery(orgId);
   const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
@@ -240,11 +232,8 @@ export function LoadCenterView({
   /** Desktop web: 5 indent cards per row (mobile <820 uses hub list cards). */
   const useGridLayout = Platform.OS === "web" && width >= 1024;
   const isMobileView = width < 820;
-  /** Phone + tablet list: hub ticket cards; desktop grid uses dense fillGrid variant. */
-  const useHubIndentListCards = !useGridLayout;
   /** Narrow / grid cards: stack bid meta + actions so CTAs stay aligned and tappable. */
   const compactIndentFooter = width < 520;
-  const stackIndentCardFooter = compactIndentFooter || useGridLayout;
 
   useEffect(() => {
     if (!highlightedIndentId || useGridLayout) return;
@@ -711,7 +700,7 @@ export function LoadCenterView({
   };
 
 
-  const activeDrivers = useMemo(
+  const _activeDrivers = useMemo(
     () => drivers.filter((d) => !d.left_at),
     [drivers],
   );
@@ -1160,156 +1149,6 @@ export function LoadCenterView({
       tripDeployment.assigningTripId,
     ],
   );
-
-  const renderClaimedLoadCard = (
-    load: IndentRow,
-    isDone: boolean,
-    stretchInGrid = false,
-    /** Hide redundant "Claimed" pill when the Claimed sub-tab is already selected */
-    hideClaimedContextPill = true,
-  ) => {
-    const acceptedQuote = myQuotes.find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
-    );
-    const supplierRate =
-      acceptedQuote?.amount != null
-        ? Number(acceptedQuote.amount)
-        : Number(load.client_price || 0);
-    const vehicleDetail = load.vehicle_type || "—";
-    const weightValue = Number(load.weight);
-    const weightDetail =
-      Number.isFinite(weightValue) && weightValue > 0
-        ? `${weightValue} KG`
-        : "—";
-    const loadTypeDetail = load.load_type || "—";
-
-    return (
-      <TouchableOpacity
-        style={[styles.loadCard, stretchInGrid && styles.loadCardGrid]}
-        onPress={() => onIndentPress(load)}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.loadCardOrb, { pointerEvents: "none" }]} />
-        <View style={styles.loadCardHeroRow}>
-          {!hideClaimedContextPill ? (
-            <View style={styles.loadPillRow}>
-              <View style={styles.loadTypePill}>
-                <Text style={styles.loadTypePillText}>CLAIMED</Text>
-              </View>
-            </View>
-          ) : null}
-          <Text style={styles.loadCardIdCompact} numberOfLines={1}>
-            {getIndentDisplayNumber(load)}
-            {getTripOperationalDisplay({
-              trip_number: load["trip_number"] ?? null,
-            }) !== "—"
-              ? ` · ${getTripOperationalDisplay({ trip_number: load["trip_number"] ?? null })}`
-              : ""}
-          </Text>
-          <Text style={styles.loadCardDateHero}>
-            {formatIndentCardDate(load.pickup_date)}
-          </Text>
-        </View>
-        <LoadCardRouteRow
-          origin={load.pickup_area || "—"}
-          destination={load.drop_location || "—"}
-          compact={stretchInGrid}
-        />
-        <View style={styles.loadCardSpecsPanel}>
-          <LoadCardSpecsRow
-            vehicle={vehicleDetail}
-            weight={weightDetail}
-            loadType={loadTypeDetail}
-          />
-          <View style={styles.loadCardQuoteHint}>
-            <Text style={styles.loadCardQuoteHintText}>
-              Agreed rate {formatINR(supplierRate)}
-            </Text>
-          </View>
-        </View>
-        <View
-          style={[
-            styles.loadCardFooter,
-            stretchInGrid && styles.loadCardFooterGrid,
-            stackIndentCardFooter && styles.loadCardFooterCompact,
-          ]}
-        >
-          <View
-            style={[
-              styles.loadCardMeta,
-              stackIndentCardFooter && styles.loadCardMetaCompact,
-            ]}
-          >
-            <View style={styles.bidMetaWrap}>
-              <View
-                style={[
-                  styles.bidIconCircle,
-                  isDone
-                    ? styles.bidIconCircleActive
-                    : styles.bidIconCircleMuted,
-                ]}
-              >
-                <Package
-                  size={16}
-                  color={isDone ? Theme.darkGreen : Theme.textMuted}
-                  strokeWidth={2.2}
-                />
-              </View>
-              <Text style={styles.loadCardMetaText} numberOfLines={2}>
-                {isDone ? "Trip on books" : "Assign staff to deploy"}
-              </Text>
-            </View>
-          </View>
-          <View
-            style={[
-              styles.loadCardActions,
-              stackIndentCardFooter && styles.loadCardActionsCompact,
-            ]}
-          >
-            <View
-              style={[
-                styles.loadCardActionCluster,
-                stackIndentCardFooter && styles.loadCardActionClusterStacked,
-              ]}
-            >
-              <TouchableOpacity
-                style={styles.shareIndentIconBtn}
-                onPress={() => handleShareIndent(load)}
-                activeOpacity={0.88}
-                accessibilityLabel="Share load"
-              >
-                <Share2 size={18} color={Theme.textMuted} strokeWidth={2.2} />
-              </TouchableOpacity>
-              {isDone ? (
-                <TouchableOpacity
-                  style={styles.reviewBidsBtn}
-                  onPress={() => onIndentPress(load)}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.reviewBidsBtnText}>View detail</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={styles.reviewBidsBtn}
-                  onPress={() => openIndentAllocation(load)}
-                  activeOpacity={0.9}
-                  disabled={tripDeployment.assigningTripId === load.id}
-                >
-                  <Text style={styles.reviewBidsBtnText}>
-                    {tripDeployment.assigningTripId === load.id
-                      ? "Authorizing…"
-                      : "Assign & deploy"}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
 
   return (
     <HubScreenShell

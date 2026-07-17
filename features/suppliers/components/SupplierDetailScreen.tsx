@@ -249,7 +249,7 @@ export default function SupplierDetailScreen({
 
   const linkedOrgDisplayMap = useLinkedOrgProfileMap(clients, orgSuppliers);
 
-  const { disputesByTripId } = useDisputeMapQuery(
+  const { disputesByTripId: _disputesByTripId } = useDisputeMapQuery(
     currentOrganization?.id ?? null,
   );
 
@@ -816,7 +816,7 @@ export default function SupplierDetailScreen({
       };
     });
   }, [tripsForMissionTable, paidByTripId, tripIdToDue, tripFinanceAdjRecord]);
-  const getTripSalesForSupplierView = useCallback(
+  const _getTripSalesForSupplierView = useCallback(
     (trip: TripRow): number => {
       const mappedAggregateSales = aggregateTripSalesById[trip.id];
       if (mappedAggregateSales != null && mappedAggregateSales > 0) {
@@ -903,7 +903,7 @@ export default function SupplierDetailScreen({
     return m;
   }, [trips]);
 
-  const getVehicleNumberForTripId = useCallback(
+  const _getVehicleNumberForTripId = useCallback(
     (tripId: string | null) => {
       if (!tripId) return null;
       const t = trips.find((x) => String(x.id) === String(tripId));
@@ -948,7 +948,7 @@ export default function SupplierDetailScreen({
     supplierTripDetailsMap,
   ]);
 
-  const tripOptions = useMemo(
+  const _tripOptions = useMemo(
     () =>
       trips.map((t) => ({
         id: t.id,

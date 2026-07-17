@@ -59,7 +59,7 @@ export function LoadBoardModal({
   const [loadCustomTo, setLoadCustomTo] = useState<string | null>(null);
   const [loadDateModalVisible, setLoadDateModalVisible] = useState(false);
   const orgId = (visible || asScreen) ? organizationId : null;
-  const { data: indents = [], isLoading: loading, refetch } = useIndentsQuery(orgId);
+  const { data: indents = [], isLoading: loading } = useIndentsQuery(orgId);
 
   const loadDateOpts = useMemo(
     () => ({ customFrom: loadCustomFrom, customTo: loadCustomTo }),

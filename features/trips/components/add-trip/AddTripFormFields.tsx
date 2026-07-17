@@ -114,18 +114,6 @@ function routePreviewLine(s: string): string {
   return t || "—";
 }
 
-function formatUiDateLabel(iso: string): string {
-  const t = iso.trim();
-  if (!t) return "Select date";
-  const d = new Date(`${t}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return t;
-  return d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 const ROUTE_INSTRUCTOR_ANIMATION = require("@/assets/Animated folder/reach the location.json");
 
 function toISODate(d: Date): string {
@@ -432,8 +420,8 @@ export function AddTripFormFields({
   const [fleetLoading, setFleetLoading] = useState(false);
   const [suppliersLoading, setSuppliersLoading] = useState(false);
   const clientPriceInputRef = useRef<TextInput>(null);
-  const supplierRateInputRef = useRef<TextInput>(null);
-  const advancePaidInputRef = useRef<TextInput>(null);
+  const _supplierRateInputRef = useRef<TextInput>(null);
+  const _advancePaidInputRef = useRef<TextInput>(null);
   const aggregateDriverNameInputRef = useRef<TextInput>(null);
   const driverPhoneInputRef = useRef<TextInput>(null);
   const aggregateVehicleInputRef = useRef<TextInput>(null);
@@ -475,7 +463,7 @@ export function AddTripFormFields({
     [focusField],
   );
 
-  const focusFieldAfterModalClose = useCallback(
+  const _focusFieldAfterModalClose = useCallback(
     (ref: { current: TextInput | null }) => {
       // Web modal close/render timing can swallow immediate focus.
       // Retry shortly after close to make focus reliable.
@@ -498,9 +486,9 @@ export function AddTripFormFields({
     return () => clearTimeout(t);
   }, [notesModalOpen, focusField]);
 
-  const openPickerNext = useCallback((_type: "driver" | "vehicle") => {}, []);
+  const _openPickerNext = useCallback((_type: "driver" | "vehicle") => {}, []);
 
-  const openSupplierPickerNext = useCallback(() => {}, []);
+  const _openSupplierPickerNext = useCallback(() => {}, []);
   const fetchFleet = useCallback(() => {
     if (!organizationId) return;
     setFleetLoading(true);
@@ -862,11 +850,7 @@ export function AddTripFormFields({
     allocationSubStep === "supply";
   const selectedClientRow = clients.find((c) => c.id === state.clientId) ?? null;
   const selectedSupplierRow = suppliers.find((s) => s.id === state.supplierId) ?? null;
-  const showClientList = !state.clientId || clientListExpanded;
-  const showClientSummary = Boolean(
-    state.clientId && !clientListExpanded && selectedClientRow,
-  );
-  const clientAvatarGridItems = useMemo(
+  const _clientAvatarGridItems = useMemo(
     () =>
       isWizardTypography
         ? clientsToWizardAvatarGridItems(clients)
@@ -874,11 +858,6 @@ export function AddTripFormFields({
     [clients, isWizardTypography],
   );
   const showPartnerList = !state.supplierId || partnerListExpanded;
-  const showPartnerSummary = Boolean(
-    state.supplierId && !partnerListExpanded && selectedSupplierRow,
-  );
-  const selectedPartnerName =
-    suppliers.find((s) => s.id === state.supplierId)?.name?.trim() ?? "";
   const busyFleetHintAsset =
     supplyIsAsset &&
     !state.assignLater &&

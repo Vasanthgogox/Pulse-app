@@ -138,7 +138,6 @@ function formatTxDate(iso: string | null | undefined): string {
 function KanbanCard({
   row,
   index,
-  cat,
   openDetail,
   hasAmtIn,
   amount,

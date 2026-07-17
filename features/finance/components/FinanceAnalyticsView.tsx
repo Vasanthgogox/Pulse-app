@@ -28,7 +28,7 @@ function dateKey(iso: string | null | undefined): string | null {
 }
 
 function formatShortDate(key: string): string {
-  const [y, m, d] = key.split("-");
+  const [, m, d] = key.split("-");
   const mi = Number(m ?? 0) - 1;
   return `${d ?? ""} ${MONTHS_SHORT[mi] ?? m}`;
 }

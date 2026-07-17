@@ -74,12 +74,12 @@ export function useFinanceEntities({
   const { data: supplierRows = [], isPending: suppliersLoading } = useSuppliersQuery(orgId);
   const { data: vehicleRows = [], isPending: vehiclesLoading } = useVehiclesQuery(orgId);
   const { data: driverRows = [], isPending: driversLoading } = useDriversQuery(orgId);
-  const { data: driverOffers = {}, isPending: offersLoading } = useDriverOffersQuery(orgId);
-  const { data: connectionRequestsSent = [], isPending: connLoading } =
+  const { data: driverOffers = {} } = useDriverOffersQuery(orgId);
+  const { data: connectionRequestsSent = [] } =
     useConnectionRequestsSentQuery(orgId);
-  const { data: tripsWhereOrgIsClient = [], isPending: tripsAsClientLoading } =
+  const { data: tripsWhereOrgIsClient = [] } =
     useTripsWhereOrgIsClientQuery(orgId);
-  const { data: tripsWhereOrgIsSupplier = [], isPending: tripsAsSupplierLoading } =
+  const { data: tripsWhereOrgIsSupplier = [] } =
     useTripsWhereOrgIsSupplierQuery(orgId);
   const { data: salaryRequestsFromQuery = [] } = useSalaryRequestsQuery(orgId, "pending");
 
@@ -87,9 +87,7 @@ export function useFinanceEntities({
     () => tripsWhereOrgIsSupplier.map((t) => t.id),
     [tripsWhereOrgIsSupplier]
   );
-  const shouldLoadTripSubcontracts = !!orgId && tripIdsWhereOrgIsSupplier.length > 0;
-  
-  const { data: tripSubcontracts = [], isPending: subcontractsLoading } = 
+  const { data: tripSubcontracts = [] } =
     useTripSubcontractsQuery(orgId, tripIdsWhereOrgIsSupplier);
 
   const tripsWhereOrgIsSupplierWithSubcontracts = useMemo(() => {

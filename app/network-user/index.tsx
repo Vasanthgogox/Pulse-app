@@ -35,7 +35,6 @@ export default function NetworkUserScreen() {
 
   const id = params.id ?? 'N/A';
   const name = (params.name ?? 'Unknown').toUpperCase();
-  const type = params.type ?? 'NODE';
   const region = params.region ?? '—';
   const level = Math.min(30, Math.max(1, parseInt(params.level ?? '10', 10) || 10));
   const safetyScore = params.safetyScore ?? '—';

@@ -47,7 +47,7 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
   region,
   pickupCoord,
   dropCoord,
-  currentLocation,
+  currentLocation: _currentLocation,
   highlightTarget,
   route,
   guidance,

@@ -61,7 +61,7 @@ export function NetworkDesktopSalesLineChart({
   const chartW = width - PAD.left - PAD.right;
   const chartH = height - PAD.top - PAD.bottom;
 
-  const { pts, linePath, areaPath, baseY, maxVal } = useMemo(() => {
+  const { pts, linePath, areaPath } = useMemo(() => {
     const values = data.map((d) => d.trips);
     const max = Math.max(...values, 1);
     const n = data.length;

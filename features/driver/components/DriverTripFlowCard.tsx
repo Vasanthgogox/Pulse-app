@@ -276,8 +276,8 @@ export function DriverTripFlowCard({
   driverLocationLabel = null,
   onRefresh,
   onTripUpdated,
-  onToggleCollapse,
-  collapsed = false,
+  onToggleCollapse: _onToggleCollapse,
+  collapsed: _collapsed = false,
   onBackToDashboard,
   onTripCompleted,
   edgeToEdge = false,
@@ -287,7 +287,7 @@ export function DriverTripFlowCard({
   const colors = useDriverThemeColors();
   const { profile } = useAuth();
   const router = useRouter();
-  const { conversations, ensureDriverTripConversation, refreshConversations } = useDriverChat();
+  const { conversations, ensureDriverTripConversation } = useDriverChat();
 
   const [localTrip, setLocalTrip] = useState<tripsService.TripRow>(trip);
   const [step, setStep] = useState<StepId>(() => deriveDriverFlowStepFromTrip(trip));
@@ -317,12 +317,12 @@ export function DriverTripFlowCard({
   const [lrDeletingId, setLrDeletingId] = useState<string | null>(null);
   const lrUploadCancelledRef = useRef(false);
   const [lrHoldProgress, setLrHoldProgress] = useState(0);
-  const [isLrHolding, setIsLrHolding] = useState(false);
+  const [_isLrHolding, setIsLrHolding] = useState(false);
   const lrHoldTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lrHoldStartRef = useRef(0);
 
   const [holdProgress, setHoldProgress] = useState(0);
-  const [isHolding, setIsHolding] = useState(false);
+  const [_isHolding, setIsHolding] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const holdStartRef = useRef(0);
 
@@ -484,7 +484,7 @@ export function DriverTripFlowCard({
     return formatINR(0);
   }, [tripIsAggregate, commissionAmount]);
 
-  const progressPct = useMemo(() => progressForStep(step), [step]);
+  const _progressPct = useMemo(() => progressForStep(step), [step]);
   const stage = useMemo(() => stageForStep(step), [step]);
   const title = useMemo(() => titleForStep(step), [step]);
 

@@ -179,8 +179,6 @@ export function FinanceScreen() {
     driverOffers,
     connectionRequestsSent,
     entitiesLoading,
-    tripsError,
-    refetchTrips,
     garagePeriodOptions,
     setPendingDriverSalaryRequests,
   } = entities;

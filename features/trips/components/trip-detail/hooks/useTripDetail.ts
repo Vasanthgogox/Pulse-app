@@ -2304,7 +2304,7 @@ export function useTripDetail({
     if (!trip?.id || !effectiveDriverIdForLocation) return;
     void driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, effectiveDriverIdForLocation)
       .then(res => { if (!res.error && res.location) setDriverLocation(res.location); });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [trip?.updated_at, trip?.status, effectiveDriverIdForLocation, trip?.id]);
 
   useTrackingTripBroadcast({

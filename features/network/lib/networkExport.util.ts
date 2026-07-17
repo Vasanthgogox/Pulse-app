@@ -73,7 +73,7 @@ async function shareOrSave(
   await Share.share({ url: uri, title: dialogTitle });
 }
 
-async function printOrShare(html: string, title: string, fileName: string): Promise<void> {
+async function printOrShare(html: string, title: string, _fileName: string): Promise<void> {
   if (Platform.OS === "web") {
     await Print.printAsync({ html });
     return;

@@ -7,7 +7,6 @@ import { navigateToOpsAlert } from "@/lib/alertRegistry/registryOpsNavigation.ut
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
-import { resolveSharedActionKind } from "@/lib/sharedLedger/registryLabels";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import { useRouter } from "expo-router";
@@ -96,7 +95,6 @@ export function useAlertRegistryFinanceHandlers(): {
   const handleSharedAction = useCallback(
     async (item: SharedLedgerNotificationRow) => {
       const payload = item.payload_json ?? {};
-      const actionKind = resolveSharedActionKind(item.event_type, payload);
       const tripId = typeof payload.trip_id === "string" ? payload.trip_id : null;
       const entityType =
         typeof payload.entity_type === "string"

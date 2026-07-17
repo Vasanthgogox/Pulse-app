@@ -280,7 +280,6 @@ interface Step1State {
 }
 
 function Step1TaxCredentials({
-  orgName,
   state,
   onChange,
   onValidateGstin,

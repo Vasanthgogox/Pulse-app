@@ -10,8 +10,6 @@
 
 'use strict';
 
-const { performance } = require('perf_hooks');
-
 // ── UUIDv7 (same as load test) ────────────────────────────────────────────────
 let _wallMs = 0, _logMs = 0, _seq = 0;
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -34,16 +32,6 @@ function crockford6() {
 }
 
 // ── Failure simulators ────────────────────────────────────────────────────────
-
-/** Simulate DB connection failure with given probability */
-function maybeDbFailure(p=0.3) {
-  if (Math.random() < p) throw new Error('SIMULATED: Connection pool exhausted');
-}
-
-/** Simulate network timeout */
-function maybeNetworkTimeout(p=0.2) {
-  if (Math.random() < p) throw new Error('SIMULATED: API timeout after 30s');
-}
 
 /** Simulate partial transaction (inserts but then fails) */
 function maybePartialTransaction(p=0.15) {
@@ -85,7 +73,7 @@ class IdempotencyStore {
     }
   }
 
-  fail(key, error) {
+  fail(key, _error) {
     if (this.keys.has(key)) {
       this.keys.get(key).status = 'failed';
     }
@@ -144,7 +132,7 @@ function testIdempotency_RetryAfterCrash() {
   const key = 'invoice:create:org456:req-def';
 
   // First attempt: acquire but crash before completing
-  const r1 = store.acquire(key, 'invoice', 'hash-C');
+  store.acquire(key, 'invoice', 'hash-C');
   store.fail(key, 'Simulated crash');  // mark as failed
 
   // Second attempt: should be allowed (retry_allowed)

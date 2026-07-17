@@ -59,17 +59,6 @@ export function statusToStageIndex(status: string, hasStarted = false): number {
   return 0; // confirmed / assigned / draft
 }
 
-/** Merge coarse trip timestamps into stage index so the 4-segment bar reflects reality. */
-function effectiveJourneyProgressIndex(trip: TripRow): number {
-  let i = statusToStageIndex(trip.status ?? "", !!trip.started_at);
-  if (trip.completed_at) i = Math.max(i, 7);
-  if (trip.started_at) i = Math.max(i, 3);
-  if (trip.pickup_date && (trip.driver_id || trip.vehicle_display_number?.trim())) {
-    i = Math.max(i, 1);
-  }
-  return Math.min(i, 7);
-}
-
 /** Driver flow stages compressed into four visible journey segments. */
 function getJourneySegmentProgress(trip: TripRow): 0 | 1 | 2 | 3 | 4 {
   const s = (trip.status ?? "").toLowerCase();
@@ -173,7 +162,6 @@ export function TripStatusTimeline({
   onOpenMaps,
 }: TripStatusTimelineProps) {
   const activeIdx = statusToStageIndex(trip.status ?? "", !!trip.started_at);
-  const journeyIdx = effectiveJourneyProgressIndex(trip);
   const journeySegmentProgress = getJourneySegmentProgress(trip);
   const journeyStageLabel = getJourneyStageLabel(trip);
   const progress = PROGRESS_BY_INDEX[activeIdx] ?? 0;

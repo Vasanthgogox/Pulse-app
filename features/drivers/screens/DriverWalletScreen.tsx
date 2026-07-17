@@ -119,31 +119,12 @@ function formatTransactionDateSection(dateStr: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-const DRIVER_LEDGER_TYPE_LABELS: Record<string, string> = {
-  salary: 'Monthly salary',
-  settlement: 'Trip-based',
-  advance: 'Advance',
-  reimbursement: 'Reimbursement',
-  adjustment: 'Adjustment',
-  deduction: 'Deduction',
-};
-
-function ledgerTypeLabel(type: string): string {
-  return DRIVER_LEDGER_TYPE_LABELS[type] ?? type;
-}
-
 /** Wallet card + credits — deeper emerald palette (aligned with Theme.driver*) */
 const EMERALD_950 = '#022c22';
-const EMERALD_900 = '#064e3b';
-const EMERALD_700 = '#047857';
-const EMERALD_600 = '#059669';
 const EMERALD_500 = '#047857'; /* credits hero / accents */
 const EMERALD_400 = '#059669'; /* watermark, secondary accent */
 const EMERALD_200_90 = 'rgba(167,243,208,0.88)'; /* card label on dark emerald */
 const GRAY_700 = '#374151';      /* gray-700: credits subtitle (dark grey) */
-const AMBER_50 = 'rgba(245,158,11,0.12)';   /* pending badge bg */
-const AMBER_600 = '#d97706';     /* pending badge text */
-const EMERALD_50 = 'rgba(4,120,87,0.14)'; /* received badge bg */
 
 function formatEmploymentDuration(from: string, to?: string | null): string {
   const start = new Date(from);
@@ -191,19 +172,19 @@ export default function DriverWalletScreen() {
   const { profile } = useAuth();
   const fleetConnectionRevision =
     useOptionalDriverInviteModal()?.fleetConnectionRevision ?? 0;
-  const { avatarSeed } = useDriverAvatar();
+  useDriverAvatar();
   const { avatarUri } = useDriverAvatarUri();
-  const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
+  const [_driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);
   const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
   const [salaryRequests, setSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [_refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
-  const [transactionFilter, setTransactionFilter] = useState<'all' | 'pending' | 'received'>('all');
+  const [transactionFilter, _setTransactionFilter] = useState<'all' | 'pending' | 'received'>('all');
   /** Expand/collapse transaction detail (trip id or null). No redirect. */
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
   const [expandedTripReceiptId, setExpandedTripReceiptId] = useState<string | null>(null);
@@ -225,7 +206,7 @@ export default function DriverWalletScreen() {
   const [leaveFleetLoading, setLeaveFleetLoading] = useState(false);
   const [markFleetTripLoadingId, setMarkFleetTripLoadingId] = useState<string | null>(null);
   const [tripsSubTab, setTripsSubTab] = useState<'fleet' | 'open' | 'attributed'>('fleet');
-  const [copiedTripId, setCopiedTripId] = useState<string | null>(null);
+  const [_copiedTripId, setCopiedTripId] = useState<string | null>(null);
   const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{
     trip: tripsService.TripRow;
     amount: number;
@@ -256,7 +237,7 @@ export default function DriverWalletScreen() {
     }
   }, []);
 
-  const handleCopyTripId = useCallback((tripId: string) => {
+  const _handleCopyTripId = useCallback((tripId: string) => {
     Clipboard.setStringAsync(tripId)
       .then(() => {
         setCopiedTripId(tripId);
@@ -462,7 +443,7 @@ export default function DriverWalletScreen() {
   // - if a trip is fleet-marked paid but not yet verified, show that pending-paid amount immediately.
   // - once settlement exists for a trip, skip pending-paid for that trip to avoid double counting.
   // - non-trip ledger entries (salary/reimbursement/etc) still affect cash as before.
-  const totalReceived = useMemo(() => {
+  const _totalReceived = useMemo(() => {
     const verifiedTripReceived = Object.values(receivedByTripId).reduce(
       (sum, amount) => sum + (Number(amount) || 0),
       0,
@@ -993,7 +974,7 @@ export default function DriverWalletScreen() {
     [linkedDrivers, profile?.uid, shareTripClaimPdf, openWhatsAppReminder],
   );
 
-  const { pendingTrips, receivedTrips, filteredTrips, pendingTotal, receivedTotal } = useMemo(() => {
+  const { receivedTrips, filteredTrips, pendingTotal } = useMemo(() => {
     const visibleTrips = [...completedTrips]
       .sort((a, b) => {
         const da = new Date(a.completed_at ?? a.updated_at ?? a.created_at).getTime();
@@ -1023,7 +1004,7 @@ export default function DriverWalletScreen() {
   }, [completedTrips, receivedByTripId, transactionFilter]);
 
   /** UPI-style: trips grouped by date section (Today, Yesterday, 5 Mar, ...) */
-  const transactionSections = useMemo(() => {
+  const _transactionSections = useMemo(() => {
     const list = filteredTrips.slice(0, 50);
     const bySection: { sectionLabel: string; dateKey: string; trips: typeof list }[] = [];
     let currentKey = '';
@@ -1058,7 +1039,7 @@ export default function DriverWalletScreen() {
     return bySection;
   }, [filteredTrips]);
 
-  const receivedTripSections = useMemo(() => {
+  const _receivedTripSections = useMemo(() => {
     const list = receivedTrips.slice(0, 50);
     const bySection: { sectionLabel: string; dateKey: string; trips: typeof list }[] = [];
     let currentKey = '';
@@ -1927,8 +1908,8 @@ export default function DriverWalletScreen() {
   }, [filteredCashTrips]);
 
   /** Request payment for this trip: route user to Salary Request screen. */
-  const openSalaryRequestForTrip = useCallback(
-    (trip: tripsService.TripRow) => {
+  const _openSalaryRequestForTrip = useCallback(
+    (_trip: tripsService.TripRow) => {
       // Keep Wallet self-contained: route to existing Salary Request flow.
       // (Salary Request screen already supports trip-based requests.)
       router.push('/(driver)/salary-request');
@@ -2972,7 +2953,6 @@ export default function DriverWalletScreen() {
                         const settlementCapturedAt = phonePeMetaDate(ledger?.created_at ?? item.trip.completed_at ?? item.trip.updated_at ?? item.trip.created_at);
                         const settlementRoute = `${item.from} → ${item.to}`;
 
-                        const pendingTxnId = fleetPendingLedger?.id ?? tripId;
                         const pendingUtr = extractUtr(fleetPendingLedger?.description) ?? '—';
                         const pendingMode = derivePaymentMode(fleetPendingLedger?.description) ?? '—';
                         const pendingCapturedAt = phonePeMetaDate(

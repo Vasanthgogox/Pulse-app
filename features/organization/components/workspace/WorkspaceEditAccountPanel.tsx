@@ -43,8 +43,6 @@ import {
 
 const PURPLE = "#4D3636";
 const PURPLE_TINT = "rgba(79,70,229,0.08)";
-const PURPLE_BORDER = "rgba(79,70,229,0.22)";
-const DEFAULT_AVATAR_SEED = "driver-1";
 
 type Props = {
   onBack: () => void;

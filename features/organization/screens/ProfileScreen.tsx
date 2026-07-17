@@ -389,7 +389,7 @@ export default function ProfileScreen() {
     }
   }, [profile?.avatar_seed]);
 
-  const [avatarUri, setAvatarUri] = useState<string>(() =>
+  const [_avatarUri, setAvatarUri] = useState<string>(() =>
     getUser2DAvatarUriForSeed(profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED),
   );
 

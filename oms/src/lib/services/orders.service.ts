@@ -150,7 +150,6 @@ export async function createOrder(input: CreateOrderInput): Promise<Order> {
 
   // Compute totals from lines
   const subtotal = input.lines.reduce((s, l) => {
-    const tax = l.tax_rate ?? 18;
     const lineBase = l.quantity * l.unit_price;
     return s + lineBase;
   }, 0);

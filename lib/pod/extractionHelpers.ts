@@ -9,11 +9,6 @@ export function lineItemDescription(desc: unknown): string {
   return String(desc);
 }
 
-const FINANCIAL_NUMERIC_KEYS = new Set([
-  'unloading_charges', 'loading_charges', 'shortage_amount', 'damage_amount',
-  'leakage_amount', 'total_amount',
-]);
-
 export function recomputeTotalFromExtraction(extraction: PODExtraction): number {
   const f = extraction.financials ?? {};
   const unloading = Number((f.unloading_charges as ConfidenceField<number>)?.value) || 0;

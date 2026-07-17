@@ -263,16 +263,6 @@ export function AddSupplierModal({
     }
   };
 
-  const inputStyle = [
-    styles.input,
-    {
-      borderColor: Theme.borderInput,
-      backgroundColor: Theme.surfaceForm,
-      color: Theme.textPrimary,
-    },
-  ];
-  const labelStyle = [styles.label, { color: Theme.textMutedDemo }];
-  const isPopup = visible === true;
   const useSingleColumnFields = windowWidth < 390;
 
   const ledgerFormContent = (

@@ -122,7 +122,6 @@ function TierSection({
 }) {
   const cfg      = TIER_CONFIG[tier];
   const isActive = currentTier === tier;
-  const isDone   = currentTier === 'TIER_2_FULL';
   const tierNum  = tier === 'TIER_0_SANDBOX' ? 0 : tier === 'TIER_1_PARTIAL' ? 1 : 2;
 
   return (

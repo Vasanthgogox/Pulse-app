@@ -158,7 +158,7 @@ export function ReassignSheet({
   const [wizardStep, setWizardStep] = useState<ReassignWizardStep>(
     isAggregate ? 'driverPhone' : 'driver',
   );
-  const [driverNameManual, setDriverNameManual] = useState(false);
+  const [_driverNameManual, setDriverNameManual] = useState(false);
   const otpDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const aggregatePhoneLookup = useAggregateDriverPhoneLookup({

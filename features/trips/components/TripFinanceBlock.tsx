@@ -101,18 +101,11 @@ export function TripFinanceBlock({
     trip.indent_id != null && !isTripOwner
       ? Number(trip.supplier_rate) || 0
       : Number(trip.client_price) || 0;
-  const received = useMemo(
+  const _received = useMemo(
     () =>
       tripTransactions.reduce((sum, tx) => sum + Number(tx.amount_in ?? 0), 0),
     [tripTransactions],
   );
-  const due = Math.max(0, revenue - received);
-  /** Owner + indent: cost = supplier_rate (what we pay). Non-owner + indent: no cost. Non-indent: supplier_rate. */
-  const cost =
-    trip.indent_id != null && !isTripOwner
-      ? 0
-      : Number(trip.supplier_rate) || 0;
-  const profit = revenue - cost;
 
   const revenueEntries = useMemo(
     () =>

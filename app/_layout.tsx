@@ -425,8 +425,7 @@ function ConfigErrorScreen() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const layoutWidth = useWebLayoutWidth();
-  const isDesktopWeb = Platform.OS === 'web' && layoutWidth >= Layout.webDesktopMinWidth;
+  const _layoutWidth = useWebLayoutWidth();
   const pathname = usePathname();
   const auth = useOptionalAuth();
   const isDriverRole = auth?.profile?.role === 'driver';

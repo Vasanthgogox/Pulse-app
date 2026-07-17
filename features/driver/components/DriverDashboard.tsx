@@ -165,17 +165,6 @@ function isTripInProgress(t: tripsService.TripRow) {
   return isActiveMission(t.status) || !!(t.started_at);
 }
 
-/** Human-readable status for dashboard status-only card (no actions). */
-function getTripStatusLabel(t: tripsService.TripRow): string {
-  const s = (t.status || '').toLowerCase();
-  if (s === 'assigned' || s === 'pending' || s === 'scheduled') return 'Awaiting acceptance';
-  if (s === 'in_progress' || s === 'pickup' || s === 'picked_up') return 'Proceed to pickup';
-  if (s === 'in_transit' || s === 'transit') return 'Trip in transit';
-  if (s === 'at_drop') return 'At drop-off location';
-  if (isCompletedStatus(t.status)) return 'Completed';
-  return 'Awaiting acceptance';
-}
-
 type DriverGuidanceStep = 'accepted' | 'pickup' | 'transit' | 'reached' | 'completed';
 
 type DriverGuidanceConfig = {
@@ -267,9 +256,6 @@ async function getExpoLocation() {
     return null;
   }
 }
-
-/** Minimum displacement (metres) before sending another point; skip noisy duplicates. */
-const MIN_DISPLACEMENT_M = 30;
 
 /** Approximate distance in metres between two WGS84 points (Haversine-style). */
 function distanceMeters(
@@ -374,7 +360,7 @@ export default function DriverDashboard() {
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [isAssignmentSheetExpanded, setIsAssignmentSheetExpanded] = useState(false);
-  const [reassignedTripLabels, setReassignedTripLabels] = useState<string[]>([]);
+  const [_reassignedTripLabels, setReassignedTripLabels] = useState<string[]>([]);
   const previousTripsRef = useRef<Map<string, string>>(new Map());
   const searchPulseAnim = useRef(new Animated.Value(0)).current;
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
@@ -405,7 +391,7 @@ export default function DriverDashboard() {
     FALLBACK_DRIVER_PANEL_RUNTIME
   );
   const OlaAnimatedMarker = Reanimated.createAnimatedComponent(Marker);
-  const [stopsExpanded, setStopsExpanded] = useState(false);
+  const [_stopsExpanded, _setStopsExpanded] = useState(false);
   const [justCompletedTrip, setJustCompletedTrip] = useState(false);
   const [isFullMapVisible, setIsFullMapVisible] = useState(false);
   const [inlineMapViewportHeight, setInlineMapViewportHeight] = useState(0);
@@ -971,16 +957,6 @@ export default function DriverDashboard() {
       : 0;
   const firstIncomingIsAggregate = effectiveFirstIncoming != null && isAggregateTrip(effectiveFirstIncoming);
 
-  // For driver view: load-based (roster/ad hoc) counterparty is the supplier (fleet); asset-only is the customer.
-  const firstIncomingCounterpartyLabel = firstIncomingIsAggregate ? 'Supplier' : 'Customer';
-  const firstIncomingCounterpartyName =
-    firstIncomingIsAggregate
-      ? (invites.find(
-          (i) =>
-            (i.from_organization_id ?? '').trim() === (driver?.organization_id ?? '').trim() &&
-            String(i.status ?? '').toLowerCase() === 'accepted'
-        )?.from_org_name?.trim() ?? 'Supplier')
-      : (effectiveFirstIncoming?.client_name?.trim() || 'Customer');
   const activeGuidanceTrip =
     activeMission ??
     (effectiveFirstIncoming && effectiveFirstIncoming.id === acceptedTripId

@@ -670,7 +670,7 @@ export async function getSharedLedgerNotificationsCount(
         ? false
         : null;
     }
-    const { data, error } = await supabase().rpc(
+    const { error } = await supabase().rpc(
       "get_shared_ledger_notifications_count",
       {
         org_id: organizationId,

@@ -434,7 +434,7 @@ function renderChecklist(findings) {
   return lines.join('\n');
 }
 
-function renderConfig(project) {
+function renderConfig(_project) {
   const lines = [];
 
   lines.push('═══════════════════════════════════════════════════════════════');

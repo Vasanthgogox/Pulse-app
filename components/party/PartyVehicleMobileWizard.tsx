@@ -80,8 +80,6 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
   onVehicleAxleChange,
   vehicleBodyType,
   onVehicleBodyTypeChange,
-  capacityHint,
-  axleHint,
   formError,
   noOrganizationBanner,
   canAdvance,

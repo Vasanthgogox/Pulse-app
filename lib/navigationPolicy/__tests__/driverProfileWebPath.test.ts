@@ -1,7 +1,5 @@
-import { canonicalizePath } from '@/lib/navigationPolicy/pathCanonicalize';
 import { evaluateNavigationPolicy } from '@/lib/navigationPolicy/evaluate';
 import { buildPrincipal } from '@/lib/navigationPolicy/grants';
-import { findMatchingPolicy } from '@/lib/navigationPolicy/registry';
 import { DRIVER_HOME_PATH } from '@/lib/navigationPolicy/types';
 
 describe('driver profile web path (group-stripped)', () => {
@@ -9,7 +7,6 @@ describe('driver profile web path (group-stripped)', () => {
 
   it('usePathname /profile for driver must not bounce to driver home', () => {
     const raw = '/profile';
-    const matched = findMatchingPolicy(canonicalizePath(raw).path);
     // Today may match org.profile — decision must still allow for drivers
     const d = evaluateNavigationPolicy({
       rawPathname: raw,

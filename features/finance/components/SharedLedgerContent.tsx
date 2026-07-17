@@ -290,7 +290,6 @@ function buildReconciledRows(
     }
   }
   const results: ReconciledRow[] = [];
-  const norm = (id: string) => String(id).trim().toLowerCase();
 
   for (const [key, int] of internalMap) {
     const ext = sharedMap.get(key);
@@ -405,100 +404,6 @@ function getLedgerEscalationKind(
   return "raise_dispute";
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- *  StatusFilter UI helpers — colors + labels for chips / pills / icons.
- *  Keeping them as module-level pure functions so they don't re-create on
- *  every render and are easy to unit test.
- *
- *  (Shared across the By-Trip and By-Transaction views in the shared-ledger.)
- * ────────────────────────────────────────────────────────────────────────── */
-
-function filterChipDotStyle(key: "matched" | "no_entry" | "pending" | "conflict") {
-  switch (key) {
-    case "matched":
-      return { backgroundColor: Theme.darkGreen };
-    case "no_entry":
-      return { backgroundColor: Theme.primary };
-    case "pending":
-      return { backgroundColor: Theme.driverGold };
-    case "conflict":
-      return { backgroundColor: Theme.teslaRed };
-  }
-}
-
-function txnStatusLabel(s: "matched" | "no_entry" | "pending" | "conflict") {
-  if (s === "matched") return "Same";
-  if (s === "no_entry") return "Add to yours";
-  if (s === "pending") return "Awaiting partner";
-  return "Doesn’t match";
-}
-
-function txnStatusPillStyle(s: "matched" | "no_entry" | "pending" | "conflict") {
-  switch (s) {
-    case "matched":
-      return {
-        backgroundColor: Theme.positiveMuted,
-        borderColor: Theme.darkGreen,
-      };
-    case "no_entry":
-      return {
-        backgroundColor: Theme.surfaceLight,
-        borderColor: Theme.primary,
-      };
-    case "pending":
-      return {
-        backgroundColor: Theme.surfaceLight,
-        borderColor: Theme.driverGold,
-      };
-    case "conflict":
-      return {
-        backgroundColor: Theme.negativeMuted,
-        borderColor: Theme.teslaRed,
-      };
-  }
-}
-
-function txnStatusPillTextStyle(
-  s: "matched" | "no_entry" | "pending" | "conflict",
-) {
-  switch (s) {
-    case "matched":
-      return { color: Theme.darkGreen };
-    case "no_entry":
-      return { color: Theme.primary };
-    case "pending":
-      return { color: Theme.driverGold };
-    case "conflict":
-      return { color: Theme.teslaRed };
-  }
-}
-
-function txnIconColor(s: "matched" | "no_entry" | "pending" | "conflict") {
-  switch (s) {
-    case "matched":
-      return Theme.darkGreen;
-    case "no_entry":
-      return Theme.primary;
-    case "pending":
-      return Theme.driverGold;
-    case "conflict":
-      return Theme.teslaRed;
-  }
-}
-
-function txnIconWrapStyle(s: "matched" | "no_entry" | "pending" | "conflict") {
-  switch (s) {
-    case "matched":
-      return { backgroundColor: Theme.positiveMuted };
-    case "no_entry":
-      return { backgroundColor: Theme.surfaceLight };
-    case "pending":
-      return { backgroundColor: Theme.surfaceLight };
-    case "conflict":
-      return { backgroundColor: Theme.negativeMuted };
-  }
-}
-
 export function SharedLedgerContent({
   entity,
   entityType,
@@ -508,7 +413,6 @@ export function SharedLedgerContent({
   integrated = false,
   sharedTrips: sharedTripsProp,
   onRefresh,
-  viewAsPartner = false,
   embeddedInOverlay = false,
   onRequestInvite,
   onRequestConnection,
@@ -535,7 +439,7 @@ export function SharedLedgerContent({
   const [loadingShared, setLoadingShared] = useState(
     !!organizationId && integrated && !sharedTripsProp?.length,
   );
-  const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
+  const [, setExpandedTripId] = useState<string | null>(null);
   const [selectedDispute, setSelectedDispute] = useState<ReconciledRow | null>(
     null,
   );
@@ -554,7 +458,7 @@ export function SharedLedgerContent({
     useState<ReconciledRow | null>(null);
   const [pendingReviewDispute, setPendingReviewDispute] =
     useState<DisputeRow | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery] = useState("");
 
   const partnerProfileImageUrl = useMemo(
     () => resolveAvatarPublicUrl(entity.avatar_url),
@@ -1557,10 +1461,7 @@ export function SharedLedgerContent({
     }
   }, [pendingOpenSharedReport, loadingShared]);
 
-  /** Which counts drive the chip numbers depends on the active view. */
-  const activeCounts = viewMode === "trip" ? tripCounts : txnCounts;
-
-  const disputeSentByTripId = useMemo(() => {
+  const _disputeSentByTripId = useMemo(() => {
     const m = new Map<string, DisputeRow>();
     for (const d of disputesRaised)
       m.set(String(d.transaction_id).trim().toLowerCase(), d);

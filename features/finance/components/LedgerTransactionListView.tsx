@@ -51,7 +51,6 @@ const TIMELINE_ANCHOR_WIDTH = 80;
 
 /** Minimum font size for readable labels (accessibility). */
 const FONT_SIZE_CAPTION = 8;
-const FONT_SIZE_LABEL = 9;
 const FONT_SIZE_BODY = 10;
 const FONT_SIZE_BODY_STRONG = 11;
 
@@ -182,37 +181,6 @@ function formatTxDateLong(iso: string | null | undefined): string {
   return `${day} ${MONTHS_SHORT[Number(m) - 1] ?? m} ${y}`;
 }
 
-/** Relative aging for expanded card (e.g. "Today", "Yesterday", "3 days ago"). */
-function getAgingLabel(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(String(iso).slice(0, 10));
-  if (isNaN(d.getTime())) return "—";
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  d.setHours(0, 0, 0, 0);
-  const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return formatTxDateLong(iso);
-}
-
-function partyDetailLine(row: LedgerRow): string {
-  const party = (row.party_name ?? "").trim();
-  const trip = getTripOperationalDisplay({
-    trip_operational_code: row.trips?.trip_operational_code ?? null,
-    trip_code: row.trips?.trip_code ?? null,
-    display_trip_id: row.trips?.["display_trip_id"] ?? null,
-    trip_number: row["trip_number"] ?? null,
-  });
-  const desc = (row.description ?? "").trim();
-  const parts: string[] = [];
-  if (party) parts.push(party);
-  if (trip && trip !== "—") parts.push(`Trip ${trip}`);
-  if (desc && desc !== "GENERAL" && !parts.includes(desc)) parts.push(desc);
-  return parts.join(" · ") || "—";
-}
-
 export type TripDetailMap = Record<
   string,
   {
@@ -226,20 +194,6 @@ export type TripDetailMap = Record<
     vehicle_body_type?: string | null;
   }
 >;
-
-function tripDetailLine(
-  row: LedgerRow,
-  tripDetailsMap: TripDetailMap | undefined,
-): string | null {
-  if (!row.trip_id || !tripDetailsMap?.[row.trip_id]) return null;
-  const d = tripDetailsMap[row.trip_id];
-  const num = getTripOperationalDisplay({
-    trip_number: d["trip_number"] ?? row["trip_number"] ?? null,
-  });
-  const route = [d.pickup_area, d.drop_location].filter(Boolean).join(" → ");
-  if ((!num || num === "—") && !route) return null;
-  return route ? `${num} · ${route}` : num;
-}
 
 /** Route only (e.g. "Pondy → Madurai") for display below date. */
 function tripRouteOnly(
@@ -330,11 +284,9 @@ export function LedgerTransactionListView({
   showFiscalSubTabs = true,
   useTimelineLayout = false,
   fiscalViewMode: fiscalViewModeProp,
-  onFiscalViewModeChange,
   useFlatList = false,
   embedInParentScroll = false,
   fullWidth = false,
-  onExportPress,
   renderPartyAvatar,
   driverRows = [],
   driverProfileImageUrls,
@@ -378,11 +330,10 @@ export function LedgerTransactionListView({
     },
     [transactions, onRowPress],
   );
-  const [fiscalViewModeInternal, setFiscalViewModeInternal] = useState<
+  const [fiscalViewModeInternal] = useState<
     "card" | "table"
   >("card");
   const fiscalViewMode = fiscalViewModeProp ?? fiscalViewModeInternal;
-  const setFiscalViewMode = onFiscalViewModeChange ?? setFiscalViewModeInternal;
 
   const driverByIdForAvatar = useMemo(() => {
     const m = new Map<
@@ -525,15 +476,6 @@ export function LedgerTransactionListView({
     },
     [getVehicleNumberForTripId, tripDetailsMap],
   );
-
-  /** Vehicle type for display (e.g. "40 ft container", from vehicle_body_type or vehicle_type). */
-  const getVehicleTypeForRow = (row: LedgerRow): string => {
-    if (!row.trip_id || !tripDetailsMap?.[row.trip_id]) return "";
-    const d = tripDetailsMap[row.trip_id];
-    const body = (d.vehicle_body_type ?? "").trim();
-    const type = (d.vehicle_type ?? "").trim();
-    return body || type || "";
-  };
 
   return (
     <View style={[styles.wrap, embedInParentScroll && styles.wrapEmbedded]}>
@@ -821,10 +763,6 @@ export function LedgerTransactionListView({
                         const inAmt = Number(row.amount_in ?? 0);
                         const outAmt = Number(row.amount_out ?? 0);
                         const isIn = inAmt > 0;
-                        const tripIdOnly = tripNumberForPill(
-                          row,
-                          tripDetailsMap,
-                        );
                         const routeStr = tripRouteOnly(row, tripDetailsMap);
                         const tripDateStr =
                           row.trip_id && tripDetailsMap?.[row.trip_id]
@@ -1111,9 +1049,6 @@ export function LedgerTransactionListView({
                                 const dateDisplay = formatTxDateLong(
                                   row.transaction_date ?? row.created_at,
                                 );
-                                const agingStr = getAgingLabel(
-                                  row.transaction_date ?? row.created_at,
-                                );
                                 const avatarBg = avatarColor(partyName);
                                 const customAvatar = resolvePartyAvatarForRow(row);
                                 const isLastRow = rowIndex === txRows.length - 1;
@@ -1377,8 +1312,6 @@ export function LedgerTransactionListView({
                             row.description ??
                             row.party_name ??
                             "—";
-                          const partyDetail = partyDetailLine(row);
-                          const tripLine = tripDetailLine(row, tripDetailsMap);
                           const tripIdOnly = tripNumberForPill(
                             row,
                             tripDetailsMap,
@@ -1397,10 +1330,6 @@ export function LedgerTransactionListView({
                             [routeStr, typeLabel].filter(Boolean).join(" · ") ||
                             null;
                           const vehicleStr = getVehicleForRow(row);
-                          const dateVehicleLine =
-                            [dateStr, routeStr, vehicleStr]
-                              .filter(Boolean)
-                              .join(" · ") || dateStr;
                           const avatarBg = avatarColor(partyName);
                           const initialText = initials(partyName);
                           const customAvatar = resolvePartyAvatarForRow(row);

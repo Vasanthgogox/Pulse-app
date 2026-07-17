@@ -132,8 +132,6 @@ export const SignUpPhotoPickerStep = memo(function SignUpPhotoPickerStep({
 
 /** Body-only picker for driver signup scroll pages. */
 export const SignUpPhotoPickerBody = memo(function SignUpPhotoPickerBody({
-  title,
-  subtitle,
   previewUri,
   previewImage,
   previewFallback,

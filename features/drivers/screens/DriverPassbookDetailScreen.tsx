@@ -1585,7 +1585,6 @@ export default function DriverPassbookDetailScreen() {
             const statusPillBg = isCredit ? colors.emeraldMuted : AMBER_50;
             const statusPillTextColor = isCredit ? colors.emerald : Theme.warning;
             const statusPillBorderColor = isCredit ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
-            const rowToneBorder = isCredit ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
             const iconSqBg = isCredit ? colors.emeraldMuted : AMBER_50;
             const iconColor = isCredit ? colors.emerald : Theme.warning;
             return (

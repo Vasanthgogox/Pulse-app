@@ -12,7 +12,6 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { ClientRiskBadge } from "@/features/ai";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { computeLedgerDerivedPaidSeed } from "@/features/finance/utils/ledgerDerivedPaidSeed.util";
 import {
   averageScore,
@@ -27,10 +26,8 @@ import {
     adjustedRevenue,
 } from "@/features/trips/services/tripAdjustments";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
-import {
-    getExpenseGroupedForTrip,
-    getExpenseLinesForTripPnL,
-} from "@/features/vehicles/pnl";
+
+
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import {
@@ -123,11 +120,6 @@ function SummaryPulseIcon({
       <FontAwesome name={name} size={size} color={color} />
     </Animated.View>
   );
-}
-
-/** Normalized party name for matching trip `client_name` to entity display name (see aggregation helpers). */
-function toNameKey(name: string): string {
-  return (name || "").toLowerCase().trim();
 }
 
 const TRIP_TABLE_AVATAR = 24;
@@ -301,14 +293,6 @@ function protocolRowsToLedger(
   });
 }
 
-/** Summary card labels: from trip details — sale value, received/paid, pending to receive / due to pay. */
-const SUMMARY_LABELS: Record<FinancialRowType, { in: string; out: string }> = {
-  ledger: { in: "Total Received", out: "Total Paid" },
-  customers: { in: "Total Sales", out: "Pending" },
-  suppliers: { in: "Contract value", out: "Due to pay" },
-  garage: { in: "Sales", out: "Profit" },
-  drivers: { in: "To pay", out: "Due" },
-};
 
 export interface EntityDetailOverlayProps {
   entity: FinancialRowData;
@@ -401,280 +385,6 @@ function getAgingLabel(
   }
 }
 
-/** Inline trip P&L panel (statement-style, same pattern as monthly statement expand). */
-function TripPnLInlinePanel({
-  trip,
-  transactions,
-  formatINR: fmt,
-  styles: s,
-  onAddEntry,
-  entityType,
-}: {
-  trip: TripRow;
-  transactions: LedgerRow[] | null;
-  formatINR: (n: number) => string;
-  styles: Record<string, object>;
-  onAddEntry?: (context: TripEntryContext) => void;
-  entityType?: EntityType;
-}) {
-  const { t } = useLanguage();
-  const tripLedgerEntries = useMemo(() => {
-    return getTripLedgerEntries(
-      transactions,
-      trip.id,
-      getTripDisplayNumber(trip),
-    );
-  }, [transactions, trip.id, trip["trip_number"], trip["display_trip_id"]]);
-  const grouped = useMemo(
-    () => getExpenseGroupedForTrip(trip, tripLedgerEntries),
-    [trip, tripLedgerEntries],
-  );
-  const revenueLines = useMemo(
-    () => [{ label: "Client Billing", amount: Number(trip.client_price ?? 0) }],
-    [trip],
-  );
-  const expenseLines = useMemo(
-    () => getExpenseLinesForTripPnL(trip, tripLedgerEntries),
-    [trip, tripLedgerEntries],
-  );
-
-  const sales = Number(trip.client_price ?? 0);
-  const totalExpense = grouped?.total ?? 0;
-  const net = sales - totalExpense;
-  const margin = sales > 0 ? (net / sales) * 100 : totalExpense > 0 ? -100 : 0;
-  const missionId = getTripDisplayNumber(trip);
-  const clientName = trip.client_name ?? "—";
-  const route = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`;
-
-  return (
-    <View style={s.monthDetailWrap}>
-      <Text style={s.monthDetailTitle}>TRIP P&L STATEMENT · {missionId}</Text>
-      <View style={s.earningsSummaryBlock}>
-        <View style={s.earningsSummaryRow}>
-          <Text style={s.earningsSummaryLabel} numberOfLines={1}>
-            Client
-          </Text>
-          <Text style={s.earningsSummaryValue} numberOfLines={1}>
-            {clientName}
-          </Text>
-        </View>
-        <View style={s.earningsSummaryRow}>
-          <Text style={s.earningsSummaryLabel} numberOfLines={1}>
-            Route
-          </Text>
-          <Text style={s.earningsSummaryValue} numberOfLines={1}>
-            {route}
-          </Text>
-        </View>
-        {revenueLines.map((line, i) => (
-          <View key={`rev-${i}`} style={s.earningsSummaryRow}>
-            <Text style={s.earningsSummaryLabel} numberOfLines={1}>
-              {line.label}
-            </Text>
-            <Text style={s.earningsSummaryValue} numberOfLines={1}>
-              {fmt(line.amount)}
-            </Text>
-          </View>
-        ))}
-        <View style={[s.earningsSummaryRow, s.earningsSummaryRowTotal]}>
-          <Text style={s.earningsSummaryLabelBold} numberOfLines={1}>
-            Total Revenue
-          </Text>
-          <Text
-            style={[s.earningsSummaryValueBold, s.tdGreen]}
-            numberOfLines={1}
-          >
-            {fmt(sales)}
-          </Text>
-        </View>
-        {expenseLines.map((line, i) => (
-          <View key={`exp-${i}`} style={s.earningsSummaryRow}>
-            <Text style={s.earningsSummaryLabel} numberOfLines={1}>
-              {line.label}
-            </Text>
-            <Text style={s.earningsSummaryValue} numberOfLines={1}>
-              {fmt(line.amount)}
-            </Text>
-          </View>
-        ))}
-        <View style={[s.earningsSummaryRow, s.earningsSummaryRowTotal]}>
-          <Text style={s.earningsSummaryLabelBold} numberOfLines={1}>
-            Total Expenses
-          </Text>
-          <Text style={[s.earningsSummaryValueBold, s.tdRed]} numberOfLines={1}>
-            {fmt(totalExpense)}
-          </Text>
-        </View>
-        <View style={[s.earningsSummaryRow, s.earningsSummaryRowBalance]}>
-          <Text style={s.earningsSummaryLabelBold} numberOfLines={1}>
-            Net Profit / Loss
-          </Text>
-          <Text
-            style={[
-              s.earningsSummaryValueBold,
-              net > 0 ? s.tdGreen : net < 0 ? s.tdRed : undefined,
-            ]}
-            numberOfLines={1}
-          >
-            {net > 0 ? "+" : ""}
-            {fmt(net)}
-          </Text>
-        </View>
-        <View style={s.earningsSummaryRow}>
-          <Text style={s.earningsSummaryLabel}>Margin</Text>
-          <Text
-            style={[
-              s.earningsSummaryValue,
-              net > 0 ? s.tdGreen : net < 0 ? s.tdRed : undefined,
-            ]}
-            numberOfLines={1}
-          >
-            {margin > 0 ? "+" : ""}
-            {margin.toFixed(1)}%
-          </Text>
-        </View>
-      </View>
-      {onAddEntry != null && entityType != null && (
-        <View style={s.tripStatementActionsWrap}>
-          <Text style={s.tripStatementActionsLabel}>Quick actions</Text>
-          <View style={s.tripStatementActionsRow}>
-            {entityType === "CLIENT" && (
-              <TouchableOpacity
-                style={[
-                  s.tripStatementActionBtn,
-                  s.tripStatementActionBtnPrimary,
-                ]}
-                onPress={() =>
-                  onAddEntry({ tripId: trip.id, intent: "client_receivable" })
-                }
-                activeOpacity={0.8}
-              >
-                <FontAwesome
-                  name="arrow-down"
-                  size={12}
-                  color={Theme.textOnPrimary}
-                />
-                <Text style={s.tripStatementActionBtnPrimaryText}>
-                  Record cash in
-                </Text>
-              </TouchableOpacity>
-            )}
-            {entityType === "SUPPLIER" && (
-              <TouchableOpacity
-                style={[
-                  s.tripStatementActionBtn,
-                  s.tripStatementActionBtnPrimary,
-                ]}
-                onPress={() =>
-                  onAddEntry({ tripId: trip.id, intent: "supplier_payable" })
-                }
-                activeOpacity={0.8}
-              >
-                <FontAwesome
-                  name="rupee"
-                  size={12}
-                  color={Theme.textOnPrimary}
-                />
-                <Text style={s.tripStatementActionBtnPrimaryText}>
-                  Record payment
-                </Text>
-              </TouchableOpacity>
-            )}
-            {entityType === "DRIVER" && (
-              <TouchableOpacity
-                style={[
-                  s.tripStatementActionBtn,
-                  s.tripStatementActionBtnPrimary,
-                ]}
-                onPress={() =>
-                  onAddEntry({ tripId: trip.id, intent: "driver_payable" })
-                }
-                activeOpacity={0.8}
-              >
-                <FontAwesome
-                  name="rupee"
-                  size={12}
-                  color={Theme.textOnPrimary}
-                />
-                <Text style={s.tripStatementActionBtnPrimaryText}>
-                  Record payment
-                </Text>
-              </TouchableOpacity>
-            )}
-            {(entityType === "VEHICLE" ||
-              entityType === "CLIENT" ||
-              entityType === "SUPPLIER" ||
-              entityType === "DRIVER") && (
-              <TouchableOpacity
-                style={[
-                  s.tripStatementActionBtn,
-                  s.tripStatementActionBtnSecondary,
-                ]}
-                onPress={() =>
-                  onAddEntry({ tripId: trip.id, intent: "trip_expense" })
-                }
-                activeOpacity={0.8}
-              >
-                <FontAwesome
-                  name="minus-circle"
-                  size={12}
-                  color={Theme.primary}
-                />
-                <Text style={s.tripStatementActionBtnSecondaryText}>
-                  Add expense
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      )}
-      <View style={s.monthDetailPaymentsBlock}>
-        <Text style={s.monthDetailTitle}>
-          LEDGER ENTRIES ({tripLedgerEntries.length})
-        </Text>
-        <View style={s.monthDetailHeaderRow}>
-          <Text style={s.monthDetailHeaderCellWide} numberOfLines={1}>
-            DESC / DATE
-          </Text>
-          <Text
-            style={[s.monthDetailHeaderCell, s.tdRightLast]}
-            numberOfLines={1}
-          >
-            IN · OUT
-          </Text>
-        </View>
-        {tripLedgerEntries.length === 0 ? (
-          <Text style={s.monthDetailEmptyPayments}>
-            {t("noLedgerEntriesForTrip")}
-          </Text>
-        ) : (
-          tripLedgerEntries.map((tx) => {
-            const inAmt = Number(tx.amount_in ?? 0);
-            const outAmt = Number(tx.amount_out ?? 0);
-            const date = formatLedgerDate(
-              tx.transaction_date ?? tx.created_at ?? "",
-            );
-            return (
-              <View key={tx.id} style={s.monthDetailRow}>
-                <Text style={s.monthDetailCellWide} numberOfLines={1}>
-                  {tx.description || "ENTRY"} · {date}
-                </Text>
-                <Text
-                  style={[s.monthDetailCell, s.tdRightLast]}
-                  numberOfLines={1}
-                >
-                  {inAmt > 0 ? fmt(inAmt) : "—"} ·{" "}
-                  {outAmt > 0 ? fmt(outAmt) : "—"}
-                </Text>
-              </View>
-            );
-          })
-        )}
-      </View>
-    </View>
-  );
-}
-
 const DRIVER_STATEMENT_MONTHS = 12;
 
 export function EntityDetailOverlay({
@@ -683,7 +393,6 @@ export function EntityDetailOverlay({
   subTab,
   trips,
   transactions,
-  allLedgerTransactions,
   driverOffer,
   driverLedgerEntries,
   onBack,
@@ -855,8 +564,6 @@ export function EntityDetailOverlay({
       ? (entity.due ?? 0)
       : (entity.pending ?? entity.due ?? 0);
 
-  const n = Math.max(1, trips.length);
-
   const tripIdsForFinanceAdj = useMemo(
     () => (trips ?? []).map((t) => String(t.id)).filter(Boolean),
     [trips],
@@ -936,19 +643,6 @@ export function EntityDetailOverlay({
               isLoadBasedTrip(t) &&
               t.organization_id != null &&
               t.organization_id === linkedOrgId;
-            const entityNameKey = toNameKey(entity.name ?? "");
-            const isOwnerClient =
-              entityType === "CLIENT" &&
-              (t.client_id === entity.id ||
-                toNameKey(t.client_name || "") === entityNameKey);
-            const isIntegratedShipperClient =
-              entityType === "CLIENT" &&
-              (entity as { is_integrated?: boolean }).is_integrated === true &&
-              linkedOrgId != null &&
-              isLoadBasedTrip(t) &&
-              t.organization_id != null &&
-              t.organization_id === linkedOrgId &&
-              !isOwnerClient;
             const adj = adjustmentsForTripId(tripFinanceAdjRecord, t.id);
             let sales: number;
             if (entityType === "CLIENT") {

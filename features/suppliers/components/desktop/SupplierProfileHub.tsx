@@ -245,7 +245,7 @@ export function SupplierProfileHub({
   onBack,
   onRefresh,
 }: Props) {
-  const router = useRouter();
+  const _router = useRouter();
   const compact = useProfileHubCompact();
   const layoutInsets = useLayoutInsets();
   const [tab, setTab] = useState<SupplierProfileTab>(initialTab);

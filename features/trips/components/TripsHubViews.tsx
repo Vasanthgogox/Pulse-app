@@ -261,58 +261,6 @@ function formatTripPickupCell(iso: string | null | undefined): string {
   }
 }
 
-/** Distance from trip row (km). */
-function formatTripDistanceKm(raw: string | number | null | undefined): string {
-  if (raw == null || raw === "") return "—";
-  const n =
-    typeof raw === "string"
-      ? parseFloat(String(raw).replace(/,/g, ""))
-      : Number(raw);
-  if (Number.isNaN(n) || n < 0) return "—";
-  const rounded = n >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
-  return `${rounded} km`;
-}
-
-function formatLoadTypeCell(raw: string | null | undefined): string {
-  const s = (raw ?? "").trim();
-  if (!s) return "—";
-  return s
-    .split(/[\s_]+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-}
-
-type HubPaymentTone = "paid" | "partial" | "pending" | "neutral";
-
-function hubPaymentTone(status: string | null | undefined): HubPaymentTone {
-  const s = (status ?? "").trim().toLowerCase();
-  if (!s) return "neutral";
-  if (s.includes("partial")) return "partial";
-  if (s.includes("paid") && !s.includes("unpaid")) return "paid";
-  if (
-    s.includes("pending") ||
-    s.includes("unpaid") ||
-    s.includes("due") ||
-    s === "unpaid"
-  ) {
-    return "pending";
-  }
-  return "neutral";
-}
-
-function formatPaymentStatusLabel(
-  status: string | null | undefined,
-  tr: (k: string) => string,
-): string {
-  const raw = (status ?? "").trim();
-  if (!raw) return "—";
-  const s = raw.toLowerCase();
-  if (s === "paid" || s === "fully_paid") return tr("tripsHubPayPaid");
-  if (s === "pending" || s === "unpaid") return tr("tripsHubPayPending");
-  if (s === "partial" || s.includes("partial")) return tr("tripsHubPayPartial");
-  return raw.replace(/_/g, " ").toUpperCase();
-}
-
 export type TripsHubTableColumnId =
   | "party"
   | "driver"
@@ -1051,22 +999,13 @@ const HUB_COLUMN_LABEL: Record<TripsHubTableColumnId, string> = {
   ledgerMeta: "tripsHubColLedgerShort",
 };
 
-/** Table header text alignment matches body column alignment. */
-const HUB_TH_LEFT = new Set<TripsHubTableColumnId>([
-  "party",
-  "driver",
-  "vehicle",
-  "pickupDate",
-  "loadType",
-]);
-
 export function TripsHubTableView({
   trips,
   currentOrganizationId,
   getStageLabel,
   transactionsByTripId,
   onOpenTripDetails,
-  onExportLedger,
+  onExportLedger: _onExportLedger,
   tr,
   clientNameByTripId,
   linkedOrgByOrganizationId,
@@ -1676,7 +1615,6 @@ export function TripsHubTableView({
               nonSupplierExpenseTotal: tripNonSupplierOutflowTotal(entries),
             };
             const cost = tripHubCost(t, currentOrganizationId, rowAdj, hubCostOpts);
-            const ledgerRoll = summarizeTripLedgerForHub(entries);
             const hasLedgerMismatch =
               isLoadBasedTrip(t) &&
               entries.some((r) => r.reconciliation_status === "mismatch");
@@ -5139,18 +5077,3 @@ const styles = StyleSheet.create({
   },
 });
 
-const HUB_COL_STYLES: Record<TripsHubTableColumnId, ViewStyle> = {
-  party: styles.auditColParty,
-  driver: styles.auditColDriver,
-  vehicle: styles.auditColVehicle,
-  pickupDate: styles.auditColPickupDate,
-  distance: styles.auditColDistance,
-  loadType: styles.auditColLoadType,
-  payment: styles.auditColPayment,
-  billed: styles.auditColBilled,
-  cost: styles.auditColCost,
-  received: styles.auditColReceived,
-  due: styles.auditColDue,
-  margin: styles.auditColMargin,
-  ledgerMeta: styles.auditColLedgerMeta,
-};

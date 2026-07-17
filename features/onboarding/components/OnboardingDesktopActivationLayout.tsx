@@ -34,7 +34,6 @@ export const OnboardingDesktopActivationLayout = memo(function OnboardingDesktop
   trustCompleted,
   children,
   pageWidth,
-  bottomPad,
 }: OnboardingDesktopActivationLayoutProps) {
   const insets = useSafeAreaInsets();
 

@@ -134,18 +134,12 @@ function inr(value: number): string {
   return `₹${Math.round(value).toLocaleString("en-IN")}`;
 }
 
-function toYmd(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-
 function MetricCard({
   title,
   value,
   deltaPct,
   insight,
   state,
-  density,
   compareActive,
   desktopQuarter,
   icon,
@@ -256,8 +250,6 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   const { width } = useWindowDimensions();
   const { isDesktop } = usePulseDesktopLayout();
   const wide = width >= 720;
-  const twoCol = width >= 1080;
-  const halfCardStyle = wide ? styles.halfCardWide : styles.halfCardNarrow;
   const kpiQuarter = isDesktop;
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
@@ -266,7 +258,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   const [activeDomain, setActiveDomain] = useState<DomainTab>("overview");
   const density: WidgetDensity = "compact";
   const [timePreset, setTimePreset] = useState<TimePreset>("all");
-  const [comparePreset, setComparePreset] = useState<ComparePreset>("none");
+  const [comparePreset, _setComparePreset] = useState<ComparePreset>("none");
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [financeLedger, setFinanceLedger] = useState<FinanceAgingKind>("receivable");
   const scrollRef = useRef<ScrollView>(null);
@@ -397,27 +389,6 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   );
 
   const compareActive = comparePreset !== "none" && compareFilters != null;
-
-  const handleComparePreset = (preset: ComparePreset) => {
-    if (preset !== "none" && preset === comparePreset) {
-      setComparePreset("none");
-      return;
-    }
-    setComparePreset(preset);
-    if (preset === "none") return;
-    const hasExplicitRange = Boolean(filters.dateRange.start && filters.dateRange.end);
-    if (hasExplicitRange) return;
-    if (timePreset === "all") {
-      setTimePreset("month");
-      const range = getPresetDateRange("month");
-      setDateRange(range.start, range.end);
-      return;
-    }
-    const range = getPresetDateRange(timePreset);
-    if (range.start && range.end) {
-      setDateRange(range.start, range.end);
-    }
-  };
 
   const scoped = useMemo(() => applyPulseFilters(dataset, activeFilters), [activeFilters, dataset]);
   const assetScoped = useMemo(() => restrictToAssetExecution(scoped), [scoped]);

@@ -1461,11 +1461,11 @@ export function TripDetailFinanceView({
     return { supplierCommission: supplier, driverCommission: driver };
   }, [tripLedgerEntries]);
 
-  const receivableTransactions = useMemo(
+  const _receivableTransactions = useMemo(
     () => tripLedgerEntries.filter((tx) => Number(tx.amount_in ?? 0) > 0),
     [tripLedgerEntries],
   );
-  const payableTransactions = useMemo(
+  const _payableTransactions = useMemo(
     () => tripLedgerEntries.filter((tx) => Number(tx.amount_out ?? 0) > 0),
     [tripLedgerEntries],
   );
@@ -3219,8 +3219,6 @@ export function TripDetailFinanceView({
   );
 }
 
-/** Match {@link TripsHubMobileTripCard} density (radius 16, compact type). */
-const HUB_CARD_RADIUS = 16;
 const CARD_PADDING = 14;
 const SECTION_GAP = 12;
 

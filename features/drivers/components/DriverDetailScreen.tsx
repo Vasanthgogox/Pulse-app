@@ -654,7 +654,7 @@ export default function DriverDetailScreen({
   }, [driver?.id, driver?.avatar_url, driver?.avatar_seed]);
 
 
-  const tripOptions = useMemo(
+  const _tripOptions = useMemo(
     () =>
       trips.map((t) => ({
         id: t.id,

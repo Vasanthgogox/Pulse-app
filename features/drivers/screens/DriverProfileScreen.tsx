@@ -122,7 +122,6 @@ export default function DriverProfileScreen() {
     'Pilot';
 
   const {
-    imageUri: displayAvatarUri,
     imageSource: displayAvatarSource,
     initials: displayAvatarInitials,
     initialsColor: displayAvatarColor,

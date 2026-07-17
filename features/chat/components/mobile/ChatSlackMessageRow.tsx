@@ -76,7 +76,6 @@ export type ChatSlackMessageRowProps = {
 };
 
 function ChatSlackMessageRowInner({
-  messageId,
   senderName,
   content,
   timestamp,

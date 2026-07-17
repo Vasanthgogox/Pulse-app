@@ -95,7 +95,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { org_id, storage_path, typed_gstin, typed_pan, typed_company } = body;
+  const { storage_path, typed_gstin, typed_pan, typed_company } = body;
   if (!storage_path) return json({ error: 'storage_path required' }, 400);
 
   // ── 1. Fetch signed URL for the private document ──────────────────────────

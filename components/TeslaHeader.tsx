@@ -57,7 +57,6 @@ export function TeslaHeader({
   variant = "dark",
   showBack,
   onBack,
-  onLoadClick,
   onNetworkClick,
   onNotificationClick,
   onProfileClick,

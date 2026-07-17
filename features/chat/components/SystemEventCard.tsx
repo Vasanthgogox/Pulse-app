@@ -104,8 +104,6 @@ function statusChangeNarrative(message: TripMessageRow, statusKey: string): stri
 
 function StatusChangeCard({
   message,
-  isMobile = false,
-  routeContext,
   composeTrip,
 }: {
   message: TripMessageRow;
@@ -177,8 +175,6 @@ function ImageMessageCard({ message, isOwn }: { message: TripMessageRow; isOwn: 
 
 function TrackingCard({
   message,
-  isMobile = false,
-  routeContext,
   composeTrip,
 }: {
   message: TripMessageRow;
@@ -275,7 +271,6 @@ export const SystemEventCard = React.memo(function SystemEventCard({
   isMobile = false,
   routeContext,
   composeTrip,
-  onFeedbackSubmit,
 }: SystemEventCardProps) {
   switch (message.message_type) {
     case 'status_change':

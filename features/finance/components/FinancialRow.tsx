@@ -72,35 +72,6 @@ function formatNumSigned(n: number): string {
   return n < 0 ? `-${absStr}` : absStr;
 }
 
-/** Subtle pulse animation for section icons in expanded Transaction insights */
-function ExpandedSectionIcon({
-  name,
-  color,
-}: {
-  name: "tag" | "clock-o" | "money";
-  color: string;
-}) {
-  const scale = useSharedValue(1);
-  useEffect(() => {
-    scale.value = withRepeat(
-      withSequence(
-        withTiming(1.12, { duration: 800 }),
-        withTiming(1, { duration: 800 }),
-      ),
-      -1,
-      true,
-    );
-  }, [scale]);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  return (
-    <Animated.View style={[styles.expandedSectionIconWrap, animatedStyle]}>
-      <FontAwesome name={name} size={12} color={color} />
-    </Animated.View>
-  );
-}
-
 /** Animated status dot (right-aligned in row): green = online/on_trip/available, red = offline. Exported for use in Garage vehicle column. */
 export function DriverStatusDot({ status }: { status: string }) {
   const isOnline =
@@ -492,18 +463,13 @@ export function FinancialRow({
   onEntityPress,
   expandedRowId,
   onExpandedChange,
-  ledgerExpandedDesktopThreeColumn = false,
 }: FinancialRowProps) {
   const { t } = useLanguage();
-  const [expandedInternal, setExpandedInternal] = useState(false);
+  const [expandedInternal] = useState(false);
   const isControlled =
     type === "ledger" && expandedRowId !== undefined && onExpandedChange != null;
   const expanded =
     type === "ledger" && isControlled ? data.id === expandedRowId : expandedInternal;
-  const setExpanded =
-    type === "ledger" && isControlled
-      ? (value: boolean) => onExpandedChange!(value ? data.id : null)
-      : setExpandedInternal;
 
   /** Drivers tab: line 1 = driver name (never empty); line 2 = vehicle number. */
   const driverNameLine =

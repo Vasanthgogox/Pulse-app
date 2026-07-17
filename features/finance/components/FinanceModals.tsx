@@ -181,7 +181,6 @@ export function FinanceModals(props: FinanceModalsProps) {
     linkedClientIdByOrgId,
     linkedSupplierIdByOrgId,
     viewerOrgId,
-    financeSubTab,
     showAddClientModal,
     onCloseAddClientModal,
     onAddClientComplete,

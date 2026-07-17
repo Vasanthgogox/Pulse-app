@@ -23,7 +23,6 @@ interface FABProps {
 export function FAB({
   label,
   onPress,
-  icon,
   FontAwesomeIconName = 'plus',
   LucideIconComponent,
   showPlusSuffix = true,

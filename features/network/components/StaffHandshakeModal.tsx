@@ -44,12 +44,12 @@ import {
   View,
 } from "react-native";
 
-const ASSET_FLOW_STEPS = [
+const _ASSET_FLOW_STEPS = [
   { id: "driver", label: "Driver" },
   { id: "vehicle", label: "Vehicle" },
 ] as const;
 
-type AssetFlowStep = (typeof ASSET_FLOW_STEPS)[number]["id"];
+type AssetFlowStep = (typeof _ASSET_FLOW_STEPS)[number]["id"];
 
 type AssetRosterPickersProps = {
   isFlow: boolean;
@@ -68,7 +68,6 @@ type AssetRosterPickersProps = {
 export function AssetRosterPickers({
   isFlow,
   assetFlowStep,
-  width,
   orgId,
   activeDrivers,
   vehicles,
