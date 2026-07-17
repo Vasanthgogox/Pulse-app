@@ -70,6 +70,7 @@ React Native 0.81 · Expo SDK 54 · Expo Router 6 · TypeScript 5.9 · TanStack 
 - Debugging & common errors → `docs/debugging.md`
 - Architectural decisions → `docs/decisions.md`
 - Commands & troubleshooting → `docs/commands.md`
+- Dev URLs & ports (localhost map) → `docs/DEV_URLS.md`
 - Code patterns → `docs/patterns.md`
 - Performance & bottlenecks → `docs/performance.md`
 - Anti-patterns → `docs/anti-patterns.md`

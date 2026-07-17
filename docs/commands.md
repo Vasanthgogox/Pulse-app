@@ -3,11 +3,16 @@
 ## Dev
 ```bash
 npm run web              # Web dev server (port 8081) — required before Playwright tests
+npm run dev              # Pulse web + Commerce (OMS :3004, proxied at /oms)
+npm run oms:dev          # Commerce only → http://127.0.0.1:3004/oms/
+npm run audit            # DB Audit UI → http://localhost:4040
 npm start                # Expo Go (device)
 npm run start:simulator  # iOS simulator
 npm run start:dev-client # Dev client (native modules)
 npm run start:tunnel     # Tunnel mode (remote device)
 ```
+
+Full localhost / port map: [DEV_URLS.md](./DEV_URLS.md).
 
 ## Build
 ```bash
