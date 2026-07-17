@@ -30,7 +30,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AwardedIndentDeployModalProvider } from '@/contexts/AwardedIndentDeployModalContext';
 import { BusinessConnectionRequestModalProvider } from '@/contexts/BusinessConnectionRequestModalContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
-import { OrgVerificationReminderProvider } from '@/features/organization/components/workspace/kyc/OrgVerificationReminderProvider';
 import { useQueryClient } from '@tanstack/react-query';
 
 function DemoCustomTabBar(
@@ -213,9 +212,7 @@ export default function TabLayout() {
   return (
     <AwardedIndentDeployModalProvider>
       <BusinessConnectionRequestModalProvider>
-        <OrgVerificationReminderProvider>
-          <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
-        </OrgVerificationReminderProvider>
+        <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
       </BusinessConnectionRequestModalProvider>
     </AwardedIndentDeployModalProvider>
   );

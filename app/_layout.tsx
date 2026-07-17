@@ -85,6 +85,7 @@ import { NavigationPolicyShadowHost } from '@/lib/navigationPolicy/NavigationPol
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { OrganizationProvider, useOptionalOrganization } from '@/contexts/OrganizationContext';
+import { OrgVerificationReminderProvider } from '@/features/organization/components/workspace/kyc/OrgVerificationReminderProvider';
 import { ActiveWorkspaceProvider } from '@/contexts/ActiveWorkspaceContext';
 import { KeyboardAccessoryProvider } from '@/contexts/KeyboardAccessoryContext';
 import { WalletProvider } from '@/contexts/WalletContext';
@@ -388,7 +389,9 @@ export default function RootLayout() {
                     <KeyboardAccessoryProvider>
                       <GlobalSyncProvider>
                         <AppBootGate>
-                          <RootLayoutNav />
+                          <OrgVerificationReminderProvider>
+                            <RootLayoutNav />
+                          </OrgVerificationReminderProvider>
                         </AppBootGate>
                       </GlobalSyncProvider>
                     </KeyboardAccessoryProvider>

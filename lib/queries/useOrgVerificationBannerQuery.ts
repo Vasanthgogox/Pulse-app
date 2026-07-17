@@ -11,7 +11,14 @@ import {
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
-export function useOrgVerificationBannerQuery(orgId: string | null) {
+export type UseOrgVerificationBannerQueryOptions = {
+  enabled?: boolean;
+};
+
+export function useOrgVerificationBannerQuery(
+  orgId: string | null,
+  options?: UseOrgVerificationBannerQueryOptions,
+) {
   return useQuery<OrgVerificationBannerFields | null, Error>({
     queryKey: queryKeys.workspace.verificationBanner(orgId ?? ''),
     queryFn: async () => {
@@ -19,7 +26,7 @@ export function useOrgVerificationBannerQuery(orgId: string | null) {
       if (res.error) throw res.error;
       return res.fields;
     },
-    enabled: !!orgId,
+    enabled: !!orgId && (options?.enabled ?? true),
     staleTime: STALE.moderate,
   });
 }
