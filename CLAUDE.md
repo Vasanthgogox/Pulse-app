@@ -53,6 +53,8 @@ React Native 0.81 · Expo SDK 54 · Expo Router 6 · TypeScript 5.9 · TanStack 
 | DB change | `supabase/migrations/` (new file only) + `npm run db:push` |
 
 ## Reference Docs (load only when relevant)
+- **Operating model RBAC (Asset / Aggregate / Hybrid)** → `docs/RBAC_OPERATING_MODEL.md`
+- **RBAC change log (new / modified files)** → `docs/RBAC_OPERATING_MODEL_CHANGELOG.md`
 - Architecture & data flow → `docs/architecture.md`
 - Auth & session → `docs/auth.md`
 - Routing → `docs/routing.md`
@@ -71,3 +73,6 @@ React Native 0.81 · Expo SDK 54 · Expo Router 6 · TypeScript 5.9 · TanStack 
 - Code patterns → `docs/patterns.md`
 - Performance & bottlenecks → `docs/performance.md`
 - Anti-patterns → `docs/anti-patterns.md`
+
+## RBAC sessions
+When the user asks about roles, asset vs aggregate, give-load, suppliers, garage, or page/modal access: load `docs/RBAC_OPERATING_MODEL.md` first, implement via `useCapabilities` / `ModelAccessGate`, then append rows to `docs/RBAC_OPERATING_MODEL_CHANGELOG.md`.

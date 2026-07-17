@@ -1,0 +1,18 @@
+---
+description: Asset / Aggregate / Hybrid operating-model RBAC — who can do what; useCapabilities; route gates
+globs: lib/capabilities.ts,lib/useCapabilities.ts,components/ModelAccessGate.tsx,lib/navigationPolicy/**/*.ts,features/finance/**/*.tsx,features/trips/**/*.tsx,features/indents/**/*.tsx,features/party/**/*.tsx,app/supplier/**/*.tsx,app/vehicle/**/*.tsx,app/party/**/*.tsx,app/create-indent/**/*.tsx
+alwaysApply: false
+---
+
+# Pulse: Operating model RBAC
+
+Before changing access, finance tabs, create-trip supply mode, give-load, suppliers, garage, or party routes:
+
+1. **Read** `docs/RBAC_OPERATING_MODEL.md` (capability matrix).
+2. **Update** `docs/RBAC_OPERATING_MODEL_CHANGELOG.md` (new vs modified files table) when you ship a change.
+3. Prefer **`useCapabilities()`** — org `operatingModel` overrides stale profile flags.
+4. Do **not** grant give-load / suppliers to Asset-only (`ASSET_BASED`).
+5. Do **not** grant garage / own vehicles to Aggregate-only (`NON_ASSET`).
+6. Route gates: `ModelAccessGate` + `lib/navigationPolicy/registry/org.ts` must stay aligned.
+
+Source: `lib/capabilities.ts`, `lib/useCapabilities.ts`, `components/ModelAccessGate.tsx`.
