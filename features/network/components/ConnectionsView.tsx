@@ -3,7 +3,6 @@
  * `hubMode`: Network screen layout (nested cards, shared header search/filters in parent).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { NetworkPartyRolePill } from "@/features/network/components/NetworkPartyProfileCard";
 import { NetworkPartyHubListCard } from "@/features/network/components/NetworkPartyHubListCard";
@@ -36,14 +35,12 @@ import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { ConnectionEntityAvatar } from "@/features/network/utils/connectionEntityAvatar";
-import { supabase } from "@/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
 import {
     LayoutGrid,
     List,
     MessageCircle,
     Search,
-    Users,
     Zap,
 } from "lucide-react-native";
 import { NetworkGrowBanner } from "@/features/network/components/NetworkGrowBanner";

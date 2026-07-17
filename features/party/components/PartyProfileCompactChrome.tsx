@@ -19,7 +19,7 @@ import {
 } from "@/lib/partyEntityAccent";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 export type PartyProfileChromeModel = {
   name: string;

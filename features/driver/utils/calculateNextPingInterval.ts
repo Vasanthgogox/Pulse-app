@@ -2,7 +2,6 @@ import { supabase } from "@/lib/supabase";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getOptimalRoute } from "@/lib/routingService";
 import {
-  LONG_HAUL_STANDARD_PINGS,
   STRETCH_PING_INTERVAL_MS,
   isRunningLateHealthStatus,
   standardHeartbeatIntervalMs,

@@ -58,7 +58,6 @@ import {
     TouchableOpacity,
     View,
     useWindowDimensions,
-    type TextStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {

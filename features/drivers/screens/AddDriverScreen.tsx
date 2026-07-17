@@ -7,7 +7,6 @@ import { PartyRegistrationPortal } from '@/features/finance/components/PartyRegi
 import { usePartyPortalRouteHandlers } from '@/features/finance/hooks/usePartyPortalRouteHandlers';
 import { type DriverFormData, inviteDriver } from '@/features/drivers';
 import { invalidateFleetDriverConnectionCaches } from '@/lib/invalidateFleetDriverConnectionCaches';
-import { queryKeys } from '@/lib/queryKeys';
 import { closeModal } from '@/app/(modals)/add-driver-closeModal';
 
 export { closeModal };

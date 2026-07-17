@@ -36,7 +36,6 @@ import {
 } from '../services/drivers.service';
 import type { VehicleRow } from '@/features/vehicles/services/vehicles.service';
 import { FleetDriverAnalyticsTab } from "./analytics/FleetDriverAnalyticsTab";
-import type { FleetDriverRow } from "./analytics/FleetDriverAnalyticsTab";
 
 /** Minimal ledger row for aggregation (compatible with LedgerTx). */
 export interface LedgerRowForDriver {

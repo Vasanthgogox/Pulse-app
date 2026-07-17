@@ -9,7 +9,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  Image,
   Platform,
   StyleSheet,
   Text,
@@ -19,7 +18,6 @@ import {
 } from 'react-native';
 import Theme from '@/constants/Theme';
 import {
-  getDisplayAvatar,
   useAvatarUri,
   type AvatarContext,
   type AvatarParty,

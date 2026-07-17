@@ -1,7 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { PulsePartyAvatar } from "@/features/business-pulse/components/PulsePartyAvatar";
-import Theme from "@/constants/Theme";
 import type { PulsePartyProfile } from "@/features/business-pulse/lib/pulsePartyAvatars.util";
 import { pulsePartyForName } from "@/features/business-pulse/lib/pulsePartyAvatars.util";
 

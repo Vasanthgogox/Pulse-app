@@ -7,7 +7,7 @@
 const RELOAD_GUARD_KEY = 'pulse_deploy_reload_v1';
 
 declare global {
-  // eslint-disable-next-line no-var
+   
   var __qNativeBundleReloadGuard: boolean | undefined;
 }
 

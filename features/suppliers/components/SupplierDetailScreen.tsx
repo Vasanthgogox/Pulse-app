@@ -82,8 +82,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { ROUTES } from "@/lib/routes";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
     Alert,

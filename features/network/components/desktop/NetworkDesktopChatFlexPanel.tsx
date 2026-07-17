@@ -13,7 +13,6 @@ import {
   useIntegratedChat,
   type IntegratedChat,
 } from "@/features/chat/contexts/IntegratedChatContext";
-import type { NetworkPartner } from "@/features/chat/types/chat.types";
 import { networkDesktopChatStyles as styles } from "@/features/network/components/desktop/networkDesktopChat.styles";
 import {
   mergeNetworkChatPartners,

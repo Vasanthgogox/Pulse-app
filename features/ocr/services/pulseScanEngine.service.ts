@@ -4,10 +4,6 @@ import {
   processOcrJob,
   scheduleOcrJobProcessing,
   scheduleOcrRescan,
-  requestOcrRescan,
-  loadPersistedOcrJob,
-  odometerResultFromJob,
-  expenseResultFromJob,
   type EnqueueOcrJobResult,
   type OcrProgressPhase,
 } from "@/features/ocr/services/ocrJobProcessor.service";

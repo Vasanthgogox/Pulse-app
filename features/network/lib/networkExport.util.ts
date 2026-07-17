@@ -6,7 +6,7 @@ import * as FileSystem from "expo-file-system";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
-import { Alert, Platform, Share } from "react-native";
+import { Platform, Share } from "react-native";
 import { prependPulseExcelBanner } from "@/lib/reportWatermark.util";
 import { buildPulseIntelligenceReportHtml } from "@/lib/pulseReportPrint.util";
 import type { SalesTableRow, SalesKpis } from "@/features/network/utils/connectionSalesAnalytics.util";

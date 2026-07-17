@@ -11,7 +11,6 @@ import {
   Pressable,
 } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

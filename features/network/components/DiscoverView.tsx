@@ -5,7 +5,6 @@
  */
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
   ConnectionRoleModal,
@@ -52,10 +51,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlashList } from "@shopify/flash-list";
 import {
   Alert,
-  Animated,
   Platform,
-  Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,

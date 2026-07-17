@@ -69,7 +69,7 @@ export async function loadContactPhonesForNetworkLookup(): Promise<{
     const byNormalized = new Map<string, ContactPhoneEntry>();
     let pageOffset = 0;
     let totalRead = 0;
-    // eslint-disable-next-line no-constant-condition
+     
     while (true) {
       const { data, hasNextPage } = await Contacts.getContactsAsync({
         fields,

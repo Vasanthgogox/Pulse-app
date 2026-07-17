@@ -1,4 +1,3 @@
-import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import Layout from '@/constants/Layout';
 import {
     PULSE_PILL_BUTTON_BORDER_WIDTH,

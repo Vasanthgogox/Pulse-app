@@ -2,11 +2,10 @@
  * Ledger / Entity overlay — Client Risk Score badge.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { getClientRiskScore } from '../services/ai.service';
 import type { ClientRiskScore } from '../types';
 import { AIBadge, type AIBadgeVariant } from './AIBadge';
-import Theme from '@/constants/Theme';
 
 export interface ClientRiskBadgeProps {
   organizationId: string | null;

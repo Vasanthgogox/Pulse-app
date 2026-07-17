@@ -4,7 +4,6 @@ import { DriverProfileOverviewPanel } from "@/features/drivers/components/deskto
 import {
   clientProfileStyles as cpStyles,
   hubStyles as styles,
-  METRONIC,
 } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import {
@@ -15,7 +14,6 @@ import { profileHubLayoutStyles as mobile } from "@/features/party/components/pr
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import { driverToPublicEntity } from "@/features/public-profile/mappers";
 import { useLayoutInsets } from "@/lib/layoutInsets";
-import { ROUTES } from "@/lib/routes";
 import { Wallet } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";

@@ -276,7 +276,7 @@ export interface TripDetailFinanceViewProps {
 }
 
 export type { DocCategory, TripDocItem } from './tripDocTypes';
-import type { DocCategory, TripDocItem } from './tripDocTypes';
+import type { TripDocItem } from './tripDocTypes';
 
 const DEFAULT_TRIP_DOCS: TripDocItem[] = [
   {

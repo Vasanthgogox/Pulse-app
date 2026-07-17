@@ -21,7 +21,7 @@ import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
 
 import { PulseActivationDesktopSplit } from './components/PulseActivationDesktopSplit';
 import { DRIVER_SIGNUP } from './signUpDriverTheme';
-import { DESKTOP_SIGNUP_SPLIT_FLOW_MAX, DESKTOP_SIGNUP_SPLIT_PAD } from './signUpConstants';
+import { DESKTOP_SIGNUP_SPLIT_FLOW_MAX } from './signUpConstants';
 import { PULSE_SIGNUP, type SignUpTheme } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO } from './signUpTypography';
 

@@ -3,7 +3,6 @@
  * Does not resize or split the page content underneath.
  */
 import { RegistryWebDrawer } from "@/components/RegistryWebDrawer";
-import Theme from "@/constants/Theme";
 import {
   NetworkDesktopChatFlexPanel,
   type NetworkChatJoinRequest,

@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 
-import Theme from "@/constants/Theme";
 
 import { HUB_MOBILE_ACCENT, hubMobileChromeStyles as styles } from "./hubMobileChrome";
 

@@ -7,7 +7,6 @@ import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
 import {
   preloadPulseLoadsChunk,
   preloadTabScreen,
-  type PreloadableTab,
 } from '@/lib/preloadTabChunks';
 import { scheduleIdleWork } from '@/lib/scheduleIdleWork';
 import type { QueryClient } from '@tanstack/react-query';

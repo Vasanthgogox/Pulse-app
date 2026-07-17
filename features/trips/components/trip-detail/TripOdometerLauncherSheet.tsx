@@ -1,4 +1,3 @@
-import Feather from "@expo/vector-icons/Feather";
 import { Activity, Flag, Layers, PlayCircle } from "lucide-react-native";
 import {
   Modal,

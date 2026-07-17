@@ -1,4 +1,4 @@
-import type { ObservatoryRecord, ObservatoryRecordType, ObservatoryStatus } from '@/types/observatory';
+import type { ObservatoryRecord, ObservatoryStatus } from '@/types/observatory';
 
 const MAX_RECORDS = 500;
 const records: ObservatoryRecord[] = [];

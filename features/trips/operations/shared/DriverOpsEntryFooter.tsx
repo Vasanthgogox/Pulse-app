@@ -1,6 +1,5 @@
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
-import Theme from "@/constants/Theme";
 import { getDriverThemeColors } from "@/contexts/DriverThemeContext";
 
 import { driverOpsEntryStyles as ops } from "./driverOpsEntry.styles";

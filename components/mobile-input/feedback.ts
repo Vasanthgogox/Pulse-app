@@ -18,7 +18,7 @@ function getHaptics(): typeof import('expo-haptics') | null {
   if (Platform.OS === 'web') return null;
   if (!Haptics) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+       
       Haptics = require('expo-haptics') as typeof import('expo-haptics');
     } catch {
       Haptics = null;

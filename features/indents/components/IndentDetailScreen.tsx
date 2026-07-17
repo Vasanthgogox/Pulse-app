@@ -30,7 +30,6 @@ import { resolveIndentClientEntityDisplayName } from "@/features/indents/utils/i
 import {
     createDirectQuote,
     updateDirectQuoteStatus,
-    type DirectQuoteRow,
 } from "@/features/indents/services/direct-quotes.service";
 import {
     cancelIndent,
@@ -71,7 +70,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
     Modal,
-    Platform,
     Pressable,
     StyleSheet,
     Text,

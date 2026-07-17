@@ -4,7 +4,6 @@ import type {
   ExecutionRoute,
   Order,
   PlanStop,
-  ShipmentAllocation,
 } from '@/types/commerce';
 import type { EntityMetadata, TenantContext } from '@/types/platform';
 import { gatewayRequest } from '@/lib/platform-gateway';

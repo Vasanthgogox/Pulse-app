@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
 

@@ -32,7 +32,6 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
-  ScrollView,
   Text,
   TouchableOpacity,
   useWindowDimensions,

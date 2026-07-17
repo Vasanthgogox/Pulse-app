@@ -1,5 +1,4 @@
 import { DriverBrandMark } from "@/components/driver/DriverBrandMark";
-import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
     driverBodyPrimary,
     driverBodySecondary,
@@ -27,49 +26,24 @@ import {
   getDriverTripDisplayNumber,
 } from "@/features/driver/utils/driverTripSequence.util";
 import { isAggregateTrip, isRosterTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
-import { formatLedgerDateTime, formatTime } from "@/lib/format";
+import { formatTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
-import { getOptimalRoute } from "@/lib/routingService";
-import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import { supabase } from "@/lib/supabase";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as tripsService from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
 import { type Href, useRouter } from "expo-router";
 import {
-    ArrowDownToLine,
-    Banknote,
-    Calendar,
-    CheckCircle2,
-    ChevronDown,
-    ChevronRight,
-    ChevronUp,
-    Clock,
-    FileImage,
-    Info,
     MapPinned,
-    MessageSquare,
-    Navigation,
-    Route,
     Search as SearchIcon,
-    Share2,
-    ShieldCheck,
-    Sparkles,
-    Wallet,
 } from "lucide-react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
     AppState,
     Image,
-    Linking,
-    Modal,
     Platform,
-    Pressable,
-    ScrollView,
-    Share,
     StyleSheet,
     Text,
     TextInput,

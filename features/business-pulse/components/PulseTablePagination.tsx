@@ -1,6 +1,5 @@
 import { Pressable, Text, View } from "react-native";
 
-import Theme from "@/constants/Theme";
 import { pulseTableStyles as tbl } from "@/features/business-pulse/components/pulseTableStyles";
 
 type Props = {

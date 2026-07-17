@@ -15,7 +15,6 @@ import { getOrganizationsForUser } from '@/features/organization/services/organi
 import {
   formatInvitationAge,
   type InvitationResolverResult,
-  type ResolvedTeamInvitation,
 } from '@/features/organization/services/teamInvitationResolver.service';
 import { shadowCheckPlatformIdentity } from '@/features/organization/utils/platformIdentityShadowCheck.util';
 import { validateEmail } from '@/lib/emailValidation';

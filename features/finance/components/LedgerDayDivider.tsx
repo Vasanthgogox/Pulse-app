@@ -4,7 +4,6 @@
  */
 import { formatChatDividerDate } from "@/features/chat/components/shared/ChatDateDivider";
 import {
-  CASH_LEDGER_MAX_WIDTH,
   LEDGER_AVATAR_SIZE,
   LEDGER_RIGHT_COLUMN_WIDTH,
   LEDGER_ROW_GAP,

@@ -124,7 +124,6 @@ import {
     ActivityIndicator,
     Alert,
     Animated,
-    AppState,
     Dimensions,
     Keyboard,
     KeyboardAvoidingView,

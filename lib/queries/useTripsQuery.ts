@@ -6,7 +6,6 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import {
   getTripsByOrganization,
   getShipperDisplayNamesForSupplierTrips,
-  syncTripsWithCache,
   updateTripStatus,
   type TripRow,
 } from '@/features/trips/services/trips.service';

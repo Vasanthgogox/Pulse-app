@@ -1,4 +1,4 @@
-import type { OnboardingStepId, OrganizationState } from '@/types/onboarding';
+import type { OrganizationState } from '@/types/onboarding';
 import { EMPTY_ORGANIZATION } from '@/types/onboarding';
 
 /** Onboarding wizard state only — master data lives in platform services. */

@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import { createStyles, text, view } from "@/lib/styles/createStyles";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { IndentHubMedalGlyph, IndentHubGlyphSlot } from "@/features/indents/components/IndentHubAnimatedGlyphs";
 
 import { EntityAvatar } from "@/components/EntityAvatar";

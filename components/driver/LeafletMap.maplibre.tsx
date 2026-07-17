@@ -7,7 +7,7 @@ import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
 // a full API migration is out of scope for a type-only pass and needs on-device verification.
 // @ts-expect-error - default import kept for the legacy namespace usage below (MapView/Camera/etc.)
 import MapLibreGL, { type CameraRef } from '@maplibre/maplibre-react-native';
-import React, { useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useImperativeHandle, useMemo, useRef } from 'react';
 import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 

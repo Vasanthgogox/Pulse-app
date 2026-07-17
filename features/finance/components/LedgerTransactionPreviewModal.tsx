@@ -10,7 +10,6 @@ import {
   Pressable,
   StyleSheet,
   useWindowDimensions,
-  View,
 } from "react-native";
 
 export function LedgerTransactionPreviewModal({

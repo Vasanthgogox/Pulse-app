@@ -2,7 +2,7 @@
  * Treasury summary banner — dark block with Total In / Total Out and period filter.
  * Single source: parent passes totals (from one ledger fetch or tab callbacks). Theme only.
  */
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import type { FinancePeriodFilter } from '../types';

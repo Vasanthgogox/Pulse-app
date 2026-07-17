@@ -28,8 +28,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
-  Loader,
   Plus,
   Save,
   X,
@@ -39,11 +37,9 @@ import { profileHubLayoutStyles as mobile } from "@/features/party/components/pr
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,

@@ -3,7 +3,6 @@
  * (client / supplier / driver `/public-profile/*`).
  */
 import Layout from '@/constants/Layout';
-import Theme from '@/constants/Theme';
 import { StyleSheet } from 'react-native';
 
 const GUTTER = Layout.screenPaddingHorizontal;

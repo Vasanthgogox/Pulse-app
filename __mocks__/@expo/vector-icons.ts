@@ -1,4 +1,3 @@
-import React from 'react';
 
 jest.mock('react-native-vector-icons/lib/create-icon-set', () => {
   const React = require('react') as typeof import('react');

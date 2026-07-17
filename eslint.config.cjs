@@ -4,6 +4,7 @@ const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const importPlugin = require('eslint-plugin-import');
 const boundariesPlugin = require('eslint-plugin-boundaries');
+const unusedImports = require('eslint-plugin-unused-imports');
 
 // Custom project-specific rules
 const pulse = {
@@ -84,11 +85,24 @@ module.exports = [
     plugins: {
       '@typescript-eslint': tsPlugin,
       import: importPlugin,
+      'unused-imports': unusedImports,
       pulse,
     },
     rules: {
       // Basic recommended TypeScript rules
       ...tsPlugin.configs.recommended.rules,
+
+      // Delegate unused detection to unused-imports: it auto-fixes dead imports
+      // and honors the _-prefix convention for intentionally-unused vars/args.
+      '@typescript-eslint/no-unused-vars': 'off',
+      'unused-imports/no-unused-imports': 'error',
+      'unused-imports/no-unused-vars': ['error', {
+        vars: 'all',
+        varsIgnorePattern: '^_',
+        args: 'after-used',
+        argsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
 
       // Metro resolves static asset requires (fonts, images, JSON, Lottie) — this
       // is the idiomatic RN pattern, not a CommonJS smell. Allow require() only for

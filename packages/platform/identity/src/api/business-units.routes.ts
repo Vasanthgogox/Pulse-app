@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { IdentityConfig, AuthContext } from '../config';
 import { OrganizationService } from '../services/organization.service';
 import { authenticate } from '../middleware/authenticate';
-import { authorize, authorizeBootstrap } from '../middleware/authorize';
+import { authorizeBootstrap } from '../middleware/authorize';
 import { Permission, PlatformError, ErrorCodes, roleHasPermission } from '@pulse/contracts';
 import { createBusinessUnitSchema } from '../validation/organization.schema';
 import { parseBody, respondError, respondSuccess } from '../http/respond';

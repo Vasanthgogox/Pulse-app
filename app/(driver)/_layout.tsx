@@ -7,7 +7,6 @@ import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { DriverInviteModalProvider } from '@/contexts/DriverInviteModalContext';
 import { DriverTripOpsProvider } from '@/contexts/DriverTripOpsContext';
 import { DriverTabBar } from '@/components/driver/DriverTabBar';
-import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { DriverAvatarProvider } from '@/contexts/DriverAvatarContext';
 import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
@@ -31,7 +30,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { Tabs } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 function DriverTabsNavigator() {
   return (

@@ -16,7 +16,7 @@ describe('Phase 2 registry coverage', () => {
   it('accounts for every routable page (unmapped = 0)', () => {
     const report = buildRegistryCoverageReport();
     if (report.unmapped.length > 0) {
-      // eslint-disable-next-line no-console
+       
       console.error('Unmapped routes:', report.unmapped);
     }
     expect(report.inventoryCount).toBeGreaterThan(100);

@@ -1,6 +1,5 @@
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
-import type { TripRow } from "@/features/trips/services/trips.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { buildVehiclePnLRows } from "./pulseSelectors";
 import type { PulseDataset, PulseFilterState } from "../types";

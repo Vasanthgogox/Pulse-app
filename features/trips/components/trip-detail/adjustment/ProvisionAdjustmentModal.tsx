@@ -27,7 +27,6 @@ import {
   COST_REASON_OPTIONS,
   getAdjustmentReasonOptions,
   REVENUE_REASON_OPTIONS,
-  isAdjustmentVoided,
   type TripAdjustmentImpact,
   type TripAdjustmentType,
 } from "@/features/trips/services/tripAdjustments";

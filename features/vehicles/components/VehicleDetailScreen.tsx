@@ -6,7 +6,6 @@ import {
   Alert,
   Animated,
   Easing,
-  Image,
   Modal,
   Platform,
   RefreshControl,

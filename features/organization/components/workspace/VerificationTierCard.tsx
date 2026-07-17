@@ -35,7 +35,6 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import {
   getVerificationJobStatus,
   getTierCapabilities,
-  pillarLabel,
   subscribeToVerificationUpdates,
   type PillarStatus,
   type TierCapabilities,

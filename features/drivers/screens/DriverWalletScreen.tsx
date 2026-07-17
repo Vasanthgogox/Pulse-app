@@ -35,7 +35,6 @@ import {
   buildMarkPaidConfirmMessage,
   deriveDriverPaymentMode,
   extractDriverPaymentUtr,
-  formatDriverPaymentModeLabel,
 } from "@/features/driver/tripSettlement/driverTripSettlement.util";
 import { getFleetAvatarUriForOrg, resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
 import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';

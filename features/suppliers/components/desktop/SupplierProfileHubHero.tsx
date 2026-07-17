@@ -16,7 +16,7 @@ import {
 } from "@/features/suppliers/components/desktop/supplierProfileHub.styles";
 
 const spStyles = { ..._spStyles, ...supplierStyles };
-import { ArrowLeft, BadgeCheck, Building2, Mail, MapPin, Phone, ShieldCheck } from "lucide-react-native";
+import { ArrowLeft, BadgeCheck, Mail, MapPin, Phone, ShieldCheck } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
 type Props = {

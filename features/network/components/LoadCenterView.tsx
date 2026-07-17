@@ -4,7 +4,6 @@
  */
 import { PulsePillButton } from "@/components/PulsePillButton";
 import { ContentErrorState } from '@/components/ContentErrorState';
-import { Typography } from "@/constants/Typography";
 import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
 import { HubScreenBottomBar } from "@/components/hub/HubScreenBottomBar";
 import { HubScreenShell } from "@/components/hub/HubScreenShell";
@@ -31,7 +30,6 @@ import {
   giveLoadIndentAvatarProps,
   marketLoadIndentAvatarProps,
 } from "@/features/network/utils/indentCardAvatar.util";
-import { PartyAvatar } from "@/components/PartyAvatar";
 import {
   CHAT_FILTER_MUTED,
   chatFilterChromeStyles as chatChrome,
@@ -41,9 +39,7 @@ import { useLayoutInsets } from "@/lib/layoutInsets";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-    BidReceivedHammer,
     getIndentDisplayNumber,
-    type DirectQuoteRow,
     type IndentRow,
 } from "@/features/indents";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
@@ -52,13 +48,9 @@ import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/inden
 import {
     DONE_SUB_TABS,
     formatIndentCardDate,
-    giveLoadStatusPillStyles,
     getLoadCenterStatusTabLabel,
-    giveLoadBidReceivedDisplayStatus,
-    resolveGetLoadMobileCardLabels,
     resolveGetLoadTicketCommerce,
     resolveGiveLoadMobileDisplayStatus,
-    shouldHideGetLoadStatePill,
     STATUS_TABS,
     statusMatchesFilter,
     type DoneSubTab,
@@ -86,7 +78,6 @@ import {
 } from "@/features/network/utils/loadCenterIntegratedParties.util";
 import {
     assignmentShellColors,
-    assignmentShellStyles,
 } from "@/features/trips/styles/assignmentShellShared";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { formatINR } from "@/lib/format";
@@ -107,20 +98,17 @@ import {
     useVehiclesQuery,
 } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { type FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 import {
-    Building2,
     Package,
     Share2,
-    Zap,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Image,
     Modal,
     Platform,
     RefreshControl,

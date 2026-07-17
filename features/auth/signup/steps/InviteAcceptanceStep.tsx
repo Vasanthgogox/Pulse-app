@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Theme from "@/constants/Theme";
-import { PULSE_SIGNUP_TYPO, SIGNUP_TEXT } from "@/features/auth/signup/signUpTypography";
+import { SIGNUP_TEXT } from "@/features/auth/signup/signUpTypography";
 import type { SignUpFlow } from "@/features/auth/signup/hooks/useBusinessSignUpFlow";
 import { SignUpPulseField } from "@/features/auth/signup/SignUpPulseField";
 import { SignUpPulseFormStep } from "@/features/auth/signup/SignUpPulseFormStep";

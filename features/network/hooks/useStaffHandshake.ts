@@ -35,13 +35,12 @@ import { updateDirectQuoteAssignment } from "@/features/indents";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { useInvalidateIndents, useInvalidateTrips } from "@/lib/queries";
 import { validatePhone } from "@/lib/phoneValidation";
-import { formatIndianVehicleNumber, formatMobileNumber } from "@/lib/format";
+import { formatIndianVehicleNumber } from "@/lib/format";
 import { isIndianVehiclePlateComplete } from "@/lib/indianVehicleInput.util";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, TextInput } from "react-native";
-import { Platform } from "react-native";
+import { Alert } from "react-native";
 import React from "react";
 
 interface UseStaffHandshakeParams {

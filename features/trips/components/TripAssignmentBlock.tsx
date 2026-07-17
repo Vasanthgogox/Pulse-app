@@ -38,8 +38,6 @@ import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellSh
 import { PULSE_TRIP } from "@/features/trips/components/add-trip/addTripPulseTheme";
 import {
     formatIndianVehicleNumber,
-    formatIndianVehicleNumberInput,
-    formatMobileNumber,
 } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";

@@ -7,7 +7,6 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import { Platform } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";

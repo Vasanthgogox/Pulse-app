@@ -25,7 +25,6 @@
 import { useMemo } from "react";
 
 import { Theme } from "@/constants/Theme";
-import { formatINR } from "@/lib/format";
 
 import {
   PulseGaugePanel,

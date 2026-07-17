@@ -14,7 +14,7 @@ import {
   type TripRow,
 } from "@/features/trips/services/trips.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
-import { formatLedgerDate, normalizeVehicleNumberForMatch } from "@/lib/format";
+import { normalizeVehicleNumberForMatch } from "@/lib/format";
 import { buildTripPnL, getExpenseLinesForTripPnL } from "@/features/vehicles/pnl";
 import { getVehicleById, type VehicleRow } from "../services/vehicles.service";
 

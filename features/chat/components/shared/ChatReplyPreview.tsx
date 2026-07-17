@@ -1,5 +1,5 @@
 import { stripChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
-import { CornerUpLeft, FileText, Image, X } from "lucide-react-native";
+import { CornerUpLeft, X } from "lucide-react-native";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export type ReplyPreviewData = {

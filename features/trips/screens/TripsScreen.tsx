@@ -46,7 +46,6 @@ import {
   linkedOrgAvatarFields,
     summarizeTripLedgerForHub,
   tripFinanceAdjForHubLookup,
-  tripHubCost,
   tripHubRevenue,
     TripsHubAuditFooter,
     TripsHubMobileTripListCanvas,

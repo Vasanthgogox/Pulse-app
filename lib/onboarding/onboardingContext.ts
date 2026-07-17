@@ -7,7 +7,6 @@ import type { OnboardingContextInput } from './onboardingContextInput';
 import {
   onboardingContextAnalyticsEvent,
   onboardingContextToUi,
-  type OnboardingContextType,
   type ResolvedOnboardingContext,
 } from './mapDomainContextToUi';
 

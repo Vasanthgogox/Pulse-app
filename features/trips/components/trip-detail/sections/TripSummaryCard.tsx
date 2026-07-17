@@ -3,7 +3,6 @@
  * Shows pickup → drop, client, load type, distance, and key financials at a glance.
  */
 import Theme from "@/constants/Theme";
-import Layout from "@/constants/Layout";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { StyleSheet, Text, View } from "react-native";
 import type { TripRow } from "../../../services/trips.service";

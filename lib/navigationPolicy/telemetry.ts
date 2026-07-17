@@ -26,7 +26,7 @@ export function subscribeNavigationDecisions(listener: Listener): () => void {
 
 export function emitNavigationDecision(event: NavigationDecisionEvent): void {
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    // eslint-disable-next-line no-console
+     
     console.debug('[NavigationPolicy]', event.decision.type, event.reason, {
       path: event.canonicalPath,
     });

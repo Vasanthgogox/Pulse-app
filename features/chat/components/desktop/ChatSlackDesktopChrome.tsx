@@ -22,7 +22,6 @@ import {
 import {
   SLACK_DESKTOP_AVATAR,
   slackDesktopStyles as st,
-  SLACK_DESKTOP,
 } from "./chatSlackDesktop.styles";
 
 const WORKSPACE_AVATAR_SIZE = 24;

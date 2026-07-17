@@ -1,7 +1,6 @@
 /**
  * Client Profile Hub — Metronic tabbed layout (Overview, KYC, Warehouses, Contracts, etc.)
  */
-import Theme from "@/constants/Theme";
 import { ClientProfileOverviewPanel } from "@/features/clients/components/desktop/ClientProfileOverviewPanel";
 import { ClientProfileKycPanel } from "@/features/clients/components/desktop/ClientProfileKycPanel";
 import {

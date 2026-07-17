@@ -4,7 +4,7 @@
  */
 import Theme from "@/constants/Theme";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
-import { Platform, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 
 export { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 export { networkDesktopHubStyles as hubStyles } from "@/features/network/components/desktop/networkDesktopHub.styles";

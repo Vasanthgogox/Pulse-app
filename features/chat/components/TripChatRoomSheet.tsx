@@ -31,7 +31,6 @@ import type { TripForCompose } from "../services/chat.service";
 import { useAssignmentAuditNameMaps } from "../hooks/useAssignmentAuditNameMaps";
 import {
   TripChatRoomActionCard,
-  type TripChatRoomActionCardProps,
 } from "./TripChatRoomActionCard";
 import { useTripChatRoom } from "../hooks/useTripChatRoom";
 import { useTripAssignmentAuditHistoryQuery } from "@/lib/queries/useTripsQuery";

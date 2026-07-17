@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
-import { Permission } from '@pulse/contracts';
 import type { IdentityConfig, AuthContext } from '../config';
 import { OrganizationService } from '../services/organization.service';
 import { authenticate } from '../middleware/authenticate';
-import { authorize, authorizeBootstrap } from '../middleware/authorize';
+import { authorizeBootstrap } from '../middleware/authorize';
 import { createOrganizationSchema } from '../validation/organization.schema';
 import { parseBody, respondError, respondSuccess } from '../http/respond';
 

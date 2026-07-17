@@ -2,7 +2,7 @@
  * Aggregate driver phone / name / vehicle — full-page keypad flows (Create Trip mobile).
  * Matches indent deploy + party wizard standard (no system keyboard on phone / plate).
  */
-import { memo, useCallback, useMemo, type ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import {
   Platform,
   Pressable,

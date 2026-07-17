@@ -40,7 +40,6 @@ import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoa
 import { NetworkProfileDirectMessageButton } from "@/features/network/components/NetworkProfileDirectMessageButton";
 import { NetworkProfileModalBody } from "@/features/network/components/NetworkProfileModalBody";
 import { getOrgProfileSnapshot } from "@/features/network/services/networkProfileSnapshot.service";
-import { LinearGradient } from "expo-linear-gradient";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
 import { StoryReel } from "@/features/network/components/StoryReel";
@@ -81,8 +80,6 @@ import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useRouter } from "expo-router";
 import {
   Activity,
-  ArrowLeft,
-  ArrowRight,
   ArrowUpRight,
   Building2,
   Check,
@@ -91,7 +88,6 @@ import {
   User,
   UserPlus,
   Warehouse,
-  X,
 } from "lucide-react-native";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -99,7 +95,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams, useSegments } from "expo-router";
 import {
   Alert,
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -109,14 +104,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   type TextStyle,
   View,
 } from "react-native";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useWebLayoutWidth } from "@/lib/useWebLayoutWidth";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { supabase } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 
 function isStoryPost(p: PostRow): boolean {

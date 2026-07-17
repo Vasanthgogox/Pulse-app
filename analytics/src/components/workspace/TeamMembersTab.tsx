@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RefreshCcw, UserX, LogIn, ShieldOff, UserCheck, Loader2 } from 'lucide-react';
+import { RefreshCcw, UserX, LogIn, UserCheck, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAdmin } from '@/context/AdminDataProvider';

@@ -3,7 +3,6 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 
 import { colors } from '@/design-system/colors';
 import { tabularNums, typography } from '@/design-system/typography';
-import { space } from '@/design-system/spacing';
 
 export type MetricTone = 'neutral' | 'revenue' | 'cost' | 'pending' | 'brand';
 export type MetricSize = 'compact' | 'default' | 'hero';

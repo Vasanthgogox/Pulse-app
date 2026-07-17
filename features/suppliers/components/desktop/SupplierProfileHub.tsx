@@ -3,7 +3,6 @@
  * Tabs: Overview · KYC · Compliance · Contracts · Fleet · Drivers ·
  *        Warehouses · Performance · Finance · Timeline
  */
-import Theme from "@/constants/Theme";
 import {
   SupplierProfileCompliancePanel,
   SupplierProfileContractsPanel,

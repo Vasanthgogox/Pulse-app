@@ -8,7 +8,7 @@ import Theme from "@/constants/Theme";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
 import { ConnectionEntityAvatar } from "@/features/network/utils/connectionEntityAvatar";
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
-import { ChevronRight, Clock3, UserPlus, X, Zap } from "lucide-react-native";
+import { ChevronRight, Clock3, UserPlus, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 

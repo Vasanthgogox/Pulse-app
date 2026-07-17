@@ -50,7 +50,7 @@ import {
   type VerificationDocumentFile,
 } from '@/features/organization/services/businessVerification.service';
 import { isVerificationFrozen } from '@/types/organization';
-import type { AddressProofType, KycVerificationStatus, RegistrationType, WorkspaceKyc } from '@/types/organization';
+import type { AddressProofType, RegistrationType, WorkspaceKyc } from '@/types/organization';
 import { BUSINESS_TYPE_TO_REGISTRATION } from '@/features/organization/utils/kycVerification.util';
 
 const REGISTRATION_TYPES: { value: RegistrationType; label: string }[] = [

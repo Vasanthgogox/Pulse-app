@@ -8,7 +8,6 @@ import {
   Platform,
   ScrollView,
   Text,
-  TouchableOpacity,
   useWindowDimensions,
   View,
   type ViewStyle,

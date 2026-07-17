@@ -70,7 +70,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getTripDisplayNumber, type TripRow } from "../services/trips.service";
-import { TripHubDriverPresenceBadge } from "./TripHubDriverPresenceBadge";
 import { TripHubInTransitPingLines } from "./TripHubInTransitPingLines";
 import type { TripHubInTransitPingMeta } from "../hooks/useTripHubInTransitPings";
 import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { PlatformError, ErrorCodes } from '@pulse/contracts';
 
 export const createOrganizationSchema = z.object({
   name:      z.string().min(1).max(200),

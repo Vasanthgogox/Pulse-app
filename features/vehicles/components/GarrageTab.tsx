@@ -19,7 +19,6 @@ import type { TripRow } from "@/features/trips/services/trips.service";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo } from "react";

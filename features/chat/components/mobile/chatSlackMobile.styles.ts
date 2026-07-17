@@ -4,7 +4,7 @@ import {
   CHAT_TEXT_PRIMARY,
 } from "@/features/chat/chatTheme";
 import { SLACK_CHAT_AVATAR } from "@/features/chat/components/shared/chatSlackAvatar.constants";
-import { Platform, StyleSheet, type ViewStyle } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
 import { withWebSafeShadows } from "@/lib/platformViewStyle.util";
 

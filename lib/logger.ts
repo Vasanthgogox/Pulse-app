@@ -37,23 +37,23 @@ function extractError(context?: Record<string, unknown>): Error | undefined {
 export const logger = {
   debug: (message: string, context?: Record<string, unknown>) => {
     if (!shouldLog('debug')) return;
-    // eslint-disable-next-line no-console
+     
     console.debug(format(message, context));
   },
   info: (message: string, context?: Record<string, unknown>) => {
     if (!shouldLog('info')) return;
-    // eslint-disable-next-line no-console
+     
     console.info(format(message, context));
   },
   warn: (message: string, context?: Record<string, unknown>) => {
     if (!shouldLog('warn')) return;
-    // eslint-disable-next-line no-console
+     
     console.warn(format(message, context));
     captureMessage(message, 'warning', context);
   },
   error: (message: string, context?: Record<string, unknown>) => {
     if (!shouldLog('error')) return;
-    // eslint-disable-next-line no-console
+     
     console.error(format(message, context));
     const err = extractError(context);
     if (err) {

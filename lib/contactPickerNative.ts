@@ -4,7 +4,7 @@
  */
 import * as Contacts from "expo-contacts";
 import { Platform } from "react-native";
-import type { PickedContact, PickContactResult } from "./contactPicker";
+import type { PickContactResult } from "./contactPicker";
 
 const DEFAULT_COUNTRY_CODE = "91";
 const MIN_DIGITS_VALID = 10;

@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
-import { GitMerge, Radio } from 'lucide-react';
+import { Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EntityFlexSheet } from '@/components/commerce/EntityFlexSheet';
 import { CorrelationTrace, RouteTimeline, StatusBadge } from '@/components/pulse-ui';
 import { useCommerce } from '@/context/CommerceProvider';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { getStopById } from '@/lib/merge-engine';
-import type { ExecutionPlan } from '@/types/commerce';
 
 interface PlanDetailSheetProps {
   planId: string | null;

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type {
   Organization, AdminContextValue,
   OrgUser, UsageMetric, FeatureFlag,
-  BillingTier, AppStatus, CheckStatus,
+  BillingTier, AppStatus,
   AuditEntry, AutomatedCheck, BusinessDocument,
   DocumentType,
 } from '@/types/admin';

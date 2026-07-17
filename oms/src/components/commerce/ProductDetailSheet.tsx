@@ -7,7 +7,7 @@ import { StatusDotBadge } from '@/components/commerce/StatusDotBadge';
 import { useCommerce } from '@/context/CommerceProvider';
 import { useOrganization } from '@/context/OrganizationProvider';
 import { formatDimensions, parseDimension, volumeFromDimensionsCm } from '@/lib/product-dimensions';
-import type { Product, ProductCategory } from '@/types/commerce';
+import type { ProductCategory } from '@/types/commerce';
 import { cn, formatCurrency } from '@/lib/utils';
 
 const CATEGORIES: ProductCategory[] = ['Electronics', 'Apparel', 'FMCG', 'Industrial', 'Pharmaceuticals', 'Food & Beverage'];

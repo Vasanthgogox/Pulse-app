@@ -2,7 +2,6 @@
  * Network discover helpers: debounced phone lookup + contacts-on-app recommendations.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { PartyAvatar } from "@/components/PartyAvatar";
 import { PulsePillButton } from "@/components/PulsePillButton";
 import Theme from "@/constants/Theme";
 import {
@@ -62,7 +61,6 @@ import {
   Linking,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,

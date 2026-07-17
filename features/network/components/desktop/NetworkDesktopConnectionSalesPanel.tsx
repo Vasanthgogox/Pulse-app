@@ -45,7 +45,6 @@ import {
 } from "@/features/network/lib/networkExport.util";
 import {
   LayoutGrid,
-  MoreVertical,
   Star,
   TrendingUp,
   Users,

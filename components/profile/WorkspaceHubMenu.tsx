@@ -7,7 +7,6 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
   HUB_HEADER_GRADIENT,
-  HUB_ICON_WELL,
   HUB_MENU_ICON,
   HUB_MENU_ICON_SIZE,
   HUB_MENU_ICON_STROKE,

@@ -17,7 +17,6 @@ import {
 } from '@/lib/lastRoute';
 import { PULSE_BOTTOM_TAB_DOCK } from '@/components/navigation/PulseBottomTabBar/dockMetrics';
 import { useLayoutInsets } from '@/lib/layoutInsets';
-import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
 import {
   preloadTabScreen,
   scheduleDispatcherTabPreloads,

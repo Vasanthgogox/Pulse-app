@@ -21,7 +21,6 @@ import { getTripOperationalDisplayCode } from "@/features/operations/display";
 import type { DriverTripRow, SupplierTripRow } from "@/types/trip-views";
 import {
   driverRowToTripRow,
-  supplierRowToTripRow,
   tripRowToDriverTripRow,
 } from "@/types/trip-views";
 

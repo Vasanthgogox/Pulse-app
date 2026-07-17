@@ -5,7 +5,7 @@ import { ensureWebRnCompatPatches } from '@/lib/installWebRnCompatPatches';
 import { ensureWebShellParity } from '@/lib/htmlShell';
 // Background GPS task must be registered before any component mounts — do not move this import.
 import '@/lib/tracking/backgroundTasks';
-import { markStartupPhase, dumpStartupMetrics } from '@/lib/startupMetrics';
+import { markStartupPhase } from '@/lib/startupMetrics';
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { initCrashReporter } from '@/lib/crashReporter';
@@ -69,7 +69,7 @@ import { useEffect, useMemo } from 'react';
 import { AppBootGate } from '@/components/AppBootGate';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { NavigationLoadingOverlay } from '@/components/NavigationLoadingOverlay';
-import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { LogBox, Platform, StyleSheet, Text, View } from 'react-native';
 import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';

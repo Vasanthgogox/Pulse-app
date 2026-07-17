@@ -4,7 +4,6 @@
  */
 import * as chatService from '@/features/chat/services/chat.service';
 import { TRIP_CHAT_HISTORY_PAGE } from '@/features/chat/services/chat.service';
-import type { TripMessageRow } from '@/features/chat/types/chat.types';
 import {
   flattenDriverChatMessages,
   type DriverChatMessagesPage,

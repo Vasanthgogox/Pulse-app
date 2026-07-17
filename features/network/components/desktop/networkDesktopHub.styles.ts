@@ -1,6 +1,6 @@
 import Theme from "@/constants/Theme";
 import { column, createStyles, image, text, view, webView, type ColumnStyle } from "@/lib/styles/createStyles";
-import { Platform, StyleSheet, type ImageStyle, type TextStyle, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, type TextStyle, type ViewStyle } from "react-native";
 
 export const METRONIC = {
   border: "#EFF2F5",

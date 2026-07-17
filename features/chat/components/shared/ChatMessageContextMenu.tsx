@@ -2,7 +2,7 @@
  * Long-press / right-click context menu for a chat message.
  * Shows quick emoji reactions + action buttons (Reply, Copy).
  */
-import { Copy, CornerUpLeft, Pencil, Plus, Smile, Trash2 } from "lucide-react-native";
+import { Copy, CornerUpLeft, Pencil, Plus, Trash2 } from "lucide-react-native";
 import {
   Modal,
   Pressable,

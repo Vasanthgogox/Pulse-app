@@ -1,5 +1,4 @@
 import Theme from "@/constants/Theme";
-import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { TeamMembersView } from "@/features/organization/components/TeamMembersView";

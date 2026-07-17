@@ -7,7 +7,6 @@ import Theme from '@/constants/Theme';
 import { formatMobileNumber } from '@/lib/format';
 import { isContactPickerAvailable } from '@/lib/contactPicker';
 import type { ExistingDriverMatch } from '@/features/drivers/services/drivers.service';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {
   ActivityIndicator,
   Platform,
@@ -16,7 +15,6 @@ import {
   Text,
   TextInput,
   View,
-  type ViewStyle,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { BookUser, Key, Mail, UserPlus } from 'lucide-react-native';

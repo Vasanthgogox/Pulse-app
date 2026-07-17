@@ -4,7 +4,6 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Theme from '@/constants/Theme';
-import Layout from '@/constants/Layout';
 import { darkMapStyle } from '@/lib/mapStyles';
 import { DriverGuidanceConfig } from '@/types/driver';
 import type { RouteResult } from '@/lib/routingService';

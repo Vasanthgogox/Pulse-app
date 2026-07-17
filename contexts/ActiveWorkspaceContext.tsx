@@ -19,7 +19,6 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { supabase } from '@/lib/supabase';
-import { withTimeout } from '@/lib/authEngine';
 import {
   clearPlatformWorkspaceStore,
   syncPlatformWorkspaceFromActive,

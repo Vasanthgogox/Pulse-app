@@ -37,7 +37,6 @@ import { memo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   CHAT_SLACK_BOTTOM_NAV_BAR,
-  PULSE_CHAT,
   slackMobileStyles as st,
   SLACK_AVATAR,
   SLACK_ICON,

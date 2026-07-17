@@ -1,4 +1,3 @@
-import React from 'react';
 import type { AdditionalCharge, InvoicingTripView } from '../services/invoicing.service';
 import type { InvoiceCalcResult } from '../hooks/useInvoiceCalc';
 

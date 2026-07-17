@@ -2,7 +2,7 @@
  * Create Trip — sectioned form (route, client, allocation); Theme tokens only.
  */
 import { resolveWizardClientPhone } from "@/features/clients/utils/clientContactDisplay.util";
-import { fullPageWizardStyles, WizardClientPicker, WizardClientSummaryCard, WizardEntitySummaryCard, WizardFormBody, WizardPartyContextRow, WizardPriorSelections, type WizardPriorSelectionItem } from "@/components/full-page-wizard";
+import { fullPageWizardStyles, WizardClientSummaryCard, WizardEntitySummaryCard, WizardFormBody, WizardPartyContextRow, WizardPriorSelections, type WizardPriorSelectionItem } from "@/components/full-page-wizard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -47,7 +47,6 @@ import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAlloc
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import {
     formatIndianVehicleNumber,
-    formatIndianVehicleNumberInput,
     formatMobileNumber,
 } from "@/lib/format";
 import {
@@ -57,20 +56,14 @@ import {
   getIndianVehicleNormalizedLength,
 } from "@/lib/indianVehicleInput.util";
 import { validatePhone } from "@/lib/phoneValidation";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
     AlertCircle,
     ArrowRight,
-    Building2,
     CheckCircle2,
-    Clock,
     FileText,
-    IndianRupee,
     Info,
-    ListChecks,
     MapPin,
     Navigation,
-    PlusCircle,
     Truck,
     User,
 } from "lucide-react-native";
@@ -83,9 +76,7 @@ import {
     Modal,
     Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
-    Switch,
     Text,
     TextInput,
     TouchableOpacity,

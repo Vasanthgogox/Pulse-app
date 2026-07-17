@@ -1,4 +1,3 @@
-import Theme from '@/constants/Theme';
 import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
 import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
