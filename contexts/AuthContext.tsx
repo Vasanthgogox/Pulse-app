@@ -39,6 +39,7 @@ import {
 } from "@/lib/authEngine";
 import { noteDriverLoginAttempt, resetDriverPerfMetrics } from "@/lib/driverPerfMetrics";
 import { clearStaleAuthOnFirstLaunch } from "@/lib/firstLaunch";
+import { setCrashReporterUser, clearCrashReporterUser } from "@/lib/crashReporter";
 import { resetIndexBootRedirect } from "@/lib/indexBootRedirect.util";
 import { getKeepSignedIn, setKeepSignedIn } from "@/lib/keepSignedInPreference";
 import { clearAllRealtimeChannels } from "@/lib/realtimeRegistry";
@@ -216,6 +217,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRoleVerified(web.profile.role === "driver" || web.profile.role === "user");
     }
   }, []);
+
+  // Attach/detach the signed-in user for crash reports. Observability only —
+  // reads auth state, never mutates it.
+  useEffect(() => {
+    if (user?.uid) {
+      setCrashReporterUser({ id: user.uid, email: user.email });
+    } else {
+      clearCrashReporterUser();
+    }
+  }, [user?.uid, user?.email]);
 
   const clearRestoreError = useCallback(() => setRestoreError(null), []);
 

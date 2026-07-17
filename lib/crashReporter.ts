@@ -7,10 +7,20 @@
  * works identically with or without Sentry configured.
  */
 import * as Sentry from '@sentry/react-native';
+import Constants from 'expo-constants';
 
 let initialized = false;
 
 const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
+
+/** App version + build channel become the Sentry release/environment tags. */
+const RELEASE =
+  Constants.expoConfig?.version != null
+    ? `pulse@${Constants.expoConfig.version}`
+    : undefined;
+const ENVIRONMENT =
+  process.env.EXPO_PUBLIC_ENV ??
+  (process.env.NODE_ENV === 'production' ? 'production' : 'development');
 
 /**
  * Initialize crash reporting. Call once at app startup (app/_layout.tsx).
@@ -23,8 +33,22 @@ export function initCrashReporter(): void {
     // Keep tracing off by default; enable later once volume/cost is understood.
     tracesSampleRate: 0,
     enableNative: true,
+    release: RELEASE,
+    environment: ENVIRONMENT,
   });
   initialized = true;
+}
+
+/** Attach the signed-in user to crash reports. Call after login/session restore. */
+export function setCrashReporterUser(user: { id: string; email?: string | null }): void {
+  if (__DEV__ || !initialized) return;
+  Sentry.setUser({ id: user.id, email: user.email ?? undefined });
+}
+
+/** Clear user context on logout. */
+export function clearCrashReporterUser(): void {
+  if (__DEV__ || !initialized) return;
+  Sentry.setUser(null);
 }
 
 export function captureException(

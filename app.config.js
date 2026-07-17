@@ -99,6 +99,22 @@ const expoContactsPlugin = contactsAvailable
   ? [['expo-contacts', { contactsPermission: 'Allow $(PRODUCT_NAME) to access your contacts to fill name and phone when adding clients, suppliers, or drivers.' }]]
   : [];
 
+// Sentry Expo config plugin: enables native crash symbolication + source-map
+// upload so production stack traces are readable. Only included when installed
+// AND a Sentry org/project are configured, so local/dev builds are unaffected.
+let sentryPluginAvailable = false;
+try {
+  require.resolve('@sentry/react-native/app.plugin');
+  sentryPluginAvailable = true;
+} catch (_) {}
+const sentryPlugin =
+  sentryPluginAvailable && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
+    ? [['@sentry/react-native/expo', {
+        organization: process.env.SENTRY_ORG,
+        project: process.env.SENTRY_PROJECT,
+      }]]
+    : [];
+
 // react-native-maps 1.20.x does not ship an Expo config plugin; do not add it to plugins.
 // For Android release, set Google Maps API key in native project (e.g. android/app/src/main/AndroidManifest.xml) if needed.
 
@@ -139,6 +155,7 @@ module.exports = {
       ...pluginsFromConfig,
       ['expo-build-properties', { android: { usesCleartextTraffic: useCleartextTraffic }, ios: {} }],
       ...expoContactsPlugin,
+      ...sentryPlugin,
     ].filter(Boolean),
   },
 };
