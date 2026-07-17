@@ -67,6 +67,9 @@ module.exports = [
       'data-analytics/**',
       'apps/web/**',
       'packages/*/node_modules/**',
+      // Non-shipping scratch/reference material — already excluded from tsconfig,
+      // imported by nothing in app/features/lib/components.
+      '_reference/**',
     ],
   },
   {
@@ -86,6 +89,13 @@ module.exports = [
     rules: {
       // Basic recommended TypeScript rules
       ...tsPlugin.configs.recommended.rules,
+
+      // Metro resolves static asset requires (fonts, images, JSON, Lottie) — this
+      // is the idiomatic RN pattern, not a CommonJS smell. Allow require() only for
+      // those asset targets; genuine module requires still flag.
+      '@typescript-eslint/no-require-imports': ['error', {
+        allow: ['\\.(png|jpg|jpeg|gif|webp|svg|ttf|otf|woff2?|mp4|lottie|json)$'],
+      }],
 
       // Enforce feature-level file naming for services and utils
       'pulse/file-naming': 'error',
@@ -210,6 +220,19 @@ module.exports = [
           ],
         },
       ],
+    },
+  },
+  // Config, build, and Node script files legitimately use CommonJS require().
+  {
+    files: [
+      '*.js',
+      '*.cjs',
+      '**/*.config.js',
+      'metro.config.js',
+      'scripts/**/*.{js,ts}',
+    ],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
 ];
