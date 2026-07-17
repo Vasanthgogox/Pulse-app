@@ -186,7 +186,13 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
         getTripTollEntries(tripId!),
         getTripOtherExpenses(tripId!),
       ]);
-      if (tripRes.error || !tripRes.trip) throw tripRes.error ?? new Error("Trip not found");
+      // A genuine DB/transport error should surface (retry + report). A 0-row result is not an
+      // error here: the trip is known to exist at the call site (callers pass an existing trip),
+      // so an empty read means the row isn't visible yet under RLS (anon/expired session, cross-org
+      // replication lag). Return null so consumers fall back to their empty state instead of
+      // throwing a false "Trip not found" into Sentry.
+      if (tripRes.error) throw tripRes.error;
+      if (!tripRes.trip) return null;
       const fuelEntries = fuelRes.error ? [] : fuelRes.entries;
       const tollEntries = tollRes.error ? [] : tollRes.entries;
       const otherEntries = otherRes.error ? [] : otherRes.entries;

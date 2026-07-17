@@ -170,6 +170,8 @@ export function ChatSlackDesktopComposer({
             blurOnSubmit={false}
             textAlignVertical="top"
             maxLength={MAX_LENGTH + 50}
+            submitOnEnter
+            onSubmit={submitMessage}
           />
           {showEmojiPanel ? (
             <View style={styles.emojiPanel}>

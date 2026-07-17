@@ -586,6 +586,11 @@ interface ChatState {
   upsertConversation: (conv: TripConversation) => void;
   /** Realtime `trip_conversations` row — sync sidebar unread + preview from DB denorm. */
   patchTripConversationFromRealtime: (row: Record<string, unknown>) => void;
+  /**
+   * Pull newest message page when denorm preview/at is ahead of `event_stream`
+   * (missed INSERT / own-send race). Debounced + single-flight per conversation.
+   */
+  syncTripThreadIfStale: (convId: string, opts?: { force?: boolean }) => void;
   applySystemUpdate:  (tripId: string, patch: Partial<TripEntry>) => void;
   /** Optimistic feedback submission — patches message metadata locally. The caller
    *  also fires the RPC; this ensures the UI flips immediately. */
@@ -706,14 +711,47 @@ function binaryInsertEvent(stream: TripEvent[], incoming: TripEvent): TripEvent[
 export function upsertEventIntoStream(stream: TripEvent[], incoming: TripEvent): TripEvent[] {
   const idx = stream.findIndex((e) => e.id === incoming.id);
   if (idx === -1) {
-    // New event: binary insert maintains sort without full O(n log n) sort.
-    return binaryInsertEvent(stream, incoming);
+    // Drop matching optimistic bubble when the persisted row arrives (same send).
+    let inheritedClientKey: string | null = null;
+    const withoutOptimistic = incoming.id && !String(incoming.id).startsWith("optimistic-")
+      ? stream.filter((e) => {
+          if (!String(e.id).startsWith("optimistic-")) return true;
+          if (e.conversation_id !== incoming.conversation_id) return true;
+          if (
+            incoming.sender_user_id &&
+            e.sender_user_id &&
+            e.sender_user_id !== incoming.sender_user_id
+          ) {
+            return true;
+          }
+          const sameContent =
+            String(e.content ?? "") === String(incoming.content ?? "");
+          if (!sameContent) return true;
+          const eTs = Date.parse(String(e.created_at ?? ""));
+          const iTs = Date.parse(String(incoming.created_at ?? ""));
+          if (!Number.isFinite(eTs) || !Number.isFinite(iTs)) {
+            inheritedClientKey = e.client_key ?? e.id;
+            return false;
+          }
+          if (Math.abs(eTs - iTs) < 60_000) {
+            inheritedClientKey = e.client_key ?? e.id;
+            return false;
+          }
+          return true;
+        })
+      : stream;
+    const withKey: TripEvent =
+      inheritedClientKey && !incoming.client_key
+        ? { ...incoming, client_key: inheritedClientKey }
+        : incoming;
+    return binaryInsertEvent(withoutOptimistic, withKey);
   }
   const prev = stream[idx];
   const merged: TripEvent = {
     ...prev,
     ...incoming,
     partyType: incoming.partyType ?? prev.partyType,
+    client_key: incoming.client_key ?? prev.client_key ?? null,
     metadata: mergeTripMessageMetadata(prev.metadata, incoming.metadata),
   };
   const next = [...stream];
@@ -1061,6 +1099,85 @@ const CHAT_BOOTSTRAP_TRIP_PAGE = 25;
 const CHAT_BOOTSTRAP_TRIP_PAGE_MORE = 20;
 
 const tripHydrationInFlight = new Map<string, Promise<void>>();
+const tripThreadPullDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+const tripThreadPullInFlight = new Set<string>();
+const tripThreadPullNeedsRerun = new Set<string>();
+/** Suppress heal refetches after local send (avoids flicker + pool spam). */
+const tripLocalSendAt = new Map<string, number>();
+const TRIP_LOCAL_SEND_HEAL_SUPPRESS_MS = 15_000;
+/** Hard cap concurrent windowed history pulls across all conversations. */
+let tripThreadPullGlobalInFlight = 0;
+const TRIP_THREAD_PULL_GLOBAL_MAX = 2;
+
+export function noteLocalTripSend(conversationId: string): void {
+  const id = (conversationId ?? "").trim();
+  if (!id) return;
+  tripLocalSendAt.set(id, Date.now());
+}
+
+export function isTripLocalSendHealSuppressed(conversationId: string): boolean {
+  const at = tripLocalSendAt.get(conversationId);
+  if (at == null) return false;
+  if (Date.now() - at > TRIP_LOCAL_SEND_HEAL_SUPPRESS_MS) {
+    tripLocalSendAt.delete(conversationId);
+    return false;
+  }
+  return true;
+}
+
+/** Newest created_at in event_stream for this conversation lane (ms). */
+function latestStreamAtForConversation(
+  entry: TripEntry,
+  convId: string,
+  opts?: { includeOptimistic?: boolean },
+): number {
+  const includeOptimistic = opts?.includeOptimistic !== false;
+  let max = 0;
+  for (const e of entry.event_stream) {
+    if (String(e.conversation_id ?? "") !== convId) continue;
+    if (!includeOptimistic && String(e.id).startsWith("optimistic-")) continue;
+    const t = Date.parse(String(e.created_at ?? ""));
+    if (Number.isFinite(t) && t > max) max = t;
+  }
+  return max;
+}
+
+function streamHasDenormPreview(
+  entry: TripEntry,
+  convId: string,
+  denormPreview: string | null | undefined,
+): boolean {
+  const want = (denormPreview ?? "").trim();
+  if (!want) return false;
+  for (let i = entry.event_stream.length - 1; i >= 0; i -= 1) {
+    const e = entry.event_stream[i];
+    if (String(e.conversation_id ?? "") !== convId) continue;
+    const text = (previewText(e) ?? String(e.content ?? "")).trim();
+    if (text === want || text.startsWith(want) || want.startsWith(text)) return true;
+    // Only inspect the newest lane row for preview match.
+    return false;
+  }
+  return false;
+}
+
+function tripThreadLooksStale(
+  entry: TripEntry,
+  convId: string,
+  denormAt: string | null | undefined,
+  denormPreview?: string | null,
+): boolean {
+  if (!denormAt) return false;
+  const denormMs = Date.parse(denormAt);
+  if (!Number.isFinite(denormMs)) return false;
+  // Include optimistic — otherwise own-send triggers a heal refetch mid-flight
+  // (denorm UPDATE lands before replaceOptimistic) and the thread flickers.
+  const streamMs = latestStreamAtForConversation(entry, convId, {
+    includeOptimistic: true,
+  });
+  if (denormMs <= streamMs + 1_500) return false;
+  if (streamHasDenormPreview(entry, convId, denormPreview)) return false;
+  return true;
+}
 
 function allPartyHistoryWindowsLoaded(entry: TripEntry): boolean {
   const order: ConversationPartyType[] = ["client", "supplier", "driver"];
@@ -1650,7 +1767,10 @@ export const useChatStore = create<ChatState>()(
         String(row.conversation_id ?? "") ===
         String(getActiveTripMessageConversationId() ?? "");
 
-      const shouldPatchEventStream = mode === "active" || (isOpenThread && isMediaInbound);
+      // Open thread always merges into event_stream (text + media), even if the
+      // chat shell is briefly backgrounded — otherwise sidebar denorm updates
+      // while bubbles stay stale.
+      const shouldPatchEventStream = mode === "active" || isOpenThread;
 
       if (shouldPatchEventStream) {
         const prevIds = new Set(entry.event_stream.map((e) => e.id));
@@ -2097,11 +2217,24 @@ export const useChatStore = create<ChatState>()(
         rawStream.length > MAX_EVENT_STREAM_SIZE
           ? rawStream.slice(-MAX_EVENT_STREAM_SIZE)
           : rawStream;
+
+      let lastEventAt = entry.lastEventAt;
+      let lastEventPreview = entry.lastEventPreview;
+      for (let i = cappedStream.length - 1; i >= 0; i -= 1) {
+        const e = cappedStream[i];
+        if (String(e.conversation_id ?? "") !== convId) continue;
+        lastEventAt = e.created_at ?? lastEventAt;
+        lastEventPreview = previewText(e) ?? lastEventPreview;
+        break;
+      }
+
       const merged = clearEventStreamLazySkipIfFilled(
         withLongHaulFieldsFromStream({
           ...entry,
           parties,
           event_stream: cappedStream,
+          lastEventAt,
+          lastEventPreview,
         }),
       );
       set({
@@ -2138,6 +2271,10 @@ export const useChatStore = create<ChatState>()(
             row.delivery_status ??
             (String(row.id).startsWith("optimistic-") ? "sending" : resolveOutgoingDeliveryStatus(row)),
         };
+      }
+      // Stable list key for optimistic rows.
+      if (String(row.id).startsWith("optimistic-") && !row.client_key) {
+        row = { ...row, client_key: row.id };
       }
 
       const event: TripEvent = { ...row, partyType };
@@ -2190,14 +2327,36 @@ export const useChatStore = create<ChatState>()(
           : persisted;
 
       if (__DEV__) console.log(`[CHAT:SEND] replaceOptimistic conv=${convId} tempId=${tempId} realId=${persisted.id}`);
-      const streamWithoutOptimistic = entry.event_stream.filter((e) => e.id !== tempId);
-      const nextStream = upsertEventIntoStream(streamWithoutOptimistic, { ...persistedRow, partyType });
+
+      const idx = entry.event_stream.findIndex((e) => e.id === tempId);
+      let nextStream: TripEvent[];
+      if (idx >= 0) {
+        // In-place swap: keep index + client_key + local created_at so FlatList
+        // does not remount or reorder (no flicker).
+        const prev = entry.event_stream[idx]!;
+        const next = entry.event_stream.slice();
+        next[idx] = {
+          ...persistedRow,
+          partyType,
+          client_key: prev.client_key ?? tempId,
+          created_at: prev.created_at,
+        };
+        nextStream = next;
+      } else {
+        nextStream = upsertEventIntoStream(entry.event_stream, {
+          ...persistedRow,
+          partyType,
+          client_key: tempId,
+        });
+      }
       set({
         trips: {
           ...trips,
           [tripId]: withLongHaulFieldsFromStream({
             ...entry,
             event_stream: nextStream,
+            lastEventAt:      persistedRow.created_at ?? entry.lastEventAt,
+            lastEventPreview: previewText(persistedRow) ?? entry.lastEventPreview,
           }),
         },
       });
@@ -2290,6 +2449,86 @@ export const useChatStore = create<ChatState>()(
         convToTrip: { ...convToTrip, [convId]: tripId },
         convToParty: { ...convToParty, [convId]: partyType },
       });
+
+      // Sidebar denorm can land without a trip_messages INSERT. Heal only
+      // non-open threads — the open lane gets INSERT realtime (no history RPC).
+      const activeCid = getActiveTripMessageConversationId();
+      if (activeCid && activeCid === convId) return;
+      if (isTripLocalSendHealSuppressed(convId)) return;
+      if (
+        tripThreadLooksStale(
+          next,
+          convId,
+          lmAt ?? next.lastEventAt,
+          lmPrev ?? next.lastEventPreview,
+        )
+      ) {
+        get().syncTripThreadIfStale(convId);
+      }
+    },
+
+    syncTripThreadIfStale: (convId, opts) => {
+      const id = (convId ?? "").trim();
+      if (!id) return;
+      const force = opts?.force === true;
+      // Own send / open-thread INSERT path — never heal-refetch.
+      if (isTripLocalSendHealSuppressed(id)) return;
+      const activeCid = getActiveTripMessageConversationId();
+      if (!force && activeCid && activeCid === id) return;
+      const { trips, convToTrip } = get();
+      const tripId = convToTrip[id];
+      const entry = tripId ? trips[tripId] : null;
+      if (!entry) return;
+      if (!force && !tripThreadLooksStale(entry, id, entry.lastEventAt, entry.lastEventPreview)) {
+        return;
+      }
+
+      const existingTimer = tripThreadPullDebounce.get(id);
+      if (existingTimer) clearTimeout(existingTimer);
+      tripThreadPullDebounce.set(
+        id,
+        setTimeout(() => {
+          tripThreadPullDebounce.delete(id);
+          if (isTripLocalSendHealSuppressed(id)) return;
+          const liveActive = getActiveTripMessageConversationId();
+          if (liveActive && liveActive === id) return;
+          if (tripThreadPullInFlight.has(id)) {
+            tripThreadPullNeedsRerun.add(id);
+            return;
+          }
+          if (tripThreadPullGlobalInFlight >= TRIP_THREAD_PULL_GLOBAL_MAX) {
+            tripThreadPullNeedsRerun.add(id);
+            return;
+          }
+          tripThreadPullInFlight.add(id);
+          tripThreadPullGlobalInFlight += 1;
+          const partyType = get().convToParty[id];
+          void fetchConversationHistory(id, {
+            partyType: partyType ?? null,
+          })
+            .then((rows) => {
+              if (rows.length > 0) {
+                get().mergeConversationHistory(id, rows);
+              }
+            })
+            .catch(() => {
+              // non-critical — denorm preview already updated
+            })
+            .finally(() => {
+              tripThreadPullInFlight.delete(id);
+              tripThreadPullGlobalInFlight = Math.max(0, tripThreadPullGlobalInFlight - 1);
+              if (tripThreadPullNeedsRerun.has(id)) {
+                tripThreadPullNeedsRerun.delete(id);
+                if (
+                  !isTripLocalSendHealSuppressed(id) &&
+                  getActiveTripMessageConversationId() !== id
+                ) {
+                  get().syncTripThreadIfStale(id);
+                }
+              }
+            });
+        }, 280),
+      );
     },
 
     // ── upsertConversation ────────────────────────────────────────────────────

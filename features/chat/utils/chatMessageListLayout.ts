@@ -4,6 +4,10 @@ import { isMessageVisibleInTab } from "../types/chat.types";
 /**
  * Stable row height estimates for FlatList.getItemLayout (avoids layout thrash
  * when images resolve). Values are conservative upper bounds vs. actual UI.
+ *
+ * IMPORTANT: only call with the same array the FlatList `data` prop uses.
+ * Building layout from `displayMessages` while rendering date/unread dividers
+ * mis-indexes rows and hides the newest bubbles on desktop web.
  */
 export function estimateTripMessageRowHeight(
   m: TripMessageRow,
@@ -40,6 +44,18 @@ export function estimateTripMessageRowHeight(
   }
 }
 
+export function estimateThreadListItemHeight(
+  item:
+    | TripMessageRow
+    | { __dateDivider: true; dateStr: string; id: string }
+    | { __unreadDivider: true; id: string },
+  partyType: ConversationPartyType,
+): number {
+  if ("__dateDivider" in item) return 44;
+  if ("__unreadDivider" in item) return 36;
+  return estimateTripMessageRowHeight(item, partyType);
+}
+
 export function buildTripMessageListLayoutMeta(
   messages: TripMessageRow[],
   partyType: ConversationPartyType,
@@ -48,7 +64,22 @@ export function buildTripMessageListLayoutMeta(
   offsets: number[];
   getItemLayout: (index: number) => { length: number; offset: number; index: number };
 } {
-  const lengths = messages.map((m) => estimateTripMessageRowHeight(m, partyType));
+  return buildThreadListLayoutMeta(messages, partyType);
+}
+
+export function buildThreadListLayoutMeta(
+  items: ReadonlyArray<
+    | TripMessageRow
+    | { __dateDivider: true; dateStr: string; id: string }
+    | { __unreadDivider: true; id: string }
+  >,
+  partyType: ConversationPartyType,
+): {
+  lengths: number[];
+  offsets: number[];
+  getItemLayout: (index: number) => { length: number; offset: number; index: number };
+} {
+  const lengths = items.map((item) => estimateThreadListItemHeight(item, partyType));
   const offsets: number[] = [];
   let acc = 0;
   for (let i = 0; i < lengths.length; i++) {
@@ -60,7 +91,11 @@ export function buildTripMessageListLayoutMeta(
     offsets,
     getItemLayout: (index: number) => ({
       length: lengths[index] ?? 80,
-      offset: offsets[index] ?? 0,
+      offset:
+        offsets[index] ??
+        (offsets.length
+          ? offsets[offsets.length - 1]! + (lengths[lengths.length - 1] ?? 80)
+          : 0),
       index,
     }),
   };

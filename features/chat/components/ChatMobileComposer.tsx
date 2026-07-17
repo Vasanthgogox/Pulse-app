@@ -283,6 +283,8 @@ export function ChatMobileComposer({
               autoCorrect
               autoCapitalize="sentences"
               maxLength={maxLength + 50}
+              submitOnEnter
+              onSubmit={submit}
             />
 
             <TouchableOpacity
@@ -420,6 +422,33 @@ export function ChatMobileComposer({
             autoCorrect
             autoCapitalize="sentences"
             maxLength={maxLength}
+            onKeyPress={(e) => {
+              if (Platform.OS !== "web") return;
+              const key = e.nativeEvent.key;
+              const shiftKey = Boolean(
+                (e.nativeEvent as { shiftKey?: boolean }).shiftKey,
+              );
+              if (key === "Enter" && !shiftKey) {
+                (e as unknown as { preventDefault?: () => void }).preventDefault?.();
+                submit();
+              }
+            }}
+            {...(Platform.OS === "web"
+              ? ({
+                  onKeyDown: (e: {
+                    key: string;
+                    shiftKey: boolean;
+                    isComposing?: boolean;
+                    preventDefault: () => void;
+                  }) => {
+                    if (e.isComposing) return;
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      submit();
+                    }
+                  },
+                } as object)
+              : null)}
           />
           {onOpenAttach ? (
             <TouchableOpacity

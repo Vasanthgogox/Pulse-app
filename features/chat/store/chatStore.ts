@@ -87,16 +87,25 @@ function _convFromEntry(
     convId,
   );
 
-  // Derive last_message_preview from the actual history array so the sidebar
-  // shows meaningful text immediately after bootstrap (before any Realtime
-  // arrives).  Falls back to the store field, which itself falls back to the
-  // DB column set in entryFromConv.
-  const lastMsg = messages[messages.length - 1] ?? entry.event_stream[entry.event_stream.length - 1];
-  const lastPreview =
-    (lastMsg ? previewText(lastMsg) : null) ?? entry.lastEventPreview;
+  // Prefer lane history for preview; when denorm is ahead (missed INSERT), use
+  // trip_conversations last_* so sidebar matches DB until the heal pull lands.
+  const lastLaneMsg = messages[messages.length - 1] ?? null;
+  const laneAtMs = lastLaneMsg?.created_at
+    ? Date.parse(lastLaneMsg.created_at)
+    : 0;
+  const denormAtMs = entry.lastEventAt ? Date.parse(entry.lastEventAt) : 0;
+  const denormAhead =
+    Number.isFinite(denormAtMs) &&
+    denormAtMs > (Number.isFinite(laneAtMs) ? laneAtMs : 0) + 1_500;
 
-  const lastAt =
-    lastMsg?.created_at ?? entry.lastEventAt;
+  const lastPreview = denormAhead
+    ? (entry.lastEventPreview ??
+      (lastLaneMsg ? previewText(lastLaneMsg) : null))
+    : (lastLaneMsg ? previewText(lastLaneMsg) : null) ?? entry.lastEventPreview;
+
+  const lastAt = denormAhead
+    ? (entry.lastEventAt ?? lastLaneMsg?.created_at ?? null)
+    : (lastLaneMsg?.created_at ?? entry.lastEventAt);
 
   return {
     id:                      party.conversationId,

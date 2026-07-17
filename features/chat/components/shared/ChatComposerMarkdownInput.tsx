@@ -8,7 +8,7 @@ import {
   renderChatComposerPendingPreview,
   renderChatComposerPreview,
 } from "@/features/chat/utils/chatInlineMarkdown.util";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   Platform,
   StyleSheet,
@@ -36,6 +36,9 @@ type ChatComposerMarkdownInputProps = {
   onChangeText: (text: string) => void;
   style?: StyleProp<TextStyle>;
   pendingFormat?: ChatPendingFormat;
+  /** Web: Enter sends; Shift+Enter inserts a newline. */
+  submitOnEnter?: boolean;
+  onSubmit?: () => void;
 } & Omit<TextInputProps, "value" | "onChangeText" | "style">;
 
 export const ChatComposerMarkdownInput = React.forwardRef<
@@ -48,6 +51,9 @@ export const ChatComposerMarkdownInput = React.forwardRef<
     style,
     pendingFormat = {},
     placeholderTextColor,
+    submitOnEnter = false,
+    onSubmit,
+    onKeyPress,
     ...rest
   },
   ref,
@@ -69,6 +75,45 @@ export const ChatComposerMarkdownInput = React.forwardRef<
     return renderChatComposerPreview(previewSource);
   }, [showPreview, hasLiteralMarkers, pendingFormat, value, previewSource]);
 
+  const handleKeyPress = useCallback(
+    (e: Parameters<NonNullable<TextInputProps["onKeyPress"]>>[0]) => {
+      onKeyPress?.(e);
+      if (!submitOnEnter || !onSubmit) return;
+      if (Platform.OS !== "web") return;
+      const key = e.nativeEvent.key;
+      const shiftKey = Boolean(
+        (e.nativeEvent as { shiftKey?: boolean }).shiftKey,
+      );
+      if (key === "Enter" && !shiftKey) {
+        // Prevent newline; send instead.
+        (
+          e as unknown as { preventDefault?: () => void }
+        ).preventDefault?.();
+        onSubmit();
+      }
+    },
+    [onKeyPress, onSubmit, submitOnEnter],
+  );
+
+  // RN-web: onKeyPress sometimes misses preventDefault for Enter; also handle onKeyDown.
+  const webEnterProps =
+    submitOnEnter && onSubmit && Platform.OS === "web"
+      ? ({
+          onKeyDown: (e: {
+            key: string;
+            shiftKey: boolean;
+            isComposing?: boolean;
+            preventDefault: () => void;
+          }) => {
+            if (e.isComposing) return;
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onSubmit();
+            }
+          },
+        } as Record<string, unknown>)
+      : null;
+
   return (
     <View style={styles.wrap}>
       {previewNodes ? (
@@ -84,8 +129,10 @@ export const ChatComposerMarkdownInput = React.forwardRef<
       <TextInput
         ref={ref}
         {...rest}
+        {...(webEnterProps as object)}
         value={value}
         onChangeText={onChangeText}
+        onKeyPress={handleKeyPress}
         style={[flatStyle, showPreview && styles.inputLayer, showPreview && TRANSPARENT_INPUT]}
         placeholderTextColor={placeholderTextColor}
         // caretColor is a web-only CSS prop RN Web forwards via TextInput; not in RN types.

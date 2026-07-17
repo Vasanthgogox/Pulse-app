@@ -155,7 +155,7 @@ import {
 import { setActiveTripMessageConversationId } from "@/features/chat/realtime/activeTripMessageScope";
 import { useAssignmentAuditNameMaps } from "@/features/chat/hooks/useAssignmentAuditNameMaps";
 import { mergeAssignmentAuditIntoTripMessages } from "@/features/chat/utils/assignmentAuditChatMessages.util";
-import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
+import { buildThreadListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
 import { applyContractualHubPartyIsolation } from "@/features/chat/utils/contractHubPartyIsolation.util";
 import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
 import {
@@ -1368,11 +1368,21 @@ export function ChatScreen() {
   const initiateNetworkConversation =
     integratedChatCtx?.initiateNetworkConversation ??
     (async () => null);
+  const setActiveNetworkConversationId =
+    integratedChatCtx?.setActiveNetworkConversationId;
 
   const netUnread = netTotal();
 
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [selectedNetId, setSelectedNetId] = useState<string | null>(null);
+
+  // Keep open Network DM subscribed for live INSERT (receiver WhatsApp-style).
+  useEffect(() => {
+    if (!setActiveNetworkConversationId) return;
+    const openId = activeTab === "network" ? selectedNetId : null;
+    setActiveNetworkConversationId(openId);
+    return () => setActiveNetworkConversationId(null);
+  }, [activeTab, selectedNetId, setActiveNetworkConversationId]);
 
   // useConversation subscribes directly to this one conversation in the singleton
   // store — re-renders only when THIS conversation changes (not the full list).
@@ -2171,6 +2181,7 @@ export function ChatScreen() {
       await useChatStore.getState().hydrateTripMessagesIfNeeded(conv.trip_id, {
         conversationId: conv.id,
       });
+      // DetailPanel always pulls newest page once on open — avoid a second force RPC.
       chatStore.switchParty(conv.trip_id, conv.party_type);
       setSelectedConvId(conv.id);
       setFocusedTripPartyKey(tripPartyPeopleKey(conv));
@@ -2252,10 +2263,18 @@ export function ChatScreen() {
             ? { senderName: pendingReply.senderName, content: pendingReply.content, messageType: pendingReply.messageType ?? null }
             : null,
         );
-        setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
+        // Scroll is handled once by the thread tail effect (no post-send scrollToEnd —
+        // that raced replaceOptimistic / contentSize and flickered from the bottom).
       } else if (activeTab === "network" && selectedNetId) {
         sendNet(selectedNetId, text, "dispatcher");
-        setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
+        // One pin after optimistic insert; avoid multi-timeout scroll storms.
+        requestAnimationFrame(() => {
+          try {
+            messagesRef.current?.scrollToEnd({ animated: false });
+          } catch {
+            // ignore
+          }
+        });
       }
     } finally {
       isSendingRef.current = false;
@@ -7704,8 +7723,10 @@ function TripConversationDetailLoaded({
     const generation = historyFetchGenerationRef.current;
     const convId = liveConvRef.current.id;
     const partyType = liveConvRef.current.party_type ?? null;
+    const alreadyHasMessages = (liveConvRef.current.messages?.length ?? 0) > 0;
     setHistoryError(null);
-    setHistoryLoading(true);
+    // Don't flash the empty-state spinner when the lane already has bubbles.
+    if (!alreadyHasMessages) setHistoryLoading(true);
     try {
       const rows = await getMessagesByConversation(convId, {
         limit: TRIP_CHAT_HISTORY_PAGE,
@@ -7775,15 +7796,60 @@ function TripConversationDetailLoaded({
     }
   }, [hasMoreOlder, mergeHistoryPage]);
 
+  const latestHistoryFetchedForRef = useRef<string | null>(null);
+  /** After open/history fetch, keep pinning to end until layout settles. */
+  const needsOpenPinRef = useRef(true);
+  const prevThreadTailIdRef = useRef<string | null>(null);
+  /** After local send, briefly ignore duplicate tail scrolls (not open-pin). */
+  const stickSuppressUntilRef = useRef(0);
+  /**
+   * RN-web fires onStartReached on mount/send/layout. Only allow older-history
+   * RPC after the user scrolls up from the bottom toward the top.
+   */
+  const allowLoadOlderRef = useRef(false);
+  const sawBottomRef = useRef(false);
+  const runLatestHistoryPageRef = useRef(runLatestHistoryPage);
+  runLatestHistoryPageRef.current = runLatestHistoryPage;
+  const pinThreadToEndRef = useRef<(animated?: boolean) => void>(() => {});
+
   const onStartReachedLoadOlder = useCallback(() => {
+    if (needsOpenPinRef.current) return;
+    if (Date.now() < stickSuppressUntilRef.current) return;
+    if (!allowLoadOlderRef.current) return;
     if (olderStartDebounceRef.current) return;
     const convIdWhenScheduled = liveConvRef.current.id;
     olderStartDebounceRef.current = setTimeout(() => {
       olderStartDebounceRef.current = null;
       if (liveConvRef.current.id !== convIdWhenScheduled) return;
+      if (!allowLoadOlderRef.current) return;
       void loadOlderHistoryPage();
     }, 400);
   }, [loadOlderHistoryPage]);
+
+  const onThreadScroll = useCallback(
+    (e: {
+      nativeEvent: {
+        contentOffset: { y: number };
+        contentSize: { height: number };
+        layoutMeasurement: { height: number };
+      };
+    }) => {
+      if (needsOpenPinRef.current) return;
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      const y = contentOffset.y;
+      const distanceFromBottom =
+        contentSize.height - layoutMeasurement.height - y;
+      if (distanceFromBottom < 180) {
+        sawBottomRef.current = true;
+        return;
+      }
+      // User moved up from the bottom toward older messages.
+      if (sawBottomRef.current && y <= 160) {
+        allowLoadOlderRef.current = true;
+      }
+    },
+    [],
+  );
 
   useEffect(
     () => () => {
@@ -7800,6 +7866,12 @@ function TripConversationDetailLoaded({
   useEffect(() => {
     historyFetchGenerationRef.current += 1;
     latestHistoryInFlightRef.current = false;
+    latestHistoryFetchedForRef.current = null;
+    needsOpenPinRef.current = true;
+    prevThreadTailIdRef.current = null;
+    stickSuppressUntilRef.current = 0;
+    allowLoadOlderRef.current = false;
+    sawBottomRef.current = false;
     setHistoryLoading(false);
     setHistoryError(null);
     setHasMoreOlder((liveConv.messages?.length ?? 0) >= TRIP_CHAT_HISTORY_PAGE);
@@ -7810,11 +7882,56 @@ function TripConversationDetailLoaded({
     }
   }, [liveConv.id]);
 
-  // Single automatic newest-page fetch when the lane is still empty (same in-flight guard as manual).
+  const pinThreadToEnd = useCallback((animated = false) => {
+    const list = messagesRef.current;
+    if (!list) return;
+    try {
+      list.scrollToEnd({ animated });
+      // RN-web often ignores the first scrollToEnd before layout finishes.
+      list.scrollToOffset?.({ offset: 1_000_000, animated });
+    } catch {
+      // ignore
+    }
+  }, []);
+  pinThreadToEndRef.current = pinThreadToEnd;
+
+  // Always pull the newest page once per open conversation id.
+  // Deps: only liveConv.id — do NOT re-run when send updates messages.
   useEffect(() => {
-    if (liveConv.messages.length > 0) return;
-    void runLatestHistoryPage();
-  }, [liveConv.id, liveConv.messages.length, runLatestHistoryPage]);
+    if (latestHistoryFetchedForRef.current === liveConv.id) return;
+    latestHistoryFetchedForRef.current = liveConv.id;
+    const openedId = liveConv.id;
+    void (async () => {
+      await runLatestHistoryPageRef.current();
+      if (liveConvRef.current.id !== openedId) return;
+      const conv = chatStore.getConversation(openedId);
+      if (!conv) {
+        needsOpenPinRef.current = true;
+        requestAnimationFrame(() => pinThreadToEndRef.current(false));
+        return;
+      }
+      const denormMs = conv.last_message_at
+        ? Date.parse(conv.last_message_at)
+        : 0;
+      const last = conv.messages[conv.messages.length - 1];
+      const laneMs = last?.created_at ? Date.parse(last.created_at) : 0;
+      if (Number.isFinite(denormMs) && denormMs > laneMs + 1_500) {
+        latestHistoryInFlightRef.current = false;
+        await runLatestHistoryPageRef.current();
+      }
+      if (liveConvRef.current.id !== openedId) return;
+      needsOpenPinRef.current = true;
+      requestAnimationFrame(() => {
+        pinThreadToEndRef.current(false);
+        setTimeout(() => pinThreadToEndRef.current(false), 64);
+        setTimeout(() => {
+          pinThreadToEndRef.current(false);
+          needsOpenPinRef.current = false;
+          sawBottomRef.current = true;
+        }, 180);
+      });
+    })();
+  }, [liveConv.id]);
 
   // ── useMarkSeen: viewport-based per-message seen tracking ─────────────────
   const { onViewableItemsChanged, viewabilityConfig } = useMarkSeen({
@@ -7966,7 +8083,12 @@ function TripConversationDetailLoaded({
 
   const threadStreamFingerprint = useMemo(() => {
     const last = displayMessages[displayMessages.length - 1];
-    return `${liveConv.id}:${displayMessages.length}:${last?.id ?? ""}`;
+    // Prefer client_key so optimistic→persisted id swap does not thrash FlatList.
+    const stable =
+      (last as { client_key?: string | null } | undefined)?.client_key ??
+      last?.id ??
+      "";
+    return `${liveConv.id}:${displayMessages.length}:${stable}:${last?.delivery_status ?? ""}`;
   }, [liveConv.id, displayMessages]);
 
   // ── Slack-style: emoji reactions ─────────────────────────────────────
@@ -8065,34 +8187,51 @@ function TripConversationDetailLoaded({
     return items;
   }, [displayMessages, isMessageFromSelf, mediaBurstIndex.skipIds]);
 
-  const scrollToEndCooldownRef = useRef(0);
-  const prevThreadTailIdRef = useRef<string | null>(null);
+  // During open pin, follow content-size growth so newest rows aren't left below the fold.
   const onMessagesContentSizeChange = useCallback(() => {
-    if (displayMessages.length === 0) return;
-    const t = Date.now();
-    if (t - scrollToEndCooldownRef.current < 150) return;
-    scrollToEndCooldownRef.current = t;
-    messagesRef.current?.scrollToEnd({ animated: false });
-  }, [displayMessages.length]);
+    if (!needsOpenPinRef.current) return;
+    pinThreadToEnd(false);
+  }, [pinThreadToEnd]);
 
-  const threadTailMessageId =
-    displayMessages[displayMessages.length - 1]?.id ?? null;
+  // Stable across optimistic→persisted so id swap does not re-trigger scroll.
+  const threadTailStableKey = (() => {
+    const last = displayMessages[displayMessages.length - 1];
+    if (!last) return null;
+    return (
+      (last as { client_key?: string | null }).client_key ?? last.id ?? null
+    );
+  })();
 
   useEffect(() => {
     const prevTail = prevThreadTailIdRef.current;
-    prevThreadTailIdRef.current = threadTailMessageId;
-    if (!threadTailMessageId || threadTailMessageId === prevTail || prevTail == null) {
+    prevThreadTailIdRef.current = threadTailStableKey;
+    if (!threadTailStableKey || threadTailStableKey === prevTail) {
       return;
     }
+    // Open / history catch-up: always pin (do not let send-suppress block this).
+    if (needsOpenPinRef.current || prevTail == null) {
+      requestAnimationFrame(() => pinThreadToEnd(false));
+      return;
+    }
+    if (Date.now() < stickSuppressUntilRef.current) return;
+
+    const isOptimistic = String(threadTailStableKey).startsWith("optimistic-");
+    if (isOptimistic) {
+      stickSuppressUntilRef.current = Date.now() + 2_000;
+      allowLoadOlderRef.current = false;
+      // Already at bottom while composing — skip scroll to avoid bottom flicker.
+      return;
+    }
+    // Inbound (driver / other user): gentle pin once.
     const frame = requestAnimationFrame(() => {
-      messagesRef.current?.scrollToEnd({ animated: true });
+      pinThreadToEnd(true);
     });
     return () => cancelAnimationFrame(frame);
-  }, [threadTailMessageId]);
+  }, [threadTailStableKey, pinThreadToEnd]);
 
   const messageListLayout = useMemo(
-    () => buildTripMessageListLayoutMeta(displayMessages, liveConv.party_type),
-    [displayMessages, liveConv.party_type],
+    () => buildThreadListLayoutMeta(threadListItems, liveConv.party_type),
+    [threadListItems, liveConv.party_type],
   );
 
   const getMessageItemLayout = useCallback(
@@ -8729,7 +8868,7 @@ function TripConversationDetailLoaded({
         senderName={own ? undefined : peerLabel}
         peerAvatar={peerAvatar}
         deliveryStatus={own ? resolveOutgoingDeliveryStatus(m) : undefined}
-        isNew={Date.parse(m.created_at) > mountedAtMs}
+        isNew={!own && Date.parse(m.created_at) > mountedAtMs}
         isMobile={!isDesktop}
         slackLayout={isDesktop || isChatMobileLayout(isDesktop)}
         slackVariant={isDesktop ? "desktop" : "mobile"}
@@ -9133,30 +9272,39 @@ function TripConversationDetailLoaded({
                 : [s.msgsContent, slackSt.threadMsgsContent]
             }
             data={threadListItems}
-            keyExtractor={(item) =>
-              "id" in item ? (item as { id: string }).id : Math.random().toString()
-            }
+            keyExtractor={(item) => {
+              if ("__dateDivider" in item || "__unreadDivider" in item) {
+                return String(item.id);
+              }
+              const m = item as TripMessageRow & { client_key?: string | null };
+              return String(m.client_key ?? m.id);
+            }}
             renderItem={renderMessage}
             extraData={threadStreamFingerprint}
+            // Desktop web: getItemLayout was previously keyed off displayMessages
+            // while data included date dividers — wrong offsets hid newest bubbles.
+            // Keep estimates only when lengths match data 1:1 (now threadListItems).
             getItemLayout={
-              isDesktop
+              Platform.OS !== "web"
                 ? (getMessageItemLayout as NonNullable<
                     React.ComponentProps<typeof FlatList<ThreadListItem>>["getItemLayout"]
                   >)
                 : undefined
             }
-            removeClippedSubviews
-            windowSize={!isDesktop ? 7 : 9}
-            maxToRenderPerBatch={!isDesktop ? 10 : 12}
-            initialNumToRender={!isDesktop ? 16 : undefined}
+            removeClippedSubviews={Platform.OS !== "web"}
+            windowSize={!isDesktop ? 7 : 21}
+            maxToRenderPerBatch={!isDesktop ? 10 : 24}
+            initialNumToRender={!isDesktop ? 16 : 40}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
             onViewableItemsChanged={stableOnViewableItemsChanged}
             viewabilityConfig={viewabilityConfig}
             onContentSizeChange={onMessagesContentSizeChange}
+            onScroll={onThreadScroll}
+            scrollEventThrottle={100}
             onStartReached={displayMessages.length > 0 ? onStartReachedLoadOlder : undefined}
-            onStartReachedThreshold={0.12}
+            onStartReachedThreshold={0.05}
             ListHeaderComponent={
               <>
                 <ChatSystemMsg
@@ -9363,6 +9511,7 @@ function NetworkDetailPanel({
 
   const integratedChat = useOptionalIntegratedChat();
   const [loadingOlderNet, setLoadingOlderNet] = useState(false);
+  const netOlderStartDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!selectedNet?.id || !integratedChat?.hydrateNetworkThread) return;
@@ -9373,14 +9522,87 @@ function NetworkDetailPanel({
     if (!selectedNet?.id || !integratedChat?.loadOlderNetworkMessages) return;
     if (!integratedChat.networkThreadHasMore(selectedNet.id)) return;
     if (loadingOlderNet) return;
-    setLoadingOlderNet(true);
-    void integratedChat
-      .loadOlderNetworkMessages(selectedNet.id)
-      .finally(() => setLoadingOlderNet(false));
+    // RN-web fires onStartReached during send/layout; debounce like trip threads.
+    if (netOlderStartDebounceRef.current) return;
+    netOlderStartDebounceRef.current = setTimeout(() => {
+      netOlderStartDebounceRef.current = null;
+      if (!selectedNet?.id || !integratedChat?.loadOlderNetworkMessages) return;
+      if (!integratedChat.networkThreadHasMore(selectedNet.id)) return;
+      setLoadingOlderNet(true);
+      void integratedChat
+        .loadOlderNetworkMessages(selectedNet.id)
+        .finally(() => setLoadingOlderNet(false));
+    }, 400);
   }, [selectedNet?.id, integratedChat, loadingOlderNet]);
 
   useEffect(() => {
+    return () => {
+      if (netOlderStartDebounceRef.current) {
+        clearTimeout(netOlderStartDebounceRef.current);
+        netOlderStartDebounceRef.current = null;
+      }
+    };
+  }, []);
+
+  const netTailMessageId =
+    selectedNet?.messages[selectedNet.messages.length - 1]?.id ?? null;
+  const prevNetTailIdRef = useRef<string | null>(null);
+  const netContentHeightRef = useRef(0);
+  const stickNetToBottomRef = useRef(true);
+
+  const scrollNetToBottom = useCallback(
+    (animated = false) => {
+      stickNetToBottomRef.current = true;
+      const list = messagesRef.current;
+      if (!list) return;
+      const run = () => {
+        try {
+          list.scrollToEnd({ animated });
+        } catch {
+          // ignore
+        }
+        // RN-web FlatList often ignores scrollToEnd; force with content height / large offset.
+        try {
+          const offset = Math.max(netContentHeightRef.current, 1_000_000);
+          list.scrollToOffset({ offset, animated });
+        } catch {
+          // ignore
+        }
+      };
+      run();
+      requestAnimationFrame(run);
+      setTimeout(run, 48);
+      setTimeout(run, 140);
+    },
+    [messagesRef],
+  );
+
+  // New message at the tail (optimistic or persisted) → keep composer pinned above last bubble.
+  useEffect(() => {
+    const prevTail = prevNetTailIdRef.current;
+    prevNetTailIdRef.current = netTailMessageId;
+    if (!netTailMessageId) return;
+    if (prevTail === netTailMessageId) return;
+    scrollNetToBottom(prevTail != null);
+  }, [netTailMessageId, scrollNetToBottom]);
+
+  const onNetContentSizeChange = useCallback(
+    (_w: number, h: number) => {
+      netContentHeightRef.current = h;
+      if (!stickNetToBottomRef.current) return;
+      try {
+        messagesRef.current?.scrollToOffset({ offset: h, animated: false });
+      } catch {
+        messagesRef.current?.scrollToEnd({ animated: false });
+      }
+    },
+    [messagesRef],
+  );
+
+  useEffect(() => {
     setNetReactionsByMessageId({});
+    prevNetTailIdRef.current = null;
+    stickNetToBottomRef.current = true;
   }, [selectedNet?.id]);
 
   const toggleNetReaction = useCallback(
@@ -9426,20 +9648,30 @@ function NetworkDetailPanel({
           style={s.msgs}
           contentContainerStyle={
             isDesktop
-              ? deskSt.threadMsgsContent
+              ? [deskSt.threadMsgsContent, { paddingBottom: 28 }]
               : [s.msgsContent, slackSt.threadMsgsContent]
           }
           data={netThreadListItems}
+          extraData={`${selectedNet.messages.length}:${selectedNet.messages[selectedNet.messages.length - 1]?.id ?? ""}`}
           keyExtractor={(m) => ("__dateDivider" in m ? m.id : m.id)}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
-          removeClippedSubviews={!isDesktop}
+          removeClippedSubviews={false}
           windowSize={!isDesktop ? 7 : undefined}
           maxToRenderPerBatch={!isDesktop ? 10 : undefined}
           initialNumToRender={!isDesktop ? 16 : undefined}
           showsVerticalScrollIndicator={!isDesktop ? false : undefined}
-          onStartReached={onNetStartReached}
+          onStartReached={
+            selectedNet.messages.length > 0 ? onNetStartReached : undefined
+          }
           onStartReachedThreshold={0.15}
+          onScroll={(e) => {
+            const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+            const distanceFromBottom =
+              contentSize.height - layoutMeasurement.height - contentOffset.y;
+            stickNetToBottomRef.current = distanceFromBottom < 80;
+          }}
+          scrollEventThrottle={16}
           renderItem={({ item }) => {
             if ("__dateDivider" in item && item.__dateDivider) {
               return (
@@ -9494,7 +9726,7 @@ function NetworkDetailPanel({
               />
             </>
           }
-          onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={onNetContentSizeChange}
         />
       }
       inputBar={

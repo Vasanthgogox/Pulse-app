@@ -72,6 +72,8 @@ interface IntegratedChatContextType {
   /** Keyset page of older messages — prepends when more history exists. */
   loadOlderNetworkMessages: (chatId: string) => Promise<boolean>;
   networkThreadHasMore: (chatId: string) => boolean;
+  /** Open DM thread id — enables conversation-scoped network_messages realtime. */
+  setActiveNetworkConversationId: (chatId: string | null) => void;
 }
 
 const IntegratedChatContext = createContext<IntegratedChatContextType | undefined>(undefined);
@@ -157,6 +159,67 @@ function toIntegratedChat(
   };
 }
 
+/** Keep in-flight optimistic bubbles when a server page would otherwise wipe them. */
+function mergeNetworkMessagesPreservingOptimistic(
+  local: NetworkMessageRow[],
+  incoming: NetworkMessageRow[],
+): NetworkMessageRow[] {
+  const optimistic = local.filter((m) => String(m.id).startsWith("optimistic-"));
+  if (optimistic.length === 0) {
+    return [...incoming].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+  }
+  const kept = optimistic.filter((o) => {
+    const oTs = new Date(o.created_at).getTime();
+    return !incoming.some(
+      (p) =>
+        p.sender_org_id === o.sender_org_id &&
+        p.content === o.content &&
+        Math.abs(new Date(p.created_at).getTime() - oTs) < 60_000,
+    );
+  });
+  return [...incoming, ...kept].sort(
+    (a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+}
+
+/** Upsert one live message into a conversation (receiver path + own echo). */
+function upsertNetworkMessageInConversation(
+  conv: NetworkConversation,
+  row: NetworkMessageRow,
+): NetworkConversation {
+  const withoutOptimisticMatch = conv.messages.filter((m) => {
+    if (!String(m.id).startsWith("optimistic-")) return true;
+    const mTs = new Date(m.created_at).getTime();
+    const rTs = new Date(row.created_at).getTime();
+    return !(
+      m.sender_org_id === row.sender_org_id &&
+      m.content === row.content &&
+      Math.abs(mTs - rTs) < 60_000
+    );
+  });
+  const idx = withoutOptimisticMatch.findIndex((m) => m.id === row.id);
+  let messages: NetworkMessageRow[];
+  if (idx >= 0) {
+    messages = withoutOptimisticMatch.slice();
+    messages[idx] = { ...messages[idx], ...row };
+  } else {
+    messages = [...withoutOptimisticMatch, row].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+  }
+  return {
+    ...conv,
+    messages,
+    last_message_at: row.created_at,
+    last_message_preview: row.content.slice(0, 120),
+  };
+}
+
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function IntegratedChatProvider({
@@ -184,9 +247,78 @@ export function IntegratedChatProvider({
   const networkOlderInFlightRef = useRef<Record<string, boolean>>({});
   const bootstrappedOrgRef = useRef<string | null>(null);
   const lastFetchedAtRef = useRef<number>(0);
-  // Stable ref read inside realtime callback so isActive changes don't re-subscribe.
-  const isActiveRef = useRef(isActive);
-  isActiveRef.current = isActive;
+  const [activeNetworkConversationId, setActiveNetworkConversationId] = useState<
+    string | null
+  >(null);
+  const pullMessagesDebounceRef = useRef<
+    Record<string, ReturnType<typeof setTimeout> | null>
+  >({});
+  const pullMessagesInFlightRef = useRef<Record<string, boolean>>({});
+  const pullMessagesNeedsRerunRef = useRef<Record<string, boolean>>({});
+  const conversationsRef = useRef<NetworkConversation[]>([]);
+  const activeNetworkConversationIdRef = useRef<string | null>(null);
+  activeNetworkConversationIdRef.current = activeNetworkConversationId;
+  conversationsRef.current = conversations;
+
+  const applyIncomingNetworkMessage = useCallback((row: NetworkMessageRow) => {
+    if (!row?.id || !row.conversation_id) return;
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === row.conversation_id
+          ? upsertNetworkMessageInConversation(conv, row)
+          : conv,
+      ),
+    );
+  }, []);
+
+  const queuePullLatestNetworkMessages = useCallback((convId: string) => {
+    if (!convId) return;
+    const existing = pullMessagesDebounceRef.current[convId];
+    if (existing) clearTimeout(existing);
+    pullMessagesDebounceRef.current[convId] = setTimeout(() => {
+      pullMessagesDebounceRef.current[convId] = null;
+      const isActive = convId === activeNetworkConversationIdRef.current;
+      const cached = conversationsRef.current.find((c) => c.id === convId);
+      const hasCachedMessages = (cached?.messages?.length ?? 0) > 0;
+      // Skip cold inbox rows — preview/unread already patched; body loads on open.
+      if (!isActive && !hasCachedMessages) return;
+
+      if (pullMessagesInFlightRef.current[convId]) {
+        pullMessagesNeedsRerunRef.current[convId] = true;
+        return;
+      }
+      pullMessagesInFlightRef.current[convId] = true;
+      void chatService
+        .getNetworkMessagesByConversation(convId, {
+          limit: chatService.NETWORK_CHAT_HISTORY_PAGE,
+        })
+        .then((rows) => {
+          setConversations((prev) =>
+            prev.map((conv) =>
+              conv.id === convId
+                ? {
+                    ...conv,
+                    messages: mergeNetworkMessagesPreservingOptimistic(
+                      conv.messages,
+                      rows,
+                    ),
+                  }
+                : conv,
+            ),
+          );
+        })
+        .catch(() => {
+          // non-critical — preview metadata already patched
+        })
+        .finally(() => {
+          pullMessagesInFlightRef.current[convId] = false;
+          if (pullMessagesNeedsRerunRef.current[convId]) {
+            pullMessagesNeedsRerunRef.current[convId] = false;
+            queuePullLatestNetworkMessages(convId);
+          }
+        });
+    }, 180);
+  }, []);
 
   const loadData = useCallback(async () => {
     if (!orgId || !selfUid) return;
@@ -196,7 +328,21 @@ export function IntegratedChatProvider({
         chatService.getNetworkConversationsByOrg(orgId),
         chatService.getIntegratedPartners(orgId),
       ]);
-      setConversations(convs);
+      // Preserve optimistic bubbles if a refresh races an in-flight send.
+      setConversations((prev) => {
+        const prevById = new Map(prev.map((c) => [c.id, c]));
+        return convs.map((c) => {
+          const local = prevById.get(c.id);
+          if (!local?.messages?.length) return c;
+          return {
+            ...c,
+            messages: mergeNetworkMessagesPreservingOptimistic(
+              local.messages,
+              c.messages ?? [],
+            ),
+          };
+        });
+      });
       setPartners(pts);
       lastFetchedAtRef.current = Date.now();
     } catch {
@@ -242,25 +388,18 @@ export function IntegratedChatProvider({
     };
   }, []);
 
-  // Single always-on subscription — isActiveRef read inside the callback avoids
-  // channel teardown/rebuild on every focus-change (previously two effects shared
-  // the same channel key which caused refcount 2→0→1 churn on isActive flips).
+  // Conversation-row realtime: patch unread/preview, then pull message bodies.
+  // (Historically we only patched metadata — receivers never saw live bubbles.)
   useEffect(() => {
     if (!orgId || !selfUid) return;
     return subscribeSharedPostgresChanges(
       `network_conversations:org:${orgId}`,
       networkConversationsOrgSpecs(orgId),
       (payload) => {
-        if (isActiveRef.current) {
-          // Focused screen: full debounced sync.
-          queueRefreshData();
-          return;
-        }
-        // Background: lightweight unread-count patch — no full refetch.
         const row = payload.new as Partial<NetworkConversationRow> | null;
         if (!row?.id || row.org_a_id == null || row.org_b_id == null) return;
-        const myUnread = row.org_a_id === orgId ? row.unread_count_a : row.unread_count_b;
-        if (typeof myUnread !== "number") return;
+        const myUnread =
+          row.org_a_id === orgId ? row.unread_count_a : row.unread_count_b;
         let found = false;
         setConversations((prev) =>
           prev.map((conv) => {
@@ -268,11 +407,13 @@ export function IntegratedChatProvider({
             found = true;
             return {
               ...conv,
-              unread_count: myUnread,
+              unread_count:
+                typeof myUnread === "number" ? myUnread : conv.unread_count,
               last_message_at: row.last_message_at ?? conv.last_message_at,
-              last_message_preview: row.last_message_preview ?? conv.last_message_preview,
+              last_message_preview:
+                row.last_message_preview ?? conv.last_message_preview,
             };
-          })
+          }),
         );
         if (!found) {
           const now = Date.now();
@@ -281,10 +422,49 @@ export function IntegratedChatProvider({
             missingNetConvRefreshAtRef.current[row.id] = now;
             queueRefreshData();
           }
+          return;
         }
-      }
+        // Open thread bodies come from network_messages INSERT (no history RPC).
+        // Skipping pull here avoids send flicker + connection-pool pressure.
+      },
     );
   }, [orgId, selfUid, queueRefreshData]);
+
+  // Open-thread realtime: direct network_messages INSERT/UPDATE (requires publication).
+  useEffect(() => {
+    if (!orgId || !selfUid || !activeNetworkConversationId) return;
+    return subscribeSharedPostgresChanges(
+      `network_messages:conv:${activeNetworkConversationId}`,
+      [
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "network_messages",
+          filter: `conversation_id=eq.${activeNetworkConversationId}`,
+        },
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "network_messages",
+          filter: `conversation_id=eq.${activeNetworkConversationId}`,
+        },
+      ],
+      (payload) => {
+        const row = payload.new as NetworkMessageRow | null;
+        if (!row?.id) return;
+        applyIncomingNetworkMessage(row);
+      },
+    );
+  }, [orgId, selfUid, activeNetworkConversationId, applyIncomingNetworkMessage]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of Object.values(pullMessagesDebounceRef.current)) {
+        if (t) clearTimeout(t);
+      }
+      pullMessagesDebounceRef.current = {};
+    };
+  }, []);
 
   const chats = useMemo<IntegratedChat[]>(
     () => orgId ? conversations.map((c) => toIntegratedChat(c, orgId, partners)) : [],
@@ -430,7 +610,13 @@ export function IntegratedChatProvider({
         prev.map((conv) => {
           if (conv.id !== chatId) return conv;
           if (mode === "replace") {
-            return { ...conv, messages: incoming };
+            return {
+              ...conv,
+              messages: mergeNetworkMessagesPreservingOptimistic(
+                conv.messages,
+                incoming,
+              ),
+            };
           }
           const existingIds = new Set(conv.messages.map((m) => m.id));
           const older = incoming.filter((m) => !existingIds.has(m.id));
@@ -519,6 +705,7 @@ export function IntegratedChatProvider({
       hydrateNetworkThread,
       loadOlderNetworkMessages,
       networkThreadHasMore,
+      setActiveNetworkConversationId,
     }),
     [
       chats,

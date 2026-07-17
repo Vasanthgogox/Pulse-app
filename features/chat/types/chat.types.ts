@@ -318,6 +318,11 @@ export interface TripMessageRow {
    */
   delivery_status?: MessageDeliveryStatus;
   /**
+   * Stable FlatList row key across optimistic → persisted id swap (client-only).
+   * Prevents remount flicker on send.
+   */
+  client_key?: string | null;
+  /**
    * Party routing tags — conversation IDs (or party_type strings) that should
    * receive this message. Populated by process_b2b_event / get_unified_b2b_bootstrap.
    * Ledger rows: prefer a single originating conversation id (not all fin lanes).

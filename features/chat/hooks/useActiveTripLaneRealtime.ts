@@ -12,7 +12,10 @@ import {
   getActiveTripMessageConversationId,
   useActiveTripMessageConversationId,
 } from "../realtime/activeTripMessageScope";
-import { useChatStore } from "../store/useChatStore";
+import {
+  isTripLocalSendHealSuppressed,
+  useChatStore,
+} from "../store/useChatStore";
 import type { TripMessageRow } from "../types/chat.types";
 
 export function useActiveTripLaneRealtime(
@@ -38,27 +41,32 @@ export function useActiveTripLaneRealtime(
       (payload) => {
         if (payload.eventType !== "INSERT") return;
         const row = payload.new as Partial<TripMessageRow> | null;
-        if (!row?.conversation_id) return;
+        if (!row?.conversation_id || !row.id) return;
 
-        // Skip own messages only when an optimistic entry is still in the stream
-        // for this conversation — replaceOptimistic will reconcile it.
-        // If no optimistic exists (RPC failed → removeMessage already ran), we must
-        // process the Realtime INSERT so the persisted message reaches the UI.
-        if (row.sender_user_id && row.sender_user_id === selfUid) {
-          const { trips, convToTrip } = useChatStore.getState();
-          const tripId = convToTrip[row.conversation_id];
-          const entry = tripId ? trips[tripId] : null;
-          const hasOptimistic = entry?.event_stream.some(
-            (e) =>
-              String(e.id).startsWith("optimistic-") &&
-              e.conversation_id === row.conversation_id,
-          );
-          if (__DEV__) {
-            console.log(
-              `[CHAT:REALTIME] own INSERT conv=${row.conversation_id} id=${row.id} hasOptimistic=${hasOptimistic}`,
-            );
+        // Own send: replaceOptimistic owns reconciliation while local-send suppress
+        // is active and an optimistic (or already-persisted) row is present. Skip the
+        // duplicate INSERT to avoid a second stream write → FlatList flicker.
+        // If replaceOptimistic failed (no optimistic / no persisted id), fall through.
+        if (
+          selfUid &&
+          row.sender_user_id === selfUid &&
+          isTripLocalSendHealSuppressed(row.conversation_id)
+        ) {
+          const state = useChatStore.getState();
+          const tripId = state.convToTrip[row.conversation_id];
+          const stream = tripId ? state.trips[tripId]?.event_stream : undefined;
+          if (stream?.some((e) => e.id === row.id)) return;
+          const content = String(row.content ?? "");
+          if (
+            stream?.some(
+              (e) =>
+                String(e.id).startsWith("optimistic-") &&
+                e.conversation_id === row.conversation_id &&
+                String(e.content ?? "") === content,
+            )
+          ) {
+            return;
           }
-          if (hasOptimistic) return;
         }
 
         const mode: "active" | "background" = isActive ? "active" : "background";

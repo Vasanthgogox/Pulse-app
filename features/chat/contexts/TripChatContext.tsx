@@ -19,6 +19,7 @@ import * as chatService from "../services/chat.service";
 import { useConversations, useTotalUnreadCount } from "../store/chatStore";
 import {
   clearReadReceiptDebouncerForConversation,
+  noteLocalTripSend,
   pruneModuleLevelDedupeState,
   registerMarkMessagesSeenRpc,
   useChatStore,
@@ -410,8 +411,10 @@ export function TripChatProvider({
         profile.displayName ||
         "Dispatcher";
 
+      const optimisticId = `optimistic-${Date.now()}`;
       const optimisticMsg: TripMessageRow = {
-        id:              `optimistic-${Date.now()}`,
+        id:              optimisticId,
+        client_key:      optimisticId,
         conversation_id: conversationId,
         organization_id: messageOrgId,
         sender_user_id:  profile.uid ?? null,
@@ -427,6 +430,8 @@ export function TripChatProvider({
       } as TripMessageRow;
 
       useChatStore.getState().optimisticInsert(conversationId, optimisticMsg);
+      // Prevent denorm UPDATE → heal refetch while send is in flight / settling.
+      noteLocalTripSend(conversationId);
 
       try {
         const persisted = await chatService.sendChatMessage({
@@ -441,6 +446,7 @@ export function TripChatProvider({
           replyToPreview,
         });
         useChatStore.getState().replaceOptimistic(conversationId, optimisticMsg.id, persisted);
+        noteLocalTripSend(conversationId);
       } catch {
         useChatStore.getState().removeMessage(conversationId, optimisticMsg.id);
       }
