@@ -679,9 +679,10 @@ export function IndentDetailScreen({
   const canOpenQuoteModal =
     canSupplierBid && statusLower !== "awarded" && statusLower !== "completed";
   const isLockedStatus = LOCKED_INDENT_STATUSES.has(statusLower);
-  const canCancelLoad = isOwner && !isLockedStatus;
-  const canEditLoad = isOwner && !isLockedStatus;
-  const canBroadcast = isOwner && statusLower === "draft";
+  const canCancelLoad = canUseSuppliers && isOwner && !isLockedStatus;
+  const canEditLoad = canUseSuppliers && isOwner && !isLockedStatus;
+  const canBroadcast =
+    canUseSuppliers && isOwner && statusLower === "draft";
   const canAward =
     statusLower !== "awarded" &&
     statusLower !== "completed" &&
@@ -808,7 +809,13 @@ export function IndentDetailScreen({
               compact={hubDense}
               stacked={stackedHub}
               isOwner={isOwner}
-              typeLabel={isOwner ? "GIVE LOAD" : "GET LOAD"}
+              typeLabel={
+                isOwner
+                  ? canUseSuppliers
+                    ? "GIVE LOAD"
+                    : "LOAD"
+                  : "GET LOAD"
+              }
               status={status}
               isDirect={isDirect}
               dateLabel={dateLabel}
@@ -1178,7 +1185,7 @@ export function IndentDetailScreen({
         }
       />
 
-      {isOwner && orgId ? (
+      {canUseSuppliers && isOwner && orgId ? (
         <ShareLoadSheet
           visible={shareStorySheetVisible}
           indent={indent}

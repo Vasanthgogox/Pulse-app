@@ -73,10 +73,12 @@ export function getEffectivePermissions(
         p.suppliers = true;
         break;
       case "dispatch_for_own_fleet":
-        // Own-fleet dispatch still bills customers; no suppliers (aggregation).
-        p.indents = { view: true, create: true, edit: true };
+        // Own-fleet trips. Do not grant give-load; do not wipe indent create if `dispatch` already set it.
         p.trips = { view: true, create: true, assign: true };
         p.clients = true;
+        if (!p.indents.view && !p.indents.create) {
+          p.indents = { view: true, create: false, edit: false };
+        }
         break;
       case "marketplace_post":
         p.marketplacePost = true;

@@ -1,9 +1,26 @@
+import { ModelAccessGate, type ModelAccessKind } from "@/components/ModelAccessGate";
 import { PartyDirectoryScreen } from "@/features/party/components/PartyDirectoryScreen";
-import { parsePartyKind } from "@/features/party/types/partyDirectory.types";
+import {
+  parsePartyKind,
+  type PartyKind,
+} from "@/features/party/types/partyDirectory.types";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { useLocalSearchParams } from "expo-router";
 import { Text, View } from "react-native";
 import Theme from "@/constants/Theme";
+
+function partyKindToAccess(kind: PartyKind): ModelAccessKind {
+  switch (kind) {
+    case "customers":
+      return "clients";
+    case "suppliers":
+      return "suppliers";
+    case "drivers":
+      return "drivers";
+    case "vehicles":
+      return "vehicles";
+  }
+}
 
 export default function PartyDirectoryRoute() {
   const { kind } = useLocalSearchParams<{ kind: string }>();
@@ -18,5 +35,9 @@ export default function PartyDirectoryRoute() {
     );
   }
 
-  return <PartyDirectoryScreen kind={parsed} onBack={safeBack} />;
+  return (
+    <ModelAccessGate kind={partyKindToAccess(parsed)}>
+      <PartyDirectoryScreen kind={parsed} onBack={safeBack} />
+    </ModelAccessGate>
+  );
 }

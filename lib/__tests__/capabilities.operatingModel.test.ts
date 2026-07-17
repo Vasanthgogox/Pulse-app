@@ -5,6 +5,7 @@ import {
   canUseAggregateSupply,
   canUseAssetSupply,
   getCapabilitiesFromProfile,
+  getEffectivePermissions,
 } from "@/lib/capabilities";
 
 describe("getCapabilitiesFromProfile + operatingModel", () => {
@@ -20,9 +21,20 @@ describe("getCapabilitiesFromProfile + operatingModel", () => {
     expect(canAccessFinanceSubTab(caps, "suppliers")).toBe(false);
     expect(canAccessFinanceSubTab(caps, "garage")).toBe(true);
     expect(caps.includes("dispatch_for_own_fleet")).toBe(true);
+    expect(caps.includes("dispatch")).toBe(false);
   });
 
-  it("NON_ASSET hides garage and keeps suppliers", () => {
+  it("ASSET_BASED cannot create give-load indents", () => {
+    const caps = getCapabilitiesFromProfile(
+      { role: "user", aggregated: false, asset: true },
+      "ASSET_BASED",
+    );
+    const p = getEffectivePermissions(caps);
+    expect(p.indents.create).toBe(false);
+    expect(p.trips.create).toBe(true);
+  });
+
+  it("NON_ASSET hides garage and keeps suppliers + give-load", () => {
     const caps = getCapabilitiesFromProfile(
       { role: "user", aggregated: true, asset: true },
       "NON_ASSET",
@@ -33,6 +45,7 @@ describe("getCapabilitiesFromProfile + operatingModel", () => {
     expect(canAccessVehicles(caps)).toBe(false);
     expect(canAccessFinanceSubTab(caps, "suppliers")).toBe(true);
     expect(canAccessFinanceSubTab(caps, "garage")).toBe(false);
+    expect(getEffectivePermissions(caps).indents.create).toBe(true);
   });
 
   it("HYBRID keeps both", () => {
@@ -44,5 +57,6 @@ describe("getCapabilitiesFromProfile + operatingModel", () => {
     expect(canUseAggregateSupply(caps)).toBe(true);
     expect(canAccessSuppliers(caps)).toBe(true);
     expect(canAccessVehicles(caps)).toBe(true);
+    expect(getEffectivePermissions(caps).indents.create).toBe(true);
   });
 });
