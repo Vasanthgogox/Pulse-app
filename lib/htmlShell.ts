@@ -73,7 +73,7 @@ export function setupViewportHeightBootstrap() {
 
   function setAppVh() {
     // Once installWebViewportHeight (React runtime) takes over, stop writing.
-    if ((window as any).__appVhOwned) return;
+    if ((window as Window & { __appVhOwned?: boolean }).__appVhOwned) return;
     var vv = window.visualViewport;
     var inner = window.innerHeight;
     if (isIOSWeb() && vv) {

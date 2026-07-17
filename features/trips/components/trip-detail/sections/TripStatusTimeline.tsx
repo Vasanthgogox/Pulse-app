@@ -5,6 +5,7 @@
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import type { ViewStyle } from "react-native";
 import type { TripRow } from "../../../services/trips.service";
 
 // ── Stage definitions ──────────────────────────────────────────────────────
@@ -618,7 +619,7 @@ const styles = StyleSheet.create({
   stepsRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    overflow: Platform.OS === "web" ? ("auto" as any) : "scroll",
+    overflow: Platform.OS === "web" ? ("auto" as ViewStyle["overflow"]) : "scroll",
   },
   stepWrap: {
     flex: 1,

@@ -279,7 +279,7 @@ function HBarChart({
             <AnimatedRect
               x={LABEL_W}
               y={y + 4}
-              width={animW as any}
+              width={animW as unknown as number}
               height={ROW_H - 8}
               fill={barColor}
               rx={4}
@@ -375,9 +375,9 @@ function DistBarChart({
             {/* Animated bar */}
             <AnimatedRect
               x={cx - barW / 2}
-              y={animY as any}
+              y={animY as unknown as number}
               width={barW}
-              height={animH as any}
+              height={animH as unknown as number}
               fill={item.color}
               rx={4}
               fillOpacity={0.85}

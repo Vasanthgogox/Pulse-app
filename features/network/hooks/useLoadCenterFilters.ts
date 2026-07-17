@@ -24,7 +24,7 @@ export interface UseLoadCenterFiltersParams {
   indents: IndentRow[];
   marketIndents: IndentRow[];
   myQuotes: DirectQuoteRow[];
-  trips: any[];
+  trips: TripRow[];
   quoteCounts: Record<string, number>;
   loadSubTab: LoadSubTab;
   statusFilterTab: StatusFilterTab;

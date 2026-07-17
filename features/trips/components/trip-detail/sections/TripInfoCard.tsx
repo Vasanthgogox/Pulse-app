@@ -13,7 +13,16 @@ interface TripInfoCardProps {
   currentStageLabel?: string;
 }
 
+/** Optional display-only fields that may arrive on the row from joined/synced sources but are not part of the canonical TripRow. */
+type TripInfoExtras = {
+  truck_type?: string | null;
+  vehicle_type?: string | null;
+  billing_type?: string | null;
+  weight?: string | number | null;
+};
+
 export function TripInfoCard({ trip, clientName, currentStageLabel }: TripInfoCardProps) {
+  const extras = trip as TripRow & TripInfoExtras;
   const tripNumber = getTripDisplayNumber(trip);
   const pickup = (trip.pickup_area ?? "").trim() || "—";
   const drop = (trip.drop_location ?? "").trim() || "—";
@@ -67,11 +76,11 @@ export function TripInfoCard({ trip, clientName, currentStageLabel }: TripInfoCa
         />
         <MetaCell
           label="TRUCK TYPE"
-          value={(trip as any).truck_type ?? (trip as any).vehicle_type ?? "—"}
+          value={extras.truck_type ?? extras.vehicle_type ?? "—"}
         />
         <MetaCell
           label="BILLING TYPE"
-          value={(trip as any).billing_type ?? "Fixed"}
+          value={extras.billing_type ?? "Fixed"}
         />
         <MetaCell
           label="MATERIAL"
@@ -85,8 +94,8 @@ export function TripInfoCard({ trip, clientName, currentStageLabel }: TripInfoCa
               : "—"
           }
         />
-        {(trip as any).weight ? (
-          <MetaCell label="WEIGHT" value={`${(trip as any).weight} Tons`} />
+        {extras.weight ? (
+          <MetaCell label="WEIGHT" value={`${extras.weight} Tons`} />
         ) : null}
       </View>
     </View>

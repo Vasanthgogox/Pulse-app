@@ -552,9 +552,10 @@ export async function searchPlacesInIndia(query: string, opts?: SearchOpts): Pro
       if (apiResults.length === 0) {
         apiResults = await searchNominatim(trimmed, opts);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Abort is expected during typing; suppress noisy logs.
-      if (e?.name !== 'AbortError') {
+      const name = e instanceof Error ? e.name : (e as { name?: string } | null)?.name;
+      if (name !== 'AbortError') {
         console.warn('placesService search error', e);
       }
     }

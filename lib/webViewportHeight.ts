@@ -30,7 +30,7 @@ export function installWebViewportHeight(): () => void {
   }
 
   // Claim ownership — suppresses setupViewportHeightBootstrap from the static HTML shell.
-  (window as any).__appVhOwned = true;
+  (window as Window & { __appVhOwned?: boolean }).__appVhOwned = true;
 
   if (isIOSWeb()) {
     applyIOSWebSafariViewportPin();
@@ -45,7 +45,7 @@ export function installWebViewportHeight(): () => void {
   }
 
   return () => {
-    (window as any).__appVhOwned = false;
+    (window as Window & { __appVhOwned?: boolean }).__appVhOwned = false;
   };
 }
 

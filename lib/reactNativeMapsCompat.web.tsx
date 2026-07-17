@@ -3,7 +3,7 @@ import { View } from 'react-native';
 
 type CompatProps = {
   children?: React.ReactNode;
-  style?: any;
+  style?: object;
 };
 
 function NullMapPrimitive({ children, style }: CompatProps) {

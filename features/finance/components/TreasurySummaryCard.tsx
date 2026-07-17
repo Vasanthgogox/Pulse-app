@@ -1918,4 +1918,7 @@ const styles = StyleSheet.create({
   dropdownItemCheck: {
     marginLeft: 6,
   },
+  // Web boxShadow + mixed View/Text styles: RN StyleSheet inference widens every key
+  // to ViewStyle|TextStyle|ImageStyle without this assertion (151 TS errors at use sites).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- StyleSheet.create key widening
 } as any);

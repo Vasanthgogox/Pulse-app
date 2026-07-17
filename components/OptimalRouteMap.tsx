@@ -129,7 +129,7 @@ export const OptimalRouteMap: React.FC<OptimalRouteMapProps> = ({
           latitudeDelta: Math.abs(from.latitude - to.latitude) * 2,
           longitudeDelta: Math.abs(from.longitude - to.longitude) * 2,
         }}
-        customMapStyle={isDark ? (darkMapStyle as any) : undefined}
+        customMapStyle={isDark ? (darkMapStyle as unknown as import("react-native-maps").MapStyleElement[]) : undefined}
         userInterfaceStyle={isDark ? 'dark' : 'light'}
       >
         {/* Start Marker (Pickup) */}

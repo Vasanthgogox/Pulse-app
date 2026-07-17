@@ -1041,7 +1041,7 @@ export function EntityCompareVerifyView({
     isPending: boolean,
     hasDisputeSent: boolean,
     hasDisputeReceived: boolean,
-    receivedDispute: any
+    receivedDispute: DisputeRow | undefined
   ) => (
     <View style={styles.expandedWrap}>
       <View style={styles.reconHeader}>
@@ -2953,7 +2953,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   modalActions: {

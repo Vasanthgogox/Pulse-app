@@ -449,7 +449,7 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
 
   const podInserts: {
     trip_id: string;
-    lr_number: string;
+    lr_number: string | null;
     courier_name: string;
     tracking_id: string;
   }[] = [];
@@ -469,7 +469,7 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
         lr_number: lr === "N/A" ? null : lr,
         courier_name: finalCourierName,
         tracking_id: trackingId,
-      } as any);
+      });
       if (lr !== "N/A") {
         lrUpdates.push({ trip_id: internalId as string, lr_number: lr });
       }
@@ -511,7 +511,7 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
         file_name: att.file_name,
         file_size: att.file_size,
         file_type: att.file_type,
-      } as any;
+      };
     },
   );
 

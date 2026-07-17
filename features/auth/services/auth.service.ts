@@ -1839,7 +1839,7 @@ export async function updateProfile(
     if (authError) return { error: new Error(authError.message || "Auth update failed") };
 
     // 2. Sync to public.profiles table (for relational use, searching, and public profile view)
-    const profileUpdates: Record<string, any> = {};
+    const profileUpdates: Record<string, string | null> = {};
     if (updates.full_name !== undefined) profileUpdates.full_name = updates.full_name.trim();
     if (updates.phone !== undefined) {
       const t = updates.phone.trim();

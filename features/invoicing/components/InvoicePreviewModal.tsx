@@ -3,13 +3,13 @@
  */
 import Theme from '@/constants/Theme';
 import { InvoicePreviewPanel } from '@/features/invoicing/components/InvoicePreviewPanel';
-import type { InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
+import type { InvoicingTripView, InvoicePayload } from '@/features/invoicing/services/invoicing.service';
 import { Modal, StyleSheet, View } from 'react-native';
 
 export interface InvoicePreviewModalProps {
   visible: boolean;
   onClose: () => void;
-  onFinalize: (internalIds: string[], payload?: any) => Promise<void>;
+  onFinalize: (internalIds: string[], payload?: InvoicePayload) => Promise<void>;
   isFinalizing: boolean;
   activeClient: string | null;
   selectedTrips: InvoicingTripView[];

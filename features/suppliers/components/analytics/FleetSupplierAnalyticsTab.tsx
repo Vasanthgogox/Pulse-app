@@ -283,7 +283,7 @@ function HBarChart({
             <AnimatedRect
               x={LABEL_W}
               y={y + 4}
-              width={animW as any}
+              width={animW as unknown as number}
               height={ROW_H - 8}
               fill={barColor}
               rx={4}
@@ -377,7 +377,7 @@ function BucketBarChart({
             <AnimatedRect
               x={LABEL_W}
               y={y + 2}
-              width={animW as any}
+              width={animW as unknown as number}
               height={BAR_H - 4}
               fill={item.color}
               rx={4}

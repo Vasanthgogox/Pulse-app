@@ -9,6 +9,9 @@ import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { supabase } from "@/lib/supabase";
 import { normalizeInfrastructureErrorMessage } from "@/lib/supabaseHttp.util";
+import type { RatingRow } from "@/features/ratings";
+import type { SalaryRequestRow } from "@/features/drivers/services/salaryRequests.service";
+import type { LedgerRow } from "@/features/finance";
 import {
   validateDriverInviteCompensation,
 } from "../utils/driverInviteCompensation.util";
@@ -2005,17 +2008,17 @@ export async function getDriverLedgerByDriverIds(
 export async function getDriverDetailBundle(orgId: string, driverId: string): Promise<{
   error: Error | null;
   driver: DriverRow | null;
-  ratings: any[];
-  salaryRequests: any[];
+  ratings: RatingRow[];
+  salaryRequests: SalaryRequestRow[];
   ledger: DriverLedgerRow[];
-  transactions: any[];
+  transactions: LedgerRow[];
 }> {
   const { data, error } = await supabase().rpc('get_driver_detail_bundle', {
     p_org_id: orgId,
     p_driver_id: driverId,
   });
   if (error) return { error: new Error(error.message), driver: null, ratings: [], salaryRequests: [], ledger: [], transactions: [] };
-  const bundle = data as { driver: DriverRow | null; ratings: any[]; salary_requests: any[]; ledger: any[]; transactions: any[] };
+  const bundle = data as { driver: DriverRow | null; ratings: RatingRow[]; salary_requests: SalaryRequestRow[]; ledger: DriverLedgerRow[]; transactions: LedgerRow[] };
   return {
     error: null,
     driver: bundle.driver ?? null,

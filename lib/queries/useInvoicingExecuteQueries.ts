@@ -1,3 +1,4 @@
+import type { InvoicePayload } from '@/features/invoicing/services/invoicing.service';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchInvoicingTrips,
@@ -38,7 +39,7 @@ export function useExecuteInvoiceMutation(orgId: string | null) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ internalIds, payload }: { internalIds: string[]; payload?: any }) => {
+    mutationFn: async ({ internalIds, payload }: { internalIds: string[]; payload?: InvoicePayload }) => {
       const result = await executeInvoiceCreation(internalIds, payload);
       if (result.error) throw result.error;
       return result;

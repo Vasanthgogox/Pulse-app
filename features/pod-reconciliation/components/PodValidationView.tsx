@@ -23,7 +23,7 @@ import { enqueueAndProcessOcrJob, getOcrJobForPodAttachment } from '@/features/o
 import { chatWithDocument } from '@/lib/pod/chat';
 import { compressImage } from '@/lib/pod/imageCompression';
 import type { PodReconciliationTripView } from '../services/podReconciliationService';
-import type { PODExtraction } from '@/types/pod';
+import type { PODExtraction, ConfidenceField} from '@/types/pod';
 
 interface PodValidationViewProps {
   trip: PodReconciliationTripView | null;
@@ -99,18 +99,24 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
     return supabase().storage.from(bucket).getPublicUrl(path).data.publicUrl;
   };
 
-  const updateExtractedField = (section: keyof Omit<PODExtraction, 'line_items' | 'validationError'>, key: string, value: any) => {
+  const updateExtractedField = (
+    section: keyof Omit<PODExtraction, 'line_items' | 'validationError'>,
+    key: string,
+    value: string | number,
+  ) => {
     setExtractedData(prev => {
       const current = prev || createEmptyExtraction();
+      const sectionObj = (current[section] ?? {}) as Record<string, ConfidenceField | undefined>;
+      const existing = sectionObj[key];
       return {
         ...current,
         [section]: {
-          ...(current[section] || {}),
+          ...sectionObj,
           [key]: {
-            ...((current[section] as any)?.[key] || { confidence: 1 }),
-            value
-          }
-        }
+            confidence: existing?.confidence ?? 1,
+            value,
+          },
+        },
       };
     });
   };
@@ -322,11 +328,17 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   const finalAmount = originalAmount - totalDeductions;
   const receivedLRs = Array.isArray(trip.trip_pods) ? trip.trip_pods : [];
   const allLRs = Array.isArray(trip.lr_numbers) ? trip.lr_numbers : [];
+  const tripExtras = trip as PodReconciliationTripView & {
+    vehicle_no?: string | null;
+    vehicle_display_number?: string | null;
+    vehicle_type?: string | null;
+    truck_type?: string | null;
+  };
   const assignedVehicle =
-    (trip as any).vehicle_no ||
-    (trip as any).vehicle_display_number ||
+    tripExtras.vehicle_no ||
+    tripExtras.vehicle_display_number ||
     'N/A';
-  const assignedVehicleType = (trip as any).vehicle_type || (trip as any).truck_type || undefined;
+  const assignedVehicleType = tripExtras.vehicle_type || tripExtras.truck_type || undefined;
   const dispatchDate = trip.date
     ? new Date(trip.date).toLocaleDateString('en-IN', {
         day: 'numeric',
@@ -362,7 +374,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   const isImage = currentDocType.startsWith('image/');
   const attachmentPreviewItems = useMemo(
     () =>
-      attachments.map((att: any) => {
+      attachments.map((att) => {
         const docUrl = getFileUrl(
           STORAGE_BUCKET_CANDIDATES[0],
           sanitizeStoragePath(att.file_path),
@@ -396,7 +408,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       // Prefer signed URL: works for both public & private buckets.
       // If bucket is missing/misnamed, we'll surface a clear error.
       try {
-        let lastErr: any = null;
+        let lastErr: { message?: string } | null = null;
         for (const bucket of STORAGE_BUCKET_CANDIDATES) {
           const { data, error } = await supabase()
             .storage
@@ -412,10 +424,10 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
           lastErr = error ?? lastErr;
         }
         throw lastErr ?? new Error('Object not found');
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (cancelled) return;
         setDocLoadError(
-          e?.message ||
+          (e instanceof Error ? e.message : null) ||
             'Storage preview failed. Check bucket name and file path.',
         );
       } finally {
@@ -640,7 +652,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
         <Text style={styles.emptyText}>No documents attached.</Text>
       ) : (
         <View style={styles.attachmentGrid}>
-          {attachmentPreviewItems.map((att: any, idx: number) => {
+          {attachmentPreviewItems.map((att, idx) => {
             const isSelected = selectedDocIndex === idx;
             return (
               <View key={att.id} style={[styles.attachmentItem, isSelected && { borderColor: Theme.primary }]}>
@@ -768,15 +780,16 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
                 }
                 setDocLoading(false);
               }}
-              onError={(e: any) => {
+              onError={(e) => {
                 if (Platform.OS === 'web') {
                   if (previewLoadEndedRef.current) return;
                   previewLoadEndedRef.current = true;
                 }
                 setDocLoading(false);
+                const err = e as { nativeEvent?: { error?: string }; message?: string };
                 const msg =
-                  e?.nativeEvent?.error ||
-                  e?.message ||
+                  err?.nativeEvent?.error ||
+                  err?.message ||
                   'Image failed to load';
                 setDocLoadError(String(msg));
               }}
@@ -992,7 +1005,7 @@ function ExtractionSection({ title, children }: { title: string; children: React
   );
 }
 
-function AIFieldRow({ label, field, isNumber, onChange }: { label: string; field: any; isNumber?: boolean; onChange: (val: any) => void }) {
+function AIFieldRow({ label, field, isNumber, onChange }: { label: string; field: ConfidenceField | ConfidenceField<number> | null | undefined; isNumber?: boolean; onChange: (val: string | number) => void }) {
   const value = field?.value !== undefined ? field.value : '';
   const confidence = field?.confidence ?? null;
   const isLowConfidence = confidence != null && confidence < 0.85;

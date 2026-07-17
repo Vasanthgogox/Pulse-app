@@ -5,9 +5,24 @@ import { useMemo, useState } from "react";
 import { useTripOperationsSummary } from "../queries/useTripOperations";
 import { toOperationsDisplayMetrics } from "../metrics/operationsMetrics";
 import { VerificationStatusChip } from "@/features/trips/verification/components/VerificationStatusChip";
+import type { OdometerVerificationState } from "@/features/trips/verification/types";
 
 function formatInr(v: number): string {
   return `₹${Math.round(v).toLocaleString("en-IN")}`;
+}
+
+const ODOMETER_VERIFICATION_STATES: readonly OdometerVerificationState[] = [
+  "none",
+  "partial",
+  "driver_verified",
+  "business_verified",
+  "gps_verified",
+];
+
+function toVerificationState(value: string | null | undefined): OdometerVerificationState {
+  return ODOMETER_VERIFICATION_STATES.includes(value as OdometerVerificationState)
+    ? (value as OdometerVerificationState)
+    : "none";
 }
 
 export function TripOperationsSummary({
@@ -42,7 +57,7 @@ export function TripOperationsSummary({
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Verification</Text>
             <VerificationStatusChip
-              state={(trip.odometer_verification_state as any) ?? "none"}
+              state={toVerificationState(trip.odometer_verification_state)}
             />
           </View>
 

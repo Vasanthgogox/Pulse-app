@@ -4509,7 +4509,7 @@ const styles = StyleSheet.create({
       web: {
         transitionProperty: "transform, opacity",
         transitionDuration: "280ms",
-      } as any,
+      } as object,
     }),
   },
   entityFabIslandRailCollapsed: {
@@ -4565,7 +4565,7 @@ const styles = StyleSheet.create({
       web: {
         transitionProperty: "opacity, transform",
         transitionDuration: "220ms",
-      } as any,
+      } as object,
     }),
   },
   entityFabLabelWrapCollapsed: {

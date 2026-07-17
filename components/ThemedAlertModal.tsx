@@ -32,17 +32,18 @@ export function ThemedAlertModal({
   const insets = useSafeAreaInsets();
 
   const variantConfig = React.useMemo(() => {
+    type IconName = React.ComponentProps<typeof FontAwesome>["name"];
     if (variant === "warning") {
       return {
         accentColor: Theme.negative,
-        iconName: "exclamation-circle",
+        iconName: "exclamation-circle" as IconName,
         iconColor: Theme.negative,
         iconBg: Theme.negativeMuted,
       };
     }
     return {
       accentColor: Theme.modalNeutralAccent,
-      iconName: "check-circle",
+      iconName: "check-circle" as IconName,
       iconColor: Theme.modalNeutralAccent,
       iconBg: Theme.modalNeutralIconWash,
     };
@@ -74,7 +75,7 @@ export function ThemedAlertModal({
           <View style={[styles.accentBar, { backgroundColor: variantConfig.accentColor }]} />
 
           <View style={[styles.iconCircle, { backgroundColor: variantConfig.iconBg }]}>
-            <FontAwesome name={variantConfig.iconName as any} size={22} color={variantConfig.iconColor} />
+            <FontAwesome name={variantConfig.iconName} size={22} color={variantConfig.iconColor} />
           </View>
 
           <Text style={styles.title}>{title}</Text>

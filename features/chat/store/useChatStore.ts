@@ -1391,7 +1391,10 @@ export const useChatStore = create<ChatState>()(
         }));
       } catch (err) {
         if (__DEV__) console.error('[useChatStore] bootstrap failed:', err);
-        const code = (err as any)?.code;
+        const code =
+          typeof err === "object" && err !== null && "code" in err
+            ? (err as { code?: unknown }).code
+            : undefined;
         // 42501 = permission denied (no session); PGRST301 = JWT expired.
         // Don't mark bootstrapped — a valid session may arrive shortly and must
         // be able to retry. For network/other errors mark done to unblock the spinner.

@@ -1895,7 +1895,7 @@ export function AddTransactionModal({
 
   const partyOptions = useMemo(() => {
     if (type === "in" && selectedTrip) {
-      const lid = (selectedTrip as any).organization_id;
+      const lid = selectedTrip.organization_id ?? "";
       const isIntegrated = isCrossOrgIntegrationTrip(
         {
           organization_id: selectedTrip.organization_id ?? "",
@@ -2425,13 +2425,14 @@ export function AddTransactionModal({
         let entityType: PartyEntityType = "client";
         if (safeSuppliers.some((s) => s.id === p.id)) entityType = "supplier";
         else if (safeDrivers.some((d) => d.id === p.id)) entityType = "driver";
+        const party = p as PartyOption;
         return {
-          id: p.id,
-          name: p.name,
-          avatar_url: p.avatar_url ?? null,
-          avatar_seed: p.avatar_seed ?? null,
+          id: party.id,
+          name: party.name,
+          avatar_url: party.avatar_url ?? null,
+          avatar_seed: party.avatar_seed ?? null,
           entityType,
-          is_integrated: p.is_integrated === true,
+          is_integrated: party.is_integrated === true,
         };
       }),
     [partyOptions, safeClients, safeSuppliers, safeDrivers],
@@ -5595,7 +5596,7 @@ export function AddTransactionModal({
                   >
                     <View style={styles.selectorSummaryMain}>
                       <View style={styles.selectorSummaryIcon}>
-                        <FontAwesome name={selectedPaymentModeIcon as any} size={12} color={Theme.textPrimaryDark} />
+                        <FontAwesome name={selectedPaymentModeIcon as FontAwesomeIconName} size={12} color={Theme.textPrimaryDark} />
                       </View>
                       <Text style={styles.selectorSummaryText}>{selectedPaymentModeName}</Text>
                     </View>
@@ -5826,7 +5827,7 @@ export function AddTransactionModal({
                   >
                     <View style={styles.selectorSummaryMain}>
                       <View style={styles.selectorSummaryIcon}>
-                        <FontAwesome name={selectedPaymentTypeIcon as any} size={12} color={Theme.textPrimaryDark} />
+                        <FontAwesome name={selectedPaymentTypeIcon as FontAwesomeIconName} size={12} color={Theme.textPrimaryDark} />
                       </View>
                       <Text style={styles.selectorSummaryText}>{selectedPaymentTypeLabel}</Text>
                     </View>
@@ -5902,7 +5903,7 @@ export function AddTransactionModal({
                   >
                     <View style={styles.selectorSummaryMain}>
                       <View style={styles.selectorSummaryIcon}>
-                        <FontAwesome name={selectedPaymentTypeIcon as any} size={12} color={Theme.textPrimaryDark} />
+                        <FontAwesome name={selectedPaymentTypeIcon as FontAwesomeIconName} size={12} color={Theme.textPrimaryDark} />
                       </View>
                       <Text style={styles.selectorSummaryText}>{selectedPaymentTypeLabel}</Text>
                     </View>
@@ -5966,7 +5967,7 @@ export function AddTransactionModal({
                           ]}
                         >
                           <FontAwesome
-                            name={item.iconName as any}
+                            name={item.iconName as FontAwesomeIconName}
                             size={11}
                             color={item.selected ? Theme.textOnPrimary : Theme.textMutedDemo}
                           />
@@ -7050,7 +7051,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
 
@@ -7127,7 +7128,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   fieldInput: {
@@ -7139,7 +7140,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   fieldInputError: { borderWidth: 1, borderColor: Theme.negative, borderRadius: 8 },
@@ -7154,7 +7155,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         transitionDuration: "160ms",
-      } as any,
+      } as object,
     }),
   },
   fieldChevronOpen: {

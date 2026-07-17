@@ -256,7 +256,7 @@ function HBarChart({ items, width }: { items: HBarItem[]; width: number }) {
             <AnimatedRect
               x={LABEL_W}
               y={y + 4}
-              width={animW as any}
+              width={animW as unknown as number}
               height={ROW_H - 8}
               fill={item.color}
               rx={4}

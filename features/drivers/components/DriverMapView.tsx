@@ -80,7 +80,7 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
         initialRegion={region}
         mapType={Platform.OS === 'ios' ? 'mutedStandard' : 'standard'}
         userInterfaceStyle={mapStyleDark ? 'dark' : 'light'}
-        customMapStyle={mapStyleDark ? (darkMapStyle as any) : undefined}
+        customMapStyle={mapStyleDark ? (darkMapStyle as unknown as import("react-native-maps").MapStyleElement[]) : undefined}
         showsUserLocation
         rotateEnabled={false}
         mapPadding={{ top: 0, left: 0, right: 0, bottom: mapPadding }}

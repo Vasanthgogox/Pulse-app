@@ -296,13 +296,13 @@ export function IntegratedChatProvider({
       if (!orgId || !profile) return;
 
       const senderName =
-        (profile as any).full_name || (profile as any).displayName || orgName;
+        profile.full_name || profile.displayName || orgName;
 
       const optimisticMsg: NetworkMessageRow = {
         id: `optimistic-${Date.now()}`,
         conversation_id: chatId,
         sender_org_id: orgId,
-        sender_user_id: (profile as any).uid ?? null,
+        sender_user_id: profile.uid ?? null,
         sender_name: senderName,
         content,
         is_read_by_other: false,
@@ -327,7 +327,7 @@ export function IntegratedChatProvider({
         .sendNetworkMessage({
           conversationId: chatId,
           senderOrgId: orgId,
-          senderUserId: (profile as any).uid ?? null,
+          senderUserId: profile.uid ?? null,
           senderName,
           content,
         })

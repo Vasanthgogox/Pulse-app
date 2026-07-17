@@ -7651,9 +7651,9 @@ function TripConversationDetailLoaded({
 }) {
   const router = useRouter();
   const { profile } = useAuth();
-  const selfUid = (profile as any)?.uid ?? null;
+  const selfUid = profile?.uid ?? null;
   const selfName =
-    (profile as any)?.full_name ?? (profile as any)?.displayName ?? "You";
+    profile?.full_name ?? profile?.displayName ?? "You";
   const { currentOrganization } = useOrganization();
   /** Outgoing bubble side / "YOU" — must use auth uid, not sender_role (linked clients see dispatcher messages as incoming). */
   const isMessageFromSelf = useCallback(
@@ -8096,7 +8096,7 @@ function TripConversationDetailLoaded({
   );
 
   const getMessageItemLayout = useCallback(
-    (_data: ArrayLike<TripMessageRow> | null | undefined, index: number) =>
+    (_data: ArrayLike<ThreadListItem> | null | undefined, index: number) =>
       messageListLayout.getItemLayout(index),
     [messageListLayout],
   );
@@ -8718,8 +8718,8 @@ function TripConversationDetailLoaded({
           supplierId,
         });
 
-    const msgReactions = (m as any).reactions as ChatReactions | null | undefined;
-    const msgReplyPreview = (m as any).reply_to_preview as ReplyPreviewData | null | undefined;
+    const msgReactions = (m as { reactions?: ChatReactions | null }).reactions;
+    const msgReplyPreview = (m as { reply_to_preview?: ReplyPreviewData | null }).reply_to_preview;
 
     return (
       <ChatBubble
@@ -9124,21 +9124,27 @@ function TripConversationDetailLoaded({
             onClose={() => setActiveDetailTab(liveConv.party_type)}
           />
         ) : (
-          <FlatList
-            ref={messagesRef}
+          <FlatList<ThreadListItem>
+            ref={messagesRef as React.RefObject<FlatList<ThreadListItem> | null>}
             style={s.msgs}
             contentContainerStyle={
               isDesktop
                 ? deskSt.threadMsgsContent
                 : [s.msgsContent, slackSt.threadMsgsContent]
             }
-            data={threadListItems as unknown as TripMessageRow[]}
+            data={threadListItems}
             keyExtractor={(item) =>
               "id" in item ? (item as { id: string }).id : Math.random().toString()
             }
-            renderItem={renderMessage as any}
+            renderItem={renderMessage}
             extraData={threadStreamFingerprint}
-            getItemLayout={isDesktop ? getMessageItemLayout : undefined}
+            getItemLayout={
+              isDesktop
+                ? (getMessageItemLayout as NonNullable<
+                    React.ComponentProps<typeof FlatList<ThreadListItem>>["getItemLayout"]
+                  >)
+                : undefined
+            }
             removeClippedSubviews
             windowSize={!isDesktop ? 7 : 9}
             maxToRenderPerBatch={!isDesktop ? 10 : 12}
@@ -9304,8 +9310,8 @@ function NetworkDetailPanel({
     return () => clearTimeout(t);
   }, [isDesktop, keyboardOpen, messagesRef]);
   const { profile } = useAuth();
-  const selfUid = (profile as any)?.uid ?? null;
-  const selfName = (profile as any)?.full_name ?? (profile as any)?.displayName ?? "You";
+  const selfUid = profile?.uid ?? null;
+  const selfName = profile?.full_name ?? profile?.displayName ?? "You";
   const nativeMobileDetail = isChatMobileLayout(isDesktop);
   const slackThreadUi = isDesktop || nativeMobileDetail;
 

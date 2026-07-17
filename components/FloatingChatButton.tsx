@@ -71,7 +71,7 @@ export function FloatingChatButton() {
         title: getTripDisplayNumber({
           display_trip_id: c.display_trip_id ?? null,
           trip_number: c.trip_number,
-        } as any),
+        } as import("@/features/trips/services/trips.service").TripRow),
         lastMsg: c.last_message_preview || `${c.pickup_area} -> ${c.drop_location}`,
         time: c.last_message_at
           ? new Date(c.last_message_at).toLocaleTimeString("en-IN", {
@@ -83,7 +83,7 @@ export function FloatingChatButton() {
         code: getTripDisplayNumber({
           display_trip_id: c.display_trip_id ?? null,
           trip_number: c.trip_number,
-        } as any)
+        } as import("@/features/trips/services/trips.service").TripRow)
           .slice(0, 2)
           .toUpperCase(),
         unread: c.unread_dispatcher_count || 0,

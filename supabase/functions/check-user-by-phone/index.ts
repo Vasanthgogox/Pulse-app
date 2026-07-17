@@ -96,8 +96,7 @@ async function createSupabaseAnon(): Promise<ReturnType<
 }
 
 async function lookupEmailByPhone(
-  // deno-lint-ignore no-explicit-any
-  supabase: any,
+  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseAdmin>>>,
   normalized: string,
 ): Promise<string | null> {
   const { data: emailRpc, error: rpcError } = await supabase.rpc('get_email_by_phone', {

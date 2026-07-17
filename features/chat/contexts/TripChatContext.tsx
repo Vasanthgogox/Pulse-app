@@ -406,15 +406,15 @@ export function TripChatProvider({
       const messageOrgId = conv?.organization_id ?? organizationId;
       const senderRole: TripMessageRow["sender_role"] = "dispatcher";
       const senderName =
-        (profile as any).full_name ||
-        (profile as any).displayName ||
+        profile.full_name ||
+        profile.displayName ||
         "Dispatcher";
 
       const optimisticMsg: TripMessageRow = {
         id:              `optimistic-${Date.now()}`,
         conversation_id: conversationId,
         organization_id: messageOrgId,
-        sender_user_id:  (profile as any).uid ?? null,
+        sender_user_id:  profile.uid ?? null,
         sender_role:     senderRole,
         sender_name:     senderName,
         content,
@@ -435,7 +435,7 @@ export function TripChatProvider({
           content,
           senderRole,
           senderName,
-          senderUserId: (profile as any).uid ?? null,
+          senderUserId: profile.uid ?? null,
           messageType,
           replyToId,
           replyToPreview,
@@ -463,8 +463,8 @@ export function TripChatProvider({
           tripId,
           organizationId,
           newStatus,
-          userId:   (profile as any).uid ?? null,
-          userName: (profile as any).full_name || (profile as any).displayName || "Dispatcher",
+          userId:   profile.uid ?? null,
+          userName: profile.full_name || profile.displayName || "Dispatcher",
         });
         return true;
       } catch {

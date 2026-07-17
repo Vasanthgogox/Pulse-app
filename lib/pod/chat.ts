@@ -1,4 +1,10 @@
-import { GoogleGenAI, type Content } from '@google/genai';
+import {
+  GoogleGenAI,
+  type Content,
+  type Part,
+  type GenerateContentConfig,
+  type GenerateContentResponse,
+} from '@google/genai';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 const TIMEOUT_MS = 60_000;
@@ -17,7 +23,7 @@ function getGenAIClient() {
   return genAIClient;
 }
 
-function timeoutPromise(ms: number) {
+function timeoutPromise(ms: number): Promise<never> {
   return new Promise((_, reject) => setTimeout(() => reject(new Error('AI response timeout')), ms));
 }
 
@@ -45,7 +51,7 @@ export async function chatWithDocument(
   const base64Data = arrayBufferToBase64(fileBuffer);
   
   // The first message needs to contain the document attachment
-  const documentPart = { inlineData: { data: base64Data, mimeType } } as any;
+  const documentPart: Part = { inlineData: { data: base64Data, mimeType } };
 
   const systemInstruction = `You are a highly advanced digital audit assistant ("POD AI").
 You are analyzing a proof-of-delivery (POD), LSR copy, invoice, or logistics document.
@@ -58,7 +64,7 @@ Keep responses concise, crisp, and professional. Use formatting like bolding or 
   const contents: Content[] = [];
   
   // Add the current interaction context
-  const currentTurnParts: any[] = [
+  const currentTurnParts: Part[] = [
     { text: systemInstruction },
     documentPart
   ];
@@ -69,29 +75,29 @@ Keep responses concise, crisp, and professional. Use formatting like bolding or 
     for (const msg of history) {
       contents.push({
         role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content } as any],
-      } as any);
+        parts: [{ text: msg.content }],
+      });
     }
     // Add the new message
     contents.push({
       role: 'user',
-      parts: [documentPart, { text: newMessage } as any],
-    } as any);
+      parts: [documentPart, { text: newMessage }],
+    });
   } else {
     // First message ever
     contents.push({
       role: 'user',
-      parts: [...currentTurnParts, { text: newMessage } as any],
-    } as any);
+      parts: [...currentTurnParts, { text: newMessage }],
+    });
   }
 
-  const config = {
+  const config: GenerateContentConfig = {
     temperature: 0.2, // Slightly creative but mostly deterministic
     topK: 40,
-  } as any;
+  };
 
   try {
-    const result: any = await Promise.race([
+    const result: GenerateContentResponse = await Promise.race([
       getGenAIClient().models.generateContent({
         model: MODELS.default,
         contents,
@@ -103,15 +109,15 @@ Keep responses concise, crisp, and professional. Use formatting like bolding or 
     const text = result.text ?? '';
     if (!text) throw new Error('Empty response from AI model');
     return text;
-  } catch (err: any) {
-    const msg = err?.message ?? String(err);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.error("[Chat API Error]", msg);
     
     // Attempt fallback if timeout or quota
     if (msg.includes('timeout') || msg.includes('429') || msg.includes('exhausted')) {
         console.log("Attempting fallback model...");
         try {
-            const fallbackResult: any = await getGenAIClient().models.generateContent({
+            const fallbackResult: GenerateContentResponse = await getGenAIClient().models.generateContent({
               model: MODELS.fallback,
               contents,
               config,

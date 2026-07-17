@@ -302,9 +302,9 @@ export function RevExpBarChart({ data, width, height = 160 }: RevExpBarChartProp
             {/* Revenue bar (indigo) */}
             <AnimatedRect
               x={gx - barW - 1.5}
-              y={animRevY as any}
+              y={animRevY as unknown as number}
               width={barW}
-              height={animRevH as any}
+              height={animRevH as unknown as number}
               fill={Theme.primary}
               rx={2}
               fillOpacity={0.9}
@@ -312,9 +312,9 @@ export function RevExpBarChart({ data, width, height = 160 }: RevExpBarChartProp
             {/* Expense bar (red) */}
             <AnimatedRect
               x={gx + 1.5}
-              y={animExpY as any}
+              y={animExpY as unknown as number}
               width={barW}
-              height={animExpH as any}
+              height={animExpH as unknown as number}
               fill={Theme.teslaRed}
               rx={2}
               fillOpacity={0.75}
@@ -399,9 +399,9 @@ export function ProfitBarChart({ data, width, height = 130 }: RevExpBarChartProp
           <G key={i}>
             <AnimatedRect
               x={gx - barW / 2}
-              y={positive ? (animY as any) : baseY}
+              y={positive ? (animY as unknown as number) : baseY}
               width={barW}
-              height={animH as any}
+              height={animH as unknown as number}
               fill={positive ? Theme.darkGreen : Theme.teslaRed}
               rx={2}
               fillOpacity={0.85}
@@ -546,7 +546,7 @@ export function UtilizationRing({ pct, size = 72, color = Theme.primary }: Utili
         stroke={color}
         strokeWidth={strokeW}
         strokeDasharray={`${circumference}`}
-        strokeDashoffset={dashOffset as any}
+        strokeDashoffset={dashOffset as unknown as number}
         strokeLinecap="round"
         rotation="-90"
         origin={`${cx},${cy}`}

@@ -1001,7 +1001,7 @@ const styles = StyleSheet.create({
     width: "98%",
     maxWidth: 760,
     ...Platform.select({
-      web: { height: "92vh", maxHeight: "92vh" } as any,
+      web: { height: "92vh", maxHeight: "92vh" } as object,
       default: { maxHeight: "92%" },
     }),
   },
@@ -1085,7 +1085,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-      } as any,
+      } as object,
       default: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
@@ -1107,7 +1107,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05)",
-      } as any,
+      } as object,
     }),
   },
   handshakeSegBtnText: {
@@ -1131,7 +1131,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
-      } as any,
+      } as object,
       default: {
         shadowColor: "#0f172a",
         shadowOffset: { width: 0, height: 1 },
@@ -1184,7 +1184,7 @@ const styles = StyleSheet.create({
       web: {
         boxShadow: "0 12px 24px rgba(15,23,42,0.2)",
         cursor: "pointer",
-      } as any,
+      } as object,
       default: {
         shadowColor: "#0f172a",
         shadowOffset: { width: 0, height: 8 },
@@ -1515,7 +1515,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   partnerAddBtn: {
@@ -1548,7 +1548,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   phoneModalFound: {

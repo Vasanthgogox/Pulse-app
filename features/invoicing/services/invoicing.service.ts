@@ -361,7 +361,7 @@ export async function fetchPodReconciliationSummary(
   }
 }
 
-interface InvoicePayload {
+export interface InvoicePayload {
   invoiceNo?: string;
   [key: string]: unknown;
 }

@@ -799,7 +799,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: 'none',
-      } as any,
+      } as object,
     }),
   },
   twoCol: { flexDirection: 'row', gap: 12 },
@@ -836,7 +836,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: 'none',
-      } as any,
+      } as object,
     }),
   },
   fieldChevron: { marginLeft: 4, flexShrink: 0 },

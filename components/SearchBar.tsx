@@ -61,7 +61,7 @@ export function SearchBar({ value, onChangeText, placeholder = 'Search...', styl
         selectionColor={Theme.driverEmerald}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        style={[styles.input, chromeFix as any]}
+        style={[styles.input, chromeFix as object]}
         {...inputProps}
       />
     </Pressable>

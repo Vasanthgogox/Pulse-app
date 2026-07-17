@@ -188,8 +188,8 @@ function getTripStopCoordinate(
   trip: tripsService.TripRow,
   target: 'pickup' | 'drop'
 ): { latitude: number; longitude: number } | null {
-  const latitude = Number(target === 'pickup' ? (trip as any).pickup_lat : (trip as any).drop_lat);
-  const longitude = Number(target === 'pickup' ? (trip as any).pickup_lon : (trip as any).drop_lon);
+  const latitude = Number(target === 'pickup' ? trip.pickup_lat : trip.drop_lat);
+  const longitude = Number(target === 'pickup' ? trip.pickup_lon : trip.drop_lon);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   return { latitude, longitude };
 }
@@ -1141,7 +1141,7 @@ export default function DriverDashboard() {
     lastCameraCenterRef.current = driverMapPosition;
 
     try {
-      const mapAny = mapRef.current as any;
+      const mapAny = mapRef.current as { animateCamera?: (cam: object, duration?: number) => void } | null;
       const heading = Number(youHeadingSv.value);
       mapAny?.animateCamera?.(
         {
@@ -1576,7 +1576,7 @@ export default function DriverDashboard() {
     if (!targetRef.current || !driverMapPosition) return;
 
     try {
-      const mapAny = targetRef.current as any;
+      const mapAny = targetRef.current as { animateCamera?: (cam: object, duration?: number) => void } | null;
       mapAny?.animateCamera?.(
         {
           center: {
@@ -1638,9 +1638,9 @@ export default function DriverDashboard() {
               ? { ...driverMapPosition, latitudeDelta: 0.02, longitudeDelta: 0.02 }
               : DEFAULT_MAP_REGION
           }
-          mapType={Platform.OS === 'ios' ? ('mutedStandard' as any) : 'standard'}
-          userInterfaceStyle={mapIsDark ? ('dark' as any) : ('light' as any)}
-          customMapStyle={mapIsDark ? (darkMapStyle as any) : undefined}
+          mapType={Platform.OS === 'ios' ? "mutedStandard" as const : 'standard'}
+          userInterfaceStyle={mapIsDark ? "dark" as const : "light" as const}
+          customMapStyle={mapIsDark ? (darkMapStyle as unknown as import("react-native-maps").MapStyleElement[]) : undefined}
           showsUserLocation={false}
           scrollEnabled={!mapInteractionsLocked}
           zoomEnabled={!mapInteractionsLocked}
@@ -1652,7 +1652,7 @@ export default function DriverDashboard() {
             try {
               // Keep the map stable; we follow the driver via animateCamera in an effect.
               if (driverMapPosition && targetRef.current) {
-                const mapAny = targetRef.current as any;
+                const mapAny = targetRef.current as { animateCamera?: (cam: object, duration?: number) => void } | null;
                 mapAny?.animateCamera?.(
                   {
                     center: {

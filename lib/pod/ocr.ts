@@ -1,6 +1,18 @@
-import { GoogleGenAI, type Content } from '@google/genai';
+import { GoogleGenAI, type Content, type Part } from '@google/genai';
 import { BASE_OCR_PROMPT, buildUserPrompt } from './prompts';
-import type { PODExtraction } from '@/types/pod';
+import type {
+  PODExtraction,
+  PODExtractionLegacy,
+  PODHeader,
+  PODTransport,
+  PODParties,
+  PODFinancials,
+  PODInspection,
+  DamageShortageRow,
+  LineItem,
+  ConfidenceField,
+  MultiPODExtraction,
+} from '@/types/pod';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 const TIMEOUT_MS = 60_000;
@@ -43,39 +55,41 @@ function parseExtractionJson(text: string) {
   }
 }
 
-function num(v: any): number {
+function num(v: unknown): number {
   if (typeof v === 'number' && !Number.isNaN(v)) return v;
   if (typeof v === 'string') return parseFloat(String(v).replace(/[^0-9.-]/g, '')) || 0;
-  if (v != null && typeof v === 'object' && 'value' in v) return num(v.value);
+  if (v != null && typeof v === 'object' && 'value' in v) return num((v as { value: unknown }).value);
   return 0;
 }
 
-function str(v: any): string {
+function str(v: unknown): string {
   if (v == null) return '';
   if (typeof v === 'string') return v;
-  if (typeof v === 'object' && v !== null && 'value' in v) return String(v.value ?? '');
+  if (typeof v === 'object' && v !== null && 'value' in v) return String((v as { value: unknown }).value ?? '');
   return String(v);
 }
 
-function digitsOnly(podNumber: any): string {
+function digitsOnly(podNumber: unknown): string {
   if (podNumber == null) return '';
   const s = String(str(podNumber)).trim();
   const digits = s.replace(/\D/g, '');
   return digits || '';
 }
 
-function unwrapScalar(v: any) {
+function unwrapScalar(v: unknown): unknown {
   if (v == null) return null;
-  if (typeof v === 'object' && v !== null && 'value' in v) return v.value;
+  if (typeof v === 'object' && v !== null && 'value' in v) return (v as { value: unknown }).value;
   return v;
 }
 
-function cf(value: any, confidence: any, isNum = false) {
+function cf(value: unknown, confidence: unknown, isNum = false): ConfidenceField<number | string> {
   return {
     value: isNum ? num(value) : (value == null ? '' : String(value)),
     confidence: Number(confidence) || 0.9,
   };
 }
+
+type CF = ConfidenceField<number | string>;
 
 const HEADER_KEYS = ['date', 'lr_number', 'invoice_number', 'original_gir_no', 'gir_number', 'arrival_date_time', 'unload_start_date_time', 'unload_end_date_time', 'release_date_time', 'eway_bill_number', 'loading_in_time', 'loading_out_time', 'unloading_in_time', 'unloading_out_time'];
 const TRANSPORT_KEYS: string[] = [];
@@ -83,14 +97,16 @@ const PARTIES_KEYS = ['consignor_name_address', 'consignee_name_address', 'gstin
 const FINANCIALS_KEYS = ['unloading_charges', 'loading_charges', 'shortage_amount', 'damage_amount', 'leakage_amount', 'total_amount', 'debit_reason_code', 'debit_type', 'loading_cost', 'unloading_cost', 'damage_cost', 'shortage_cost'];
 const FINANCIALS_NUMERIC = new Set(['unloading_charges', 'loading_charges', 'shortage_amount', 'damage_amount', 'leakage_amount', 'total_amount', 'loading_cost', 'unloading_cost', 'damage_cost', 'shortage_cost']);
 
-function section(obj: any, keys: string[], numericKeys = new Set()) {
+function section(obj: unknown, keys: string[], numericKeys: Set<string> = new Set()): Record<string, CF> {
   if (!obj || typeof obj !== 'object') return {};
-  const out: any = {};
+  const record = obj as Record<string, unknown>;
+  const out: Record<string, CF> = {};
   for (const k of keys) {
-    if (obj[k] == null) continue;
-    const v = obj[k];
+    if (record[k] == null) continue;
+    const v = record[k];
     if (typeof v === 'object' && v !== null && 'value' in v) {
-      out[k] = cf(v.value, v.confidence, numericKeys.has(k));
+      const cfv = v as { value: unknown; confidence?: unknown };
+      out[k] = cf(cfv.value, cfv.confidence, numericKeys.has(k));
     } else {
       out[k] = cf(v, 0.9, numericKeys.has(k));
     }
@@ -98,55 +114,65 @@ function section(obj: any, keys: string[], numericKeys = new Set()) {
   return out;
 }
 
-function ensureLrNumberFromPodNumber(header: any, rawHeader: any) {
-  if (!header || !rawHeader) return;
-  const lrVal = header.lr_number?.value;
+function ensureLrNumberFromPodNumber(header: Record<string, unknown>, rawHeader: unknown) {
+  if (!header || !rawHeader || typeof rawHeader !== 'object') return;
+  const lrVal = (header.lr_number as CF | undefined)?.value;
   const hasLr = lrVal != null && String(lrVal).trim() !== '';
   if (hasLr) return;
-  const podVal = rawHeader.pod_number;
-  const v = podVal && typeof podVal === 'object' && 'value' in podVal ? podVal.value : podVal;
+  const podVal = (rawHeader as Record<string, unknown>).pod_number;
+  const podObj = podVal && typeof podVal === 'object' ? (podVal as { value?: unknown; confidence?: unknown }) : null;
+  const v = podObj && 'value' in podObj ? podObj.value : podVal;
   if (v != null && String(v).trim() !== '') {
-    header.lr_number = cf(v, (podVal && typeof podVal === 'object' && podVal.confidence != null) ? podVal.confidence : 0.9);
+    header.lr_number = cf(v, podObj && podObj.confidence != null ? podObj.confidence : 0.9);
   }
 }
 
-function normalizeExtraction(obj: any) {
-  const hasNested = obj && (obj.header != null || obj.financials != null);
+/** Coerce an unknown parsed value into an indexable record (empty if not object-like). */
+function asRec(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+}
+
+function normalizeExtraction(input: unknown): PODExtraction | PODExtractionLegacy {
+  const obj = asRec(input);
+  const hasNested = obj.header != null || obj.financials != null;
   if (hasNested) {
-    const inspectionRaw = obj.inspection || {};
-    const inspection: any = {
+    const inspectionRaw = asRec(obj.inspection);
+    const inspection: PODInspection = {
       damaged_cases: num(unwrapScalar(inspectionRaw.damaged_cases)),
       short_cases: num(unwrapScalar(inspectionRaw.short_cases)),
       excess_cases: num(unwrapScalar(inspectionRaw.excess_cases)),
-      goods_inspection_report: typeof inspectionRaw.goods_inspection_report === 'object' ? inspectionRaw.goods_inspection_report : cf(inspectionRaw.goods_inspection_report, 0.9),
-      actual_vs_standard_time: typeof inspectionRaw.actual_vs_standard_time === 'object' ? inspectionRaw.actual_vs_standard_time : cf(inspectionRaw.actual_vs_standard_time, 0.9),
-      tolerance_hours: typeof inspectionRaw.tolerance_hours === 'object' ? inspectionRaw.tolerance_hours : cf(inspectionRaw.tolerance_hours, 0.9, true),
-      bpil_copy_data: typeof inspectionRaw.bpil_copy_data === 'object' ? inspectionRaw.bpil_copy_data : cf(inspectionRaw.bpil_copy_data, 0.9),
-      lscr_copy_data: typeof inspectionRaw.lscr_copy_data === 'object' ? inspectionRaw.lscr_copy_data : cf(inspectionRaw.lscr_copy_data, 0.9),
+      goods_inspection_report: (typeof inspectionRaw.goods_inspection_report === 'object' ? (inspectionRaw.goods_inspection_report as CF) : cf(inspectionRaw.goods_inspection_report, 0.9)) as ConfidenceField<string>,
+      actual_vs_standard_time: (typeof inspectionRaw.actual_vs_standard_time === 'object' ? (inspectionRaw.actual_vs_standard_time as CF) : cf(inspectionRaw.actual_vs_standard_time, 0.9)) as ConfidenceField<string>,
+      tolerance_hours: (typeof inspectionRaw.tolerance_hours === 'object' ? (inspectionRaw.tolerance_hours as ConfidenceField<number>) : cf(inspectionRaw.tolerance_hours, 0.9, true)) as ConfidenceField<number>,
+      bpil_copy_data: (typeof inspectionRaw.bpil_copy_data === 'object' ? (inspectionRaw.bpil_copy_data as CF) : cf(inspectionRaw.bpil_copy_data, 0.9)) as ConfidenceField<string>,
+      lscr_copy_data: (typeof inspectionRaw.lscr_copy_data === 'object' ? (inspectionRaw.lscr_copy_data as CF) : cf(inspectionRaw.lscr_copy_data, 0.9)) as ConfidenceField<string>,
     };
     if (Array.isArray(inspectionRaw.damage_shortage_rows) && inspectionRaw.damage_shortage_rows.length > 0) {
-      inspection.damage_shortage_rows = inspectionRaw.damage_shortage_rows.map((row: any) => ({
-        unit_type: str(unwrapScalar(row.unit_type)) || undefined,
-        quantity: unwrapScalar(row.quantity) != null ? num(unwrapScalar(row.quantity)) : undefined,
-        shortage_count: unwrapScalar(row.shortage_count) != null ? num(unwrapScalar(row.shortage_count)) : undefined,
-        spillage_count: unwrapScalar(row.spillage_count) != null ? num(unwrapScalar(row.spillage_count)) : undefined,
-        damage_count: unwrapScalar(row.damage_count) != null ? num(unwrapScalar(row.damage_count)) : undefined,
-        damage_cost: unwrapScalar(row.damage_cost) != null ? num(unwrapScalar(row.damage_cost)) : undefined,
-      }));
+      inspection.damage_shortage_rows = inspectionRaw.damage_shortage_rows.map((rawRow: unknown): DamageShortageRow => {
+        const row = asRec(rawRow);
+        return {
+          unit_type: str(unwrapScalar(row.unit_type)) || undefined,
+          quantity: unwrapScalar(row.quantity) != null ? num(unwrapScalar(row.quantity)) : undefined,
+          shortage_count: unwrapScalar(row.shortage_count) != null ? num(unwrapScalar(row.shortage_count)) : undefined,
+          spillage_count: unwrapScalar(row.spillage_count) != null ? num(unwrapScalar(row.spillage_count)) : undefined,
+          damage_count: unwrapScalar(row.damage_count) != null ? num(unwrapScalar(row.damage_count)) : undefined,
+          damage_cost: unwrapScalar(row.damage_cost) != null ? num(unwrapScalar(row.damage_cost)) : undefined,
+        };
+      });
     }
 
-    const line_items: any[] = [];
+    const line_items: LineItem[] = [];
 
-    const extraction: any = {
-      header: section(obj.header, HEADER_KEYS),
-      transport: section(obj.transport, TRANSPORT_KEYS),
-      parties: section(obj.parties, PARTIES_KEYS),
-      financials: section(obj.financials, FINANCIALS_KEYS, FINANCIALS_NUMERIC),
+    const extraction: PODExtraction = {
+      header: section(obj.header, HEADER_KEYS) as PODHeader,
+      transport: section(obj.transport, TRANSPORT_KEYS) as PODTransport,
+      parties: section(obj.parties, PARTIES_KEYS) as PODParties,
+      financials: section(obj.financials, FINANCIALS_KEYS, FINANCIALS_NUMERIC) as PODFinancials,
       inspection,
       line_items,
     };
     if (extraction.header) {
-      ensureLrNumberFromPodNumber(extraction.header, obj.header);
+      ensureLrNumberFromPodNumber(extraction.header as Record<string, unknown>, obj.header);
       extraction.header.pod_number_canonical = digitsOnly(extraction.header.lr_number?.value);
     }
 
@@ -155,20 +181,26 @@ function normalizeExtraction(obj: any) {
     return extraction;
   }
 
-  const legacyHeader: any = {
-    date: obj.pod_date ? cf(obj.pod_date.value ?? obj.pod_date, obj.pod_date.confidence) : undefined,
-    lr_number: obj.lr_number ? cf(obj.lr_number.value ?? obj.lr_number, obj.lr_number.confidence) : undefined,
-    invoice_number: obj.invoice_reference ? cf(obj.invoice_reference.value ?? obj.invoice_reference, obj.invoice_reference.confidence) : undefined,
+  const podDate = asRec(obj.pod_date);
+  const lrNumber = asRec(obj.lr_number);
+  const invoiceRef = asRec(obj.invoice_reference);
+  const legacyHeader: PODHeader = {
+    date: obj.pod_date ? (cf(podDate.value ?? obj.pod_date, podDate.confidence) as ConfidenceField<string>) : undefined,
+    lr_number: obj.lr_number ? (cf(lrNumber.value ?? obj.lr_number, lrNumber.confidence) as ConfidenceField<string>) : undefined,
+    invoice_number: obj.invoice_reference ? (cf(invoiceRef.value ?? obj.invoice_reference, invoiceRef.confidence) as ConfidenceField<string>) : undefined,
   };
   legacyHeader.pod_number_canonical = digitsOnly(legacyHeader.lr_number?.value);
-  const legacy: any = {
+  const unloadingCharges = asRec(obj.unloading_charges);
+  const unloadingDebit = asRec(obj.unloading_debit);
+  const totalAmount = asRec(obj.total_amount);
+  const legacy: PODExtraction = {
     header: legacyHeader,
     transport: {},
     parties: {},
     financials: {
-      unloading_charges: obj.unloading_charges ? cf(obj.unloading_charges.value, obj.unloading_charges.confidence, true) : undefined,
-      shortage_amount: obj.unloading_debit ? cf(obj.unloading_debit.value, obj.unloading_debit.confidence, true) : undefined,
-      total_amount: obj.total_amount ? cf(obj.total_amount.value, obj.total_amount.confidence, true) : undefined,
+      unloading_charges: obj.unloading_charges ? (cf(unloadingCharges.value, unloadingCharges.confidence, true) as ConfidenceField<number>) : undefined,
+      shortage_amount: obj.unloading_debit ? (cf(unloadingDebit.value, unloadingDebit.confidence, true) as ConfidenceField<number>) : undefined,
+      total_amount: obj.total_amount ? (cf(totalAmount.value, totalAmount.confidence, true) as ConfidenceField<number>) : undefined,
     },
     inspection: { damaged_cases: 0, short_cases: 0, excess_cases: 0 },
     line_items: [],
@@ -178,7 +210,7 @@ function normalizeExtraction(obj: any) {
   return legacy;
 }
 
-function computeValidationError(extraction: any) {
+function computeValidationError(extraction: { financials?: PODFinancials }) {
   const totalFromDoc = extraction.financials?.total_amount?.value != null ? num(extraction.financials.total_amount.value) : null;
   const unloading = num(extraction.financials?.unloading_charges?.value);
   const loading = num(extraction.financials?.loading_charges?.value);
@@ -194,8 +226,8 @@ function computeValidationError(extraction: any) {
   return null;
 }
 
-function normalizeGeminiError(err: any) {
-  const msg = err?.message ?? String(err);
+function normalizeGeminiError(err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
   if (/API key not valid|invalid.*api.*key|403/i.test(msg)) return 'Invalid or missing Gemini API key.';
   if (/quota|rate limit|429|resource exhausted/i.test(msg)) return 'OCR rate limit exceeded. Try again in a few minutes.';
   if (/timeout|deadline/i.test(msg)) return 'OCR request timed out. Try again or use a smaller file.';
@@ -203,56 +235,83 @@ function normalizeGeminiError(err: any) {
   return msg;
 }
 
-function normalizeTrip(trip: any) {
-  if (!trip || typeof trip !== 'object') return null;
-  const transport = section(trip.transport, TRANSPORT_KEYS);
-  const parties = section(trip.parties, PARTIES_KEYS);
-  const arrival_date_time = trip.arrival_date_time && typeof trip.arrival_date_time === 'object' && 'value' in trip.arrival_date_time ? cf(trip.arrival_date_time.value, trip.arrival_date_time.confidence) : undefined;
-  const release_date_time = trip.release_date_time && typeof trip.release_date_time === 'object' && 'value' in trip.release_date_time ? cf(trip.release_date_time.value, trip.release_date_time.confidence) : undefined;
-  const unload_start_date_time = trip.unload_start_date_time && typeof trip.unload_start_date_time === 'object' && 'value' in trip.unload_start_date_time ? cf(trip.unload_start_date_time.value, trip.unload_start_date_time.confidence) : undefined;
-  const unload_end_date_time = trip.unload_end_date_time && typeof trip.unload_end_date_time === 'object' && 'value' in trip.unload_end_date_time ? cf(trip.unload_end_date_time.value, trip.unload_end_date_time.confidence) : undefined;
-  return { transport, parties, arrival_date_time, release_date_time, unload_start_date_time, unload_end_date_time };
+type NormalizedTrip = {
+  transport: Record<string, CF>;
+  parties: Record<string, CF>;
+  arrival_date_time?: CF;
+  release_date_time?: CF;
+  unload_start_date_time?: CF;
+  unload_end_date_time?: CF;
+};
+
+/** Read a { value, confidence } field off a raw record, returning a normalized CF if present. */
+function dateField(rec: Record<string, unknown>, key: string): CF | undefined {
+  const v = rec[key];
+  if (v && typeof v === 'object' && 'value' in v) {
+    const cfv = v as RawField;
+    return cf(cfv.value, cfv.confidence);
+  }
+  return undefined;
 }
 
-function mergeTripIntoPod(normalizedTrip: any, podOnly: any) {
-  const header: any = { ...section(podOnly.header, HEADER_KEYS) };
+type RawField = { value?: unknown; confidence?: unknown };
+
+function normalizeTrip(trip: unknown): NormalizedTrip | null {
+  if (!trip || typeof trip !== 'object') return null;
+  const rec = trip as Record<string, unknown>;
+  return {
+    transport: section(rec.transport, TRANSPORT_KEYS),
+    parties: section(rec.parties, PARTIES_KEYS),
+    arrival_date_time: dateField(rec, 'arrival_date_time'),
+    release_date_time: dateField(rec, 'release_date_time'),
+    unload_start_date_time: dateField(rec, 'unload_start_date_time'),
+    unload_end_date_time: dateField(rec, 'unload_end_date_time'),
+  };
+}
+
+function mergeTripIntoPod(normalizedTrip: NormalizedTrip, podOnlyInput: unknown): PODExtraction {
+  const podOnly = asRec(podOnlyInput);
+  const header: Record<string, CF | string> = { ...section(podOnly.header, HEADER_KEYS) };
   if (normalizedTrip.arrival_date_time) header.arrival_date_time = normalizedTrip.arrival_date_time;
   if (normalizedTrip.release_date_time) header.release_date_time = normalizedTrip.release_date_time;
   if (normalizedTrip.unload_start_date_time) header.unload_start_date_time = normalizedTrip.unload_start_date_time;
   if (normalizedTrip.unload_end_date_time) header.unload_end_date_time = normalizedTrip.unload_end_date_time;
 
-  const inspectionRaw = podOnly.inspection || {};
-  const inspection: any = {
+  const inspectionRaw = asRec(podOnly.inspection);
+  const inspection: PODInspection = {
     damaged_cases: num(unwrapScalar(inspectionRaw.damaged_cases)),
     short_cases: num(unwrapScalar(inspectionRaw.short_cases)),
     excess_cases: num(unwrapScalar(inspectionRaw.excess_cases)),
   };
   if (Array.isArray(inspectionRaw.damage_shortage_rows) && inspectionRaw.damage_shortage_rows.length > 0) {
-    inspection.damage_shortage_rows = inspectionRaw.damage_shortage_rows.map((row: any) => ({
-      unit_type: str(unwrapScalar(row.unit_type)) || undefined,
-      quantity: unwrapScalar(row.quantity) != null ? num(unwrapScalar(row.quantity)) : undefined,
-      shortage_count: unwrapScalar(row.shortage_count) != null ? num(unwrapScalar(row.shortage_count)) : undefined,
-      spillage_count: unwrapScalar(row.spillage_count) != null ? num(unwrapScalar(row.spillage_count)) : undefined,
-      damage_count: unwrapScalar(row.damage_count) != null ? num(unwrapScalar(row.damage_count)) : undefined,
-      damage_cost: unwrapScalar(row.damage_cost) != null ? num(unwrapScalar(row.damage_cost)) : undefined,
-    }));
+    inspection.damage_shortage_rows = inspectionRaw.damage_shortage_rows.map((rawRow: unknown): DamageShortageRow => {
+      const row = asRec(rawRow);
+      return {
+        unit_type: str(unwrapScalar(row.unit_type)) || undefined,
+        quantity: unwrapScalar(row.quantity) != null ? num(unwrapScalar(row.quantity)) : undefined,
+        shortage_count: unwrapScalar(row.shortage_count) != null ? num(unwrapScalar(row.shortage_count)) : undefined,
+        spillage_count: unwrapScalar(row.spillage_count) != null ? num(unwrapScalar(row.spillage_count)) : undefined,
+        damage_count: unwrapScalar(row.damage_count) != null ? num(unwrapScalar(row.damage_count)) : undefined,
+        damage_cost: unwrapScalar(row.damage_cost) != null ? num(unwrapScalar(row.damage_cost)) : undefined,
+      };
+    });
   }
-  if (inspectionRaw.goods_inspection_report != null) inspection.goods_inspection_report = typeof inspectionRaw.goods_inspection_report === 'object' ? inspectionRaw.goods_inspection_report : cf(inspectionRaw.goods_inspection_report, 0.9);
-  if (inspectionRaw.actual_vs_standard_time != null) inspection.actual_vs_standard_time = typeof inspectionRaw.actual_vs_standard_time === 'object' ? inspectionRaw.actual_vs_standard_time : cf(inspectionRaw.actual_vs_standard_time, 0.9);
-  if (inspectionRaw.tolerance_hours != null) inspection.tolerance_hours = typeof inspectionRaw.tolerance_hours === 'object' ? inspectionRaw.tolerance_hours : cf(inspectionRaw.tolerance_hours, 0.9, true);
+  if (inspectionRaw.goods_inspection_report != null) inspection.goods_inspection_report = (typeof inspectionRaw.goods_inspection_report === 'object' ? (inspectionRaw.goods_inspection_report as CF) : cf(inspectionRaw.goods_inspection_report, 0.9)) as ConfidenceField<string>;
+  if (inspectionRaw.actual_vs_standard_time != null) inspection.actual_vs_standard_time = (typeof inspectionRaw.actual_vs_standard_time === 'object' ? (inspectionRaw.actual_vs_standard_time as CF) : cf(inspectionRaw.actual_vs_standard_time, 0.9)) as ConfidenceField<string>;
+  if (inspectionRaw.tolerance_hours != null) inspection.tolerance_hours = (typeof inspectionRaw.tolerance_hours === 'object' ? (inspectionRaw.tolerance_hours as ConfidenceField<number>) : cf(inspectionRaw.tolerance_hours, 0.9, true)) as ConfidenceField<number>;
 
-  const line_items: any[] = [];
+  const line_items: LineItem[] = [];
 
-  const full: any = {
-    header,
-    transport: normalizedTrip.transport || {},
-    parties: normalizedTrip.parties || {},
-    financials: section(podOnly.financials, FINANCIALS_KEYS, FINANCIALS_NUMERIC),
+  const full: PODExtraction = {
+    header: header as PODHeader,
+    transport: (normalizedTrip.transport || {}) as PODTransport,
+    parties: (normalizedTrip.parties || {}) as PODParties,
+    financials: section(podOnly.financials, FINANCIALS_KEYS, FINANCIALS_NUMERIC) as PODFinancials,
     inspection,
     line_items,
   };
   if (full.header) {
-    ensureLrNumberFromPodNumber(full.header, podOnly.header);
+    ensureLrNumberFromPodNumber(full.header as Record<string, unknown>, podOnly.header);
     full.header.pod_number_canonical = digitsOnly(full.header.lr_number?.value);
   }
   const validationError = computeValidationError(full);
@@ -260,9 +319,10 @@ function mergeTripIntoPod(normalizedTrip: any, podOnly: any) {
   return full;
 }
 
-function tripHash(extraction: any) {
-  const p = extraction.parties || {};
-  const h = extraction.header || {};
+function tripHash(extraction: PODExtraction | PODExtractionLegacy): string {
+  const e = extraction as PODExtraction;
+  const p = e.parties || {};
+  const h = e.header || {};
   const parts = [
     str(h.arrival_date_time?.value),
     str(h.release_date_time?.value),
@@ -272,12 +332,12 @@ function tripHash(extraction: any) {
   return parts.join('|');
 }
 
-function consolidatePodsAndValidate(pods: any[], tripMismatch: boolean) {
-  const seen = new Set();
-  const consolidated = [];
+function consolidatePodsAndValidate(pods: (PODExtraction | PODExtractionLegacy)[], tripMismatch: boolean): MultiPODExtraction {
+  const seen = new Set<string>();
+  const consolidated: (PODExtraction | PODExtractionLegacy)[] = [];
   let duplicateCanonical = false;
   for (let i = 0; i < pods.length; i++) {
-    const p = pods[i];
+    const p = pods[i] as PODExtraction;
     const canonical = (p.header && p.header.pod_number_canonical) ? String(p.header.pod_number_canonical) : '';
     const key = canonical || `__page_${i}`;
     if (seen.has(key)) {
@@ -299,21 +359,27 @@ function consolidatePodsAndValidate(pods: any[], tripMismatch: boolean) {
   };
 }
 
-function normalizeToPodsArray(parsed: any) {
-  if (parsed && parsed.trip != null && Array.isArray(parsed.pods) && parsed.pods.length > 0) {
-    const normalizedTrip = normalizeTrip(parsed.trip);
-    const pods = parsed.pods.map((podOnly: any) => mergeTripIntoPod(normalizedTrip || { transport: {}, parties: {} }, podOnly)).filter(Boolean);
+function normalizeToPodsArray(parsed: unknown): MultiPODExtraction {
+  const obj = asRec(parsed);
+  if (obj.trip != null && Array.isArray(obj.pods) && obj.pods.length > 0) {
+    const normalizedTrip = normalizeTrip(obj.trip);
+    const pods = obj.pods
+      .map((podOnly) => mergeTripIntoPod(normalizedTrip || { transport: {}, parties: {} }, podOnly))
+      .filter((p): p is PODExtraction => p != null);
     if (pods.length === 0) throw new Error('OCR returned no valid PODs');
-    const hashes = pods.map((p: any) => tripHash(p));
-    const tripMismatch = hashes.some((h: any) => h !== hashes[0]);
+    const hashes = pods.map((p) => tripHash(p));
+    const tripMismatch = hashes.some((h) => h !== hashes[0]);
     return consolidatePodsAndValidate(pods, tripMismatch);
   }
-  if (parsed && Array.isArray(parsed.pods) && parsed.pods.length > 0) {
-    const pods = parsed.pods.map((p: any) => normalizeExtraction(p)).filter(Boolean);
-    const tripMismatch = pods.length > 1 && pods.map((p: any) => tripHash(p)).some((h: any, i: number, arr: any[]) => h !== arr[0]);
+  if (Array.isArray(obj.pods) && obj.pods.length > 0) {
+    const pods = obj.pods
+      .map((p) => normalizeExtraction(p))
+      .filter((p): p is PODExtraction | PODExtractionLegacy => p != null);
+    const hashes = pods.map((p) => tripHash(p));
+    const tripMismatch = pods.length > 1 && hashes.some((h) => h !== hashes[0]);
     return consolidatePodsAndValidate(pods, tripMismatch);
   }
-  if (parsed && (parsed.header != null || parsed.financials != null || parsed.pod_date != null)) {
+  if (obj.header != null || obj.financials != null || obj.pod_date != null) {
     return { pods: [normalizeExtraction(parsed)] };
   }
   throw new Error('OCR returned no valid PODs');
@@ -333,15 +399,11 @@ async function performOCR(buffer: Uint8Array | ArrayBuffer, mimeType: string, mo
   const base64Data = arrayBufferToBase64(buffer);
   const fullPrompt = BASE_OCR_PROMPT + buildUserPrompt(fileName);
   
-  const contents: Content[] = [
-    {
-      role: 'user',
-      parts: [
-        { text: fullPrompt } as any,
-        { inlineData: { data: base64Data, mimeType } } as any,
-      ],
-    },
+  const parts: Part[] = [
+    { text: fullPrompt },
+    { inlineData: { data: base64Data, mimeType } },
   ];
+  const contents: Content[] = [{ role: 'user', parts }];
 
   const response = await getGenAIClient().models.generateContent({
     model: modelName,
@@ -351,7 +413,7 @@ async function performOCR(buffer: Uint8Array | ArrayBuffer, mimeType: string, mo
       // We reduced generation tokens required by asking to omit missing fields, this drastically speeds up output!
       temperature: 0.1, // Lower temperature = faster and more deterministic JSON parsing
       topK: 10,
-    } as any,
+    },
   });
   const text = response.text ?? '';
   if (!text) throw new Error('Empty response from OCR model');
@@ -359,20 +421,28 @@ async function performOCR(buffer: Uint8Array | ArrayBuffer, mimeType: string, mo
   return normalizeToPodsArray(parsed);
 }
 
-async function runOCRWithRetrySingle(buffer: Uint8Array | ArrayBuffer, mimeType: string, fileName?: string) {
+type OCRRunResult = {
+  extraction: MultiPODExtraction;
+  model: string;
+  processingTime: number;
+};
+
+async function runOCRWithRetrySingle(
+  buffer: Uint8Array | ArrayBuffer,
+  mimeType: string,
+  fileName?: string,
+): Promise<OCRRunResult> {
   const models = [MODELS.default, MODELS.fallback];
-  let lastError;
-  let lastResult;
-  
-  // We removed retry loops on identical models to fail-fast. If gemini-2.0-flash errors, it drops immediately to 1.5. 
+  let lastError: unknown;
+
+  // We removed retry loops on identical models to fail-fast. If gemini-2.0-flash errors, it drops immediately to 1.5.
   for (const model of models) {
     try {
-      const extraction: any = await Promise.race([
+      const extraction = (await Promise.race([
         performOCR(buffer, mimeType, model, fileName),
         timeoutPromise(TIMEOUT_MS),
-      ]);
-      lastResult = { extraction, model, processingTime: 0 };
-      return lastResult;
+      ])) as MultiPODExtraction;
+      return { extraction, model, processingTime: 0 };
     } catch (err) {
       console.log(`[OCR] error on ${model}`, err);
       lastError = err;
@@ -389,27 +459,22 @@ export async function runOCR(
 ): Promise<OCROutput> {
   const start = Date.now();
   if (onProgress) onProgress(10);
-  
+
   const buffer = await file.arrayBuffer();
   const mimeType = file.type;
-  
+
   if (onProgress) onProgress(20);
-
-  let result: any;
-
   if (onProgress) onProgress(50);
-  result = await runOCRWithRetrySingle(buffer, mimeType, fileName);
-  
+  const result = await runOCRWithRetrySingle(buffer, mimeType, fileName);
   if (onProgress) onProgress(100);
 
-  let extractionToReturn = result.extraction;
-  if(result.extraction && result.extraction.pods && result.extraction.pods.length > 0) {
-      extractionToReturn = result.extraction.pods[0];
-  }
+  const firstPod = result.extraction.pods?.[0];
+  const extractionToReturn =
+    firstPod != null ? firstPod : (result.extraction as unknown as PODExtraction);
 
   return {
-      extraction: extractionToReturn as PODExtraction,
-      model: result.model,
-      processingTime: (Date.now() - start) / 1000
+    extraction: extractionToReturn as PODExtraction,
+    model: result.model,
+    processingTime: (Date.now() - start) / 1000,
   };
 }

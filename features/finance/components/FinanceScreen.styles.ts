@@ -64,7 +64,7 @@ export const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         filter: "blur(22px)",
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -87,7 +87,7 @@ export const styles = StyleSheet.create({
         minHeight: 236,
         paddingHorizontal: 24,
         paddingVertical: 20,
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -96,7 +96,7 @@ export const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         minHeight: 252,
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -300,7 +300,7 @@ export const styles = StyleSheet.create({
         flexWrap: "nowrap",
         alignItems: "stretch",
         width: "100%",
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -328,7 +328,7 @@ export const styles = StyleSheet.create({
         minWidth: 0,
         height: 170,
         borderRadius: 20,
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -348,7 +348,7 @@ export const styles = StyleSheet.create({
       web: {
         paddingHorizontal: 18,
         paddingVertical: 16,
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -363,7 +363,7 @@ export const styles = StyleSheet.create({
       web: {
         right: 12,
         top: 10,
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -393,7 +393,7 @@ export const styles = StyleSheet.create({
         width: 24,
         height: 24,
         borderRadius: 9,
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -410,7 +410,7 @@ export const styles = StyleSheet.create({
       web: {
         fontSize: 9,
         letterSpacing: 1.35,
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -433,7 +433,7 @@ export const styles = StyleSheet.create({
         paddingTop: Layout.currencyTextPaddingVertical,
         paddingBottom: Layout.currencyTextPaddingVertical,
         lineHeight: 58,
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -509,7 +509,7 @@ export const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         fontSize: 9,
-      } as any,
+      } as object,
       default: {},
     }),
   },

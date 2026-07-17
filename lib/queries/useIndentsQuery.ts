@@ -39,7 +39,7 @@ export function useIndentsQuery(orgId: string | null) {
         (qc.getQueryData(queryKeys.indents.finite(orgId ?? '')) as
           | Array<{ id: string }>
           | undefined) ?? [];
-      const res = await syncIndentsWithCache(orgId!, existing as any);
+      const res = await syncIndentsWithCache(orgId!, existing as Parameters<typeof syncIndentsWithCache>[1]);
       if (res.error) throw res.error;
       return res.indents;
     },

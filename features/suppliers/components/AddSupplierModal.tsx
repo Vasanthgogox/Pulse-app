@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   fieldRowWrap: {
@@ -862,7 +862,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   ledgerSubmitBtn: {
@@ -1182,7 +1182,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   screenActionCard: {

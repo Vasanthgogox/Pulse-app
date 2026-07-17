@@ -2079,7 +2079,7 @@ export function useTripDetail({
     setTripDocuments(
       bundle.documents.map((d) => ({
         ...(d as unknown as tripDocumentsService.TripDocumentRow),
-        document_type: (d as any).document_type ?? 'pod',
+        document_type: d.document_type ?? 'pod',
       })),
     );
 

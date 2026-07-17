@@ -641,7 +641,7 @@ const sl = withWebSafeShadows(
     alignSelf: "center",
   },
   charCount: {
-    marginLeft: "auto" as any,
+    marginLeft: "auto",
     fontSize: 10,
     fontWeight: "500",
     color: "#9CA3AF",

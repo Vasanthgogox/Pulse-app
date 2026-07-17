@@ -12,7 +12,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import {
     FlatList,
     Modal,
@@ -913,7 +913,7 @@ export function PodReconciliationScreen() {
                     <Text style={styles.errorText}>Could not load data</Text>
                     {error && (
                       <Text style={styles.errorDetail}>
-                        {(error as any).message || String(error)}
+                        {(error instanceof Error ? error.message : null) || String(error)}
                       </Text>
                     )}
                     <Pressable
@@ -1568,7 +1568,7 @@ function MetricCard({
   value: string;
   count: number;
   color: string;
-  icon: any;
+  icon: ComponentProps<typeof FontAwesome>["name"];
   compact?: boolean;
 }) {
   return (
@@ -1980,7 +1980,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   financeActionRight: {

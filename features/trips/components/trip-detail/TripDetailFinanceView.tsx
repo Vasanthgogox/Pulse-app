@@ -28,7 +28,7 @@ import {
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { splitTripLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
@@ -327,7 +327,7 @@ function TripDocsGrid({
               : isUploaded
                 ? Theme.primary
                 : Theme.textMuted;
-          const statusIcon =
+          const statusIcon: ComponentProps<typeof FontAwesome>["name"] =
             doc.status === "Pending" ? "clock-o" : "check-circle";
 
           return (
@@ -362,7 +362,7 @@ function TripDocsGrid({
               </Text>
               <View style={styles.docCardStatus}>
                 <FontAwesome
-                  name={statusIcon as any}
+                  name={statusIcon}
                   size={12}
                   color={statusColor}
                 />
@@ -4744,7 +4744,7 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     paddingVertical: 4,
     ...Platform.select({
-      web: { outlineStyle: "none" } as any,
+      web: { outlineStyle: "none" } as object,
     }),
   },
   inlineReasonWrap: {
@@ -4776,7 +4776,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Theme.textPrimaryDark,
     ...Platform.select({
-      web: { outlineStyle: "none" } as any,
+      web: { outlineStyle: "none" } as object,
     }),
   },
   inlineSaveBtn: {

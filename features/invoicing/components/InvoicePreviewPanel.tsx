@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export interface InvoicePreviewPanelProps {
   onClose?: () => void;
-  onPreview: (params: any) => void; // Changed from onFinalize to onPreview
+  onPreview: (params: Record<string, string>) => void; // Changed from onFinalize to onPreview
   isFinalizing: boolean; // This will now represent the state of PDF generation/navigation
   activeClient: string | null;
   selectedTrips: InvoicingTripView[];
@@ -1282,7 +1282,7 @@ const styles = StyleSheet.create({
   },
   termOptionActive: { color: Theme.primary, fontWeight: "800" },
   webTermsDropdown: {
-    position: "absolute" as any,
+    position: "absolute" as const,
     top: 44,
     right: 0,
     width: 120,

@@ -95,7 +95,16 @@ export async function getOrganizationsForUser(): Promise<{
     if (!memError && memberships?.length) {
       const orgIds = [...new Set(memberships.map((m) => m.organization_id))];
       // Try with logo_url first (requires migration 20260503120000_add_org_logo_url); fall back without it.
-      let orgsData: { id: any; name: any; slug: any; owner_id: any; operating_model: any; logo_url?: any }[] | null = null;
+      let orgsData:
+        | {
+            id: string;
+            name: string;
+            slug: string | null;
+            owner_id: string | null;
+            operating_model: string;
+            logo_url?: string | null;
+          }[]
+        | null = null;
       let orgError: { message: string } | null = null;
 
       const withLogo = await supabase()

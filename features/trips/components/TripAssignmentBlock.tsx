@@ -2278,14 +2278,14 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   statusPillPartial: {
-    backgroundColor: (Theme as any).warningMuted ?? Theme.surfaceGray,
+    backgroundColor: Theme.warningMuted ?? Theme.surfaceGray,
   },
   statusPillAssigned: {
     backgroundColor: Theme.positiveMuted,
   },
   statusPillTextUnassigned: { color: Theme.textMuted },
   statusPillTextPartial: {
-    color: (Theme as any).warning ?? Theme.textPrimaryDark,
+    color: Theme.warning ?? Theme.textPrimaryDark,
   },
   statusPillTextAssigned: { color: Theme.darkGreen },
 
@@ -2659,7 +2659,7 @@ const styles = StyleSheet.create({
       height: "85vh",
       maxHeight: "85vh",
       minHeight: 520,
-    } as any,
+    } as object,
     default: {},
   }),
   assignModalHeader: {
@@ -2742,7 +2742,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   assignAdhocVehicleBtn: {
@@ -2857,7 +2857,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   assignModalFooter: {
@@ -2890,7 +2890,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   assignRegistryCard: {
@@ -2950,7 +2950,7 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   assignRegistrySubtextBusy: {
-    color: (Theme as any).warning ?? "#B45309",
+    color: Theme.warning ?? "#B45309",
   },
   assignBusyBadge: {
     paddingHorizontal: 6,
@@ -2960,7 +2960,7 @@ const styles = StyleSheet.create({
   assignBusyBadgeText: {
     fontSize: 7,
     fontWeight: "700",
-    color: (Theme as any).warning ?? "#B45309",
+    color: Theme.warning ?? "#B45309",
     textTransform: "uppercase",
   },
   assignVehicleIconWrapRegistry: {
@@ -3045,7 +3045,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   phoneModalFoundWrap: { marginBottom: 10 },
@@ -3142,7 +3142,7 @@ const styles = StyleSheet.create({
   phoneModalInTrip: {
     fontSize: 12,
     fontWeight: "700",
-    color: (Theme as any).warning ?? "#B45309",
+    color: Theme.warning ?? "#B45309",
     marginBottom: 4,
   },
   phoneModalBusyWrap: {
@@ -3164,7 +3164,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   phoneFound: {
@@ -3351,7 +3351,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   allocSearchFlex: {
@@ -3429,7 +3429,7 @@ const styles = StyleSheet.create({
         flex: 1,
         minWidth: 0,
         minHeight: 0,
-      } as any,
+      } as object,
       default: {},
     }),
   },
@@ -3444,7 +3444,7 @@ const styles = StyleSheet.create({
       web: {
         minHeight: 0,
         maxHeight: "100%",
-      } as any,
+      } as object,
       default: {},
     }),
   },

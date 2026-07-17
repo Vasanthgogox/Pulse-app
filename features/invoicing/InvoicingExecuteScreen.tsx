@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { InvoicePreviewPanel } from "@/features/invoicing/components/InvoicePreviewPanel";
+import type { InvoicingTripView } from "@/features/invoicing/services/invoicing.service";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import {
     useExecuteInvoiceMutation,
@@ -315,7 +316,7 @@ export function InvoicingExecuteScreen() {
   };
 
   const handlePreview = useCallback(
-    (params: any) => {
+    (params: Record<string, string>) => {
       router.push({
         pathname: "/invoicing/pdf-preview",
         params: {
@@ -327,7 +328,7 @@ export function InvoicingExecuteScreen() {
   );
 
   const exportTripsToCsv = useCallback(
-    (trips: any[], kind: "selected" | "filtered") => {
+    (trips: InvoicingTripView[], kind: "selected" | "filtered") => {
       if (!trips.length) {
         Alert.alert("Export", "No trips to export.");
         return;
@@ -732,7 +733,7 @@ export function InvoicingExecuteScreen() {
                 onSelectAll={handleSelectAll}
                 onToggleTrip={handleToggleTrip}
                 onBulkMenuPress={handleBulkActions}
-                isTripInvoiceable={(trip: any) => trip?.status === "approved"}
+                isTripInvoiceable={(trip: InvoicingTripView) => trip?.status === "approved"}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 startDate={startDate}
@@ -830,7 +831,7 @@ export function InvoicingExecuteScreen() {
                     onSelectAll={handleSelectAll}
                     onToggleTrip={handleToggleTrip}
                     onBulkMenuPress={handleBulkActions}
-                    isTripInvoiceable={(trip: any) => trip?.status === "approved"}
+                    isTripInvoiceable={(trip: InvoicingTripView) => trip?.status === "approved"}
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     startDate={startDate}
@@ -839,6 +840,7 @@ export function InvoicingExecuteScreen() {
                     setEndDate={setEndDate}
                     isRefetching={isRefetching}
                     refetch={refetch}
+                    mobileBottomPad={mobileBottomPad}
                   />
                 </View>
               </View>
@@ -906,6 +908,28 @@ export function InvoicingExecuteScreen() {
   );
 }
 
+type TripListContentProps = {
+  tabBarScrollProps: object;
+  isDesktopTripTable: boolean;
+  clientTrips: InvoicingTripView[];
+  activeClient: string | null;
+  selectedTripIds: string[];
+  allSelected: boolean;
+  onSelectAll: () => void;
+  onToggleTrip: (id: string) => void;
+  onBulkMenuPress: () => void;
+  isTripInvoiceable: (trip: InvoicingTripView) => boolean;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  isRefetching: boolean;
+  refetch: () => void;
+  startDate: string;
+  setStartDate: (d: string) => void;
+  endDate: string;
+  setEndDate: (d: string) => void;
+  mobileBottomPad?: number;
+};
+
 function TripListContent({
   tabBarScrollProps,
   isDesktopTripTable,
@@ -925,8 +949,8 @@ function TripListContent({
   setStartDate,
   endDate,
   setEndDate,
-  mobileBottomPad,
-}: any) {
+  mobileBottomPad = 0,
+}: TripListContentProps) {
   const filterRow = (
     <>
       <View
@@ -1330,7 +1354,7 @@ const styles = StyleSheet.create({
   invHeaderSearchInputWeb: {
     outlineStyle: "none",
     outlineWidth: 0,
-  } as unknown as any,
+  } as unknown as object,
   invHeaderToolbarActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -1353,7 +1377,7 @@ const styles = StyleSheet.create({
     minWidth: 86,
     textTransform: "uppercase",
     ...Platform.select({
-      web: { outlineStyle: "none" } as any,
+      web: { outlineStyle: "none" } as object,
     }),
   },
   invHeaderDateTo: {
@@ -1491,7 +1515,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
 
@@ -1616,7 +1640,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   invMobilePartnerBadge: {
@@ -1778,7 +1802,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
 

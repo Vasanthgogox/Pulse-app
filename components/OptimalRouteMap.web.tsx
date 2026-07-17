@@ -2,12 +2,12 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Theme from '@/constants/Theme';
 import { LeafletMap, type LeafletLatLng, type LeafletMarker } from '@/components/driver/LeafletMap.web';
-import { getOptimalRoute } from '@/lib/routingService';
+import { getOptimalRoute, type LatLon, type RouteResult } from '@/lib/routingService';
 
 interface OptimalRouteMapProps {
-  from: any;
-  to: any;
-  onRouteFetched?: (route: any) => void;
+  from: LatLon;
+  to: LatLon;
+  onRouteFetched?: (route: RouteResult | null) => void;
 }
 
 export const OptimalRouteMap: React.FC<OptimalRouteMapProps> = ({ from, to, onRouteFetched }) => {

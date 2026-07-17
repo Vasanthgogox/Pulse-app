@@ -41,7 +41,7 @@ import type { SupplierRow } from "@/features/suppliers/services/suppliers.servic
 import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 export interface FinanceKanbanTabProps {
   transactions: LedgerRow[];
-  onRowSelect?: (data: any) => void;
+  onRowSelect?: (data: LedgerRow) => void;
   getVehicleNumberForTripId?: (tripId: string | null) => string | null;
   tripDetailsMap?: Record<
     string,
@@ -261,7 +261,7 @@ function KanbanColumn({
 }: {
   type: ColumnType;
   transactions: LedgerRow[];
-  t: any;
+  t: (key: string) => string;
   renderCard: (row: LedgerRow, index: number) => React.ReactNode;
   showPartyPromosInColumns?: boolean;
   onKanbanPartyAddPress?: (column: FinanceKanbanColumnType) => void;

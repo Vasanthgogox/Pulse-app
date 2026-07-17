@@ -11,6 +11,9 @@ import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { syncDomainRows } from '@/lib/cache/domainSync';
 import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
 import type { DeltaResponse } from '@/lib/cache/deltaTypes';
+import type { RatingRow } from '@/features/ratings';
+import type { ClientWarehouse } from '@/features/clients/services/clientWarehouses.service';
+import type { ClientContract } from '@/features/clients/services/clientContracts.service';
 
 export interface ClientRow {
   id: string;
@@ -517,16 +520,16 @@ export async function updateClient(
 export async function getClientDetailBundle(orgId: string, clientId: string): Promise<{
   error: Error | null;
   client: ClientRow | null;
-  ratings: any[];
-  warehouses: any[];
-  contracts: any[];
+  ratings: RatingRow[];
+  warehouses: ClientWarehouse[];
+  contracts: ClientContract[];
 }> {
   const { data, error } = await supabase().rpc('get_client_detail_bundle', {
     p_org_id: orgId,
     p_client_id: clientId,
   });
   if (error) return { error: new Error(error.message), client: null, ratings: [], warehouses: [], contracts: [] };
-  const bundle = data as { client: ClientRow | null; ratings: any[]; warehouses: any[]; contracts: any[] };
+  const bundle = data as { client: ClientRow | null; ratings: RatingRow[]; warehouses: ClientWarehouse[]; contracts: ClientContract[] };
   return {
     error: null,
     client: bundle.client ?? null,
