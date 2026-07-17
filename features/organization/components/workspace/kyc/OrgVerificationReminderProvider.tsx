@@ -4,12 +4,15 @@
  * is still `unverified`; dismissible per session.
  *
  * Mounted at root (inside AppBootGate) so `sessionDismissed` survives
- * `(tabs)/_layout` remounts. Visibility is gated by auth + `(tabs)` segment.
+ * `(tabs)/_layout` remounts. Visibility is gated by auth + `(tabs)` segment +
+ * business capabilities (not profile.role).
  */
 import { OrgVerificationReminderModal } from '@/features/organization/components/workspace/kyc/OrgVerificationReminderModal';
 import { getOrgVerificationReminderCopy } from '@/features/organization/components/workspace/kyc/orgVerificationReminder.util';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
+import { hasBusinessCapabilities } from '@/lib/capabilities';
+import { useCapabilities } from '@/lib/useCapabilities';
 import { useOrgVerificationBannerQuery } from '@/lib/queries/useOrgVerificationBannerQuery';
 import { useRouter, useSegments } from 'expo-router';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
@@ -17,14 +20,15 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react';
 export function OrgVerificationReminderProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
-  const { user, profile, status } = useAuth();
+  const { user, status } = useAuth();
+  const capabilities = useCapabilities();
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
   const [sessionDismissed, setSessionDismissed] = useState(false);
 
   const isInTabs = segments.includes('(tabs)');
   const isEligibleUser =
-    status === 'authenticated' && !!user && !!profile && profile.role !== 'driver';
+    status === 'authenticated' && !!user && hasBusinessCapabilities(capabilities);
   const shouldFetch = isInTabs && isEligibleUser && !sessionDismissed;
 
   const { data } = useOrgVerificationBannerQuery(orgId, { enabled: shouldFetch });

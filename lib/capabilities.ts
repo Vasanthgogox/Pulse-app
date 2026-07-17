@@ -101,6 +101,14 @@ export function getEffectivePermissions(
   return p;
 }
 
+/**
+ * Any non-empty capability set — business workspace operators.
+ * Drivers (and other empty-cap personas) resolve to false without role string checks.
+ */
+export function hasBusinessCapabilities(capabilities: Capability[]): boolean {
+  return capabilities.length > 0;
+}
+
 export function canAccessIndents(capabilities: Capability[]): boolean {
   const p = getEffectivePermissions(capabilities);
   return p.indents.view || p.indents.create;

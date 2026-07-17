@@ -13,6 +13,8 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 |--------|---------|
 | `943c7241` | `useCapabilities` + ModelAccessGate + finance/trip/party/supplier/vehicle gates |
 | `3af2fdaf` | Party directory gate; give-load blocked for asset; nav policy + capability merge fix |
+| `6cef06c4` | Docs + cursor rule: operating model blueprint |
+| _(pending)_ | Org KYC reminder: `hasBusinessCapabilities` instead of `role !== 'driver'` |
 
 ---
 
@@ -33,7 +35,8 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 
 | File | What changed |
 |------|----------------|
-| `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe |
+| `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe; `hasBusinessCapabilities` |
+| `features/organization/components/workspace/kyc/OrgVerificationReminderProvider.tsx` | Gate via `useCapabilities` + `hasBusinessCapabilities` (no `profile.role`) |
 | `lib/navigationPolicy/grants.ts` | `operatingModel` arg on grant set |
 | `lib/navigationPolicy/NavigationPolicyProvider.tsx` | Passes `operatingModel` into principal |
 | `lib/navigationPolicy/NavigationPolicyShadowHost.tsx` | Reads org operating model |
