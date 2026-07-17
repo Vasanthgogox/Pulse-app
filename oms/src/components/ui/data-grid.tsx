@@ -10,8 +10,9 @@ import {
 import { cn } from '@/lib/utils';
 
 declare module '@tanstack/react-table' {
-   
-  interface ColumnMeta<TData extends RowData, _TValue> {
+  // TValue must match @tanstack/react-table's ColumnMeta arity/names (TS2428).
+  // eslint-disable-next-line unused-imports/no-unused-vars -- type-param name is part of the merge contract
+  interface ColumnMeta<TData extends RowData, TValue> {
     headerTitle?: string;
     headerClassName?: string;
     cellClassName?: string;
