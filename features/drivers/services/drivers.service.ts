@@ -1826,12 +1826,21 @@ export async function acceptDriverInvite(inviteId: string): Promise<{
   const { data, error } = await supabase().rpc("accept_driver_invite", {
     p_invite_id: inviteId,
   });
-  if (error)
+  if (error) {
+    // 23505 = duplicate key on idx_drivers_active_phone: a concurrent accept
+    // already registered this driver in the org. Surface a clean message rather
+    // than a raw DB exception.
+    const code = (error as { code?: string }).code;
+    const message =
+      code === "23505"
+        ? "You're already registered with this organization."
+        : error.message;
     return {
-      error: new Error(error.message),
+      error: new Error(message),
       driver_id: null,
       organization_id: null,
     };
+  }
   const obj = data as { driver_id?: string; organization_id?: string } | null;
   return {
     error: null,

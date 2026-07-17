@@ -35,7 +35,9 @@ export async function recordStoryView(
   if (error) {
     // 23505 = unique_violation — already viewed, keep first view time, ignore
     if ((error as { code?: string }).code === '23505') return;
-    if (__DEV__) console.error('[story-views] recordStoryView failed:', error.message, error);
+    // 42501 = RLS denial, typically a stale/expired session firing after logout.
+    // Non-actionable view-tracking noise — log at warn level, never error.
+    if (__DEV__) console.warn('[story-views] recordStoryView skipped:', error.message);
   }
 }
 
