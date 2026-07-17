@@ -154,6 +154,59 @@ describe("shadowCheckPlatformIdentity — failure handling", () => {
     expect(mockLoggerDebug).not.toHaveBeenCalled();
   });
 
+  it("logs debug (not warn) when all read failures are platform schema unavailable", async () => {
+    const schemaErr = new Error("Invalid schema: platform");
+    mockGetOrganizationsForCurrentUser.mockResolvedValue({
+      error: schemaErr,
+      organizations: [],
+    });
+    mockGetCurrentUserMemberships.mockResolvedValue({
+      error: schemaErr,
+      memberships: [],
+    });
+    mockGetInvitationsForCurrentUser.mockResolvedValue({
+      error: schemaErr,
+      invitations: [],
+    });
+
+    await expect(
+      shadowCheckPlatformIdentity({ flow: "business_signup", legacyOrganizationIds: [] }),
+    ).resolves.toBeUndefined();
+
+    expect(mockLoggerDebug).toHaveBeenCalledWith(
+      "platform_identity_shadow_schema_unavailable",
+      expect.objectContaining({
+        flow: "business_signup",
+        orgsError: "Invalid schema: platform",
+      }),
+    );
+    expect(mockLoggerWarn).not.toHaveBeenCalled();
+  });
+
+  it("still warns when a non-schema failure is mixed with schema-unavailable errors", async () => {
+    mockGetOrganizationsForCurrentUser.mockResolvedValue({
+      error: new Error("Invalid schema: platform"),
+      organizations: [],
+    });
+    mockGetCurrentUserMemberships.mockResolvedValue({
+      error: new Error("JWT expired"),
+      memberships: [],
+    });
+    mockGetInvitationsForCurrentUser.mockResolvedValue({ error: null, invitations: [] });
+
+    await shadowCheckPlatformIdentity({
+      flow: "business_signup",
+      legacyOrganizationIds: [],
+    });
+
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      "platform_identity_shadow_read_failed",
+      expect.objectContaining({
+        membershipsError: "JWT expired",
+      }),
+    );
+  });
+
   it("never throws even if an adapter call rejects unexpectedly", async () => {
     mockGetOrganizationsForCurrentUser.mockRejectedValue(new Error("boom"));
     mockGetCurrentUserMemberships.mockResolvedValue({ error: null, memberships: [] });

@@ -80,6 +80,18 @@ function reconcileOrganizations(
  * `organizations.matched === false` is the expected outcome today, not an error signal —
  * this becomes meaningful the moment a backfill starts populating that column.
  */
+/** PostgREST 406 when `platform` is not in exposed schemas — expected until cutover. */
+function isPlatformSchemaUnavailable(message: string | null | undefined): boolean {
+  if (!message) return false;
+  const m = message.toLowerCase();
+  return m.includes("invalid schema: platform") || m.includes('schema "platform"');
+}
+
+function allFailedReadsAreSchemaUnavailable(errors: Array<string | null>): boolean {
+  const present = errors.filter((e): e is string => e != null && e.length > 0);
+  return present.length > 0 && present.every(isPlatformSchemaUnavailable);
+}
+
 export async function shadowCheckPlatformIdentity(context: {
   flow: PlatformIdentityShadowFlow;
   legacyOrganizationIds: string[];
@@ -92,12 +104,23 @@ export async function shadowCheckPlatformIdentity(context: {
     ]);
 
     if (orgsResult.error || membershipsResult.error || invitationsResult.error) {
-      logger.warn("platform_identity_shadow_read_failed", {
+      const orgsError = orgsResult.error?.message ?? null;
+      const membershipsError = membershipsResult.error?.message ?? null;
+      const invitationsError = invitationsResult.error?.message ?? null;
+      const payload = {
         flow: context.flow,
-        orgsError: orgsResult.error?.message ?? null,
-        membershipsError: membershipsResult.error?.message ?? null,
-        invitationsError: invitationsResult.error?.message ?? null,
-      });
+        orgsError,
+        membershipsError,
+        invitationsError,
+      };
+
+      // Schema not exposed yet → expected; do not escalate to Sentry (logger.warn → captureMessage).
+      if (allFailedReadsAreSchemaUnavailable([orgsError, membershipsError, invitationsError])) {
+        logger.debug("platform_identity_shadow_schema_unavailable", payload);
+        return;
+      }
+
+      logger.warn("platform_identity_shadow_read_failed", payload);
       return;
     }
 
