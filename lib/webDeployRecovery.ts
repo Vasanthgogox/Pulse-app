@@ -42,11 +42,14 @@ export function isStaleNativeBundleError(error: Error): boolean {
 /** Lazy route chunks missing after a new Netlify deploy (hashed filenames no longer exist). */
 export function isStaleWebChunkError(error: Error): boolean {
   if (platformOS() !== 'web') return false;
-  const msg = error.message;
+  const msg = error.message ?? '';
   return (
     /Requiring unknown module/i.test(msg) ||
     /Unexpected token '<'/i.test(msg) ||
-    /Loading chunk [\w-]+ failed/i.test(msg)
+    /Loading chunk [\w-]+ failed/i.test(msg) ||
+    /Failed to fetch dynamically imported module/i.test(msg) ||
+    /error loading dynamically imported module/i.test(msg) ||
+    /Importing a module script failed/i.test(msg)
   );
 }
 
@@ -136,18 +139,37 @@ export function installNativeBundleRecoveryHandler(): void {
   installSupabaseAuthLockErrorHandler();
 }
 
-/** Listen for script load failures before React error boundaries run. */
+/** Listen for script load / parse failures before React error boundaries run. */
 export function installWebDeployRecoveryListener(): void {
   if (platformOS() !== 'web' || typeof window === 'undefined') return;
   window.addEventListener(
     'error',
     (event) => {
       const target = event.target;
-      if (!(target instanceof HTMLScriptElement)) return;
-      const src = target.src ?? '';
-      if (!src.includes('.js')) return;
-      recoverStaleWebDeploy();
+      if (target instanceof HTMLScriptElement) {
+        const src = target.src ?? '';
+        if (src.includes('.js')) {
+          recoverStaleWebDeploy();
+          return;
+        }
+      }
+      // HTML served as JS (SPA fallback) throws SyntaxError before React.lazy rejects.
+      const err =
+        event.error instanceof Error
+          ? event.error
+          : new Error(event.message ?? '');
+      if (isStaleWebChunkError(err)) {
+        recoverStaleWebDeploy();
+      }
     },
     true,
   );
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    const err =
+      reason instanceof Error ? reason : new Error(String(reason ?? ''));
+    if (isStaleWebChunkError(err) && recoverStaleWebDeploy()) {
+      event.preventDefault();
+    }
+  });
 }

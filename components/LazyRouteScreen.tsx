@@ -3,7 +3,9 @@ import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
 import { LazySuspenseInlineFallback, LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
 import {
   isStaleNativeBundleError,
+  isStaleWebChunkError,
   recoverStaleNativeBundle,
+  recoverStaleWebDeploy,
 } from "@/lib/webDeployRecovery";
 import {
   Component,
@@ -68,21 +70,35 @@ class LazyRouteErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error) {
+    if (isStaleWebChunkError(error) && recoverStaleWebDeploy()) {
+      return;
+    }
     if (__DEV__ && isStaleNativeBundleError(error)) {
       recoverStaleNativeBundle();
     }
   }
 
   private handleRetry = () => {
+    const msg = this.state.errorMessage;
+    if (msg && isStaleWebChunkError(new Error(msg)) && recoverStaleWebDeploy()) {
+      return;
+    }
+    if (msg && __DEV__ && isStaleNativeBundleError(new Error(msg))) {
+      recoverStaleNativeBundle();
+      return;
+    }
     this.remountKey += 1;
     this.setState({ hasError: false, errorMessage: null });
   };
 
   render() {
     if (this.state.hasError) {
-      const staleBundle =
-        this.state.errorMessage != null &&
-        isStaleNativeBundleError(new Error(this.state.errorMessage));
+      const err = new Error(this.state.errorMessage ?? "");
+      const staleWeb = isStaleWebChunkError(err);
+      const staleBundle = isStaleNativeBundleError(err);
+      if (staleWeb) {
+        return <View style={{ flex: 1 }} />;
+      }
 
       return (
         <View style={{ flex: 1 }}>

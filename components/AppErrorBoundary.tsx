@@ -1,5 +1,9 @@
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { logger } from '@/lib/logger';
+import {
+  isStaleWebChunkError,
+  recoverStaleWebDeploy,
+} from '@/lib/webDeployRecovery';
 import React, { Component, type ReactNode } from 'react';
 import { View } from 'react-native';
 
@@ -9,6 +13,7 @@ type State = {
   hasError: boolean;
   errorMessage: string | null;
   componentStack: string | null;
+  recoveringDeploy: boolean;
 };
 
 /**
@@ -19,9 +24,17 @@ type State = {
  *
  * Modeled on NetworkTabErrorBoundary. Errors are funneled through `logger.error`,
  * which forwards to the crash reporter (Sentry) in production.
+ *
+ * Stale Netlify chunks are recovered here (not only in Expo Router ErrorBoundary):
+ * this boundary wraps the tree and otherwise swallows the reload path.
  */
 export class AppErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, errorMessage: null, componentStack: null };
+  state: State = {
+    hasError: false,
+    errorMessage: null,
+    componentStack: null,
+    recoveringDeploy: false,
+  };
 
   private retryKey = 0;
 
@@ -30,6 +43,10 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    if (isStaleWebChunkError(error) && recoverStaleWebDeploy()) {
+      this.setState({ recoveringDeploy: true });
+      return;
+    }
     this.setState({ componentStack: info.componentStack ?? null });
     logger.error('[AppErrorBoundary] render error', {
       error,
@@ -38,12 +55,27 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   private handleRetry = () => {
+    const msg = this.state.errorMessage;
+    if (msg && isStaleWebChunkError(new Error(msg)) && recoverStaleWebDeploy()) {
+      return;
+    }
     this.retryKey += 1;
-    this.setState({ hasError: false, errorMessage: null, componentStack: null });
+    this.setState({
+      hasError: false,
+      errorMessage: null,
+      componentStack: null,
+      recoveringDeploy: false,
+    });
   };
 
   render() {
     if (this.state.hasError) {
+      if (this.state.recoveringDeploy) {
+        return <View style={{ flex: 1 }} />;
+      }
+      const staleDeploy =
+        this.state.errorMessage != null &&
+        isStaleWebChunkError(new Error(this.state.errorMessage));
       const technicalDetails = [this.state.errorMessage, this.state.componentStack]
         .filter(Boolean)
         .join('\n\n');
@@ -51,7 +83,7 @@ export class AppErrorBoundary extends Component<Props, State> {
       return (
         <View style={{ flex: 1 }}>
           <ContentErrorState
-            variant="generic"
+            variant={staleDeploy ? 'update' : 'generic'}
             technicalDetails={technicalDetails || null}
             onRetry={this.handleRetry}
           />
