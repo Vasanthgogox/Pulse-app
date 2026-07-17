@@ -53,10 +53,13 @@ const pulse = {
 /** @type {import('eslint').Linter.FlatConfig[]} */
 module.exports = [
   {
-    // Global ignores — exclude build artifacts, caches, and third-party code
+    // Global ignores — exclude build artifacts, caches, and third-party code.
+    // Use **/dist and **/build so nested build outputs (analytics/dist,
+    // tools/db-audit/dist) are excluded too, not just the repo-root dist.
     ignores: [
       'node_modules/**',
-      'dist/**',
+      '**/dist/**',
+      '**/build/**',
       'dist-test-bundle/**',
       '.expo/**',
       '.metro-cache/**',
