@@ -97,7 +97,10 @@ function installSupabaseAuthLockErrorHandler(): void {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { isIgnorableSupabaseAuthLockError } = require('@/lib/supabaseAuthLock.util') as typeof import('@/lib/supabaseAuthLock.util');
 
-  if (typeof window !== 'undefined') {
+  // On native, `window` exists (Hermes global alias) but has no
+  // addEventListener — so guarding on `typeof window` alone throws
+  // "undefined is not a function". Guard on the method itself.
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
     window.addEventListener('unhandledrejection', (event) => {
       if (isIgnorableSupabaseAuthLockError(event.reason)) {
         event.preventDefault();

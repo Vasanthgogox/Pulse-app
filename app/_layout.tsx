@@ -8,7 +8,7 @@ import '@/lib/tracking/backgroundTasks';
 import { markStartupPhase } from '@/lib/startupMetrics';
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
-import { initCrashReporter } from '@/lib/crashReporter';
+import { initCrashReporter, captureException } from '@/lib/crashReporter';
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
 import { DemoTabBar } from '@/components/demo/DemoTabBar';
@@ -136,6 +136,21 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
       recoverStaleNativeBundle();
     }
   }, [error]);
+
+  // Report genuine crashes to Sentry. The root ErrorBoundary previously showed
+  // the "Something went wrong" screen but never captured the error, so these
+  // never reached Sentry and had no stack/line to debug. Skip the benign cases
+  // handled above (session-expired sign-out, stale-bundle auto-recovery).
+  useEffect(() => {
+    if (
+      sessionExpired ||
+      isStaleWebChunkError(error) ||
+      isStaleNativeBundleError(error)
+    ) {
+      return;
+    }
+    captureException(error, { source: 'root-error-boundary' });
+  }, [error, sessionExpired]);
 
   if (sessionExpired) {
     return null;
