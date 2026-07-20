@@ -5306,24 +5306,28 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
+  // Decorative brand ambiance. Pinned to the true page corners with fixed
+  // off-screen offsets (percentage offsets drifted into the middle of tall
+  // phone screens and washed over the field labels / client card).
   blobA: {
     position: "absolute",
-    top: "18%",
-    left: "-12%",
-    width: 280,
-    height: 280,
-    borderRadius: 200,
+    top: -110,
+    left: -120,
+    width: 220,
+    height: 220,
+    borderRadius: 220,
     backgroundColor: PULSE_TRIP.indigoMuted,
+    opacity: 0.6,
     zIndex: -1,
   },
   blobB: {
     position: "absolute",
-    bottom: "-8%",
-    right: "-8%",
-    width: 220,
-    height: 220,
+    bottom: -120,
+    right: -120,
+    width: 200,
+    height: 200,
     borderRadius: 200,
-    backgroundColor: "rgba(16, 185, 129, 0.08)",
+    backgroundColor: "rgba(16, 185, 129, 0.06)",
     zIndex: -1,
   },
   mutedSmall: {

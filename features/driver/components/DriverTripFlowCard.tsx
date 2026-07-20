@@ -20,6 +20,11 @@ import { sendDocumentShareMessage } from '@/features/chat/services/chat.service'
 import type { JobCardAssignerPayload } from '@/features/trips/utils/driverAssignerDisplay.util';
 import type { DriverFlowStepId as StepId } from '@/features/driver/utils/driverTripStatusNotes.util';
 import { deriveDriverFlowStepFromTrip } from '@/features/driver/utils/driverTripStatusNotes.util';
+import {
+  clearLrPhase,
+  hasEnteredLrPhase,
+  markLrPhaseEntered,
+} from '@/features/drivers/services/tripControlProgress.storage';
 import { isAggregateTrip } from '@/features/drivers/utils/driverUtils.util';
 import { formatINR } from '@/lib/format';
 import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
@@ -353,6 +358,35 @@ export function DriverTripFlowCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tripSyncKey gates identity
   }, [tripSyncKey]);
 
+  // Restore the local-only "LR" sub-step across full reloads / remounts.
+  // The LR phase ("Package collected" → upload Lorry Receipt) is NOT encoded in
+  // server trip status (status stays `in_progress`, which derives to "pickup"),
+  // so a hard reload — e.g. the stale-chunk deploy-recovery `location.replace`
+  // in lib/webDeployRecovery.ts, or any remount from a dashboard refetch —
+  // would otherwise reseed `step` to "pickup" and dump the driver back on the
+  // "Package collected" screen. The per-trip marker lives in AsyncStorage, which
+  // survives a page reload, so we can put them back on the LR upload step.
+  useEffect(() => {
+    const id = trip?.id;
+    if (!id) return;
+    let cancelled = false;
+    void hasEnteredLrPhase(id).then((entered) => {
+      if (cancelled || !entered) return;
+      const derived = deriveDriverFlowStepFromTrip(trip);
+      if (derived === 'pickup') {
+        // Server still at pickup, but the driver already collected the package.
+        setStep((prev) => (prev === 'pickup' ? 'lr' : prev));
+      } else if (derived !== 'accepted') {
+        // Trip genuinely advanced past LR (transit+) — drop the stale marker.
+        void clearLrPhase(id);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore keyed by trip id
+  }, [trip?.id]);
+
   const tripIsAggregate = useMemo(() => isAggregateTrip(localTrip), [localTrip]);
 
   const tripChatUnread = useMemo(() => {
@@ -645,6 +679,16 @@ export function DriverTripFlowCard({
     onRefresh?.();
   };
 
+  // Explicit driver action ("Package collected"). Enters the local-only LR
+  // sub-step and persists that entry so a full reload / remount restores "lr"
+  // instead of regressing to the "Package collected" (pickup) screen. No server
+  // write — LR upload must not change trip status.
+  const handlePackageCollected = useCallback(() => {
+    setStep('lr');
+    const id = localTrip?.id;
+    if (id) void markLrPhaseEntered(id);
+  }, [localTrip?.id]);
+
   const engageTransit = async () => {
     const id = localTrip?.id;
     if (!id || stepLoading) return;
@@ -667,6 +711,9 @@ export function DriverTripFlowCard({
       onTripUpdated?.(reverted);
       return;
     }
+    // Left the LR phase for good — drop the persisted marker so it can't
+    // restore a stale sub-step after a future reload.
+    void clearLrPhase(id);
     if (updated) {
       setLocalTrip(updated);
       onTripUpdated?.(updated);
@@ -904,7 +951,12 @@ export function DriverTripFlowCard({
         });
         await shareTripDocumentInChat(doc, 'Lorry Receipt');
       }
-      onRefresh?.();
+      // NOTE: intentionally NOT calling onRefresh?.() here. LR upload does not
+      // change trip status and the dashboard does not render LR docs, so a full
+      // driver-home invalidation is pure churn — it forces a refetch + trip
+      // re-sync (and any lazy re-render) that was resetting this card back to
+      // the "Package collected" step and could trip the stale-chunk reload.
+      // The uploaded doc is already in local state; chat share drives the badge.
     } catch (e) {
       setStepError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
@@ -1189,7 +1241,7 @@ export function DriverTripFlowCard({
           {step === 'pickup' ? (
             <TouchableOpacity
               style={[styles.primaryBtnWrap, stepLoading && styles.btnDisabled]}
-              onPress={() => setStep('lr')}
+              onPress={handlePackageCollected}
               disabled={stepLoading}
               activeOpacity={0.88}
             >

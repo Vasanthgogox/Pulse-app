@@ -110,13 +110,13 @@ export default function DriverControlScreen() {
     setTrip,
     loading,
     step,
-    setStep,
     stepLoading,
     stepError,
     setStepError,
     acceptedOffer,
     tripDriver,
     confirmArrival,
+    confirmPackageCollected,
     engageTransit,
     confirmReached,
     completeTrip,
@@ -1139,7 +1139,7 @@ export default function DriverControlScreen() {
                   { backgroundColor: colors.emerald },
                   stepLoading && styles.primaryBtnDisabled,
                 ]}
-                onPress={() => setStep("lr")}
+                onPress={confirmPackageCollected}
                 disabled={stepLoading}
                 activeOpacity={0.8}
               >

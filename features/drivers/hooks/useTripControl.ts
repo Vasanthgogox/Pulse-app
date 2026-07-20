@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import * as tripsService from "@/features/trips/services/trips.service";
 import * as driversService from "@/features/drivers/services/drivers.service";
+import {
+  clearLrPhase,
+  hasEnteredLrPhase,
+  markLrPhaseEntered,
+} from "@/features/drivers/services/tripControlProgress.storage";
 
 export const STEPS = [
   { id: "accepted", label: "Start", icon: "compass" as const },
@@ -58,6 +63,25 @@ export function useTripControl(tripId: string | undefined) {
         } else {
           derived = "accepted";
         }
+
+        // The "LR" phase ("Package collected" → upload Lorry Receipt) has no
+        // server-status representation — status stays `in_progress`, which maps
+        // to "pickup". The in-memory reconciler below only protects the step
+        // *within* a mounted hook instance; on any remount / background
+        // re-sync `prev` resets to "accepted" and we would derive "pickup",
+        // throwing the driver back onto the "Package collected" screen with no
+        // interaction. Restore the LR phase from its persisted per-trip marker
+        // so background status updates never change the route.
+        if (derived === "pickup" && (await hasEnteredLrPhase(tripId))) {
+          derived = "lr";
+        } else if (
+          (STEP_RANK[derived] ?? 0) > (STEP_RANK.lr ?? 0)
+        ) {
+          // Trip has genuinely advanced past LR on the server — drop the
+          // now-obsolete marker so it can't resurrect a stale sub-step later.
+          void clearLrPhase(tripId);
+        }
+
         setStep((prev) => {
           // Keep the local-only LR sub-step while server status is still pickup.
           if (prev === "lr" && derived === "pickup") return prev;
@@ -146,6 +170,18 @@ export function useTripControl(tripId: string | undefined) {
     else await load();
   };
 
+  /**
+   * Explicit driver action from the "Package collected" button. Advances into
+   * the local-only LR sub-step and persists that entry so a later remount /
+   * background status re-sync restores "lr" instead of regressing to "pickup".
+   * No server write — LR upload must not change trip status.
+   */
+  const confirmPackageCollected = useCallback(() => {
+    const id = trip?.id ?? tripId;
+    setStep("lr");
+    if (id) void markLrPhaseEntered(id);
+  }, [trip?.id, tripId]);
+
   const engageTransit = async () => {
     const id = trip?.id ?? tripId;
     if (!id || stepLoading) return;
@@ -166,10 +202,14 @@ export function useTripControl(tripId: string | undefined) {
     if (error) {
       setStepError(error.message);
       setStep("pickup");
+      // Transit write failed — keep the LR-phase marker so a reload restores
+      // the driver's place instead of the "Package collected" screen.
       // Fallback on error is handled by not calling setTrip with the partial update anymore
       // or we could revert here if needed. The current logic in the screen re-loads on error if trip is null.
       return;
     }
+    // Left the LR phase for good — drop the persisted marker (success only).
+    void clearLrPhase(id);
     // Sync with server state or fallback to full reload if update didn't return a row
     if (updated) setTrip(updated);
     else await load();
@@ -239,6 +279,7 @@ export function useTripControl(tripId: string | undefined) {
     tripDriver,
     load,
     confirmArrival,
+    confirmPackageCollected,
     engageTransit,
     confirmReached,
     completeTrip,
