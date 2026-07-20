@@ -23,7 +23,11 @@ import {
   clearPlatformWorkspaceStore,
   syncPlatformWorkspaceFromActive,
 } from '@/lib/platform-identity/workspace/workspaceContextStore';
-import type { CurrentOrganization } from '@/types/organization';
+import {
+  platformRoleFromMember,
+  type PlatformTeamRole,
+} from '@/features/organization/utils/teamInviteRoles.util';
+import type { CurrentOrganization, OrgMemberRole } from '@/types/organization';
 import type { ActiveWorkspaceState, Workspace, WorkspaceMember } from '@/types/workspace';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,6 +43,7 @@ const STORAGE_KEY = 'pulse:active_workspace_id';
 interface WorkspaceMemberRow {
   role: WorkspaceMember['role'];
   status: string;
+  permissions: Record<string, unknown> | null;
   organizations: {
     id: string;
     name: string | null;
@@ -66,9 +71,18 @@ interface WorkspaceMemberRow {
 
 function mapRowToWorkspace(
   row: WorkspaceMemberRow,
-): { workspace: Workspace; role: WorkspaceMember['role'] } | null {
+): {
+  workspace: Workspace;
+  role: WorkspaceMember['role'];
+  platformRole: PlatformTeamRole | null;
+} | null {
   const o = row.organizations;
   if (!o) return null;
+
+  const platformRole = platformRoleFromMember({
+    role: row.role as OrgMemberRole,
+    permissions: row.permissions ?? {},
+  });
 
   const operatingModel =
     o.operating_model === 'ASSET_BASED' ||
@@ -105,6 +119,7 @@ function mapRowToWorkspace(
       kyc_rejected_reason: o.kyc_rejected_reason ?? null,
     },
     role: row.role,
+    platformRole,
   };
 }
 
@@ -168,6 +183,10 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
   const [memberRole, setMemberRole] = useState<WorkspaceMember['role'] | null>(null);
   const [roleMap, setRoleMap] = useState<Map<string, WorkspaceMember['role']>>(new Map());
+  const [memberPlatformRole, setMemberPlatformRole] = useState<PlatformTeamRole | null>(null);
+  const [platformRoleMap, setPlatformRoleMap] = useState<Map<string, PlatformTeamRole | null>>(
+    new Map(),
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -188,6 +207,8 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           setActiveWorkspace(null);
           setMemberRole(null);
           setRoleMap(new Map());
+          setMemberPlatformRole(null);
+          setPlatformRoleMap(new Map());
           setCurrentOrganizationRef.current(null);
           clearPlatformWorkspaceStore();
           setIsLoading(false);
@@ -207,6 +228,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
             .select(`
               role,
               status,
+              permissions,
               organizations (
                 id, name, slug, logo_url, operating_model,
                 address_line, locality, pincode, city, state, zone,
@@ -238,11 +260,15 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         const newRoleMap = new Map<string, WorkspaceMember['role']>(
           mapped.map((m) => [m.workspace.id, m.role]),
         );
+        const newPlatformRoleMap = new Map<string, PlatformTeamRole | null>(
+          mapped.map((m) => [m.workspace.id, m.platformRole]),
+        );
 
         if (stale()) return;
 
         setWorkspaces(loadedWorkspaces);
         setRoleMap(newRoleMap);
+        setPlatformRoleMap(newPlatformRoleMap);
 
         // Read persisted workspace ID, fall back to first
         let targetWorkspace: Workspace | null = loadedWorkspaces[0] ?? null;
@@ -261,6 +287,9 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         setActiveWorkspace(targetWorkspace);
         const role = targetWorkspace ? (newRoleMap.get(targetWorkspace.id) ?? null) : null;
         setMemberRole(role);
+        setMemberPlatformRole(
+          targetWorkspace ? (newPlatformRoleMap.get(targetWorkspace.id) ?? null) : null,
+        );
         setCurrentOrganization(
           targetWorkspace ? workspaceToCurrentOrganization(targetWorkspace) : null,
         );
@@ -309,6 +338,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
       const role = roleMap.get(workspaceId) ?? null;
       setActiveWorkspace(found);
       setMemberRole(role);
+      setMemberPlatformRole(platformRoleMap.get(workspaceId) ?? null);
       setCurrentOrganizationRef.current(workspaceToCurrentOrganization(found));
       syncPlatformWorkspaceFromActive({
         personId: userRef.current?.uid ?? null,
@@ -321,7 +351,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         // Persist failure is non-fatal
       }
     },
-    [workspaces, roleMap], // setCurrentOrganization removed — accessed via stable ref
+    [workspaces, roleMap, platformRoleMap], // setCurrentOrganization removed — accessed via stable ref
   );
 
   const refresh = useCallback(async () => {
@@ -335,6 +365,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
     workspaces,
     activeWorkspace,
     memberRole,
+    memberPlatformRole,
     isLoading,
     error,
     switchWorkspace,

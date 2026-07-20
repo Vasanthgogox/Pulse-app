@@ -96,17 +96,17 @@ export function MemberEditModal({
   onTransfer,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const [selectedRole, setSelectedRole] = useState<PlatformTeamRole>("operator");
+  const [selectedRole, setSelectedRole] = useState<PlatformTeamRole>("tripops");
 
   useEffect(() => {
     if (!member) return;
-    setSelectedRole(platformRoleFromMember(member) ?? "operator");
+    setSelectedRole(platformRoleFromMember(member) ?? "tripops");
   }, [member]);
 
   if (!member) return null;
 
   const displayName = member.full_name || member.phone || member.email || "Team member";
-  const currentRole = platformRoleFromMember(member) ?? "operator";
+  const currentRole = platformRoleFromMember(member) ?? "tripops";
   const unchanged = selectedRole === currentRole;
   const centered = desktopMetronic || Platform.OS === "web";
 

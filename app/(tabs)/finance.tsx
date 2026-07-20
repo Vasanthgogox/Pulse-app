@@ -1,3 +1,4 @@
+import { MemberDomainGate } from '@/components/MemberDomainGate';
 import { createPreloadedTabRoute } from '@/lib/createPreloadedTabRoute';
 
 const { TabRoute: FinanceTab, preload: preloadFinanceTabRoute } =
@@ -9,6 +10,14 @@ const { TabRoute: FinanceTab, preload: preloadFinanceTabRoute } =
     'finance',
   );
 
+function GatedFinanceTab() {
+  return (
+    <MemberDomainGate kind="finance">
+      <FinanceTab />
+    </MemberDomainGate>
+  );
+}
+
 /** Warm Cash tab chunk (same module as {@link preloadTabScreen} `finance`). */
 export { preloadFinanceTabRoute };
-export default FinanceTab;
+export default GatedFinanceTab;

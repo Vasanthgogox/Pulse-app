@@ -4,7 +4,35 @@
  */
 import type { OrgMember, OrgMemberRole } from "@/types/organization";
 
-export type PlatformTeamRole = "admin" | "planner" | "operator";
+/**
+ * `planner` / `operator` are retired from new invites (superseded by the named
+ * functional roles below) but stay in the union so pre-existing stored rows
+ * still resolve to a real type instead of falling through to `null`.
+ */
+export type PlatformTeamRole =
+  | "admin"
+  | "planner"
+  | "operator"
+  | "finance"
+  | "sales"
+  | "tripops";
+
+const ALL_PLATFORM_TEAM_ROLES: readonly PlatformTeamRole[] = [
+  "admin",
+  "planner",
+  "operator",
+  "finance",
+  "sales",
+  "tripops",
+];
+
+/** Narrows a raw string (e.g. from an RPC payload) to a known `PlatformTeamRole`. */
+export function isPlatformTeamRole(value: string): value is PlatformTeamRole {
+  return (ALL_PLATFORM_TEAM_ROLES as readonly string[]).includes(value);
+}
+
+/** Named functional roles an owner can assign to a non-admin member. */
+export type FunctionalRole = "finance" | "sales" | "tripops";
 
 export type TeamInvitePermissions = {
   platformRole: PlatformTeamRole;
@@ -23,6 +51,8 @@ const PERMISSION_LABELS: Record<string, string> = {
   "planning:*": "Planning — indents & load planning",
   "ops:*": "Operations — dispatch & trips",
   "execution:read": "View trips & execution",
+  "finance:read": "View finance & ledgers",
+  "finance:manage": "Manage finance & invoicing",
 };
 
 export const PLATFORM_ROLE_GRANTS: Record<PlatformTeamRole, string[]> = {
@@ -36,6 +66,8 @@ export const PLATFORM_ROLE_GRANTS: Record<PlatformTeamRole, string[]> = {
     "commerce:*",
     "planning:*",
     "ops:*",
+    "finance:read",
+    "finance:manage",
   ],
   planner: [
     "org:read",
@@ -45,6 +77,9 @@ export const PLATFORM_ROLE_GRANTS: Record<PlatformTeamRole, string[]> = {
     "planning:*",
   ],
   operator: ["org:read", "warehouses:read", "ops:*", "execution:read"],
+  finance: ["org:read", "finance:read", "finance:manage"],
+  sales: ["org:read", "warehouses:read", "commerce:*"],
+  tripops: ["org:read", "warehouses:read", "ops:*", "planning:*", "execution:read"],
 };
 
 export type TeamInviteRoleOption = {
@@ -62,16 +97,22 @@ export const TEAM_INVITE_ROLE_OPTIONS: TeamInviteRoleOption[] = [
     grants: PLATFORM_ROLE_GRANTS.admin,
   },
   {
-    value: "planner",
-    label: "Planner",
-    description: "Commerce and planning — customers, indents, load planning, and warehouses.",
-    grants: PLATFORM_ROLE_GRANTS.planner,
+    value: "finance",
+    label: "Finance",
+    description: "Finance and ledgers — cash, invoicing, and fiscal reporting.",
+    grants: PLATFORM_ROLE_GRANTS.finance,
   },
   {
-    value: "operator",
-    label: "Operator",
+    value: "sales",
+    label: "Sales",
+    description: "Commerce and customers — marketplace, clients, and load posting.",
+    grants: PLATFORM_ROLE_GRANTS.sales,
+  },
+  {
+    value: "tripops",
+    label: "TripOps",
     description: "Day-to-day execution — trips, dispatch, driver coordination, and trip visibility.",
-    grants: PLATFORM_ROLE_GRANTS.operator,
+    grants: PLATFORM_ROLE_GRANTS.tripops,
   },
 ];
 
@@ -99,6 +140,12 @@ export function orgMemberRoleForPlatformRole(
       return "dispatcher";
     case "operator":
       return "member";
+    case "finance":
+      return "finance";
+    case "sales":
+      return "member";
+    case "tripops":
+      return "dispatcher";
   }
 }
 
@@ -121,6 +168,25 @@ export function platformRoleFromMember(
     default:
       return null;
   }
+}
+
+/**
+ * Narrows a stored platform role to a functional role, for domain-access
+ * intersection with the org operating model. `null` covers admin/owner
+ * (bypass functional gating entirely) and unassigned/legacy planner/operator
+ * rows (no functional domain access until the owner assigns one).
+ */
+export function functionalRoleFromPlatformRole(
+  platformRole: PlatformTeamRole | null,
+): FunctionalRole | null {
+  if (
+    platformRole === "finance" ||
+    platformRole === "sales" ||
+    platformRole === "tripops"
+  ) {
+    return platformRole;
+  }
+  return null;
 }
 
 export function memberDisplayRoleLabel(

@@ -6,7 +6,10 @@
  */
 import { supabase } from "@/lib/supabase";
 import type { PlatformTeamRole } from "@/features/organization/utils/teamInviteRoles.util";
-import { platformRoleLabel } from "@/features/organization/utils/teamInviteRoles.util";
+import {
+  isPlatformTeamRole,
+  platformRoleLabel,
+} from "@/features/organization/utils/teamInviteRoles.util";
 
 export type ResolvedTeamInvitation = {
   inviteId: string;
@@ -47,10 +50,8 @@ function mapRow(row: {
   is_expired: boolean;
   status: string;
 }): ResolvedTeamInvitation {
-  const platformRole = (["admin", "planner", "operator"] as const).includes(
-    row.platform_role as PlatformTeamRole,
-  )
-    ? (row.platform_role as PlatformTeamRole)
+  const platformRole = isPlatformTeamRole(row.platform_role)
+    ? row.platform_role
     : null;
 
   return {

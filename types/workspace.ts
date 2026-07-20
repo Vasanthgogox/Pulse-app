@@ -1,4 +1,5 @@
 // Types: User, Workspace (with KYC), WorkspaceMember, ActiveWorkspaceState
+import type { PlatformTeamRole } from '@/features/organization/utils/teamInviteRoles.util';
 
 export type KycStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
 
@@ -50,6 +51,8 @@ export interface ActiveWorkspaceState {
   activeWorkspace: Workspace | null;
   // User's role in the active workspace
   memberRole: WorkspaceMember['role'] | null;
+  // User's stored functional/platform role in the active workspace (admin/finance/sales/tripops/…)
+  memberPlatformRole: PlatformTeamRole | null;
   // True while loading the workspace list
   isLoading: boolean;
   error: Error | null;

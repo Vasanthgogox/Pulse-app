@@ -19,6 +19,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | _(pending)_ | Operating-model switching: owner-only, 30-day cooldown, audited RPC; impact-preview modal; capability re-gate with no data loss |
 | _(pending)_ | Desktop hub sub-panels (details / hero / grow) gated on `canAccessSuppliers`/`canAccessDrivers`; `database.types.ts` regen (change_operating_model RPC + operating_model_changed_at); Hybrid model verified full-union (no gates to add, covered by tests) |
 | _(pending)_ | Ownership transfer: owner-only atomic audited RPC (`transfer_organization_ownership`) — demote owner→admin, promote member→owner, sync `organizations.owner_id`; hardened `org_members_update` RLS to block off-RPC `role='owner'`; owner-only "Transfer ownership" action in `MemberEditModal`; workspace refresh re-gates ex-owner |
+| _(pending)_ | Part 2: functional member roles (Finance/Sales/TripOps) — invite roles replace Planner/Operator; `permissions.platformRole` now read into `ActiveWorkspaceContext`; new `useMemberCapabilities()` intersects org model with functional role (owner/admin bypass); client-side gate on the 3 primary tabs only (`MemberDomainGate`) — no RLS change, no DB migration (reuses existing `organization_members.permissions` column and legacy `role` CHECK values) |
 
 ---
 
@@ -36,6 +37,8 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `supabase/migrations/20261208120000_change_operating_model.sql` | `operating_model_changed_at` col + owner-only, cooldown-guarded, audited `change_operating_model` RPC |
 | `features/organization/components/workspace/ChangeOperatingModelModal.tsx` | Owner-only model picker with downgrade impact preview |
 | `supabase/migrations/20261210120000_transfer_organization_ownership.sql` | Owner-only atomic ownership-transfer RPC + `org_members_update` RLS hardening (no off-RPC `role='owner'`) |
+| `lib/useMemberCapabilities.ts` | Hook: `useCapabilities()` (org model) ∩ member's functional role (finance/sales/tripops) → `{ finance, sales, tripops }` domain booleans; owner/admin bypass |
+| `components/MemberDomainGate.tsx` | Client-side redirect-on-deny gate for the Fiscal/Trips/Network tabs (same pattern as `ModelAccessGate`) |
 
 ---
 
@@ -102,8 +105,23 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `features/log-pods/LogIncomingPodsScreen.tsx` | Caps via hook |
 | `CLAUDE.md` | Points to RBAC docs |
 | `.cursor/rules/pulse-standards.mdc` | Points to operating-model RBAC |
+| `features/organization/utils/teamInviteRoles.util.ts` | `PlatformTeamRole` adds `finance`/`sales`/`tripops` (planner/operator kept for legacy-row display only); `TEAM_INVITE_ROLE_OPTIONS` now Admin/Finance/Sales/TripOps; `orgMemberRoleForPlatformRole` maps finance→`finance`, sales→`member`, tripops→`dispatcher`; new `FunctionalRole` type + `functionalRoleFromPlatformRole()` |
+| `features/organization/components/InviteMemberModal.tsx` | Default `selectedRole` → `"tripops"` (was `"operator"`, now retired from the picker) |
+| `features/organization/components/MemberEditModal.tsx` | Default/fallback `selectedRole`/`currentRole` → `"tripops"` |
+| `contexts/ActiveWorkspaceContext.tsx` | Selects `permissions` from `organization_members`; new `platformRoleMap` (parallel to `roleMap`) + `memberPlatformRole` state, derived via `platformRoleFromMember`, set in `loadWorkspaces` and `switchWorkspace` |
+| `types/workspace.ts` | `ActiveWorkspaceState.memberPlatformRole: PlatformTeamRole \| null` |
+| `app/(tabs)/finance.tsx` | Wrapped in `<MemberDomainGate kind="finance">` |
+| `app/(tabs)/trips.tsx` | Wrapped in `<MemberDomainGate kind="tripops">` |
+| `app/(tabs)/network/index.tsx` | Wrapped in `<MemberDomainGate kind="sales">` |
 
 ---
+
+## Known gaps (Part 2 — functional member roles)
+
+- **Rollout behavior change**: any existing non-admin member with no `permissions.platformRole` set (plain legacy `member`, or a pre-existing Planner/Operator invite) now gets **zero** Fiscal/Trips/Network tab access until the owner explicitly assigns Finance/Sales/TripOps. This was a deliberate strict-default choice, not an oversight — flag it before shipping.
+- **`DemoTabBar`/`DemoTabBarMobileFooter` icons are not hidden** for a domain the member can't reach — tapping still bounces back via `MemberDomainGate` (same UX as any other denied nav), it's just not proactively hidden. Deferred because those components are large/animation-heavy and this is cosmetic, not an access gap.
+- **Scope is nav/tab-entry only** — the ~30 existing `useCapabilities()` call sites inside individual screens (sub-tabs, ledger categories, party detail screens, etc.) are untouched and remain org-model-only. A functional-role member who is inside an allowed tab still sees the same content an Admin would see for that org model.
+- No RLS/database-level enforcement; no CHECK-constraint migration (new roles map onto existing legal `role` values).
 
 ## How to update this file
 

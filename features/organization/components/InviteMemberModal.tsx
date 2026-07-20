@@ -338,7 +338,7 @@ export function InviteMemberFlow({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [foundProfile, setFoundProfile] = useState<UserProfileForInvite | null>(null);
   const [isNewEmployee, setIsNewEmployee] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<PlatformTeamRole>("operator");
+  const [selectedRole, setSelectedRole] = useState<PlatformTeamRole>("tripops");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
