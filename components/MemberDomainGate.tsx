@@ -12,6 +12,7 @@ import {
   useMemberCapabilities,
   type MemberDomainAccess,
 } from "@/lib/useMemberCapabilities";
+import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useEffect, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -27,6 +28,10 @@ export function MemberDomainGate({ kind, children }: Props) {
   const router = useRouter();
   const access = useMemberCapabilities();
   const { t } = useOptionalLanguage();
+  // On desktop web the tab layout mounts all three tab scenes at once
+  // (`lazy: false`), so an unfocused denied gate must NOT fire a redirect or
+  // render the notice — only the scene the user is actually on should act.
+  const isFocused = useIsFocused();
   const allowed = access[kind];
   const isLoading = access.isLoading;
   // The member's own landing tab. When they have another reachable domain we
@@ -37,12 +42,12 @@ export function MemberDomainGate({ kind, children }: Props) {
   useEffect(() => {
     // Hold while the workspace/role is still resolving — bouncing here would
     // eject a legitimately-allowed member before their functional role loads.
-    if (isLoading || allowed) return;
+    if (!isFocused || isLoading || allowed) return;
     if (!home || home === ROUTES.TABS[kindToTab(kind)]) return;
     // Always replace() (not back()): on a hard web load / deep-link the
     // navigator has no history and back() dispatches an unhandled GO_BACK.
     router.replace(home as "/");
-  }, [isLoading, allowed, home, kind, router]);
+  }, [isFocused, isLoading, allowed, home, kind, router]);
 
   if (isLoading) {
     // Inert placeholder — NOT the branded AppLoadingSplash (canvas-based, crashes
@@ -53,8 +58,9 @@ export function MemberDomainGate({ kind, children }: Props) {
 
   if (allowed) return <>{children}</>;
 
-  // Denied with somewhere to go — hold blank for the frame until replace() fires.
-  if (home) return <View style={{ flex: 1 }} />;
+  // Denied but either not the focused scene (background-mounted on desktop) or
+  // we have somewhere to redirect — hold blank for the frame until replace() fires.
+  if (!isFocused || home) return <View style={{ flex: 1 }} />;
 
   // Denied with no reachable domain (member has no functional role). Redirecting
   // would loop, so render a clear notice instead of a blank screen.

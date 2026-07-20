@@ -30,7 +30,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AwardedIndentDeployModalProvider } from '@/contexts/AwardedIndentDeployModalContext';
 import { BusinessConnectionRequestModalProvider } from '@/contexts/BusinessConnectionRequestModalContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
-import { useMemberCapabilities } from '@/lib/useMemberCapabilities';
+import {
+  memberCanAccessTabRoute,
+  memberHomeRouteFromAccess,
+  useMemberCapabilities,
+} from '@/lib/useMemberCapabilities';
 import { useQueryClient } from '@tanstack/react-query';
 
 function DemoCustomTabBar(
@@ -169,6 +173,10 @@ export default function TabLayout() {
   const orgId = org?.currentOrganization?.id ?? null;
   const tabMountMarked = useRef(false);
   const tabsUnlockedRef = useRef(false);
+  // Functional-role access — gates boot preloads so a member never fires RPCs /
+  // warms chunks for a domain their role can't open (e.g. Sales-only skips the
+  // finance trips+transactions warm-up entirely).
+  const access = useMemberCapabilities();
 
   useEffect(() => {
     void hydrateSignupFlowFlags();
@@ -184,10 +192,21 @@ export default function TabLayout() {
 
   useEffect(() => {
     if (loading || !orgId || profile?.role === 'driver') return;
+    // Wait for the functional role to resolve so we only warm allowed domains.
+    if (access.isLoading) return;
     void getLastTabRoute().then((route) => {
-      scheduleDispatcherTabPreloads(route, { queryClient, orgId });
+      // Warm the member's reachable landing tab — not a denied persisted route
+      // (a member booting onto a stale finance route redirects to their home).
+      const warmRoute = memberCanAccessTabRoute(route, access)
+        ? route
+        : (memberHomeRouteFromAccess(access) ?? route);
+      scheduleDispatcherTabPreloads(warmRoute, {
+        queryClient,
+        orgId,
+        warmFinanceData: access.finance || access.tripops,
+      });
     });
-  }, [loading, orgId, profile?.role, queryClient]);
+  }, [loading, orgId, profile?.role, queryClient, access]);
 
   // Pre-warm chat providers + bootstrap as soon as auth + org are ready.
   // This runs immediately (not idle), so provider modules and the bootstrap RPC
@@ -199,21 +218,22 @@ export default function TabLayout() {
     preloadChatRoute(orgId);
   }, [loading, orgId, profile?.role]);
 
-  /** Warm trips first (default tab), then fiscal + network — staggered to avoid Metro OOM. */
+  /** Warm only the tab chunks the member's role can open — staggered to avoid Metro OOM. */
   useEffect(() => {
     if (isDesktopWeb) return;
     if (__DEV__) {
       // Staggered tab preloads + Fast Refresh → stale module IDs (unknown module errors).
       return;
     }
-    preloadTabScreen('trips');
-    const t0 = setTimeout(() => preloadTabScreen('finance'), 700);
-    const t1 = setTimeout(() => preloadTabScreen('network'), 1400);
+    if (access.isLoading) return;
+    if (access.tripops) preloadTabScreen('trips');
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (access.finance) timers.push(setTimeout(() => preloadTabScreen('finance'), 700));
+    if (access.sales) timers.push(setTimeout(() => preloadTabScreen('network'), 1400));
     return () => {
-      clearTimeout(t0);
-      clearTimeout(t1);
+      timers.forEach(clearTimeout);
     };
-  }, [isDesktopWeb]);
+  }, [isDesktopWeb, access]);
 
   if (!loading && user && profile && profile.role !== 'driver') {
     tabsUnlockedRef.current = true;
