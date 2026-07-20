@@ -66,6 +66,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useCapabilities } from "@/lib/useCapabilities";
 import {
   allowedConnectionRoles,
+  canAccessDrivers,
   canAccessSuppliers,
   canUseAggregateSupply,
 } from "@/lib/capabilities";
@@ -244,6 +245,8 @@ function NetworkScreenInner() {
   const canPostLoads = canUseAggregateSupply(capabilities);
   /** Asset-only orgs don't onboard suppliers: no supplier tab/count, connect as client only. */
   const canUseSuppliers = canAccessSuppliers(capabilities);
+  /** Aggregate-only orgs have no own fleet: no driver tab, no FLEET count. */
+  const canUseFleet = canAccessDrivers(capabilities);
   const [refreshing, setRefreshing] = useState(false);
   const [connSearch, setConnSearch] = useState("");
   const [connFilter, setConnFilter] = useState<ConnectionFilterTab>("ALL");
@@ -294,10 +297,13 @@ function NetworkScreenInner() {
 
   const filterTabs = useMemo(
     () =>
-      (canUseSuppliers
-        ? ["ALL", "CLIENT", "SUPPLIER", "DRIVER"]
-        : ["ALL", "CLIENT", "DRIVER"]) as ConnectionFilterTab[],
-    [canUseSuppliers],
+      [
+        "ALL",
+        "CLIENT",
+        ...(canUseSuppliers ? ["SUPPLIER"] : []),
+        ...(canUseFleet ? ["DRIVER"] : []),
+      ] as ConnectionFilterTab[],
+    [canUseSuppliers, canUseFleet],
   );
 
   const clientCount = useMemo(
@@ -313,8 +319,11 @@ function NetworkScreenInner() {
     [driversQ.data],
   );
   const totalConnections = useMemo(
-    () => clientCount + (canUseSuppliers ? supplierCount : 0) + driverCount,
-    [clientCount, supplierCount, driverCount, canUseSuppliers],
+    () =>
+      clientCount +
+      (canUseSuppliers ? supplierCount : 0) +
+      (canUseFleet ? driverCount : 0),
+    [clientCount, supplierCount, driverCount, canUseSuppliers, canUseFleet],
   );
   const animatedTotalConnections = useAnimatedCount(totalConnections);
   const animatedClientCount = useAnimatedCount(clientCount);
@@ -923,6 +932,7 @@ function NetworkScreenInner() {
                         </Text>
                   </View>
                       ) : null}
+                      {canUseFleet ? (
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                     <User
                       size={isMobileLayout ? 11 : 13}
@@ -936,6 +946,7 @@ function NetworkScreenInner() {
                           FLEET
                         </Text>
                   </View>
+                      ) : null}
                 </View>
               </View>
             </View>

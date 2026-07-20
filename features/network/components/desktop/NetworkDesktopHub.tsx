@@ -41,6 +41,8 @@ import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useOrgMembersData } from "@/lib/queries/useOrgMembersQuery";
 import { platformRoleFromMember } from "@/features/organization/utils/teamInviteRoles.util";
 import { useLayoutInsets } from "@/lib/layoutInsets";
+import { useCapabilities } from "@/lib/useCapabilities";
+import { canAccessDrivers, canAccessSuppliers } from "@/lib/capabilities";
 import { ChevronLeft, MessageSquare, MoreHorizontal, UserPlus } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -172,6 +174,10 @@ export function NetworkDesktopHub({
   bottomScrollInset = 0,
 }: Props) {
   const { user, profile } = useAuth();
+  const capabilities = useCapabilities();
+  /** Asset-only: no suppliers. Aggregate-only: no own fleet (drivers). */
+  const canUseSuppliers = canAccessSuppliers(capabilities);
+  const canUseFleet = canAccessDrivers(capabilities);
   const router = useRouter();
   const canGoBack = router.canGoBack();
   const layout = useProfileHubCompactLayout();
@@ -420,8 +426,10 @@ export function NetworkDesktopHub({
   const hubStats = [
     { value: String(totalConnections), label: "CONNECTIONS" },
     { value: String(clientCount), label: "CLIENTS" },
-    { value: String(supplierCount), label: "SUPPLIERS" },
-    { value: String(driverCount), label: "FLEET" },
+    ...(canUseSuppliers
+      ? [{ value: String(supplierCount), label: "SUPPLIERS" }]
+      : []),
+    ...(canUseFleet ? [{ value: String(driverCount), label: "FLEET" }] : []),
   ];
 
   const statCellCompactStyle = layout.statCellGridCorner;

@@ -42,9 +42,6 @@ Stop investigating when:
 
 Do not continue searching for alternative explanations.
 
-## Stack
-React Native 0.81 · Expo SDK 54 · Expo Router 6 · TypeScript 5.9 · TanStack Query v5 · Supabase
-
 ## Key Conventions
 - Routes: always `ROUTES.*` from `lib/routes.ts`
 - Query keys: always `queryKeys.*` from `lib/queryKeys.ts`
