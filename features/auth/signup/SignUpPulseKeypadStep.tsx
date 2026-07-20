@@ -158,7 +158,28 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
 
   const fieldInput = useKeypad ? (
     customDisplay ? (
-      <View style={styles.customDisplay}>{customDisplay}</View>
+      <View style={styles.customDisplay}>
+        {customDisplay}
+        {/* Invisible OTP-autofill hook: iOS never mounts the visible TextInput
+            branch (custom keypad is forced there), so without this the SMS
+            QuickType "Insert code" suggestion never appears. Keypad stays the
+            visible/interactive UI; this only donates a oneTimeCode field. */}
+        <TextInput
+          value={digits}
+          onChangeText={handleDigitsChange}
+          onSubmitEditing={handleSubmitEditing}
+          returnKeyType="go"
+          keyboardType="number-pad"
+          inputMode="numeric"
+          maxLength={maxDigits}
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
+          caretHidden
+          style={styles.otpAutofillHidden}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        />
+      </View>
     ) : (
       <View style={[styles.displayRow, errorMessage ? styles.displayError : null]}>
         {phoneLead}
@@ -603,6 +624,22 @@ function createStyles(theme: SignUpTheme, isDesktop: boolean) {
         } as object,
         default: {},
       }),
+    },
+    otpAutofillHidden: {
+      // Same invisible-autofill-hook idea as otpWebOverlay, but self-positioned
+      // (absolute top-left, 1x1) instead of absoluteFillObject — the custom
+      // keypad's customDisplay container isn't position:relative and clips
+      // overflow, so a full-fill overlay would be inert/clipped here.
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: 1,
+      height: 1,
+      opacity: 0,
+      fontSize: 1,
+      color: 'transparent',
+      borderWidth: 0,
+      backgroundColor: 'transparent',
     },
     error: {
       ...(mobile ? text.errorMobile : text.error),

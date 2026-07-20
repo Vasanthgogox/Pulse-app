@@ -498,7 +498,30 @@ export async function updateDriver(
     .select()
     .single();
   if (error) return { error: new Error(error.message), driver: null };
-  return { error: null, driver: data as DriverRow };
+  const driver = data as DriverRow;
+
+  // Best-effort: keep the accepted invite's compensation terms in sync.
+  // getDriverOffersByOrganization() reads driver_invites.payable_amount /
+  // commission_* in preference to the drivers table, so an edit here would
+  // otherwise never surface in trip-cost/PnL calculations.
+  const touchesCompensation =
+    patch.payable_amount !== undefined ||
+    patch.commission_percent !== undefined ||
+    patch.commission_per_km !== undefined;
+  if (touchesCompensation && driver.user_id) {
+    const inviteUpdates: Record<string, unknown> = {};
+    if (patch.payable_amount !== undefined) inviteUpdates.payable_amount = patch.payable_amount;
+    if (patch.commission_percent !== undefined) inviteUpdates.commission_percent = patch.commission_percent;
+    if (patch.commission_per_km !== undefined) inviteUpdates.commission_per_km = patch.commission_per_km;
+    await supabase()
+      .from("driver_invites")
+      .update(inviteUpdates)
+      .eq("from_organization_id", orgId)
+      .eq("to_user_id", driver.user_id)
+      .eq("status", "accepted");
+  }
+
+  return { error: null, driver };
 }
 
 export type DriverContactCollision = {

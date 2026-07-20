@@ -11,6 +11,15 @@ export const STEPS = [
 
 export type StepId = (typeof STEPS)[number]["id"] | "reached" | "lr";
 
+const STEP_RANK: Record<StepId, number> = {
+  accepted: 0,
+  pickup: 1,
+  lr: 2,
+  transit: 3,
+  reached: 4,
+  completed: 5,
+};
+
 export function useTripControl(tripId: string | undefined) {
   const [trip, setTrip] = useState<tripsService.TripRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,17 +46,25 @@ export function useTripControl(tripId: string | undefined) {
       if (res.trip) {
         const s = (res.trip.status ?? "").toLowerCase();
 
+        let derived: StepId;
         if (s === "completed" || s === "delivered" || s === "done") {
-          setStep("completed");
+          derived = "completed";
         } else if (s === "at_drop") {
-          setStep("reached");
+          derived = "reached";
         } else if (s === "in_transit" || s === "transit") {
-          setStep("transit");
+          derived = "transit";
         } else if (s === "picked_up" || s === "pickup" || s === "in_progress") {
-          setStep("pickup");
+          derived = "pickup";
         } else {
-          setStep("accepted");
+          derived = "accepted";
         }
+        setStep((prev) => {
+          // Keep the local-only LR sub-step while server status is still pickup.
+          if (prev === "lr" && derived === "pickup") return prev;
+          // Don't regress past a locally confirmed advance (e.g. a stale poll).
+          if ((STEP_RANK[prev] ?? 0) > (STEP_RANK[derived] ?? 0)) return prev;
+          return derived;
+        });
       }
     } catch (error) {
       console.error("Failed to load trip:", error);

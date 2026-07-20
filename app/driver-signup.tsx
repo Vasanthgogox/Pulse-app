@@ -583,8 +583,6 @@ export default function DriverSignUpScreen() {
         throw signInResult.error;
       }
 
-      goToPage(7);
-
       const {
         data: { user: signedInUser },
       } = await supabase().auth.getUser();
@@ -619,6 +617,11 @@ export default function DriverSignUpScreen() {
         }
         await supabase().auth.refreshSession();
       }
+
+      // Show success only once the profile photo/documents are actually
+      // persisted — otherwise a fast "Go to app" tap can navigate away while
+      // the upload is still in flight and silently lose the write.
+      goToPage(7);
     } catch (e) {
       clearDriverSignupSuccess();
       const msg = e instanceof Error ? e.message : 'Sign up failed';
