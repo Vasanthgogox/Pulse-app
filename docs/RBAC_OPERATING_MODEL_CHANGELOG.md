@@ -120,9 +120,16 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 ## Known gaps (Part 2 — functional member roles)
 
 - **Rollout behavior change**: any existing non-admin member with no `permissions.platformRole` set (plain legacy `member`, or a pre-existing Planner/Operator invite) now gets **zero** Fiscal/Trips/Network tab access until the owner explicitly assigns Finance/Sales/TripOps. This was a deliberate strict-default choice, not an oversight — flag it before shipping.
-- **`DemoTabBar`/`DemoTabBarMobileFooter` icons are not hidden** for a domain the member can't reach — tapping still bounces back via `MemberDomainGate` (same UX as any other denied nav), it's just not proactively hidden. Deferred because those components are large/animation-heavy and this is cosmetic, not an access gap.
 - **Scope is nav/tab-entry only** — the ~30 existing `useCapabilities()` call sites inside individual screens (sub-tabs, ledger categories, party detail screens, etc.) are untouched and remain org-model-only. A functional-role member who is inside an allowed tab still sees the same content an Admin would see for that org model.
 - No RLS/database-level enforcement; no CHECK-constraint migration (new roles map onto existing legal `role` values).
+
+### Follow-up fixes (landing + tab visibility)
+
+Resolved three defects reported after the first pass, where a functional-role member landed on the wrong screen:
+
+- **Role-aware redirect target.** `MemberDomainGate` no longer bounces a denied member to the neutral Profile tab. It now redirects to the member's own home tab via `memberHomeRouteFromAccess()` (`lib/useMemberCapabilities.ts`): TripOps → Trips, Finance → Fiscal, Sales → Network. This fixes a TripOps member cold-booting onto a persisted/default Fiscal or Network route and getting parked on Profile.
+- **No-access notice instead of a blank frame.** A member with no reachable domain (no functional role) has nowhere to redirect, so the gate now renders a themed "No workspace access yet" notice (i18n `memberNoAccessTitle` / `memberNoAccessBody`) rather than an empty `<View>`.
+- **Denied tabs are now hidden from the dock.** `DemoTabBar` (desktop top nav) and `PulseBottomTabBar` (mobile footer) take an optional `visibility` prop, wired from `useMemberCapabilities()` in `app/(tabs)/_layout.tsx`. A member only sees the primary tabs their role can reach; the dock highlight also falls back to the member's home tab (not a hard-coded `trips`) when the current route isn't a primary tab, fixing the "Trips highlighted while URL is /profile" desync. Owner/Admin are unaffected — all three tabs stay visible. While access is still resolving, all tabs stay visible to avoid a flicker (the per-tab gate holds the screen).
 
 ## How to update this file
 

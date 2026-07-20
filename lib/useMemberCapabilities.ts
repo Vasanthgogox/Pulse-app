@@ -12,6 +12,7 @@ import {
   canAccessIndents,
   canAccessTrips,
 } from "@/lib/capabilities";
+import { ROUTES } from "@/lib/routes";
 import { useCapabilities } from "@/lib/useCapabilities";
 import { useMemo } from "react";
 
@@ -21,6 +22,22 @@ export interface MemberDomainAccess {
   tripops: boolean;
   /** True until the active workspace (role + functional role) has resolved. */
   isLoading: boolean;
+}
+
+/**
+ * The member's primary landing tab — the first domain their functional role can
+ * reach. Drives both boot landing and the redirect target when a denied tab
+ * bounces them. Returns `null` when the member can reach no domain at all
+ * (no functional role assigned) — callers show a no-access notice instead of
+ * looping a redirect. Owner/admin resolve to Trips (all domains allowed).
+ */
+export function memberHomeRouteFromAccess(
+  access: MemberDomainAccess,
+): string | null {
+  if (access.tripops) return ROUTES.TABS.TRIPS;
+  if (access.finance) return ROUTES.TABS.FINANCE;
+  if (access.sales) return ROUTES.TABS.NETWORK;
+  return null;
 }
 
 export function useMemberCapabilities(): MemberDomainAccess {

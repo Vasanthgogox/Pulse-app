@@ -30,6 +30,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AwardedIndentDeployModalProvider } from '@/contexts/AwardedIndentDeployModalContext';
 import { BusinessConnectionRequestModalProvider } from '@/contexts/BusinessConnectionRequestModalContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
+import { useMemberCapabilities } from '@/lib/useMemberCapabilities';
 import { useQueryClient } from '@tanstack/react-query';
 
 function DemoCustomTabBar(
@@ -44,13 +45,33 @@ function DemoCustomTabBar(
   const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+
+  // Functional-role tab visibility. While access resolves, keep all tabs shown
+  // (the per-tab MemberDomainGate holds the screen) so denied tabs don't flicker
+  // in then out. Owner/admin see all three (org-model-gated only, as before).
+  const memberAccess = useMemberCapabilities();
+  const tabVisibility = {
+    finance: memberAccess.isLoading || memberAccess.finance,
+    trips: memberAccess.isLoading || memberAccess.tripops,
+    network: memberAccess.isLoading || memberAccess.sales,
+  };
+  // The member's own home tab — used to highlight the dock when the current
+  // route isn't a primary tab (e.g. profile), so a hidden tab is never shown active.
+  const homeTab: DemoTabId = tabVisibility.trips
+    ? 'trips'
+    : tabVisibility.finance
+      ? 'finance'
+      : tabVisibility.network
+        ? 'network'
+        : 'trips';
+
   const routeName = state.routes[state.index]?.name;
   const activeTab: DemoTabId =
     routeName === 'finance' ? 'finance'
     : routeName === 'trips' ? 'trips'
     : routeName === 'network' ? 'network'
     : routeName === 'resources' ? 'resources'
-    : 'trips';
+    : homeTab;
 
   const onTabChange = useCallback(
     (tab: DemoTabId) => {
@@ -119,6 +140,7 @@ function DemoCustomTabBar(
   const tabBar = (
     <DemoTabBar
       activeTab={activeTab}
+      visibility={tabVisibility}
       onTabChange={onTabChange}
       onProfilePress={onProfilePress}
       onNotificationsPress={() => router.push("/notifications")}
