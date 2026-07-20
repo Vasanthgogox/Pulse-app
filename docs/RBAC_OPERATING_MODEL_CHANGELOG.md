@@ -17,6 +17,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `e1670210` | Org KYC reminder: `hasBusinessCapabilities` instead of `role !== 'driver'` |
 | _(pending)_ | Network page: counterparty-aware connect roles; asset hides supplier tab/count/create-post; aggregate hides driver (FLEET) tab/count |
 | _(pending)_ | Operating-model switching: owner-only, 30-day cooldown, audited RPC; impact-preview modal; capability re-gate with no data loss |
+| _(pending)_ | Desktop hub sub-panels (details / hero / grow) gated on `canAccessSuppliers`/`canAccessDrivers`; `database.types.ts` regen (change_operating_model RPC + operating_model_changed_at); Hybrid model verified full-union (no gates to add, covered by tests) |
 
 ---
 
@@ -45,7 +46,8 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `features/organization/components/workspace/WorkspaceSettingsPanel.tsx` | Owner-only editable Operating Model field → opens modal; refresh + `['q',…]` cache purge on switch |
 | `features/organization/components/workspace/workspacePanelUi.tsx` | `panelFieldHint` style |
 | `features/network/screens/NetworkScreen.tsx` | Asset: hide supplier tab/count/create-post, connect as client only. Aggregate: hide DRIVER tab + FLEET count. Empty-role connect blocked with alert |
-| `features/network/components/desktop/NetworkDesktopHub.tsx` | Hub stats: drop SUPPLIERS tile (asset) / FLEET tile (aggregate) via `canAccessSuppliers`/`canAccessDrivers` |
+| `features/network/components/desktop/NetworkDesktopHub.tsx` | Hub stats: drop SUPPLIERS tile (asset) / FLEET tile (aggregate) via `canAccessSuppliers`/`canAccessDrivers`. Zero gated counts (`gatedSupplierCount`/`gatedDriverCount`) into details/hero/grow sub-panels so no hidden-surface count leaks |
+| `lib/database.types.ts` | Regenerated — adds `change_operating_model` RPC + `organizations.operating_model_changed_at` |
 | `features/network/components/ConnectionRoleModal.tsx` | `allowedRoles` prop; preselect + render only valid roles |
 | `features/network/components/StoryReel.tsx` | `canCreatePost` prop; hide create bubble/`+` badge for asset |
 | `features/network/components/DiscoverView.tsx` | Connect modal gated by `allowedConnectionRoles`; empty-role connect blocked |

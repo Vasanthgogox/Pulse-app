@@ -178,6 +178,12 @@ export function NetworkDesktopHub({
   /** Asset-only: no suppliers. Aggregate-only: no own fleet (drivers). */
   const canUseSuppliers = canAccessSuppliers(capabilities);
   const canUseFleet = canAccessDrivers(capabilities);
+  // Zero out counts for surfaces this model can't use so every downstream
+  // sub-panel (details / hero / grow) stays consistent with the gated hub
+  // tiles — an asset org must never see a supplier count, nor aggregate a fleet
+  // count. Underlying rows are untouched; they reappear on re-upgrade.
+  const gatedSupplierCount = canUseSuppliers ? supplierCount : 0;
+  const gatedDriverCount = canUseFleet ? driverCount : 0;
   const router = useRouter();
   const canGoBack = router.canGoBack();
   const layout = useProfileHubCompactLayout();
@@ -330,8 +336,8 @@ export function NetworkDesktopHub({
           phone={profile?.phone}
           totalConnections={totalConnections}
           clientCount={clientCount}
-          supplierCount={supplierCount}
-          driverCount={driverCount}
+          supplierCount={gatedSupplierCount}
+          driverCount={gatedDriverCount}
           pendingInviteCount={pendingInviteCount}
         />
       );
@@ -412,7 +418,7 @@ export function NetworkDesktopHub({
         onSearchChange={onDiscoverSearchChange}
         totalConnections={totalConnections}
         clientCount={clientCount}
-        supplierCount={supplierCount}
+        supplierCount={gatedSupplierCount}
         discoverInviteCount={discoverInviteCount}
         discoverInviteLimit={discoverInviteLimit}
         onInviteCountChange={onDiscoverInviteCountChange}
@@ -427,9 +433,9 @@ export function NetworkDesktopHub({
     { value: String(totalConnections), label: "CONNECTIONS" },
     { value: String(clientCount), label: "CLIENTS" },
     ...(canUseSuppliers
-      ? [{ value: String(supplierCount), label: "SUPPLIERS" }]
+      ? [{ value: String(gatedSupplierCount), label: "SUPPLIERS" }]
       : []),
-    ...(canUseFleet ? [{ value: String(driverCount), label: "FLEET" }] : []),
+    ...(canUseFleet ? [{ value: String(gatedDriverCount), label: "FLEET" }] : []),
   ];
 
   const statCellCompactStyle = layout.statCellGridCorner;
@@ -553,7 +559,7 @@ export function NetworkDesktopHub({
           modelLabel={modelLabel}
           totalConnections={totalConnections}
           clientCount={clientCount}
-          supplierCount={supplierCount}
+          supplierCount={gatedSupplierCount}
           onProfilePress={() => selectTab("profile")}
         />
       )}

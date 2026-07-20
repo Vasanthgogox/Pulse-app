@@ -12,33 +12,68 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
+      _monitor_heartbeat: {
+        Row: {
+          job_name: string
+          last_run: string
+        }
+        Insert: {
+          job_name: string
+          last_run: string
+        }
+        Update: {
+          job_name?: string
+          last_run?: string
+        }
+        Relationships: []
+      }
+      _monitor_net_fail_snapshot: {
+        Row: {
+          captured_at: string
+          fail_count: number
+        }
+        Insert: {
+          captured_at?: string
+          fail_count: number
+        }
+        Update: {
+          captured_at?: string
+          fail_count?: number
+        }
+        Relationships: []
+      }
+      _monitor_stmt_snapshot: {
+        Row: {
+          captured_at: string | null
+          total_timeout_calls: number | null
+        }
+        Insert: {
+          captured_at?: string | null
+          total_timeout_calls?: number | null
+        }
+        Update: {
+          captured_at?: string | null
+          total_timeout_calls?: number | null
+        }
+        Relationships: []
+      }
+      _monitor_watchdog_state: {
+        Row: {
+          alerted_at: string | null
+          id: boolean
+        }
+        Insert: {
+          alerted_at?: string | null
+          id?: boolean
+        }
+        Update: {
+          alerted_at?: string | null
+          id?: boolean
+        }
+        Relationships: []
+      }
       accounting_books: {
         Row: {
           amount: number
@@ -98,6 +133,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_books_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_books_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -216,6 +265,24 @@ export type Database = {
           },
         ]
       }
+      app_config: {
+        Row: {
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       b2b_operations_dismissals: {
         Row: {
           alert_key: string
@@ -307,6 +374,70 @@ export type Database = {
           },
         ]
       }
+      booking_ref_backfill_log: {
+        Row: {
+          migrated_at: string
+          new_ref: string
+          old_ref: string
+          trip_id: string | null
+        }
+        Insert: {
+          migrated_at?: string
+          new_ref: string
+          old_ref: string
+          trip_id?: string | null
+        }
+        Update: {
+          migrated_at?: string
+          new_ref?: string
+          old_ref?: string
+          trip_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_ref_backfill_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_ref_backfill_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_ref_backfill_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_ref_backfill_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_ref_backfill_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_ref_backfill_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+        ]
+      }
       branding_settings: {
         Row: {
           company_name: string | null
@@ -340,6 +471,48 @@ export type Database = {
           {
             foreignKeyName: "branding_settings_org_id_fkey"
             columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cashflow_forecast: {
+        Row: {
+          confidence: number
+          created_at: string
+          date: string
+          expected_inflow: number
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          date: string
+          expected_inflow?: number
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          date?: string
+          expected_inflow?: number
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashflow_forecast_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cashflow_forecast_organization_id_fkey"
+            columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
@@ -535,6 +708,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -2075,6 +2262,77 @@ export type Database = {
           },
         ]
       }
+      commerce_inventory: {
+        Row: {
+          available_qty: number
+          created_at: string
+          damaged_qty: number
+          id: string
+          last_adjusted_at: string
+          organization_id: string
+          product_id: string
+          reorder_level: number
+          reserved_qty: number
+          updated_at: string
+          warehouse_id: string
+        }
+        Insert: {
+          available_qty?: number
+          created_at?: string
+          damaged_qty?: number
+          id?: string
+          last_adjusted_at?: string
+          organization_id: string
+          product_id: string
+          reorder_level?: number
+          reserved_qty?: number
+          updated_at?: string
+          warehouse_id: string
+        }
+        Update: {
+          available_qty?: number
+          created_at?: string
+          damaged_qty?: number
+          id?: string
+          last_adjusted_at?: string
+          organization_id?: string
+          product_id?: string
+          reorder_level?: number
+          reserved_qty?: number
+          updated_at?: string
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_inventory_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commerce_inventory_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commerce_inventory_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commerce_inventory_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "client_warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       connection_requests: {
         Row: {
           created_at: string | null
@@ -2444,49 +2702,78 @@ export type Database = {
         Row: {
           commission_per_km: number | null
           commission_percent: number | null
+          consumed_at: string | null
           created_at: string | null
           deleted_at: string | null
+          driver_id: string | null
+          expires_at: string | null
           from_org_name: string | null
           from_organization_id: string
           id: string
+          invited_by: string | null
           invitee_name: string | null
           payable_amount: number | null
+          phone_normalised: string | null
           responded_at: string | null
           responded_by: string | null
           status: string
-          to_user_id: string
+          to_user_id: string | null
         }
         Insert: {
           commission_per_km?: number | null
           commission_percent?: number | null
+          consumed_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          driver_id?: string | null
+          expires_at?: string | null
           from_org_name?: string | null
           from_organization_id: string
           id?: string
+          invited_by?: string | null
           invitee_name?: string | null
           payable_amount?: number | null
+          phone_normalised?: string | null
           responded_at?: string | null
           responded_by?: string | null
           status?: string
-          to_user_id: string
+          to_user_id?: string | null
         }
         Update: {
           commission_per_km?: number | null
           commission_percent?: number | null
+          consumed_at?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          driver_id?: string | null
+          expires_at?: string | null
           from_org_name?: string | null
           from_organization_id?: string
           id?: string
+          invited_by?: string | null
           invitee_name?: string | null
           payable_amount?: number | null
+          phone_normalised?: string | null
           responded_at?: string | null
           responded_by?: string | null
           status?: string
-          to_user_id?: string
+          to_user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "driver_invites_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_invites_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_balances"
+            referencedColumns: ["driver_id"]
+          },
           {
             foreignKeyName: "driver_invites_from_organization_id_fkey"
             columns: ["from_organization_id"]
@@ -2583,6 +2870,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_ledger_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_ledger_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -2688,6 +2989,20 @@ export type Database = {
             foreignKeyName: "driver_locations_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_locations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_locations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -2781,6 +3096,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_presence_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_presence_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -3133,6 +3462,7 @@ export type Database = {
           organization_id: string
           payable_amount: number | null
           phone: string | null
+          phone_normalised: string | null
           status: string
           tracking_only: boolean
           updated_at: string | null
@@ -3158,6 +3488,7 @@ export type Database = {
           organization_id: string
           payable_amount?: number | null
           phone?: string | null
+          phone_normalised?: string | null
           status?: string
           tracking_only?: boolean
           updated_at?: string | null
@@ -3183,6 +3514,7 @@ export type Database = {
           organization_id?: string
           payable_amount?: number | null
           phone?: string | null
+          phone_normalised?: string | null
           status?: string
           tracking_only?: boolean
           updated_at?: string | null
@@ -3208,6 +3540,92 @@ export type Database = {
             columns: ["assigned_vehicle_id"]
             isOneToOne: false
             referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entity_bank_accounts: {
+        Row: {
+          account_number: string | null
+          account_type: string | null
+          bank_name: string | null
+          cancelled_cheque_url: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          ifsc_code: string | null
+          is_primary: boolean
+          organization_id: string
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          account_number?: string | null
+          account_type?: string | null
+          bank_name?: string | null
+          cancelled_cheque_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          ifsc_code?: string | null
+          is_primary?: boolean
+          organization_id: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          account_number?: string | null
+          account_type?: string | null
+          bank_name?: string | null
+          cancelled_cheque_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          ifsc_code?: string | null
+          is_primary?: boolean
+          organization_id?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_bank_accounts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_bank_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_bank_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_bank_accounts_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -3503,6 +3921,149 @@ export type Database = {
         }
         Relationships: []
       }
+      execution_plan_stops: {
+        Row: {
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          execution_plan_id: string
+          id: string
+          label: string | null
+          notes: string | null
+          organization_id: string
+          pod_required: boolean
+          sequence: number
+          stop_type: string
+          warehouse_id: string
+        }
+        Insert: {
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          execution_plan_id: string
+          id?: string
+          label?: string | null
+          notes?: string | null
+          organization_id: string
+          pod_required?: boolean
+          sequence?: number
+          stop_type: string
+          warehouse_id: string
+        }
+        Update: {
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          execution_plan_id?: string
+          id?: string
+          label?: string | null
+          notes?: string | null
+          organization_id?: string
+          pod_required?: boolean
+          sequence?: number
+          stop_type?: string
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "execution_plan_stops_execution_plan_id_fkey"
+            columns: ["execution_plan_id"]
+            isOneToOne: false
+            referencedRelation: "execution_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "execution_plan_stops_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "execution_plan_stops_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "execution_plan_stops_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "client_warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      execution_plans: {
+        Row: {
+          constraints: Json
+          correlation_id: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          lifecycle_stage: string | null
+          merge_score: number | null
+          organization_id: string
+          origin: string
+          plan_number: string
+          planned_vehicle_type: string | null
+          published_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          constraints?: Json
+          correlation_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          lifecycle_stage?: string | null
+          merge_score?: number | null
+          organization_id: string
+          origin?: string
+          plan_number: string
+          planned_vehicle_type?: string | null
+          published_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          constraints?: Json
+          correlation_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          lifecycle_stage?: string | null
+          merge_score?: number | null
+          organization_id?: string
+          origin?: string
+          plan_number?: string
+          planned_vehicle_type?: string | null
+          published_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "execution_plans_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "execution_plans_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       geofence_events: {
         Row: {
           driver_id: string
@@ -3571,6 +4132,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "geofence_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "geofence_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -3729,6 +4304,7 @@ export type Database = {
           owner_user_id: string | null
           pickup_area: string
           pickup_date: string | null
+          sales_order_id: string | null
           sequence_number: number | null
           shared_at: string | null
           status: string
@@ -3758,6 +4334,7 @@ export type Database = {
           owner_user_id?: string | null
           pickup_area: string
           pickup_date?: string | null
+          sales_order_id?: string | null
           sequence_number?: number | null
           shared_at?: string | null
           status?: string
@@ -3787,6 +4364,7 @@ export type Database = {
           owner_user_id?: string | null
           pickup_area?: string
           pickup_date?: string | null
+          sales_order_id?: string | null
           sequence_number?: number | null
           shared_at?: string | null
           status?: string
@@ -3836,6 +4414,13 @@ export type Database = {
             columns: ["owner_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "indents_sales_order_id_fkey"
+            columns: ["sales_order_id"]
+            isOneToOne: false
+            referencedRelation: "sales_orders"
             referencedColumns: ["id"]
           },
         ]
@@ -3967,6 +4552,110 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      loads: {
+        Row: {
+          created_at: string | null
+          created_by_user_id: string
+          id: string
+          indent_id: string | null
+          load_number: string | null
+          owner_user_id: string
+          trip_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by_user_id: string
+          id?: string
+          indent_id?: string | null
+          load_number?: string | null
+          owner_user_id: string
+          trip_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by_user_id?: string
+          id?: string
+          indent_id?: string | null
+          load_number?: string | null
+          owner_user_id?: string
+          trip_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loads_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loads_indent_id_fkey"
+            columns: ["indent_id"]
+            isOneToOne: false
+            referencedRelation: "indents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loads_indent_id_fkey"
+            columns: ["indent_id"]
+            isOneToOne: false
+            referencedRelation: "v_open_indents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loads_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loads_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loads_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loads_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loads_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loads_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loads_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
           },
         ]
       }
@@ -4226,6 +4915,20 @@ export type Database = {
             foreignKeyName: "ocr_jobs_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -4302,20 +5005,65 @@ export type Database = {
         }
         Relationships: []
       }
+      org_feature_flags: {
+        Row: {
+          enabled: boolean
+          flag_id: string
+          id: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          flag_id: string
+          id?: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          flag_id?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_feature_flags_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_feature_flags_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_counters: {
         Row: {
           indent_seq: number
+          order_seq: number
           organization_id: string
+          plan_seq: number
           trip_seq: number
         }
         Insert: {
           indent_seq?: number
+          order_seq?: number
           organization_id: string
+          plan_seq?: number
           trip_seq?: number
         }
         Update: {
           indent_seq?: number
+          order_seq?: number
           organization_id?: string
+          plan_seq?: number
           trip_seq?: number
         }
         Relationships: [
@@ -4330,6 +5078,81 @@ export type Database = {
             foreignKeyName: "organization_counters_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_kyc_documents: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          doc_label: string | null
+          doc_type: string
+          file_name: string | null
+          file_size_bytes: number | null
+          id: string
+          is_mandatory: boolean
+          mime_type: string | null
+          organization_id: string
+          rejection_notes: string | null
+          status: string
+          storage_path: string | null
+          updated_at: string
+          uploaded_by: string | null
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          doc_label?: string | null
+          doc_type: string
+          file_name?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          is_mandatory?: boolean
+          mime_type?: string | null
+          organization_id: string
+          rejection_notes?: string | null
+          status?: string
+          storage_path?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          doc_label?: string | null
+          doc_type?: string
+          file_name?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          is_mandatory?: boolean
+          mime_type?: string | null
+          organization_id?: string
+          rejection_notes?: string | null
+          status?: string
+          storage_path?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_kyc_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_kyc_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -4558,10 +5381,81 @@ export type Database = {
           },
         ]
       }
+      organization_team_invites: {
+        Row: {
+          accepted_user_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          invited_by: string
+          invitee_email: string | null
+          invitee_name: string
+          invitee_phone: string
+          invitee_phone_canon: string
+          organization_id: string
+          permissions: Json
+          role: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_user_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          invited_by: string
+          invitee_email?: string | null
+          invitee_name: string
+          invitee_phone: string
+          invitee_phone_canon: string
+          organization_id: string
+          permissions?: Json
+          role: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_user_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string
+          invitee_email?: string | null
+          invitee_name?: string
+          invitee_phone?: string
+          invitee_phone_canon?: string
+          organization_id?: string
+          permissions?: Json
+          role?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_team_invites_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_team_invites_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           address_line: string | null
+          address_pincode: string | null
+          address_proof_path: string | null
+          address_proof_type: string | null
           avatar_seed: string | null
+          biometric_detail: Json | null
+          biometric_status: Database["public"]["Enums"]["pillar_status_type"]
           business_pan: string | null
           business_type: string | null
           cin: string | null
@@ -4570,14 +5464,24 @@ export type Database = {
           deleted_at: string | null
           employee_count: string | null
           founded_year: number | null
+          frozen_at: string | null
+          gst_not_applicable: boolean
           gstin: string | null
           id: string
+          iec_number: string | null
           kyc_rejected_reason: string | null
+          locality: string | null
           logo_url: string | null
+          msme_number: string | null
           name: string
           operating_model: string
+          operating_model_changed_at: string | null
           operational_code: string | null
           owner_id: string | null
+          penny_drop_detail: Json | null
+          penny_drop_status: Database["public"]["Enums"]["pillar_status_type"]
+          pincode: string | null
+          platform_status: string
           profile_about: string | null
           profile_area: string | null
           profile_ceo_name: string | null
@@ -4586,17 +5490,32 @@ export type Database = {
           profile_sector: string | null
           profile_website: string | null
           profile_youtube: string | null
+          registration_type:
+            | Database["public"]["Enums"]["registration_type_enum"]
+            | null
+          rejection_reasons: Json | null
           slug: string | null
           state: string | null
+          submitted_at: string | null
+          tan_number: string | null
+          tier_1_unlocked_at: string | null
+          tier_2_unlocked_at: string | null
+          transaction_cap_paise: number
           updated_at: string | null
           verification_status: Database["public"]["Enums"]["kyc_verification_status"]
+          verification_tier: Database["public"]["Enums"]["verification_tier_enum"]
           verified_at: string | null
           verified_by: string | null
           zone: string | null
         }
         Insert: {
           address_line?: string | null
+          address_pincode?: string | null
+          address_proof_path?: string | null
+          address_proof_type?: string | null
           avatar_seed?: string | null
+          biometric_detail?: Json | null
+          biometric_status?: Database["public"]["Enums"]["pillar_status_type"]
           business_pan?: string | null
           business_type?: string | null
           cin?: string | null
@@ -4605,14 +5524,24 @@ export type Database = {
           deleted_at?: string | null
           employee_count?: string | null
           founded_year?: number | null
+          frozen_at?: string | null
+          gst_not_applicable?: boolean
           gstin?: string | null
           id?: string
+          iec_number?: string | null
           kyc_rejected_reason?: string | null
+          locality?: string | null
           logo_url?: string | null
+          msme_number?: string | null
           name: string
           operating_model?: string
+          operating_model_changed_at?: string | null
           operational_code?: string | null
           owner_id?: string | null
+          penny_drop_detail?: Json | null
+          penny_drop_status?: Database["public"]["Enums"]["pillar_status_type"]
+          pincode?: string | null
+          platform_status?: string
           profile_about?: string | null
           profile_area?: string | null
           profile_ceo_name?: string | null
@@ -4621,17 +5550,32 @@ export type Database = {
           profile_sector?: string | null
           profile_website?: string | null
           profile_youtube?: string | null
+          registration_type?:
+            | Database["public"]["Enums"]["registration_type_enum"]
+            | null
+          rejection_reasons?: Json | null
           slug?: string | null
           state?: string | null
+          submitted_at?: string | null
+          tan_number?: string | null
+          tier_1_unlocked_at?: string | null
+          tier_2_unlocked_at?: string | null
+          transaction_cap_paise?: number
           updated_at?: string | null
           verification_status?: Database["public"]["Enums"]["kyc_verification_status"]
+          verification_tier?: Database["public"]["Enums"]["verification_tier_enum"]
           verified_at?: string | null
           verified_by?: string | null
           zone?: string | null
         }
         Update: {
           address_line?: string | null
+          address_pincode?: string | null
+          address_proof_path?: string | null
+          address_proof_type?: string | null
           avatar_seed?: string | null
+          biometric_detail?: Json | null
+          biometric_status?: Database["public"]["Enums"]["pillar_status_type"]
           business_pan?: string | null
           business_type?: string | null
           cin?: string | null
@@ -4640,14 +5584,24 @@ export type Database = {
           deleted_at?: string | null
           employee_count?: string | null
           founded_year?: number | null
+          frozen_at?: string | null
+          gst_not_applicable?: boolean
           gstin?: string | null
           id?: string
+          iec_number?: string | null
           kyc_rejected_reason?: string | null
+          locality?: string | null
           logo_url?: string | null
+          msme_number?: string | null
           name?: string
           operating_model?: string
+          operating_model_changed_at?: string | null
           operational_code?: string | null
           owner_id?: string | null
+          penny_drop_detail?: Json | null
+          penny_drop_status?: Database["public"]["Enums"]["pillar_status_type"]
+          pincode?: string | null
+          platform_status?: string
           profile_about?: string | null
           profile_area?: string | null
           profile_ceo_name?: string | null
@@ -4656,15 +5610,76 @@ export type Database = {
           profile_sector?: string | null
           profile_website?: string | null
           profile_youtube?: string | null
+          registration_type?:
+            | Database["public"]["Enums"]["registration_type_enum"]
+            | null
+          rejection_reasons?: Json | null
           slug?: string | null
           state?: string | null
+          submitted_at?: string | null
+          tan_number?: string | null
+          tier_1_unlocked_at?: string | null
+          tier_2_unlocked_at?: string | null
+          transaction_cap_paise?: number
           updated_at?: string | null
           verification_status?: Database["public"]["Enums"]["kyc_verification_status"]
+          verification_tier?: Database["public"]["Enums"]["verification_tier_enum"]
           verified_at?: string | null
           verified_by?: string | null
           zone?: string | null
         }
         Relationships: []
+      }
+      platform_identity_audit_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          invite_id: string | null
+          membership_id: string | null
+          metadata: Json
+          occurred_at: string
+          organization_id: string | null
+          person_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          invite_id?: string | null
+          membership_id?: string | null
+          metadata?: Json
+          occurred_at?: string
+          organization_id?: string | null
+          person_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          invite_id?: string | null
+          membership_id?: string | null
+          metadata?: Json
+          occurred_at?: string
+          organization_id?: string | null
+          person_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_identity_audit_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_identity_audit_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       platform_metrics: {
         Row: {
@@ -4893,6 +5908,99 @@ export type Database = {
           },
         ]
       }
+      products: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          fragile: boolean
+          hazmat: boolean
+          height_cm: number | null
+          hsn_code: string | null
+          id: string
+          length_cm: number | null
+          name: string
+          organization_id: string
+          sku: string
+          status: string
+          tax_rate: number
+          temperature_type: string
+          unit_price: number
+          uom: string
+          updated_at: string
+          volume_m3: number
+          weight_kg: number
+          width_cm: number | null
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          fragile?: boolean
+          hazmat?: boolean
+          height_cm?: number | null
+          hsn_code?: string | null
+          id?: string
+          length_cm?: number | null
+          name: string
+          organization_id: string
+          sku: string
+          status?: string
+          tax_rate?: number
+          temperature_type?: string
+          unit_price?: number
+          uom?: string
+          updated_at?: string
+          volume_m3?: number
+          weight_kg?: number
+          width_cm?: number | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          fragile?: boolean
+          hazmat?: boolean
+          height_cm?: number | null
+          hsn_code?: string | null
+          id?: string
+          length_cm?: number | null
+          name?: string
+          organization_id?: string
+          sku?: string
+          status?: string
+          tax_rate?: number
+          temperature_type?: string
+          unit_price?: number
+          uom?: string
+          updated_at?: string
+          volume_m3?: number
+          weight_kg?: number
+          width_cm?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_products_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commerce_products_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           address: string | null
@@ -4992,6 +6100,110 @@ export type Database = {
         }
         Relationships: []
       }
+      pulse_audit_actions: {
+        Row: {
+          action: string
+          audit_table: string | null
+          created_at: string
+          data_detail: string | null
+          del_tables: string[]
+          flow_group: string | null
+          id: string
+          ins_tables: string[]
+          is_subflow: boolean | null
+          priority: string
+          route: string | null
+          seq: number
+          service: string | null
+          sub_seq: number | null
+          trigger_name: string | null
+          upd_tables: string[]
+          verify_sql: string | null
+        }
+        Insert: {
+          action: string
+          audit_table?: string | null
+          created_at?: string
+          data_detail?: string | null
+          del_tables?: string[]
+          flow_group?: string | null
+          id: string
+          ins_tables?: string[]
+          is_subflow?: boolean | null
+          priority?: string
+          route?: string | null
+          seq: number
+          service?: string | null
+          sub_seq?: number | null
+          trigger_name?: string | null
+          upd_tables?: string[]
+          verify_sql?: string | null
+        }
+        Update: {
+          action?: string
+          audit_table?: string | null
+          created_at?: string
+          data_detail?: string | null
+          del_tables?: string[]
+          flow_group?: string | null
+          id?: string
+          ins_tables?: string[]
+          is_subflow?: boolean | null
+          priority?: string
+          route?: string | null
+          seq?: number
+          service?: string | null
+          sub_seq?: number | null
+          trigger_name?: string | null
+          upd_tables?: string[]
+          verify_sql?: string | null
+        }
+        Relationships: []
+      }
+      pulse_audit_verifications: {
+        Row: {
+          action_id: string
+          id: string
+          notes: string | null
+          snapshot_after: Json | null
+          snapshot_before: Json | null
+          status: string
+          tester_name: string | null
+          updated_at: string
+          verified_at: string
+        }
+        Insert: {
+          action_id: string
+          id?: string
+          notes?: string | null
+          snapshot_after?: Json | null
+          snapshot_before?: Json | null
+          status?: string
+          tester_name?: string | null
+          updated_at?: string
+          verified_at?: string
+        }
+        Update: {
+          action_id?: string
+          id?: string
+          notes?: string | null
+          snapshot_after?: Json | null
+          snapshot_before?: Json | null
+          status?: string
+          tester_name?: string | null
+          updated_at?: string
+          verified_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pulse_audit_verifications_action_id_fkey"
+            columns: ["action_id"]
+            isOneToOne: true
+            referencedRelation: "pulse_audit_actions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ratings: {
         Row: {
           comment: string | null
@@ -5058,6 +6270,20 @@ export type Database = {
             foreignKeyName: "ratings_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ratings_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ratings_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -5097,6 +6323,204 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      sales_order_lines: {
+        Row: {
+          allocated_quantity: number
+          created_at: string
+          id: string
+          line_total: number
+          organization_id: string
+          product_id: string
+          quantity: number
+          sales_order_id: string
+          tax_rate: number
+          unit_price: number
+          volume_m3: number
+          weight_kg: number
+        }
+        Insert: {
+          allocated_quantity?: number
+          created_at?: string
+          id?: string
+          line_total?: number
+          organization_id: string
+          product_id: string
+          quantity: number
+          sales_order_id: string
+          tax_rate?: number
+          unit_price?: number
+          volume_m3?: number
+          weight_kg?: number
+        }
+        Update: {
+          allocated_quantity?: number
+          created_at?: string
+          id?: string
+          line_total?: number
+          organization_id?: string
+          product_id?: string
+          quantity?: number
+          sales_order_id?: string
+          tax_rate?: number
+          unit_price?: number
+          volume_m3?: number
+          weight_kg?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_order_lines_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_order_lines_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_order_lines_sales_order_id_fkey"
+            columns: ["sales_order_id"]
+            isOneToOne: false
+            referencedRelation: "sales_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_orders: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          currency: string
+          customer_id: string
+          deleted_at: string | null
+          delivery_window_end: string | null
+          delivery_window_start: string | null
+          drop_warehouse_id: string | null
+          execution_plan_id: string | null
+          expected_dispatch_date: string | null
+          id: string
+          notes: string | null
+          order_number: string
+          organization_id: string
+          pickup_warehouse_id: string
+          priority: string
+          source: string
+          status: string
+          subtotal: number
+          tax_amount: number
+          total_amount: number
+          total_volume_m3: number
+          total_weight_kg: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          customer_id: string
+          deleted_at?: string | null
+          delivery_window_end?: string | null
+          delivery_window_start?: string | null
+          drop_warehouse_id?: string | null
+          execution_plan_id?: string | null
+          expected_dispatch_date?: string | null
+          id?: string
+          notes?: string | null
+          order_number: string
+          organization_id: string
+          pickup_warehouse_id: string
+          priority?: string
+          source?: string
+          status?: string
+          subtotal?: number
+          tax_amount?: number
+          total_amount?: number
+          total_volume_m3?: number
+          total_weight_kg?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          customer_id?: string
+          deleted_at?: string | null
+          delivery_window_end?: string | null
+          delivery_window_start?: string | null
+          drop_warehouse_id?: string | null
+          execution_plan_id?: string | null
+          expected_dispatch_date?: string | null
+          id?: string
+          notes?: string | null
+          order_number?: string
+          organization_id?: string
+          pickup_warehouse_id?: string
+          priority?: string
+          source?: string
+          status?: string
+          subtotal?: number
+          tax_amount?: number
+          total_amount?: number
+          total_volume_m3?: number
+          total_weight_kg?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_orders_drop_warehouse_id_fkey"
+            columns: ["drop_warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "client_warehouses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_orders_execution_plan_id_fkey"
+            columns: ["execution_plan_id"]
+            isOneToOne: false
+            referencedRelation: "execution_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_orders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_orders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_orders_pickup_warehouse_id_fkey"
+            columns: ["pickup_warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "client_warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       search_index: {
         Row: {
@@ -5310,6 +6734,88 @@ export type Database = {
           },
         ]
       }
+      shipment_allocations: {
+        Row: {
+          created_at: string
+          drop_stop_id: string
+          execution_plan_id: string
+          id: string
+          organization_id: string
+          pickup_stop_id: string
+          quantity: number
+          sales_order_line_id: string
+          volume_m3: number
+          weight_kg: number
+        }
+        Insert: {
+          created_at?: string
+          drop_stop_id: string
+          execution_plan_id: string
+          id?: string
+          organization_id: string
+          pickup_stop_id: string
+          quantity: number
+          sales_order_line_id: string
+          volume_m3?: number
+          weight_kg?: number
+        }
+        Update: {
+          created_at?: string
+          drop_stop_id?: string
+          execution_plan_id?: string
+          id?: string
+          organization_id?: string
+          pickup_stop_id?: string
+          quantity?: number
+          sales_order_line_id?: string
+          volume_m3?: number
+          weight_kg?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shipment_allocations_drop_stop_id_fkey"
+            columns: ["drop_stop_id"]
+            isOneToOne: false
+            referencedRelation: "execution_plan_stops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipment_allocations_execution_plan_id_fkey"
+            columns: ["execution_plan_id"]
+            isOneToOne: false
+            referencedRelation: "execution_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipment_allocations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipment_allocations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipment_allocations_pickup_stop_id_fkey"
+            columns: ["pickup_stop_id"]
+            isOneToOne: false
+            referencedRelation: "execution_plan_stops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipment_allocations_sales_order_line_id_fkey"
+            columns: ["sales_order_line_id"]
+            isOneToOne: false
+            referencedRelation: "sales_order_lines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       story_views: {
         Row: {
           id: string
@@ -5354,6 +6860,36 @@ export type Database = {
             foreignKeyName: "story_views_viewer_org_id_fkey"
             columns: ["viewer_org_id"]
             isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subcontract_counters: {
+        Row: {
+          seq: number
+          sourcing_org_id: string
+        }
+        Insert: {
+          seq?: number
+          sourcing_org_id: string
+        }
+        Update: {
+          seq?: number
+          sourcing_org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subcontract_counters_sourcing_org_id_fkey"
+            columns: ["sourcing_org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subcontract_counters_sourcing_org_id_fkey"
+            columns: ["sourcing_org_id"]
+            isOneToOne: true
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -5886,6 +7422,36 @@ export type Database = {
           },
         ]
       }
+      supplier_trip_counters: {
+        Row: {
+          seq: number
+          supplier_org_id: string
+        }
+        Insert: {
+          seq?: number
+          supplier_org_id: string
+        }
+        Update: {
+          seq?: number
+          supplier_org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_trip_counters_supplier_org_id_fkey"
+            columns: ["supplier_org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_trip_counters_supplier_org_id_fkey"
+            columns: ["supplier_org_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       supplier_warehouses: {
         Row: {
           address: string | null
@@ -5973,6 +7539,7 @@ export type Database = {
           address: string | null
           avatar_seed: string | null
           avatar_url: string | null
+          cin: string | null
           company_name: string | null
           contact: string | null
           contact_person: string | null
@@ -5982,10 +7549,11 @@ export type Database = {
           gst_number: string | null
           gstin: string | null
           id: string
-          industry: string | null
+          iec_number: string | null
           is_active: boolean
           is_verified: boolean
           linked_organization_id: string | null
+          msme_number: string | null
           name: string | null
           onboarding_agreement_notes: string | null
           onboarding_agreement_signed_at: string | null
@@ -5996,17 +7564,16 @@ export type Database = {
           owner_full_name: string | null
           pan_number: string | null
           phone: string | null
-          registered_address: string | null
           supplier_type: string | null
+          tan_number: string | null
           updated_at: string | null
-          updated_by: string | null
           vehicle_types: string[] | null
-          website: string | null
         }
         Insert: {
           address?: string | null
           avatar_seed?: string | null
           avatar_url?: string | null
+          cin?: string | null
           company_name?: string | null
           contact?: string | null
           contact_person?: string | null
@@ -6016,10 +7583,11 @@ export type Database = {
           gst_number?: string | null
           gstin?: string | null
           id?: string
-          industry?: string | null
+          iec_number?: string | null
           is_active?: boolean
           is_verified?: boolean
           linked_organization_id?: string | null
+          msme_number?: string | null
           name?: string | null
           onboarding_agreement_notes?: string | null
           onboarding_agreement_signed_at?: string | null
@@ -6030,17 +7598,16 @@ export type Database = {
           owner_full_name?: string | null
           pan_number?: string | null
           phone?: string | null
-          registered_address?: string | null
           supplier_type?: string | null
+          tan_number?: string | null
           updated_at?: string | null
-          updated_by?: string | null
           vehicle_types?: string[] | null
-          website?: string | null
         }
         Update: {
           address?: string | null
           avatar_seed?: string | null
           avatar_url?: string | null
+          cin?: string | null
           company_name?: string | null
           contact?: string | null
           contact_person?: string | null
@@ -6050,10 +7617,11 @@ export type Database = {
           gst_number?: string | null
           gstin?: string | null
           id?: string
-          industry?: string | null
+          iec_number?: string | null
           is_active?: boolean
           is_verified?: boolean
           linked_organization_id?: string | null
+          msme_number?: string | null
           name?: string | null
           onboarding_agreement_notes?: string | null
           onboarding_agreement_signed_at?: string | null
@@ -6064,12 +7632,10 @@ export type Database = {
           owner_full_name?: string | null
           pan_number?: string | null
           phone?: string | null
-          registered_address?: string | null
           supplier_type?: string | null
+          tan_number?: string | null
           updated_at?: string | null
-          updated_by?: string | null
           vehicle_types?: string[] | null
-          website?: string | null
         }
         Relationships: [
           {
@@ -6106,10 +7672,12 @@ export type Database = {
         Row: {
           amount_in: number
           amount_out: number
+          booking_ref: string | null
           chat_mirror_of_transaction_id: string | null
           contact_id: string | null
           contact_type: string | null
           created_at: string | null
+          created_by: string | null
           description: string
           id: string
           is_opening_balance: boolean
@@ -6118,16 +7686,19 @@ export type Database = {
           ledger_flow_type: string | null
           organization_id: string
           party_name: string
+          payment_ref: string | null
           transaction_date: string
           trip_id: string | null
         }
         Insert: {
           amount_in?: number
           amount_out?: number
+          booking_ref?: string | null
           chat_mirror_of_transaction_id?: string | null
           contact_id?: string | null
           contact_type?: string | null
           created_at?: string | null
+          created_by?: string | null
           description?: string
           id?: string
           is_opening_balance?: boolean
@@ -6136,16 +7707,19 @@ export type Database = {
           ledger_flow_type?: string | null
           organization_id: string
           party_name: string
+          payment_ref?: string | null
           transaction_date?: string
           trip_id?: string | null
         }
         Update: {
           amount_in?: number
           amount_out?: number
+          booking_ref?: string | null
           chat_mirror_of_transaction_id?: string | null
           contact_id?: string | null
           contact_type?: string | null
           created_at?: string | null
+          created_by?: string | null
           description?: string
           id?: string
           is_opening_balance?: boolean
@@ -6154,10 +7728,25 @@ export type Database = {
           ledger_flow_type?: string | null
           organization_id?: string
           party_name?: string
+          payment_ref?: string | null
           transaction_date?: string
           trip_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_booking_ref_fkey"
+            columns: ["booking_ref"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["booking_ref"]
+          },
+          {
+            foreignKeyName: "transactions_booking_ref_fkey"
+            columns: ["booking_ref"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["booking_ref"]
+          },
           {
             foreignKeyName: "transactions_chat_mirror_of_transaction_id_fkey"
             columns: ["chat_mirror_of_transaction_id"]
@@ -6184,6 +7773,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -6284,6 +7887,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_assignment_audit_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_assignment_audit_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -6409,6 +8026,20 @@ export type Database = {
             foreignKeyName: "trip_conversations_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_conversations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_conversations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -6478,6 +8109,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_documents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_documents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -6572,6 +8217,20 @@ export type Database = {
             foreignKeyName: "trip_finance_adjustments_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_finance_adjustments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_finance_adjustments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -6602,6 +8261,7 @@ export type Database = {
           entered_by: string | null
           fuel_type: string | null
           id: string
+          idempotency_key: string | null
           last_retry_at: string | null
           ledger_state: string
           liters: number | null
@@ -6633,6 +8293,7 @@ export type Database = {
           entered_by?: string | null
           fuel_type?: string | null
           id?: string
+          idempotency_key?: string | null
           last_retry_at?: string | null
           ledger_state?: string
           liters?: number | null
@@ -6664,6 +8325,7 @@ export type Database = {
           entered_by?: string | null
           fuel_type?: string | null
           id?: string
+          idempotency_key?: string | null
           last_retry_at?: string | null
           ledger_state?: string
           liters?: number | null
@@ -6698,6 +8360,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_fuel_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_fuel_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -6810,6 +8486,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_location_checkpoints_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_location_checkpoints_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -6988,6 +8678,20 @@ export type Database = {
             foreignKeyName: "trip_messages_context_trip_id_fkey"
             columns: ["context_trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_messages_context_trip_id_fkey"
+            columns: ["context_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_messages_context_trip_id_fkey"
+            columns: ["context_trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -7082,6 +8786,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_operational_timeline_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_operational_timeline_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -7220,6 +8938,20 @@ export type Database = {
             foreignKeyName: "trip_other_expenses_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_other_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_other_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -7273,6 +9005,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: true
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_otps_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_otps_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -7346,6 +9092,239 @@ export type Database = {
           },
         ]
       }
+      trip_status_audit: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          id: string
+          org_id: string | null
+          status_from: string | null
+          status_to: string
+          trip_id: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          org_id?: string | null
+          status_from?: string | null
+          status_to: string
+          trip_id: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          org_id?: string | null
+          status_from?: string | null
+          status_to?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_status_audit_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_status_audit_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_status_audit_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_status_audit_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_status_audit_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_status_audit_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_status_audit_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_status_audit_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+        ]
+      }
+      trip_subcontracts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          rate: number
+          status: string
+          sub_driver_id: string | null
+          sub_supplier_name: string | null
+          sub_supplier_on_platform: boolean
+          sub_supplier_org_id: string | null
+          sub_supplier_phone: string | null
+          sub_trip_code: string | null
+          supplier_id: string | null
+          trip_id: string
+          updated_at: string
+          viewer_org_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          rate?: number
+          status?: string
+          sub_driver_id?: string | null
+          sub_supplier_name?: string | null
+          sub_supplier_on_platform?: boolean
+          sub_supplier_org_id?: string | null
+          sub_supplier_phone?: string | null
+          sub_trip_code?: string | null
+          supplier_id?: string | null
+          trip_id: string
+          updated_at?: string
+          viewer_org_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          rate?: number
+          status?: string
+          sub_driver_id?: string | null
+          sub_supplier_name?: string | null
+          sub_supplier_on_platform?: boolean
+          sub_supplier_org_id?: string | null
+          sub_supplier_phone?: string | null
+          sub_trip_code?: string | null
+          supplier_id?: string | null
+          trip_id?: string
+          updated_at?: string
+          viewer_org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_subcontracts_sub_driver_id_fkey"
+            columns: ["sub_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_sub_driver_id_fkey"
+            columns: ["sub_driver_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_balances"
+            referencedColumns: ["driver_id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_sub_supplier_org_id_fkey"
+            columns: ["sub_supplier_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_sub_supplier_org_id_fkey"
+            columns: ["sub_supplier_org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_viewer_org_id_fkey"
+            columns: ["viewer_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_subcontracts_viewer_org_id_fkey"
+            columns: ["viewer_org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_toll_entries: {
         Row: {
           amount_inr: number
@@ -7355,6 +9334,7 @@ export type Database = {
           entered_at: string
           entered_by: string | null
           id: string
+          idempotency_key: string | null
           is_estimated: boolean
           last_retry_at: string | null
           ledger_state: string
@@ -7385,6 +9365,7 @@ export type Database = {
           entered_at?: string
           entered_by?: string | null
           id?: string
+          idempotency_key?: string | null
           is_estimated?: boolean
           last_retry_at?: string | null
           ledger_state?: string
@@ -7415,6 +9396,7 @@ export type Database = {
           entered_at?: string
           entered_by?: string | null
           id?: string
+          idempotency_key?: string | null
           is_estimated?: boolean
           last_retry_at?: string | null
           ledger_state?: string
@@ -7450,6 +9432,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_toll_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_toll_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -7549,6 +9545,20 @@ export type Database = {
             foreignKeyName: "trip_tracking_sessions_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_tracking_sessions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_tracking_sessions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -7619,6 +9629,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_workflow_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_workflow_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -7709,6 +9733,7 @@ export type Database = {
           status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          supplier_trip_sequence: number | null
           trip_code: string | null
           trip_number: string
           trip_operational_code: string | null
@@ -7781,6 +9806,7 @@ export type Database = {
           status_change_origin?: string | null
           supplier_id?: string | null
           supplier_rate?: number
+          supplier_trip_sequence?: number | null
           trip_code?: string | null
           trip_number: string
           trip_operational_code?: string | null
@@ -7853,6 +9879,7 @@ export type Database = {
           status_change_origin?: string | null
           supplier_id?: string | null
           supplier_rate?: number
+          supplier_trip_sequence?: number | null
           trip_code?: string | null
           trip_number?: string
           trip_operational_code?: string | null
@@ -8150,6 +10177,20 @@ export type Database = {
             foreignKeyName: "vehicle_ledger_entries_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -8245,6 +10286,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -8370,6 +10425,20 @@ export type Database = {
             foreignKeyName: "vehicle_odometer_events_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
             referencedRelation: "v_active_trips"
             referencedColumns: ["id"]
           },
@@ -8459,6 +10528,20 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_operation_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_driver_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_operation_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_supplier_view"
             referencedColumns: ["id"]
           },
           {
@@ -8577,6 +10660,189 @@ export type Database = {
             foreignKeyName: "vehicles_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      verification_audit_logs: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          id: string
+          ip_address: string | null
+          new_status: Database["public"]["Enums"]["kyc_verification_status"]
+          notes: string | null
+          org_id: string
+          previous_status:
+            | Database["public"]["Enums"]["kyc_verification_status"]
+            | null
+          rejection_reasons: Json | null
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          new_status: Database["public"]["Enums"]["kyc_verification_status"]
+          notes?: string | null
+          org_id: string
+          previous_status?:
+            | Database["public"]["Enums"]["kyc_verification_status"]
+            | null
+          rejection_reasons?: Json | null
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          new_status?: Database["public"]["Enums"]["kyc_verification_status"]
+          notes?: string | null
+          org_id?: string
+          previous_status?:
+            | Database["public"]["Enums"]["kyc_verification_status"]
+            | null
+          rejection_reasons?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_audit_logs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "verification_audit_logs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      verification_documents: {
+        Row: {
+          created_at: string
+          document_type: Database["public"]["Enums"]["verification_document_type"]
+          id: string
+          mime_type: string
+          ocr_detail: Json | null
+          org_id: string
+          size_bytes: number
+          status: Database["public"]["Enums"]["verification_document_status"]
+          storage_path: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          document_type: Database["public"]["Enums"]["verification_document_type"]
+          id?: string
+          mime_type: string
+          ocr_detail?: Json | null
+          org_id: string
+          size_bytes: number
+          status?: Database["public"]["Enums"]["verification_document_status"]
+          storage_path: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          document_type?: Database["public"]["Enums"]["verification_document_type"]
+          id?: string
+          mime_type?: string
+          ocr_detail?: Json | null
+          org_id?: string
+          size_bytes?: number
+          status?: Database["public"]["Enums"]["verification_document_status"]
+          storage_path?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "verification_documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      verification_jobs: {
+        Row: {
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          error_logs: string[] | null
+          id: string
+          next_attempt_at: string
+          ocr_detail: Json | null
+          ocr_status: Database["public"]["Enums"]["pillar_status_type"]
+          organization_id: string
+          pillar_1_tax_detail: Json | null
+          pillar_1_tax_status: Database["public"]["Enums"]["pillar_status_type"]
+          pillar_2_mca_detail: Json | null
+          pillar_2_mca_status: Database["public"]["Enums"]["pillar_status_type"]
+          status: Database["public"]["Enums"]["verification_job_status"]
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          error_logs?: string[] | null
+          id?: string
+          next_attempt_at?: string
+          ocr_detail?: Json | null
+          ocr_status?: Database["public"]["Enums"]["pillar_status_type"]
+          organization_id: string
+          pillar_1_tax_detail?: Json | null
+          pillar_1_tax_status?: Database["public"]["Enums"]["pillar_status_type"]
+          pillar_2_mca_detail?: Json | null
+          pillar_2_mca_status?: Database["public"]["Enums"]["pillar_status_type"]
+          status?: Database["public"]["Enums"]["verification_job_status"]
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          error_logs?: string[] | null
+          id?: string
+          next_attempt_at?: string
+          ocr_detail?: Json | null
+          ocr_status?: Database["public"]["Enums"]["pillar_status_type"]
+          organization_id?: string
+          pillar_1_tax_detail?: Json | null
+          pillar_1_tax_status?: Database["public"]["Enums"]["pillar_status_type"]
+          pillar_2_mca_detail?: Json | null
+          pillar_2_mca_status?: Database["public"]["Enums"]["pillar_status_type"]
+          status?: Database["public"]["Enums"]["verification_job_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "verification_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -8739,6 +11005,188 @@ export type Database = {
           },
         ]
       }
+      trips_driver_view: {
+        Row: {
+          client_price: number | null
+          created_at: string | null
+          distance: number | null
+          driver_commission: number | null
+          driver_display_trip_id: string | null
+          driver_id: string | null
+          drop_lat: number | null
+          drop_lon: number | null
+          dropoff_address: string | null
+          dropoff_location: string | null
+          dropoff_scheduled_at: string | null
+          id: string | null
+          instructions: string | null
+          pickup_address: string | null
+          pickup_lat: number | null
+          pickup_location: string | null
+          pickup_lon: number | null
+          pickup_scheduled_at: string | null
+          started_at: string | null
+          status: string | null
+          supplier_rate: number | null
+          updated_at: string | null
+          vehicle_id: string | null
+        }
+        Insert: {
+          client_price?: number | null
+          created_at?: string | null
+          distance?: number | null
+          driver_commission?: number | null
+          driver_display_trip_id?: string | null
+          driver_id?: string | null
+          drop_lat?: number | null
+          drop_lon?: number | null
+          dropoff_address?: string | null
+          dropoff_location?: string | null
+          dropoff_scheduled_at?: never
+          id?: string | null
+          instructions?: string | null
+          pickup_address?: string | null
+          pickup_lat?: number | null
+          pickup_location?: string | null
+          pickup_lon?: number | null
+          pickup_scheduled_at?: string | null
+          started_at?: string | null
+          status?: string | null
+          supplier_rate?: number | null
+          updated_at?: string | null
+          vehicle_id?: string | null
+        }
+        Update: {
+          client_price?: number | null
+          created_at?: string | null
+          distance?: number | null
+          driver_commission?: number | null
+          driver_display_trip_id?: string | null
+          driver_id?: string | null
+          drop_lat?: number | null
+          drop_lon?: number | null
+          dropoff_address?: string | null
+          dropoff_location?: string | null
+          dropoff_scheduled_at?: never
+          id?: string | null
+          instructions?: string | null
+          pickup_address?: string | null
+          pickup_lat?: number | null
+          pickup_location?: string | null
+          pickup_lon?: number | null
+          pickup_scheduled_at?: string | null
+          started_at?: string | null
+          status?: string | null
+          supplier_rate?: number | null
+          updated_at?: string | null
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trips_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trips_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_balances"
+            referencedColumns: ["driver_id"]
+          },
+          {
+            foreignKeyName: "trips_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trips_supplier_view: {
+        Row: {
+          assigned_driver_id: string | null
+          booking_ref: string | null
+          created_at: string | null
+          driver_display_trip_id: string | null
+          dropoff_address: string | null
+          dropoff_location: string | null
+          dropoff_scheduled_at: string | null
+          id: string | null
+          instructions: string | null
+          pickup_address: string | null
+          pickup_location: string | null
+          pickup_scheduled_at: string | null
+          source_indent_code: string | null
+          status: string | null
+          supplier_trip_sequence: number | null
+          updated_at: string | null
+          vehicle_id: string | null
+        }
+        Insert: {
+          assigned_driver_id?: string | null
+          booking_ref?: string | null
+          created_at?: string | null
+          driver_display_trip_id?: string | null
+          dropoff_address?: string | null
+          dropoff_location?: string | null
+          dropoff_scheduled_at?: never
+          id?: string | null
+          instructions?: string | null
+          pickup_address?: string | null
+          pickup_location?: string | null
+          pickup_scheduled_at?: string | null
+          source_indent_code?: string | null
+          status?: string | null
+          supplier_trip_sequence?: number | null
+          updated_at?: string | null
+          vehicle_id?: string | null
+        }
+        Update: {
+          assigned_driver_id?: string | null
+          booking_ref?: string | null
+          created_at?: string | null
+          driver_display_trip_id?: string | null
+          dropoff_address?: string | null
+          dropoff_location?: string | null
+          dropoff_scheduled_at?: never
+          id?: string | null
+          instructions?: string | null
+          pickup_address?: string | null
+          pickup_location?: string | null
+          pickup_scheduled_at?: string | null
+          source_indent_code?: string | null
+          status?: string | null
+          supplier_trip_sequence?: number | null
+          updated_at?: string | null
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trips_driver_id_fkey"
+            columns: ["assigned_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trips_driver_id_fkey"
+            columns: ["assigned_driver_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_balances"
+            referencedColumns: ["driver_id"]
+          },
+          {
+            foreignKeyName: "trips_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_active_trips: {
         Row: {
           client_name: string | null
@@ -8879,6 +11327,24 @@ export type Database = {
           total_distance_km: number | null
           trip_id: string | null
           trip_number: string | null
+        }
+        Insert: {
+          current_km?: never
+          expected_km?: never
+          health_status?: never
+          time_elapsed?: never
+          total_distance_km?: never
+          trip_id?: string | null
+          trip_number?: string | null
+        }
+        Update: {
+          current_km?: never
+          expected_km?: never
+          health_status?: never
+          time_elapsed?: never
+          total_distance_km?: never
+          trip_id?: string | null
+          trip_number?: string | null
         }
         Relationships: []
       }
@@ -9058,6 +11524,11 @@ export type Database = {
         }
         Returns: undefined
       }
+      accept_pending_team_invitation: {
+        Args: { p_invite_id: string }
+        Returns: Json
+      }
+      accept_team_invite: { Args: { p_org_id: string }; Returns: undefined }
       acknowledge_global_alert: {
         Args: { p_alert_key: string; p_org_id: string }
         Returns: undefined
@@ -9082,6 +11553,23 @@ export type Database = {
           p_type: string
         }
         Returns: string
+      }
+      admin_approve_profile: {
+        Args: { p_admin_id: string; p_notes?: string; p_org_id: string }
+        Returns: Json
+      }
+      admin_force_unlock_profile: {
+        Args: { p_admin_id: string; p_org_id: string; p_reason: string }
+        Returns: Json
+      }
+      admin_reject_profile: {
+        Args: {
+          p_admin_id: string
+          p_notes?: string
+          p_org_id: string
+          p_rejection_reasons: Json
+        }
+        Returns: Json
       }
       allocate_invoice_number: {
         Args: { p_financial_yr?: string; p_org_id: string }
@@ -9157,6 +11645,7 @@ export type Database = {
           status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          supplier_trip_sequence: number | null
           trip_code: string | null
           trip_number: string
           trip_operational_code: string | null
@@ -9176,8 +11665,13 @@ export type Database = {
         Args: { p_batch?: number; p_older_than?: string }
         Returns: number
       }
+      are_orgs_connected: {
+        Args: { p_org_a: string; p_org_b: string }
+        Returns: boolean
+      }
       assign_aggregate_trip_driver: {
         Args: {
+          p_driver_name?: string
           p_driver_org_id: string
           p_driver_phone: string
           p_trip_id: string
@@ -9186,6 +11680,7 @@ export type Database = {
         }
         Returns: Json
       }
+      auth_org_id: { Args: never; Returns: string }
       award_indent_to_trip: {
         Args: {
           p_driver_id?: string
@@ -9260,6 +11755,7 @@ export type Database = {
           status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          supplier_trip_sequence: number | null
           trip_code: string | null
           trip_number: string
           trip_operational_code: string | null
@@ -9287,6 +11783,18 @@ export type Database = {
         Args: { p_trip_id: string }
         Returns: boolean
       }
+      cancel_pending_sent_connections_to_partner_owner: {
+        Args: { p_from_org_id: string; p_partner_owner_id: string }
+        Returns: string[]
+      }
+      cancel_team_invite_pending: {
+        Args: { p_invite_id: string }
+        Returns: undefined
+      }
+      change_operating_model: {
+        Args: { p_new_model: string; p_org_id: string }
+        Returns: Json
+      }
       change_trip_status_with_notification: {
         Args: {
           p_new_status: string
@@ -9295,6 +11803,20 @@ export type Database = {
           p_user_id?: string
           p_user_name?: string
         }
+        Returns: Json
+      }
+      check_cron_job_health: {
+        Args: { p_consecutive_failures?: number; p_jobid: number }
+        Returns: {
+          consecutive_failures: number
+          is_healthy: boolean
+          last_run: string
+          last_status: string
+          message: string
+        }[]
+      }
+      check_email_registered_for_signup: {
+        Args: { p_email: string }
         Returns: Json
       }
       check_ocr_scan_quota: { Args: { p_org_id: string }; Returns: Json }
@@ -9306,6 +11828,10 @@ export type Database = {
           p_window?: string
         }
         Returns: boolean
+      }
+      claim_pending_team_invites: {
+        Args: { p_phone: string; p_user_id: string }
+        Returns: number
       }
       claim_trip_by_otp: {
         Args: { p_code: string; p_max_attempts?: number }
@@ -9344,6 +11870,39 @@ export type Database = {
       confirm_trip_feedback: {
         Args: { p_msg_id: string; p_rating: number }
         Returns: Json
+      }
+      consume_driver_invite: { Args: { p_invite_id: string }; Returns: boolean }
+      create_team_invite_pending: {
+        Args: {
+          p_email?: string
+          p_name: string
+          p_org_id: string
+          p_permissions?: Json
+          p_phone: string
+          p_role?: string
+        }
+        Returns: {
+          accepted_user_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          invited_by: string
+          invitee_email: string | null
+          invitee_name: string
+          invitee_phone: string
+          invitee_phone_canon: string
+          organization_id: string
+          permissions: Json
+          role: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "organization_team_invites"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       create_trip_from_assigned_indent: {
         Args: {
@@ -9416,6 +11975,7 @@ export type Database = {
           status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          supplier_trip_sequence: number | null
           trip_code: string | null
           trip_number: string
           trip_operational_code: string | null
@@ -9431,87 +11991,171 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      create_trip_from_direct_quote: {
-        Args: { p_quote_id: string; p_vehicle_display_number?: string }
-        Returns: {
-          actual_distance_traveled_km: number | null
-          advance_paid: number
-          amount_paid: number
-          assigned_by_user_id: string | null
-          booking_ref: string | null
-          client_id: string | null
-          client_name: string
-          client_price: number
-          completed_at: string | null
-          converted_by: string | null
-          converted_from_indent_at: string | null
-          created_at: string | null
-          created_by_user_id: string | null
-          deleted_at: string | null
-          display_trip_id: string | null
-          distance: number | null
-          distance_discrepancy_km: number | null
-          distance_source: string | null
-          driver_commission: number
-          driver_display_name: string | null
-          driver_display_trip_id: string | null
-          driver_id: string | null
-          drop_lat: number | null
-          drop_location: string
-          drop_lon: number | null
-          end_odometer_km: number | null
-          estimated_duration: string | null
-          gps_distance_km: number | null
-          id: string
-          indent_id: string | null
-          indent_reference_code: string | null
-          is_guaranteed: boolean
-          last_location_at: string | null
-          last_location_chat_at: string | null
-          load_tons: number | null
-          load_type: string | null
-          margin: number | null
-          notes: string | null
-          odometer_distance_km: number | null
-          odometer_notes: string | null
-          odometer_updated_at: string | null
-          odometer_updated_by: string | null
-          odometer_verification_state: string
-          organization_id: string
-          owner_user_id: string | null
-          payment_status: string
-          pickup_area: string
-          pickup_date: string | null
-          pickup_lat: number | null
-          pickup_lon: number | null
-          platform_fee: number
-          pod_received_at: string | null
-          pod_required: boolean
-          sequence_number: number | null
-          source: string
-          source_indent_code: string | null
-          source_indent_id: string | null
-          start_odometer_km: number | null
-          started_at: string | null
-          status: string
-          status_change_origin: string | null
-          supplier_id: string | null
-          supplier_rate: number
-          trip_code: string | null
-          trip_number: string
-          trip_operational_code: string | null
-          trip_payout_mode: string | null
-          updated_at: string | null
-          vehicle_display_number: string | null
-          vehicle_id: string | null
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "trips"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
+      create_trip_from_direct_quote:
+        | {
+            Args: { p_quote_id: string }
+            Returns: {
+              actual_distance_traveled_km: number | null
+              advance_paid: number
+              amount_paid: number
+              assigned_by_user_id: string | null
+              booking_ref: string | null
+              client_id: string | null
+              client_name: string
+              client_price: number
+              completed_at: string | null
+              converted_by: string | null
+              converted_from_indent_at: string | null
+              created_at: string | null
+              created_by_user_id: string | null
+              deleted_at: string | null
+              display_trip_id: string | null
+              distance: number | null
+              distance_discrepancy_km: number | null
+              distance_source: string | null
+              driver_commission: number
+              driver_display_name: string | null
+              driver_display_trip_id: string | null
+              driver_id: string | null
+              drop_lat: number | null
+              drop_location: string
+              drop_lon: number | null
+              end_odometer_km: number | null
+              estimated_duration: string | null
+              gps_distance_km: number | null
+              id: string
+              indent_id: string | null
+              indent_reference_code: string | null
+              is_guaranteed: boolean
+              last_location_at: string | null
+              last_location_chat_at: string | null
+              load_tons: number | null
+              load_type: string | null
+              margin: number | null
+              notes: string | null
+              odometer_distance_km: number | null
+              odometer_notes: string | null
+              odometer_updated_at: string | null
+              odometer_updated_by: string | null
+              odometer_verification_state: string
+              organization_id: string
+              owner_user_id: string | null
+              payment_status: string
+              pickup_area: string
+              pickup_date: string | null
+              pickup_lat: number | null
+              pickup_lon: number | null
+              platform_fee: number
+              pod_received_at: string | null
+              pod_required: boolean
+              sequence_number: number | null
+              source: string
+              source_indent_code: string | null
+              source_indent_id: string | null
+              start_odometer_km: number | null
+              started_at: string | null
+              status: string
+              status_change_origin: string | null
+              supplier_id: string | null
+              supplier_rate: number
+              supplier_trip_sequence: number | null
+              trip_code: string | null
+              trip_number: string
+              trip_operational_code: string | null
+              trip_payout_mode: string | null
+              updated_at: string | null
+              vehicle_display_number: string | null
+              vehicle_id: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "trips"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { p_quote_id: string; p_vehicle_display_number?: string }
+            Returns: {
+              actual_distance_traveled_km: number | null
+              advance_paid: number
+              amount_paid: number
+              assigned_by_user_id: string | null
+              booking_ref: string | null
+              client_id: string | null
+              client_name: string
+              client_price: number
+              completed_at: string | null
+              converted_by: string | null
+              converted_from_indent_at: string | null
+              created_at: string | null
+              created_by_user_id: string | null
+              deleted_at: string | null
+              display_trip_id: string | null
+              distance: number | null
+              distance_discrepancy_km: number | null
+              distance_source: string | null
+              driver_commission: number
+              driver_display_name: string | null
+              driver_display_trip_id: string | null
+              driver_id: string | null
+              drop_lat: number | null
+              drop_location: string
+              drop_lon: number | null
+              end_odometer_km: number | null
+              estimated_duration: string | null
+              gps_distance_km: number | null
+              id: string
+              indent_id: string | null
+              indent_reference_code: string | null
+              is_guaranteed: boolean
+              last_location_at: string | null
+              last_location_chat_at: string | null
+              load_tons: number | null
+              load_type: string | null
+              margin: number | null
+              notes: string | null
+              odometer_distance_km: number | null
+              odometer_notes: string | null
+              odometer_updated_at: string | null
+              odometer_updated_by: string | null
+              odometer_verification_state: string
+              organization_id: string
+              owner_user_id: string | null
+              payment_status: string
+              pickup_area: string
+              pickup_date: string | null
+              pickup_lat: number | null
+              pickup_lon: number | null
+              platform_fee: number
+              pod_received_at: string | null
+              pod_required: boolean
+              sequence_number: number | null
+              source: string
+              source_indent_code: string | null
+              source_indent_id: string | null
+              start_odometer_km: number | null
+              started_at: string | null
+              status: string
+              status_change_origin: string | null
+              supplier_id: string | null
+              supplier_rate: number
+              supplier_trip_sequence: number | null
+              trip_code: string | null
+              trip_number: string
+              trip_operational_code: string | null
+              trip_payout_mode: string | null
+              updated_at: string | null
+              vehicle_display_number: string | null
+              vehicle_id: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "trips"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
       discover_extract_city: { Args: { p_location: string }; Returns: string }
       discover_organizations: {
         Args: {
@@ -9523,7 +12167,6 @@ export type Database = {
         Returns: {
           address_line: string
           avatar_seed: string
-          avatar_url: string
           average_rating: number
           city: string
           connection_status: string
@@ -9532,6 +12175,7 @@ export type Database = {
           lane_overlap_count: number
           mutual_count: number
           name: string
+          operating_model: string
           profile_role: string
           recommendation_score: number
           state: string
@@ -9542,6 +12186,8 @@ export type Database = {
         Args: { p_driver_id: string }
         Returns: Json
       }
+      dispatch_push_notifications: { Args: never; Returns: undefined }
+      dispatch_verification_workers: { Args: never; Returns: undefined }
       driver_has_assigned_trip_for_supplier: {
         Args: { p_supplier_id: string }
         Returns: boolean
@@ -9691,6 +12337,10 @@ export type Database = {
         }
         Returns: string
       }
+      ensure_organization_operational_code: {
+        Args: { p_org_id: string }
+        Returns: string
+      }
       ensure_trip_chat_room: {
         Args: { p_trip_id: string }
         Returns: {
@@ -9721,6 +12371,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      ensure_trip_otp_for_phone_assigned_driver: {
+        Args: { p_trip_id: string; p_ttl_minutes?: number }
+        Returns: undefined
+      }
       execute_b2b_update: {
         Args: {
           p_event_type: string
@@ -9731,6 +12385,14 @@ export type Database = {
         Returns: Json
       }
       expire_old_posts: { Args: never; Returns: number }
+      expire_stale_team_invitations: {
+        Args: { p_phone: string }
+        Returns: number
+      }
+      expire_stale_team_invitations_by_email: {
+        Args: { p_email: string }
+        Returns: number
+      }
       find_org_matches_for_counterparty: {
         Args: { p_min_similarity?: number; p_name: string; p_phone?: string }
         Returns: {
@@ -9738,6 +12400,13 @@ export type Database = {
           org_id: string
           org_name: string
           similarity_score: number
+        }[]
+      }
+      find_pending_sent_connection_to_partner_owner: {
+        Args: { p_from_org_id: string; p_to_org_id: string }
+        Returns: {
+          request_id: string
+          same_pair: boolean
         }[]
       }
       fn_build_chat_lanes: { Args: { p_unified: Json }; Returns: Json }
@@ -10123,6 +12792,7 @@ export type Database = {
       }
       get_db_capabilities: { Args: never; Returns: Json }
       get_db_observability_summary: { Args: never; Returns: Json }
+      get_db_snapshot: { Args: never; Returns: Json }
       get_direct_quotes_with_bidder_names: {
         Args: { p_indent_id: string }
         Returns: {
@@ -10177,6 +12847,7 @@ export type Database = {
           created_at: string
           from_org_avatar_seed: string
           from_org_avatar_url: string
+          from_org_logo_url: string
           from_org_name: string
           from_organization_id: string
           id: string
@@ -10332,28 +13003,17 @@ export type Database = {
         Args: { p_limit?: number; p_org_id: string; p_since: string }
         Returns: Json
       }
-      get_initial_chat_state:
-        | {
-            Args: {
-              p_hub_trip_bucket?: string
-              p_message_limit?: number
-              p_organization_id: string
-              p_trip_limit?: number
-              p_trip_offset?: number
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_hub_trip_bucket?: string
-              p_include_message_bodies?: boolean
-              p_message_limit?: number
-              p_organization_id: string
-              p_trip_limit?: number
-              p_trip_offset?: number
-            }
-            Returns: Json
-          }
+      get_initial_chat_state: {
+        Args: {
+          p_hub_trip_bucket?: string
+          p_include_message_bodies?: boolean
+          p_message_limit?: number
+          p_organization_id: string
+          p_trip_limit?: number
+          p_trip_offset?: number
+        }
+        Returns: Json
+      }
       get_integrated_partners: { Args: { p_org_id: string }; Returns: Json }
       get_invitee_by_phone: {
         Args: { p_phone: string }
@@ -10416,6 +13076,16 @@ export type Database = {
           avatar_url: string
           id: string
           name: string
+        }[]
+      }
+      get_my_team_invites: {
+        Args: never
+        Returns: {
+          id: string
+          joined_at: string
+          org_name: string
+          organization_id: string
+          role: string
         }[]
       }
       get_network_conversations_delta: {
@@ -10505,6 +13175,23 @@ export type Database = {
           role: string
           status: string
           user_id: string
+        }[]
+      }
+      get_org_team_pending_invites: {
+        Args: { p_org_id: string }
+        Returns: {
+          conflict_org_names: string[]
+          created_at: string
+          email_conflict: boolean
+          expires_at: string
+          id: string
+          invitee_email: string
+          invitee_name: string
+          invitee_phone: string
+          organization_id: string
+          permissions: Json
+          role: string
+          status: string
         }[]
       }
       get_org_trip_metrics: {
@@ -10599,6 +13286,7 @@ export type Database = {
           status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          supplier_trip_sequence: number | null
           trip_code: string | null
           trip_number: string
           trip_operational_code: string | null
@@ -10704,6 +13392,22 @@ export type Database = {
           trip_id: string
         }[]
       }
+      get_sqids_alphabet: { Args: never; Returns: string }
+      get_story_preview: {
+        Args: { p_post_id: string }
+        Returns: {
+          destination: string
+          expires_at: string
+          id: string
+          is_active: boolean
+          load_date: string
+          org_name: string
+          organization_id: string
+          origin: string
+          type: string
+          vehicle_type: string
+        }[]
+      }
       get_supplier_details: { Args: { p_supplier_id: string }; Returns: Json }
       get_supplier_management_bundle: {
         Args: { p_org_id: string; p_supplier_id: string }
@@ -10761,9 +13465,29 @@ export type Database = {
           updated_at: string
         }[]
       }
+      get_table_columns: {
+        Args: { p_schema: string; p_table: string }
+        Returns: {
+          column_name: string
+          data_type: string
+          is_nullable: string
+          ordinal_position: number
+          udt_name: string
+        }[]
+      }
+      get_tier_capabilities: { Args: { p_org_id: string }; Returns: Json }
       get_transactions_delta: {
         Args: { p_limit?: number; p_org_id: string; p_since: string }
         Returns: Json
+      }
+      get_trigger_coverage: {
+        Args: never
+        Returns: {
+          has_rls: boolean
+          tbl: string
+          trg_count: number
+          trg_names: string[]
+        }[]
       }
       get_trip_assigner_displays_for_driver: {
         Args: { p_trip_ids: string[] }
@@ -10823,6 +13547,32 @@ export type Database = {
           count: number
           status: string
         }[]
+      }
+      get_trip_subcontracts: {
+        Args: { p_trip_ids: string[]; p_viewer_org_id: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          id: string
+          rate: number
+          status: string
+          sub_driver_id: string | null
+          sub_supplier_name: string | null
+          sub_supplier_on_platform: boolean
+          sub_supplier_org_id: string | null
+          sub_supplier_phone: string | null
+          sub_trip_code: string | null
+          supplier_id: string | null
+          trip_id: string
+          updated_at: string
+          viewer_org_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "trip_subcontracts"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_trips_delta: {
         Args: { p_limit?: number; p_org_id: string; p_since: string }
@@ -10896,6 +13646,7 @@ export type Database = {
           status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          supplier_trip_sequence: number | null
           trip_code: string | null
           trip_number: string
           trip_operational_code: string | null
@@ -10914,80 +13665,27 @@ export type Database = {
       get_trips_where_org_is_supplier: {
         Args: { p_org_id: string }
         Returns: {
-          actual_distance_traveled_km: number | null
-          advance_paid: number
-          amount_paid: number
-          assigned_by_user_id: string | null
+          assigned_driver_id: string | null
           booking_ref: string | null
-          client_id: string | null
-          client_name: string
-          client_price: number
-          completed_at: string | null
-          converted_by: string | null
-          converted_from_indent_at: string | null
           created_at: string | null
-          created_by_user_id: string | null
-          deleted_at: string | null
-          display_trip_id: string | null
-          distance: number | null
-          distance_discrepancy_km: number | null
-          distance_source: string | null
-          driver_commission: number
-          driver_display_name: string | null
           driver_display_trip_id: string | null
-          driver_id: string | null
-          drop_lat: number | null
-          drop_location: string
-          drop_lon: number | null
-          end_odometer_km: number | null
-          estimated_duration: string | null
-          gps_distance_km: number | null
-          id: string
-          indent_id: string | null
-          indent_reference_code: string | null
-          is_guaranteed: boolean
-          last_location_at: string | null
-          last_location_chat_at: string | null
-          load_tons: number | null
-          load_type: string | null
-          margin: number | null
-          notes: string | null
-          odometer_distance_km: number | null
-          odometer_notes: string | null
-          odometer_updated_at: string | null
-          odometer_updated_by: string | null
-          odometer_verification_state: string
-          organization_id: string
-          owner_user_id: string | null
-          payment_status: string
-          pickup_area: string
-          pickup_date: string | null
-          pickup_lat: number | null
-          pickup_lon: number | null
-          platform_fee: number
-          pod_received_at: string | null
-          pod_required: boolean
-          sequence_number: number | null
-          source: string
+          dropoff_address: string | null
+          dropoff_location: string | null
+          dropoff_scheduled_at: string | null
+          id: string | null
+          instructions: string | null
+          pickup_address: string | null
+          pickup_location: string | null
+          pickup_scheduled_at: string | null
           source_indent_code: string | null
-          source_indent_id: string | null
-          start_odometer_km: number | null
-          started_at: string | null
-          status: string
-          status_change_origin: string | null
-          supplier_id: string | null
-          supplier_rate: number
-          trip_code: string | null
-          trip_number: string
-          trip_operational_code: string | null
-          trip_payout_mode: string | null
+          status: string | null
+          supplier_trip_sequence: number | null
           updated_at: string | null
-          vehicle_display_number: string | null
           vehicle_id: string | null
         }[]
         SetofOptions: {
           from: "*"
-          to: "trips"
+          to: "trips_supplier_view"
           isOneToOne: false
           isSetofReturn: true
         }
@@ -11012,6 +13710,28 @@ export type Database = {
           trip_count: number
         }[]
       }
+      get_user_profile_by_email: {
+        Args: { p_email: string }
+        Returns: {
+          avatar_url: string
+          email: string
+          full_name: string
+          phone: string
+          role: string
+          user_id: string
+        }[]
+      }
+      get_user_profile_by_phone: {
+        Args: { p_phone: string }
+        Returns: {
+          avatar_url: string
+          email: string
+          full_name: string
+          phone: string
+          role: string
+          user_id: string
+        }[]
+      }
       get_vehicle_monthly_analytics: {
         Args: { p_months_back?: number; p_org_id: string; p_vehicle_id: string }
         Returns: {
@@ -11028,6 +13748,8 @@ export type Database = {
         Args: { p_limit?: number; p_org_id: string; p_since: string }
         Returns: Json
       }
+      get_verification_documents: { Args: { p_org_id: string }; Returns: Json }
+      get_verification_job_status: { Args: { p_org_id: string }; Returns: Json }
       get_whatsapp_bootstrap_data: {
         Args: {
           p_hub_trip_bucket?: string
@@ -11086,12 +13808,32 @@ export type Database = {
         }
         Returns: undefined
       }
+      increment_subcontract_seq: {
+        Args: { p_sourcing_org_id: string }
+        Returns: number
+      }
+      increment_supplier_trip_seq: {
+        Args: { p_supplier_org_id: string }
+        Returns: number
+      }
       indent_creator_org_names_for_viewer: {
         Args: { p_trip_numbers: string[]; p_viewer_org: string }
         Returns: {
           creator_org_name: string
           trip_number: string
         }[]
+      }
+      indent_target_for_broadcast: {
+        Args: { indent_id: string }
+        Returns: {
+          id: string
+          organization_id: string
+          supplier_target: number
+        }[]
+      }
+      invite_driver: {
+        Args: { p_name: string; p_org_id: string; p_phone: string }
+        Returns: string
       }
       is_app_migration_applied: {
         Args: { p_version: string }
@@ -11243,6 +13985,7 @@ export type Database = {
           organization_id: string
           payable_amount: number | null
           phone: string | null
+          phone_normalised: string | null
           status: string
           tracking_only: boolean
           updated_at: string | null
@@ -11261,7 +14004,11 @@ export type Database = {
         Args: { p_entity_type: string; p_org_id: string }
         Returns: number
       }
+      next_order_number: { Args: { p_org_id: string }; Returns: string }
+      next_plan_number: { Args: { p_org_id: string }; Returns: string }
       next_trip_number: { Args: { p_org_id: string }; Returns: string }
+      normalise_phone: { Args: { raw: string }; Returns: string }
+      normalize_phone_canon: { Args: { p_phone: string }; Returns: string }
       normalize_phone_last10: { Args: { p_phone: string }; Returns: string }
       normalize_phone_number: { Args: { p: string }; Returns: string }
       operational_prefix_for_entity: {
@@ -11276,7 +14023,19 @@ export type Database = {
         }
         Returns: Json
       }
+      org_has_kyc_document: {
+        Args: { p_org_id: string; p_types: string[] }
+        Returns: boolean
+      }
       organization_name_is_taken: { Args: { p_name: string }; Returns: boolean }
+      platform_next_canonical_code: {
+        Args: { p_prefix: string; p_width?: number }
+        Returns: string
+      }
+      precheck_team_invite_contact: {
+        Args: { p_email?: string; p_org_id: string; p_phone: string }
+        Returns: Json
+      }
       process_b2b_event: {
         Args: {
           p_event_type: string
@@ -11285,6 +14044,30 @@ export type Database = {
           p_trip_id: string
         }
         Returns: Json
+      }
+      prune_cron_job_run_details: { Args: never; Returns: undefined }
+      quoted_indents_for_org: {
+        Args: { org_id: string }
+        Returns: {
+          assigned_supplier_id: string
+          assigned_supplier_rate: number
+          circulation_target: string
+          client_name: string
+          client_price: number
+          created_at: string
+          creator_organization_name: string
+          drop_location: string
+          id: string
+          indent_number: string
+          load_type: string
+          organization_id: string
+          pickup_area: string
+          pickup_date: string
+          status: string
+          supplier_target: number
+          updated_at: string
+          vehicle_type: string
+        }[]
       }
       record_activity: {
         Args: {
@@ -11303,6 +14086,36 @@ export type Database = {
         Returns: string
       }
       refresh_dashboard_trip_metrics: { Args: never; Returns: undefined }
+      refresh_trip_chat_room_team: {
+        Args: { p_trip_id: string }
+        Returns: {
+          channel_key: string | null
+          client_id: string | null
+          conversation_type: string
+          created_at: string
+          created_by: string | null
+          driver_id: string | null
+          id: string
+          is_archived: boolean
+          last_message_at: string | null
+          last_message_preview: string | null
+          legacy_network_conversation_id: string | null
+          legacy_trip_conversation_id: string | null
+          message_count: number
+          metadata: Json
+          organization_id: string
+          supplier_id: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chat_conversations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       regenerate_trip_otp: {
         Args: { p_trip_id: string; p_ttl_minutes?: number }
         Returns: {
@@ -11314,10 +14127,21 @@ export type Database = {
         Args: { p_platform: string; p_token: string }
         Returns: undefined
       }
+      register_verification_document: {
+        Args: {
+          p_document_type: Database["public"]["Enums"]["verification_document_type"]
+          p_mime_type: string
+          p_org_id: string
+          p_size_bytes: number
+          p_storage_path: string
+        }
+        Returns: Json
+      }
       reject_driver_invite: {
         Args: { p_invite_id: string }
         Returns: undefined
       }
+      reject_team_invite: { Args: { p_org_id: string }; Returns: undefined }
       reopen_driver_invite: {
         Args: {
           p_commission_per_km?: number
@@ -11358,6 +14182,48 @@ export type Database = {
           tier: string
         }[]
       }
+      resolve_pending_team_invitations_by_email: {
+        Args: { p_email: string }
+        Returns: {
+          business_unit_name: string
+          created_at: string
+          department_name: string
+          expires_at: string
+          invite_id: string
+          invited_by_name: string
+          invitee_email: string
+          invitee_name: string
+          is_expired: boolean
+          organization_id: string
+          organization_name: string
+          platform_role: string
+          role: string
+          status: string
+        }[]
+      }
+      resolve_pending_team_invitations_by_phone: {
+        Args: { p_phone: string }
+        Returns: {
+          business_unit_name: string
+          created_at: string
+          department_name: string
+          expires_at: string
+          invite_id: string
+          invited_by_name: string
+          invitee_email: string
+          invitee_name: string
+          is_expired: boolean
+          organization_id: string
+          organization_name: string
+          platform_role: string
+          role: string
+          status: string
+        }[]
+      }
+      run_db_health_monitor: { Args: never; Returns: undefined }
+      run_db_health_monitor_guarded: { Args: never; Returns: undefined }
+      run_monitor_watchdog: { Args: never; Returns: undefined }
+      run_monitor_watchdog_guarded: { Args: never; Returns: undefined }
       search_chat_messages: {
         Args: { p_limit?: number; p_organization_id: string; p_query: string }
         Returns: {
@@ -11480,20 +14346,22 @@ export type Database = {
         Args: { p_org_id: string; p_trip_id: string }
         Returns: undefined
       }
-      stress_test_chat_messages: {
-        Args: {
-          p_batch_delay_ms?: number
-          p_batch_size?: number
-          p_conversation_id: string
-          p_message_count?: number
-          p_organization_id: string
-        }
-        Returns: {
-          avg_insert_ms: number
-          elapsed_ms: number
-          messages_inserted: number
-        }[]
+      sqids_encode_booking_ref: { Args: { p_num: number }; Returns: string }
+      sqids_encode_id: { Args: { p_num: number }; Returns: string }
+      sqids_encode_numbers: {
+        Args: { p_attempt?: number; p_min_length?: number; p_numbers: number[] }
+        Returns: string
       }
+      sqids_encode_sub_trip_code: {
+        Args: { p_operational_code: string; p_seq: number }
+        Returns: string
+      }
+      sqids_shuffle: { Args: { p_alphabet: string }; Returns: string }
+      sqids_to_id: {
+        Args: { p_alphabet: string; p_num: number }
+        Returns: string
+      }
+      sqids_working_alphabet: { Args: never; Returns: string }
       submit_atomic_feedback: {
         Args: {
           p_comment?: string
@@ -11521,6 +14389,28 @@ export type Database = {
         }
         Returns: Json
       }
+      submit_business_verification:
+        | {
+            Args: {
+              p_address_pincode?: string
+              p_address_proof_path?: string
+              p_address_proof_type?: string
+              p_org_id: string
+              p_registration_type?: Database["public"]["Enums"]["registration_type_enum"]
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_address_pincode?: string
+              p_address_proof_path?: string
+              p_address_proof_type?: string
+              p_gst_not_applicable?: boolean
+              p_org_id: string
+              p_registration_type?: Database["public"]["Enums"]["registration_type_enum"]
+            }
+            Returns: Json
+          }
       submit_pulse_bid_with_direct_quote: {
         Args: {
           p_amount: number
@@ -11602,6 +14492,37 @@ export type Database = {
         }
         Returns: undefined
       }
+      upsert_trip_subcontract: {
+        Args: {
+          p_rate: number
+          p_supplier_id: string
+          p_trip_id: string
+          p_viewer_org_id: string
+        }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          id: string
+          rate: number
+          status: string
+          sub_driver_id: string | null
+          sub_supplier_name: string | null
+          sub_supplier_on_platform: boolean
+          sub_supplier_org_id: string | null
+          sub_supplier_phone: string | null
+          sub_trip_code: string | null
+          supplier_id: string | null
+          trip_id: string
+          updated_at: string
+          viewer_org_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trip_subcontracts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       uuidv7_generate: { Args: never; Returns: string }
       uuidv7_timestamp: { Args: { p_id: string }; Returns: string }
       validate_identity_integrity: { Args: { p_since?: string }; Returns: Json }
@@ -11653,6 +14574,47 @@ export type Database = {
         | "verified"
         | "rejected"
       ocr_job_status: "pending" | "processing" | "completed" | "failed"
+      pillar_status_type:
+        | "NOT_STARTED"
+        | "QUEUED"
+        | "PROCESSING"
+        | "PASSED"
+        | "MANUAL_REVIEW"
+        | "FAILED"
+      registration_type_enum:
+        | "proprietorship"
+        | "llp"
+        | "pvt_ltd"
+        | "public_ltd"
+        | "partnership"
+      verification_document_status:
+        | "UPLOADED"
+        | "OCR_PASSED"
+        | "OCR_FAILED"
+        | "MANUAL_REVIEW"
+        | "REPLACED"
+      verification_document_type:
+        | "gst_certificate"
+        | "pan_card"
+        | "address_proof_lease"
+        | "address_proof_utility_bill"
+        | "address_proof_other"
+        | "cin_certificate"
+        | "msme_certificate"
+        | "incorporation_certificate"
+        | "partnership_deed"
+        | "llp_agreement"
+        | "iec_certificate"
+      verification_job_status:
+        | "QUEUED"
+        | "PROCESSING"
+        | "COMPLETED"
+        | "PARTIAL_REVIEW"
+        | "FAILED"
+      verification_tier_enum:
+        | "TIER_0_SANDBOX"
+        | "TIER_1_PARTIAL"
+        | "TIER_2_FULL"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -11778,9 +14740,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       kyc_verification_status: [
@@ -11790,6 +14749,53 @@ export const Constants = {
         "rejected",
       ],
       ocr_job_status: ["pending", "processing", "completed", "failed"],
+      pillar_status_type: [
+        "NOT_STARTED",
+        "QUEUED",
+        "PROCESSING",
+        "PASSED",
+        "MANUAL_REVIEW",
+        "FAILED",
+      ],
+      registration_type_enum: [
+        "proprietorship",
+        "llp",
+        "pvt_ltd",
+        "public_ltd",
+        "partnership",
+      ],
+      verification_document_status: [
+        "UPLOADED",
+        "OCR_PASSED",
+        "OCR_FAILED",
+        "MANUAL_REVIEW",
+        "REPLACED",
+      ],
+      verification_document_type: [
+        "gst_certificate",
+        "pan_card",
+        "address_proof_lease",
+        "address_proof_utility_bill",
+        "address_proof_other",
+        "cin_certificate",
+        "msme_certificate",
+        "incorporation_certificate",
+        "partnership_deed",
+        "llp_agreement",
+        "iec_certificate",
+      ],
+      verification_job_status: [
+        "QUEUED",
+        "PROCESSING",
+        "COMPLETED",
+        "PARTIAL_REVIEW",
+        "FAILED",
+      ],
+      verification_tier_enum: [
+        "TIER_0_SANDBOX",
+        "TIER_1_PARTIAL",
+        "TIER_2_FULL",
+      ],
     },
   },
-} as const;
+} as const
