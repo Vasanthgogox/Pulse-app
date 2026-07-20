@@ -40,6 +40,23 @@ export function memberHomeRouteFromAccess(
   return null;
 }
 
+/**
+ * Whether a primary-tab route is reachable for this member — used to skip boot
+ * data/chunk warm-ups for domains the functional role can't open. Non-primary
+ * routes (network hub, etc.) return true so unrelated warm-ups aren't blocked.
+ */
+export function memberCanAccessTabRoute(
+  route: string,
+  access: MemberDomainAccess,
+): boolean {
+  if (route === ROUTES.TABS.FINANCE) return access.finance;
+  if (route === ROUTES.TABS.TRIPS) return access.tripops;
+  if (route === ROUTES.TABS.NETWORK || route.includes("/network")) {
+    return access.sales;
+  }
+  return true;
+}
+
 export function useMemberCapabilities(): MemberDomainAccess {
   const capabilities = useCapabilities();
   const { memberRole, memberPlatformRole, isLoading } = useActiveWorkspace();

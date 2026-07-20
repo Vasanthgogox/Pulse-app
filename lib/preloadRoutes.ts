@@ -32,20 +32,32 @@ export function preloadTabForRoute(route: string, orgId?: string | null): void {
  */
 export function scheduleDispatcherTabPreloads(
   lastTabRoute?: string,
-  opts?: { queryClient?: QueryClient; orgId?: string | null },
+  opts?: {
+    queryClient?: QueryClient;
+    orgId?: string | null;
+    /**
+     * Warm the finance data set (trips + transactions RPCs). Callers pass false
+     * for functional-role members who can reach neither finance nor trips, so a
+     * Sales-only member doesn't fire finance/trips RPCs on boot. Default true.
+     */
+    warmFinanceData?: boolean;
+  },
 ): void {
   const run = () => {
     // Idle preloads of large lazy chunks race with Fast Refresh in dev and
     // surface as "Requiring unknown module NNNN" on the next navigation.
     const orgId = opts?.orgId ?? null;
+    const warmFinanceData = opts?.warmFinanceData ?? true;
     if (__DEV__) {
       if (lastTabRoute) preloadTabForRoute(lastTabRoute, orgId);
       return;
     }
-    if (opts?.queryClient && orgId) {
-      preloadFinanceWarmup(opts.queryClient, orgId);
-    } else {
-      preloadTabScreen('finance');
+    if (warmFinanceData) {
+      if (opts?.queryClient && orgId) {
+        preloadFinanceWarmup(opts.queryClient, orgId);
+      } else {
+        preloadTabScreen('finance');
+      }
     }
     if (lastTabRoute) preloadTabForRoute(lastTabRoute, orgId);
   };
