@@ -27,6 +27,8 @@ import {
 } from "@/features/network/constants/networkHubGrid";
 import { useNetworkDiscovery } from '@/features/network/hooks/useNetworkDiscovery';
 import type { DiscoverOrg } from '@/features/network/services/discover.service';
+import { useCapabilities } from '@/lib/useCapabilities';
+import { allowedConnectionRoles } from '@/lib/capabilities';
 import { showAppAlert } from "@/lib/appAlert";
 import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
 import {
@@ -291,6 +293,7 @@ export function DiscoverView({
   suppressGrowSectionHeader = false,
 }: DiscoverViewProps) {
   const { t } = useLanguage();
+  const capabilities = useCapabilities();
   const windowWidth = useWebLayoutWidth();
   const { height: windowHeight } = useWindowDimensions();
   const isNativeApp = Platform.OS !== "web";
@@ -496,9 +499,18 @@ export function DiscoverView({
         showInviteLimitExceededAlert();
         return;
       }
+      // No valid role between these two operating models (e.g. two pure
+      // carriers) → don't open a zero-option role modal.
+      if (allowedConnectionRoles(capabilities, org.operating_model).length === 0) {
+        showAppAlert(
+          "Cannot connect",
+          "Your organization and this one can't form a client or supplier link.",
+        );
+        return;
+      }
       setRequestRoleModalOrg(org);
     },
-    [atDailyInviteLimit, showInviteLimitExceededAlert],
+    [atDailyInviteLimit, showInviteLimitExceededAlert, capabilities],
   );
 
   const handleConnect = async (org: ScoredOrg, mode: "client" | "supplier") => {
@@ -947,6 +959,10 @@ export function DiscoverView({
       <ConnectionRoleModal
         visible={Boolean(requestRoleModalOrg)}
         companyName={requestRoleModalOrg?.name ?? ""}
+        allowedRoles={allowedConnectionRoles(
+          capabilities,
+          requestRoleModalOrg?.operating_model,
+        )}
         submitting={Boolean(
           requestRoleModalOrg && connecting === requestRoleModalOrg.id,
         )}

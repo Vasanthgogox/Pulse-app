@@ -1,4 +1,5 @@
 import {
+  allowedConnectionRoles,
   canAccessFinanceSubTab,
   canAccessSuppliers,
   canAccessVehicles,
@@ -7,6 +8,9 @@ import {
   getCapabilitiesFromProfile,
   getEffectivePermissions,
 } from "@/lib/capabilities";
+
+const capsFor = (model: string) =>
+  getCapabilitiesFromProfile({ role: "user" }, model);
 
 describe("getCapabilitiesFromProfile + operatingModel", () => {
   it("ASSET_BASED hides suppliers and keeps own-fleet trips", () => {
@@ -58,5 +62,40 @@ describe("getCapabilitiesFromProfile + operatingModel", () => {
     expect(canAccessSuppliers(caps)).toBe(true);
     expect(canAccessVehicles(caps)).toBe(true);
     expect(getEffectivePermissions(caps).indents.create).toBe(true);
+  });
+});
+
+describe("allowedConnectionRoles (counterparty-aware)", () => {
+  it("asset → aggregate counterparty: client only (they give load, I carry)", () => {
+    expect(allowedConnectionRoles(capsFor("ASSET_BASED"), "NON_ASSET")).toEqual([
+      "client",
+    ]);
+  });
+
+  it("asset → asset counterparty: no valid role (neither gives load)", () => {
+    // Two pure carriers have no client/supplier relationship. Callers must
+    // handle the empty case (hide/disable Connect) rather than show 0 options.
+    expect(
+      allowedConnectionRoles(capsFor("ASSET_BASED"), "ASSET_BASED"),
+    ).toEqual([]);
+  });
+
+  it("aggregate → asset counterparty: supplier only (they carry my loads)", () => {
+    expect(allowedConnectionRoles(capsFor("NON_ASSET"), "ASSET_BASED")).toEqual([
+      "supplier",
+    ]);
+  });
+
+  it("hybrid → hybrid counterparty: both roles", () => {
+    expect(allowedConnectionRoles(capsFor("HYBRID"), "HYBRID")).toEqual([
+      "client",
+      "supplier",
+    ]);
+  });
+
+  it("unknown counterparty model → gate by my model only (asset: client)", () => {
+    expect(allowedConnectionRoles(capsFor("ASSET_BASED"), null)).toEqual([
+      "client",
+    ]);
   });
 });

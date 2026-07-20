@@ -20,6 +20,11 @@ export type ConnectionRoleModalProps = {
   visible: boolean;
   companyName: string;
   submitting?: boolean;
+  /**
+   * Roles this org may offer. Asset-only orgs connect as "client" only
+   * (they never onboard suppliers). Defaults to both.
+   */
+  allowedRoles?: ConnectionInviteRole[];
   onClose: () => void;
   onConfirm: (role: ConnectionInviteRole) => void;
 };
@@ -28,15 +33,22 @@ export function ConnectionRoleModal({
   visible,
   companyName,
   submitting = false,
+  allowedRoles = ["client", "supplier"],
   onClose,
   onConfirm,
 }: ConnectionRoleModalProps) {
   const { t } = useLanguage();
-  const [selectedRole, setSelectedRole] = useState<ConnectionInviteRole | null>(null);
+  const canClient = allowedRoles.includes("client");
+  const canSupplier = allowedRoles.includes("supplier");
+  const singleRole = allowedRoles.length === 1 ? allowedRoles[0] : null;
+  const [selectedRole, setSelectedRole] = useState<ConnectionInviteRole | null>(
+    singleRole,
+  );
 
   useEffect(() => {
-    if (!visible) setSelectedRole(null);
-  }, [visible]);
+    // When only one role is allowed, keep it preselected so the CTA is live.
+    if (!visible) setSelectedRole(singleRole);
+  }, [visible, singleRole]);
 
   const handleSubmit = useCallback(() => {
     if (!selectedRole || submitting) return;
@@ -76,18 +88,22 @@ export function ConnectionRoleModal({
               </View>
 
               <View style={styles.options}>
-                <RoleOption
-                  title={t("networkConnectionAddAsClient")}
-                  description={t("networkConnectionAddAsClientDesc")}
-                  selected={selectedRole === "client"}
-                  onPress={() => setSelectedRole("client")}
-                />
-                <RoleOption
-                  title={t("networkConnectionAddAsSupplier")}
-                  description={t("networkConnectionAddAsSupplierDesc")}
-                  selected={selectedRole === "supplier"}
-                  onPress={() => setSelectedRole("supplier")}
-                />
+                {canClient ? (
+                  <RoleOption
+                    title={t("networkConnectionAddAsClient")}
+                    description={t("networkConnectionAddAsClientDesc")}
+                    selected={selectedRole === "client"}
+                    onPress={() => setSelectedRole("client")}
+                  />
+                ) : null}
+                {canSupplier ? (
+                  <RoleOption
+                    title={t("networkConnectionAddAsSupplier")}
+                    description={t("networkConnectionAddAsSupplierDesc")}
+                    selected={selectedRole === "supplier"}
+                    onPress={() => setSelectedRole("supplier")}
+                  />
+                ) : null}
               </View>
 
               <View style={styles.footer}>

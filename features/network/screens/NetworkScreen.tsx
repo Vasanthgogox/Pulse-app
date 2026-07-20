@@ -63,6 +63,12 @@ import {
   isRegisteredOrgId,
 } from "@/features/network/utils/networkActions.util";
 import { queryKeys } from "@/lib/queryKeys";
+import { useCapabilities } from "@/lib/useCapabilities";
+import {
+  allowedConnectionRoles,
+  canAccessSuppliers,
+  canUseAggregateSupply,
+} from "@/lib/capabilities";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { useInboundProtocolInviteActions } from "@/lib/hooks/useInboundProtocolInviteActions";
 import { useQueryBootDefer } from "@/lib/hooks/useQueryBootDefer";
@@ -124,6 +130,7 @@ function NetworkStoryStrip({
   onCreatePost,
   headerActions,
   embedded,
+  canCreatePost,
 }: {
   orgId: string;
   orgName: string;
@@ -132,6 +139,7 @@ function NetworkStoryStrip({
   onCreatePost: () => void;
   headerActions?: React.ReactNode;
   embedded?: boolean;
+  canCreatePost?: boolean;
 }) {
   const storyPosts = useMemo(() => feedPosts.filter(isStoryPost), [feedPosts]);
   if (feedLoading && storyPosts.length === 0) {
@@ -150,6 +158,7 @@ function NetworkStoryStrip({
       onCreatePost={onCreatePost}
       headerActions={headerActions}
       embedded={embedded}
+      canCreatePost={canCreatePost}
     />
   );
 }
@@ -230,6 +239,11 @@ function NetworkScreenInner() {
     refreshOrganization,
   } = useOrganization();
   const orgId = organization?.id ?? null;
+  const capabilities = useCapabilities();
+  /** Aggregate supply → may give/broadcast loads. Asset-only orgs cannot post. */
+  const canPostLoads = canUseAggregateSupply(capabilities);
+  /** Asset-only orgs don't onboard suppliers: no supplier tab/count, connect as client only. */
+  const canUseSuppliers = canAccessSuppliers(capabilities);
   const [refreshing, setRefreshing] = useState(false);
   const [connSearch, setConnSearch] = useState("");
   const [connFilter, setConnFilter] = useState<ConnectionFilterTab>("ALL");
@@ -279,8 +293,11 @@ function NetworkScreenInner() {
   const businessConnectionModal = useOptionalBusinessConnectionRequestModal();
 
   const filterTabs = useMemo(
-    () => ["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as ConnectionFilterTab[],
-    [],
+    () =>
+      (canUseSuppliers
+        ? ["ALL", "CLIENT", "SUPPLIER", "DRIVER"]
+        : ["ALL", "CLIENT", "DRIVER"]) as ConnectionFilterTab[],
+    [canUseSuppliers],
   );
 
   const clientCount = useMemo(
@@ -296,8 +313,8 @@ function NetworkScreenInner() {
     [driversQ.data],
   );
   const totalConnections = useMemo(
-    () => clientCount + supplierCount + driverCount,
-    [clientCount, supplierCount, driverCount],
+    () => clientCount + (canUseSuppliers ? supplierCount : 0) + driverCount,
+    [clientCount, supplierCount, driverCount, canUseSuppliers],
   );
   const animatedTotalConnections = useAnimatedCount(totalConnections);
   const animatedClientCount = useAnimatedCount(clientCount);
@@ -323,7 +340,11 @@ function NetworkScreenInner() {
       tab === "chat"
     );
   }, [segments, hubParam, hubTabParam]);
-  const onCreatePost = () => router.push("/(modals)/create-post");
+  const onCreatePost = () => {
+    // Asset-only orgs cannot give/broadcast load — no post entry.
+    if (!canPostLoads) return;
+    router.push("/(modals)/create-post");
+  };
   useEffect(() => {
     if (searchParams.view !== "requests") return;
     if (showDesktopHub) {
@@ -672,6 +693,18 @@ function NetworkScreenInner() {
       // this is a safety net, not the primary gate, so it stays silent.
       return;
     }
+    // No valid client/supplier role between the two operating models
+    // (e.g. two pure carriers) → block rather than open a 0-option modal.
+    if (
+      allowedConnectionRoles(capabilities, selectedProfileNode.operating_model)
+        .length === 0
+    ) {
+      Alert.alert(
+        "Cannot connect",
+        "Your organization and this one can't form a client or supplier link.",
+      );
+      return;
+    }
     setProtocolRoleModalOpen(true);
   };
 
@@ -875,6 +908,7 @@ function NetworkScreenInner() {
                           CLIENTS
                         </Text>
                   </View>
+                      {canUseSuppliers ? (
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                     <Warehouse
                       size={isMobileLayout ? 11 : 13}
@@ -888,6 +922,7 @@ function NetworkScreenInner() {
                           SUPPLIERS
                         </Text>
                   </View>
+                      ) : null}
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                     <User
                       size={isMobileLayout ? 11 : 13}
@@ -915,6 +950,7 @@ function NetworkScreenInner() {
                     feedPosts={feedPosts}
                     feedLoading={feedQ.isLoading}
                     onCreatePost={onCreatePost}
+                    canCreatePost={canPostLoads}
                     embedded
                   />
                 </View>
@@ -929,6 +965,7 @@ function NetworkScreenInner() {
                 feedPosts={feedPosts}
                 feedLoading={feedQ.isLoading}
                 onCreatePost={onCreatePost}
+                canCreatePost={canPostLoads}
               />
             )}
               </View>
@@ -1499,6 +1536,10 @@ function NetworkScreenInner() {
         visible={protocolRoleModalOpen}
         companyName={selectedProfileNode?.name ?? ""}
         submitting={protocolSending}
+        allowedRoles={allowedConnectionRoles(
+          capabilities,
+          selectedProfileNode?.operating_model,
+        )}
         onClose={() => {
           if (protocolSending) return;
           setProtocolRoleModalOpen(false);

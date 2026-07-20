@@ -22,6 +22,11 @@ interface StoryReelProps {
   headerActions?: React.ReactNode;
   /** Inside desktop 80% story column — trim outer horizontal padding. */
   embedded?: boolean;
+  /**
+   * Whether this org may post/broadcast load stories. Asset-only orgs can
+   * view stories but never create them (they cannot give load). Default true.
+   */
+  canCreatePost?: boolean;
 }
 
 type StoryMetrics = {
@@ -260,6 +265,7 @@ export function StoryReel({
   orgId,
   onCreatePost,
   embedded = false,
+  canCreatePost = true,
 }: StoryReelProps) {
   const router = useRouter();
   const { profile } = useAuth();
@@ -352,7 +358,8 @@ export function StoryReel({
             metrics={metrics}
             onPress={() => {
             if (!latestOwnStory) {
-              onCreatePost();
+              // Asset-only orgs can't post loads — the empty bubble is a no-op.
+              if (canCreatePost) onCreatePost();
               return;
             }
             markStorySeen(latestOwnStory);
@@ -367,6 +374,7 @@ export function StoryReel({
             });
           }}
           badge={
+            canCreatePost ? (
             <View
               style={[
                 styles.addBadge,
@@ -393,6 +401,7 @@ export function StoryReel({
             >
               <Plus size={metrics.plusSize} color={Theme.textPrimaryDark} strokeWidth={2.6} />
             </View>
+            ) : undefined
           }
         >
           <StoryAvatar
