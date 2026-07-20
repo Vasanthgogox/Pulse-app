@@ -54,6 +54,9 @@ export function ChangeOperatingModelModal({
   const driversQ = useDriversQuery(orgId);
   const supplierCount = (suppliersQ.data ?? []).length;
   const driverCount = (driversQ.data ?? []).filter((d) => !d.left_at).length;
+  // Counts aren't trustworthy until both queries settle — a mid-fetch 0 would
+  // read as "nothing to lose" and mislead the user into confirming.
+  const countsLoading = suppliersQ.isLoading || driversQ.isLoading;
 
   const transition = useMemo(
     () => operatingModelTransition(currentModel, selected),
@@ -72,14 +75,16 @@ export function ChangeOperatingModelModal({
       return {
         surface: s,
         label: SURFACE_LABEL[s],
-        count,
+        // Only surface a count once it's real — never a mid-fetch 0.
+        count: countsLoading ? null : count,
       };
     });
-  }, [transition.hiddenSurfaces, supplierCount, driverCount]);
+  }, [transition.hiddenSurfaces, supplierCount, driverCount, countsLoading]);
 
   const hasLiveData =
-    (transition.hiddenSurfaces.includes("suppliers") && supplierCount > 0) ||
-    (transition.hiddenSurfaces.includes("drivers") && driverCount > 0);
+    !countsLoading &&
+    ((transition.hiddenSurfaces.includes("suppliers") && supplierCount > 0) ||
+      (transition.hiddenSurfaces.includes("drivers") && driverCount > 0));
 
   return (
     <Modal
@@ -133,7 +138,11 @@ export function ChangeOperatingModelModal({
               {hiddenLines.map((l) => (
                 <Text key={l.surface} style={styles.impactItem}>
                   •  {l.label}
-                  {l.count != null ? `  —  ${l.count} active` : ""}
+                  {l.count != null
+                    ? l.count > 0
+                      ? `  —  ${l.count} active`
+                      : "  —  none yet"
+                    : ""}
                 </Text>
               ))}
               {hasLiveData ? (
