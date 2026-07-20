@@ -480,7 +480,11 @@ export async function getTripRowByIdLight(
     .eq("id", tripId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
-  if (!data) return { error: new Error("Trip not found"), trip: null };
+  // 0 rows is not an error: the row may be RLS-invisible (expired/anon session,
+  // cross-org). Callers distinguish transport error (throw + report) from a
+  // null trip (empty state); collapsing "not found" into .error threw a false
+  // "Trip not found" into Sentry (GX-PULSE-7). Return null trip, no error.
+  if (!data) return { error: null, trip: null };
   return { error: null, trip: normalizeTripRowWithIndent(data as TripRow) };
 }
 

@@ -89,6 +89,13 @@ const runtimeKindPolyfillPath = path.resolve(
   projectRoot,
   'polyfills/runtimeKind.js',
 );
+// Web-only, RN-free. Attaches stale-chunk recovery listeners before the first
+// lazy import runs (the useEffect install in _layout.tsx was too late — see
+// polyfills/webChunkRecovery.js). No-op on native (guards on `document`).
+const webChunkRecoveryPolyfillPath = path.resolve(
+  projectRoot,
+  'polyfills/webChunkRecovery.js',
+);
 const metroRuntimePath = path.resolve(
   projectRoot,
   'node_modules/@expo/metro-runtime/src/index.ts',
@@ -127,7 +134,7 @@ config.serializer = {
   ...config.serializer,
   getModulesRunBeforeMainModule: () => {
     const upstream = upstreamGetModulesRunBeforeMainModule?.() ?? [];
-    return [runtimeKindPolyfillPath, ...upstream];
+    return [runtimeKindPolyfillPath, webChunkRecoveryPolyfillPath, ...upstream];
   },
 };
 

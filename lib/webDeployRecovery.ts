@@ -142,6 +142,13 @@ export function installNativeBundleRecoveryHandler(): void {
 /** Listen for script load / parse failures before React error boundaries run. */
 export function installWebDeployRecoveryListener(): void {
   if (platformOS() !== 'web' || typeof window === 'undefined') return;
+  // The Metro pre-main polyfill (polyfills/webChunkRecovery.js) attaches these
+  // listeners before the first lazy import — earlier than this useEffect can.
+  // Guard against double-attach so this stays a harmless no-op when it ran.
+  if ((window as unknown as { __qWebChunkRecoveryInstalled?: boolean }).__qWebChunkRecoveryInstalled) {
+    return;
+  }
+  (window as unknown as { __qWebChunkRecoveryInstalled?: boolean }).__qWebChunkRecoveryInstalled = true;
   window.addEventListener(
     'error',
     (event) => {
