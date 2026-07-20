@@ -8,7 +8,7 @@ import {
   type PlatformTeamRole,
 } from "@/features/organization/utils/teamInviteRoles.util";
 import type { OrgMember } from "@/types/organization";
-import { Check, Pencil, Shield, Trash2, X } from "lucide-react-native";
+import { ArrowRightLeft, Check, Pencil, Shield, Trash2, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
@@ -26,9 +26,12 @@ type Props = {
   member: OrgMember | null;
   saving?: boolean;
   desktopMetronic?: boolean;
+  /** Owner-only: reveal the "Transfer ownership" action for this member. */
+  canTransfer?: boolean;
   onClose: () => void;
   onSave: (member: OrgMember, role: PlatformTeamRole) => void;
   onRemove: (member: OrgMember) => void;
+  onTransfer?: (member: OrgMember) => void;
 };
 
 function RoleOption({
@@ -86,9 +89,11 @@ export function MemberEditModal({
   member,
   saving = false,
   desktopMetronic = false,
+  canTransfer = false,
   onClose,
   onSave,
   onRemove,
+  onTransfer,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [selectedRole, setSelectedRole] = useState<PlatformTeamRole>("operator");
@@ -176,6 +181,28 @@ export function MemberEditModal({
               />
             ))}
             <PermissionsPanel role={selectedRole} />
+
+            {canTransfer && member.status === "active" ? (
+              <Pressable
+                onPress={() => onTransfer?.(member)}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.transferRow,
+                  pressed && !saving && { opacity: 0.88 },
+                  saving && styles.btnDisabled,
+                ]}
+              >
+                <View style={styles.transferIcon}>
+                  <ArrowRightLeft size={14} color={Theme.warning} strokeWidth={2.2} />
+                </View>
+                <View style={styles.transferCopy}>
+                  <Text style={styles.transferTitle}>Transfer ownership</Text>
+                  <Text style={styles.transferDesc}>
+                    Make {displayName} the owner. You&apos;ll become an admin.
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
           </ScrollView>
 
           <View style={styles.footer}>
@@ -431,6 +458,36 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     lineHeight: 14,
     flexShrink: 1,
+  },
+  transferRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 4,
+    padding: 11,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.warning,
+    backgroundColor: Theme.warningMuted,
+  },
+  transferIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
+  },
+  transferCopy: { flex: 1, gap: 2 },
+  transferTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.warning,
+  },
+  transferDesc: {
+    fontSize: 11,
+    color: Theme.textSecondary,
+    lineHeight: 15,
   },
   footer: {
     marginTop: 12,

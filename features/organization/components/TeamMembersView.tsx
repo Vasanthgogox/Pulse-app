@@ -12,7 +12,11 @@ import {
   updateMemberRole,
   removeMember,
   cancelTeamInvite,
+  transferOwnership,
+  looksLikeTransferTargetError,
 } from "@/features/organization/services/members.service";
+import { useOrgRole } from "@/lib/hooks/useOrgRole";
+import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { MemberEditModal } from "@/features/organization/components/MemberEditModal";
 import type { OrgMember, PendingPhoneTeamInvite } from "@/types/organization";
 import {
@@ -576,6 +580,8 @@ export function TeamMembersView({
 
   const query = useOrgMembersQuery(orgId);
   const invalidate = useInvalidateOrgMembers(orgId);
+  const { isOwner } = useOrgRole();
+  const { refresh: refreshWorkspace } = useActiveWorkspace();
 
   const roster = query.data;
   const all = roster?.members ?? [];
@@ -649,6 +655,45 @@ export function TeamMembersView({
   const handleEditRemove = (member: OrgMember) => {
     setEditingMember(null);
     handleRemove(member);
+  };
+
+  const handleTransfer = (member: OrgMember) => {
+    const name = member.full_name || member.phone || member.email || "this member";
+    Alert.alert(
+      "Transfer ownership?",
+      `${name} will become the owner and you'll become an admin. You can't undo this yourself.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Transfer",
+          style: "destructive",
+          onPress: async () => {
+            setActionId(member.id);
+            try {
+              const { error } = await transferOwnership(orgId, member.user_id);
+              if (error) {
+                Alert.alert(
+                  "Could not transfer ownership",
+                  looksLikeTransferTargetError(error.message)
+                    ? "The chosen person must be an active member of this workspace."
+                    : error.message,
+                );
+                return;
+              }
+              setEditingMember(null);
+              // Ownership drives memberRole via ActiveWorkspaceContext (not React
+              // Query) — refresh it so the ex-owner loses owner-only surfaces at
+              // once, then refresh the roster pills.
+              await refreshWorkspace();
+              invalidate();
+              await query.refetch();
+            } finally {
+              setActionId(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleCancelPhoneInvite = (invite: PendingPhoneTeamInvite) => {
@@ -900,6 +945,8 @@ export function TeamMembersView({
           onClose={() => setEditingMember(null)}
           onSave={(member, role) => void handleEditSave(member, role)}
           onRemove={handleEditRemove}
+          canTransfer={isOwner}
+          onTransfer={handleTransfer}
         />
       </View>
     );
@@ -925,6 +972,8 @@ export function TeamMembersView({
         onClose={() => setEditingMember(null)}
         onSave={(member, role) => void handleEditSave(member, role)}
         onRemove={handleEditRemove}
+        canTransfer={isOwner}
+        onTransfer={handleTransfer}
       />
     </>
   );

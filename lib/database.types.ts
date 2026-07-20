@@ -14466,6 +14466,10 @@ export type Database = {
         }
         Returns: Json
       }
+      transfer_organization_ownership: {
+        Args: { p_new_owner_user_id: string; p_org_id: string }
+        Returns: Json
+      }
       trip_otp_increment_failed: {
         Args: { p_code: string }
         Returns: undefined

@@ -18,6 +18,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | _(pending)_ | Network page: counterparty-aware connect roles; asset hides supplier tab/count/create-post; aggregate hides driver (FLEET) tab/count |
 | _(pending)_ | Operating-model switching: owner-only, 30-day cooldown, audited RPC; impact-preview modal; capability re-gate with no data loss |
 | _(pending)_ | Desktop hub sub-panels (details / hero / grow) gated on `canAccessSuppliers`/`canAccessDrivers`; `database.types.ts` regen (change_operating_model RPC + operating_model_changed_at); Hybrid model verified full-union (no gates to add, covered by tests) |
+| _(pending)_ | Ownership transfer: owner-only atomic audited RPC (`transfer_organization_ownership`) — demote owner→admin, promote member→owner, sync `organizations.owner_id`; hardened `org_members_update` RLS to block off-RPC `role='owner'`; owner-only "Transfer ownership" action in `MemberEditModal`; workspace refresh re-gates ex-owner |
 
 ---
 
@@ -34,6 +35,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `supabase/migrations/20261207160000_discover_organizations_expose_operating_model.sql` | RPC returns `operating_model` for counterparty-aware connect roles |
 | `supabase/migrations/20261208120000_change_operating_model.sql` | `operating_model_changed_at` col + owner-only, cooldown-guarded, audited `change_operating_model` RPC |
 | `features/organization/components/workspace/ChangeOperatingModelModal.tsx` | Owner-only model picker with downgrade impact preview |
+| `supabase/migrations/20261210120000_transfer_organization_ownership.sql` | Owner-only atomic ownership-transfer RPC + `org_members_update` RLS hardening (no off-RPC `role='owner'`) |
 
 ---
 
@@ -43,6 +45,9 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 |------|----------------|
 | `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe; `hasBusinessCapabilities`; `allowedConnectionRoles` (counterparty-aware client/supplier); `operatingModelTransition` (impact preview) |
 | `features/organization/services/organization.service.ts` | `changeOperatingModel` RPC wrapper + `looksLikeModelChangeCooldownError` |
+| `features/organization/services/members.service.ts` | `transferOwnership` RPC wrapper + `looksLikeTransferTargetError` |
+| `features/organization/components/MemberEditModal.tsx` | Owner-only "Transfer ownership" action (`canTransfer`/`onTransfer`); active-member only |
+| `features/organization/components/TeamMembersView.tsx` | `handleTransfer` (confirm → RPC → workspace refresh + roster invalidate); `canTransfer={isOwner}` |
 | `features/organization/components/workspace/WorkspaceSettingsPanel.tsx` | Owner-only editable Operating Model field → opens modal; refresh + `['q',…]` cache purge on switch |
 | `features/organization/components/workspace/workspacePanelUi.tsx` | `panelFieldHint` style |
 | `features/network/screens/NetworkScreen.tsx` | Asset: hide supplier tab/count/create-post, connect as client only. Aggregate: hide DRIVER tab + FLEET count. Empty-role connect blocked with alert |

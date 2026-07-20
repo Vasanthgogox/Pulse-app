@@ -424,6 +424,35 @@ export async function updateMemberRole(
   }
 }
 
+// ─── Transfer ownership ─────────────────────────────────────────────────────────
+
+/** Detect the RPC's "target must be an active member" rejection for a friendly message. */
+export function looksLikeTransferTargetError(message: string): boolean {
+  return /transfer_target_not_member/i.test(message);
+}
+
+/**
+ * Transfer org ownership to an active member via the owner-only, atomic,
+ * audited RPC. The current owner steps down to admin and the target becomes
+ * owner in one transaction (owner_id + role rows flipped together). The DB is
+ * the authority — UI gating is convenience only.
+ */
+export async function transferOwnership(
+  orgId: string,
+  newOwnerUserId: string,
+): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase().rpc("transfer_organization_ownership", {
+      p_org_id: orgId,
+      p_new_owner_user_id: newOwnerUserId,
+    });
+    if (error) return { error: new Error(error.message) };
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
 // ─── Remove member ─────────────────────────────────────────────────────────────
 
 export async function removeMember(memberId: string): Promise<{ error: Error | null }> {

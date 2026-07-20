@@ -108,6 +108,26 @@ Owner-only, cooldown-guarded, audited switch. A change is a **pure capability re
 
 ---
 
+## Transferring ownership
+
+Owner-only, atomic, audited. The current owner picks an **active member**; the owner steps down to **admin** and the member becomes **owner** — both `organization_members.role` rows and `organizations.owner_id` flip in one transaction.
+
+| Aspect | Rule |
+|--------|------|
+| Who | **Owner only** (`useOrgRole().isOwner`), enforced in the RPC |
+| Target | Must be an **active** member (not self, not pending) |
+| Atomicity | Single SECURITY DEFINER RPC; `FOR UPDATE` lock on the org row — no two-owner/zero-owner race |
+| owner_id sync | RPC writes `owner_id` explicitly (the `sync_organization_owner_from_member` trigger no-ops once it's non-null) |
+| RLS backstop | `org_members_update` `WITH CHECK` forbids writing `role='owner'` off-RPC (only the current owner may) |
+| Audit | `workspace_audit_log` event `ownership.transfer` `{from_user,to_user}` |
+| Propagation | `useActiveWorkspace().refresh()` recomputes `memberRole` (ex-owner drops to admin) + members-query invalidate |
+
+- RPC: `transfer_organization_ownership(p_org_id, p_new_owner_user_id)` — [migration](../supabase/migrations/20261210120000_transfer_organization_ownership.sql)
+- Service: `transferOwnership` + `looksLikeTransferTargetError` in `features/organization/services/members.service.ts`
+- UI: owner-only "Transfer ownership" action in `MemberEditModal`, wired in `TeamMembersView`
+
+---
+
 ## Manual test (quick)
 
 | Persona | Check |
