@@ -136,11 +136,25 @@ function AnimatedPress({
 
 export type DemoTabId = "finance" | "trips" | "network" | "loadCenter" | "resources";
 
+/** Per-domain tab visibility (functional member roles). Omitted → all visible. */
+export type DemoTabVisibility = {
+  finance: boolean;
+  trips: boolean;
+  network: boolean;
+};
+
+const ALL_TABS_VISIBLE: DemoTabVisibility = {
+  finance: true,
+  trips: true,
+  network: true,
+};
+
 interface DemoTabBarProps {
   activeTab: DemoTabId;
   onTabChange: (tab: DemoTabId) => void;
   onProfilePress?: () => void;
   onNotificationsPress?: () => void;
+  visibility?: DemoTabVisibility;
 }
 
 export function DemoTabBar({
@@ -148,6 +162,7 @@ export function DemoTabBar({
   onTabChange,
   onProfilePress,
   onNotificationsPress,
+  visibility = ALL_TABS_VISIBLE,
 }: DemoTabBarProps) {
   void onNotificationsPress;
   const router = useRouter();
@@ -600,7 +615,7 @@ export function DemoTabBar({
   }, [collapseNetworkDock]);
 
   if (isDesktopWeb) {
-    const navItems: Array<{
+    const allNavItems: Array<{
       id: DemoTabId;
       title: string;
       subtitle?: string;
@@ -636,6 +651,13 @@ export function DemoTabBar({
         active: isLoadCenter,
       },
     ];
+    // Hide primary-domain tabs the member's functional role can't reach.
+    const navItems = allNavItems.filter((item) => {
+      if (item.id === "finance") return visibility.finance;
+      if (item.id === "trips") return visibility.trips;
+      if (item.id === "network") return visibility.network;
+      return true;
+    });
 
     return (
       <Fragment>
@@ -830,6 +852,7 @@ export function DemoTabBar({
   return (
     <DemoTabBarMobileFooter
       activeTab={activeTab}
+      visibility={visibility}
       isChatRoute={isChatRoute}
       isCompactMobile={isCompactMobile}
       footerPadBottom={footerPadBottom}

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react-native';
 
 import { WEB_TOP_NAV_ICON } from '@/components/demo/webTopNavIcon.tokens';
-import type { DemoTabId } from '@/components/demo/DemoTabBar';
+import type { DemoTabId, DemoTabVisibility } from '@/components/demo/DemoTabBar';
 import Theme from '@/constants/Theme';
 import { pe } from '@/lib/platformViewStyle.util';
 import { preloadPulseLoadsRoute, preloadTabScreen } from '@/lib/preloadRoutes';
@@ -31,6 +31,8 @@ import { PulseBottomTabSlot } from './PulseBottomTabSlot';
 
 export type PulseBottomTabBarProps = {
   activeTab: DemoTabId;
+  /** Per-domain tab visibility (functional member roles). Omitted → all visible. */
+  visibility?: DemoTabVisibility;
   isChatRoute: boolean;
   isCompactMobile: boolean;
   footerPadBottom: number;
@@ -65,6 +67,7 @@ function TabOutlineIcon({
 
 function PulseBottomTabBarInner({
   activeTab,
+  visibility,
   isChatRoute,
   isCompactMobile,
   footerPadBottom,
@@ -78,6 +81,9 @@ function PulseBottomTabBarInner({
   onWarmTab,
 }: PulseBottomTabBarProps) {
   const iconSize = isCompactMobile ? MOBILE_TAB_ICON_SIZE_COMPACT : MOBILE_TAB_ICON_SIZE;
+  const showFinance = visibility?.finance ?? true;
+  const showTrips = visibility?.trips ?? true;
+  const showNetwork = visibility?.network ?? true;
 
   const switchTab = useCallback(
     (tab: DemoTabId) => {
@@ -111,54 +117,60 @@ function PulseBottomTabBarInner({
       style={[styles.footerWrap, shellSurface, { paddingBottom: footerPadBottom }, pe('box-none')]}
     >
       <View style={[styles.bar, isCompactMobile && styles.barCompact]}>
-        <PulseBottomTabSlot
-          label="Home"
-          active={activeTab === 'network'}
-          badgeCount={pendingInvites}
-          compact={isCompactMobile}
-          onPress={() => switchTab('network')}
-          onPressIn={() => warmTab('network')}
-          icon={
-            <Home
-              size={iconSize}
-              color={
-                activeTab === 'network'
-                  ? WEB_TOP_NAV_ICON.active
-                  : WEB_TOP_NAV_ICON.muted
-              }
-              fill={activeTab === 'network' ? WEB_TOP_NAV_ICON.active : 'transparent'}
-              strokeWidth={WEB_TOP_NAV_ICON.stroke}
-            />
-          }
-        />
-        <PulseBottomTabSlot
-          label="Cash"
-          active={activeTab === 'finance'}
-          compact={isCompactMobile}
-          onPress={() => switchTab('finance')}
-          onPressIn={() => warmTab('finance')}
-          icon={
-            <TabOutlineIcon
-              Icon={DollarSign}
-              active={activeTab === 'finance'}
-              size={iconSize}
-            />
-          }
-        />
-        <PulseBottomTabSlot
-          label="Trips"
-          active={activeTab === 'trips'}
-          compact={isCompactMobile}
-          onPress={() => switchTab('trips')}
-          onPressIn={() => warmTab('trips')}
-          icon={
-            <TabOutlineIcon
-              Icon={Signpost}
-              active={activeTab === 'trips'}
-              size={iconSize}
-            />
-          }
-        />
+        {showNetwork ? (
+          <PulseBottomTabSlot
+            label="Home"
+            active={activeTab === 'network'}
+            badgeCount={pendingInvites}
+            compact={isCompactMobile}
+            onPress={() => switchTab('network')}
+            onPressIn={() => warmTab('network')}
+            icon={
+              <Home
+                size={iconSize}
+                color={
+                  activeTab === 'network'
+                    ? WEB_TOP_NAV_ICON.active
+                    : WEB_TOP_NAV_ICON.muted
+                }
+                fill={activeTab === 'network' ? WEB_TOP_NAV_ICON.active : 'transparent'}
+                strokeWidth={WEB_TOP_NAV_ICON.stroke}
+              />
+            }
+          />
+        ) : null}
+        {showFinance ? (
+          <PulseBottomTabSlot
+            label="Cash"
+            active={activeTab === 'finance'}
+            compact={isCompactMobile}
+            onPress={() => switchTab('finance')}
+            onPressIn={() => warmTab('finance')}
+            icon={
+              <TabOutlineIcon
+                Icon={DollarSign}
+                active={activeTab === 'finance'}
+                size={iconSize}
+              />
+            }
+          />
+        ) : null}
+        {showTrips ? (
+          <PulseBottomTabSlot
+            label="Trips"
+            active={activeTab === 'trips'}
+            compact={isCompactMobile}
+            onPress={() => switchTab('trips')}
+            onPressIn={() => warmTab('trips')}
+            icon={
+              <TabOutlineIcon
+                Icon={Signpost}
+                active={activeTab === 'trips'}
+                size={iconSize}
+              />
+            }
+          />
+        ) : null}
         <PulseBottomTabSlot
           label="Loads"
           active={activeTab === 'loadCenter'}
@@ -196,6 +208,9 @@ function PulseBottomTabBarInner({
 function propsEqual(prev: PulseBottomTabBarProps, next: PulseBottomTabBarProps): boolean {
   return (
     prev.activeTab === next.activeTab &&
+    prev.visibility?.finance === next.visibility?.finance &&
+    prev.visibility?.trips === next.visibility?.trips &&
+    prev.visibility?.network === next.visibility?.network &&
     prev.isChatRoute === next.isChatRoute &&
     prev.isCompactMobile === next.isCompactMobile &&
     prev.footerPadBottom === next.footerPadBottom &&

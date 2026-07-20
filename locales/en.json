@@ -64,6 +64,8 @@
   "load": "Load",
   "more": "More",
   "profile": "Profile",
+  "memberNoAccessTitle": "No workspace access yet",
+  "memberNoAccessBody": "Your account doesn't have a role assigned for this workspace. Ask the workspace owner to give you Finance, Sales, or TripOps access.",
   "financeCashbook": "Finance (Cashbook)",
   "accountSettingsComingSoon": "Account settings coming soon.",
   "supplier": "Supplier",
