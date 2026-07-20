@@ -88,6 +88,8 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
     try {
       const { error } = await changeOperatingModel(orgId, newModel);
       if (error) {
+        // Close first so the banner isn't hidden behind the RN Modal overlay.
+        setModelModalOpen(false);
         notice({
           kind: "error",
           title: "Couldn't change model",
