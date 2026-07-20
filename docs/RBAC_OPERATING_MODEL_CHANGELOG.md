@@ -37,6 +37,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `supabase/migrations/20261208120000_change_operating_model.sql` | `operating_model_changed_at` col + owner-only, cooldown-guarded, audited `change_operating_model` RPC |
 | `features/organization/components/workspace/ChangeOperatingModelModal.tsx` | Owner-only model picker with downgrade impact preview |
 | `supabase/migrations/20261210120000_transfer_organization_ownership.sql` | Owner-only atomic ownership-transfer RPC + `org_members_update` RLS hardening (no off-RPC `role='owner'`) |
+| `supabase/migrations/20261211090000_fix_org_members_policy_recursion.sql` | Fix infinite-recursion in `org_members_update`/`org_members_insert` (self-referenced `organization_members` inside its own policy → every UPDATE/INSERT 500'd). New `is_org_owner()` SECURITY DEFINER helper; policies now use `is_org_admin()`/`is_org_owner()` instead of inline self-subqueries. Same authz intent |
 | `lib/useMemberCapabilities.ts` | Hook: `useCapabilities()` (org model) ∩ member's functional role (finance/sales/tripops) → `{ finance, sales, tripops }` domain booleans; owner/admin bypass |
 | `components/MemberDomainGate.tsx` | Client-side redirect-on-deny gate for the Fiscal/Trips/Network tabs (same pattern as `ModelAccessGate`) |
 

@@ -19,11 +19,13 @@ export interface MemberDomainAccess {
   finance: boolean;
   sales: boolean;
   tripops: boolean;
+  /** True until the active workspace (role + functional role) has resolved. */
+  isLoading: boolean;
 }
 
 export function useMemberCapabilities(): MemberDomainAccess {
   const capabilities = useCapabilities();
-  const { memberRole, memberPlatformRole } = useActiveWorkspace();
+  const { memberRole, memberPlatformRole, isLoading } = useActiveWorkspace();
 
   return useMemo(() => {
     const isOwnerOrAdmin = memberRole === "owner" || memberRole === "admin";
@@ -41,6 +43,7 @@ export function useMemberCapabilities(): MemberDomainAccess {
         finance: orgAllowsFinance,
         sales: orgAllowsSales,
         tripops: orgAllowsTripOps,
+        isLoading,
       };
     }
 
@@ -49,6 +52,7 @@ export function useMemberCapabilities(): MemberDomainAccess {
       finance: orgAllowsFinance && functionalRole === "finance",
       sales: orgAllowsSales && functionalRole === "sales",
       tripops: orgAllowsTripOps && functionalRole === "tripops",
+      isLoading,
     };
-  }, [capabilities, memberRole, memberPlatformRole]);
+  }, [capabilities, memberRole, memberPlatformRole, isLoading]);
 }

@@ -23,18 +23,19 @@ export function MemberDomainGate({ kind, children }: Props) {
   const router = useRouter();
   const access = useMemberCapabilities();
   const allowed = access[kind];
+  const isLoading = access.isLoading;
 
   useEffect(() => {
-    if (allowed) return;
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-    // Neutral fallback — never one of the 3 gated tabs, so it can't redirect to itself.
+    // Hold while the workspace/role is still resolving — bouncing here would
+    // eject a legitimately-allowed member before their functional role loads.
+    if (isLoading || allowed) return;
+    // Neutral fallback — never one of the 3 gated tabs, so it can't redirect to
+    // itself. Always replace() (not back()): on a hard web load / deep-link the
+    // navigator has no history and back() dispatches an unhandled GO_BACK.
     router.replace(ROUTES.TABS.PROFILE as "/");
-  }, [allowed, router]);
+  }, [isLoading, allowed, router]);
 
-  if (!allowed) {
+  if (isLoading || !allowed) {
     return <CenteredLoadingView />;
   }
 
