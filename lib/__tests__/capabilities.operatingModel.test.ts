@@ -7,6 +7,7 @@ import {
   canUseAssetSupply,
   getCapabilitiesFromProfile,
   getEffectivePermissions,
+  operatingModelTransition,
 } from "@/lib/capabilities";
 
 const capsFor = (model: string) =>
@@ -97,5 +98,66 @@ describe("allowedConnectionRoles (counterparty-aware)", () => {
     expect(allowedConnectionRoles(capsFor("ASSET_BASED"), null)).toEqual([
       "client",
     ]);
+  });
+});
+
+describe("operatingModelTransition", () => {
+  it("HYBRID → ASSET_BASED is a downgrade hiding suppliers/indents/posts", () => {
+    const t = operatingModelTransition("HYBRID", "ASSET_BASED");
+    expect(t.direction).toBe("downgrade");
+    expect(t.capsGained).toEqual([]);
+    expect(t.hiddenSurfaces).toEqual(
+      expect.arrayContaining(["suppliers", "indents", "posts"]),
+    );
+    expect(t.hiddenSurfaces).not.toContain("vehicles");
+    expect(t.hiddenSurfaces).not.toContain("drivers");
+  });
+
+  it("HYBRID → NON_ASSET is a downgrade hiding vehicles/drivers/bids", () => {
+    const t = operatingModelTransition("HYBRID", "NON_ASSET");
+    expect(t.direction).toBe("downgrade");
+    expect(t.hiddenSurfaces).toEqual(
+      expect.arrayContaining(["vehicles", "drivers", "bids"]),
+    );
+    expect(t.hiddenSurfaces).not.toContain("suppliers");
+  });
+
+  it("ASSET_BASED → HYBRID is an upgrade with no hidden surfaces", () => {
+    const t = operatingModelTransition("ASSET_BASED", "HYBRID");
+    expect(t.direction).toBe("upgrade");
+    expect(t.capsLost).toEqual([]);
+    expect(t.hiddenSurfaces).toEqual([]);
+  });
+
+  it("NON_ASSET → HYBRID is an upgrade with no hidden surfaces", () => {
+    const t = operatingModelTransition("NON_ASSET", "HYBRID");
+    expect(t.direction).toBe("upgrade");
+    expect(t.capsLost).toEqual([]);
+    expect(t.hiddenSurfaces).toEqual([]);
+  });
+
+  it("ASSET_BASED → NON_ASSET is lateral (loses fleet, gains give-load)", () => {
+    const t = operatingModelTransition("ASSET_BASED", "NON_ASSET");
+    expect(t.direction).toBe("lateral");
+    expect(t.capsLost.length).toBeGreaterThan(0);
+    expect(t.capsGained.length).toBeGreaterThan(0);
+    expect(t.hiddenSurfaces).toEqual(
+      expect.arrayContaining(["vehicles", "drivers", "bids"]),
+    );
+  });
+
+  it("NON_ASSET → ASSET_BASED is lateral (loses give-load, gains fleet)", () => {
+    const t = operatingModelTransition("NON_ASSET", "ASSET_BASED");
+    expect(t.direction).toBe("lateral");
+    expect(t.hiddenSurfaces).toEqual(
+      expect.arrayContaining(["suppliers", "indents", "posts"]),
+    );
+  });
+
+  it("same model is a no-op with no caps lost/gained", () => {
+    const t = operatingModelTransition("HYBRID", "HYBRID");
+    expect(t.capsLost).toEqual([]);
+    expect(t.capsGained).toEqual([]);
+    expect(t.hiddenSurfaces).toEqual([]);
   });
 });

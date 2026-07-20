@@ -26,6 +26,12 @@
 
   var RELOAD_GUARD_KEY = 'pulse_deploy_reload_v1'; // shared with webDeployRecovery.ts
 
+  // True once a recovery reload has been triggered this pageview. Concurrent
+  // stale-chunk rejections (e.g. NetworkScreen + TripsScreen rejecting in the
+  // same tick before location.replace unloads the page) must be swallowed too,
+  // otherwise the 2nd+ rejection escapes to Sentry as noise (GX-PULSE-B).
+  var recoveryInFlight = false;
+
   function isStaleWebChunkError(msg) {
     if (!msg) return false;
     return (
@@ -40,13 +46,20 @@
     );
   }
 
+  // Returns true when this pageview's stale-chunk error is being handled by a
+  // recovery reload — so the caller should suppress it — whether this call
+  // triggered the reload or an earlier concurrent one already did.
   function recover() {
+    if (recoveryInFlight) return true;
     try {
+      // A prior pageview already cache-busted and it still failed: don't loop.
+      // The error is real (chunk genuinely missing) and should reach Sentry.
       if (sessionStorage.getItem(RELOAD_GUARD_KEY)) return false;
       sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
     } catch (e) {
       return false;
     }
+    recoveryInFlight = true;
     var url = new URL(window.location.href);
     // Date.now is fine here — this is app runtime, not a workflow script.
     url.searchParams.set('_cb', String(Date.now()));
@@ -65,11 +78,11 @@
         typeof target.src === 'string' &&
         target.src.indexOf('.js') !== -1
       ) {
-        recover();
+        if (recover()) event.preventDefault();
         return;
       }
       var message = (event.error && event.error.message) || event.message || '';
-      if (isStaleWebChunkError(message)) recover();
+      if (isStaleWebChunkError(message) && recover()) event.preventDefault();
     },
     true,
   );

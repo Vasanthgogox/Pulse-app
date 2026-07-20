@@ -1149,6 +1149,12 @@ export const workspacePanelStyles = StyleSheet.create({
     color: Theme.textSecondary,
     letterSpacing: -0.1,
   },
+  panelFieldHint: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '600',
+    color: Theme.primary,
+  },
 
   // Org name field
   nameInputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: Theme.borderMedium, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: Theme.surface, gap: 10, marginHorizontal: 14, marginBottom: 2 },

@@ -281,6 +281,30 @@ export async function updateOrganizationLogo(
   return { error: null };
 }
 
+export type OperatingModel = "ASSET_BASED" | "NON_ASSET" | "HYBRID";
+
+/** Detect the RPC's 30-day cooldown rejection so the UI can show a friendly message. */
+export function looksLikeModelChangeCooldownError(message: string): boolean {
+  return /operating_model_change_cooldown/i.test(message);
+}
+
+/**
+ * Change an org's operating model via the owner-only, cooldown-guarded,
+ * audited RPC. The DB is the authority — UI gating is convenience only.
+ */
+export async function changeOperatingModel(
+  orgId: string,
+  newModel: OperatingModel,
+): Promise<{ error: Error | null; from?: string; to?: string }> {
+  const { data, error } = await supabase().rpc("change_operating_model", {
+    p_org_id: orgId,
+    p_new_model: newModel,
+  });
+  if (error) return { error: new Error(error.message) };
+  const result = (data ?? {}) as { from?: string; to?: string };
+  return { error: null, from: result.from, to: result.to };
+}
+
 export async function getOrganizationLocationsByIds(orgIds: string[]): Promise<{
   error: Error | null;
   locations: OrganizationLocation[];

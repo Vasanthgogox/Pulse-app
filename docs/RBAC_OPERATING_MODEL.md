@@ -88,6 +88,26 @@ Empty result → callers block Connect with an alert (never a 0-option modal). U
 
 ---
 
+## Changing operating model (post-signup)
+
+Owner-only, cooldown-guarded, audited switch. A change is a **pure capability re-gate** — no DB data is deleted; surfaces the new model can't use are hidden and restored on re-upgrade.
+
+| Aspect | Rule |
+|--------|------|
+| Who | **Owner only** (`useOrgRole().isOwner`), enforced in RPC + RLS |
+| When | Free on upgrades; warn-with-impact-preview on downgrades |
+| Cooldown | **30 days** between changes (`organizations.operating_model_changed_at`) |
+| Data safety | Nothing deleted; hidden rows stay in DB, reachable again on re-upgrade |
+| Audit | `workspace_audit_log` event `model.update` `{from,to}` |
+| Propagation | `refreshOrganization()` + purge `['q', …]` query cache so gates re-render |
+
+- RPC: `change_operating_model(p_org_id, p_new_model)` — [migration](../supabase/migrations/20261208120000_change_operating_model.sql)
+- Transition helper: `operatingModelTransition(from, to)` in `lib/capabilities.ts` → `{direction, capsLost, capsGained, hiddenSurfaces}`
+- UI: `ChangeOperatingModelModal` + owner-gated field in `WorkspaceSettingsPanel`
+- **Caveat:** hidden-party outstanding balances still sum into finance "all"/cash totals (no dedicated tab) — the modal warns when this applies.
+
+---
+
 ## Manual test (quick)
 
 | Persona | Check |
@@ -95,3 +115,4 @@ Empty result → callers block Connect with an alert (never a 0-option modal). U
 | Asset | Finance has no Suppliers; Create Trip = Own fleet; `/create-indent` denied; `/add-supplier` bounces |
 | Aggregate | Finance has no Garage; Create Trip = Partner fleet; `/add-vehicle` bounces; give-load works |
 | Hybrid | Both supply modes; Suppliers + Garage tabs; create indent works |
+| Model switch | Owner sees "Tap to change" on Operating Model; non-owner sees read-only; downgrade shows impact preview; 2nd change within 30d blocked; surfaces re-gate without reload |

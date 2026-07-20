@@ -11,10 +11,15 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
+  changeOperatingModel,
   getWorkspaceKyc,
+  looksLikeModelChangeCooldownError,
+  type OperatingModel,
   updateOrganizationLogo,
   updateOrganizationName,
 } from "@/features/organization/services/organization.service";
+import { ChangeOperatingModelModal } from "@/features/organization/components/workspace/ChangeOperatingModelModal";
+import { useQueryClient } from "@tanstack/react-query";
 import { syncBrandingFromOrg } from "@/features/invoicing/services/invoiceBranding.service";
 import { WorkspaceDetailLayout } from "@/features/organization/components/workspace/WorkspaceDetailLayout";
 import { useWorkspaceFeedback } from "@/features/organization/components/workspace/WorkspaceFeedbackProvider";
@@ -58,8 +63,9 @@ type Props = {
 
 export function WorkspaceSettingsPanel({ onBack }: Props) {
   const { currentOrganization, refreshOrganization } = useOrganization();
-  const { canEdit } = useOrgRole();
+  const { canEdit, isOwner } = useOrgRole();
   const { notice, confirm } = useWorkspaceFeedback();
+  const queryClient = useQueryClient();
 
   const orgId = currentOrganization?.id ?? "";
   const storedName = currentOrganization?.name ?? "";
@@ -69,7 +75,45 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
   const [logoUploading, setLogoUploading] = useState(false);
   const [nameSaving, setNameSaving] = useState(false);
   const [kyc, setKyc] = useState<WorkspaceKyc | null>(null);
+  const [modelModalOpen, setModelModalOpen] = useState(false);
+  const [modelSaving, setModelSaving] = useState(false);
   const nameInputRef = useRef<TextInput>(null);
+
+  const currentModel = (currentOrganization?.operatingModel ??
+    "HYBRID") as OperatingModel;
+
+  const handleChangeModel = async (newModel: OperatingModel) => {
+    if (!orgId || modelSaving) return;
+    setModelSaving(true);
+    try {
+      const { error } = await changeOperatingModel(orgId, newModel);
+      if (error) {
+        notice({
+          kind: "error",
+          title: "Couldn't change model",
+          message: looksLikeModelChangeCooldownError(error.message)
+            ? "You can change the operating model again 30 days after your last change."
+            : error.message,
+        });
+        return;
+      }
+      // Propagate: reload org row so useCapabilities recomputes, then purge
+      // org-scoped entity caches (same-org model change won't trigger the
+      // org-switch purge in OrganizationContext).
+      await refreshOrganization();
+      queryClient.removeQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === "q",
+      });
+      setModelModalOpen(false);
+      notice({
+        kind: "success",
+        title: "Operating model updated",
+        message: "Your workspace tools have been updated.",
+      });
+    } finally {
+      setModelSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (storedName) setOrgName(storedName);
@@ -350,11 +394,26 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
 
           <View style={styles.panelFieldGroup}>
             <Text style={styles.panelFieldLabel}>Operating Model</Text>
-            <View style={[styles.panelFieldInput, styles.panelFieldInputReadonly]}>
-              <Text style={styles.panelFieldStatic}>
-                {modelLabel(currentOrganization?.operatingModel)}
-              </Text>
-            </View>
+            {isOwner ? (
+              <Pressable
+                onPress={() => setModelModalOpen(true)}
+                style={({ pressed }) => [
+                  styles.panelFieldInput,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.panelFieldStatic}>
+                  {modelLabel(currentOrganization?.operatingModel)}
+                </Text>
+                <Text style={styles.panelFieldHint}>Tap to change</Text>
+              </Pressable>
+            ) : (
+              <View style={[styles.panelFieldInput, styles.panelFieldInputReadonly]}>
+                <Text style={styles.panelFieldStatic}>
+                  {modelLabel(currentOrganization?.operatingModel)}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -382,6 +441,18 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
           </View>
         </View>
       </View>
+      {isOwner && orgId ? (
+        <ChangeOperatingModelModal
+          visible={modelModalOpen}
+          orgId={orgId}
+          currentModel={currentModel}
+          saving={modelSaving}
+          onConfirm={handleChangeModel}
+          onClose={() => {
+            if (!modelSaving) setModelModalOpen(false);
+          }}
+        />
+      ) : null}
     </WorkspaceDetailLayout>
   );
 }

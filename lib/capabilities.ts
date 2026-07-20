@@ -249,6 +249,64 @@ export function allowedConnectionRoles(
   return roles;
 }
 
+/** UI surfaces that a model downgrade would hide (rows stay in DB, become unreachable). */
+export type ModelHiddenSurface =
+  | "suppliers"
+  | "indents"
+  | "posts"
+  | "vehicles"
+  | "drivers"
+  | "bids";
+
+export interface OperatingModelTransition {
+  direction: "upgrade" | "downgrade" | "lateral";
+  capsLost: Capability[];
+  capsGained: Capability[];
+  /** Surfaces the new model can no longer reach — drive the impact preview. */
+  hiddenSurfaces: ModelHiddenSurface[];
+}
+
+/**
+ * Describe a proposed operating-model switch so the UI can warn before applying.
+ * Pure — no data reads. "downgrade" means the new model loses capabilities
+ * (e.g. HYBRID→ASSET_BASED loses suppliers/give-load); "upgrade" only gains.
+ * A change that both gains and loses (ASSET_BASED↔NON_ASSET) is "lateral".
+ */
+export function operatingModelTransition(
+  from: OperatingModelForCapabilities | string | null | undefined,
+  to: OperatingModelForCapabilities | string | null | undefined,
+): OperatingModelTransition {
+  const fromCaps = getCapabilitiesFromProfile({ role: "user" }, from);
+  const toCaps = getCapabilitiesFromProfile({ role: "user" }, to);
+  const fromSet = new Set(fromCaps);
+  const toSet = new Set(toCaps);
+
+  const capsLost = fromCaps.filter((c) => !toSet.has(c));
+  const capsGained = toCaps.filter((c) => !fromSet.has(c));
+
+  const direction: OperatingModelTransition["direction"] =
+    capsLost.length && capsGained.length
+      ? "lateral"
+      : capsLost.length
+        ? "downgrade"
+        : capsGained.length
+          ? "upgrade"
+          : "lateral"; // identical caps → treat as no-op lateral
+
+  const beforePerms = getEffectivePermissions(fromCaps);
+  const afterPerms = getEffectivePermissions(toCaps);
+  const hiddenSurfaces: ModelHiddenSurface[] = [];
+  // A surface is hidden when it was reachable before and isn't after.
+  if (beforePerms.suppliers && !afterPerms.suppliers) hiddenSurfaces.push("suppliers");
+  if (beforePerms.indents.create && !afterPerms.indents.create) hiddenSurfaces.push("indents");
+  if (beforePerms.marketplacePost && !afterPerms.marketplacePost) hiddenSurfaces.push("posts");
+  if (beforePerms.vehicles && !afterPerms.vehicles) hiddenSurfaces.push("vehicles");
+  if (beforePerms.drivers && !afterPerms.drivers) hiddenSurfaces.push("drivers");
+  if (beforePerms.marketplaceBid && !afterPerms.marketplaceBid) hiddenSurfaces.push("bids");
+
+  return { direction, capsLost, capsGained, hiddenSurfaces };
+}
+
 export interface ProfileForCapabilities {
   role: string;
   aggregated?: boolean;
