@@ -1,5 +1,16 @@
 # CLAUDE.md — Pulse (q-web)
 
+## Agent Policy
+- Do NOT spawn subagents unless explicitly asked
+- Always attempt the task yourself first
+- Use at most one specialist subagent, and only if truly necessary
+- Never recursively spawn subagents
+- Prefer cheaper models (Haiku) for research/explore work; reserve Opus for critical review
+
+## Context Hygiene
+- When a feature, audit, or debugging task is complete, remind me to run /compact before continuing
+- Keep Supabase queries targeted: use LIMIT, COUNT(*), or explicit columns — never SELECT *
+
 ## Skill Restrictions
 - Never auto-invoke artifact-design unless the user explicitly asks to build a UI component, page, or visual artifact
 - For analysis, schema review, or consulting tasks: plain text output only — no artifacts, no design system, no colors, no typography
