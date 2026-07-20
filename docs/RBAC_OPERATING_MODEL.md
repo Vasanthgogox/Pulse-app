@@ -54,6 +54,26 @@ Load this doc in any session that touches access, finance tabs, create-trip, giv
 | Add transaction → vehicle expense list | Yes | **No** | Yes |
 | Marketplace post | **No** | Yes | Yes |
 | Marketplace bid | Yes | **No** | Yes |
+| Network → Supplier filter tab + count | **No** | Yes | Yes |
+| Network → Driver/FLEET filter tab + count | Yes | **No** | Yes |
+| Network → Create post (story `+`) | **No** | Yes | Yes |
+
+---
+
+## Connection roles (counterparty-aware)
+
+When org **A** sends a connect request to org **B**, the offered role(s) depend on **both** operating models. Direction is from A's perspective (`lib/capabilities.ts` → `allowedConnectionRoles`):
+
+- **client** = B gives A loads (A carries) → A can carry *and* B can give load.
+- **supplier** = B carries A's loads (B is A's fleet provider) → A can give load *and* B can carry.
+
+| A \ B | Asset | Aggregate | Hybrid |
+|-------|:-----:|:---------:|:------:|
+| **Asset** | — (block) | client | client |
+| **Aggregate** | supplier | — (block) | supplier |
+| **Hybrid** | client | supplier | client + supplier |
+
+Empty result → callers block Connect with an alert (never a 0-option modal). Unknown counterparty model → gate by A's model only. B's `operating_model` reaches the client via the `discover_organizations` RPC and the profile snapshot.
 
 ---
 

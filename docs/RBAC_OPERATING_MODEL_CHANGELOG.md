@@ -15,6 +15,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `3af2fdaf` | Party directory gate; give-load blocked for asset; nav policy + capability merge fix |
 | `6cef06c4` | Docs + cursor rule: operating model blueprint |
 | `e1670210` | Org KYC reminder: `hasBusinessCapabilities` instead of `role !== 'driver'` |
+| _(pending)_ | Network page: counterparty-aware connect roles; asset hides supplier tab/count/create-post; aggregate hides driver (FLEET) tab/count |
 
 ---
 
@@ -28,6 +29,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `docs/RBAC_OPERATING_MODEL.md` | Who-can-do-what matrix |
 | `docs/RBAC_OPERATING_MODEL_CHANGELOG.md` | This change log |
 | `.cursor/rules/pulse-operating-model-rbac.mdc` | Cursor rule for RBAC sessions |
+| `supabase/migrations/20261207160000_discover_organizations_expose_operating_model.sql` | RPC returns `operating_model` for counterparty-aware connect roles |
 
 ---
 
@@ -35,7 +37,14 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 
 | File | What changed |
 |------|----------------|
-| `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe; `hasBusinessCapabilities` |
+| `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe; `hasBusinessCapabilities`; `allowedConnectionRoles` (counterparty-aware client/supplier) |
+| `features/network/screens/NetworkScreen.tsx` | Asset: hide supplier tab/count/create-post, connect as client only. Aggregate: hide DRIVER tab + FLEET count. Empty-role connect blocked with alert |
+| `features/network/components/desktop/NetworkDesktopHub.tsx` | Hub stats: drop SUPPLIERS tile (asset) / FLEET tile (aggregate) via `canAccessSuppliers`/`canAccessDrivers` |
+| `features/network/components/ConnectionRoleModal.tsx` | `allowedRoles` prop; preselect + render only valid roles |
+| `features/network/components/StoryReel.tsx` | `canCreatePost` prop; hide create bubble/`+` badge for asset |
+| `features/network/components/DiscoverView.tsx` | Connect modal gated by `allowedConnectionRoles`; empty-role connect blocked |
+| `features/network/services/discover.service.ts` | `DiscoverOrg.operating_model` field; threaded from RPC |
+| `lib/__tests__/capabilities.operatingModel.test.ts` | `allowedConnectionRoles` cases (asset→aggregate, asset→asset empty, etc.) |
 | `features/organization/components/workspace/kyc/OrgVerificationReminderProvider.tsx` | Gate via `useCapabilities` + `hasBusinessCapabilities` (no `profile.role`) |
 | `lib/navigationPolicy/grants.ts` | `operatingModel` arg on grant set |
 | `lib/navigationPolicy/NavigationPolicyProvider.tsx` | Passes `operatingModel` into principal |
