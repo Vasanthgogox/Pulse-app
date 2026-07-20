@@ -117,7 +117,7 @@ async function forwardMapbox(
     country: "IN",
     limit: "1",
     types: "address,place,locality,neighborhood,poi",
-    worldview: "IN",
+    worldview: "in",
   });
   if (proximity) {
     params.set("proximity", `${proximity.longitude},${proximity.latitude}`);
