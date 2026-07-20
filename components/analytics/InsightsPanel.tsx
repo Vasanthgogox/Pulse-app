@@ -20,7 +20,7 @@ import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native"
 
 import { Theme } from "@/constants/Theme";
 
-import type { AnalyticsInsight } from "@/features/analytics";
+import type { AnalyticsInsight } from "@/features/analytics/types/analytics.types";
 
 const TONE_STYLES: Record<
   AnalyticsInsight["tone"],

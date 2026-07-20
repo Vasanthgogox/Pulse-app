@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { canAccessClients } from '@/lib/capabilities';
 import { useCapabilities } from "@/lib/useCapabilities";
 import { useClientsQuery } from '@/lib/queries/useClientsQuery';
@@ -21,7 +20,6 @@ export default function ClientsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { currentOrganization } = useOrganization();
-  const { profile } = useAuth();
   const [search, setSearch] = useState('');
 
   const capabilities = useCapabilities();

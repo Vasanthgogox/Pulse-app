@@ -1,6 +1,6 @@
 import { ModelAccessGate } from '@/components/ModelAccessGate';
 import { useLocalSearchParams } from 'expo-router';
-import { VehicleDetailScreen } from '@/features/vehicles';
+import VehicleDetailScreen from '@/features/vehicles/components/VehicleDetailScreen';
 import { useSafeBack } from '@/lib/useSafeBack';
 
 export default function VehicleDetailRoute() {

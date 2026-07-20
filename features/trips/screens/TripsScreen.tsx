@@ -21,7 +21,6 @@ import {
 import { useOpenTripDetail } from "@/lib/navigation/useOpenTripDetail";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
@@ -234,7 +233,6 @@ export default function TripsScreen() {
   const orgCtx = useOptionalOrganization();
   const { finance } = useAlertRegistryFinanceHandlers();
   const salaryRequestRows = useGlobalSyncStore((s) => s.salaryRequestRows);
-  const { profile } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const lastFocusRefreshRef = useRef<number>(0);
   const [tripFilter, setTripFilter] = useState<"Active" | "History">("Active");

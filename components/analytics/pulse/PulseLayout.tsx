@@ -22,7 +22,7 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 import Theme from "@/constants/Theme";
-import type { ScoreLevel } from "@/features/analytics";
+import type { ScoreLevel } from "@/features/analytics/types/analytics.types";
 
 import { RiskMeter } from "../RiskMeter";
 import {

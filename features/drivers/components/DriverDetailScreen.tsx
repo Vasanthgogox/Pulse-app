@@ -13,7 +13,6 @@ import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { entityDetailDownloadIconColor } from "@/components/entityDetailPageChrome.styles";
-import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
@@ -302,7 +301,6 @@ export default function DriverDetailScreen({
   initialDetailTab,
 }: DriverDetailScreenProps) {
   const { t } = useLanguage();
-  const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const router = useRouter();
   const capabilities = useCapabilities();

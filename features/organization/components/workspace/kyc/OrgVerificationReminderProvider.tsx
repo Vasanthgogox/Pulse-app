@@ -26,7 +26,11 @@ export function OrgVerificationReminderProvider({ children }: { children: ReactN
   const orgId = org?.currentOrganization?.id ?? null;
   const [sessionDismissed, setSessionDismissed] = useState(false);
 
-  const isInTabs = segments.includes('(tabs)');
+  // `useSegments()` is typed as a union of per-route segment tuples, so
+  // `.includes('(tabs)')` narrows the argument to `never`. Segments are plain
+  // strings at runtime, so check membership against a string[] view (accurate
+  // runtime type — not a type escape).
+  const isInTabs = (segments as readonly string[]).includes('(tabs)');
   const isEligibleUser =
     status === 'authenticated' && !!user && hasBusinessCapabilities(capabilities);
   const shouldFetch = isInTabs && isEligibleUser && !sessionDismissed;

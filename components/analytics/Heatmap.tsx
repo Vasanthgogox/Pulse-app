@@ -23,7 +23,7 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 import { Theme } from "@/constants/Theme";
-import type { HeatmapCell as HeatmapCellType } from "@/features/analytics";
+import type { HeatmapCell as HeatmapCellType } from "@/features/analytics/types/analytics.types";
 
 const TONE_PALETTE: Record<
   NonNullable<HeatmapCellType["tone"]>,

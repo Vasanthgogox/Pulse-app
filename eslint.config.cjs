@@ -27,22 +27,40 @@ const pulse = {
           return {};
         }
 
+        // Test files live under services/ and utils/ but are not service/util
+        // modules — they cannot (and must not) be renamed to *.service.ts /
+        // *.util.ts, so the naming convention does not apply to them.
+        if (
+          /(^|\/)__tests__\//.test(filename) ||
+          /\.(test|spec)\.[jt]sx?$/.test(filename)
+        ) {
+          return {};
+        }
+
         const isService = filename.includes('/services/');
         const isUtil = filename.includes('/utils/');
 
-        if (isService && !filename.endsWith('.service.ts')) {
+        // Accept the project's recognized typed-module suffixes (they each
+        // communicate the module's role). Genuine offenders — plain `.ts`
+        // files or camelCase names like `fooService.ts` — still flag.
+        //   services/: *.service.ts, *.storage.ts (persistence modules)
+        //   utils/:    *.util.ts, *.util.tsx (JSX helpers), *.model.ts
+        const serviceOk = /\.(service|storage)\.ts$/.test(filename);
+        const utilOk = /\.(util\.tsx?|model\.ts)$/.test(filename);
+
+        if (isService && !serviceOk) {
           context.report({
             loc: { line: 1, column: 0 },
             message:
-              'Service files under features/*/services/ must be named *.service.ts (e.g. clients.service.ts).',
+              'Service files under features/*/services/ must use a typed suffix: *.service.ts (or *.storage.ts).',
           });
         }
 
-        if (isUtil && !filename.endsWith('.util.ts')) {
+        if (isUtil && !utilOk) {
           context.report({
             loc: { line: 1, column: 0 },
             message:
-              'Utility files under features/*/utils/ must be named *.util.ts (e.g. totals.util.ts).',
+              'Utility files under features/*/utils/ must use a typed suffix: *.util.ts / *.util.tsx (or *.model.ts).',
           });
         }
 
@@ -248,6 +266,8 @@ module.exports = [
     },
   },
   // Config, build, and Node script files legitimately use CommonJS require().
+  // NOTE: bare '*.js' only matches repo-root files in flat config, so nested
+  // Node/tooling dirs (tools/, polyfills/, jest __mocks__) are listed explicitly.
   {
     files: [
       '*.js',
@@ -255,9 +275,20 @@ module.exports = [
       '**/*.config.js',
       'metro.config.js',
       'scripts/**/*.{js,ts}',
+      'tools/**/*.{js,cjs,ts}',
+      'polyfills/**/*.{js,cjs}',
+      '**/__mocks__/**/*.{js,ts}',
     ],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  // Supabase Edge Functions run on Deno, where the `/// <reference .../>` type
+  // directive is the idiomatic way to load ambient types — not a code smell.
+  {
+    files: ['supabase/functions/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/triple-slash-reference': 'off',
     },
   },
 ];

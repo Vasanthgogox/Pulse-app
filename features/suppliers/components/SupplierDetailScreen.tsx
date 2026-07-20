@@ -17,7 +17,6 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
-import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
@@ -155,7 +154,6 @@ export default function SupplierDetailScreen({
 }: SupplierDetailScreenProps) {
   const router = useRouter();
   const { t } = useLanguage();
-  const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const queryClient = useQueryClient();
   const capabilities = useCapabilities();

@@ -26,7 +26,7 @@ import {
 } from "react-native";
 
 import { Theme } from "@/constants/Theme";
-import type { AnalyticsPeriod } from "@/features/analytics";
+import type { AnalyticsPeriod } from "@/features/analytics/types/analytics.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PeriodPicker

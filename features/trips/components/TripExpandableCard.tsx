@@ -78,7 +78,7 @@ export function TripExpandableCard({
   const router = useRouter();
   /** When onPress is provided, card opens detail in new page; no inline expand. */
   const opensNewPage = !!onPressProp;
-  const { profile, user } = useAuth();
+  const { user } = useAuth();
 
   const capabilities = useCapabilities();
   const canAssign = canAssignTrip(capabilities);

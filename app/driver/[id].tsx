@@ -1,4 +1,4 @@
-import { DriverDetailScreen } from '@/features/drivers';
+import DriverDetailScreen from '@/features/drivers/components/DriverDetailScreen';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeBack } from '@/lib/useSafeBack';
 

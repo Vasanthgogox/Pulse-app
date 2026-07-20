@@ -273,7 +273,7 @@ function KanbanColumn({
   return (
     <View 
       style={styles.column}
-      // @ts-ignore - mouse events supported on web
+      // @ts-expect-error - mouse events supported on web, not in RN View types
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -303,7 +303,6 @@ function KanbanColumn({
             ({ scrollbarWidth: "thin" } as ViewStyle),
         ]}
         showsVerticalScrollIndicator={isHovered}
-        // @ts-ignore - persistent scrollbar on web
         contentContainerStyle={{ paddingRight: 0 }}
       >
         {transactions.length === 0 ? (

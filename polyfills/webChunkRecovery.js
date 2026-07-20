@@ -56,7 +56,7 @@
       // The error is real (chunk genuinely missing) and should reach Sentry.
       if (sessionStorage.getItem(RELOAD_GUARD_KEY)) return false;
       sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
-    } catch (e) {
+    } catch {
       return false;
     }
     recoveryInFlight = true;

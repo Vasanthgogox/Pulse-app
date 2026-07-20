@@ -34,7 +34,7 @@ import {
 
 import { Theme } from "@/constants/Theme";
 
-import type { ScoreLevel } from "@/features/analytics";
+import type { ScoreLevel } from "@/features/analytics/types/analytics.types";
 
 import { resolveAnalyticsColumns } from "./analyticsLayout";
 

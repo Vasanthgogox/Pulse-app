@@ -122,14 +122,12 @@ function CapacityDialPickerWeb({ value, onChange }: Props) {
   return (
     <View style={styles.webRoot}>
       {/* Invisible native select covers the entire touchable area for interaction */}
-      {/* @ts-ignore */}
       <select
         value={resolvedValue}
         onChange={(e: { target: { value: string } }) => onChange(e.target.value)}
         style={webSelectOverlay}
       >
         {CAPACITY_VALUES.map((v) => (
-          // @ts-ignore
           <option key={v} value={v}>{v} TON</option>
         ))}
       </select>

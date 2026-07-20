@@ -744,7 +744,6 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
             ) : Platform.OS === 'web' && isPdf ? (
             // On web, render PDFs using an iframe (closest to Catalyst UX).
             // RN-web supports arbitrary DOM elements in JSX.
-            // eslint-disable-next-line react/no-unknown-property
             <iframe
               src={previewDocUrl}
               title={currentDoc?.file_name || 'POD document'}

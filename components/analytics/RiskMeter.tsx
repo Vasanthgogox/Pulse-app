@@ -15,7 +15,7 @@ import Svg, { Circle } from "react-native-svg";
 
 import { Theme } from "@/constants/Theme";
 
-import type { ScoreLevel } from "@/features/analytics";
+import type { ScoreLevel } from "@/features/analytics/types/analytics.types";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 

@@ -251,7 +251,6 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontWeight: '600',
     color: Theme.textBody,
-    // @ts-ignore
     fontVariant: ['tabular-nums'],
     textAlign: 'right',
   },
@@ -317,7 +316,6 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: '600',
     color: Theme.textBody,
-    // @ts-ignore
     fontVariant: ['tabular-nums'],
   },
   fieldPlaceholder: {

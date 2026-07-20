@@ -27,7 +27,7 @@ import Layout from "@/constants/Layout";
 import { LedgerSyncPalette } from "@/constants/LedgerSyncPalette";
 import Theme from "@/constants/Theme";
 import type { DriverOffer } from "@/features/drivers/services/drivers.service";
-import type { LedgerRow } from "@/features/finance";
+import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
     computeTripEntryFinancialSnapshot,
     type TripEntryFinancialSnapshot,

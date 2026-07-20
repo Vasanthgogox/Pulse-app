@@ -243,7 +243,6 @@ const styles = StyleSheet.create({
     fontSize: 44,
     fontWeight: '600',
     color: Theme.textPrimary,
-    // @ts-ignore — fontVariant is valid in RN 0.64+
     fontVariant: ['tabular-nums'],
     letterSpacing: -0.5,
     lineHeight: 48,
