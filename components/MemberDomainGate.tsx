@@ -3,7 +3,6 @@
  * member whose functional role doesn't cover this domain (see useMemberCapabilities).
  * Same redirect-on-deny pattern as ModelAccessGate.
  */
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ROUTES } from "@/lib/routes";
 import {
   useMemberCapabilities,
@@ -11,6 +10,7 @@ import {
 } from "@/lib/useMemberCapabilities";
 import { useRouter } from "expo-router";
 import { useEffect, type ReactNode } from "react";
+import { View } from "react-native";
 
 export type MemberDomainKind = keyof MemberDomainAccess;
 
@@ -36,7 +36,10 @@ export function MemberDomainGate({ kind, children }: Props) {
   }, [isLoading, allowed, router]);
 
   if (isLoading || !allowed) {
-    return <CenteredLoadingView />;
+    // Inert placeholder — NOT the branded AppLoadingSplash (canvas-based, crashes
+    // when mounted in this pre-nav route window in prod). A gate only needs to
+    // hold a blank frame for the few ms until access resolves or the redirect fires.
+    return <View style={{ flex: 1 }} />;
   }
 
   return <>{children}</>;
