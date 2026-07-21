@@ -26,9 +26,11 @@ export function WizardFormBody({
   contentContainerStyle,
   scrollViewProps,
 }: WizardFormBodyProps) {
-  if (shellScroll) {
+  if (shellScroll || scrollViewProps?.scrollEnabled === false) {
     return (
-      <View style={[styles.wizardStepBody, contentContainerStyle]}>{children}</View>
+      <View style={[styles.wizardStepBody, contentContainerStyle, { flex: 1, minHeight: 0 }]}>
+        {children}
+      </View>
     );
   }
 
