@@ -477,12 +477,36 @@ export default function VehicleDetailScreen({
     );
   }
 
-  const vehicleTypeLabel = [vehicle.vehicle_brand, vehicle.vehicle_model, vehicle.vehicle_body_type]
+  const vehicleTypeDisplay =
+    vehicle.vehicle_type?.trim() ||
+    vehicle.vehicle_body_type?.trim() ||
+    "—";
+  const vehicleBrandModelLabel = [vehicle.vehicle_brand, vehicle.vehicle_model]
     .filter(Boolean)
-    .join(' ') || vehicle.vehicle_type || '—';
+    .join(" ");
+  const vehicleTypeLabel =
+    vehicleTypeDisplay !== "—"
+      ? vehicleTypeDisplay
+      : vehicleBrandModelLabel || "—";
   const profileIdentitySubtitle = [linkedDriver?.name?.trim(), vehicleTypeLabel?.trim()]
     .filter((value): value is string => Boolean(value && value !== "—"))
     .join(" • ") || "—";
+  const bodyTypeDisplay = vehicle.vehicle_body_type?.trim() || "—";
+  const profileSpecRows = [
+    { label: "Vehicle type", value: vehicleTypeDisplay },
+    {
+      label: "Body",
+      value:
+        bodyTypeDisplay !== "—" &&
+        bodyTypeDisplay.toUpperCase() !== vehicleTypeDisplay.toUpperCase()
+          ? bodyTypeDisplay
+          : "—",
+    },
+    { label: "Brand / model", value: vehicleBrandModelLabel || "—" },
+    { label: "Capacity", value: vehicle.capacity?.trim() || "—" },
+    { label: "Axle", value: vehicle.vehicle_axle?.trim() || "—" },
+    { label: "Size", value: vehicle.vehicle_size?.trim() || "—" },
+  ].filter((row, index) => index === 0 || row.value !== "—");
 
   const heroDecorAnimatedStyle = isWebDesktop
     ? {
@@ -1009,11 +1033,37 @@ export default function VehicleDetailScreen({
                       style={[styles.profileBadge, styles.profileBadgeCore]}
                     >
                       <Text style={styles.profileBadgeCoreText}>
-                        {vehicleTypeLabel}
+                        {vehicleTypeDisplay}
                       </Text>
                     </View>
+                    {vehicleBrandModelLabel &&
+                    vehicleBrandModelLabel.toUpperCase() !==
+                      vehicleTypeDisplay.toUpperCase() ? (
+                      <View style={styles.profileBadge}>
+                        <Text style={styles.profileBadgeText}>
+                          {vehicleBrandModelLabel}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
+              </View>
+              <View style={styles.profileSpecList}>
+                {profileSpecRows.map((row, index) => (
+                  <View
+                    key={row.label}
+                    style={[
+                      styles.profileSpecRow,
+                      index === profileSpecRows.length - 1 &&
+                        styles.profileSpecRowLast,
+                    ]}
+                  >
+                    <Text style={styles.profileSpecLabel}>{row.label}</Text>
+                    <Text style={styles.profileSpecValue} numberOfLines={2}>
+                      {row.value === "—" ? "Not set" : row.value}
+                    </Text>
+                  </View>
+                ))}
               </View>
               {currentOrganization?.id && (
                 <View style={styles.profileGrid}>
@@ -1400,6 +1450,36 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.primary,
     textTransform: "uppercase",
+  },
+  profileSpecList: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  profileSpecRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    gap: 4,
+  },
+  profileSpecRowLast: {
+    borderBottomWidth: 0,
+  },
+  profileSpecLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  profileSpecValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
   },
   profileGrid: {
     flexDirection: "row",

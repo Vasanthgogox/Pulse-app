@@ -756,6 +756,9 @@ export function TripExpensesScreen({
     },
   ].filter((action) => typeof action.onPress === "function");
 
+  const onAddExpense =
+    onAddOtherExpense ?? onAddFuel ?? onAddToll ?? undefined;
+
   return (
     <View
       style={[
@@ -838,6 +841,29 @@ export function TripExpensesScreen({
                 </View>
               </View>
             )}
+
+            {onAddExpense ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.addExpenseBtn,
+                  pressed && styles.addExpenseBtnPressed,
+                ]}
+                onPress={onAddExpense}
+                accessibilityRole="button"
+                accessibilityLabel="Add expense"
+              >
+                <View style={styles.addExpenseBtnIcon}>
+                  <Feather name="plus" size={14} color="#fff" />
+                </View>
+                <View style={styles.addExpenseBtnCopy}>
+                  <Text style={styles.addExpenseBtnTitle}>Add expense</Text>
+                  <Text style={styles.addExpenseBtnSub} numberOfLines={1}>
+                    Fuel, toll, parking & other trip costs
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={Theme.textMuted} />
+              </Pressable>
+            ) : null}
 
             {quickActions.length > 0 ? (
               <View style={styles.quickActionsRow}>
@@ -1018,6 +1044,20 @@ export function TripExpensesScreen({
                   ? "Log fuel, toll, or other trip costs you paid for reimbursement."
                   : "Add fuel, toll, or other costs for this trip."}
             </Text>
+            {listFilter !== "action" && onAddExpense ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.emptyAddBtn,
+                  pressed && styles.addExpenseBtnPressed,
+                ]}
+                onPress={onAddExpense}
+                accessibilityRole="button"
+                accessibilityLabel="Add expense"
+              >
+                <Feather name="plus" size={14} color="#fff" />
+                <Text style={styles.emptyAddBtnText}>Add expense</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : (
           <>
@@ -1406,6 +1446,64 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#0f766e",
     fontVariant: ["tabular-nums"],
+  },
+  addExpenseBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 8,
+    marginTop: 8,
+    marginBottom: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    minHeight: 48,
+  },
+  addExpenseBtnPressed: {
+    opacity: 0.88,
+  },
+  addExpenseBtnIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.primary,
+  },
+  addExpenseBtnCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  addExpenseBtnTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  addExpenseBtnSub: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+  },
+  emptyAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: Theme.primary,
+    minHeight: 40,
+  },
+  emptyAddBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fff",
   },
   quickActionsRow: {
     flexDirection: "row",

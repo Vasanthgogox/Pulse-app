@@ -1,4 +1,5 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { useAuth } from "@/contexts/AuthContext";
 import { DriverUnifiedExpenseEntryScreen } from "@/features/trips/operations/shared/DriverUnifiedExpenseEntryScreen";
 import {
   parseDriverExpenseCategoryParam,
@@ -6,8 +7,8 @@ import {
 } from "@/features/trips/operations/shared/driverExpenseCategoryNav.util";
 import { OtherExpenseEntryScreen } from "@/features/trips/operations/other/OtherExpenseEntryScreen";
 import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
-import { useAuth } from "@/contexts/AuthContext";
-import { useLocalSearchParams } from "expo-router";
+import { ROUTES } from "@/lib/routes";
+import { type Href, Redirect, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
@@ -61,6 +62,16 @@ export default function TripOtherExpenseEntryRoute() {
       );
     }
 
+    // Fleet: kind=fuel|toll must use dedicated screens (legacy deep links).
+    if (profile?.role !== "driver" && !entryId) {
+      if (initialKind === "fuel") {
+        return <Redirect href={ROUTES.tripFuelEntry(tripId) as Href} />;
+      }
+      if (initialKind === "toll") {
+        return <Redirect href={ROUTES.tripTollEntry(tripId) as Href} />;
+      }
+    }
+
     if (profile?.role === "driver") {
       return (
         <DriverUnifiedExpenseEntryScreen
@@ -79,5 +90,5 @@ export default function TripOtherExpenseEntryRoute() {
         initialCategory={initialCategory}
       />
     );
-  }, [entryId, error, initialCategory, initialKind, loading, profile?.role, trip]);
+  }, [entryId, error, initialCategory, initialKind, loading, profile?.role, trip, tripId]);
 }

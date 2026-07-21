@@ -1,4 +1,5 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { useAuth } from "@/contexts/AuthContext";
 import { FuelEntryScreen } from "@/features/trips/operations/fuel/FuelEntryScreen";
 import { driverExpenseEntryHref } from "@/features/trips/operations/shared/driverExpenseCategoryNav.util";
 import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
@@ -12,12 +13,12 @@ function readParam(value: string | string[] | undefined): string {
   return "";
 }
 
-function TripFuelEditRoute({
+function TripFuelScreenRoute({
   tripId,
   entryId,
 }: {
   tripId: string;
-  entryId: string;
+  entryId: string | null;
 }) {
   const [trip, setTrip] = useState<TripRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,17 +51,12 @@ function TripFuelEditRoute({
 }
 
 export default function TripFuelEntryRoute() {
+  const { profile } = useAuth();
   const params = useLocalSearchParams<{ id?: string | string[]; entryId?: string | string[] }>();
   const tripId = readParam(params.id);
   const entryId = readParam(params.entryId);
 
-  if (!entryId && tripId) {
-    return (
-      <Redirect href={driverExpenseEntryHref(tripId, { kind: "fuel" }) as Href} />
-    );
-  }
-
-  if (!tripId || !entryId) {
+  if (!tripId) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 16 }}>
         <Text style={{ color: "#64748b", fontSize: 14 }}>Trip not found.</Text>
@@ -68,5 +64,12 @@ export default function TripFuelEntryRoute() {
     );
   }
 
-  return <TripFuelEditRoute tripId={tripId} entryId={entryId} />;
+  // Drivers use the unified expense form (fuel / toll / other chips).
+  if (!entryId && profile?.role === "driver") {
+    return (
+      <Redirect href={driverExpenseEntryHref(tripId, { kind: "fuel" }) as Href} />
+    );
+  }
+
+  return <TripFuelScreenRoute tripId={tripId} entryId={entryId || null} />;
 }

@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -24,6 +23,7 @@ import {
   setPendingCommodityPick,
   type CommodityTypeKind,
 } from "@/features/trips/services/userCommodityTypes.storage";
+import { confirmDialog } from "@/lib/confirmDialog";
 
 export type AddCommodityTypeScreenProps = {
   kind: CommodityTypeKind;
@@ -93,19 +93,16 @@ export function AddCommodityTypeScreen({ kind, onClose }: AddCommodityTypeScreen
     }
   };
 
-  const handleRemove = (label: string) => {
+  const handleRemove = async (label: string) => {
     if (!userId) return;
-    Alert.alert("Remove type?", `"${label}" will be removed from your list.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          const store = await removeUserCommodityType(userId, kind, label);
-          setCustomList(kind === "vehicle" ? store.vehicleTypes : store.productTypes);
-        },
-      },
-    ]);
+    const ok = await confirmDialog(
+      "Remove type?",
+      `"${label}" will be removed from your list.`,
+      { confirmText: "Remove", destructive: true },
+    );
+    if (!ok) return;
+    const store = await removeUserCommodityType(userId, kind, label);
+    setCustomList(kind === "vehicle" ? store.vehicleTypes : store.productTypes);
   };
 
   if (!userId) {
@@ -164,14 +161,16 @@ export function AddCommodityTypeScreen({ kind, onClose }: AddCommodityTypeScreen
               <Text style={styles.listRowText} numberOfLines={2}>
                 {label}
               </Text>
-              <Pressable
-                onPress={() => handleRemove(label)}
+              <TouchableOpacity
+                onPress={() => void handleRemove(label)}
                 hitSlop={10}
+                accessibilityRole="button"
                 accessibilityLabel={`Remove ${label}`}
                 style={styles.removeBtn}
+                activeOpacity={0.7}
               >
-                <Trash2 size={16} color={Theme.destructive} />
-              </Pressable>
+                <Trash2 size={16} color={Theme.destructive} pointerEvents="none" />
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -264,7 +263,14 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   removeBtn: {
-    padding: 4,
+    padding: 8,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      web: { cursor: "pointer" } as object,
+    }),
   },
   muted: {
     fontSize: 13,
