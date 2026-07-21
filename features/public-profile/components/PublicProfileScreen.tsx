@@ -21,6 +21,7 @@ import {
   NetworkProfileInviteStats,
 } from "@/features/network/components/NetworkProfileInviteHero";
 import { networkProfileInviteStyles as inviteS } from "@/features/network/components/networkProfileInvite.styles";
+import { resolveOrgVerificationState } from "@/features/network/utils/orgVerification.util";
 import {
   partyAccentFromConnectionRole,
   type PartyRoleLabel,
@@ -287,6 +288,11 @@ function Hero({
           avatarUrl={entity.avatarUrl}
           avatarSeed={entity.avatarSeed}
           showVerified={entity.isVerified}
+          verificationState={resolveOrgVerificationState({
+            is_kyc_verified: entity.isVerified,
+            verification_status: entity.verificationStatus,
+          })}
+          showVerificationTags={entity.entityType !== "driver"}
           metaChips={metaChips}
           avatarSize={compact ? 68 : 86}
           compact={compact}

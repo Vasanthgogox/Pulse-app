@@ -9,6 +9,7 @@ import {
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { platformShadow } from "@/lib/platformShadow";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
+import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
 import type { LucideIcon } from "lucide-react-native";
 import {
   BadgeCheck,
@@ -27,6 +28,9 @@ import {
 } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  type OrgVerificationState,
+} from "@/features/network/utils/orgVerification.util";
 
 export type NetworkProfileHubHeroStat = {
   value: string;
@@ -42,6 +46,8 @@ type Props = {
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   showVerified?: boolean;
+  /** Explicit KYC state; when set, overrides showVerified boolean. */
+  verificationState?: OrgVerificationState;
   /** Partner is registered on Pulse (integrated connection). */
   isSignedIn?: boolean;
   memberSinceYear?: number | null;
@@ -178,22 +184,28 @@ function StatusPill({
   compact,
 }: {
   label: string;
-  variant: "signedIn" | "since" | "connection";
+  variant: "signedIn" | "verified" | "recommended" | "since" | "connection";
   icon?: ReactNode;
   compact?: boolean;
 }) {
   const variantStyle =
     variant === "signedIn"
       ? styles.statusPillSignedIn
-      : variant === "since"
-        ? styles.statusPillSince
-        : styles.statusPillConnection;
+      : variant === "verified"
+        ? styles.statusPillVerified
+        : variant === "recommended"
+          ? styles.statusPillRecommended
+          : variant === "since"
+            ? styles.statusPillSince
+            : styles.statusPillConnection;
   const textStyle =
-    variant === "signedIn"
+    variant === "signedIn" || variant === "verified"
       ? styles.statusPillTextOnDark
-      : variant === "since"
-        ? styles.statusPillTextSince
-        : styles.statusPillTextConnection;
+      : variant === "recommended"
+        ? styles.statusPillTextRecommended
+        : variant === "since"
+          ? styles.statusPillTextSince
+          : styles.statusPillTextConnection;
 
   return (
     <View style={[styles.statusPill, variantStyle, compact && styles.statusPillCompact]}>
@@ -212,6 +224,7 @@ export function NetworkProfileHubHero({
   avatarUrl,
   avatarSeed,
   showVerified = false,
+  verificationState: verificationStateProp,
   isSignedIn = false,
   memberSinceYear = null,
   connectionStatus,
@@ -222,6 +235,10 @@ export function NetworkProfileHubHero({
   indentCount = 0,
   profileStatsLoading = false,
 }: Props) {
+  const verificationState: OrgVerificationState =
+    verificationStateProp ??
+    (showVerified ? "verified" : "not_verified");
+  const isKycVerified = verificationState === "verified";
   const locationLabel =
     location?.trim() && location.trim() !== "Not available"
       ? location.trim()
@@ -231,11 +248,11 @@ export function NetworkProfileHubHero({
   const RoleIcon = roleIcon(entityType);
   const avatarSize = compact ? 72 : 88;
   const vehiclesLabel = profileStatsLoading
-    ? "Vehicles owned · …"
-    : `${vehicleCount} vehicle${vehicleCount === 1 ? "" : "s"} owned`;
+    ? "Assets · …"
+    : `${vehicleCount} asset${vehicleCount === 1 ? "" : "s"}`;
   const indentsLabel = profileStatsLoading
-    ? "Indents created · …"
-    : `${indentCount} indent${indentCount === 1 ? "" : "s"} created`;
+    ? "Indents shared · …"
+    : `${indentCount} indent${indentCount === 1 ? "" : "s"} shared to network`;
 
   return (
     <View
@@ -292,7 +309,7 @@ export function NetworkProfileHubHero({
           >
             {name}
           </Text>
-          {showVerified || isSignedIn ? (
+          {isKycVerified ? (
             <BadgeCheck
               size={compact ? 16 : 18}
               color={Theme.darkGreen}
@@ -348,6 +365,11 @@ export function NetworkProfileHubHero({
         )}
 
         <View style={[styles.statusRow, compact && styles.statusRowCompact]}>
+          <OrgVerificationBadges
+            state={verificationState}
+            compact={compact}
+            style={styles.verificationBadgesInStatus}
+          />
           {isSignedIn ? (
             <StatusPill
               compact={compact}
@@ -561,6 +583,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 0,
   },
+  verificationBadgesInStatus: {
+    justifyContent: "flex-start",
+  },
   statusPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -576,6 +601,14 @@ const styles = StyleSheet.create({
   statusPillSignedIn: {
     backgroundColor: Theme.darkGreen,
   },
+  statusPillVerified: {
+    backgroundColor: Theme.darkGreen,
+  },
+  statusPillRecommended: {
+    backgroundColor: Theme.aggregatePillBg,
+    borderWidth: 1,
+    borderColor: Theme.aggregatePillBorder,
+  },
   statusPillSince: {
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
@@ -589,6 +622,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.textOnPrimary,
     letterSpacing: 0.2,
+  },
+  statusPillTextRecommended: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.aggregatePillText,
+    letterSpacing: 0.15,
   },
   statusPillTextSince: {
     fontSize: 11,

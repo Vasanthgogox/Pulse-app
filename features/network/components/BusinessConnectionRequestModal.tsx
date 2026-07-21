@@ -1,4 +1,5 @@
 import Theme from '@/constants/Theme';
+import { OrgVerificationBadges } from '@/features/network/components/OrgVerificationBadges';
 import { platformShadow } from '@/lib/platformShadow';
 import {
   buildYourRoleTiles,
@@ -11,6 +12,7 @@ import {
   formatConnectionTripsValue,
   type ConnectionOfferTile,
 } from '@/features/network/utils/businessConnectionOffer.util';
+import { isOrgKycVerified } from '@/features/network/utils/orgVerification.util';
 import {
   getFleetAvatarUriForOrg,
   resolveOrgAvatarUri,
@@ -25,6 +27,7 @@ import {
 
 import {
   ArrowRight,
+  BadgeCheck,
   Building2,
   Check,
   Handshake,
@@ -127,12 +130,35 @@ export function BusinessConnectionRequestModal({
 
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [senderAvatarLoadFailed, setSenderAvatarLoadFailed] = useState(false);
+  const [fetchedVerificationStatus, setFetchedVerificationStatus] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     setLogoLoadFailed(false);
     setSenderAvatarLoadFailed(false);
+    setFetchedVerificationStatus(null);
   }, [invite.id]);
 
+  useEffect(() => {
+    if (!visible || !invite.partnerOrgId) return;
+    if (invite.verificationStatus) {
+      setFetchedVerificationStatus(invite.verificationStatus);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { getLinkedOrgProfile } = await import(
+        '@/features/clients/services/clients.service'
+      );
+      const { profile } = await getLinkedOrgProfile(invite.partnerOrgId);
+      if (cancelled) return;
+      setFetchedVerificationStatus(profile?.verificationStatus ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, invite.id, invite.partnerOrgId, invite.verificationStatus]);
   useEffect(() => {
     if (visible) {
       dismissingRef.current = false;
@@ -297,6 +323,11 @@ export function BusinessConnectionRequestModal({
     invite.ratingCount,
   );
   const reviewsLabel = formatConnectionRatingCount(invite.ratingCount);
+  const verificationStatus =
+    invite.verificationStatus ?? fetchedVerificationStatus;
+  const isKycVerified = isOrgKycVerified({
+    verificationStatus,
+  });
 
   if (!shellVisible && !visible) return null;
 
@@ -346,12 +377,23 @@ export function BusinessConnectionRequestModal({
             )}
           </View>
           <View style={styles.heroTextBlock}>
-            <Text style={[styles.heroTitle, { color: palette.textOnAccent }]} numberOfLines={1}>
-              {orgName}
-            </Text>
+            <View style={styles.heroTitleRow}>
+              <Text style={[styles.heroTitle, { color: palette.textOnAccent }]} numberOfLines={1}>
+                {orgName}
+              </Text>
+              {isKycVerified ? (
+                <BadgeCheck size={16} color="#50CD89" strokeWidth={2.4} />
+              ) : null}
+            </View>
             <Text style={[styles.heroOrgKicker, { color: palette.mutedOnAccent }]} numberOfLines={1}>
               Business connection invite
             </Text>
+            <OrgVerificationBadges
+              verification={{ verificationStatus }}
+              compact
+              tone="onDark"
+              style={styles.heroVerificationRow}
+            />
             <View style={styles.heroPillRow}>
               <View style={[styles.heroPill, { backgroundColor: palette.inlinePillBg }]}>
                 <Text style={[styles.heroPillText, { color: palette.textOnAccent }]}>{yourRolePill}</Text>
@@ -859,6 +901,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     letterSpacing: -0.45,
     lineHeight: 24,
+    flexShrink: 1,
+  },
+  heroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
+  heroVerificationRow: {
+    justifyContent: 'flex-start',
+    marginTop: 6,
+    marginBottom: 2,
   },
   heroOrgKicker: {
     fontSize: 11,

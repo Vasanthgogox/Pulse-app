@@ -33,6 +33,8 @@ export type PartyProfileChromeModel = {
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   showVerified?: boolean;
+  verificationState?: import("@/features/network/utils/orgVerification.util").OrgVerificationState;
+  showVerificationTags?: boolean;
   metaChips?: { label: string }[];
   metrics: PublicProfileEntity["metrics"];
 };
@@ -147,6 +149,8 @@ export function PartyProfileCompactChrome({ model, onBack, chatAction }: Props) 
           avatarUrl={model.avatarUrl}
           avatarSeed={model.avatarSeed}
           showVerified={model.showVerified}
+          verificationState={model.verificationState}
+          showVerificationTags={model.showVerificationTags !== false}
           metaChips={model.metaChips}
           avatarSize={68}
           compact

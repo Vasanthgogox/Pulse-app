@@ -4,6 +4,7 @@
 import { NetworkProfileHubHero } from "@/features/network/components/NetworkProfileHubHero";
 import Theme from "@/constants/Theme";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { isOrgKycVerified, resolveOrgVerificationState } from "@/features/network/utils/orgVerification.util";
 import {
   Building2,
   Globe,
@@ -24,6 +25,8 @@ export type NetworkProfileModalNode = {
   avatar_url?: string | null;
   avatar_seed?: string | null;
   is_integrated?: boolean;
+  /** Admin / KYC verified (`organizations.verification_status = verified`). */
+  is_kyc_verified?: boolean;
   /** Enriched from snapshot */
   registered_address?: string | null;
   branch_count?: number;
@@ -87,6 +90,8 @@ export function NetworkProfileModalBody({
   const tripsValue = profileStatsLoading ? "…" : String(totalTrips);
   const inApp =
     node.is_integrated ?? (node.status === "CONNECTED" || node.status === "LIVE");
+  const isKycVerified = isOrgKycVerified(node);
+  const verificationState = resolveOrgVerificationState(node);
   const memberSinceYear = node.member_since_year ?? null;
   const showRegisteredAddress = shouldShowRegisteredAddress(
     node.location,
@@ -111,7 +116,8 @@ export function NetworkProfileModalBody({
         entityType={entityTypeFromRole(node.type)}
         avatarUrl={node.avatar_url}
         avatarSeed={node.avatar_seed}
-        showVerified={inApp}
+        showVerified={isKycVerified}
+        verificationState={verificationState}
         isSignedIn={inApp}
         memberSinceYear={memberSinceYear}
         connectionStatus={connectionLabel}

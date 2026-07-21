@@ -7,7 +7,9 @@ import Theme from "@/constants/Theme";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
 import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";
 import { NetworkDesktopSalesStars } from "@/features/network/components/desktop/NetworkDesktopSalesStars";
+import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
 import { formatPartyContactPhone } from "@/features/network/utils/partyContactDisplay.util";
+import { isOrgKycVerified } from "@/features/network/utils/orgVerification.util";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { BadgeCheck, MessageCircle } from "lucide-react-native";
 import { connectionCardStyles as styles } from "@/features/network/components/desktop/networkDesktopConnectionCard.styles";
@@ -85,6 +87,7 @@ export function NetworkDesktopConnectionCard({
     ? formatPartyContactPhone(item.phone)
     : slugHandle(item.name, item.id);
   const inApp = item.is_integrated;
+  const isKycVerified = isOrgKycVerified(item);
   const inviteDisabled = inApp || actionLoading;
   const tone = roleTone(item.role);
   const ratingValue = item.rating ?? null;
@@ -140,10 +143,17 @@ export function NetworkDesktopConnectionCard({
         <Text style={styles.name} numberOfLines={1}>
           {item.name}
         </Text>
-        {inApp ? (
-          <BadgeCheck size={14} color={Theme.primary} strokeWidth={2.2} />
+        {isKycVerified || inApp ? (
+          <BadgeCheck size={14} color={Theme.darkGreen} strokeWidth={2.2} />
         ) : null}
       </View>
+      {item.role !== "DRIVER" ? (
+        <OrgVerificationBadges
+          verification={item}
+          compact
+          style={styles.trustBadgesRow}
+        />
+      ) : null}
       <Text style={styles.handle} numberOfLines={1}>
         {handle}
       </Text>

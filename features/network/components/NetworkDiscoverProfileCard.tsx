@@ -15,6 +15,7 @@ export type NetworkDiscoverProfileCardProps = {
   mutualCount?: number;
   connectionStatus: "none" | "pending" | "approved" | string;
   isRecommended?: boolean;
+  isKycVerified?: boolean;
   loading?: boolean;
   layout?: "grid" | "list";
   onOpenProfile?: () => void;
@@ -38,6 +39,7 @@ export function NetworkDiscoverProfileCard({
   mutualCount = 0,
   connectionStatus,
   isRecommended = false,
+  isKycVerified = false,
   loading = false,
   onOpenProfile,
   onConnect,
@@ -61,7 +63,8 @@ export function NetworkDiscoverProfileCard({
       totalTrips={totalTrips}
       ratingValue={ratingValue}
       mutualCount={mutualCount}
-      recommendedHighlight={isRecommended}
+      recommendedHighlight={isRecommended || isKycVerified}
+      showVerified={isKycVerified}
       showTopMetrics={layout === "grid"}
       showStatsRow={layout === "list"}
       primaryMetaIcon="map-pin"

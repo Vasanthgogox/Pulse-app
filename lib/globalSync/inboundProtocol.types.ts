@@ -19,6 +19,8 @@ export type InboundPartnerDisplay = {
   tripCount?: number;
   averageRating?: number | null;
   ratingCount?: number;
+  /** Admin KYC status from partner display RPC. */
+  verificationStatus?: string | null;
 };
 
 export type InboundProtocolInviteItem = {
@@ -44,6 +46,8 @@ export type InboundProtocolInviteItem = {
   tripCount?: number | null;
   averageRating?: number | null;
   ratingCount?: number | null;
+  /** Admin KYC status for Verified / Not verified tags. */
+  verificationStatus?: string | null;
   createdAt: string;
   /** Distinguishes org connection requests from fleet driver invitations. */
   kind?: 'connection' | 'driver';

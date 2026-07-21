@@ -304,6 +304,7 @@ export async function getLinkedOrgProfileForSupplier(
     gstin?: string | null;
     address?: string | null;
     website?: string | null;
+    verificationStatus?: string | null;
   } | null;
 }> {
   const { data, error } = await supabase().rpc('get_connection_partner_display', {
@@ -325,6 +326,7 @@ export async function getLinkedOrgProfileForSupplier(
     gstin?: string | null;
     address?: string | null;
     website?: string | null;
+    verificationStatus?: string | null;
   };
   return {
     error: null,
@@ -338,6 +340,7 @@ export async function getLinkedOrgProfileForSupplier(
       gstin: raw.gstin ?? null,
       address: raw.address ?? null,
       website: raw.website ?? null,
+      verificationStatus: (raw.verificationStatus ?? '').trim() || null,
     },
   };
 }

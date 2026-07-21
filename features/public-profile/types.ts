@@ -38,8 +38,10 @@ export interface PublicProfileEntity {
   avatarSeed?: string | null;
   /** True when this party has a linked org on the platform. */
   isIntegrated: boolean;
-  /** True when explicitly verified (supplier.is_verified) OR integrated. */
+  /** Admin / KYC verified (`organizations.verification_status = verified`). */
   isVerified: boolean;
+  /** Raw KYC status for Verified / Not verified / Pending tags. */
+  verificationStatus?: string | null;
   /** One-line subtitle under the name on the hero — e.g. company / industry. */
   subtitle: string | null;
   /** Free-form short bio shown in the quote block. Falls back to a sensible default. */

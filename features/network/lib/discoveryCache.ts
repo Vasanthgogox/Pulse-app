@@ -6,7 +6,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { DiscoverOrg } from '@/features/network/services/discover.service';
 
 export const DISCOVERY_CACHE_TTL_MS = 30_000;
-const PERSIST_KEY = '@q/discover-cache/v1';
+/** Bump when DiscoverOrg shape changes (e.g. verification_status) so stale tiles refresh. */
+const PERSIST_KEY = '@q/discover-cache/v2';
 const MAX_ENTRIES_PER_ORG = 24;
 
 export type DiscoveryCacheEntry = {
@@ -15,7 +16,7 @@ export type DiscoveryCacheEntry = {
 };
 
 type PersistedPayload = {
-  version: 1;
+  version: 2;
   byOrg: Record<string, Record<string, DiscoveryCacheEntry>>;
 };
 
@@ -69,6 +70,15 @@ export function getDiscoveryCache(
   // Empty snapshots are not valid cache hits — always re-fetch so a stale
   // persisted [] (e.g. from a prior error or cold start) cannot block the list.
   if (entry.data.length === 0) return null;
+  // Pre-verification cache entries lack KYC fields — force a fresh discover fetch.
+  const missingKyc = entry.data.some(
+    (org) =>
+      org.is_kyc_verified === undefined && org.verification_status === undefined,
+  );
+  if (missingKyc) {
+    orgMap(orgId).delete(discoveryCacheKey(orgId, search));
+    return null;
+  }
   return entry;
 }
 
@@ -111,7 +121,7 @@ export async function hydrateDiscoveryCacheFromStorage(): Promise<void> {
     const raw = await AsyncStorage.getItem(PERSIST_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as PersistedPayload;
-    if (parsed.version !== 1 || !parsed.byOrg) return;
+    if (parsed.version !== 2 || !parsed.byOrg) return;
     for (const [orgId, entries] of Object.entries(parsed.byOrg)) {
       const map = orgMap(orgId);
       for (const [key, entry] of Object.entries(entries)) {
@@ -133,7 +143,7 @@ async function persistDiscoveryCache(): Promise<void> {
     });
     await AsyncStorage.setItem(
       PERSIST_KEY,
-      JSON.stringify({ version: 1, byOrg } satisfies PersistedPayload),
+      JSON.stringify({ version: 2, byOrg } satisfies PersistedPayload),
     );
   } catch {
     /* storage full / unavailable */

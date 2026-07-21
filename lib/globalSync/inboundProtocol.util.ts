@@ -293,6 +293,7 @@ export function mapPendingInviteItems(
         tripCount: partnerProfile?.tripCount ?? null,
         averageRating: partnerProfile?.averageRating ?? null,
         ratingCount: partnerProfile?.ratingCount ?? null,
+        verificationStatus: partnerProfile?.verificationStatus ?? null,
         createdAt: row.created_at,
       };
     });

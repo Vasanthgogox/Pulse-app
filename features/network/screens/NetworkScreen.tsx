@@ -177,6 +177,8 @@ type NetworkProfileNode = {
   avatar_url?: string | null;
   avatar_seed?: string | null;
   is_integrated?: boolean;
+  /** Admin / KYC verified (`organizations.verification_status = verified`). */
+  is_kyc_verified?: boolean;
   // Enriched fields from snapshot
   registered_address?: string | null;
   branch_count?: number;
@@ -483,6 +485,7 @@ function NetworkScreenInner() {
               avatar_url: snap.avatar_url ?? prev.avatar_url,
               avatar_seed: snap.avatar_seed ?? prev.avatar_seed,
               is_integrated: snap.is_integrated ?? prev.is_integrated,
+              is_kyc_verified: snap.is_kyc_verified ?? prev.is_kyc_verified,
               // Enriched profile data
               registered_address: snap.registered_address ?? null,
               branch_count: snap.branch_count ?? 0,
