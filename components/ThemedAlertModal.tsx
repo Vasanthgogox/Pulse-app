@@ -30,7 +30,7 @@ export interface ThemedAlertModalProps {
   secondaryText?: string;
   onSecondary?: () => void;
   /** Prefer asset Lottie over the default glyph icon. */
-  lottieSource?: AnimationObject | object;
+  lottieSource?: AnimationObject;
   lottieLoop?: boolean;
   lottieSize?: number;
 }
