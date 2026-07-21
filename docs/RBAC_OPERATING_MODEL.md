@@ -81,8 +81,8 @@ Empty result → callers block Connect with an alert (never a 0-option modal). U
 
 ## Implementation checklist (for future changes)
 
-1. Prefer `useCapabilities()` over raw profile flags.
-2. Gate UI with helpers: `canAccessSuppliers`, `canAccessVehicles`, `canUseAssetSupply`, `canUseAggregateSupply`, `canAccessFinanceSubTab`, `canAccessPartyKind`.
+1. Prefer `useCapabilities()` for org-model helpers; add `useMemberAccess().can(surfaceId)` when two actions share a Capability.
+2. Gate UI with helpers: `canAccessSuppliers`, `canAccessVehicles`, `canUseAssetSupply`, `canUseAggregateSupply`, `canAccessFinanceSubTab`, `canAccessPartyKind` **and** the matching surface id from `MEMBER_SURFACE_CATALOG`.
 3. Wrap party routes with `ModelAccessGate` (`components/ModelAccessGate.tsx`).
 4. Keep `lib/navigationPolicy/registry/org.ts` grants aligned (suppliers/`create-indent` → `dispatch` only; vehicles/drivers → `fleet_management`).
 5. **Hybrid:** `dispatch` + `dispatch_for_own_fleet` must not wipe indent create — see merge logic in `getEffectivePermissions`.
@@ -140,15 +140,17 @@ A second, orthogonal RBAC axis layered on top of the operating model above. Owne
 | Sales | Network tab (marketplace, clients, connections) | `member` |
 | TripOps | Trips tab (dispatch, indents, trip execution) | `dispatcher` |
 
-- Storage lives in `organization_members.permissions` jsonb: `{ platformRole, grants, domains? }`.
+- Storage lives in `organization_members.permissions` jsonb: `{ platformRole, grants, domains?, surfaces? }`.
   - `platformRole` — preset label (admin / finance / sales / tripops); still used for invite UI and coarse `role` column mapping.
-  - `domains` — optional `{ finance, sales, tripops }` booleans. When present, **multi-domain** access is allowed (any combination). When absent (legacy rows), access falls back to the single functional role derived from `platformRole`.
+  - `domains` — optional `{ finance, sales, tripops }` booleans (derived from surfaces when present).
+  - `surfaces` — **Part 4** drill-down map (`MemberSurfaceId` → boolean). Catalog: `lib/memberSurfaces.ts`. Enforcement: `useMemberAccess().can(id)` for actions that share a Capability (create indent vs create trip, finance sub-tabs, assign, etc.). `useCapabilities()` soft-filters Cap tokens implied by enabled surfaces for coarse helpers.
   - `grants` — display/cosmetic colon-namespaced tokens (still not the Capability enforcement vocabulary).
-- Owner edits domains on **Member access** (`app/(modals)/member-permissions?memberId=`) — KYC-style detail page with role presets + per-domain Switches. Write path: `updateMemberPermissions` → `set_member_role` RPC (owner-only, audited).
-- `ActiveWorkspaceContext` exposes `memberPlatformRole` and `memberDomains`.
-- `useMemberCapabilities()` intersects org model with `memberDomains` (or legacy single-role). Owner / org-role admin / `platformRole === "admin"` bypass domain gating.
-- **Strict default:** a member with no domains enabled (and no functional role on legacy rows) gets **no** domain access until the owner assigns access via Invite / Edit / Member access.
-- Enforcement is **client-side, nav/tab-entry only**: `components/MemberDomainGate.tsx` wraps the 3 primary tabs. No RLS change; existing `useCapabilities()` call sites stay org-model-only.
+- Owner edits surfaces on **Member access** (`app/(modals)/member-permissions?memberId=`) — domain master switches + nested action toggles. Write path: `updateMemberPermissions` → `set_member_role` RPC (owner-only, audited).
+- `ActiveWorkspaceContext` exposes `memberPlatformRole`, `memberDomains`, and `memberSurfaces`.
+- `useMemberCapabilities()` intersects org model with domains for primary tab entry (`MemberDomainGate`).
+- Owner / org-role admin / `platformRole === "admin"` bypass member surface filtering (org model only).
+- **Strict default:** a member with no domains/surfaces enabled gets **no** domain access until the owner assigns access via Invite / Edit / Member access.
+- Surfaces unavailable for the org operating model render locked in the permission UI.
 
 ---
 

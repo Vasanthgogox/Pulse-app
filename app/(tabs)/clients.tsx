@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { canAccessClients } from '@/lib/capabilities';
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useClientsQuery } from '@/lib/queries/useClientsQuery';
 import { useRefreshWithFeedback } from '@/lib/useRefreshWithFeedback';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
@@ -23,7 +24,10 @@ export default function ClientsScreen() {
   const [search, setSearch] = useState('');
 
   const capabilities = useCapabilities();
-  const canAccess = canAccessClients(capabilities);
+  const { can: canSurface } = useMemberAccess();
+  const canAccess =
+    canAccessClients(capabilities) && canSurface("sales.clients.view");
+  const canCreateClient = canSurface("sales.clients.create");
   const orgId = canAccess ? currentOrganization?.id ?? null : null;
 
   const { data: clients = [], isLoading: loading, refetch } = useClientsQuery(orgId);
@@ -77,11 +81,13 @@ export default function ClientsScreen() {
         />
       }
       fab={
-        <FAB
-          label="Add Customer"
-          onPress={() => router.push('/(modals)/add-client')}
-          LucideIconComponent={Building2}
-        />
+        canCreateClient ? (
+          <FAB
+            label="Add Customer"
+            onPress={() => router.push('/(modals)/add-client')}
+            LucideIconComponent={Building2}
+          />
+        ) : undefined
       }
       listData={filtered}
       listKeyExtractor={(c) => c.id}

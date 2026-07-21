@@ -3,6 +3,12 @@
  * Maps to legacy organization_members.role for mobile Supabase writes.
  */
 import type { OrgMember, OrgMemberRole } from "@/types/organization";
+import type { Capability } from "@/lib/capabilities";
+import {
+  defaultSurfacesForRole,
+  domainsFromSurfaces,
+  type MemberSurfaceMap,
+} from "@/lib/memberSurfaces";
 
 /**
  * `planner` / `operator` are retired from new invites (superseded by the named
@@ -50,6 +56,11 @@ export type TeamInvitePermissions = {
    * `platformRole`. Absent on legacy rows → fall back to one-of-three role.
    */
   domains?: MemberDomainFlags;
+  /**
+   * Drill-down surface grants (org model ∩ these). Source of truth for
+   * per-action RBAC — see `lib/memberSurfaces.ts`.
+   */
+  surfaces?: MemberSurfaceMap;
 };
 
 const PERMISSION_LABELS: Record<string, string> = {
@@ -154,12 +165,15 @@ export function domainsFromPlatformRole(
 
 /**
  * Resolve effective domain flags for a stored member row.
- * Prefers explicit `permissions.domains`; otherwise derives from platformRole.
+ * Prefers surfaces → domains → platformRole.
  */
 export function domainsFromMember(
   member: Pick<OrgMember, "role" | "permissions">,
 ): MemberDomainFlags {
   const raw = member.permissions as TeamInvitePermissions | null | undefined;
+  if (raw?.surfaces && Object.keys(raw.surfaces).length > 0) {
+    return domainsFromSurfaces(raw.surfaces);
+  }
   const stored = raw?.domains;
   if (
     stored &&
@@ -174,6 +188,20 @@ export function domainsFromMember(
     };
   }
   return domainsFromPlatformRole(platformRoleFromMember(member));
+}
+
+/** Resolve surface map — explicit surfaces, else derive from role (unfiltered). */
+export function surfacesFromMember(
+  member: Pick<OrgMember, "role" | "permissions">,
+  orgCaps: Capability[] = [],
+): MemberSurfaceMap {
+  const raw = member.permissions as TeamInvitePermissions | null | undefined;
+  if (raw?.surfaces && typeof raw.surfaces === "object") {
+    return { ...raw.surfaces };
+  }
+  const role = platformRoleFromMember(member);
+  if (!role) return {};
+  return defaultSurfacesForRole(role, orgCaps);
 }
 
 /**
@@ -212,8 +240,19 @@ export function grantsFromDomains(domains: MemberDomainFlags): string[] {
 export function buildTeamInvitePermissions(
   platformRole: PlatformTeamRole,
   domains?: MemberDomainFlags,
+  orgCaps: Capability[] = [],
+  surfaces?: MemberSurfaceMap,
 ): TeamInvitePermissions {
-  const resolvedDomains = domains ?? domainsFromPlatformRole(platformRole);
+  const resolvedSurfaces =
+    surfaces ??
+    (orgCaps.length > 0
+      ? defaultSurfacesForRole(platformRole, orgCaps)
+      : undefined);
+  const resolvedDomains =
+    domains ??
+    (resolvedSurfaces
+      ? domainsFromSurfaces(resolvedSurfaces)
+      : domainsFromPlatformRole(platformRole));
   return {
     platformRole,
     grants:
@@ -221,13 +260,45 @@ export function buildTeamInvitePermissions(
         ? PLATFORM_ROLE_GRANTS.admin
         : grantsFromDomains(resolvedDomains),
     domains: resolvedDomains,
+    ...(resolvedSurfaces ? { surfaces: resolvedSurfaces } : null),
   };
 }
 
-/** Build permissions from an explicit domain toggle set (permission detail page). */
+/** Build permissions from an explicit surface map (permission detail page). */
+export function buildPermissionsFromSurfaces(
+  surfaces: MemberSurfaceMap,
+  options?: {
+    preferAdmin?: boolean;
+    platformRole?: PlatformTeamRole;
+    orgCaps?: Capability[];
+  },
+): TeamInvitePermissions {
+  const domains = domainsFromSurfaces(surfaces);
+  const preferAdmin =
+    options?.preferAdmin ?? options?.platformRole === "admin";
+  const platformRole =
+    options?.platformRole === "admin" &&
+    domains.finance &&
+    domains.sales &&
+    domains.tripops
+      ? "admin"
+      : platformRoleFromDomains(domains, preferAdmin);
+  return buildTeamInvitePermissions(
+    platformRole,
+    domains,
+    options?.orgCaps ?? [],
+    surfaces,
+  );
+}
+
+/** @deprecated Prefer buildPermissionsFromSurfaces — kept for callers that only flip domains. */
 export function buildPermissionsFromDomains(
   domains: MemberDomainFlags,
-  options?: { preferAdmin?: boolean; platformRole?: PlatformTeamRole },
+  options?: {
+    preferAdmin?: boolean;
+    platformRole?: PlatformTeamRole;
+    orgCaps?: Capability[];
+  },
 ): TeamInvitePermissions {
   const preferAdmin =
     options?.preferAdmin ?? options?.platformRole === "admin";
@@ -238,7 +309,36 @@ export function buildPermissionsFromDomains(
     domains.tripops
       ? "admin"
       : platformRoleFromDomains(domains, preferAdmin);
-  return buildTeamInvitePermissions(platformRole, domains);
+  const orgCaps = options?.orgCaps ?? [];
+  const surfaces =
+    orgCaps.length > 0
+      ? defaultSurfacesForRole(platformRole, orgCaps)
+      : undefined;
+  // Honor domain master switches when we have surfaces
+  let resolved = surfaces ?? {};
+  if (surfaces) {
+    if (!domains.finance) {
+      resolved = { ...resolved };
+      for (const k of Object.keys(resolved) as (keyof MemberSurfaceMap)[]) {
+        if (String(k).startsWith("finance.")) resolved[k] = false;
+      }
+    }
+    if (!domains.sales) {
+      resolved = { ...resolved };
+      for (const k of Object.keys(resolved) as (keyof MemberSurfaceMap)[]) {
+        if (String(k).startsWith("sales.")) resolved[k] = false;
+      }
+    }
+    if (!domains.tripops) {
+      resolved = { ...resolved };
+      for (const k of Object.keys(resolved) as (keyof MemberSurfaceMap)[]) {
+        if (String(k).startsWith("tripops.") || String(k).startsWith("fleet.")) {
+          resolved[k] = false;
+        }
+      }
+    }
+  }
+  return buildTeamInvitePermissions(platformRole, domains, orgCaps, resolved);
 }
 
 /** Legacy org_members.role value stored alongside permissions.platformRole. */

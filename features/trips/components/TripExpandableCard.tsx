@@ -17,6 +17,7 @@ import {
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { canAssignTrip } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
@@ -81,7 +82,9 @@ export function TripExpandableCard({
   const { user } = useAuth();
 
   const capabilities = useCapabilities();
-  const canAssign = canAssignTrip(capabilities);
+  const { can: canSurface } = useMemberAccess();
+  const canAssign =
+    canAssignTrip(capabilities) && canSurface("tripops.trips.assign");
   const currentUserId = user?.uid ?? null;
   const { currentOrganization } = useOrganization();
   /** Roster flow from Load Hub: driver + vehicle set at create — asset-based; do not show OTP/assign-by-phone. */
@@ -302,6 +305,7 @@ export function TripExpandableCard({
       : (vehicleLabel ?? null);
 
   const handleViewFullTrip = () => {
+    if (!canSurface("tripops.trips.detail")) return;
     if (onViewFullTrip) {
       onViewFullTrip(trip.id);
     } else {
@@ -509,14 +513,16 @@ export function TripExpandableCard({
               ) : null
             }
           />
-          <TouchableOpacity
-            style={styles.viewFullTripBtn}
-            onPress={handleViewFullTrip}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.viewFullTripText}>{t("viewFullTrip")}</Text>
-            <FontAwesome name="chevron-right" size={10} color={Theme.primary} />
-          </TouchableOpacity>
+          {canSurface("tripops.trips.detail") ? (
+            <TouchableOpacity
+              style={styles.viewFullTripBtn}
+              onPress={handleViewFullTrip}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.viewFullTripText}>{t("viewFullTrip")}</Text>
+              <FontAwesome name="chevron-right" size={10} color={Theme.primary} />
+            </TouchableOpacity>
+          ) : null}
         </View>
       )}
     </View>

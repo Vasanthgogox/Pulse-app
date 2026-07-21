@@ -1,50 +1,86 @@
 /**
- * Expandable domain access row — Webild-inspired soft card + switch.
- * Visual language: https://www.webild.io/
+ * Domain accordion with drill-down surface toggles (full RBAC catalog).
+ * Surfaces unavailable for the org operating model render locked/off.
+ * Wide layouts use a 2-column action grid to cut vertical scroll.
  */
 import {
-  permissionLabel,
-  PLATFORM_ROLE_GRANTS,
-  type FunctionalRole,
-} from "@/features/organization/utils/teamInviteRoles.util";
-import { Check, ChevronDown, ChevronUp } from "lucide-react-native";
-import { useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+  applySurfaceToggle,
+  memberHasSurface,
+  orgAllowsSurface,
+  surfacesForDomain,
+  type MemberSurfaceId,
+  type MemberSurfaceMap,
+} from "@/lib/memberSurfaces";
+import type { Capability } from "@/lib/capabilities";
+import type { FunctionalRole } from "@/features/organization/utils/teamInviteRoles.util";
+import { ChevronDown, ChevronUp, Lock } from "lucide-react-native";
+import { useMemo, useState } from "react";
+import {
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
-/** Webild spectrum accents per domain. */
-const DOMAIN_ACCENT: Record<FunctionalRole, string> = {
+const DOMAIN_ACCENT: Record<FunctionalRole | "fleet" | "team", string> = {
   finance: "#0894FF",
   sales: "#C959DD",
   tripops: "#FF9004",
+  fleet: "#0894FF",
+  team: "#171717",
 };
 
 export type DomainToggleRowDef = {
   key: FunctionalRole;
   label: string;
   hint: string;
-  grantRole: FunctionalRole;
 };
 
 type Props = {
   def: DomainToggleRowDef;
-  enabled: boolean;
+  /** Domain master switch (tab-level). */
+  domainEnabled: boolean;
+  surfaces: MemberSurfaceMap;
+  orgCaps: Capability[];
   canEdit: boolean;
-  orgAllows: boolean;
-  onToggle: (next: boolean) => void;
+  orgAllowsDomain: boolean;
+  /** Start expanded (default: false — less scroll on first paint). */
+  defaultExpanded?: boolean;
+  onToggleDomain: (next: boolean) => void;
+  onToggleSurface: (id: MemberSurfaceId, next: boolean) => void;
 };
 
 export function DomainPermissionToggleRow({
   def,
-  enabled,
+  domainEnabled,
+  surfaces,
+  orgCaps,
   canEdit,
-  orgAllows,
-  onToggle,
+  orgAllowsDomain,
+  defaultExpanded = false,
+  onToggleDomain,
+  onToggleSurface,
 }: Props) {
-  const [expanded, setExpanded] = useState(false);
-  const grants = PLATFORM_ROLE_GRANTS[def.grantRole];
-  const lockedByOrg = !orgAllows;
-  const switchOn = enabled && orgAllows;
+  const { width } = useWindowDimensions();
+  const twoColSurfaces = width >= 720;
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const accent = DOMAIN_ACCENT[def.key];
+  const lockedByOrg = !orgAllowsDomain;
+  const switchOn = domainEnabled && orgAllowsDomain;
+
+  const rows = useMemo(() => {
+    const primary = surfacesForDomain(def.key);
+    const extra =
+      def.key === "tripops" ? surfacesForDomain("fleet") : [];
+    return [...primary, ...extra];
+  }, [def.key]);
+
+  const enabledCount = rows.filter((r) =>
+    memberHasSurface(orgCaps, surfaces, r.id, false),
+  ).length;
+  const availableCount = rows.filter((r) => orgAllowsSurface(orgCaps, r.id)).length;
 
   return (
     <View style={[styles.card, switchOn && styles.cardOn]}>
@@ -52,48 +88,91 @@ export function DomainPermissionToggleRow({
         <View style={[styles.dot, { backgroundColor: accent }]} />
         <View style={styles.copy}>
           <Text style={styles.label}>{def.label}</Text>
-          <Text style={styles.hint} numberOfLines={2}>
+          <Text style={styles.hint} numberOfLines={1}>
             {lockedByOrg
               ? "Not available for this workspace operating model"
               : def.hint}
           </Text>
         </View>
+        <Pressable
+          onPress={() => setExpanded((v) => !v)}
+          style={({ pressed }) => [
+            styles.expandChip,
+            pressed && { opacity: 0.7 },
+          ]}
+          hitSlop={6}
+          accessibilityRole="button"
+        >
+          <Text style={styles.expandText}>
+            {expanded ? "Hide" : "Show"} {availableCount}
+            {availableCount > 0 ? ` · ${enabledCount} on` : ""}
+          </Text>
+          {expanded ? (
+            <ChevronUp size={14} color="#737373" strokeWidth={2} />
+          ) : (
+            <ChevronDown size={14} color="#737373" strokeWidth={2} />
+          )}
+        </Pressable>
         <Switch
           value={switchOn}
           disabled={!canEdit || lockedByOrg}
-          onValueChange={onToggle}
+          onValueChange={onToggleDomain}
           trackColor={{ false: "#E8E8E8", true: accent }}
           thumbColor="#FFFFFF"
           ios_backgroundColor="#E8E8E8"
-          accessibilityLabel={`${def.label} access`}
+          accessibilityLabel={`${def.label} domain`}
         />
       </View>
 
-      <Pressable
-        onPress={() => setExpanded((v) => !v)}
-        style={({ pressed }) => [styles.expandBtn, pressed && { opacity: 0.7 }]}
-        hitSlop={6}
-        accessibilityRole="button"
-        accessibilityLabel={expanded ? "Hide permissions" : "View permissions"}
-      >
-        <Text style={styles.expandText}>
-          {expanded ? "Hide" : "View"} {grants.length} permissions
-        </Text>
-        {expanded ? (
-          <ChevronUp size={14} color="#737373" strokeWidth={2} />
-        ) : (
-          <ChevronDown size={14} color="#737373" strokeWidth={2} />
-        )}
-      </Pressable>
-
       {expanded ? (
-        <View style={styles.chips}>
-          {grants.map((grant) => (
-            <View key={grant} style={styles.chip}>
-              <Check size={10} color={accent} strokeWidth={2.8} />
-              <Text style={styles.chipText}>{permissionLabel(grant)}</Text>
-            </View>
-          ))}
+        <View
+          style={[
+            styles.surfaceList,
+            twoColSurfaces && styles.surfaceListGrid,
+          ]}
+        >
+          {rows.map((surface) => {
+            const orgOk = orgAllowsSurface(orgCaps, surface.id);
+            const on = memberHasSurface(orgCaps, surfaces, surface.id, false);
+            return (
+              <View
+                key={surface.id}
+                style={[
+                  styles.surfaceRow,
+                  twoColSurfaces ? styles.surfaceRowHalf : styles.surfaceRowFull,
+                  !orgOk && styles.surfaceRowMuted,
+                ]}
+              >
+                <View style={styles.surfaceCopy}>
+                  <Text
+                    style={[
+                      styles.surfaceLabel,
+                      !orgOk && styles.surfaceMuted,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {surface.label}
+                  </Text>
+                  <Text style={styles.surfaceHint} numberOfLines={1}>
+                    {!orgOk ? "Blocked by operating model" : surface.hint}
+                  </Text>
+                </View>
+                {!orgOk ? (
+                  <Lock size={14} color="#A3A3A3" strokeWidth={2} />
+                ) : (
+                  <Switch
+                    value={on}
+                    disabled={!canEdit || !switchOn}
+                    onValueChange={(next) => onToggleSurface(surface.id, next)}
+                    trackColor={{ false: "#E8E8E8", true: accent }}
+                    thumbColor="#FFFFFF"
+                    ios_backgroundColor="#E8E8E8"
+                    accessibilityLabel={surface.label}
+                  />
+                )}
+              </View>
+            );
+          })}
         </View>
       ) : null}
     </View>
@@ -104,105 +183,120 @@ export const DOMAIN_TOGGLE_ROWS: DomainToggleRowDef[] = [
   {
     key: "finance",
     label: "Finance",
-    hint: "Fiscal tab — cash, invoicing, and ledgers",
-    grantRole: "finance",
+    hint: "Fiscal tab, ledgers, invoicing, POD",
   },
   {
     key: "sales",
     label: "Sales / Network",
-    hint: "Network tab — marketplace, clients, and connections",
-    grantRole: "sales",
+    hint: "Network, clients, marketplace, suppliers",
   },
   {
     key: "tripops",
-    label: "TripOps",
-    hint: "Trips tab — dispatch, indents, and execution",
-    grantRole: "tripops",
+    label: "TripOps + Fleet",
+    hint: "Trips, indents, assign, vehicles, drivers",
   },
 ];
+
+/** Re-export helper for parent panel cascade. */
+export { applySurfaceToggle };
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: "#FBFBFB",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 10,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#EEEEEE",
-    gap: 4,
+    gap: 0,
   },
   cardOn: {
     backgroundColor: "#FFFFFF",
     borderColor: "#E4E4E4",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 2,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  copy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 3,
-  },
+  copy: { flex: 1, minWidth: 0, gap: 1 },
   label: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
     color: "#171717",
     letterSpacing: -0.3,
   },
   hint: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#737373",
-    lineHeight: 16,
+    lineHeight: 14,
     letterSpacing: -0.1,
   },
-  expandBtn: {
+  expandChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingLeft: 22,
-    paddingVertical: 6,
-    alignSelf: "flex-start",
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "#F3F3F3",
   },
   expandText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
     color: "#737373",
   },
-  chips: {
+  surfaceList: {
+    gap: 2,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#F0F0F0",
+  },
+  surfaceListGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    paddingLeft: 22,
-    paddingBottom: 6,
+    gap: 4,
+    rowGap: 2,
   },
-  chip: {
+  surfaceRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#E5E5E5",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 10,
   },
-  chipText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#404040",
-    letterSpacing: -0.1,
+  surfaceRowFull: {
+    width: "100%",
+  },
+  surfaceRowHalf: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "48%",
+    maxWidth: "49.5%",
+    backgroundColor: "#FAFAFA",
+  },
+  surfaceRowMuted: {
+    opacity: 0.7,
+  },
+  surfaceCopy: { flex: 1, minWidth: 0, gap: 1 },
+  surfaceLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#171717",
+    letterSpacing: -0.2,
+  },
+  surfaceMuted: { color: "#A3A3A3" },
+  surfaceHint: {
+    fontSize: 10,
+    color: "#A3A3A3",
+    lineHeight: 13,
   },
 });

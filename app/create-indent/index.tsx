@@ -59,6 +59,7 @@ import {
 import {
     getEffectivePermissions } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { ROUTES } from "@/lib/routes";
 import { useSafeBack } from "@/lib/useSafeBack";
@@ -392,8 +393,10 @@ export default function CreateIndentScreen() {
   }, [loadTypePickerOpen]);
 
   const capabilities = useCapabilities();
+  const { can: canSurface } = useMemberAccess();
   const permissions = getEffectivePermissions(capabilities);
-  const canCreate = permissions.indents.create;
+  const canCreate =
+    permissions.indents.create && canSurface("tripops.indents.create");
 
   const orgId = currentOrganization?.id ?? null;
   const invalidateIndents = useInvalidateIndents();

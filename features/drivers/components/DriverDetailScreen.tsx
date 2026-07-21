@@ -50,6 +50,7 @@ import {
 import {
     canAccessFinance } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import {
@@ -304,7 +305,9 @@ export default function DriverDetailScreen({
   const { currentOrganization } = useOrganization();
   const router = useRouter();
   const capabilities = useCapabilities();
-  const canAddTransaction = canAccessFinance(capabilities);
+  const { can: canSurface } = useMemberAccess();
+  const canAddTransaction =
+    canAccessFinance(capabilities) && canSurface("finance.add_transaction");
   const [driver, setDriver] = useState<DriverRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [loading, setLoading] = useState(true);

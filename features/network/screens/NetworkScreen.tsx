@@ -64,6 +64,7 @@ import {
 } from "@/features/network/utils/networkActions.util";
 import { queryKeys } from "@/lib/queryKeys";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import {
   allowedConnectionRoles,
   canAccessDrivers,
@@ -241,12 +242,16 @@ function NetworkScreenInner() {
   } = useOrganization();
   const orgId = organization?.id ?? null;
   const capabilities = useCapabilities();
+  const { can: canSurface } = useMemberAccess();
   /** Aggregate supply → may give/broadcast loads. Asset-only orgs cannot post. */
-  const canPostLoads = canUseAggregateSupply(capabilities);
+  const canPostLoads =
+    canUseAggregateSupply(capabilities) && canSurface("sales.marketplace.post");
   /** Asset-only orgs don't onboard suppliers: no supplier tab/count, connect as client only. */
-  const canUseSuppliers = canAccessSuppliers(capabilities);
+  const canUseSuppliers =
+    canAccessSuppliers(capabilities) && canSurface("sales.suppliers.view");
   /** Aggregate-only orgs have no own fleet: no driver tab, no FLEET count. */
-  const canUseFleet = canAccessDrivers(capabilities);
+  const canUseFleet =
+    canAccessDrivers(capabilities) && canSurface("fleet.drivers.view");
   const [refreshing, setRefreshing] = useState(false);
   const [connSearch, setConnSearch] = useState("");
   const [connFilter, setConnFilter] = useState<ConnectionFilterTab>("ALL");

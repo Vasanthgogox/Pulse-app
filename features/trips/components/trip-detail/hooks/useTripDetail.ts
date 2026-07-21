@@ -33,6 +33,7 @@ import {
 } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip } from "@/lib/capabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useCapabilities } from "@/lib/useCapabilities";
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import {
@@ -403,10 +404,16 @@ export function useTripDetail({
   const currentUserId = user?.uid ?? null;
 
   const capabilities = useCapabilities();
+  const { can: canSurface } = useMemberAccess();
+  const canViewDetail = canSurface("tripops.trips.detail");
   const canAssign = useMemo(
-    () => (trip ? canAssignTrip(capabilities) : false),
-    [capabilities, trip],
+    () =>
+      trip
+        ? canAssignTrip(capabilities) && canSurface("tripops.trips.assign")
+        : false,
+    [capabilities, trip, canSurface],
   );
+  const canAddFinanceEntry = canSurface("finance.add_transaction");
 
   const showAssignByPhone = useMemo(() => {
     if (!trip) return false;
@@ -1736,7 +1743,7 @@ export function useTripDetail({
 
   // ── Entry modal ───────────────────────────────────────────────────────────
   const openAddEntry = useCallback(() => {
-    if (!trip?.id) return;
+    if (!trip?.id || !canAddFinanceEntry) return;
     openTripLedgerEntryChooser({
       trip,
       router,
@@ -1751,6 +1758,7 @@ export function useTripDetail({
     });
   }, [
     trip,
+    canAddFinanceEntry,
     router,
     clientIdFromContext,
     clientNameFromContext,
@@ -1762,7 +1770,7 @@ export function useTripDetail({
 
   /** Cash OUT / trip expense — same query shape as TripLedgerDetailScreen.onAddExpense. */
   const openAddExpense = useCallback(() => {
-    if (!trip?.id) return;
+    if (!trip?.id || !canAddFinanceEntry) return;
     const tripNumber = getTripDisplayNumber(trip);
     const params = new URLSearchParams({
       tripId: trip.id,
@@ -1804,6 +1812,7 @@ export function useTripDetail({
     router.push(`/(modals)/ledger-sync?${params.toString()}`);
   }, [
     trip,
+    canAddFinanceEntry,
     tripLedgerEntries,
     entryContext,
     partnerName,
@@ -1814,7 +1823,7 @@ export function useTripDetail({
   ]);
 
   const handleRecordDriverPayment = useCallback(() => {
-    if (!trip?.id || !trip.driver_id) return;
+    if (!trip?.id || !trip.driver_id || !canAddFinanceEntry) return;
     const tripNumber = getTripDisplayNumber(trip);
     const params = new URLSearchParams({
       tripId: trip.id,
@@ -1825,7 +1834,7 @@ export function useTripDetail({
       partyName: driverName ?? t("driver"),
     });
     router.push(`/(modals)/ledger-sync?${params.toString()}`);
-  }, [trip, driverName, router, t]);
+  }, [trip, canAddFinanceEntry, driverName, router, t]);
 
   const closeTripAdjustmentModal = useCallback(() => {
     setShowAdjustmentModal(false);
@@ -2657,6 +2666,8 @@ export function useTripDetail({
     assignmentVehicleLabels,
     tripOtp,
     canAssign,
+    canViewDetail,
+    canAddFinanceEntry,
     showAssignByPhone,
     assignmentSource,
     previousDriverName,

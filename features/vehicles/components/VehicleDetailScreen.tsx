@@ -36,6 +36,7 @@ import {
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { canAccessFinance } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { pickAndUploadVehicleAvatar } from "@/lib/avatarUpload";
 import { formatINR, formatLedgerDate, formatRelative, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { useInvalidateVehicles } from "@/lib/queries";
@@ -87,7 +88,9 @@ export default function VehicleDetailScreen({
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const router = useRouter();
   const capabilities = useCapabilities();
-  const canAddTransaction = canAccessFinance(capabilities);
+  const { can: canSurface } = useMemberAccess();
+  const canAddTransaction =
+    canAccessFinance(capabilities) && canSurface("finance.add_transaction");
   const [vehicle, setVehicle] = useState<VehicleRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);

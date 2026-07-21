@@ -54,7 +54,9 @@ import {
     canUseAggregateSupply,
     canUseAssetSupply,
 } from "@/lib/capabilities";
+import { ledgerCategorySurface } from "@/lib/memberSurfaces";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
@@ -127,13 +129,28 @@ export function FinanceScreen() {
   const { t } = useLanguage();
   const { profile } = useAuth();
   const capabilities = useCapabilities();
-  const canAccess = canAccessFinance(capabilities);
+  const { can: canSurface } = useMemberAccess();
+  const canAccess =
+    canAccessFinance(capabilities) && canSurface("finance.tab");
   const canAssetSupply = canUseAssetSupply(capabilities);
   const canAggregateSupply = canUseAggregateSupply(capabilities);
-  const visibleFinanceTabs = useMemo(
-    () => TABS.filter((tab) => canAccessFinanceSubTab(capabilities, tab.id)),
-    [capabilities],
-  );
+  const visibleFinanceTabs = useMemo(() => {
+    const surfaceByTab: Record<
+      "cash" | "customers" | "suppliers" | "garage" | "drivers",
+      Parameters<typeof canSurface>[0]
+    > = {
+      cash: "finance.subtab.cash",
+      customers: "finance.subtab.customers",
+      suppliers: "finance.subtab.suppliers",
+      garage: "finance.subtab.garage",
+      drivers: "finance.subtab.drivers",
+    };
+    return TABS.filter(
+      (tab) =>
+        canAccessFinanceSubTab(capabilities, tab.id) &&
+        canSurface(surfaceByTab[tab.id]),
+    );
+  }, [capabilities, canSurface]);
   const {
     currentOrganization,
     refreshOrganization,
@@ -278,11 +295,20 @@ export function FinanceScreen() {
     setSourceSupplyFilter,
   ]);
 
+  const canLedgerCategory = useCallback(
+    (category: "all" | "customers" | "suppliers" | "vehicle" | "driver") =>
+      canAccessLedgerCategory(capabilities, category) &&
+      canSurface(ledgerCategorySurface(category)),
+    [capabilities, canSurface],
+  );
+
+  const canAddFinanceTx = canSurface("finance.add_transaction");
+
   useEffect(() => {
-    if (!canAccessLedgerCategory(capabilities, selectedLedgerCategory)) {
+    if (!canLedgerCategory(selectedLedgerCategory)) {
       setSelectedLedgerCategory("all");
     }
-  }, [capabilities, selectedLedgerCategory, setSelectedLedgerCategory]);
+  }, [canLedgerCategory, selectedLedgerCategory, setSelectedLedgerCategory]);
 
   const showSourceSupplyFilter =
     financeSubTab === "cash" && canAssetSupply && canAggregateSupply;
@@ -382,6 +408,15 @@ export function FinanceScreen() {
   const openAddPartyForSubTab = useCallback(
     (subTab: "customers" | "suppliers" | "garage" | "drivers") => {
       if (!canAccessFinanceSubTab(capabilities, subTab)) return;
+      const createSurface =
+        subTab === "customers"
+          ? ("sales.clients.create" as const)
+          : subTab === "suppliers"
+            ? ("sales.suppliers.create" as const)
+            : subTab === "garage"
+              ? ("fleet.vehicles.create" as const)
+              : ("fleet.drivers.create" as const);
+      if (!canSurface(createSurface)) return;
       const partyKind = financeSubTabToPartyKind(subTab);
       const routeAdd =
         subTab === "customers"
@@ -402,7 +437,7 @@ export function FinanceScreen() {
       }
       routeAdd();
     },
-    [capabilities, router, usePartyPortalOnWeb],
+    [capabilities, canSurface, router, usePartyPortalOnWeb],
   );
 
   const handleAddPartyPress = useCallback(() => {
@@ -1524,7 +1559,7 @@ export function FinanceScreen() {
         allowedLedgerCategories={
           financeSubTab === "cash"
             ? (["all", "customers", "suppliers", "vehicle", "driver"] as const).filter(
-                (c) => canAccessLedgerCategory(capabilities, c),
+                (c) => canLedgerCategory(c),
               )
             : undefined
         }
@@ -1621,8 +1656,10 @@ export function FinanceScreen() {
               hasNextLedgerPage={hasNextLedgerPage}
               ledgerPageLoading={ledgerPageLoading}
               ledgerRefreshKey={ledgerRefreshKey}
-              onAddTransactionPress={() =>
-                router.push("/(modals)/ledger-sync" as const)
+              onAddTransactionPress={
+                canAddFinanceTx
+                  ? () => router.push("/(modals)/ledger-sync" as const)
+                  : undefined
               }
               onAddPartyPress={handleAddPartyPress}
               onKanbanPartyAddPress={handleKanbanPartyAddPress}
@@ -1713,8 +1750,18 @@ export function FinanceScreen() {
 
       {(() => {
         const partyKind = financeSubTabToPartyKind(financeSubTab);
+        const createOk =
+          financeSubTab === "customers"
+            ? canSurface("sales.clients.create")
+            : financeSubTab === "suppliers"
+              ? canSurface("sales.suppliers.create")
+              : financeSubTab === "garage"
+                ? canSurface("fleet.vehicles.create")
+                : financeSubTab === "drivers"
+                  ? canSurface("fleet.drivers.create")
+                  : false;
         const routeAdd =
-          financeSubTab === "cash"
+          !createOk || financeSubTab === "cash"
             ? undefined
             : financeSubTab === "customers"
               ? () => router.push("/(modals)/add-client" as const)
@@ -1955,7 +2002,9 @@ export function FinanceScreen() {
         entityOverlayClientRows={clientRows}
         entityOverlaySupplierRows={supplierRows}
         onEntityOverlayBack={() => setSelectedEntity(null)}
-        onEntityAddTransaction={(context) => {
+        onEntityAddTransaction={
+          canAddFinanceTx
+            ? (context) => {
           setAddEntryContext(context ?? null);
           const entity = selectedEntity;
           const params = new URLSearchParams();
@@ -2001,8 +2050,9 @@ export function FinanceScreen() {
             }
           }
           router.push(`/(modals)/ledger-sync?${params.toString()}` as const);
-        }}
-        onEntityOverlayRefresh={() => {
+        }
+            : undefined
+        }        onEntityOverlayRefresh={() => {
           setLedgerRefreshKey((k) => k + 1);
           setEntitiesRefreshKey((k) => k + 1);
           const orgId = currentOrganization?.id ?? "";
@@ -2051,7 +2101,7 @@ export function FinanceScreen() {
         insetsTop={insets.top}
         allowedCategories={
           (["all", "customers", "suppliers", "vehicle", "driver"] as const).filter(
-            (c) => canAccessLedgerCategory(capabilities, c),
+            (c) => canLedgerCategory(c),
           )
         }
       />

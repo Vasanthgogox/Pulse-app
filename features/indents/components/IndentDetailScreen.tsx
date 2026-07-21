@@ -14,6 +14,7 @@ import {
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { canAccessSuppliers } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { IndentBidAmountEntry } from "@/features/indents/components/bidding/IndentBidAmountEntry";
 import { IndentGiveLoadPartiesStrip } from "@/features/indents/components/IndentGiveLoadPartiesStrip";
 import { IndentLinkedTripCard } from "@/features/indents/components/IndentLinkedTripCard";
@@ -164,7 +165,11 @@ export function IndentDetailScreen({
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const capabilities = useCapabilities();
-  const canUseSuppliers = canAccessSuppliers(capabilities);
+  const { can: canSurface } = useMemberAccess();
+  const canViewIndent = canSurface("tripops.indents.view");
+  const canAllocateIndent = canSurface("tripops.indents.allocate");
+  const canUseSuppliers =
+    canAccessSuppliers(capabilities) && canViewIndent;
   const orgId = currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
   const invalidateIndents = useInvalidateIndents();
@@ -594,6 +599,16 @@ export function IndentDetailScreen({
     return <CenteredLoadingView message="Loading indent…" />;
   }
 
+  if (!canViewIndent) {
+    return (
+      <View style={styles.errorStateBody}>
+        <Text style={styles.errorText}>
+          You don’t have access to this indent.
+        </Text>
+      </View>
+    );
+  }
+
   if (error || !indent) {
     return (
       <View style={styles.container}>
@@ -708,6 +723,7 @@ export function IndentDetailScreen({
     myQuoteStatus === "accepted" &&
     (isIndentCompleted || !!linkedTrip);
   const canSupplierAllocateVehicle =
+    canAllocateIndent &&
     !isOwner &&
     myQuoteStatus === "accepted" &&
     !isIndentCompleted &&

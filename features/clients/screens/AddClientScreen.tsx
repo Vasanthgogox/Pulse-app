@@ -4,7 +4,9 @@ import type { ConnectionInviteeMatch } from "@/features/clients/components/AddCl
 import { PartyRegistrationPortal } from "@/features/finance/components/PartyRegistrationPortal";
 import { usePartyPortalRouteHandlers } from "@/features/finance/hooks/usePartyPortalRouteHandlers";
 import { ROUTES } from "@/lib/routes";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect } from "react";
 import {
   getConnectionInviteeByPhone,
   createConnectionRequest,
@@ -35,10 +37,22 @@ export default function AddClientScreen() {
   }>();
   const partyPortal = usePartyPortalRouteHandlers();
   const { currentOrganization, isLoading } = useOrganization();
+  const { can: canSurface } = useMemberAccess();
+  const canCreate = canSurface("sales.clients.create");
   const returnToParam = Array.isArray(params.returnTo)
     ? params.returnTo[0]
     : params.returnTo;
   const returnTo = returnToParam?.startsWith("/") ? returnToParam : undefined;
+
+  useEffect(() => {
+    if (!isLoading && !canCreate) {
+      closeModal(router, returnTo);
+    }
+  }, [canCreate, isLoading, returnTo, router]);
+
+  if (!isLoading && !canCreate) {
+    return null;
+  }
   const prefillOrganizationName = Array.isArray(params.prefillOrganizationName)
     ? params.prefillOrganizationName[0]
     : params.prefillOrganizationName;

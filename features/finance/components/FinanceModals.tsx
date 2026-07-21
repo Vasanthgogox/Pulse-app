@@ -128,7 +128,7 @@ export interface FinanceModalsProps {
   entityOverlayClientRows: ClientRow[];
   entityOverlaySupplierRows: SupplierRow[];
   onEntityOverlayBack: () => void;
-  onEntityAddTransaction: (context: import("./EntityDetailOverlay").TripEntryContext | null) => void;
+  onEntityAddTransaction?: (context: import("./EntityDetailOverlay").TripEntryContext | null) => void;
   onEntityOverlayRefresh: () => void;
 
   // Trip PnL
@@ -372,7 +372,11 @@ export function FinanceModals(props: FinanceModalsProps) {
               : undefined
           }
           onBack={onEntityOverlayBack}
-          onAddTransaction={(context) => onEntityAddTransaction(context ?? null)}
+          onAddTransaction={
+            onEntityAddTransaction
+              ? (context) => onEntityAddTransaction(context ?? null)
+              : undefined
+          }
           organizationId={organizationId}
           onRefresh={onEntityOverlayRefresh}
           vehicles={selectedEntity?.entityType === "DRIVER" ? vehicleRows : undefined}

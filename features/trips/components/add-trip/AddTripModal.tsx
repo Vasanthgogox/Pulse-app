@@ -18,6 +18,7 @@ import {
   canUseAssetSupply,
 } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
 import { CreateTripDesktopStepper } from "./CreateTripDesktopStepper";
@@ -90,8 +91,12 @@ export function AddTripModal({
   /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
   const webAllocSubSteps = false;
   const capabilities = useCapabilities();
-  const canAsset = canUseAssetSupply(capabilities);
-  const canAggregate = canUseAggregateSupply(capabilities);
+  const { can: canSurface } = useMemberAccess();
+  const canAsset =
+    canUseAssetSupply(capabilities) && canSurface("tripops.trips.create_asset");
+  const canAggregate =
+    canUseAggregateSupply(capabilities) &&
+    canSurface("tripops.trips.create_aggregate");
   const allowedSupplyModes = useMemo(() => {
     const modes: ("asset" | "aggregate")[] = [];
     if (canAsset) modes.push("asset");

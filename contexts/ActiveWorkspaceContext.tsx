@@ -26,9 +26,11 @@ import {
 import {
   domainsFromMember,
   platformRoleFromMember,
+  surfacesFromMember,
   type MemberDomainFlags,
   type PlatformTeamRole,
 } from '@/features/organization/utils/teamInviteRoles.util';
+import type { MemberSurfaceMap } from '@/lib/memberSurfaces';
 import type { CurrentOrganization, OrgMemberRole } from '@/types/organization';
 import type { ActiveWorkspaceState, Workspace, WorkspaceMember } from '@/types/workspace';
 
@@ -78,6 +80,7 @@ function mapRowToWorkspace(
   role: WorkspaceMember['role'];
   platformRole: PlatformTeamRole | null;
   domains: MemberDomainFlags;
+  surfaces: MemberSurfaceMap;
 } | null {
   const o = row.organizations;
   if (!o) return null;
@@ -88,6 +91,8 @@ function mapRowToWorkspace(
   };
   const platformRole = platformRoleFromMember(memberPick);
   const domains = domainsFromMember(memberPick);
+  // Org caps applied later in useCapabilities / useMemberAccess — store raw/default map.
+  const surfaces = surfacesFromMember(memberPick, []);
   const operatingModel =
     o.operating_model === 'ASSET_BASED' ||
     o.operating_model === 'NON_ASSET' ||
@@ -125,6 +130,7 @@ function mapRowToWorkspace(
     role: row.role,
     platformRole,
     domains,
+    surfaces,
   };
 }
 
@@ -194,6 +200,8 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   );
   const [memberDomains, setMemberDomains] = useState<MemberDomainFlags | null>(null);
   const [domainsMap, setDomainsMap] = useState<Map<string, MemberDomainFlags>>(new Map());
+  const [memberSurfaces, setMemberSurfaces] = useState<MemberSurfaceMap | null>(null);
+  const [surfacesMap, setSurfacesMap] = useState<Map<string, MemberSurfaceMap>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -218,6 +226,8 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           setPlatformRoleMap(new Map());
           setMemberDomains(null);
           setDomainsMap(new Map());
+          setMemberSurfaces(null);
+          setSurfacesMap(new Map());
           setCurrentOrganizationRef.current(null);
           clearPlatformWorkspaceStore();
           setIsLoading(false);
@@ -275,6 +285,9 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         const newDomainsMap = new Map<string, MemberDomainFlags>(
           mapped.map((m) => [m.workspace.id, m.domains]),
         );
+        const newSurfacesMap = new Map<string, MemberSurfaceMap>(
+          mapped.map((m) => [m.workspace.id, m.surfaces]),
+        );
 
         if (stale()) return;
 
@@ -282,6 +295,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         setRoleMap(newRoleMap);
         setPlatformRoleMap(newPlatformRoleMap);
         setDomainsMap(newDomainsMap);
+        setSurfacesMap(newSurfacesMap);
 
         // Read persisted workspace ID, fall back to first
         let targetWorkspace: Workspace | null = loadedWorkspaces[0] ?? null;
@@ -305,6 +319,9 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         );
         setMemberDomains(
           targetWorkspace ? (newDomainsMap.get(targetWorkspace.id) ?? null) : null,
+        );
+        setMemberSurfaces(
+          targetWorkspace ? (newSurfacesMap.get(targetWorkspace.id) ?? null) : null,
         );
         setCurrentOrganization(
           targetWorkspace ? workspaceToCurrentOrganization(targetWorkspace) : null,
@@ -356,6 +373,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
       setMemberRole(role);
       setMemberPlatformRole(platformRoleMap.get(workspaceId) ?? null);
       setMemberDomains(domainsMap.get(workspaceId) ?? null);
+      setMemberSurfaces(surfacesMap.get(workspaceId) ?? null);
       setCurrentOrganizationRef.current(workspaceToCurrentOrganization(found));
       syncPlatformWorkspaceFromActive({
         personId: userRef.current?.uid ?? null,
@@ -368,7 +386,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         // Persist failure is non-fatal
       }
     },
-    [workspaces, roleMap, platformRoleMap, domainsMap], // setCurrentOrganization removed — accessed via stable ref
+    [workspaces, roleMap, platformRoleMap, domainsMap, surfacesMap],
   );
 
   const refresh = useCallback(async () => {
@@ -384,6 +402,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
     memberRole,
     memberPlatformRole,
     memberDomains,
+    memberSurfaces,
     isLoading,
     error,
     switchWorkspace,

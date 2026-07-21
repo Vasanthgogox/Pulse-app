@@ -11,6 +11,7 @@ import {
 } from "@/features/connections/services/connectionRequests.service";
 import { canAccessSuppliers } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { ROUTES } from "@/lib/routes";
 
 export default function AddSupplierScreen() {
@@ -19,20 +20,23 @@ export default function AddSupplierScreen() {
   const partyPortal = usePartyPortalRouteHandlers();
   const { profile } = useAuth();
   const capabilities = useCapabilities();
+  const { can: canSurface } = useMemberAccess();
   const { currentOrganization } = useOrganization();
   const returnToParam = Array.isArray(params.returnTo)
     ? params.returnTo[0]
     : params.returnTo;
   const returnTo = returnToParam?.startsWith("/") ? returnToParam : undefined;
+  const canCreate =
+    canAccessSuppliers(capabilities) && canSurface("sales.suppliers.create");
 
   useEffect(() => {
-    if (profile && !canAccessSuppliers(capabilities)) {
+    if (profile && !canCreate) {
       if (router.canGoBack()) router.back();
       else router.replace(ROUTES.TABS.FINANCE as "/");
     }
-  }, [capabilities, profile, router]);
+  }, [canCreate, profile, router]);
 
-  if (profile && !canAccessSuppliers(capabilities)) {
+  if (profile && !canCreate) {
     return null;
   }
 

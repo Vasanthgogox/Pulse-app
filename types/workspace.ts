@@ -3,6 +3,7 @@ import type {
   MemberDomainFlags,
   PlatformTeamRole,
 } from '@/features/organization/utils/teamInviteRoles.util';
+import type { MemberSurfaceMap } from '@/lib/memberSurfaces';
 
 export type KycStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
 
@@ -62,6 +63,12 @@ export interface ActiveWorkspaceState {
    * Null while loading / no membership.
    */
   memberDomains: MemberDomainFlags | null;
+  /**
+   * Drill-down surface grants from `permissions.surfaces` (or role defaults).
+   * Intersected with org operating-model caps at read time via useCapabilities /
+   * useMemberAccess.
+   */
+  memberSurfaces: MemberSurfaceMap | null;
   // True while loading the workspace list
   isLoading: boolean;
   error: Error | null;

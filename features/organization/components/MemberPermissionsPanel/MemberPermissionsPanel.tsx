@@ -21,11 +21,12 @@ import {
   updateMemberPermissions,
 } from "@/features/organization/services/members.service";
 import {
-  buildPermissionsFromDomains,
+  buildPermissionsFromSurfaces,
   domainsFromMember,
   domainsFromPlatformRole,
   memberDisplayRoleLabel,
   platformRoleFromMember,
+  surfacesFromMember,
   TEAM_INVITE_ROLE_OPTIONS,
   type MemberDomainFlags,
   type PlatformTeamRole,
@@ -36,9 +37,18 @@ import {
   canAccessIndents,
   canAccessTrips,
 } from "@/lib/capabilities";
+import {
+  applyDomainToggle,
+  applySurfaceToggle,
+  defaultSurfacesForRole,
+  domainsFromSurfaces,
+  MEMBER_SURFACE_CATALOG,
+  type MemberSurfaceId,
+  type MemberSurfaceMap,
+} from "@/lib/memberSurfaces";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
 import { useInvalidateOrgMembers, useOrgMembersQuery } from "@/lib/queries/useOrgMembersQuery";
-import { useCapabilities } from "@/lib/useCapabilities";
+import { useOrgCapabilities } from "@/lib/useCapabilities";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowRightLeft,
@@ -71,6 +81,15 @@ function domainsEqual(a: MemberDomainFlags, b: MemberDomainFlags): boolean {
   );
 }
 
+function surfacesEqual(a: MemberSurfaceMap, b: MemberSurfaceMap): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    const id = k as MemberSurfaceId;
+    if (!!a[id] !== !!b[id]) return false;
+  }
+  return true;
+}
+
 function formatJoined(iso: string): string {
   try {
     const d = new Date(iso);
@@ -89,10 +108,11 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const twoCol = width >= 900;
+  const widePresets = width >= 1100;
   const { currentOrganization } = useOrganization();
   const { refresh: refreshWorkspace } = useActiveWorkspace();
   const { isOwner } = useOrgRole();
-  const capabilities = useCapabilities();
+  const orgCaps = useOrgCapabilities();
   const orgId = currentOrganization?.id ?? null;
   const { data: roster, isLoading, refetch } = useOrgMembersQuery(orgId);
   const invalidate = useInvalidateOrgMembers(orgId);
@@ -105,9 +125,11 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
   const [domains, setDomains] = useState<MemberDomainFlags>(
     domainsFromPlatformRole("tripops"),
   );
+  const [surfaces, setSurfaces] = useState<MemberSurfaceMap>({});
   const [baseline, setBaseline] = useState<{
     role: PlatformTeamRole;
     domains: MemberDomainFlags;
+    surfaces: MemberSurfaceMap;
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -116,23 +138,25 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
   useEffect(() => {
     if (!member) return;
     const role = platformRoleFromMember(member) ?? "tripops";
+    const nextSurfaces = surfacesFromMember(member, orgCaps);
     const nextDomains = domainsFromMember(member);
     setPlatformRole(role);
+    setSurfaces(nextSurfaces);
     setDomains(nextDomains);
-    setBaseline({ role, domains: nextDomains });
+    setBaseline({ role, domains: nextDomains, surfaces: nextSurfaces });
     setError(null);
-  }, [member]);
+  }, [member, orgCaps]);
 
   const orgAllows = useMemo(
     () => ({
-      finance: canAccessFinance(capabilities),
+      finance: canAccessFinance(orgCaps),
       sales:
-        capabilities.includes("marketplace_post") ||
-        capabilities.includes("marketplace_bid") ||
-        canAccessClients(capabilities),
-      tripops: canAccessIndents(capabilities) || canAccessTrips(capabilities),
+        orgCaps.includes("marketplace_post") ||
+        orgCaps.includes("marketplace_bid") ||
+        canAccessClients(orgCaps),
+      tripops: canAccessIndents(orgCaps) || canAccessTrips(orgCaps),
     }),
-    [capabilities],
+    [orgCaps],
   );
 
   const canEdit = isOwner && member?.role !== "owner";
@@ -140,30 +164,40 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
     isOwner && !!member && member.status === "active" && member.role !== "owner";
   const dirty =
     !!baseline &&
-    (platformRole !== baseline.role || !domainsEqual(domains, baseline.domains));
+    (platformRole !== baseline.role ||
+      !domainsEqual(domains, baseline.domains) ||
+      !surfacesEqual(surfaces, baseline.surfaces));
   const busy = saving || actionBusy;
 
-  const enabledCount = (["finance", "sales", "tripops"] as const).filter(
-    (k) => domains[k] && orgAllows[k],
-  ).length;
+  const enabledSurfaceCount = useMemo(
+    () =>
+      MEMBER_SURFACE_CATALOG.filter((s) => surfaces[s.id] === true).length,
+    [surfaces],
+  );
 
-  const handleSelectRole = useCallback((role: PlatformTeamRole) => {
-    setPlatformRole(role);
-    setDomains(domainsFromPlatformRole(role));
-    setError(null);
-  }, []);
+  const handleSelectRole = useCallback(
+    (role: PlatformTeamRole) => {
+      setPlatformRole(role);
+      const resolved = defaultSurfacesForRole(role, orgCaps);
+      setSurfaces(resolved);
+      setDomains(domainsFromSurfaces(resolved));
+      setError(null);
+    },
+    [orgCaps],
+  );
 
   const handleToggleDomain = useCallback(
     (key: keyof MemberDomainFlags, next: boolean) => {
-      setDomains((prev) => {
-        const updated = { ...prev, [key]: next };
+      setSurfaces((prev) => {
+        const updated = applyDomainToggle(prev, key, next, orgCaps);
+        setDomains(domainsFromSurfaces(updated));
         if (platformRole === "admin" && !next) {
           setPlatformRole(
-            updated.tripops
+            domainsFromSurfaces(updated).tripops
               ? "tripops"
-              : updated.finance
+              : domainsFromSurfaces(updated).finance
                 ? "finance"
-                : updated.sales
+                : domainsFromSurfaces(updated).sales
                   ? "sales"
                   : "tripops",
           );
@@ -172,7 +206,19 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
       });
       setError(null);
     },
-    [platformRole],
+    [orgCaps, platformRole],
+  );
+
+  const handleToggleSurface = useCallback(
+    (id: MemberSurfaceId, next: boolean) => {
+      setSurfaces((prev) => {
+        const updated = applySurfaceToggle(prev, id, next, orgCaps);
+        setDomains(domainsFromSurfaces(updated));
+        return updated;
+      });
+      setError(null);
+    },
+    [orgCaps],
   );
 
   const handleSave = useCallback(async () => {
@@ -180,9 +226,10 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const permissions = buildPermissionsFromDomains(domains, {
+      const permissions = buildPermissionsFromSurfaces(surfaces, {
         platformRole,
         preferAdmin: platformRole === "admin",
+        orgCaps,
       });
       const { error: saveError } = await updateMemberPermissions(
         member.id,
@@ -198,7 +245,8 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
       }
       setBaseline({
         role: permissions.platformRole,
-        domains: permissions.domains ?? domains,
+        domains: permissions.domains ?? domainsFromSurfaces(surfaces),
+        surfaces: permissions.surfaces ?? surfaces,
       });
       setPlatformRole(permissions.platformRole);
       invalidate();
@@ -211,8 +259,9 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
     member,
     canEdit,
     dirty,
-    domains,
+    surfaces,
     platformRole,
+    orgCaps,
     invalidate,
     refetch,
     refreshWorkspace,
@@ -336,7 +385,7 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
             name={displayName}
             avatarUrl={member.avatar_url ?? null}
             entityType="client"
-            size={64}
+            size={52}
           />
           <Text style={styles.identityName} numberOfLines={2}>
             {displayName}
@@ -435,11 +484,20 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
 
   const rightPane = (
     <View style={styles.rightPane}>
-      <Text style={styles.sectionEyebrow}>Role preset</Text>
-      <Text style={styles.sectionLead}>
-        Pick a starting point, then fine-tune domains below.
-      </Text>
-      <View style={styles.presetGrid}>
+      <View style={styles.sectionHeadRow}>
+        <View style={styles.sectionHeadCopy}>
+          <Text style={styles.sectionEyebrow}>Workspace domains</Text>
+          <Text style={styles.sectionLead} numberOfLines={1}>
+            Preset first, then expand a domain to fine-tune actions.
+          </Text>
+        </View>
+        <View style={styles.countPill}>
+          <Text style={styles.countPillText}>
+            {enabledSurfaceCount} on
+          </Text>
+        </View>
+      </View>
+      <View style={[styles.presetGrid, widePresets && styles.presetGridWide]}>
         {TEAM_INVITE_ROLE_OPTIONS.map((option) => {
           const selected = platformRole === option.value;
           return (
@@ -449,6 +507,7 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
               disabled={!canEdit || busy}
               style={({ pressed }) => [
                 styles.presetTile,
+                widePresets && styles.presetTileWide,
                 selected && styles.presetTileOn,
                 pressed && canEdit && { opacity: 0.88 },
               ]}
@@ -456,6 +515,7 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
               <View style={styles.presetTop}>
                 <Text
                   style={[styles.presetLabel, selected && styles.presetLabelOn]}
+                  numberOfLines={1}
                 >
                   {option.label}
                 </Text>
@@ -467,7 +527,7 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
               </View>
               <Text
                 style={[styles.presetDesc, selected && styles.presetDescOn]}
-                numberOfLines={3}
+                numberOfLines={2}
               >
                 {option.description}
               </Text>
@@ -477,23 +537,24 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
       </View>
 
       <View style={styles.domainHeader}>
-        <Text style={styles.sectionEyebrow}>Workspace domains</Text>
-        <View style={styles.countPill}>
-          <Text style={styles.countPillText}>{enabledCount}/3 on</Text>
-        </View>
+        <Text style={styles.sectionEyebrow}>Workspace actions</Text>
+        <Text style={styles.domainHint}>
+          Org model ∩ toggles · Owner/Admin bypass
+        </Text>
       </View>
-      <Text style={styles.sectionLead}>
-        Org model ∩ these toggles. Owner/Admin always keep full access.
-      </Text>
       <View style={styles.domainStack}>
         {DOMAIN_TOGGLE_ROWS.map((def) => (
           <DomainPermissionToggleRow
             key={def.key}
             def={def}
-            enabled={domains[def.key]}
+            domainEnabled={domains[def.key]}
+            surfaces={surfaces}
+            orgCaps={orgCaps}
             canEdit={canEdit && !busy}
-            orgAllows={orgAllows[def.key]}
-            onToggle={(next) => handleToggleDomain(def.key, next)}
+            orgAllowsDomain={orgAllows[def.key]}
+            defaultExpanded={false}
+            onToggleDomain={(next) => handleToggleDomain(def.key, next)}
+            onToggleSurface={handleToggleSurface}
           />
         ))}
       </View>
@@ -516,8 +577,7 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          twoCol && styles.scrollContentWide,
-          { paddingBottom: (canEdit ? 100 : 32) + insets.bottom },
+          { paddingBottom: (canEdit ? 88 : 24) + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -532,39 +592,41 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
         <View
           style={[
             styles.footer,
-            { paddingBottom: Math.max(insets.bottom, 14) },
+            { paddingBottom: Math.max(insets.bottom, 12) },
           ]}
         >
-          <Pressable
-            onPress={onBack}
-            disabled={busy}
-            style={({ pressed }) => [
-              styles.cancelBtn,
-              pressed && { opacity: 0.85 },
-              busy && { opacity: 0.5 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel"
-          >
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => void handleSave()}
-            disabled={busy || !dirty}
-            style={({ pressed }) => [
-              styles.saveBtn,
-              pressed && dirty && { opacity: 0.9 },
-              (busy || !dirty) && styles.saveBtnDisabled,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Save access changes"
-          >
-            {saving ? (
-              <LoadingIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.saveBtnText}>Save changes</Text>
-            )}
-          </Pressable>
+          <View style={styles.footerInner}>
+            <Pressable
+              onPress={onBack}
+              disabled={busy}
+              style={({ pressed }) => [
+                styles.cancelBtn,
+                pressed && { opacity: 0.85 },
+                busy && { opacity: 0.5 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void handleSave()}
+              disabled={busy || !dirty}
+              style={({ pressed }) => [
+                styles.saveBtn,
+                pressed && dirty && { opacity: 0.9 },
+                (busy || !dirty) && styles.saveBtnDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Save access changes"
+            >
+              {saving ? (
+                <LoadingIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.saveBtnText}>Save changes</Text>
+              )}
+            </Pressable>
+          </View>
         </View>
       ) : null}
     </View>
@@ -633,63 +695,61 @@ const styles = StyleSheet.create({
 
   scroll: { flex: 1 },
   scrollContent: {
-    paddingHorizontal: 18,
-    paddingTop: 8,
     width: "100%",
-    alignSelf: "center",
-  },
-  scrollContentWide: {
-    maxWidth: 1080,
-    paddingHorizontal: 24,
+    alignSelf: "stretch",
+    paddingHorizontal: 16,
+    paddingTop: 4,
   },
   columns: {
     flexDirection: "column",
-    gap: 20,
+    gap: 16,
     alignItems: "stretch",
+    width: "100%",
   },
   columnsWide: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 28,
+    gap: 20,
   },
 
   leftPane: {
-    gap: 12,
+    gap: 10,
     width: "100%",
   },
   leftPaneFixed: {
-    width: 300,
+    width: 260,
     flexShrink: 0,
     ...(Platform.OS === "web" ? ({ position: "sticky", top: 8 } as object) : null),
   },
   rightPane: {
     flex: 1,
     minWidth: 0,
-    gap: 10,
+    width: "100%",
+    gap: 8,
   },
 
   identityCard: {
     backgroundColor: "#FAFAFA",
-    borderRadius: 20,
+    borderRadius: 16,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#EEEEEE",
   },
   heroStripe: {
-    height: 4,
+    height: 3,
     width: "100%",
   },
   identityBody: {
-    padding: 20,
+    padding: 14,
     alignItems: "flex-start",
-    gap: 6,
+    gap: 4,
   },
   identityName: {
-    marginTop: 10,
-    fontSize: 22,
+    marginTop: 6,
+    fontSize: 18,
     fontWeight: "600",
     color: "#171717",
-    letterSpacing: -0.6,
+    letterSpacing: -0.5,
   },
   identityLine: {
     fontSize: 13,
@@ -783,37 +843,53 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
 
+  sectionHeadRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  sectionHeadCopy: { flex: 1, minWidth: 0, gap: 2 },
   sectionEyebrow: {
     fontSize: 12,
     fontWeight: "600",
     color: "#171717",
     letterSpacing: -0.2,
-    marginTop: 4,
   },
   sectionLead: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#737373",
-    lineHeight: 18,
+    lineHeight: 16,
     letterSpacing: -0.1,
-    marginBottom: 4,
   },
 
   presetGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 8,
+    width: "100%",
+  },
+  presetGridWide: {
+    flexWrap: "nowrap",
   },
   presetTile: {
-    width: "47.5%",
+    width: "48%",
     flexGrow: 1,
     minWidth: 140,
     backgroundColor: "#FBFBFB",
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#EEEEEE",
-    padding: 14,
-    gap: 8,
-    minHeight: 110,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+    minHeight: 72,
+  },
+  presetTileWide: {
+    width: "auto",
+    flex: 1,
+    minWidth: 0,
+    minHeight: 68,
   },
   presetTileOn: {
     backgroundColor: "#171717",
@@ -826,23 +902,25 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   presetLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: "#171717",
     letterSpacing: -0.3,
+    flex: 1,
+    minWidth: 0,
   },
   presetLabelOn: { color: "#FFFFFF" },
   presetDesc: {
     fontSize: 11,
     color: "#737373",
-    lineHeight: 15,
+    lineHeight: 14,
     letterSpacing: -0.1,
   },
   presetDescOn: { color: "rgba(255,255,255,0.65)" },
   checkBubble: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
@@ -850,9 +928,16 @@ const styles = StyleSheet.create({
 
   domainHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
     justifyContent: "space-between",
-    marginTop: 14,
+    gap: 10,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  domainHint: {
+    fontSize: 11,
+    color: "#A3A3A3",
+    letterSpacing: -0.1,
   },
   countPill: {
     backgroundColor: "#F3F3F3",
@@ -866,29 +951,32 @@ const styles = StyleSheet.create({
     color: "#525252",
     letterSpacing: -0.1,
   },
-  domainStack: { gap: 10 },
+  domainStack: { gap: 8, width: "100%" },
 
   footer: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    backgroundColor: "rgba(255,255,255,0.96)",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#F0F0F0",
+  },
+  footerInner: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
   },
   cancelBtn: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 13,
+    paddingVertical: 12,
+    borderRadius: 12,
     backgroundColor: "#F3F3F3",
-    minHeight: 48,
+    minHeight: 44,
   },
   cancelBtnText: {
     fontSize: 14,
@@ -897,13 +985,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   saveBtn: {
-    flex: 1.5,
+    flex: 2,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 13,
+    paddingVertical: 12,
+    borderRadius: 12,
     backgroundColor: "#171717",
-    minHeight: 48,
+    minHeight: 44,
   },
   saveBtnDisabled: { opacity: 0.35 },
   saveBtnText: {

@@ -14,6 +14,7 @@ import { useInvoiceCalc } from '@/features/invoicing/hooks/useInvoiceCalc';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import type { InvoicePdfData } from '@/components/InvoicePdf.types';
 
 import InvoicePdf from '@/components/InvoicePdf';
@@ -83,6 +84,7 @@ export default function InvoicePdfPreviewScreen() {
   const params = useLocalSearchParams() as InvoicePreviewParams;
   const { profile } = useAuth();
   const caps = useCapabilities();
+  const { can: canSurface } = useMemberAccess();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
 
@@ -125,7 +127,8 @@ export default function InvoicePdfPreviewScreen() {
   };
 
   const calculations = useInvoiceCalc(selectedTrips, invoiceConfig);
-  const allowed = canAccessInvoicing(profile, caps);
+  const allowed =
+    canAccessInvoicing(profile, caps) && canSurface("finance.invoicing");
 
   useEffect(() => {
     let mounted = true;

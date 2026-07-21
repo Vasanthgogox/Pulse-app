@@ -64,6 +64,7 @@ import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
     canAccessFinance } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate, formatTripTableDate } from "@/lib/format";
 import {
@@ -157,7 +158,9 @@ export default function SupplierDetailScreen({
   const { currentOrganization } = useOrganization();
   const queryClient = useQueryClient();
   const capabilities = useCapabilities();
-  const canAddTransaction = canAccessFinance(capabilities);
+  const { can: canSurface } = useMemberAccess();
+  const canAddTransaction =
+    canAccessFinance(capabilities) && canSurface("finance.add_transaction");
   const [supplier, setSupplier] = useState<SupplierRow | null>(null);
   const supplierName =
     supplier?.name ||

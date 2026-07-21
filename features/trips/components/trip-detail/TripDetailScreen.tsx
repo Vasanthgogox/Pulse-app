@@ -1401,6 +1401,16 @@ export default function TripDetailScreen({
     return <CenteredLoadingView message="Loading trip…" />;
   }
 
+  if (!detail.canViewDetail) {
+    return (
+      <View style={styles.errorWrap}>
+        <Text style={styles.errorText}>
+          You don’t have access to trip details.
+        </Text>
+      </View>
+    );
+  }
+
   if (detail.error || !detail.trip) {
     return (
       <View style={styles.errorWrap}>

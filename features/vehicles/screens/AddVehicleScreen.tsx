@@ -6,6 +6,7 @@ import { PartyRegistrationPortal } from '@/features/finance/components/PartyRegi
 import { usePartyPortalRouteHandlers } from '@/features/finance/hooks/usePartyPortalRouteHandlers';
 import { canAccessVehicles } from '@/lib/capabilities';
 import { useCapabilities } from '@/lib/useCapabilities';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 import { ROUTES } from '@/lib/routes';
 
 const DEFAULT_FALLBACK_ROUTE = ROUTES.TABS.RESOURCES;
@@ -33,17 +34,20 @@ export default function AddVehicleScreen() {
   const partyPortal = usePartyPortalRouteHandlers();
   const { profile } = useAuth();
   const capabilities = useCapabilities();
+  const { can: canSurface } = useMemberAccess();
   const { currentOrganization } = useOrganization();
   const returnToParam = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
   const returnTo = returnToParam?.startsWith('/') ? returnToParam : undefined;
+  const canCreate =
+    canAccessVehicles(capabilities) && canSurface("fleet.vehicles.create");
 
   useEffect(() => {
-    if (profile && !canAccessVehicles(capabilities)) {
+    if (profile && !canCreate) {
       closeModal(router, returnTo);
     }
-  }, [capabilities, profile, returnTo, router]);
+  }, [canCreate, profile, returnTo, router]);
 
-  if (profile && !canAccessVehicles(capabilities)) {
+  if (profile && !canCreate) {
     return null;
   }
 

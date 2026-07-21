@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThemedAlertModal } from '@/components/ThemedAlertModal';
@@ -8,6 +8,7 @@ import { usePartyPortalRouteHandlers } from '@/features/finance/hooks/usePartyPo
 import { type DriverFormData, inviteDriver } from '@/features/drivers';
 import { invalidateFleetDriverConnectionCaches } from '@/lib/invalidateFleetDriverConnectionCaches';
 import { closeModal } from '@/app/(modals)/add-driver-closeModal';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 
 export { closeModal };
 
@@ -20,8 +21,20 @@ export default function AddDriverScreen() {
   const queryClient = useQueryClient();
   const partyPortal = usePartyPortalRouteHandlers();
   const { currentOrganization } = useOrganization();
+  const { can: canSurface } = useMemberAccess();
+  const canCreate = canSurface("fleet.drivers.create");
   const returnToParam = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
   const returnTo = returnToParam?.startsWith('/') ? returnToParam : undefined;
+
+  useEffect(() => {
+    if (!canCreate) {
+      closeModal(router as CloseModalRouter, returnTo);
+    }
+  }, [canCreate, returnTo, router]);
+
+  if (!canCreate) {
+    return null;
+  }
   const [themedInfo, setThemedInfo] = useState<{
     title: string;
     message: string;
