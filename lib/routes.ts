@@ -77,6 +77,10 @@ export const ROUTES = {
 
   MODALS: {
     TEAM:           '/(modals)/team'           as const,
+    /** Owner-only member role & access control. */
+    ACCESS_CONTROL: '/(modals)/access-control' as const,
+    /** Owner-only per-member domain permission detail. */
+    MEMBER_PERMISSIONS: '/(modals)/member-permissions' as const,
     INVITE_MEMBER:  '/(modals)/invite-member'  as const,
     LANGUAGE_SETTINGS: '/(modals)/language-settings' as const,
     /** @deprecated Use {@link ROUTES.CHAT}; kept for deep links — redirects to `/chat`. */

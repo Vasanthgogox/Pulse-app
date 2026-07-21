@@ -1,11 +1,21 @@
 /**
- * Domain access for the signed-in member = org operating model ∩ functional role.
+ * Domain access for the signed-in member = org operating model ∩ member domains.
+ *
+ * Member domains come from `organization_members.permissions.domains` when set
+ * (multi-domain toggles on the permission detail page). Legacy rows without
+ * `domains` fall back to the single functional role derived from platformRole.
+ *
  * Owner/admin bypass functional gating (full access, same as useCapabilities()).
- * A member with no functional role assigned gets no domain access until the
- * owner assigns one — see docs/RBAC_OPERATING_MODEL.md.
+ * A member with no domains enabled gets no domain access until the owner
+ * assigns one — see docs/RBAC_OPERATING_MODEL.md.
  */
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
-import { functionalRoleFromPlatformRole } from "@/features/organization/utils/teamInviteRoles.util";
+import {
+  domainsFromPlatformRole,
+  functionalRoleFromPlatformRole,
+  type MemberDomainFlags,
+  type PlatformTeamRole,
+} from "@/features/organization/utils/teamInviteRoles.util";
 import {
   canAccessClients,
   canAccessFinance,
@@ -57,9 +67,21 @@ export function memberCanAccessTabRoute(
   return true;
 }
 
+function resolveMemberDomains(
+  memberDomains: MemberDomainFlags | null,
+  memberPlatformRole: PlatformTeamRole | null,
+): MemberDomainFlags {
+  if (memberDomains) return memberDomains;
+  // Legacy single-role path (no domains blob yet).
+  const functional = functionalRoleFromPlatformRole(memberPlatformRole);
+  if (functional) return domainsFromPlatformRole(memberPlatformRole);
+  return { finance: false, sales: false, tripops: false };
+}
+
 export function useMemberCapabilities(): MemberDomainAccess {
   const capabilities = useCapabilities();
-  const { memberRole, memberPlatformRole, isLoading } = useActiveWorkspace();
+  const { memberRole, memberPlatformRole, memberDomains, isLoading } =
+    useActiveWorkspace();
 
   return useMemo(() => {
     const isOwnerOrAdmin = memberRole === "owner" || memberRole === "admin";
@@ -81,12 +103,22 @@ export function useMemberCapabilities(): MemberDomainAccess {
       };
     }
 
-    const functionalRole = functionalRoleFromPlatformRole(memberPlatformRole);
+    // Admin platform role (non-owner) still bypasses domain gating.
+    if (memberPlatformRole === "admin") {
+      return {
+        finance: orgAllowsFinance,
+        sales: orgAllowsSales,
+        tripops: orgAllowsTripOps,
+        isLoading,
+      };
+    }
+
+    const domains = resolveMemberDomains(memberDomains, memberPlatformRole);
     return {
-      finance: orgAllowsFinance && functionalRole === "finance",
-      sales: orgAllowsSales && functionalRole === "sales",
-      tripops: orgAllowsTripOps && functionalRole === "tripops",
+      finance: orgAllowsFinance && domains.finance,
+      sales: orgAllowsSales && domains.sales,
+      tripops: orgAllowsTripOps && domains.tripops,
       isLoading,
     };
-  }, [capabilities, memberRole, memberPlatformRole, isLoading]);
+  }, [capabilities, memberRole, memberPlatformRole, memberDomains, isLoading]);
 }

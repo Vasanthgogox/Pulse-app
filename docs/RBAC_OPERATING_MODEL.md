@@ -126,28 +126,43 @@ Owner-only, atomic, audited. The current owner picks an **active member**; the o
 
 - RPC: `transfer_organization_ownership(p_org_id, p_new_owner_user_id)` — [migration](../supabase/migrations/20261210120000_transfer_organization_ownership.sql)
 - Service: `transferOwnership` + `looksLikeTransferTargetError` in `features/organization/services/members.service.ts`
-- UI: owner-only "Transfer ownership" action in `MemberEditModal`, wired in `TeamMembersView`
+- UI: owner-only "Transfer ownership" on the member access page (`MemberPermissionsPanel`), opened from team Edit
 
 ---
 
 ## Functional member roles (Finance / Sales / TripOps)
 
-A second, orthogonal RBAC axis layered on top of the operating model above. Owner/Admin are unaffected (full access, org-model-gated only, as before). A non-admin member is additionally assigned **one** functional role by the owner, and their effective nav access is the **intersection**: org model allows it **AND** the functional role covers that domain.
+A second, orthogonal RBAC axis layered on top of the operating model above. Owner/Admin are unaffected (full access, org-model-gated only, as before). A non-admin member’s effective nav access is the **intersection**: org model allows it **AND** the member’s domain flags cover that tab.
 
-| Functional role | Domain | Legacy `organization_members.role` (coarse storage) |
-|------------------|--------|------------------------------------------------------|
+| Domain | Tab | Legacy `organization_members.role` (coarse storage when primary) |
+|--------|-----|------------------------------------------------------------------|
 | Finance | Fiscal tab (cash, ledgers, invoicing) | `finance` |
 | Sales | Network tab (marketplace, clients, connections) | `member` |
 | TripOps | Trips tab (dispatch, indents, trip execution) | `dispatcher` |
 
-- The real functional role is the source of truth in `organization_members.permissions.platformRole` (jsonb) — the `role` column is a coarse legacy value only, kept for the existing `chk_org_members_role` CHECK constraint (no migration needed).
-- `PlatformTeamRole` (`features/organization/utils/teamInviteRoles.util.ts`) gained `finance` / `sales` / `tripops`; `TEAM_INVITE_ROLE_OPTIONS` now offers **Admin / Finance / Sales / TripOps** (Planner/Operator retired from new invites, kept in the type only so pre-existing rows still render a label via `memberDisplayRoleLabel`).
-- `ActiveWorkspaceContext` now selects `permissions` and exposes `memberPlatformRole` alongside `memberRole`.
-- `useMemberCapabilities()` (`lib/useMemberCapabilities.ts`) computes the intersection → `{ finance, sales, tripops }` booleans. Owner/Admin bypass the functional-role side entirely.
-- **Strict default:** a member with no functional role assigned (or a legacy Planner/Operator row invited before this shipped) gets **no** domain access until the owner assigns Finance/Sales/TripOps via `InviteMemberModal`/`MemberEditModal`.
-- Enforcement is **client-side, nav/tab-entry only**: `components/MemberDomainGate.tsx` wraps `app/(tabs)/finance.tsx`, `trips.tsx`, `network/index.tsx` (same redirect-on-deny pattern as `ModelAccessGate`). No RLS change, no per-screen rewrite of the existing ~30 `useCapabilities()` call sites — those stay org-model-only. Full gap list in `docs/RBAC_OPERATING_MODEL_CHANGELOG.md` → "Known gaps".
+- Storage lives in `organization_members.permissions` jsonb: `{ platformRole, grants, domains? }`.
+  - `platformRole` — preset label (admin / finance / sales / tripops); still used for invite UI and coarse `role` column mapping.
+  - `domains` — optional `{ finance, sales, tripops }` booleans. When present, **multi-domain** access is allowed (any combination). When absent (legacy rows), access falls back to the single functional role derived from `platformRole`.
+  - `grants` — display/cosmetic colon-namespaced tokens (still not the Capability enforcement vocabulary).
+- Owner edits domains on **Member access** (`app/(modals)/member-permissions?memberId=`) — KYC-style detail page with role presets + per-domain Switches. Write path: `updateMemberPermissions` → `set_member_role` RPC (owner-only, audited).
+- `ActiveWorkspaceContext` exposes `memberPlatformRole` and `memberDomains`.
+- `useMemberCapabilities()` intersects org model with `memberDomains` (or legacy single-role). Owner / org-role admin / `platformRole === "admin"` bypass domain gating.
+- **Strict default:** a member with no domains enabled (and no functional role on legacy rows) gets **no** domain access until the owner assigns access via Invite / Edit / Member access.
+- Enforcement is **client-side, nav/tab-entry only**: `components/MemberDomainGate.tsx` wraps the 3 primary tabs. No RLS change; existing `useCapabilities()` call sites stay org-model-only.
 
 ---
+
+## Owner-only Access Control
+
+Role/access changes are **owner-only** and enforced server-side.
+
+| Aspect | Rule |
+|--------|------|
+| Surface | `app/(modals)/access-control.tsx` — owner-gated (`useOrgRole().isOwner`); reuses `TeamMembersView`. Non-owners see "Owner access only". Entry: owner-only "Access" button in `WorkspaceTeamPanel`. |
+| Write path | `updateMemberRole` → `set_member_role(p_member_id, p_role, p_permissions)` RPC (SECURITY DEFINER, owner-only, atomic, audited). Owner-row reassignment rejected — use ownership transfer. |
+| RLS backstop | `org_members_update` `WITH CHECK` now allows a role/permission change only when caller `is_org_owner`; admins keep other-column edits, self-row invite accept/reject unaffected. No self-reference (uses `is_org_owner`/`member_role_permissions_unchanged` helpers) to avoid the recursion class fixed in `20261211090000`. |
+| Audit | `workspace_audit_log` event `member.role_update` `{member_id, from, to}`. |
+| Migration | `supabase/migrations/20261212090000_set_member_role_owner_only.sql` |
 
 ## Manual test (quick)
 

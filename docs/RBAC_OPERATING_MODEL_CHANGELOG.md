@@ -18,8 +18,10 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | _(pending)_ | Network page: counterparty-aware connect roles; asset hides supplier tab/count/create-post; aggregate hides driver (FLEET) tab/count |
 | _(pending)_ | Operating-model switching: owner-only, 30-day cooldown, audited RPC; impact-preview modal; capability re-gate with no data loss |
 | _(pending)_ | Desktop hub sub-panels (details / hero / grow) gated on `canAccessSuppliers`/`canAccessDrivers`; `database.types.ts` regen (change_operating_model RPC + operating_model_changed_at); Hybrid model verified full-union (no gates to add, covered by tests) |
-| _(pending)_ | Ownership transfer: owner-only atomic audited RPC (`transfer_organization_ownership`) — demote owner→admin, promote member→owner, sync `organizations.owner_id`; hardened `org_members_update` RLS to block off-RPC `role='owner'`; owner-only "Transfer ownership" action in `MemberEditModal`; workspace refresh re-gates ex-owner |
+| _(pending)_ | Ownership transfer: owner-only atomic audited RPC (`transfer_organization_ownership`) — demote owner→admin, promote member→owner, sync `organizations.owner_id`; hardened `org_members_update` RLS to block off-RPC `role='owner'`; owner-only "Transfer ownership" on member access page; workspace refresh re-gates ex-owner |
+| _(pending)_ | Owner-only Access Control page: dedicated owner-gated screen (`app/(modals)/access-control.tsx`) reusing `TeamMembersView`; role writes routed through new owner-only, atomic, audited `set_member_role` RPC; `org_members_update` RLS hardened so role/permission changes are owner-only (admins can no longer re-role teammates off-RPC); owner-only "Access" entry in `WorkspaceTeamPanel` |
 | _(pending)_ | Part 2: functional member roles (Finance/Sales/TripOps) — invite roles replace Planner/Operator; `permissions.platformRole` now read into `ActiveWorkspaceContext`; new `useMemberCapabilities()` intersects org model with functional role (owner/admin bypass); client-side gate on the 3 primary tabs only (`MemberDomainGate`) — no RLS change, no DB migration (reuses existing `organization_members.permissions` column and legacy `role` CHECK values) |
+| _(pending)_ | Part 3: per-member access page — Edit opens `/(modals)/member-permissions` (two-column: identity left, presets/domains right); replaces `MemberEditModal`; remove + transfer + role/domains save live on that page |
 
 ---
 
@@ -37,9 +39,14 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `supabase/migrations/20261208120000_change_operating_model.sql` | `operating_model_changed_at` col + owner-only, cooldown-guarded, audited `change_operating_model` RPC |
 | `features/organization/components/workspace/ChangeOperatingModelModal.tsx` | Owner-only model picker with downgrade impact preview |
 | `supabase/migrations/20261210120000_transfer_organization_ownership.sql` | Owner-only atomic ownership-transfer RPC + `org_members_update` RLS hardening (no off-RPC `role='owner'`) |
+| `supabase/migrations/20261212090000_set_member_role_owner_only.sql` | Owner-only `set_member_role(p_member_id, p_role, p_permissions)` SECURITY DEFINER RPC (rejects non-owner + owner-row reassignment, audits `member.role_update`); `member_role_permissions_unchanged()` helper; `org_members_update` RLS now requires owner to change role/permissions (no self-reference — uses helpers to avoid the `20261211090000` recursion class) |
+| `app/(modals)/access-control.tsx` | Owner-only Access Control screen — gates on `useOrgRole().isOwner`, renders `TeamMembersView` with `canManage={isOwner}`; "Owner access only" notice for non-owners |
 | `supabase/migrations/20261211090000_fix_org_members_policy_recursion.sql` | Fix infinite-recursion in `org_members_update`/`org_members_insert` (self-referenced `organization_members` inside its own policy → every UPDATE/INSERT 500'd). New `is_org_owner()` SECURITY DEFINER helper; policies now use `is_org_admin()`/`is_org_owner()` instead of inline self-subqueries. Same authz intent |
-| `lib/useMemberCapabilities.ts` | Hook: `useCapabilities()` (org model) ∩ member's functional role (finance/sales/tripops) → `{ finance, sales, tripops }` domain booleans; owner/admin bypass |
+| `lib/useMemberCapabilities.ts` | Hook: `useCapabilities()` (org model) ∩ member domains (or legacy single functional role) → `{ finance, sales, tripops }`; owner/admin bypass |
 | `components/MemberDomainGate.tsx` | Client-side redirect-on-deny gate for the Fiscal/Trips/Network tabs (same pattern as `ModelAccessGate`) |
+| `app/(modals)/member-permissions.tsx` | Owner-only per-member domain permission detail screen (`?memberId=`) |
+| `features/organization/components/MemberPermissionsPanel/MemberPermissionsPanel.tsx` | KYC-style WorkspaceDetailLayout page: role presets + domain Switch rows + save via `updateMemberPermissions` |
+| `features/organization/components/MemberPermissionsPanel/DomainPermissionToggleRow.tsx` | Expandable domain row (Switch + grants chips), mirrors KycRequiredDocumentRow |
 
 ---
 
@@ -49,9 +56,17 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 |------|----------------|
 | `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe; `hasBusinessCapabilities`; `allowedConnectionRoles` (counterparty-aware client/supplier); `operatingModelTransition` (impact preview) |
 | `features/organization/services/organization.service.ts` | `changeOperatingModel` RPC wrapper + `looksLikeModelChangeCooldownError` |
-| `features/organization/services/members.service.ts` | `transferOwnership` RPC wrapper + `looksLikeTransferTargetError` |
-| `features/organization/components/MemberEditModal.tsx` | Owner-only "Transfer ownership" action (`canTransfer`/`onTransfer`); active-member only |
-| `features/organization/components/TeamMembersView.tsx` | `handleTransfer` (confirm → RPC → workspace refresh + roster invalidate); `canTransfer={isOwner}` |
+| `features/organization/services/members.service.ts` | `transferOwnership` RPC wrapper + `looksLikeTransferTargetError`; `updateMemberRole` → `set_member_role`; new `updateMemberPermissions` for domain toggles + `looksLikeNotOwnerError` |
+| `lib/routes.ts` | `MODALS.ACCESS_CONTROL` + `MODALS.MEMBER_PERMISSIONS` |
+| `app/(modals)/_layout.tsx` | Register `access-control` + `member-permissions` fullScreenModal screens |
+| `features/organization/components/workspace/WorkspaceTeamPanel.tsx` | Owner-only "Access" button → `ROUTES.MODALS.ACCESS_CONTROL` |
+| `features/network/components/desktop/NetworkDesktopTeamPanel.tsx` | Owner-only "Access" button (network hub Team tab) → `ROUTES.MODALS.ACCESS_CONTROL` |
+| `lib/navigationPolicy/registry/org.ts` | `org.modal-access-control` + `org.modal-member-permissions` policies |
+| `features/organization/components/TeamMembersView.tsx` | Edit → member-permissions modal (no `MemberEditModal`); phone-invite cancel stays local |
+| `features/organization/utils/teamInviteRoles.util.ts` | `MemberDomainFlags`, `domains` on permissions, domain helpers, `buildPermissionsFromDomains` |
+| `contexts/ActiveWorkspaceContext.tsx` / `types/workspace.ts` | Expose `memberDomains` from permissions |
+| `lib/useMemberCapabilities.ts` | Prefer `memberDomains` (multi-domain) over single functional role |
+| ~~`features/organization/components/MemberEditModal.tsx`~~ | Removed — superseded by `MemberPermissionsPanel` |
 | `features/organization/components/workspace/WorkspaceSettingsPanel.tsx` | Owner-only editable Operating Model field → opens modal; refresh + `['q',…]` cache purge on switch |
 | `features/organization/components/workspace/workspacePanelUi.tsx` | `panelFieldHint` style |
 | `features/network/screens/NetworkScreen.tsx` | Asset: hide supplier tab/count/create-post, connect as client only. Aggregate: hide DRIVER tab + FLEET count. Empty-role connect blocked with alert |
@@ -108,7 +123,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `.cursor/rules/pulse-standards.mdc` | Points to operating-model RBAC |
 | `features/organization/utils/teamInviteRoles.util.ts` | `PlatformTeamRole` adds `finance`/`sales`/`tripops` (planner/operator kept for legacy-row display only); `TEAM_INVITE_ROLE_OPTIONS` now Admin/Finance/Sales/TripOps; `orgMemberRoleForPlatformRole` maps finance→`finance`, sales→`member`, tripops→`dispatcher`; new `FunctionalRole` type + `functionalRoleFromPlatformRole()` |
 | `features/organization/components/InviteMemberModal.tsx` | Default `selectedRole` → `"tripops"` (was `"operator"`, now retired from the picker) |
-| `features/organization/components/MemberEditModal.tsx` | Default/fallback `selectedRole`/`currentRole` → `"tripops"` |
+| ~~`features/organization/components/MemberEditModal.tsx`~~ | Removed — edit now opens `MemberPermissionsPanel` |
 | `contexts/ActiveWorkspaceContext.tsx` | Selects `permissions` from `organization_members`; new `platformRoleMap` (parallel to `roleMap`) + `memberPlatformRole` state, derived via `platformRoleFromMember`, set in `loadWorkspaces` and `switchWorkspace` |
 | `types/workspace.ts` | `ActiveWorkspaceState.memberPlatformRole: PlatformTeamRole \| null` |
 | `app/(tabs)/finance.tsx` | Wrapped in `<MemberDomainGate kind="finance">` |

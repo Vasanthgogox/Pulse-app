@@ -19,6 +19,7 @@ import {
   buildTeamInvitePermissions,
   orgMemberRoleForPlatformRole,
   type PlatformTeamRole,
+  type TeamInvitePermissions,
 } from "@/features/organization/utils/teamInviteRoles.util";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -406,18 +407,45 @@ export async function inviteTeamMemberByContact(
 
 // ─── Update role ──────────────────────────────────────────────────────────────
 
+/** Detect the set_member_role RPC's owner-only rejection for a friendly message. */
+export function looksLikeNotOwnerError(message: string): boolean {
+  return /not_org_owner/i.test(message);
+}
+
+/**
+ * Change a member's role/permissions via the owner-only, atomic, audited RPC.
+ * The DB is the authority — RLS blocks off-RPC role/permission writes for
+ * non-owners. Owner-row reassignment is rejected (use transferOwnership).
+ */
 export async function updateMemberRole(
   memberId: string,
   platformRole: PlatformTeamRole,
 ): Promise<{ error: Error | null }> {
-  const role = orgMemberRoleForPlatformRole(platformRole);
-  const permissions = buildTeamInvitePermissions(platformRole);
+  return updateMemberPermissions(memberId, buildTeamInvitePermissions(platformRole));
+}
+
+/**
+ * Persist a full permissions object (platformRole + grants + domains) via the
+ * owner-only set_member_role RPC. Used by the per-member permission detail page
+ * when domain toggles diverge from a single role preset.
+ */
+export async function updateMemberPermissions(
+  memberId: string,
+  permissions: TeamInvitePermissions,
+): Promise<{ error: Error | null }> {
+  const role = orgMemberRoleForPlatformRole(permissions.platformRole);
   try {
-    const { error } = await supabase()
-      .from("organization_members")
-      .update({ role, permissions })
-      .eq("id", memberId);
-    if (error) return { error: new Error(error.message) };
+    const { error } = await supabase().rpc("set_member_role", {
+      p_member_id: memberId,
+      p_role: role,
+      p_permissions: permissions,
+    });
+    if (error) {
+      if (looksLikeNotOwnerError(error.message)) {
+        return { error: new Error("Only the organization owner can change member roles.") };
+      }
+      return { error: new Error(error.message) };
+    }
     return { error: null };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)) };

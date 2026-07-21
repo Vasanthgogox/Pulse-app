@@ -589,6 +589,20 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
     onDeny: { type: 'sign_in' },
   },
   {
+    id: 'org.modal-access-control',
+    pattern: '/access-control',
+    experience: 'org',
+    priority: 100,
+    onDeny: { type: 'sign_in' },
+  },
+  {
+    id: 'org.modal-member-permissions',
+    pattern: '/member-permissions',
+    experience: 'org',
+    priority: 100,
+    onDeny: { type: 'sign_in' },
+  },
+  {
     id: 'org.modal-invite',
     pattern: '/invite-member',
     experience: 'org',

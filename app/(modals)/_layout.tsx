@@ -60,6 +60,14 @@ export default function ModalsLayout() {
         options={{ presentation: 'fullScreenModal', title: 'Team Members' }}
       />
       <Stack.Screen
+        name="access-control"
+        options={{ presentation: 'fullScreenModal', title: 'Access Control' }}
+      />
+      <Stack.Screen
+        name="member-permissions"
+        options={{ presentation: 'fullScreenModal', title: 'Member Access', headerShown: false }}
+      />
+      <Stack.Screen
         name="invite-member"
         options={{ presentation: 'fullScreenModal', title: 'Invite Member' }}
       />

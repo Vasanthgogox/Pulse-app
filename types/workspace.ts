@@ -1,5 +1,8 @@
 // Types: User, Workspace (with KYC), WorkspaceMember, ActiveWorkspaceState
-import type { PlatformTeamRole } from '@/features/organization/utils/teamInviteRoles.util';
+import type {
+  MemberDomainFlags,
+  PlatformTeamRole,
+} from '@/features/organization/utils/teamInviteRoles.util';
 
 export type KycStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
 
@@ -53,6 +56,12 @@ export interface ActiveWorkspaceState {
   memberRole: WorkspaceMember['role'] | null;
   // User's stored functional/platform role in the active workspace (admin/finance/sales/tripops/…)
   memberPlatformRole: PlatformTeamRole | null;
+  /**
+   * Effective domain toggles for the signed-in member in the active workspace.
+   * Prefer `permissions.domains` when present; else derived from platformRole.
+   * Null while loading / no membership.
+   */
+  memberDomains: MemberDomainFlags | null;
   // True while loading the workspace list
   isLoading: boolean;
   error: Error | null;

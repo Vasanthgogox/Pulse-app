@@ -34,9 +34,22 @@ export function isPlatformTeamRole(value: string): value is PlatformTeamRole {
 /** Named functional roles an owner can assign to a non-admin member. */
 export type FunctionalRole = "finance" | "sales" | "tripops";
 
+/** Per-domain tab access stored on the member row (org model ∩ these flags). */
+export type MemberDomainFlags = {
+  finance: boolean;
+  sales: boolean;
+  tripops: boolean;
+};
+
 export type TeamInvitePermissions = {
   platformRole: PlatformTeamRole;
   grants: string[];
+  /**
+   * Optional multi-domain overrides. When present, `useMemberCapabilities`
+   * uses these instead of the single functional role derived from
+   * `platformRole`. Absent on legacy rows → fall back to one-of-three role.
+   */
+  domains?: MemberDomainFlags;
 };
 
 const PERMISSION_LABELS: Record<string, string> = {
@@ -120,13 +133,112 @@ export function permissionLabel(grant: string): string {
   return PERMISSION_LABELS[grant] ?? grant;
 }
 
+export function emptyMemberDomains(): MemberDomainFlags {
+  return { finance: false, sales: false, tripops: false };
+}
+
+/** Default domain flags for a platform role preset. */
+export function domainsFromPlatformRole(
+  platformRole: PlatformTeamRole | null,
+): MemberDomainFlags {
+  if (platformRole === "admin") {
+    return { finance: true, sales: true, tripops: true };
+  }
+  const functional = functionalRoleFromPlatformRole(platformRole);
+  return {
+    finance: functional === "finance",
+    sales: functional === "sales",
+    tripops: functional === "tripops",
+  };
+}
+
+/**
+ * Resolve effective domain flags for a stored member row.
+ * Prefers explicit `permissions.domains`; otherwise derives from platformRole.
+ */
+export function domainsFromMember(
+  member: Pick<OrgMember, "role" | "permissions">,
+): MemberDomainFlags {
+  const raw = member.permissions as TeamInvitePermissions | null | undefined;
+  const stored = raw?.domains;
+  if (
+    stored &&
+    typeof stored.finance === "boolean" &&
+    typeof stored.sales === "boolean" &&
+    typeof stored.tripops === "boolean"
+  ) {
+    return {
+      finance: stored.finance,
+      sales: stored.sales,
+      tripops: stored.tripops,
+    };
+  }
+  return domainsFromPlatformRole(platformRoleFromMember(member));
+}
+
+/**
+ * Pick a display/storage platformRole that best matches the domain set.
+ * Admin only when all three are on AND `preferAdmin` is true (explicit admin preset).
+ */
+export function platformRoleFromDomains(
+  domains: MemberDomainFlags,
+  preferAdmin = false,
+): PlatformTeamRole {
+  if (preferAdmin && domains.finance && domains.sales && domains.tripops) {
+    return "admin";
+  }
+  // Prefer tripops > finance > sales when multiple are on (label only — domains gate access).
+  if (domains.tripops) return "tripops";
+  if (domains.finance) return "finance";
+  if (domains.sales) return "sales";
+  return "tripops";
+}
+
+/** Union of grant strings for every enabled domain (+ org:read baseline). */
+export function grantsFromDomains(domains: MemberDomainFlags): string[] {
+  const set = new Set<string>(["org:read"]);
+  if (domains.finance) {
+    for (const g of PLATFORM_ROLE_GRANTS.finance) set.add(g);
+  }
+  if (domains.sales) {
+    for (const g of PLATFORM_ROLE_GRANTS.sales) set.add(g);
+  }
+  if (domains.tripops) {
+    for (const g of PLATFORM_ROLE_GRANTS.tripops) set.add(g);
+  }
+  return Array.from(set);
+}
+
 export function buildTeamInvitePermissions(
   platformRole: PlatformTeamRole,
+  domains?: MemberDomainFlags,
 ): TeamInvitePermissions {
+  const resolvedDomains = domains ?? domainsFromPlatformRole(platformRole);
   return {
     platformRole,
-    grants: PLATFORM_ROLE_GRANTS[platformRole],
+    grants:
+      platformRole === "admin"
+        ? PLATFORM_ROLE_GRANTS.admin
+        : grantsFromDomains(resolvedDomains),
+    domains: resolvedDomains,
   };
+}
+
+/** Build permissions from an explicit domain toggle set (permission detail page). */
+export function buildPermissionsFromDomains(
+  domains: MemberDomainFlags,
+  options?: { preferAdmin?: boolean; platformRole?: PlatformTeamRole },
+): TeamInvitePermissions {
+  const preferAdmin =
+    options?.preferAdmin ?? options?.platformRole === "admin";
+  const platformRole =
+    options?.platformRole === "admin" &&
+    domains.finance &&
+    domains.sales &&
+    domains.tripops
+      ? "admin"
+      : platformRoleFromDomains(domains, preferAdmin);
+  return buildTeamInvitePermissions(platformRole, domains);
 }
 
 /** Legacy org_members.role value stored alongside permissions.platformRole. */

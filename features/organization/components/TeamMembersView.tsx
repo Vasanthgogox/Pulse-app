@@ -9,20 +9,12 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import { partyInitialsFromName } from "@/lib/partyAvatarDisplay";
 import { useOrgMembersQuery, useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
 import {
-  updateMemberRole,
-  removeMember,
   cancelTeamInvite,
-  transferOwnership,
-  looksLikeTransferTargetError,
 } from "@/features/organization/services/members.service";
-import { useOrgRole } from "@/lib/hooks/useOrgRole";
-import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
-import { MemberEditModal } from "@/features/organization/components/MemberEditModal";
 import type { OrgMember, PendingPhoneTeamInvite } from "@/types/organization";
 import {
   memberDisplayRoleLabel,
   platformRoleFromMember,
-  type PlatformTeamRole,
 } from "@/features/organization/utils/teamInviteRoles.util";
 import {
   Check,
@@ -35,6 +27,7 @@ import {
   UserPlus2,
   Users,
 } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
@@ -571,7 +564,6 @@ export function TeamMembersView({
   );
   const [search, setSearch] = useState("");
   const [actionId, setActionId] = useState<string | null>(null);
-  const [editingMember, setEditingMember] = useState<OrgMember | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   React.useEffect(() => {
@@ -580,8 +572,15 @@ export function TeamMembersView({
 
   const query = useOrgMembersQuery(orgId);
   const invalidate = useInvalidateOrgMembers(orgId);
-  const { isOwner } = useOrgRole();
-  const { refresh: refreshWorkspace } = useActiveWorkspace();
+  const router = useRouter();
+
+  const handleEditMember = (member: OrgMember) => {
+    router.push(
+      (`/(modals)/member-permissions?memberId=${encodeURIComponent(member.id)}`) as Parameters<
+        typeof router.push
+      >[0],
+    );
+  };
 
   const roster = query.data;
   const all = roster?.members ?? [];
@@ -631,71 +630,6 @@ export function TeamMembersView({
     setRefreshing(false);
   };
 
-  const handleRoleChange = async (member: OrgMember, role: PlatformTeamRole) => {
-    setActionId(member.id);
-    try {
-      const { error } = await updateMemberRole(member.id, role);
-      if (error) {
-        Alert.alert("Could not update role", error.message);
-        return false;
-      }
-      invalidate();
-      await query.refetch();
-      return true;
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const handleEditSave = async (member: OrgMember, role: PlatformTeamRole) => {
-    const ok = await handleRoleChange(member, role);
-    if (ok) setEditingMember(null);
-  };
-
-  const handleEditRemove = (member: OrgMember) => {
-    setEditingMember(null);
-    handleRemove(member);
-  };
-
-  const handleTransfer = (member: OrgMember) => {
-    const name = member.full_name || member.phone || member.email || "this member";
-    Alert.alert(
-      "Transfer ownership?",
-      `${name} will become the owner and you'll become an admin. You can't undo this yourself.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Transfer",
-          style: "destructive",
-          onPress: async () => {
-            setActionId(member.id);
-            try {
-              const { error } = await transferOwnership(orgId, member.user_id);
-              if (error) {
-                Alert.alert(
-                  "Could not transfer ownership",
-                  looksLikeTransferTargetError(error.message)
-                    ? "The chosen person must be an active member of this workspace."
-                    : error.message,
-                );
-                return;
-              }
-              setEditingMember(null);
-              // Ownership drives memberRole via ActiveWorkspaceContext (not React
-              // Query) — refresh it so the ex-owner loses owner-only surfaces at
-              // once, then refresh the roster pills.
-              await refreshWorkspace();
-              invalidate();
-              await query.refetch();
-            } finally {
-              setActionId(null);
-            }
-          },
-        },
-      ],
-    );
-  };
-
   const handleCancelPhoneInvite = (invite: PendingPhoneTeamInvite) => {
     Alert.alert(
       "Cancel invitation?",
@@ -709,40 +643,6 @@ export function TeamMembersView({
             setActionId(invite.id);
             try {
               const { error } = await cancelTeamInvite(invite.id, "phone_pending");
-              if (error) {
-                Alert.alert("Error", error.message);
-                return;
-              }
-              invalidate();
-              await query.refetch();
-            } finally {
-              setActionId(null);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleRemove = (member: OrgMember) => {
-    const displayName = member.full_name || member.phone || "this member";
-    const isPending = member.status === "invited";
-    Alert.alert(
-      isPending ? "Cancel invitation?" : "Remove from team?",
-      isPending
-        ? `Cancel the invite sent to ${displayName}?`
-        : `Remove ${displayName} from your team? They will lose access immediately.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: isPending ? "Cancel invite" : "Remove",
-          style: "destructive",
-          onPress: async () => {
-            setActionId(member.id);
-            try {
-              const { error } = isPending
-                ? await cancelTeamInvite(member.id)
-                : await removeMember(member.id);
               if (error) {
                 Alert.alert("Error", error.message);
                 return;
@@ -859,7 +759,7 @@ export function TeamMembersView({
                         member={m}
                         isCurrentUser={m.user_id === currentUserId}
                         canManage={canManage}
-                        onEdit={setEditingMember}
+                        onEdit={handleEditMember}
                       />
                     )}
                   </View>
@@ -899,7 +799,7 @@ export function TeamMembersView({
                       member={item.member}
                       isCurrentUser={item.member.user_id === currentUserId}
                       canManage={canManage}
-                      onEdit={setEditingMember}
+                      onEdit={handleEditMember}
                     />
                   )}
                 </View>
@@ -934,48 +834,20 @@ export function TeamMembersView({
   );
 
   if (embedded) {
-    return (
-      <View style={styles.embeddedRoot}>
-        {body}
-        <MemberEditModal
-          visible={!!editingMember}
-          member={editingMember}
-          saving={!!editingMember && actionId === editingMember.id}
-          desktopMetronic={desktopMetronic}
-          onClose={() => setEditingMember(null)}
-          onSave={(member, role) => void handleEditSave(member, role)}
-          onRemove={handleEditRemove}
-          canTransfer={isOwner}
-          onTransfer={handleTransfer}
-        />
-      </View>
-    );
+    return <View style={styles.embeddedRoot}>{body}</View>;
   }
 
   return (
-    <>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.loaderAccent} />
-        }
-      >
-        {body}
-      </ScrollView>
-      <MemberEditModal
-        visible={!!editingMember}
-        member={editingMember}
-        saving={!!editingMember && actionId === editingMember.id}
-        desktopMetronic={desktopMetronic}
-        onClose={() => setEditingMember(null)}
-        onSave={(member, role) => void handleEditSave(member, role)}
-        onRemove={handleEditRemove}
-        canTransfer={isOwner}
-        onTransfer={handleTransfer}
-      />
-    </>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.loaderAccent} />
+      }
+    >
+      {body}
+    </ScrollView>
   );
 }
 
