@@ -50,7 +50,8 @@ export default function WorkspaceScreen() {
     if (activePanel !== "team") return;
     closeOverlay();
     router.replace(ROUTES.MODALS.TEAM as Parameters<typeof router.replace>[0]);
-  }, [activePanel, closeOverlay, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePanel]);
 
   const panelContent = useMemo(() => {
     if (activePanel === "account") {
