@@ -136,6 +136,23 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     borderTopRightRadius: 14,
     marginHorizontal: 0,
     paddingHorizontal: 0,
+    marginTop: "auto",
+  },
+  /**
+   * Edge-to-edge GPay dock (pageRootKeypad uses paddingHorizontal: 0).
+   * Keys pad internally; chrome aligns with the screen edges.
+   */
+  keypadDockWizardBleed: {
+    marginHorizontal: 0,
+    width: "100%",
+    alignSelf: "stretch",
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderTopWidth: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    backgroundColor: Theme.surfaceGray,
   },
   /** Full-bleed iOS-style dial pad (no side margins, system gray chrome). */
   keypadDockApple: {

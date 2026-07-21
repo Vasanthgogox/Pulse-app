@@ -5,30 +5,34 @@ import {
 } from "./useAddTripForm";
 
 /**
- * Create Trip wizard — indent-style grouping.
- * Commodity + client merged (indent load flow: sections 2 & 3 combined).
+ * Create Trip wizard — client-first grouping.
+ * 1. Client + sale → 2. Route (warehouse recommendations) → 3. Commodity → Source → Assign.
  */
 export type AddTripWizardStep =
+  | "client"
   | "route"
-  | "commodityClient"
-  | "sale"
+  | "commodity"
+  | "source"
   | "allocation";
 
 export const ADD_TRIP_WIZARD_STEPS: AddTripWizardStep[] = [
+  "client",
   "route",
-  "commodityClient",
-  "sale",
+  "commodity",
+  "source",
   "allocation",
 ];
 
 export function addTripWizardStepLabel(step: AddTripWizardStep): string {
   switch (step) {
+    case "client":
+      return "Client";
     case "route":
       return "Route";
-    case "commodityClient":
-      return "Commodity & Client";
-    case "sale":
-      return "Sale";
+    case "commodity":
+      return "Commodity";
+    case "source":
+      return "Source";
     case "allocation":
       return "Allocation";
     default:
@@ -36,16 +40,36 @@ export function addTripWizardStepLabel(step: AddTripWizardStep): string {
   }
 }
 
+/** Compact labels for mobile stepper (readable at narrow widths). */
+export function addTripWizardStepShortLabel(step: AddTripWizardStep): string {
+  switch (step) {
+    case "client":
+      return "Client";
+    case "route":
+      return "Route";
+    case "commodity":
+      return "Load";
+    case "source":
+      return "Source";
+    case "allocation":
+      return "Assign";
+    default:
+      return "Trip";
+  }
+}
+
 export function addTripWizardStepSubtitle(step: AddTripWizardStep): string {
   switch (step) {
+    case "client":
+      return "Select billing client and sale value.";
     case "route":
       return "Enter pickup, drop and trip date.";
-    case "commodityClient":
-      return "Vehicle, load, weight and billing client.";
-    case "sale":
-      return "Enter the client sale value.";
+    case "commodity":
+      return "Vehicle type, load type and tonnage.";
+    case "source":
+      return "Choose asset or aggregate supply. For aggregate, pick partner and cost.";
     case "allocation":
-      return "Assign supply for this trip.";
+      return "Assign vehicle and driver, or choose Assign later.";
     default:
       return "Create trip";
   }
@@ -55,12 +79,14 @@ export function addTripWizardStepFields(
   step: AddTripWizardStep,
 ): Set<string> | null {
   switch (step) {
+    case "client":
+      return new Set(["client", "clientPrice"]);
     case "route":
       return new Set(["pickup", "drop", "tripDate"]);
-    case "commodityClient":
-      return new Set(["vehicleType", "loadType", "tons", "client"]);
-    case "sale":
-      return new Set(["clientPrice"]);
+    case "commodity":
+      return new Set(["vehicleType", "loadType", "tons"]);
+    case "source":
+      return null; // use desktopSourceStepFields / sourceStepFields with state
     case "allocation":
       return null;
     default:
@@ -68,11 +94,29 @@ export function addTripWizardStepFields(
   }
 }
 
+/** Source step — mode always set; aggregate requires partner + rate. */
+export function sourceStepFields(
+  state: Pick<AddTripFormState, "supplySource">,
+): Set<string> {
+  if (state.supplySource === "aggregate") {
+    return new Set(["partner", "partnerRate", "advancePaid"]);
+  }
+  return new Set();
+}
+
+export function computeClientStepIssues(
+  validationIssues: readonly AddTripValidationIssue[],
+): AddTripValidationIssue[] {
+  return validationIssues.filter(
+    (i) => i.field === "client" || i.field === "clientPrice",
+  );
+}
+
+/** @deprecated Prefer computeClientStepIssues + computeCommodityStepIssues */
 export function computeCommodityClientStepIssues(
   state: AddTripFormState,
   validationIssues: readonly AddTripValidationIssue[],
 ): AddTripValidationIssue[] {
   const commodity = computeCommodityStepIssues(state);
-  const client = validationIssues.filter((i) => i.field === "client");
-  return [...commodity, ...client];
+  return [...computeClientStepIssues(validationIssues), ...commodity];
 }

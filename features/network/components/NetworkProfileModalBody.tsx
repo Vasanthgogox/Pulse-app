@@ -32,6 +32,8 @@ export type NetworkProfileModalNode = {
   gstin?: string | null;
   operating_model?: string | null;
   member_since_year?: number | null;
+  vehicle_count?: number;
+  indent_count?: number;
 };
 
 export type NetworkProfileModalBodyProps = {
@@ -114,6 +116,9 @@ export function NetworkProfileModalBody({
         isSignedIn={inApp}
         memberSinceYear={memberSinceYear}
         connectionStatus={connectionLabel}
+        vehicleCount={node.vehicle_count ?? 0}
+        indentCount={node.indent_count ?? 0}
+        profileStatsLoading={profileStatsLoading}
         onClose={onClose}
         compact
         stats={[

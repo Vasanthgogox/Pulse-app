@@ -10,18 +10,22 @@ export type AllocationSubStep =
   | "fleetDriver"
   | "fleetVehicle";
 
+/**
+ * Allocation sub-steps after the top-level Source step.
+ * Source already captured mode + (aggregate) partner/rate.
+ */
 export function getAllocationSubSteps(
   state: Pick<AddTripFormState, "supplySource" | "assignLater">,
 ): AllocationSubStep[] {
-  const steps: AllocationSubStep[] = ["supply"];
-  if (state.supplySource === "aggregate") {
-    steps.push("rates");
-    if (!state.assignLater) {
-      steps.push("driverPhone", "driverName", "vehicle");
-    }
+  if (state.assignLater) {
+    // One screen to confirm assign-later (toggle already available).
+    return ["supply"];
   }
-  // Asset driver + vehicle pickers render on the supply sub-step (same screen as mode bar).
-  return steps;
+  if (state.supplySource === "aggregate") {
+    return ["driverPhone", "driverName", "vehicle"];
+  }
+  // Asset: driver + vehicle on one screen (reuse supply id for progress).
+  return ["supply"];
 }
 
 export function allocationSubStepFields(
@@ -30,10 +34,8 @@ export function allocationSubStepFields(
 ): Set<string> {
   switch (step) {
     case "supply":
-      if (state?.supplySource === "aggregate") {
-        return new Set(["partner"]);
-      }
-      if (state?.supplySource === "asset" && !state?.assignLater) {
+      if (state?.assignLater) return new Set();
+      if (state?.supplySource === "asset") {
         return new Set(["assetDriver", "assetVehicle"]);
       }
       return new Set();
@@ -56,10 +58,28 @@ export function allocationSubStepFields(
   }
 }
 
+/**
+ * Desktop allocation — fleet assignment only (source already validated).
+ */
+export function desktopAllocationStepFields(
+  state: Pick<AddTripFormState, "supplySource" | "assignLater">,
+): Set<string> {
+  if (state.assignLater) return new Set();
+  if (state.supplySource === "asset") {
+    return new Set(["assetDriver", "assetVehicle"]);
+  }
+  return new Set([
+    "driverPhone",
+    "driverConfirm",
+    "driverName",
+    "vehicleNumber",
+  ]);
+}
+
 export function allocationSubStepLabel(step: AllocationSubStep): string {
   switch (step) {
     case "supply":
-      return "Supply mode";
+      return "Assign fleet";
     case "partner":
       return "Transport partner";
     case "rates":

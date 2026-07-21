@@ -8,11 +8,15 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react-native";
+import { MotiView } from "moti";
+import { Easing } from "react-native-reanimated";
 
 import Theme from "@/constants/Theme";
 
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
+
+const SHELL_EASE = Easing.bezier(0.16, 1, 0.3, 1);
 
 export type CreateTripDesktopShellProps = {
   title?: string;
@@ -52,6 +56,8 @@ export function CreateTripDesktopShell({
     stepIndex != null && stepTotal != null && stepTotal > 0
       ? `Step ${stepIndex} of ${stepTotal}`
       : null;
+  const isFinalStep = stepIndex != null && stepTotal != null && stepIndex >= stepTotal;
+  const showHint = Boolean(hint && primaryDisabled && !primaryLoading);
 
   const stepChrome = (
     <View style={s.stepSurfaceHeader}>
@@ -63,6 +69,7 @@ export function CreateTripDesktopShell({
   const bodyInner = (
     <>
       {stepChrome}
+      <View style={s.stepSurfaceDivider} />
       {fillBody ? (
         <ScrollView
           style={s.stepSurfaceBodyScroll}
@@ -80,9 +87,14 @@ export function CreateTripDesktopShell({
   );
 
   const stepContent = (
-    <View style={[s.stepSurface, fillBody && s.stepSurfaceFill]}>
+    <MotiView
+      from={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: "timing", duration: 280, easing: SHELL_EASE }}
+      style={[s.stepSurface, fillBody && s.stepSurfaceFill, s.stepSurfaceAnimated]}
+    >
       {bodyInner}
-    </View>
+    </MotiView>
   );
 
   return (
@@ -96,15 +108,18 @@ export function CreateTripDesktopShell({
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
-              <ArrowLeft size={18} color={Theme.textSecondary} strokeWidth={2.5} />
+              <ArrowLeft size={16} color={Theme.textRouteCard} strokeWidth={2.5} />
               <Text style={s.closeBtnText}>Close</Text>
             </Pressable>
-            <View style={s.headerDivider} />
+          </View>
+          <View style={s.headerCenter} pointerEvents="none">
             <Text style={s.headerTitle} numberOfLines={1}>
               {title}
             </Text>
           </View>
-          {stepLabel ? <Text style={s.headerStep}>{stepLabel}</Text> : null}
+          <View style={s.headerRight}>
+            {stepLabel ? <Text style={s.headerStepBadge}>{stepLabel}</Text> : null}
+          </View>
         </View>
       </View>
 
@@ -119,7 +134,7 @@ export function CreateTripDesktopShell({
           style={s.content}
           contentContainerStyle={[
             s.contentInner,
-            { paddingBottom: 20 + insets.bottom },
+            { paddingBottom: 12 + (Platform.OS === "web" ? 0 : insets.bottom) },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -129,14 +144,18 @@ export function CreateTripDesktopShell({
         </ScrollView>
       )}
 
-      <View style={[s.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <View
-          style={[
-            s.rail,
-            s.footerInner,
-            onBack ? s.footerInnerWithBack : null,
-          ]}
-        >
+      <View
+        style={[
+          s.footer,
+          {
+            paddingBottom:
+              Platform.OS === "web"
+                ? 0
+                : Math.max(insets.bottom, 0),
+          },
+        ]}
+      >
+        <View style={[s.rail, s.footerInner]}>
           {onBack ? (
             <Pressable
               onPress={onBack}
@@ -144,32 +163,71 @@ export function CreateTripDesktopShell({
               accessibilityRole="button"
               accessibilityLabel="Back to previous step"
             >
-              <ArrowLeft size={14} color={Theme.textSecondary} strokeWidth={2.5} />
+              <ChevronLeft size={16} color={Theme.textRouteCard} strokeWidth={2.5} />
               <Text style={s.footerBackBtnText}>Back</Text>
             </Pressable>
           ) : (
-            <View style={s.footerSpacer} />
-          )}
-          <View style={s.footerPrimaryWrap}>
-            <Pressable
-              onPress={onPrimaryPress}
-              disabled={primaryDisabled || primaryLoading}
-              style={[
-                s.footerPrimaryBtn,
-                (primaryDisabled || primaryLoading) && s.footerPrimaryBtnDisabled,
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: primaryDisabled || primaryLoading }}
-            >
-              {primaryLoading ? (
-                <ActivityIndicator color={Theme.textOnPrimary} size="small" />
-              ) : (
-                <Text style={s.footerPrimaryBtnText}>{primaryLabel}</Text>
-              )}
+            <Pressable style={[s.footerBackBtn, s.footerBackBtnHidden]} disabled>
+              <ChevronLeft size={16} color={Theme.textRouteCard} strokeWidth={2.5} />
+              <Text style={s.footerBackBtnText}>Back</Text>
             </Pressable>
-            {hint && primaryDisabled && !primaryLoading ? (
-              <Text style={s.footerHint}>{hint}</Text>
+          )}
+          <View style={s.footerActions}>
+            {showHint ? (
+              <Text style={s.footerInlineHint} numberOfLines={2}>
+                {hint}
+              </Text>
             ) : null}
+            <View style={s.footerPrimaryWrap}>
+              <Pressable
+                onPress={onPrimaryPress}
+                disabled={primaryDisabled || primaryLoading}
+                style={[
+                  s.footerPrimaryBtn,
+                  (primaryDisabled || primaryLoading) && s.footerPrimaryBtnDisabled,
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: primaryDisabled || primaryLoading }}
+              >
+                {primaryLoading ? (
+                  <ActivityIndicator
+                    color={
+                      primaryDisabled ? Theme.textMuted : Theme.textOnPrimary
+                    }
+                    size="small"
+                  />
+                ) : (
+                  <>
+                    <Text
+                      style={[
+                        s.footerPrimaryBtnText,
+                        (primaryDisabled || primaryLoading) &&
+                          s.footerPrimaryBtnTextDisabled,
+                      ]}
+                    >
+                      {primaryLabel}
+                    </Text>
+                    {isFinalStep ? (
+                      <CheckCircle2
+                        size={16}
+                        color={
+                          primaryDisabled ? Theme.textMuted : Theme.textOnPrimary
+                        }
+                        strokeWidth={2.5}
+                      />
+                    ) : (
+                      <ChevronRight
+                        size={16}
+                        color={
+                          primaryDisabled ? Theme.textMuted : Theme.textOnPrimary
+                        }
+                        strokeWidth={2.5}
+                      />
+                    )}
+                  </>
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </View>

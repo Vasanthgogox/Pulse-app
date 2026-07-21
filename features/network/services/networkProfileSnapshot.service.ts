@@ -35,6 +35,10 @@ export type NetworkProfileSnapshot = {
   operating_model: string | null;
   total_trips: number;
   member_since_year: number | null;
+  /** Vehicles owned by this party in Pulse (org fleet and/or supplier-tagged). */
+  vehicle_count: number;
+  /** Indents created for/by this party in Pulse. */
+  indent_count: number;
 };
 
 type OrganizationSnapshotRow = {
@@ -295,10 +299,13 @@ export async function getOrgProfileSnapshot(
 
   // 2) Connection request between viewer and target (either direction).
   let role: NetworkProfileSnapshotRole = "SUPPLIER";
+  let linkedClientId: string | null = null;
+  let linkedClientName: string | null = null;
+  let linkedSupplierId: string | null = null;
 
   const clientLink = await supabase()
     .from("clients")
-    .select("id")
+    .select("id, name")
     .eq("organization_id", viewerOrgId)
     .eq("linked_organization_id", targetOrgId)
     .is("deleted_at", null)
@@ -306,6 +313,10 @@ export async function getOrgProfileSnapshot(
     .maybeSingle();
   if (clientLink.data?.id) {
     role = "CLIENT";
+    linkedClientId = String(clientLink.data.id);
+    linkedClientName = nonEmptyString(
+      (clientLink.data as { name?: string | null }).name,
+    );
   } else {
     const supplierLink = await supabase()
       .from("suppliers")
@@ -315,7 +326,10 @@ export async function getOrgProfileSnapshot(
       .is("deleted_at", null)
       .limit(1)
       .maybeSingle();
-    if (supplierLink.data?.id) role = "SUPPLIER";
+    if (supplierLink.data?.id) {
+      role = "SUPPLIER";
+      linkedSupplierId = String(supplierLink.data.id);
+    }
   }
 
   // 3) Existing relationship in viewer's clients / suppliers / drivers tables.
@@ -400,6 +414,62 @@ export async function getOrgProfileSnapshot(
     }
   }
 
+  // 6c) Vehicles owned + indents created (party records in Pulse).
+  let vehicleCount = 0;
+  let indentCount = 0;
+  {
+    const partyName = linkedClientName ?? orgRow.name?.trim() ?? null;
+
+    const [ownFleetRes, supplierFleetRes, orgIndentsRes, clientIndentsRes] =
+      await Promise.all([
+        supabase()
+          .from("vehicles")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", targetOrgId)
+          .is("deleted_at", null),
+        linkedSupplierId
+          ? supabase()
+              .from("vehicles")
+              .select("id", { count: "exact", head: true })
+              .eq("organization_id", viewerOrgId)
+              .eq("supplier_id", linkedSupplierId)
+              .is("deleted_at", null)
+          : Promise.resolve({ count: 0, error: null }),
+        supabase()
+          .from("indents")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", targetOrgId)
+          .is("deleted_at", null),
+        partyName
+          ? supabase()
+              .from("indents")
+              .select("id", { count: "exact", head: true })
+              .eq("organization_id", viewerOrgId)
+              .ilike("client_name", partyName)
+              .is("deleted_at", null)
+          : Promise.resolve({ count: 0, error: null }),
+      ]);
+
+    const ownFleet = ownFleetRes.error ? 0 : (ownFleetRes.count ?? 0);
+    const supplierFleet = supplierFleetRes.error
+      ? 0
+      : (supplierFleetRes.count ?? 0);
+    // Prefer org-owned fleet; fall back to vehicles tagged to the supplier party in Pulse.
+    vehicleCount = ownFleet > 0 ? ownFleet : supplierFleet;
+
+    const createdByOrg = orgIndentsRes.error ? 0 : (orgIndentsRes.count ?? 0);
+    const createdForClient = clientIndentsRes.error
+      ? 0
+      : (clientIndentsRes.count ?? 0);
+    // Client party → indents created for them in this workspace; else their org's indents.
+    indentCount =
+      role === "CLIENT" && (linkedClientId || partyName)
+        ? createdForClient
+        : createdByOrg > 0
+          ? createdByOrg
+          : createdForClient;
+  }
+
   // 7) Rating — prefer viewer-given scores; fall back to partner aggregate.
   let rating: number | null = null;
   const ratingRes = await supabase()
@@ -439,6 +509,8 @@ export async function getOrgProfileSnapshot(
     operating_model: operatingModel,
     total_trips: totalTrips,
     member_since_year: resolveMemberSinceYear(orgRow, partnerBatch, partnerProfile),
+    vehicle_count: vehicleCount,
+    indent_count: indentCount,
   };
 
   return { error: null, snapshot };

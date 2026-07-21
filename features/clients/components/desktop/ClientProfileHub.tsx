@@ -5,7 +5,6 @@ import Theme from "@/constants/Theme";
 import { ClientProfileOverviewPanel } from "@/features/clients/components/desktop/ClientProfileOverviewPanel";
 import { ClientProfileKycPanel } from "@/features/clients/components/desktop/ClientProfileKycPanel";
 import {
-  ClientProfileAuditPanel,
   ClientProfileCommercialsPanel,
   ClientProfileContactsPanel,
   ClientProfileContractsPanel,
@@ -86,7 +85,6 @@ const TABS: { id: ClientProfileTab; label: string }[] = [
   { id: "commercials", label: "Commercials" },
   { id: "finance", label: "Finance" },
   { id: "vault", label: "Document vault" },
-  { id: "audit", label: "Audit log" },
 ];
 
 type Props = {
@@ -222,8 +220,6 @@ export function ClientProfileHub({
         return <ClientProfileFinancePanel {...sharedProps} />;
       case "vault":
         return <ClientProfileVaultPanel bundle={bundle} />;
-      case "audit":
-        return <ClientProfileAuditPanel bundle={bundle} />;
       default:
         return (
           <ClientProfileOverviewPanel

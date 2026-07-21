@@ -1341,7 +1341,7 @@ function PartyRegistrationPortalInner(
           Icon={ShieldCheck}
           emphasized
           isLast
-          iconColor={isDriverReviewTone ? "#16a34a" : "#1d4ed8"}
+          iconColor={isDriverReviewTone ? "#16a34a" : Theme.buttonPrimaryText}
           valueMaxLines={12}
           valueProse
           tone={isDriverReviewTone ? "driver" : "default"}
@@ -2817,16 +2817,16 @@ function SummaryDetailRow({
         ]}
       >
         <Icon
-          size={17}
+          size={14}
           color={
             iconColor ??
             (emphasized
               ? isDriverTone
                 ? "#15803d"
-                : "#1d4ed8"
+                : Theme.buttonPrimaryText
               : isDriverTone
                 ? "#15803d"
-                : "#475569")
+                : Theme.textRouteCard)
           }
           strokeWidth={2.2}
         />
@@ -3351,39 +3351,42 @@ const styles = StyleSheet.create({
   },
 
   summaryDetailsCard: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 6,
-    backgroundColor: "#f7f9fd",
-    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 4,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e7edf6",
+    borderColor: Theme.borderLight,
     gap: 0,
   },
   summaryDetailsCardDriver: {
-    backgroundColor: "#f0fdf4",
+    backgroundColor: "#f7fdf9",
     borderWidth: 1,
-    borderColor: "#bbf7d0",
-    borderRadius: 18,
+    borderColor: "#d1fae5",
+    borderRadius: 14,
   },
   summaryDetailsHeading: {
     ...FinanceTxnTypography.columnTitle,
-    marginBottom: 4,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    marginBottom: 2,
     paddingHorizontal: 2,
   },
   summaryDetailsHeadingDriver: {
     color: "#166534",
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
   },
 
   summaryDetailRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 11,
+    gap: 10,
+    paddingVertical: 9,
     paddingHorizontal: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e2e8f2",
+    borderBottomColor: Theme.borderLight,
   },
   summaryDetailRowLast: {
     borderBottomWidth: 0,
@@ -3400,22 +3403,22 @@ const styles = StyleSheet.create({
     }),
   },
   summaryDetailIconBubble: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eef2fb",
+    backgroundColor: Theme.buttonPrimary,
     borderWidth: 1,
-    borderColor: "#e2e8f5",
+    borderColor: "#d7ebf5",
   },
   summaryDetailIconBubbleDriver: {
     backgroundColor: "#ecfdf3",
     borderColor: "#c7f0d5",
   },
   summaryDetailIconBubbleEmphasis: {
-    backgroundColor: "#e0e9fd",
-    borderColor: "#c3d5fb",
+    backgroundColor: Theme.buttonPrimary,
+    borderColor: "#c5e0ef",
   },
   summaryDetailIconBubbleEmphasisDriver: {
     backgroundColor: "#d6f5df",
@@ -3425,33 +3428,41 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     minWidth: 0,
+    gap: 1,
   },
   summaryDetailLabel: {
     ...FinanceTxnTypography.fieldLabel,
-    marginBottom: 3,
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.6,
+    marginBottom: 1,
   },
   summaryDetailLabelDriver: {
     color: "#16a34a",
   },
   summaryDetailValue: {
     ...FinanceTxnTypography.fieldValue,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    fontWeight: "600",
+    fontStyle: "italic",
+    lineHeight: 17,
     color: Theme.textPrimaryDark,
   },
   summaryDetailValueEmphasis: {
-    ...FinanceTxnTypography.partyTitle,
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "700",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
-    lineHeight: 20,
-    letterSpacing: 0.2,
+    lineHeight: 17,
+    letterSpacing: 0.1,
   },
   summaryDetailValueProse: {
     ...FinanceTxnTypography.fieldValue,
     fontSize: 11,
-    lineHeight: 16,
-    color: Theme.textSecondary,
+    fontWeight: "500",
+    fontStyle: "normal",
+    lineHeight: 15,
+    color: Theme.textMuted,
   },
   summaryDetailValueProseDriver: {
     color: "#166534",

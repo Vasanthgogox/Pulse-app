@@ -6,6 +6,10 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
+import Illustration12 from "@/assets/illustrations/12.svg";
+import Illustration22 from "@/assets/illustrations/22.svg";
+import Illustration24 from "@/assets/illustrations/24.svg";
+import Illustration28 from "@/assets/illustrations/28.svg";
 import { useAuth } from "@/contexts/AuthContext";
 import { BroadcastPickIndentCard } from "@/features/network/components/BroadcastPickIndentCard";
 import { createPost, type PostType } from "@/features/network/services/posts.service";
@@ -61,6 +65,19 @@ const VEHICLE_TYPES = [
   "Open Body",
   "Trailer",
 ];
+
+const LOAD_ILLUS_ASPECT = 600 / 520;
+const VEHICLE_ILLUS_ASPECT = 640 / 560;
+
+function fitIllustration(boxW: number, boxH: number, aspect: number) {
+  let w = boxW;
+  let h = w / aspect;
+  if (h > boxH) {
+    h = boxH;
+    w = h * aspect;
+  }
+  return { width: w, height: h };
+}
 
 function defaultExpiresAt(): string {
   return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -180,9 +197,14 @@ export default function CreatePostScreen() {
     (vehicleEntryMode === "idle" ? !!selectedVehicleId : vehicleType.trim().length > 0) &&
     availability.trim().length > 0;
 
-  const pickColumns = windowWidth >= 640 ? 2 : 1;
+  const pickColumns = windowWidth >= 720 ? 2 : 1;
   const pickCellWidth = pickColumns === 2 ? "49%" : "100%";
-  const isDesktop = windowWidth >= 1024;
+  const isDesktop = windowWidth >= 960;
+  const isWideForm = windowWidth >= 720;
+  const isCompactMobile = windowWidth < 480;
+  const isUltraCompactMobile = windowWidth <= 360;
+  const controlIconSize = isUltraCompactMobile ? 13 : 14;
+  const idleVehicleCellWidth = windowWidth < 400 ? "100%" : "49%";
 
   const canSubmit = (canSubmitLoadPick || canSubmitLoadManual || canSubmitVehicle) && !submitting;
 
@@ -270,26 +292,52 @@ export default function CreatePostScreen() {
   const showManualVehicleFields =
     vehicleEntryMode === "manual" || (vehicleEntryMode === "idle" && !selectedVehicleId);
   const isLoadStory = type === "LOAD";
-  const previewAccent = isLoadStory ? "#f59e0b" : Theme.primary;
+  const previewAccent = Theme.primary;
+  /** Solid fills (orange / ink) need white labels; pastel pills keep ink. */
+  const onSolidFill = Theme.textOnPrimary;
+  /** Pastel blue fills (vehicle / manual) use ink text for contrast. */
+  const onPastelFill = Theme.buttonPrimaryText;
+  const idleControlFg = Theme.textPrimary;
+  const HintIllustration = isLoadStory ? Illustration12 : Illustration24;
+  const PreviewIllustration = isLoadStory ? Illustration22 : Illustration28;
+  const storyIllusAspect = isLoadStory ? LOAD_ILLUS_ASPECT : VEHICLE_ILLUS_ASPECT;
+  const hintIllus = fitIllustration(isDesktop ? 108 : 90, isDesktop ? 92 : 74, storyIllusAspect);
+  const previewIllus = fitIllustration(96, 80, storyIllusAspect);
 
   const renderPreviewPanel = () => (
     <View style={styles.previewCol}>
+      <View style={styles.previewHero}>
+        <View style={styles.previewHeroCopy}>
+          <Text style={styles.previewHeroTitle}>
+            {isLoadStory ? "Broadcast a load" : "Share free capacity"}
+          </Text>
+          <Text style={styles.previewHeroBody}>
+            {isLoadStory
+              ? "Your network sees the lane, vehicle, and rate for 24 hours."
+              : "Partners see where equipment is free and which lanes you prefer."}
+          </Text>
+        </View>
+        <View style={styles.previewHeroIllus}>
+          <PreviewIllustration width={previewIllus.width} height={previewIllus.height} />
+        </View>
+      </View>
+
       <Text style={styles.previewKicker}>Live preview</Text>
       <View style={styles.previewCard}>
         <View style={[styles.previewAccentBar, { backgroundColor: previewAccent }]} />
         <View style={styles.previewTopRow}>
           <View style={[styles.previewBadge, { backgroundColor: previewAccent + "18" }]}>
             {isLoadStory ? (
-              <Truck size={13} color={previewAccent} />
+              <Truck size={12} color={previewAccent} />
             ) : (
-              <MapPin size={13} color={previewAccent} />
+              <MapPin size={12} color={previewAccent} />
             )}
             <Text style={[styles.previewBadgeText, { color: previewAccent }]}>
               {isLoadStory ? "Load" : "Vehicle free"}
             </Text>
           </View>
           <View style={styles.previewExpiry}>
-            <Clock size={11} color={Theme.textMuted} />
+            <Clock size={10} color={Theme.textMuted} />
             <Text style={styles.previewExpiryText}>Expires in 24h</Text>
           </View>
         </View>
@@ -301,7 +349,7 @@ export default function CreatePostScreen() {
           >
             {preview.origin || (isLoadStory ? "Pickup" : "Current location")}
           </Text>
-          <ArrowRight size={15} color={Theme.textMuted} />
+          <ArrowRight size={13} color={Theme.textMuted} />
           <Text
             style={[styles.previewCity, !preview.destination && styles.previewCityMuted]}
             numberOfLines={1}
@@ -483,33 +531,61 @@ export default function CreatePostScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={[styles.header, isDesktop && styles.headerDesktop]}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
-          <ArrowLeft size={20} color={Theme.textPrimary} />
+      <View
+        style={[
+          styles.header,
+          isDesktop && styles.headerDesktop,
+          isUltraCompactMobile && styles.headerUltraCompact,
+        ]}
+      >
+        <Pressable
+          onPress={() => router.back()}
+          style={[styles.backBtn, isUltraCompactMobile && styles.backBtnUltraCompact]}
+          hitSlop={8}
+        >
+          <ArrowLeft size={isUltraCompactMobile ? 18 : 20} color={Theme.textPrimary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Broadcast story</Text>
+        <Text
+          style={[styles.headerTitle, isUltraCompactMobile && styles.headerTitleUltraCompact]}
+          numberOfLines={1}
+        >
+          Broadcast story
+        </Text>
         <Pressable
           style={[
             styles.publishBtn,
+            isUltraCompactMobile && styles.publishBtnUltraCompact,
             canSubmit ? styles.publishBtnActive : styles.publishBtnDisabled,
           ]}
           onPress={handleSubmit}
           disabled={!canSubmit || submitting}
         >
           {submitting ? (
-            <LoadingIndicator size={14} color="#fff" />
+            <LoadingIndicator size={14} color={Theme.textOnPrimary} />
           ) : (
             <View style={styles.publishBtnInner}>
-              <Zap size={12} color={Theme.buttonPrimaryText} fill={Theme.buttonPrimaryText} />
-              <Text style={styles.publishBtnText}>Deploy</Text>
+              <Zap
+                size={12}
+                color={canSubmit ? Theme.textOnPrimary : Theme.textMuted}
+                fill={canSubmit ? Theme.textOnPrimary : Theme.textMuted}
+              />
+              <Text
+                style={[
+                  styles.publishBtnText,
+                  isUltraCompactMobile && styles.publishBtnTextUltraCompact,
+                  !canSubmit && styles.publishBtnTextDisabled,
+                ]}
+              >
+                Deploy
+              </Text>
             </View>
           )}
         </Pressable>
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "padding"}
-        enabled={Platform.OS !== "web"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        enabled={Platform.OS === "ios"}
         style={{ flex: 1 }}
         keyboardVerticalOffset={insets.top + 60}
       >
@@ -517,36 +593,99 @@ export default function CreatePostScreen() {
           style={styles.form}
           contentContainerStyle={[
             styles.formContent,
-            { paddingBottom: insets.bottom + 32 },
+            isCompactMobile && styles.formContentCompact,
+            isUltraCompactMobile && styles.formContentUltraCompact,
+            { paddingBottom: insets.bottom + (isUltraCompactMobile ? 48 : 32) },
           ]}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={isCompactMobile}
+          nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
         >
-          <View style={[styles.canvas, isDesktop && styles.canvasWide]}>
+          <View
+            style={[
+              styles.canvas,
+              isDesktop && styles.canvasWide,
+              isCompactMobile && styles.canvasCompact,
+              isUltraCompactMobile && styles.canvasUltraCompact,
+            ]}
+          >
            <View style={[styles.workspace, isDesktop && styles.workspaceWide]}>
-            <View style={[styles.formCol, isDesktop && styles.formColWide]}>
-            <View style={styles.hintBox}>
-              <Text style={styles.hintText}>
-                Stories expire in 24 hours. Only load and vehicle availability — no personal or
-                generic updates. For loads, pick an open indent from Load Center or enter details
-                manually.
-              </Text>
+            <View
+              style={[
+                styles.formCol,
+                isDesktop && styles.formColWide,
+                isCompactMobile && styles.formColCompact,
+              ]}
+            >
+            <View
+              style={[
+                styles.hintBanner,
+                isCompactMobile && styles.hintBannerCompact,
+                isUltraCompactMobile && styles.hintBannerUltraCompact,
+              ]}
+            >
+              <View style={styles.hintBannerCopy}>
+                <Text
+                  style={[
+                    styles.hintBannerTitle,
+                    isUltraCompactMobile && styles.hintBannerTitleUltraCompact,
+                  ]}
+                >
+                  {isLoadStory ? "24-hour load story" : "24-hour vehicle story"}
+                </Text>
+                <Text
+                  style={[styles.hintText, isUltraCompactMobile && styles.hintTextUltraCompact]}
+                >
+                  Stories expire in 24 hours. Only load and vehicle availability — no personal or
+                  generic updates.
+                </Text>
+              </View>
+              {isDesktop ? (
+                <View style={styles.hintBannerIllus}>
+                  <HintIllustration width={hintIllus.width} height={hintIllus.height} />
+                </View>
+              ) : null}
             </View>
 
-            <View style={[styles.typeSelector, isDesktop && styles.typeSelectorDesktop]}>
+            <View
+              style={[
+                styles.typeSelector,
+                isDesktop && styles.typeSelectorDesktop,
+                isCompactMobile && styles.stackControlsMobile,
+              ]}
+            >
               <Pressable
-                style={[styles.typeBtn, type === "LOAD" && styles.typeBtnActiveLoad]}
+                style={[
+                  styles.typeBtn,
+                  isCompactMobile && styles.typeBtnStacked,
+                  isUltraCompactMobile && styles.typeBtnUltraCompact,
+                  type === "LOAD" && styles.typeBtnActiveLoad,
+                ]}
                 onPress={() => {
                   setType("LOAD");
                 }}
               >
-                <Truck size={15} color={type === "LOAD" ? "#fff" : Theme.textSecondary} />
-                <Text style={[styles.typeBtnText, type === "LOAD" && styles.typeBtnTextActive]}>
+                <Truck
+                  size={controlIconSize}
+                  color={type === "LOAD" ? onSolidFill : idleControlFg}
+                />
+                <Text
+                  style={[
+                    styles.typeBtnText,
+                    isUltraCompactMobile && styles.typeBtnTextUltraCompact,
+                    type === "LOAD" && styles.typeBtnTextOnSolid,
+                  ]}
+                >
                   Load indent
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.typeBtn, type === "VEHICLE_AVAILABILITY" && styles.typeBtnActiveVehicle]}
+                style={[
+                  styles.typeBtn,
+                  isCompactMobile && styles.typeBtnStacked,
+                  isUltraCompactMobile && styles.typeBtnUltraCompact,
+                  type === "VEHICLE_AVAILABILITY" && styles.typeBtnActiveVehicle,
+                ]}
                 onPress={() => {
                   setType("VEHICLE_AVAILABILITY");
                   setLoadEntryMode("pick");
@@ -555,13 +694,16 @@ export default function CreatePostScreen() {
                 }}
               >
                 <MapPin
-                  size={15}
-                  color={type === "VEHICLE_AVAILABILITY" ? "#fff" : Theme.textSecondary}
+                  size={controlIconSize}
+                  color={
+                    type === "VEHICLE_AVAILABILITY" ? onPastelFill : idleControlFg
+                  }
                 />
                 <Text
                   style={[
                     styles.typeBtnText,
-                    type === "VEHICLE_AVAILABILITY" && styles.typeBtnTextActive,
+                    isUltraCompactMobile && styles.typeBtnTextUltraCompact,
+                    type === "VEHICLE_AVAILABILITY" && styles.typeBtnTextOnPastel,
                   ]}
                 >
                   Vehicle free
@@ -569,25 +711,95 @@ export default function CreatePostScreen() {
               </Pressable>
             </View>
 
+          {type === "LOAD" ? (
+            <View
+              style={[
+                styles.segmentedControl,
+                isCompactMobile && styles.segmentedControlCompact,
+                isCompactMobile && styles.stackControlsMobile,
+              ]}
+            >
+              <Pressable
+                style={[
+                  styles.segmentedBtn,
+                  isCompactMobile && styles.segmentedBtnStacked,
+                  isUltraCompactMobile && styles.segmentedBtnUltraCompact,
+                  loadEntryMode === "pick" && styles.segmentedBtnActiveLoad,
+                ]}
+                onPress={() => {
+                  setLoadEntryMode("pick");
+                  setOrigin("");
+                  setDestination("");
+                  setVehicleType("");
+                  setWeight("");
+                  setRate("");
+                  setMaterial("");
+                }}
+              >
+                <Package
+                  size={controlIconSize}
+                  color={loadEntryMode === "pick" ? onSolidFill : idleControlFg}
+                />
+                <Text
+                  style={[
+                    styles.segmentedBtnText,
+                    isUltraCompactMobile && styles.segmentedBtnTextUltraCompact,
+                    loadEntryMode === "pick" && styles.segmentedBtnTextOnSolid,
+                  ]}
+                >
+                  From open indents
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.segmentedBtn,
+                  isCompactMobile && styles.segmentedBtnStacked,
+                  isUltraCompactMobile && styles.segmentedBtnUltraCompact,
+                  loadEntryMode === "manual" && styles.segmentedBtnActiveManual,
+                ]}
+                onPress={() => {
+                  setLoadEntryMode("manual");
+                  setSelectedIndentId(null);
+                }}
+              >
+                <MapPin
+                  size={controlIconSize}
+                  color={loadEntryMode === "manual" ? onPastelFill : idleControlFg}
+                />
+                <Text
+                  style={[
+                    styles.segmentedBtnText,
+                    isUltraCompactMobile && styles.segmentedBtnTextUltraCompact,
+                    loadEntryMode === "manual" && styles.segmentedBtnTextOnPastel,
+                  ]}
+                >
+                  Enter manually
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {type === "LOAD" && loadEntryMode === "pick" && (
-            <View style={styles.pickSection}>
+            <View
+              style={[
+                styles.pickSection,
+                isCompactMobile && styles.pickSectionCompact,
+                isUltraCompactMobile && styles.pickSectionUltraCompact,
+              ]}
+            >
               <View style={styles.sectionHeaderRow}>
-                <View>
+                <View style={styles.sectionHeaderCopy}>
                   <Text style={styles.sectionKicker}>Open indents</Text>
-                  <Text style={styles.pickSectionTitle}>
+                  <Text
+                    style={[
+                      styles.pickSectionTitle,
+                      isUltraCompactMobile && styles.pickSectionTitleUltraCompact,
+                    ]}
+                  >
                     Pick a load to broadcast{" "}
                     <Text style={styles.sectionCount}>({broadcastableIndents.length})</Text>
                   </Text>
                 </View>
-                <Pressable
-                  onPress={() => {
-                    setLoadEntryMode("manual");
-                    setSelectedIndentId(null);
-                  }}
-                  style={({ pressed }) => [styles.secondaryLink, pressed && { opacity: 0.75 }]}
-                >
-                  <Text style={styles.secondaryLinkText}>Enter manually</Text>
-                </Pressable>
               </View>
               <Text style={styles.sectionSub}>
                 Only indents that are not awarded and not assigned can go to the story reel — same
@@ -599,7 +811,7 @@ export default function CreatePostScreen() {
                 <TextInput
                   style={styles.searchInput}
                   placeholder="Search route, client, number…"
-                  placeholderTextColor={Theme.textSecondary}
+                  placeholderTextColor={Theme.textMuted}
                   value={loadSearch}
                   onChangeText={setLoadSearch}
                 />
@@ -622,17 +834,8 @@ export default function CreatePostScreen() {
                     style={({ pressed }) => [styles.emptyCta, pressed && { opacity: 0.9 }]}
                     onPress={() => router.push(ROUTES.PULSE_LOADS)}
                   >
-                    <Zap size={15} color="#fff" fill="#fff" />
+                    <Zap size={15} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} />
                     <Text style={styles.emptyCtaText}>Open load center</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      setLoadEntryMode("manual");
-                      setSelectedIndentId(null);
-                    }}
-                    style={({ pressed }) => [styles.emptySecondary, pressed && { opacity: 0.8 }]}
-                  >
-                    <Text style={styles.emptySecondaryText}>Or enter a route manually</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -663,7 +866,7 @@ export default function CreatePostScreen() {
                 <TextInput
                   style={styles.notesInput}
                   placeholder="Extra context for partners (conditions, window…)"
-                  placeholderTextColor={Theme.textSecondary}
+                  placeholderTextColor={Theme.textMuted}
                   value={content}
                   onChangeText={setContent}
                   multiline
@@ -674,31 +877,19 @@ export default function CreatePostScreen() {
           )}
 
           {type === "LOAD" && loadEntryMode === "manual" && (
-            <View style={styles.loadForm}>
-              <View style={styles.modeBanner}>
-                <Text style={styles.modeBannerText}>Manual entry</Text>
-                <Pressable
-                  onPress={() => {
-                    setLoadEntryMode("pick");
-                    setOrigin("");
-                    setDestination("");
-                    setVehicleType("");
-                    setWeight("");
-                    setRate("");
-                    setMaterial("");
-                    setContent("");
-                  }}
-                  style={({ pressed }) => [styles.modeBannerAction, pressed && { opacity: 0.8 }]}
-                >
-                  <Text style={styles.modeBannerActionText}>← Pick from my indents</Text>
-                </Pressable>
-              </View>
+            <View
+              style={[
+                styles.loadForm,
+                isCompactMobile && styles.loadFormCompact,
+                isUltraCompactMobile && styles.loadFormUltraCompact,
+              ]}
+            >
               <View style={styles.orgBadge}>
                 <Zap size={12} color={Theme.primary} />
                 <Text style={styles.orgBadgeText}>{organization?.name}</Text>
               </View>
-              <View style={styles.routeSection}>
-                <View style={styles.fieldGroup}>
+              <View style={[styles.routeSection, isWideForm && styles.routeSectionWide]}>
+                <View style={[styles.fieldGroup, isWideForm && styles.halfField]}>
                   <View style={[styles.fieldDot, { backgroundColor: "#10b981" }]} />
                   <View style={styles.fieldContent}>
                     <Text style={styles.fieldLabel}>PICKUP LOCATION *</Text>
@@ -712,8 +903,8 @@ export default function CreatePostScreen() {
                     />
                   </View>
                 </View>
-                <View style={styles.routeDivider} />
-                <View style={styles.fieldGroup}>
+                {!isWideForm ? <View style={styles.routeDivider} /> : null}
+                <View style={[styles.fieldGroup, isWideForm && styles.halfField]}>
                   <View style={[styles.fieldDot, { backgroundColor: Theme.primary }]} />
                   <View style={styles.fieldContent}>
                     <Text style={styles.fieldLabel}>DROP LOCATION *</Text>
@@ -730,26 +921,27 @@ export default function CreatePostScreen() {
               </View>
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>VEHICLE TYPE</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.chipRow}
-                >
+                <View style={styles.chipWrap}>
                   {VEHICLE_TYPES.map((v) => (
                     <Pressable
                       key={v}
                       style={[styles.chip, vehicleType === v && styles.chipActive]}
                       onPress={() => setVehicleType(vehicleType === v ? "" : v)}
                     >
-                      {vehicleType === v && <Check size={11} color="#fff" strokeWidth={3} />}
+                      {vehicleType === v && <Check size={11} color={Theme.buttonPrimaryText} strokeWidth={3} />}
                       <Text style={[styles.chipText, vehicleType === v && styles.chipTextActive]}>
                         {v}
                       </Text>
                     </Pressable>
                   ))}
-                </ScrollView>
+                </View>
               </View>
-              <View style={styles.rowFields}>
+              <View
+                style={[
+                  styles.rowFields,
+                  isCompactMobile && styles.rowFieldsStacked,
+                ]}
+              >
                 <View style={[styles.fieldGroup, styles.halfField]}>
                   <View style={styles.fieldContent}>
                     <Text style={styles.fieldLabel}>WEIGHT (TONNES)</Text>
@@ -807,7 +999,12 @@ export default function CreatePostScreen() {
           )}
 
           {type === "VEHICLE_AVAILABILITY" && (
-            <View style={styles.vehicleForm}>
+            <View
+              style={[
+                styles.vehicleForm,
+                isCompactMobile && styles.vehicleFormCompact,
+              ]}
+            >
               <View style={styles.sectionHeaderRow}>
                 <View style={styles.sectionHeaderCopy}>
                   <Text style={styles.sectionKicker}>Fleet availability</Text>
@@ -815,8 +1012,7 @@ export default function CreatePostScreen() {
                 </View>
               </View>
               <Text style={styles.sectionSub}>
-                Tell the network where equipment is free and what lane you prefer. Pick an idle
-                fleet vehicle or enter details manually.
+                Tell the network where equipment is free and what lane you prefer.
               </Text>
 
               <View style={styles.orgBadge}>
@@ -824,22 +1020,31 @@ export default function CreatePostScreen() {
                 <Text style={styles.orgBadgeText}>{organization?.name}</Text>
               </View>
 
-              <View style={styles.segmentedControl}>
+              <View
+                style={[
+                  styles.segmentedControl,
+                  isCompactMobile && styles.segmentedControlCompact,
+                  isCompactMobile && styles.stackControlsMobile,
+                ]}
+              >
                 <Pressable
                   style={[
                     styles.segmentedBtn,
+                    isCompactMobile && styles.segmentedBtnStacked,
+                    isUltraCompactMobile && styles.segmentedBtnUltraCompact,
                     vehicleEntryMode === "idle" && styles.segmentedBtnActive,
                   ]}
                   onPress={switchToIdleVehicleEntry}
                 >
                   <Truck
-                    size={14}
-                    color={vehicleEntryMode === "idle" ? Theme.buttonPrimaryText : Theme.textSecondary}
+                    size={controlIconSize}
+                    color={vehicleEntryMode === "idle" ? onPastelFill : idleControlFg}
                   />
                   <Text
                     style={[
                       styles.segmentedBtnText,
-                      vehicleEntryMode === "idle" && styles.segmentedBtnTextActive,
+                      isUltraCompactMobile && styles.segmentedBtnTextUltraCompact,
+                      vehicleEntryMode === "idle" && styles.segmentedBtnTextOnPastel,
                     ]}
                   >
                     From idle fleet
@@ -848,38 +1053,27 @@ export default function CreatePostScreen() {
                 <Pressable
                   style={[
                     styles.segmentedBtn,
+                    isCompactMobile && styles.segmentedBtnStacked,
+                    isUltraCompactMobile && styles.segmentedBtnUltraCompact,
                     vehicleEntryMode === "manual" && styles.segmentedBtnActiveManual,
                   ]}
                   onPress={switchToManualVehicleEntry}
                 >
                   <MapPin
-                    size={14}
-                    color={vehicleEntryMode === "manual" ? Theme.buttonPrimaryText : Theme.textSecondary}
+                    size={controlIconSize}
+                    color={vehicleEntryMode === "manual" ? onPastelFill : idleControlFg}
                   />
                   <Text
                     style={[
                       styles.segmentedBtnText,
-                      vehicleEntryMode === "manual" && styles.segmentedBtnTextActive,
+                      isUltraCompactMobile && styles.segmentedBtnTextUltraCompact,
+                      vehicleEntryMode === "manual" && styles.segmentedBtnTextOnPastel,
                     ]}
                   >
                     Enter manually
                   </Text>
                 </Pressable>
               </View>
-
-              {vehicleEntryMode === "manual" ? (
-                <View style={styles.modeBanner}>
-                  <Text style={styles.modeBannerText}>Manual availability entry</Text>
-                  {vehicleFleetStatus === "ready" ? (
-                    <Pressable
-                      onPress={switchToIdleVehicleEntry}
-                      style={({ pressed }) => [styles.modeBannerAction, pressed && { opacity: 0.8 }]}
-                    >
-                      <Text style={styles.modeBannerActionText}>← Pick idle vehicle</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : null}
 
               {vehicleEntryMode === "idle" ? (
                 <View style={styles.formSectionCard}>
@@ -896,21 +1090,15 @@ export default function CreatePostScreen() {
                       </View>
                       <Text style={styles.emptyTitle}>No vehicles in your fleet</Text>
                       <Text style={styles.emptySub}>
-                        Add a vehicle to your garage to post availability from idle fleet, or enter
-                        the details manually below.
+                        Add a vehicle to your garage to post availability from idle fleet, or switch
+                        to Enter manually above.
                       </Text>
                       <Pressable
                         style={({ pressed }) => [styles.emptyCta, pressed && { opacity: 0.9 }]}
                         onPress={() => router.push("/(modals)/add-vehicle" as const)}
                       >
-                        <Car size={15} color="#fff" />
+                        <Car size={15} color={Theme.textOnPrimary} />
                         <Text style={styles.emptyCtaText}>Add vehicle</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={switchToManualVehicleEntry}
-                        style={({ pressed }) => [styles.emptySecondary, pressed && { opacity: 0.8 }]}
-                      >
-                        <Text style={styles.emptySecondaryText}>Enter availability manually</Text>
                       </Pressable>
                     </View>
                   ) : vehicleFleetStatus === "no_idle" ? (
@@ -922,15 +1110,8 @@ export default function CreatePostScreen() {
                       <Text style={styles.emptySub}>
                         All {ownedVehicles.length} fleet vehicle
                         {ownedVehicles.length === 1 ? " is" : "s are"} on trip or unavailable.
-                        Enter details manually to post a preference anyway.
+                        Switch to Enter manually above to post a preference anyway.
                       </Text>
-                      <Pressable
-                        style={({ pressed }) => [styles.emptyCta, pressed && { opacity: 0.9 }]}
-                        onPress={switchToManualVehicleEntry}
-                      >
-                        <MapPin size={15} color="#fff" />
-                        <Text style={styles.emptyCtaText}>Enter manually</Text>
-                      </Pressable>
                       <Pressable
                         onPress={() => router.push(ROUTES.partyDirectory("vehicles"))}
                         style={({ pressed }) => [styles.emptySecondary, pressed && { opacity: 0.8 }]}
@@ -950,7 +1131,11 @@ export default function CreatePostScreen() {
                           return (
                             <Pressable
                               key={v.id}
-                              style={[styles.idleVehicleCard, on && styles.idleVehicleCardOn]}
+                              style={[
+                                styles.idleVehicleCard,
+                                { width: idleVehicleCellWidth },
+                                on && styles.idleVehicleCardOn,
+                              ]}
                               onPress={() => {
                                 setSelectedVehicleId((prev) => {
                                   const next = prev === v.id ? null : v.id;
@@ -999,8 +1184,13 @@ export default function CreatePostScreen() {
 
               <View style={styles.formSectionCard}>
                 <Text style={styles.formSectionCardTitle}>Location & lane</Text>
-                <View style={styles.routeSectionInner}>
-                  <View style={styles.fieldGroup}>
+                <View
+                  style={[
+                    styles.routeSectionInner,
+                    isWideForm && styles.routeSectionInnerWide,
+                  ]}
+                >
+                  <View style={[styles.fieldGroup, isWideForm && styles.halfField]}>
                     <View style={[styles.fieldDot, { backgroundColor: "#10b981" }]} />
                     <View style={styles.fieldContent}>
                       <Text style={styles.fieldLabel}>CURRENT LOCATION *</Text>
@@ -1014,8 +1204,8 @@ export default function CreatePostScreen() {
                       />
                     </View>
                   </View>
-                  <View style={styles.routeDividerHorizontal} />
-                  <View style={styles.fieldGroup}>
+                  {!isWideForm ? <View style={styles.routeDividerHorizontal} /> : null}
+                  <View style={[styles.fieldGroup, isWideForm && styles.halfField]}>
                     <View style={[styles.fieldDot, { backgroundColor: "#b45309" }]} />
                     <View style={styles.fieldContent}>
                       <Text style={styles.fieldLabel}>PREFERRED LANE (OPTIONAL)</Text>
@@ -1035,18 +1225,16 @@ export default function CreatePostScreen() {
               {showManualVehicleFields ? (
                 <View style={styles.formSectionCard}>
                   <Text style={styles.sectionTitle}>VEHICLE TYPE *</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.chipRow}
-                  >
+                  <View style={styles.chipWrap}>
                     {VEHICLE_TYPES.map((v) => (
                       <Pressable
                         key={v}
                         style={[styles.chip, vehicleType === v && styles.chipActiveVehicleType]}
                         onPress={() => setVehicleType(vehicleType === v ? "" : v)}
                       >
-                        {vehicleType === v && <Check size={11} color="#fff" strokeWidth={3} />}
+                        {vehicleType === v && (
+                          <Check size={11} color={Theme.buttonPrimaryText} strokeWidth={3} />
+                        )}
                         <Text
                           style={[
                             styles.chipText,
@@ -1057,7 +1245,7 @@ export default function CreatePostScreen() {
                         </Text>
                       </Pressable>
                     ))}
-                  </ScrollView>
+                  </View>
                 </View>
               ) : selectedVehicleId ? (
                 <View style={styles.selectedVehicleSummary}>
@@ -1068,29 +1256,36 @@ export default function CreatePostScreen() {
                 </View>
               ) : null}
 
-              <View style={styles.formSectionCard}>
-                <Text style={styles.fieldLabel}>AVAILABILITY *</Text>
-                <TextInput
-                  style={styles.textareaInput}
-                  placeholder="e.g. Free from 6pm today, or 12–15 Apr"
-                  placeholderTextColor={Theme.textMuted}
-                  value={availability}
-                  onChangeText={setAvailability}
-                  editable={!(vehicleEntryMode === "idle" && !!selectedVehicleId)}
-                />
-              </View>
-
-              <View style={styles.formSectionCard}>
-                <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
-                <TextInput
-                  style={[styles.textareaInput, styles.notesTextarea]}
-                  placeholder="Contact preference, terms…"
-                  placeholderTextColor={Theme.textMuted}
-                  value={content}
-                  onChangeText={setContent}
-                  multiline
-                  numberOfLines={3}
-                />
+              <View
+                style={[
+                  styles.formSectionCard,
+                  isWideForm && !isCompactMobile && styles.formSectionCardSplit,
+                  isCompactMobile && styles.formSectionCardCompact,
+                ]}
+              >
+                <View style={isWideForm ? styles.halfField : undefined}>
+                  <Text style={styles.fieldLabel}>AVAILABILITY *</Text>
+                  <TextInput
+                    style={styles.textareaInput}
+                    placeholder="e.g. Free from 6pm today, or 12–15 Apr"
+                    placeholderTextColor={Theme.textMuted}
+                    value={availability}
+                    onChangeText={setAvailability}
+                    editable={!(vehicleEntryMode === "idle" && !!selectedVehicleId)}
+                  />
+                </View>
+                <View style={isWideForm ? styles.halfField : undefined}>
+                  <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
+                  <TextInput
+                    style={[styles.textareaInput, styles.notesTextarea]}
+                    placeholder="Contact preference, terms…"
+                    placeholderTextColor={Theme.textMuted}
+                    value={content}
+                    onChangeText={setContent}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
               </View>
             </View>
           )}
@@ -1105,18 +1300,19 @@ export default function CreatePostScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.screenBackground },
+  container: { flex: 1, minHeight: 0, backgroundColor: Theme.surface },
   canvas: {
     width: "100%",
     maxWidth: "100%",
     alignSelf: "stretch",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 10,
+    gap: 12,
   },
   canvasWide: {
     alignSelf: "center",
-    maxWidth: 1040,
-    paddingHorizontal: 24,
+    maxWidth: Layout.desktopHubMaxWidth,
+    width: "100%",
+    paddingHorizontal: 28,
   },
   workspace: {
     width: "100%",
@@ -1124,43 +1320,87 @@ const styles = StyleSheet.create({
   workspaceWide: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 28,
+    gap: 32,
   },
   formCol: {
     width: "100%",
-    gap: 10,
+    gap: 12,
   },
   formColWide: {
-    flex: 1,
+    flex: 1.15,
     minWidth: 0,
-    maxWidth: 620,
-    gap: 12,
+    maxWidth: "100%",
+    gap: 14,
   },
   previewCol: {
-    width: 320,
+    width: 460,
+    flexShrink: 0,
+    gap: 14,
+    paddingTop: 0,
+    alignSelf: "stretch",
+  },
+  previewHero: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    overflow: "hidden",
+    minHeight: 118,
+  },
+  previewHeroCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  previewHeroTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
+  },
+  previewHeroBody: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: Theme.textRouteCard,
+    lineHeight: 16,
+  },
+  previewHeroIllus: {
+    width: 112,
+    height: 96,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   previewKicker: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1,
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.7,
     color: Theme.textMuted,
     textTransform: "uppercase",
     marginLeft: 2,
   },
   previewCard: {
     backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     padding: 16,
-    paddingLeft: 20,
-    gap: 14,
+    paddingLeft: 18,
+    gap: 12,
     overflow: "hidden",
+    width: "100%",
     ...Platform.select({
-      web: { boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)" } as object,
+      web: { boxShadow: "0 6px 20px rgba(15, 23, 42, 0.05)" } as object,
       default: {
         shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
       },
     }),
   },
@@ -1169,7 +1409,7 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 4,
+    width: 3,
   },
   previewTopRow: {
     flexDirection: "row",
@@ -1180,12 +1420,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   previewBadgeText: {
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "700",
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
@@ -1196,24 +1437,24 @@ const styles = StyleSheet.create({
   },
   previewExpiryText: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textMuted,
   },
   previewRoute: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   previewCity: {
     flexShrink: 1,
-    fontSize: 17,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   previewCityMuted: {
     color: Theme.textMuted,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   previewChips: {
     flexDirection: "row",
@@ -1221,26 +1462,27 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   previewChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     backgroundColor: Theme.surface,
+    borderRadius: 6,
   },
   previewChipText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textSecondary,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textRouteCard,
   },
   previewChipRate: {
     backgroundColor: Theme.primary + "12",
   },
   previewChipRateText: {
     color: Theme.primary,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   previewAvailability: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
-    lineHeight: 17,
+    lineHeight: 16,
     color: Theme.textSecondary,
   },
   previewFooter: {
@@ -1249,27 +1491,32 @@ const styles = StyleSheet.create({
     gap: 7,
     borderTopWidth: 1,
     borderTopColor: Theme.surfaceBorder,
-    paddingTop: 11,
+    paddingTop: 10,
   },
   previewOrgDot: {
-    width: 7,
-    height: 7,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   previewFooterText: {
     flex: 1,
     fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textSecondary,
+    fontWeight: "600",
+    color: Theme.textRouteCard,
   },
   readinessCard: {
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     padding: 14,
-    gap: 9,
+    gap: 8,
+    width: "100%",
   },
   readinessTitle: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.8,
     color: Theme.textMuted,
     textTransform: "uppercase",
     marginBottom: 1,
@@ -1277,16 +1524,16 @@ const styles = StyleSheet.create({
   readinessRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
+    gap: 8,
   },
   readinessLabel: {
     fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textSecondary,
+    fontWeight: "500",
+    color: Theme.textRouteCard,
   },
   readinessLabelDone: {
     color: Theme.textPrimaryDark,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   readinessDivider: {
     height: 1,
@@ -1300,9 +1547,9 @@ const styles = StyleSheet.create({
   },
   readinessHint: {
     flex: 1,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
-    lineHeight: 14,
+    lineHeight: 15,
     color: Theme.textMuted,
   },
   header: {
@@ -1312,17 +1559,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.surfaceBorder,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    gap: 8,
   },
   headerDesktop: {
-    paddingHorizontal: 22,
+    paddingHorizontal: 28,
+  },
+  headerUltraCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
   },
   backBtn: {
     width: 36,
     height: 36,
+    borderRadius: 10,
     backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
+  },
+  backBtnUltraCompact: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
   },
   headerTitle: {
     ...FinanceTxnTypography.partyTitle,
@@ -1332,88 +1593,220 @@ const styles = StyleSheet.create({
     color: Theme.textPrimary,
     textTransform: "capitalize",
     letterSpacing: 0.1,
+    flex: 1,
+    minWidth: 0,
+    textAlign: "center",
+  },
+  headerTitleUltraCompact: {
+    fontSize: 13,
+    letterSpacing: 0,
   },
   publishBtn: {
     backgroundColor: Theme.primary,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    minWidth: 64,
+    minWidth: 88,
+    minHeight: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
+  },
+  publishBtnUltraCompact: {
+    minWidth: 72,
+    minHeight: 34,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   publishBtnActive: {
     backgroundColor: Theme.primary,
     ...Platform.select({
-      web: { boxShadow: "0 4px 12px rgba(37, 99, 235, 0.28)" } as object,
+      web: { boxShadow: "0 3px 10px rgba(77, 54, 54, 0.22)" } as object,
       default: {
         shadowColor: Theme.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.28,
-        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.22,
+        shadowRadius: 8,
       },
     }),
   },
-  publishBtnDisabled: { backgroundColor: "#9ca3af", opacity: 0.55 },
-  publishBtnInner: { flexDirection: "row", alignItems: "center", gap: 6 },
-  publishBtnText: { fontSize: 12, fontWeight: "800", color: Theme.buttonPrimaryText, letterSpacing: 0.2 },
+  publishBtnDisabled: {
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+  },
+  publishBtnInner: { flexDirection: "row", alignItems: "center", gap: 5 },
+  publishBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.2,
+  },
+  publishBtnTextUltraCompact: {
+    fontSize: 11,
+  },
+  publishBtnTextDisabled: {
+    color: Theme.textMuted,
+  },
+  hintBanner: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    overflow: "hidden",
+    minHeight: 108,
+  },
+  hintBannerCompact: {
+    minHeight: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  hintBannerUltraCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  hintBannerCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  hintBannerTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
+  },
+  hintBannerTitleUltraCompact: {
+    fontSize: 12,
+  },
+  hintBannerIllus: {
+    width: 96,
+    height: 80,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
   hintBox: {
     marginTop: 4,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: Theme.surface,
+    paddingVertical: 10,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
   },
   hintText: {
-    fontSize: 10,
-    color: Theme.textSecondary,
-    lineHeight: 14,
-    fontWeight: "500",
+    fontSize: 12,
+    color: Theme.textRouteCard,
+    lineHeight: 17,
+    fontWeight: "400",
+  },
+  hintTextUltraCompact: {
+    fontSize: 11,
+    lineHeight: 16,
   },
   typeSelector: {
     flexDirection: "row",
-    marginTop: 4,
-    marginBottom: 10,
-    gap: 10,
+    marginTop: 2,
+    marginBottom: 2,
+    gap: 8,
   },
   typeSelectorDesktop: {
-    gap: 12,
+    gap: 10,
   },
   typeBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 11,
-    backgroundColor: Theme.screenBackground,
+    gap: 7,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    minHeight: 44,
+    borderRadius: 10,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+  },
+  typeBtnStacked: {
+    flex: 0,
+    width: "100%",
+  },
+  typeBtnUltraCompact: {
+    minHeight: 42,
+    paddingVertical: 9,
+    gap: 6,
   },
   typeBtnActiveLoad: {
-    backgroundColor: "#f59e0b",
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
   },
   typeBtnActiveVehicle: {
     backgroundColor: Theme.buttonPrimary,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
   },
   typeBtnText: {
     fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    letterSpacing: 0.2,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+    letterSpacing: 0.1,
     textTransform: "capitalize",
   },
-  typeBtnTextActive: { color: Theme.buttonPrimaryText },
-  form: { flex: 1 },
+  typeBtnTextUltraCompact: {
+    fontSize: 11,
+    letterSpacing: 0,
+  },
+  typeBtnTextOnSolid: { color: Theme.textOnPrimary },
+  typeBtnTextOnPastel: { color: Theme.buttonPrimaryText },
+  form: { flex: 1, minHeight: 0 },
   formContent: {
-    paddingTop: 10,
+    paddingTop: 12,
     paddingHorizontal: 0,
     width: "100%",
     alignItems: "stretch",
+    flexGrow: 1,
+  },
+  formContentCompact: {
+    paddingTop: 10,
+  },
+  formContentUltraCompact: {
+    paddingTop: 8,
+  },
+  canvasCompact: {
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  canvasUltraCompact: {
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  formColCompact: {
+    gap: 10,
+  },
+  stackControlsMobile: {
+    flexDirection: "column",
+    gap: 8,
   },
   vehicleModeRow: {
     flexDirection: "row",
     gap: 8,
   },
   vehicleForm: {
-    gap: 14,
+    gap: 12,
     width: "100%",
+  },
+  vehicleFormCompact: {
+    gap: 10,
   },
   sectionHeaderCopy: {
     flex: 1,
@@ -1421,39 +1814,84 @@ const styles = StyleSheet.create({
   },
   segmentedControl: {
     flexDirection: "row",
-    gap: 8,
+    gap: 4,
+    padding: 3,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+  },
+  segmentedControlCompact: {
     padding: 4,
-    backgroundColor: Theme.surface,
+    gap: 6,
   },
   segmentedBtn: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
     backgroundColor: "transparent",
+  },
+  segmentedBtnStacked: {
+    flex: 0,
+    width: "100%",
+    minHeight: 44,
+  },
+  segmentedBtnUltraCompact: {
+    minHeight: 42,
+    paddingHorizontal: 10,
+    gap: 5,
   },
   segmentedBtnActive: {
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: 1,
+    borderColor: Theme.buttonPrimaryBorder,
+  },
+  segmentedBtnActiveLoad: {
+    backgroundColor: Theme.primary,
+    borderWidth: 1,
+    borderColor: Theme.primary,
   },
   segmentedBtnActiveManual: {
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: 1,
+    borderColor: Theme.buttonPrimaryBorder,
   },
   segmentedBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimary,
     textAlign: "center",
   },
-  segmentedBtnTextActive: {
-    color: Theme.buttonPrimaryText,
+  segmentedBtnTextUltraCompact: {
+    fontSize: 11,
   },
-  formSectionCard: {
+  segmentedBtnTextOnSolid: {
+    color: Theme.textOnPrimary,
+  },
+  segmentedBtnTextOnPastel: {
+    color: Theme.buttonPrimaryText,
+  },  formSectionCard: {
     gap: 10,
-    padding: 14,
+    padding: 16,
     backgroundColor: Theme.cardWhite,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  formSectionCardCompact: {
+    padding: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  formSectionCardSplit: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
   },
   formSectionCardTitle: {
     fontSize: 10,
@@ -1466,12 +1904,20 @@ const styles = StyleSheet.create({
   routeSectionInner: {
     gap: 0,
   },
+  routeSectionInnerWide: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "flex-start",
+  },
   borderedFieldInput: {
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
     lineHeight: 20,
     backgroundColor: Theme.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
@@ -1503,9 +1949,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: Theme.primary + "08",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.primary + "30",
   },
   selectedVehicleSummaryText: {
     flex: 1,
@@ -1541,7 +1990,24 @@ const styles = StyleSheet.create({
   vehicleModeBtnTextActive: {
     color: Theme.textPrimaryDark,
   },
-  pickSection: { gap: 8, width: "100%" },
+  pickSection: {
+    gap: 12,
+    width: "100%",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 18,
+  },
+  pickSectionCompact: {
+    padding: 14,
+    gap: 10,
+    borderRadius: 12,
+  },
+  pickSectionUltraCompact: {
+    padding: 12,
+    gap: 8,
+  },
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1554,23 +2020,29 @@ const styles = StyleSheet.create({
   },
   pickSectionTitle: {
     ...FinanceTxnTypography.partyTitle,
-    fontSize: 16,
+    fontSize: 14,
     fontStyle: "normal",
     fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.1,
+    letterSpacing: -0.1,
+    textTransform: "none",
+  },
+  pickSectionTitleUltraCompact: {
+    fontSize: 13,
   },
   sectionCount: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
-    color: Theme.textSecondary,
+    color: Theme.textRouteCard,
   },
   sectionSub: {
     ...FinanceTxnTypography.routeWhy,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 17,
+    fontStyle: "normal",
+    color: Theme.textRouteCard,
     marginTop: 2,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   secondaryLink: { paddingVertical: 4, paddingHorizontal: 2 },
   secondaryLinkText: {
@@ -1584,9 +2056,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: Theme.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    marginBottom: 8,
+    paddingVertical: 10,
+    marginBottom: 4,
   },
   searchInput: {
     flex: 1,
@@ -1615,8 +2090,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   idleVehicleCard: {
-    width: "49%",
     backgroundColor: Theme.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     paddingHorizontal: 12,
     paddingVertical: 11,
     gap: 5,
@@ -1625,6 +2102,7 @@ const styles = StyleSheet.create({
   },
   idleVehicleCardOn: {
     backgroundColor: Theme.primary + "10",
+    borderColor: Theme.primary + "40",
   },
   idleVehicleTop: {
     flexDirection: "row",
@@ -1649,18 +2127,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 8,
   },
-  emptyTitle: { fontSize: 16, fontWeight: "800", color: Theme.textPrimary, marginTop: 8 },
-  emptySub: { fontSize: 13, color: Theme.textSecondary, textAlign: "center", lineHeight: 20 },
+  emptyTitle: { fontSize: 14, fontWeight: "700", color: Theme.textPrimary, marginTop: 6 },
+  emptySub: { fontSize: 12, color: Theme.textRouteCard, textAlign: "center", lineHeight: 18 },
   emptyCta: {
     marginTop: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     backgroundColor: Theme.textPrimaryDark,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
   },
-  emptyCtaText: { fontSize: 13, fontWeight: "800", color: "#fff" },
+  emptyCtaText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },
   emptySecondary: { marginTop: 8, padding: 8 },
   emptySecondaryText: { fontSize: 12, fontWeight: "700", color: Theme.primary },
   notesBlock: { marginTop: 8, gap: 8 },
@@ -1671,17 +2150,36 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     padding: 12,
     marginBottom: 8,
+    borderRadius: 10,
   },
   modeBannerText: { fontSize: 12, fontWeight: "800", color: Theme.textPrimary },
   modeBannerAction: { paddingVertical: 4 },
   modeBannerActionText: { fontSize: 12, fontWeight: "800", color: Theme.primary },
-  loadForm: { gap: 16 },
+  loadForm: {
+    gap: 14,
+    width: "100%",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
+  },
+  loadFormCompact: {
+    padding: 14,
+    gap: 12,
+    borderRadius: 12,
+  },
+  loadFormUltraCompact: {
+    padding: 12,
+    gap: 10,
+  },
   orgBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     backgroundColor: Theme.primary + "10",
     alignSelf: "flex-start",
+    borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
     marginBottom: 4,
@@ -1692,10 +2190,18 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   routeSection: {
-    backgroundColor: "#f7f8fb",
+    backgroundColor: Theme.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     gap: 0,
+  },
+  routeSectionWide: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "flex-start",
   },
   fieldGroup: {
     flexDirection: "row",
@@ -1714,23 +2220,28 @@ const styles = StyleSheet.create({
   fieldDot: {
     width: 8,
     height: 8,
-    marginTop: 28,
+    borderRadius: 4,
+    marginTop: 26,
+    flexShrink: 0,
   },
-  fieldContent: { flex: 1 },
+  fieldContent: { flex: 1, minWidth: 0, gap: 6 },
   fieldLabel: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: Theme.textSecondary,
-    letterSpacing: 0.8,
-    marginBottom: 2,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   fieldInput: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Theme.textPrimary,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderMedium,
-    paddingBottom: 6,
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
   routeDivider: {
     width: 1,
@@ -1750,37 +2261,54 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 2,
   },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
   chip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    backgroundColor: "#f8fafc",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
   },
   chipActive: {
     backgroundColor: Theme.buttonPrimary,
+    borderColor: Theme.buttonPrimary,
   },
   chipActiveVehicleType: {
     backgroundColor: Theme.buttonPrimary,
+    borderColor: Theme.buttonPrimary,
   },
   chipDisabled: {
     opacity: 0.45,
   },
   chipText: {
     fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textSecondary,
+    fontWeight: "600",
+    color: Theme.textPrimary,
   },
-  chipTextActive: { color: "#fff" },
-  chipTextActiveVehicle: { color: "#fff" },
+  chipTextActive: { color: Theme.buttonPrimaryText },
+  chipTextActiveVehicle: { color: Theme.buttonPrimaryText },
   rowFields: {
     flexDirection: "row",
     gap: 12,
   },
-  halfField: { flex: 1 },
+  rowFieldsStacked: {
+    flexDirection: "column",
+    gap: 10,
+  },
+  halfField: { flex: 1, minWidth: 0 },
   rateSection: {
     backgroundColor: Theme.primary + "08",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.primary + "18",
     padding: 14,
     gap: 8,
   },
@@ -1790,39 +2318,42 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   ratePrefix: {
-    fontSize: 24,
-    fontWeight: "900",
+    fontSize: 18,
+    fontWeight: "700",
     color: Theme.primary,
   },
   rateInput: {
     flex: 1,
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "600",
     color: Theme.textPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: -0.2,
   },
   notesInput: {
-    fontSize: 14,
+    fontSize: 13,
     color: Theme.textPrimary,
     fontWeight: "500",
-    lineHeight: 20,
-    backgroundColor: Theme.surface,
-    padding: 12,
-    textAlignVertical: "top",
-    minHeight: 80,
-  },
-  textareaInput: {
-    fontSize: 14,
-    color: Theme.textPrimary,
-    fontWeight: "500",
-    lineHeight: 20,
+    lineHeight: 19,
     backgroundColor: Theme.surface,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderColor: Theme.borderLight,
+    padding: 12,
     textAlignVertical: "top",
-    minHeight: 68,
+    minHeight: 72,
+  },
+  textareaInput: {
+    fontSize: 13,
+    color: Theme.textPrimary,
+    fontWeight: "500",
+    lineHeight: 19,
+    backgroundColor: Theme.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    textAlignVertical: "top",
+    minHeight: 64,
   },
 });

@@ -478,7 +478,8 @@ export interface ExistingDriverMatch {
   avatar_url?: string | null;
   /** Optional avatar preset seed (when RPC provides it). */
   avatar_seed?: string | null;
-  /** True when driver is currently connected to at least one fleet (left_at is null). */
+  /** True when driver is currently connected to at least one fleet (left_at is null).
+   *  Not the same as “in *your* fleet” — use org roster for employment status. */
   is_in_fleet?: boolean;
 }
 

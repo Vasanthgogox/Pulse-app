@@ -213,11 +213,15 @@ const styles = StyleSheet.create({
   pressable: {
     minWidth: 0,
     flexShrink: 1,
+    width: "100%",
+    justifyContent: "center",
   },
   outer: {
     minWidth: 0,
     flexShrink: 1,
     maxWidth: 500,
+    width: "100%",
+    justifyContent: "center",
   },
   outerCompact: {
     maxWidth: "100%",
@@ -231,6 +235,7 @@ const styles = StyleSheet.create({
     gap: 9,
     minWidth: 0,
     flexShrink: 1,
+    width: "100%",
     paddingLeft: 8,
     paddingRight: 10,
     borderRadius: 999,
@@ -286,14 +291,14 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 999,
     paddingHorizontal: 11,
-    paddingVertical: 6,
-    minHeight: 30,
+    paddingVertical: 0,
+    height: 30,
     borderWidth: 1.5,
     flexShrink: 0,
   },
   pillCompact: {
     paddingHorizontal: 9,
-    minHeight: 28,
+    height: 26,
     gap: 5,
   },
   pillActive: {

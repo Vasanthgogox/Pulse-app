@@ -1,6 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { ArrowRight, MapPin, Navigation2 } from "lucide-react-native";
-import { memo, useState } from "react";
+import { ArrowUpDown, ChevronRight, MapPin } from "lucide-react-native";
+import { memo, useCallback, useState } from "react";
 import {
   Modal,
   Platform,
@@ -12,11 +12,15 @@ import {
 } from "react-native";
 
 import Theme from "@/constants/Theme";
+import { TypewriterText } from "@/components/TypewriterText";
 import type { AddTripFormState } from "@/features/trips/components/add-trip/types";
+import type { AddTripIssueField } from "@/features/trips/components/add-trip/useAddTripForm";
 import type { useAddTripForm } from "@/features/trips/components/add-trip/useAddTripForm";
 
+import { CreateTripPickupLocationPicker } from "./CreateTripPickupLocationPicker";
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
 import { LocationSearchField } from "./LocationSearchField";
+import type { PickupRecommendation } from "./pickupRecommendations.util";
 
 function toISODate(d: Date): string {
   const y = d.getFullYear();
@@ -41,32 +45,18 @@ function getDayAfter(): string {
   return toISODate(d);
 }
 
-function routePreviewLine(value: string): string {
-  const t = value.trim();
-  if (!t) return "—";
-  return t.length > 48 ? `${t.slice(0, 45)}…` : t;
-}
-
-const desktopLocationInputStyle = {
-  backgroundColor: Theme.cardWhite,
-  borderWidth: 1,
-  borderColor: Theme.borderLight,
-  borderRadius: 12,
-  paddingHorizontal: 14,
-  paddingVertical: 12,
-  minHeight: 48,
-  fontSize: 14,
-  fontWeight: "600" as const,
-  color: Theme.textPrimaryDark,
-  flex: 1,
-};
-
 export type CreateTripDesktopRouteStepProps = {
   state: AddTripFormState;
   setters: ReturnType<typeof useAddTripForm>["setters"];
-  fieldInvalid: (field: string) => boolean;
+  fieldInvalid: (field: AddTripIssueField) => boolean;
   onPickupDropdownOpenChange: (open: boolean) => void;
   onDropDropdownOpenChange: (open: boolean) => void;
+  /** Stack columns for mobile / narrow widths. */
+  compact?: boolean;
+  /** Client warehouse / office location cards for pickup. */
+  pickupRecommendations?: readonly PickupRecommendation[];
+  onSelectPickupRecommendation?: (rec: PickupRecommendation) => void;
+  pickupLocationsLoading?: boolean;
 };
 
 export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteStep({
@@ -75,6 +65,10 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
   fieldInvalid,
   onPickupDropdownOpenChange,
   onDropDropdownOpenChange,
+  compact = false,
+  pickupRecommendations = [],
+  onSelectPickupRecommendation,
+  pickupLocationsLoading = false,
 }: CreateTripDesktopRouteStepProps) {
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
 
@@ -84,226 +78,255 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
     { label: "Day after", get: getDayAfter },
   ] as const;
 
-  const showRouteSummary =
-    state.pickupArea.trim().length > 0 && state.dropLocation.trim().length > 0;
+  const swapLocations = useCallback(() => {
+    const {
+      pickupArea,
+      dropLocation,
+      pickupLat,
+      pickupLon,
+      dropLat,
+      dropLon,
+    } = state;
+    setters.setPickupArea(dropLocation);
+    setters.setDropLocation(pickupArea);
+    if (dropLat != null && dropLon != null) {
+      setters.setPickupCoords(dropLat, dropLon);
+    }
+    if (pickupLat != null && pickupLon != null) {
+      setters.setDropCoords(pickupLat, pickupLon);
+    }
+  }, [setters, state]);
 
-  return (
-    <View style={s.stepBody}>
-      <View style={s.routeGrid}>
-        <View style={s.routeGridMain}>
-          <View style={s.routeFieldsStack}>
-            <View style={s.routeConnector} pointerEvents="none" />
+  const handleSelectRecommendation = useCallback(
+    (rec: PickupRecommendation) => {
+      onSelectPickupRecommendation?.(rec);
+    },
+    [onSelectPickupRecommendation],
+  );
 
-            <View style={s.routeFieldBlock}>
-              <LocationSearchField
-                label="Pickup *"
-                placeholder="Search or pick pickup location"
-                value={state.pickupArea}
-                onChangeText={setters.setPickupArea}
-                onSelectPlace={(_name, coords) =>
-                  setters.setPickupCoords(coords.lat, coords.lon)
-                }
-                leadingIcon={<MapPin size={18} color={Theme.textMuted} />}
-                leadingIconLayout="inline"
-                labelStyle={s.routeFieldLabel}
-                inputStyle={[
-                  desktopLocationInputStyle,
-                  fieldInvalid("pickup") && s.routeInputShellError,
+  const dateSection = (
+    <View style={s.stepSection}>
+      <Text style={s.sectionHeading}>Trip date</Text>
+      <View style={s.routeDateSection}>
+        <View style={[s.quickDateRow, compact && s.compactQuickDateRow]}>
+          {quickDates.map(({ label, get }) => {
+            const iso = get();
+            const isActive = state.tripStartDate === iso;
+            return (
+              <Pressable
+                key={label}
+                style={[
+                  s.quickDateChip,
+                  compact && s.compactQuickDateChip,
+                  isActive && s.quickDateChipActive,
                 ]}
-                compact
-                onDropdownOpenChange={onPickupDropdownOpenChange}
-              />
-            </View>
-
-            <View style={s.routeFieldBlock}>
-              <LocationSearchField
-                label="Drop *"
-                placeholder="Search or pick drop location"
-                value={state.dropLocation}
-                onChangeText={setters.setDropLocation}
-                onSelectPlace={(_name, coords) =>
-                  setters.setDropCoords(coords.lat, coords.lon)
-                }
-                leadingIcon={
-                  <Navigation2
-                    size={18}
-                    color={Theme.textMuted}
-                    style={{ transform: [{ rotate: "45deg" }] }}
-                  />
-                }
-                leadingIconLayout="inline"
-                labelStyle={s.routeFieldLabel}
-                inputStyle={[
-                  desktopLocationInputStyle,
-                  fieldInvalid("drop") && s.routeInputShellError,
-                ]}
-                compact
-                onDropdownOpenChange={onDropDropdownOpenChange}
-              />
-            </View>
-          </View>
-
-          {showRouteSummary ? (
-            <View style={s.routeSummary}>
-              <View style={s.routeSummaryHeader}>
-                <ArrowRight size={16} color={Theme.textSecondary} strokeWidth={2} />
-                <Text style={s.routeSummaryTitle} numberOfLines={2}>
-                  {routePreviewLine(state.pickupArea)}{" "}
-                  <Text style={s.routeSummaryArrow}>→</Text>{" "}
-                  {routePreviewLine(state.dropLocation)}
-                </Text>
-              </View>
-              {state.routeLoading ||
-              state.routeDistanceKm != null ||
-              state.routeEtaLabel != null ? (
-                <View style={s.routeSummaryMetrics}>
-                  <View style={[s.routeSummaryMetric, s.routeSummaryMetricBorder]}>
-                    <Text style={s.routeSummaryMetricLabel}>Distance</Text>
-                    <Text style={s.routeSummaryMetricValue}>
-                      {state.routeLoading
-                        ? "…"
-                        : state.routeDistanceKm != null
-                          ? `${state.routeDistanceKm} km`
-                          : "—"}
-                    </Text>
-                  </View>
-                  <View style={s.routeSummaryMetric}>
-                    <Text style={s.routeSummaryMetricLabel}>ETA</Text>
-                    <Text style={s.routeSummaryMetricValue}>
-                      {state.routeLoading
-                        ? "…"
-                        : state.routeEtaLabel != null
-                          ? state.routeEtaLabel
-                          : "—"}
-                    </Text>
-                  </View>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-
-        <View style={s.routeGridAside}>
-          <View style={s.routeDateSection}>
-            <Text style={s.routeFieldLabel}>Trip Start Date</Text>
-            <View style={s.quickDateRow}>
-              {quickDates.map(({ label, get }) => {
-                const iso = get();
-                const isActive = state.tripStartDate === iso;
-                return (
-                  <Pressable
-                    key={label}
-                    style={[s.quickDateChip, isActive && s.quickDateChipActive]}
-                    onPress={() => setters.setTripStartDate(iso)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
-                  >
-                    <Text
-                      style={[
-                        s.quickDateChipText,
-                        isActive && s.quickDateChipTextActive,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {Platform.OS === "web" ? (
-              <TextInput
-                style={[s.dateInput, fieldInvalid("tripDate") && s.routeInputShellError]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={Theme.placeholder}
-                value={state.tripStartDate}
-                onChangeText={setters.setTripStartDate}
-                autoCorrect={false}
-              />
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={[s.dateInput, fieldInvalid("tripDate") && s.routeInputShellError]}
-                  onPress={() => setShowStartDatePicker(true)}
-                  activeOpacity={0.85}
+                onPress={() => setters.setTripStartDate(iso)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+              >
+                <Text
+                  style={[
+                    s.quickDateChipText,
+                    isActive && s.quickDateChipTextActive,
+                  ]}
                 >
-                  <Text style={{ fontSize: 14, fontWeight: "600", color: Theme.textPrimaryDark }}>
-                    {state.tripStartDate
-                      ? new Date(`${state.tripStartDate}T12:00:00`).toLocaleDateString("en-IN", {
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View
+          style={[
+            s.inputBoxClean,
+            s.routeDateInputShell,
+            fieldInvalid("tripDate") && s.inputBoxCleanError,
+          ]}
+        >
+          {Platform.OS === "web" ? (
+            <TextInput
+              style={s.dateInput}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={Theme.placeholder}
+              value={state.tripStartDate}
+              onChangeText={setters.setTripStartDate}
+              autoCorrect={false}
+            />
+          ) : (
+            <>
+              <TouchableOpacity
+                onPress={() => setShowStartDatePicker(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.routeDateNativeValue}>
+                  {state.tripStartDate
+                    ? new Date(`${state.tripStartDate}T12:00:00`).toLocaleDateString(
+                        "en-IN",
+                        {
                           weekday: "short",
                           day: "numeric",
                           month: "short",
                           year: "numeric",
-                        })
-                      : "Tap to pick date"}
-                  </Text>
-                </TouchableOpacity>
-                {showStartDatePicker ? (
-                  Platform.OS === "android" ? (
-                    <DateTimePicker
-                      value={
-                        state.tripStartDate
-                          ? new Date(`${state.tripStartDate}T12:00:00`)
-                          : new Date()
+                        },
+                      )
+                    : "Tap to pick date"}
+                </Text>
+              </TouchableOpacity>
+              {showStartDatePicker ? (
+                Platform.OS === "android" ? (
+                  <DateTimePicker
+                    value={
+                      state.tripStartDate
+                        ? new Date(`${state.tripStartDate}T12:00:00`)
+                        : new Date()
+                    }
+                    mode="date"
+                    display="default"
+                    minimumDate={new Date()}
+                    onChange={(e, date) => {
+                      setShowStartDatePicker(false);
+                      if (e.type === "set" && date) {
+                        setters.setTripStartDate(toISODate(date));
                       }
-                      mode="date"
-                      display="default"
-                      minimumDate={new Date()}
-                      onChange={(e, date) => {
-                        setShowStartDatePicker(false);
-                        if (e.type === "set" && date) {
-                          setters.setTripStartDate(toISODate(date));
-                        }
-                      }}
-                    />
-                  ) : (
-                    <Modal visible transparent animationType="slide">
-                      <TouchableOpacity
-                        style={{ flex: 1, backgroundColor: Theme.overlayBackdrop }}
-                        activeOpacity={1}
-                        onPress={() => setShowStartDatePicker(false)}
+                    }}
+                  />
+                ) : (
+                  <Modal visible transparent animationType="slide">
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: Theme.overlayBackdrop }}
+                      activeOpacity={1}
+                      onPress={() => setShowStartDatePicker(false)}
+                    >
+                      <View
+                        style={{
+                          marginTop: "auto",
+                          backgroundColor: Theme.cardWhite,
+                          padding: 16,
+                        }}
                       >
-                        <View style={{ marginTop: "auto", backgroundColor: Theme.cardWhite, padding: 16 }}>
-                          <DateTimePicker
-                            value={
-                              state.tripStartDate
-                                ? new Date(`${state.tripStartDate}T12:00:00`)
-                                : new Date()
-                            }
-                            mode="date"
-                            display="spinner"
-                            minimumDate={new Date()}
-                            onChange={(_, date) =>
-                              date && setters.setTripStartDate(toISODate(date))
-                            }
-                          />
-                        </View>
-                      </TouchableOpacity>
-                    </Modal>
-                  )
-                ) : null}
-              </>
-            )}
-          </View>
-
-          <View style={s.infoBanner}>
-            <View style={s.infoBannerIcon}>
-              <MapPin size={18} color={Theme.iconPrimary} strokeWidth={2.5} />
-            </View>
-            <View style={s.infoBannerCopy}>
-              <View style={s.infoBannerTitleRow}>
-                <Navigation2
-                  size={12}
-                  color={Theme.textMuted}
-                  style={{ transform: [{ rotate: "45deg" }] }}
-                />
-                <Text style={s.infoBannerTitle}>Update your route details</Text>
-              </View>
-              <Text style={s.infoBannerBody}>
-                Add accurate pickup and drop points for better tracking and ETA.
-              </Text>
-            </View>
-          </View>
+                        <DateTimePicker
+                          value={
+                            state.tripStartDate
+                              ? new Date(`${state.tripStartDate}T12:00:00`)
+                              : new Date()
+                          }
+                          mode="date"
+                          display="spinner"
+                          minimumDate={new Date()}
+                          onChange={(_, date) =>
+                            date && setters.setTripStartDate(toISODate(date))
+                          }
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  </Modal>
+                )
+              ) : null}
+            </>
+          )}
         </View>
+      </View>
+    </View>
+  );
+
+  const pickupDropSection = (
+    <View style={s.stepSection}>
+      <Text style={s.sectionHeading}>Pickup & drop</Text>
+      <View style={[s.routeFieldsStack, compact && s.compactRouteFieldsStack]}>
+        <CreateTripPickupLocationPicker
+          recommendations={pickupRecommendations}
+          selectedAddress={state.pickupArea}
+          onSelect={handleSelectRecommendation}
+          loading={pickupLocationsLoading}
+          compact={compact}
+        />
+
+        <LocationSearchField
+          label="Pickup *"
+          placeholder={
+            pickupRecommendations.length > 0
+              ? "Or search another pickup location"
+              : "Search or pick pickup location"
+          }
+          value={state.pickupArea}
+          onChangeText={setters.setPickupArea}
+          onSelectPlace={(_name, coords) =>
+            setters.setPickupCoords(coords.lat, coords.lon)
+          }
+          leadingIcon={
+            <MapPin size={16} color={Theme.textRouteCard} strokeWidth={2} />
+          }
+          presentation="desktopShell"
+          compact={compact}
+          labelStyle={s.desktopFieldLabel}
+          inputStyle={fieldInvalid("pickup") ? s.inputBoxCleanError : undefined}
+          onDropdownOpenChange={onPickupDropdownOpenChange}
+        />
+
+        <View style={[s.routeSwapRow, compact && s.compactRouteSwapRow]}>
+          <Pressable
+            onPress={swapLocations}
+            style={s.routeSwapBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Swap pickup and drop locations"
+          >
+            <ArrowUpDown size={14} color={Theme.textRouteCard} strokeWidth={2.5} />
+          </Pressable>
+        </View>
+
+        <LocationSearchField
+          label="Drop *"
+          placeholder="Search or pick drop location"
+          value={state.dropLocation}
+          onChangeText={setters.setDropLocation}
+          onSelectPlace={(_name, coords) =>
+            setters.setDropCoords(coords.lat, coords.lon)
+          }
+          leadingIcon={
+            <ChevronRight size={16} color={Theme.textRouteCard} strokeWidth={2.5} />
+          }
+          presentation="desktopShell"
+          compact={compact}
+          labelStyle={s.desktopFieldLabel}
+          inputStyle={fieldInvalid("drop") ? s.inputBoxCleanError : undefined}
+          onDropdownOpenChange={onDropDropdownOpenChange}
+        />
+      </View>
+
+      <View style={[s.infoBanner, s.routeInfoBannerBelowPickup]}>
+        <View style={s.infoBannerIcon}>
+          <ChevronRight size={16} color={Theme.iconPrimary} strokeWidth={2.5} />
+        </View>
+        <View style={s.infoBannerCopy}>
+          <TypewriterText
+            text="Update your route details"
+            style={s.infoBannerTitle}
+            msPerChar={36}
+          />
+          <Text style={s.infoBannerBody}>
+            Add accurate pickup and drop points for better tracking and ETA
+            forecasting.
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  /** Mobile: dedicated vertical stack — never reuse desktop row grid (avoids RN Web overlap). */
+  if (compact) {
+    return (
+      <View style={[s.stepBody, s.compactStepBody, s.compactRouteBody]}>
+        {dateSection}
+        {pickupDropSection}
+      </View>
+    );
+  }
+
+  return (
+    <View style={s.stepBody}>
+      <View style={s.routeStepGrid}>
+        <View style={s.routeStepCol}>{pickupDropSection}</View>
+        <View style={s.routeStepCol}>{dateSection}</View>
       </View>
     </View>
   );

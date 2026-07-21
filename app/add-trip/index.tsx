@@ -20,6 +20,7 @@ import { useVisibleIndentQuery } from '@/lib/queries/useIndentsQuery';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
+import { showAppAlert } from '@/lib/appAlert';
 
 export default function AddTripPage() {
   const router = useRouter();
@@ -139,6 +140,10 @@ export default function AddTripPage() {
         );
         if (assignErr) {
           console.warn('Trip created but driver assign by phone failed:', assignErr.message);
+          showAppAlert(
+            'Trip created',
+            `Trip was created, but driver could not be assigned: ${assignErr.message}`,
+          );
         } else if (assignOtp) {
           resolvedOtp = assignOtp;
         } else {
@@ -204,7 +209,13 @@ export default function AddTripPage() {
           driverName: options.driverName?.trim() || undefined,
         },
       );
-      if (assignErr) console.warn('Trip created but driver assign by phone failed:', assignErr.message);
+      if (assignErr) {
+        console.warn('Trip created but driver assign by phone failed:', assignErr.message);
+        showAppAlert(
+          'Trip created',
+          `Trip was created, but driver could not be assigned: ${assignErr.message}`,
+        );
+      }
     }
     const advancePaid = normalizedAdvancePaid;
     const supplierId = data.supplier_id ?? null;

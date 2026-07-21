@@ -85,7 +85,7 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <ChevronLeft size={20} color={Theme.textPrimaryDark} strokeWidth={2.5} />
+            <ChevronLeft size={18} color={Theme.textPrimaryDark} strokeWidth={2.5} />
           </Pressable>
           <View style={styles.progressRow}>
             {stepIds.map((id, i) => (
@@ -151,7 +151,7 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
         </View>
 
         {!hideFooter ? (
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
             <Pressable
               style={[styles.fab, !canAdvance && styles.fabDisabled]}
               onPress={onAdvance}
@@ -159,7 +159,7 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
               accessibilityRole="button"
               accessibilityLabel={advanceLabel}
             >
-              <ArrowRight size={20} color={Theme.textOnPrimary} strokeWidth={2.8} />
+              <ArrowRight size={18} color={Theme.textOnPrimary} strokeWidth={2.6} />
             </Pressable>
             <Text style={styles.footerHint}>{advanceLabel}</Text>
           </View>

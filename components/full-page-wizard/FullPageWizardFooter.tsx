@@ -1,5 +1,7 @@
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ChevronLeft, ChevronRight } from "lucide-react-native";
 
+import Theme from "@/constants/Theme";
 import { alertRegistryActionStyles } from "@/components/AlertRegistryCardActions";
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
 
@@ -19,6 +21,8 @@ export interface FullPageWizardFooterProps {
   hint?: string | null;
   /** Registry = notification / chat alert CTA chrome (Decline + Pay now). */
   actionVariant?: FullPageWizardFooterActionVariant;
+  /** Dark ink CTA — matches Create Trip desktop footer. */
+  primaryTone?: "brand" | "ink";
 }
 
 export function FullPageWizardFooter({
@@ -34,10 +38,13 @@ export function FullPageWizardFooter({
   summary,
   hint,
   actionVariant = "wizard",
+  primaryTone = "brand",
 }: FullPageWizardFooterProps) {
   const disabled = primaryDisabled || loading;
   const isRegistry = actionVariant === "registry";
+  const isInk = !isRegistry && primaryTone === "ink";
   const actionStyles = alertRegistryActionStyles;
+  const showHint = Boolean(hint && disabled && !loading);
 
   const footerBarStyle = isRegistry
     ? actionStyles.footerBar
@@ -46,7 +53,12 @@ export function FullPageWizardFooter({
       : styles.footerBar;
 
   return (
-    <View>
+    <View style={styles.footerRoot}>
+      {showHint && !isRegistry ? (
+        <Text style={styles.footerHintAbove} numberOfLines={2}>
+          {hint}
+        </Text>
+      ) : null}
       <View style={footerBarStyle}>
         {summary ? (
           <Text
@@ -58,36 +70,37 @@ export function FullPageWizardFooter({
             {summary}
           </Text>
         ) : null}
+
+        {onSecondaryPress && !isRegistry ? (
+          <Pressable
+            style={styles.cancelBtn}
+            onPress={onSecondaryPress}
+            accessibilityRole="button"
+            accessibilityLabel={secondaryLabel}
+            hitSlop={8}
+          >
+            <ChevronLeft size={18} color={Theme.textRouteCard} strokeWidth={2.5} />
+            <Text style={styles.cancelBtnText}>{secondaryLabel}</Text>
+          </Pressable>
+        ) : onSecondaryPress && isRegistry ? (
+          <Pressable style={actionStyles.footerGhostBtn} onPress={onSecondaryPress}>
+            <Text style={actionStyles.footerGhostBtnText}>{secondaryLabel}</Text>
+          </Pressable>
+        ) : !isRegistry ? (
+          <View style={styles.footerBackSpacer} />
+        ) : null}
+
         <View style={styles.footerActions}>
-          {onSecondaryPress ? (
-            <Pressable
-              style={
-                isRegistry ? actionStyles.footerGhostBtn : styles.cancelBtn
-              }
-              onPress={onSecondaryPress}
-            >
-              <Text
-                style={
-                  isRegistry
-                    ? actionStyles.footerGhostBtnText
-                    : styles.cancelBtnText
-                }
-              >
-                {secondaryLabel}
-              </Text>
-            </Pressable>
-          ) : null}
           {tertiaryLabel && onTertiaryPress ? (
             <Pressable
               style={[
                 isRegistry ? actionStyles.footerTertiaryBtn : styles.tertiaryBtn,
                 !isRegistry && tertiaryDisabled && styles.tertiaryBtnDisabled,
-                isRegistry &&
-                  tertiaryDisabled &&
-                  actionStyles.btnDisabled,
+                isRegistry && tertiaryDisabled && actionStyles.btnDisabled,
               ]}
               onPress={onTertiaryPress}
               disabled={tertiaryDisabled}
+              accessibilityRole="button"
             >
               <Text
                 style={
@@ -102,33 +115,68 @@ export function FullPageWizardFooter({
           ) : null}
           <Pressable
             style={[
-              isRegistry ? actionStyles.footerPrimaryBtn : styles.submitBtn,
+              isRegistry
+                ? actionStyles.footerPrimaryBtn
+                : isInk
+                  ? styles.submitBtnInk
+                  : styles.submitBtn,
               summary && !isRegistry && styles.submitBtnWithSummary,
               disabled &&
                 (isRegistry
                   ? actionStyles.btnDisabled
-                  : styles.submitBtnDisabled),
+                  : isInk
+                    ? styles.submitBtnInkDisabled
+                    : styles.submitBtnDisabled),
             ]}
             onPress={onPrimaryPress}
             disabled={disabled}
+            accessibilityRole="button"
+            accessibilityState={{ disabled }}
+            accessibilityLabel={primaryLabel}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <ActivityIndicator
+                color={isInk ? Theme.textOnPrimary : Theme.buttonPrimaryText}
+                size="small"
+              />
             ) : (
-              <Text
-                style={
-                  isRegistry
-                    ? actionStyles.footerPrimaryBtnText
-                    : styles.submitBtnText
-                }
-              >
-                {primaryLabel}
-              </Text>
+              <>
+                <Text
+                  style={
+                    isRegistry
+                      ? actionStyles.footerPrimaryBtnText
+                      : isInk
+                        ? [
+                            styles.submitBtnInkText,
+                            disabled && styles.submitBtnInkTextDisabled,
+                          ]
+                        : [
+                            styles.submitBtnText,
+                            disabled && styles.submitBtnTextDisabled,
+                          ]
+                  }
+                >
+                  {primaryLabel}
+                </Text>
+                {!isRegistry ? (
+                  <ChevronRight
+                    size={18}
+                    color={
+                      disabled
+                        ? Theme.textMuted
+                        : isInk
+                          ? Theme.textOnPrimary
+                          : Theme.buttonPrimaryText
+                    }
+                    strokeWidth={2.5}
+                  />
+                ) : null}
+              </>
             )}
           </Pressable>
         </View>
       </View>
-      {hint ? (
+      {hint && !showHint ? (
         <Text style={isRegistry ? actionStyles.footerHint : styles.footerHint}>
           {hint}
         </Text>

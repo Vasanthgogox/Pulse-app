@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 8,
     fontWeight: "600",
-    color: Theme.textMuted,
+    color: Theme.textRouteCard,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 4,
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 8,
     fontWeight: "500",
-    color: Theme.textSecondary,
+    color: Theme.textPrimary,
     lineHeight: 12,
     ...Platform.select({
       android: { includeFontPadding: false as const },

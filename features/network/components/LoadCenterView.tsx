@@ -1832,10 +1832,11 @@ const styles = StyleSheet.create({
   mobileNetworkToolbarRow: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 8,
-    paddingBottom: 10,
+    paddingBottom: 8,
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
+    justifyContent: "center",
   },
   loadsSearchIcon: { marginRight: 8 },
   loadsStatusTabRow: {

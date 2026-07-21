@@ -11,12 +11,14 @@ import {
   View,
   type StyleProp,
   type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ChevronRight, Plus, X } from "lucide-react-native";
 
 import Theme from "@/constants/Theme";
 import { fullPageWizardStyles as wizardChrome } from "@/components/full-page-wizard";
+import { useRecentTonsRecommendations } from "@/features/trips/hooks/useRecentTonsRecommendations";
 import { useUserCommodityTypes } from "@/features/trips/hooks/useUserCommodityTypes";
 import type { CommodityTypeKind } from "@/features/trips/services/userCommodityTypes.storage";
 import { ROUTES } from "@/lib/routes";
@@ -41,6 +43,8 @@ export type TripCommodityFieldsProps = {
   useFormChrome?: boolean;
   /** Web desktop: native `<select>` instead of bottom sheet. */
   preferWebSelect?: boolean;
+  /** Rounded shell inputs matching desktop create-trip mockup. */
+  desktopChrome?: boolean;
   fieldLabelStyle?: StyleProp<TextStyle>;
   fieldInputStyle?: StyleProp<TextStyle>;
 };
@@ -54,6 +58,7 @@ function CommodityWebSelect({
   onChange,
   hasError,
   minHeight,
+  desktopChrome = false,
 }: {
   value: string;
   options: string[];
@@ -61,19 +66,23 @@ function CommodityWebSelect({
   onChange: (v: string) => void;
   hasError?: boolean;
   minHeight: number;
+  desktopChrome?: boolean;
 }) {
   const selectStyle: CSSProperties = {
     width: "100%",
     minHeight,
-    borderRadius: 12,
-    border: `1px solid ${hasError ? Theme.negative : Theme.borderLight}`,
-    backgroundColor: "#f8fafc",
-    padding: "10px 12px",
-    fontSize: 14,
-    fontWeight: 500,
+    borderRadius: desktopChrome ? 16 : 12,
+    border: `1px solid ${hasError ? Theme.destructive : Theme.borderLight}`,
+    backgroundColor: Theme.surface,
+    padding: desktopChrome ? "12px 14px" : "10px 12px",
+    fontSize: 13,
+    fontWeight: 600,
     color: value.trim() ? Theme.textPrimaryDark : Theme.placeholder,
     boxSizing: "border-box",
     cursor: "pointer",
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
   };
   return createElement(
     "select",
@@ -105,6 +114,7 @@ export const TripCommodityFields = memo(function TripCommodityFields({
   isWide = false,
   useFormChrome = false,
   preferWebSelect = false,
+  desktopChrome = false,
   fieldLabelStyle,
   fieldInputStyle,
 }: TripCommodityFieldsProps) {
@@ -114,6 +124,16 @@ export const TripCommodityFields = memo(function TripCommodityFields({
     indentVehicleType,
     indentLoadType,
   );
+  const { chips: tonsChips, recent: recentTons, remember: rememberTons } =
+    useRecentTonsRecommendations();
+
+  const applyTons = useCallback(
+    (value: string) => {
+      onTonsChange(value);
+      void rememberTons(value);
+    },
+    [onTonsChange, rememberTons],
+  );
 
   const useWebSelect = preferWebSelect && Platform.OS === "web";
   const labelStyle =
@@ -121,6 +141,9 @@ export const TripCommodityFields = memo(function TripCommodityFields({
     (useFormChrome ? styles.formLabel : wizardChrome.wizardFieldLabel);
   const blockStyle = useFormChrome ? styles.fieldBlockForm : wizardChrome.wizardFieldBlock;
   const inputMinHeight = 44;
+  const resolvedInputStyle =
+    fieldInputStyle ??
+    (useFormChrome ? styles.formInput : wizardChrome.wizardFieldInput);
 
   const applyPendingPick = useCallback(async () => {
     const pick = await consumePendingPick();
@@ -181,12 +204,13 @@ export const TripCommodityFields = memo(function TripCommodityFields({
           onChange={onVehicleTypeChange}
           hasError={vehicleTypeError}
           minHeight={inputMinHeight}
+          desktopChrome={desktopChrome}
         />
       ) : (
         <Pressable
           style={[
             useFormChrome ? styles.pickerBtn : wizardChrome.wizardPickerBtn,
-            fieldInputStyle,
+            fieldInputStyle as ViewStyle,
             useFormChrome && styles.pickerBtnForm,
             vehicleTypeError && styles.pickerBtnError,
           ]}
@@ -223,12 +247,13 @@ export const TripCommodityFields = memo(function TripCommodityFields({
           onChange={onLoadTypeChange}
           hasError={loadTypeError}
           minHeight={inputMinHeight}
+          desktopChrome={desktopChrome}
         />
       ) : (
         <Pressable
           style={[
             useFormChrome ? styles.pickerBtn : wizardChrome.wizardPickerBtn,
-            fieldInputStyle,
+            fieldInputStyle as ViewStyle,
             useFormChrome && styles.pickerBtnForm,
             loadTypeError && styles.pickerBtnError,
           ]}
@@ -258,18 +283,68 @@ export const TripCommodityFields = memo(function TripCommodityFields({
     showTons ? (
       <View style={blockStyle}>
         <Text style={labelStyle}>Tons (optional)</Text>
-        <TextInput
-          style={[
-            useFormChrome ? fieldInputStyle : wizardChrome.wizardFieldInput,
-            tonsError && styles.inputError,
-          ]}
-          value={tons}
-          onChangeText={(t) => onTonsChange(t.replace(/[^\d.]/g, "").slice(0, 12))}
-          placeholder="Load weight in tons"
-          placeholderTextColor={Theme.placeholder}
-          keyboardType="decimal-pad"
-          inputMode="decimal"
-        />
+        {desktopChrome ? (
+          <View style={[resolvedInputStyle as object, tonsError && styles.inputError]}>
+            <View style={styles.tonsInputRow}>
+              <TextInput
+                style={styles.tonsInputField}
+                value={tons}
+                onChangeText={(t) => onTonsChange(t.replace(/[^\d.]/g, "").slice(0, 12))}
+                onBlur={() => {
+                  if (tons.trim()) void rememberTons(tons);
+                }}
+                placeholder="Load weight in tons"
+                placeholderTextColor={Theme.placeholder}
+                keyboardType="decimal-pad"
+                inputMode="decimal"
+              />
+              <Text style={styles.tonsSuffix}>Tons</Text>
+            </View>
+          </View>
+        ) : (
+          <TextInput
+            style={[
+              resolvedInputStyle,
+              tonsError && styles.inputError,
+            ]}
+            value={tons}
+            onChangeText={(t) => onTonsChange(t.replace(/[^\d.]/g, "").slice(0, 12))}
+            onBlur={() => {
+              if (tons.trim()) void rememberTons(tons);
+            }}
+            placeholder="Load weight in tons"
+            placeholderTextColor={Theme.placeholder}
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+          />
+        )}
+        <View style={styles.tonsSuggestRow}>
+          {tonsChips.map((value) => {
+            const selected = tons.trim() === value;
+            const isRecent = recentTons.includes(value);
+            return (
+              <Pressable
+                key={value}
+                onPress={() => applyTons(value)}
+                style={[styles.tonsSuggestChip, selected && styles.tonsSuggestChipSelected]}
+                accessibilityRole="button"
+                accessibilityLabel={`${value} tons`}
+                accessibilityState={{ selected }}
+                hitSlop={4}
+              >
+                <Text
+                  style={[
+                    styles.tonsSuggestChipText,
+                    selected && styles.tonsSuggestChipTextSelected,
+                    isRecent && !selected && styles.tonsSuggestChipTextRecent,
+                  ]}
+                >
+                  {value}t
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     ) : null;
 
@@ -341,7 +416,8 @@ export const TripCommodityFields = memo(function TripCommodityFields({
 
 const styles = StyleSheet.create({
   root: {
-    gap: 4,
+    width: "100%",
+    gap: 10,
   },
   labelRow: {
     flexDirection: "row",
@@ -366,16 +442,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   formLabel: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "600",
     marginBottom: 6,
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
   fieldBlockForm: {
-    marginBottom: 6,
+    marginBottom: 10,
     minWidth: 0,
+    width: "100%",
+  },
+  formInput: {
+    width: "100%",
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+    minHeight: 44,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as object,
+    }),
   },
   gridRowWide: {
     flexDirection: "row",
@@ -387,7 +480,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   pickerBtn: {
-    minHeight: 48,
+    minHeight: 44,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -407,21 +500,83 @@ const styles = StyleSheet.create({
   },
   pickerBtnText: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
   },
   pickerBtnTextForm: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
     fontStyle: "normal",
   },
   pickerBtnPlaceholder: {
-    fontWeight: "500",
+    fontWeight: "400",
     color: Theme.placeholder,
   },
   inputError: {
     borderColor: Theme.negative,
+  },
+  tonsInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  tonsInputField: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    padding: 0,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as object,
+    }),
+  },
+  tonsSuffix: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  tonsSuggestRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    alignContent: "flex-start",
+    gap: 6,
+    marginTop: 8,
+    /** Cap visual height to ~2 chip rows. */
+    maxHeight: 58,
+    overflow: "hidden",
+  },
+  tonsSuggestChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    minHeight: 26,
+    justifyContent: "center",
+    ...Platform.select({ web: { cursor: "pointer" as const }, default: {} }),
+  },
+  tonsSuggestChipSelected: {
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.cardWhite,
+  },
+  tonsSuggestChipText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+  },
+  tonsSuggestChipTextSelected: {
+    color: Theme.textPrimaryDark,
+  },
+  tonsSuggestChipTextRecent: {
+    color: Theme.textRouteCard,
   },
   modalBackdrop: {
     flex: 1,

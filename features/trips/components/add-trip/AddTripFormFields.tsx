@@ -7,6 +7,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { TypewriterText } from "@/components/TypewriterText";
 import { SmartInput } from "@/components/mobile-input";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
@@ -41,6 +42,7 @@ import { CreateTripDesktopCommodityClientStep } from "@/features/trips/component
 import { CreateTripDesktopSaleStep } from "@/features/trips/components/add-trip/CreateTripDesktopSaleStep";
 import { CreateTripDesktopPartnerRatesSection } from "@/features/trips/components/add-trip/CreateTripDesktopPartnerRatesSection";
 import { CreateTripDesktopAggregateFields } from "@/features/trips/components/add-trip/CreateTripDesktopAggregateFields";
+import { CreateTripDesktopAsideArt } from "@/features/trips/components/add-trip/CreateTripDesktopAsideArt";
 import { createTripDesktopStyles } from "@/features/trips/components/add-trip/createTripDesktop.styles";
 import { TripPartnerPickerSection } from "@/features/trips/components/add-trip/TripPartnerPickerSection";
 import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
@@ -110,7 +112,7 @@ import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/suppli
 import { useKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
 import { DriverPhoneRecommendations } from "./DriverPhoneRecommendations";
-import { lookupDriversByPhoneVariants } from "@/features/trips/utils/driverPhoneLookup.util";
+import { lookupDriversByPhoneVariants, enrichDriverMatchesWithFleetAvatars } from "@/features/trips/utils/driverPhoneLookup.util";
 import { LocationSearchField } from "./LocationSearchField";
 import { TripClientPickerSection } from "./TripClientPickerSection";
 import { TripCommodityFields } from "./TripCommodityFields";
@@ -193,7 +195,7 @@ export interface AddTripFormFieldsProps {
    * Mobile wizard mode: show a single section card at a time.
    * When unset, renders the full 01/02/03 cards.
    */
-  wizardSection?: "route" | "commodityClient" | "sale" | "allocation";
+  wizardSection?: "client" | "route" | "commodity" | "source" | "allocation";
   /** Wide desktop enterprise grid (matches Create Load / indent). */
   enterpriseFormGrid?: boolean;
   /** Stepped mobile wizard — indent-style flat steps + shell scroll. */
@@ -302,29 +304,37 @@ export function AddTripFormFields({
   const desktopFormMaxWidth = Math.min(winW - 32, 1680);
   const showRouteCard = wizardSection == null || wizardSection === "route";
   const isMergedCommodityClient =
-    wizardSection === "commodityClient" ||
+    wizardSection === "client" ||
+    wizardSection === "commodity" ||
     (wizardSection == null && desktopFormGrid);
   const showStandaloneCommodityCard =
     wizardSection == null && !desktopFormGrid;
   const showCommodityCard = showStandaloneCommodityCard;
   const showCommodityClientCard = isMergedCommodityClient;
   const showClientCard = wizardSection == null && !desktopFormGrid;
-  const showSaleCard =
-    wizardSection === "sale" ||
-    (wizardSection == null && desktopFormGrid);
+  /** Sale value now lives under the billing client on Client step. */
+  const showSaleCard = false;
   const showClientPickerOnly = isMergedCommodityClient;
-  const showClientSaleOnly = wizardSection === "sale";
+  const showClientSaleOnly = false;
   const hideWizardCardHead = wizardSection != null || desktopWizardChrome;
   const hideTonsOnRouteStep = wizardSection === "route";
   const showAllocationCard =
-    wizardSection == null || wizardSection === "allocation";
+    wizardSection == null ||
+    wizardSection === "allocation" ||
+    wizardSection === "source";
   const mobileAllocWizard = allocationSubStep != null;
   /** Enterprise desktop card — partner + rates grid (matches Client & Commercials). */
   const aggregateDesktopEnterprise = desktopFormGrid && !mobileAllocWizard;
   const isWizardRouteStep = wizardSection === "route";
   const isWizardSingleCard =
-    wizardSection != null && wizardSection !== "allocation";
+    wizardSection != null &&
+    wizardSection !== "allocation" &&
+    wizardSection !== "source";
   const isWizardAllocationCard = wizardSection === "allocation";
+  const isWizardSourceCard = wizardSection === "source";
+  /** When Source is a top-level step, allocation no longer edits mode/partner. */
+  const hideModeOnAllocation = wizardSection === "allocation";
+  const hideAssignLaterOnSource = wizardSection === "source";
   /** Compact currency / tracking fields in aggregate allocation pane. */
   const aggregateFieldDensity = isDenseForm || allocationWideLayout ? "compact" : "default";
   const showAlloc = useCallback(
@@ -338,11 +348,23 @@ export function AddTripFormFields({
     !mobileAllocWizard || allocationSubStep === "driverPhone";
   const showVehicleField =
     !mobileAllocWizard || allocationSubStep === "vehicle";
-  /** Aggregate partner list on the supply sub-step (mobile). */
+  /** Aggregate partner on Source step, or legacy supply when Source is not used. */
   const showAggregatePartnerInline =
-    mobileAllocWizard &&
-    allocationSubStep === "supply" &&
-    state.supplySource === "aggregate";
+    (isWizardSourceCard && state.supplySource === "aggregate") ||
+    (!isWizardSourceCard &&
+      !hideModeOnAllocation &&
+      mobileAllocWizard &&
+      allocationSubStep === "supply" &&
+      state.supplySource === "aggregate");
+  /** Partner rates on Source, or rates sub-step (not Allocation after Source). */
+  const showPartnerRatesBlock =
+    (isWizardSourceCard &&
+      state.supplySource === "aggregate" &&
+      Boolean(state.supplierId)) ||
+    (!isWizardSourceCard &&
+      !hideModeOnAllocation &&
+      state.supplySource === "aggregate" &&
+      (showAlloc("rates") || (!mobileAllocWizard && wizardSection == null)));
   const aggregateTrackingStep = showDriverPhoneField
     ? ("driverPhone" as const)
     : showDriverNameField
@@ -356,7 +378,10 @@ export function AddTripFormFields({
     isAggregateMobileWizard &&
     (aggregateTrackingStep != null || allocationSubStep === "rates");
   /** Keypad steps: flex column in modal body (footer stays below; no ScrollView overlap). */
-  const isWizardSaleKeypad = wizardSection === "sale" && !desktopWizardChrome;
+  const isWizardSaleKeypad =
+    wizardSection === "client" &&
+    !desktopWizardChrome &&
+    Boolean(state.clientId);
   const allocationFillBody =
     mobileAllocWizard && allocKeypadFullscreen && isWizardAllocationCard && !desktopWizardChrome;
   /** Sale + allocation keypad steps — flex column in modal body. */
@@ -648,18 +673,24 @@ export function AddTripFormFields({
     [setters],
   );
 
+  const enrichedDriverPhoneMatches = useMemo(
+    () => enrichDriverMatchesWithFleetAvatars(driverPhoneMatches, drivers),
+    [driverPhoneMatches, drivers],
+  );
+
   const renderDriverPhoneRecommendations = (
     phoneComplete: boolean,
     layout: "stack" | "aside" = "stack",
   ) => (
     <DriverPhoneRecommendations
-      matches={driverPhoneMatches}
+      matches={enrichedDriverPhoneMatches}
       loading={driverPhoneLookupLoading}
       selectedUserId={selectedDriverMatchId}
       onSelect={applyDriverPhoneMatch}
       phoneComplete={phoneComplete}
       compact={isDenseForm}
       layout={layout}
+      fleetDrivers={drivers}
     />
   );
 
@@ -713,21 +744,20 @@ export function AddTripFormFields({
 
         if (avErr) {
           setters.setDriverPhoneTripConflict(true, "Busy check unavailable");
-          setters.setDriverPhoneConfirmed(false);
+          // Soft warning — still auto-select single match so Create Trip is not blocked.
+          if (matches.length === 1) {
+            applyDriverPhoneMatch(matches[0]);
+          }
           return;
         }
         setters.setDriverPhoneTripConflict(result.isBusy, result.ongoingTripLabel);
-
-        if (result.isBusy) {
+        // Keep lookup selection even when busy — conflict is a soft warning; Create Trip stays enabled.
+        if (matches.length === 1) {
+          applyDriverPhoneMatch(matches[0]);
+        } else if (matches.length === 0) {
           setSelectedDriverMatchId(null);
           setters.setDriverPhoneName(null);
           setters.setDriverPhoneConfirmed(false);
-          setters.setAggregateDriverName("");
-          return;
-        }
-
-        if (matches.length === 1) {
-          applyDriverPhoneMatch(matches[0]);
         }
       });
     }, 400);
@@ -1184,22 +1214,28 @@ export function AddTripFormFields({
         <View
           style={[
             styles.contentMax,
-            (wizardKeypadFill || desktopAllocFill) && styles.contentMaxFill,
+            (wizardKeypadFill || desktopAllocFill || desktopWizardChrome) &&
+              styles.contentMaxFill,
             {
-              maxWidth: desktopFormGrid
-                ? desktopFormMaxWidth
-                : isWide
-                  ? 1000
-                  : 960,
-              width: desktopFormGrid ? "100%" : undefined,
-              alignSelf: desktopFormGrid ? "stretch" : undefined,
-              paddingHorizontal: desktopFormGrid
-                ? 0
-                : mobileWizardMode || isCompactMobile
-                  ? 0
+              maxWidth: desktopWizardChrome
+                ? undefined
+                : desktopFormGrid
+                  ? desktopFormMaxWidth
                   : isWide
-                    ? 16
-                    : Layout.screenPaddingHorizontal,
+                    ? 1000
+                    : 960,
+              width:
+                desktopWizardChrome || desktopFormGrid ? "100%" : undefined,
+              alignSelf:
+                desktopWizardChrome || desktopFormGrid ? "stretch" : undefined,
+              paddingHorizontal:
+                desktopWizardChrome || desktopFormGrid
+                  ? 0
+                  : mobileWizardMode || isCompactMobile
+                    ? 0
+                    : isWide
+                      ? 16
+                      : Layout.screenPaddingHorizontal,
               paddingTop: mobileWizardMode ? 0 : undefined,
             },
           ]}
@@ -1214,9 +1250,24 @@ export function AddTripFormFields({
               style={[
                 styles.formColumn,
                 desktopFormGrid && styles.formColumnGridWeb,
-                (wizardKeypadFill || desktopAllocFill) && styles.formColumnFill,
+                (wizardKeypadFill || desktopAllocFill || desktopWizardChrome) &&
+                  styles.formColumnFill,
               ]}
             >
+            <View
+              style={
+                desktopWizardChrome
+                  ? createTripDesktopStyles.wizardWorkspace
+                  : undefined
+              }
+            >
+              <View
+                style={
+                  desktopWizardChrome
+                    ? createTripDesktopStyles.wizardWorkspaceMain
+                    : undefined
+                }
+              >
           {/* 01 Route */}
           {showRouteCard ? (
             desktopWizardChrome && isWizardRouteStep ? (
@@ -1328,6 +1379,7 @@ export function AddTripFormFields({
                         style={({ pressed }) => [
                           styles.quickDateChip,
                           isDenseForm && styles.quickDateChipDense,
+                          isWizardRouteStep && styles.quickDateChipWizard,
                           isActive && styles.quickDateChipActive,
                           pressed && styles.quickDateChipPressed,
                           Platform.OS === "web" &&
@@ -1341,6 +1393,7 @@ export function AddTripFormFields({
                           style={[
                             styles.quickDateChipText,
                             isDenseForm && styles.quickDateChipTextDense,
+                            isWizardRouteStep && styles.quickDateChipTextWizard,
                             isActive && styles.quickDateChipTextActive,
                           ]}
                         >
@@ -1469,7 +1522,11 @@ export function AddTripFormFields({
                   <View style={styles.routeInstructorCopy}>
                     <View style={styles.routeInstructorTitleRow}>
                       <Navigation size={12} color={Theme.brandBlueInk} />
-                      <Text style={styles.routeInstructorTitle}>Update your route details</Text>
+                      <TypewriterText
+                        text="Update your route details"
+                        style={styles.routeInstructorTitle}
+                        msPerChar={36}
+                      />
                     </View>
                     <Text style={styles.routeInstructorBody}>
                       Add accurate pickup and drop points for better tracking and ETA.
@@ -1849,10 +1906,18 @@ export function AddTripFormFields({
                 clientsLoading={clientsLoading}
                 clientId={state.clientId}
                 clientListExpanded={clientListExpanded}
-                setClientListExpanded={setClientListExpanded}
+                onExpandClientList={() => setClientListExpanded(true)}
+                onToggleClientList={() => setClientListExpanded((p) => !p)}
                 onSelectClient={handleSelectClient}
                 onAddClient={handleAddClientShortcut}
                 clientError={invalid("client")}
+                clientPrice={state.clientPrice}
+                onClientPriceChange={(v) => setters.setClientPrice(v)}
+                clientPriceError={invalid("clientPrice")}
+                onClearClient={() => {
+                  setters.setClientSelection(null, "");
+                  setClientListExpanded(true);
+                }}
               />
             ) : (
             <View style={desktopWizardChrome ? createTripDesktopStyles.nonRouteStepWrap : undefined}>
@@ -1872,7 +1937,7 @@ export function AddTripFormFields({
                     styles.cardHead,
                     isDenseForm && styles.cardHeadDense,
                     desktopFormGrid && styles.cardHeadDesktopEnterprise,
-                    wizardSection === "commodityClient" && styles.cardHeadWizard,
+                    (wizardSection === "client" || wizardSection === "commodity") && styles.cardHeadWizard,
                   ]}
                 >
                   <View style={styles.cardHeadTitleCluster}>
@@ -1880,7 +1945,7 @@ export function AddTripFormFields({
                       style={[
                         styles.stepBadge,
                         isDenseForm && styles.stepBadgeDense,
-                        wizardSection === "commodityClient" && styles.stepBadgeWizard,
+                        (wizardSection === "client" || wizardSection === "commodity") && styles.stepBadgeWizard,
                       ]}
                     >
                       <Text style={styles.stepBadgeText}>02</Text>
@@ -1890,7 +1955,7 @@ export function AddTripFormFields({
                         styles.cardTitle,
                         isDenseForm && styles.cardTitleDense,
                         desktopFormGrid && styles.cardTitleDesktopEnterprise,
-                        wizardSection === "commodityClient" && styles.cardTitleWizard,
+                        (wizardSection === "client" || wizardSection === "commodity") && styles.cardTitleWizard,
                       ]}
                     >
                       Commodity & Client
@@ -1963,7 +2028,7 @@ export function AddTripFormFields({
                 isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
                 !isWizardTypography && isDenseForm && styles.cardDense,
                 desktopFormGrid && styles.cardDesktopEnterprise,
-                (wizardSection === "sale") &&
+                ((wizardSection === "client" || wizardSection === "commodity")) &&
                   !isWizardTypography &&
                   styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridClientWeb,
@@ -1975,7 +2040,7 @@ export function AddTripFormFields({
                 styles.cardHead,
                 isDenseForm && styles.cardHeadDense,
                 desktopFormGrid && styles.cardHeadDesktopEnterprise,
-                wizardSection === "sale" && styles.cardHeadWizard,
+                (wizardSection === "client" || wizardSection === "commodity") && styles.cardHeadWizard,
               ]}
             >
               <View style={styles.cardHeadTitleCluster}>
@@ -1983,7 +2048,7 @@ export function AddTripFormFields({
                   style={[
                     styles.stepBadge,
                     isDenseForm && styles.stepBadgeDense,
-                    wizardSection === "sale" && styles.stepBadgeWizard,
+                    (wizardSection === "client" || wizardSection === "commodity") && styles.stepBadgeWizard,
                   ]}
                 >
                   <Text style={styles.stepBadgeText}>03</Text>
@@ -1993,7 +2058,7 @@ export function AddTripFormFields({
                     styles.cardTitle,
                     isDenseForm && styles.cardTitleDense,
                     desktopFormGrid && styles.cardTitleDesktopEnterprise,
-                    wizardSection === "sale" && styles.cardTitleWizard,
+                    (wizardSection === "client" || wizardSection === "commodity") && styles.cardTitleWizard,
                   ]}
                 >
                   Client & Commercials
@@ -2196,10 +2261,63 @@ export function AddTripFormFields({
             )
           ) : null}
 
-          {/* 04 Supply & Allocation */}
+          {/* 04 Source / 05 Allocation */}
           {showAllocationCard ? (
             <>
-            {mobileAllocWizard && isWizardAllocationCard ? (
+            {isWizardSourceCard ? (
+            <View style={fullPageWizardStyles.wizardStepContentFlat}>
+              <SupplyAllocationModeBar
+                mode={supplyIsAsset ? "asset" : "aggregate"}
+                variant="wizard"
+                compact={isCompactMobile}
+                layout="stack"
+                assignLater={state.assignLater}
+                assignLaterDisabled={assignLaterSwitchDisabled}
+                onModeChange={(mode) => setters.setSupplySource(mode)}
+                onAssignLaterChange={setters.setAssignLater}
+                showAssignLater={false}
+                showModeToggle
+              />
+              {state.supplySource === "aggregate" ? (
+                <TripPartnerPickerSection
+                  suppliers={suppliers}
+                  suppliersLoading={suppliersLoading}
+                  supplierId={state.supplierId}
+                  partnerListExpanded={partnerListExpanded}
+                  setPartnerListExpanded={setPartnerListExpanded}
+                  onSelectPartner={handleSelectPartner}
+                  onClearPartner={handleClearPartner}
+                  onAddPartner={handleAddSupplierShortcut}
+                  hasError={invalid("partner")}
+                  wizardMode
+                  listMaxHeight={300}
+                />
+              ) : (
+                <View style={styles.infoCallout}>
+                  <Info size={16} color={Theme.iconPrimary} />
+                  <Text style={styles.infoCalloutText}>
+                    Next you can assign a driver and vehicle, or choose Assign later.
+                  </Text>
+                </View>
+              )}
+              {showPartnerRatesBlock ? (
+                <CreateTripDesktopPartnerRatesSection
+                  partnerRate={state.supplierRate}
+                  onPartnerRateChange={(v) => setters.setSupplierRate(v)}
+                  advancePaid={state.advancePaid}
+                  onAdvancePaidChange={(v) => setters.setAdvancePaid(v)}
+                  partyPreview={
+                    selectedSupplierRow
+                      ? supplierToNumericPartyPreview(selectedSupplierRow)
+                      : undefined
+                  }
+                  suppressPartyPreview
+                  rateError={invalid("partnerRate")}
+                  advanceError={invalid("advancePaid")}
+                />
+              ) : null}
+            </View>
+            ) : mobileAllocWizard && isWizardAllocationCard ? (
             <AllocationMobileWizardShell
               progressSteps={allocationWizardProgressSteps}
               currentStepId={allocationSubStep ?? "supply"}
@@ -2241,6 +2359,8 @@ export function AddTripFormFields({
               assignLaterDisabled={assignLaterSwitchDisabled}
               onModeChange={(mode) => setters.setSupplySource(mode)}
               onAssignLaterChange={setters.setAssignLater}
+              showModeToggle={!hideModeOnAllocation}
+              showAssignLater={!hideAssignLaterOnSource}
             />
             {assignLaterSwitchDisabled ? (
               <Text style={styles.assignLaterLockedHintBelow}>
@@ -2529,7 +2649,7 @@ export function AddTripFormFields({
               </View>
             ) : null}
 
-            {(showAlloc("rates") ||
+            {(showPartnerRatesBlock ||
               (desktopWizardChrome &&
                 state.supplySource === "aggregate" &&
                 Boolean(state.supplierId))) &&
@@ -2539,7 +2659,8 @@ export function AddTripFormFields({
               desktopWizardChrome &&
               isWizardAllocationCard &&
               Boolean(state.supplierId)
-            ) ? (
+            ) &&
+            !hideModeOnAllocation ? (
               desktopWizardChrome ? (
                 <CreateTripDesktopPartnerRatesSection
                   partnerRate={state.supplierRate}
@@ -2568,6 +2689,7 @@ export function AddTripFormFields({
                 }
                 suppressPartyPreview={Boolean(allocationContextRow?.right)}
                 wizardShell
+                saleValue={state.clientPrice}
               />
               )
             ) : null}
@@ -2601,11 +2723,12 @@ export function AddTripFormFields({
                 vehicleText={state.aggregateVehicleText}
                 onVehicleTextChange={(v) => setters.setAggregateVehicleText(v)}
                 invalid={invalid}
-                driverPhoneMatches={driverPhoneMatches}
+                driverPhoneMatches={enrichedDriverPhoneMatches}
                 driverPhoneLookupLoading={driverPhoneLookupLoading}
                 selectedDriverMatchId={selectedDriverMatchId}
                 onSelectDriverMatch={applyDriverPhoneMatch}
                 driverPhoneInTrip={state.driverPhoneTripConflict}
+                fleetDrivers={drivers}
               />
             ) : aggregateTrackingStep ? (
               <AggregateTrackingMobileStep
@@ -2624,12 +2747,13 @@ export function AddTripFormFields({
                 }
                 invalid={invalid}
                 driverNameInputRef={aggregateDriverNameInputRef}
-                driverPhoneMatches={driverPhoneMatches}
+                driverPhoneMatches={enrichedDriverPhoneMatches}
                 driverPhoneLookupLoading={driverPhoneLookupLoading}
                 selectedDriverMatchId={selectedDriverMatchId}
                 onSelectDriverMatch={applyDriverPhoneMatch}
                 driverPhoneInTrip={state.driverPhoneTripConflict}
                 driverNameFromPlatform={state.driverPhoneName?.trim() || null}
+                fleetDrivers={drivers}
               />
             ) : null}
             </View>
@@ -2697,6 +2821,8 @@ export function AddTripFormFields({
               assignLaterDisabled={assignLaterSwitchDisabled}
               onModeChange={(mode) => setters.setSupplySource(mode)}
               onAssignLaterChange={setters.setAssignLater}
+              showModeToggle={!hideModeOnAllocation}
+              showAssignLater={!hideAssignLaterOnSource}
             />
             <View style={{ marginBottom: assignLaterSwitchDisabled ? 12 : 0 }}>
               {assignLaterSwitchDisabled ? (
@@ -2999,11 +3125,11 @@ export function AddTripFormFields({
                     />
                   </View>
                   ) : null}
-                  {(showAlloc("rates") ||
+                  {(showPartnerRatesBlock ||
                     showAlloc("driverName") ||
                     showAlloc("driverPhone") ||
                     showAlloc("vehicle") ||
-                    !mobileAllocWizard) ? (
+                    (!mobileAllocWizard && !hideModeOnAllocation)) ? (
                   <View
                     style={[
                       styles.aggregateRightPane,
@@ -3340,8 +3466,8 @@ export function AddTripFormFields({
                           </Text>
                           <Text style={styles.driverConfirmSub}>
                             {state.driverPhoneTripConflictLabel
-                              ? `Open trip: ${state.driverPhoneTripConflictLabel}. Use another number or finish that trip first.`
-                              : "Driver is Busy / On Trip. Use a different number or complete the current trip first."}
+                              ? `Open trip: ${state.driverPhoneTripConflictLabel}. Ask them to complete it first, then assign them here.`
+                              : "Ask them to complete their current trip first, then assign them here."}
                           </Text>
                         </View>
                         <AlertCircle
@@ -3402,6 +3528,15 @@ export function AddTripFormFields({
               ) : null}
             </View>
           ) : null}
+              </View>
+              {desktopWizardChrome ? (
+                <View style={createTripDesktopStyles.wizardWorkspaceAside}>
+                  <CreateTripDesktopAsideArt
+                    wizardStep={wizardSection ?? "route"}
+                  />
+                </View>
+              ) : null}
+            </View>
           </View>
         </View>
         </View>
@@ -3465,8 +3600,7 @@ export function AddTripFormFields({
 
 const styles = StyleSheet.create({
   pageWrap: {
-    flex: 1,
-    minHeight: 0,
+    width: "100%",
     backgroundColor: Theme.screenBackground,
   },
   pageWrapFill: {
@@ -3476,6 +3610,8 @@ const styles = StyleSheet.create({
   pageWrapDesktopWizard: {
     flex: 1,
     minHeight: 0,
+    width: "100%",
+    alignSelf: "stretch",
     backgroundColor: Theme.cardWhite,
   },
   scroll: { flex: 1, minHeight: 0 },
@@ -3489,6 +3625,7 @@ const styles = StyleSheet.create({
   scrollContentWizard: {
     paddingTop: 0,
     paddingBottom: 8,
+    flexGrow: 0,
   },
   scrollContentFillBody: {
     flexGrow: 1,
@@ -3528,6 +3665,8 @@ const styles = StyleSheet.create({
   contentMaxFill: {
     flex: 1,
     minHeight: 0,
+    width: "100%",
+    alignSelf: "stretch",
   },
   mainGrid: {
     width: "100%",
@@ -3543,6 +3682,8 @@ const styles = StyleSheet.create({
   formColumnFill: {
     flex: 1,
     minHeight: 0,
+    width: "100%",
+    alignSelf: "stretch",
   },
   /** Desktop web: row1 route|commodity; row2 client; row3 supply; row4 CTA. */
   formColumnGridWeb: Platform.select<ViewStyle>({
@@ -4552,7 +4693,7 @@ const styles = StyleSheet.create({
   quickDateRowWizard: {
     gap: 8,
     marginTop: 4,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   quickDateRow: {
     flexDirection: "row",
@@ -4572,9 +4713,19 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
   },
+  quickDateChipWizard: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   quickDateChipActive: {
-    borderColor: PULSE_TRIP.indigo,
-    backgroundColor: PULSE_TRIP.indigoLight,
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.textPrimaryDark,
   },
   quickDateChipPressed: {
     opacity: 0.82,
@@ -4591,16 +4742,21 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     fontStyle: "normal",
   },
+  quickDateChipTextWizard: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textRouteCard,
+  },
   quickDateChipTextActive: {
-    color: PULSE_TRIP.indigo,
-    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    fontWeight: "700",
   },
   dateTouchable: {
     justifyContent: "center",
   },
   dateTouchableText: {
     ...FinanceTxnTypography.fieldValue,
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: "500",
     color: Theme.textPrimaryDark,
   },
@@ -4612,7 +4768,7 @@ const styles = StyleSheet.create({
   },
   dateTouchablePlaceholder: {
     ...FinanceTxnTypography.routeWhy,
-    fontSize: 9,
+    fontSize: 14,
     color: Theme.placeholder,
   },
   dateTouchablePlaceholderDense: {

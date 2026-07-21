@@ -17,6 +17,8 @@ export interface WizardClientPickerProps {
   listMaxHeight?: number;
   /** Default: {@link WIZARD_PARTY_GRID_COLUMNS}. Use `1` for full-width party tiles. */
   columns?: number;
+  addClientAlign?: "start" | "center" | "stretch";
+  showListShell?: boolean;
 }
 
 function sortClientsByName(clients: ClientRow[]): ClientRow[] {
@@ -38,6 +40,8 @@ export function WizardClientPicker({
   emptyMessage = "No clients yet. Add a client to continue.",
   listMaxHeight = 420,
   columns = WIZARD_PARTY_GRID_COLUMNS,
+  addClientAlign = "stretch",
+  showListShell = true,
 }: WizardClientPickerProps) {
   const sortedClients = useMemo(() => sortClientsByName(clients), [clients]);
 
@@ -72,10 +76,19 @@ export function WizardClientPicker({
           listMaxHeight={listMaxHeight}
           variant="partyCard"
           columns={columns}
+          showListShell={showListShell}
         />
       </View>
       {onAddClient ? (
-        <Pressable style={styles.addClientBtn} onPress={onAddClient}>
+        <Pressable
+          style={[
+            styles.addClientBtn,
+            styles.addClientBtnFlat,
+            addClientAlign === "start" && pickerStyles.addClientStart,
+            addClientAlign === "center" && pickerStyles.addClientCenter,
+          ]}
+          onPress={onAddClient}
+        >
           <Text style={styles.addClientBtnText}>+ Add new client</Text>
         </Pressable>
       ) : null}
@@ -116,11 +129,20 @@ const pickerStyles = StyleSheet.create({
   root: {
     width: "100%",
     alignSelf: "stretch",
-    gap: 12,
+    gap: 8,
   },
   gridArea: {
     width: "100%",
     minHeight: 0,
     alignSelf: "stretch",
+  },
+  addClientStart: {
+    alignSelf: "flex-start",
+    alignItems: "flex-start",
+    minHeight: 36,
+    paddingHorizontal: 0,
+  },
+  addClientCenter: {
+    alignSelf: "center",
   },
 });

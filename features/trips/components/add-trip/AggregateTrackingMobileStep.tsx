@@ -20,6 +20,7 @@ import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeyp
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import Theme from "@/constants/Theme";
 import type { ExistingDriverMatch } from "@/features/drivers/services/drivers.service";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { DriverPhoneRecommendations } from "@/features/trips/components/add-trip/DriverPhoneRecommendations";
 import { normalizeIndianMobileLast10 } from "@/features/trips/utils/driverPhoneLookup.util";
 import type { AddTripIssueField } from "./useAddTripForm";
@@ -42,6 +43,8 @@ export interface AggregateTrackingMobileStepProps {
   onSelectDriverMatch?: (match: ExistingDriverMatch) => void;
   driverPhoneInTrip?: boolean;
   driverNameFromPlatform?: string | null;
+  /** Fleet roster for resolving recommended-driver avatars. */
+  fleetDrivers?: readonly DriverRow[];
   testIDPrefix?: string;
 }
 
@@ -61,6 +64,7 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
   onSelectDriverMatch,
   driverPhoneInTrip = false,
   driverNameFromPlatform,
+  fleetDrivers = [],
   testIDPrefix = "add-trip-aggregate",
 }: AggregateTrackingMobileStepProps) {
   const phoneLast10 = useMemo(
@@ -71,22 +75,23 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
 
   const phoneFooterExtras = useMemo((): ReactNode => {
     if (!onSelectDriverMatch) return null;
-    if (driverPhoneInTrip) {
-      return (
-        <Text style={styles.phoneBusy}>
-          This driver is already on an active trip — use another number.
-        </Text>
-      );
-    }
     return (
-      <DriverPhoneRecommendations
-        matches={driverPhoneMatches}
-        loading={driverPhoneLookupLoading}
-        selectedUserId={selectedDriverMatchId}
-        onSelect={onSelectDriverMatch}
-        phoneComplete={phoneComplete}
-        compact
-      />
+      <>
+        {driverPhoneInTrip ? (
+          <Text style={styles.phoneBusy}>
+            Driver is on another trip — ask them to finish it before assigning here.
+          </Text>
+        ) : null}
+        <DriverPhoneRecommendations
+          matches={driverPhoneMatches}
+          loading={driverPhoneLookupLoading}
+          selectedUserId={selectedDriverMatchId}
+          onSelect={onSelectDriverMatch}
+          phoneComplete={phoneComplete}
+          compact
+          fleetDrivers={fleetDrivers}
+        />
+      </>
     );
   }, [
     driverPhoneInTrip,
@@ -95,16 +100,17 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
     selectedDriverMatchId,
     onSelectDriverMatch,
     phoneComplete,
+    fleetDrivers,
   ]);
 
   if (step === "driverPhone") {
     return (
       <PhoneNumberKeypadFlow
-        label="Driver phone (tracking) *"
+        label="Driver phone *"
         placeholder="10-digit number"
         value={driverPhone}
         onChangeText={onDriverPhoneChange}
-        error={invalid("driverPhone")}
+        error={invalid("driverPhone") || driverPhoneInTrip}
         footerExtras={phoneFooterExtras}
         testID={`${testIDPrefix}-driver-phone`}
         wizardShell
@@ -121,6 +127,7 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
         error={invalid("vehicleNumber")}
         testID={`${testIDPrefix}-vehicle-keypad`}
         wizardShell
+        label="Vehicle number *"
       />
       </View>
     );
@@ -163,10 +170,11 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
           onSelect={onSelectDriverMatch}
           phoneComplete
           compact
+          fleetDrivers={fleetDrivers}
         />
       ) : null}
 
-      <Text style={fullPageWizardStyles.wizardFieldLabel}>Driver name (tracking) *</Text>
+      <Text style={fullPageWizardStyles.wizardFieldLabel}>Driver name *</Text>
       <TextInput
         ref={driverNameInputRef}
         style={[
@@ -190,18 +198,18 @@ const styles = StyleSheet.create({
   nameRoot: {
     flex: 1,
     minHeight: 200,
-    gap: 12,
-    paddingTop: 4,
+    gap: 14,
+    paddingTop: 8,
     ...Platform.select({
       web: { maxWidth: 520, alignSelf: "center", width: "100%" },
       default: {},
     }),
   },
   phoneBusy: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
     color: Theme.destructive,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   suggestRow: {
     flexDirection: "row",
@@ -215,9 +223,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   suggestAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: Theme.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
@@ -227,14 +235,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   suggestLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
   suggestName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     marginTop: 2,

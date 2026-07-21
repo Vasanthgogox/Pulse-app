@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -8,10 +8,25 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import { CheckCircle2, User } from "lucide-react-native";
+import { CheckCircle2 } from "lucide-react-native";
 
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
-import type { ExistingDriverMatch } from "@/features/drivers/services/drivers.service";
+import {
+  getDriverProfileDisplayBatch,
+  type DriverRow,
+  type ExistingDriverMatch,
+} from "@/features/drivers/services/drivers.service";
+import {
+  enrichDriverMatchesWithFleetAvatars,
+  isDriverMatchInOrgFleet,
+  normalizeIndianMobileLast10,
+} from "@/features/trips/utils/driverPhoneLookup.util";
+
+type MatchAvatarMeta = {
+  avatarUrl: string | null;
+  avatarSeed: string | null;
+};
 
 export type DriverPhoneRecommendationsProps = {
   matches: readonly ExistingDriverMatch[];
@@ -25,7 +40,15 @@ export type DriverPhoneRecommendationsProps = {
   layout?: "stack" | "aside";
   /** Override empty-state body copy (e.g. desktop: name field is below). */
   emptyHint?: string;
+  /**
+   * Org fleet roster — used to resolve avatars (phone RPC omits them; profiles
+   * SELECT is RLS-self-only). Prefer rows with `user_id` / matching phone.
+   */
+  fleetDrivers?: readonly DriverRow[];
 };
+
+const AVATAR_SIZE = 36;
+const AVATAR_SIZE_COMPACT = 32;
 
 export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendations({
   matches,
@@ -36,7 +59,77 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
   compact = false,
   layout = "stack",
   emptyHint,
+  fleetDrivers = [],
 }: DriverPhoneRecommendationsProps) {
+  const [avatarByUserId, setAvatarByUserId] = useState<Record<string, MatchAvatarMeta>>(
+    {},
+  );
+
+  const enrichedMatches = useMemo(
+    () => enrichDriverMatchesWithFleetAvatars(matches, fleetDrivers),
+    [matches, fleetDrivers],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (enrichedMatches.length === 0) {
+      setAvatarByUserId({});
+      return;
+    }
+
+    const loadAvatars = async () => {
+      const seed: Record<string, MatchAvatarMeta> = {};
+      const needsRpc: { userId: string; driverId: string }[] = [];
+
+      for (const match of enrichedMatches) {
+        const directUrl = (match.avatar_url ?? "").trim();
+        const directSeed = (match.avatar_seed ?? "").trim();
+        if (directUrl || directSeed) {
+          seed[match.user_id] = {
+            avatarUrl: directUrl || null,
+            avatarSeed: directSeed || null,
+          };
+          continue;
+        }
+
+        const phone10 = normalizeIndianMobileLast10(match.phone);
+        const fleet =
+          fleetDrivers.find((d) => d.user_id && d.user_id === match.user_id) ??
+          (phone10.length >= 10
+            ? fleetDrivers.find(
+                (d) => normalizeIndianMobileLast10(d.phone ?? "") === phone10,
+              )
+            : undefined);
+        if (fleet?.id) {
+          needsRpc.push({ userId: match.user_id, driverId: fleet.id });
+        }
+      }
+
+      if (needsRpc.length > 0) {
+        const batch = await getDriverProfileDisplayBatch(
+          needsRpc.map((row) => row.driverId),
+        );
+        for (const row of needsRpc) {
+          const profile = batch[row.driverId];
+          if (!profile) continue;
+          const avatarUrl = (profile.avatarUrl ?? "").trim() || null;
+          const avatarSeed = (profile.avatarSeed ?? "").trim() || null;
+          if (avatarUrl || avatarSeed) {
+            seed[row.userId] = { avatarUrl, avatarSeed };
+          }
+        }
+      }
+
+      if (cancelled) return;
+      setAvatarByUserId(seed);
+    };
+
+    void loadAvatars();
+    return () => {
+      cancelled = true;
+    };
+  }, [enrichedMatches, fleetDrivers]);
+
   if (!phoneComplete) return null;
 
   const webCursor =
@@ -48,10 +141,12 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
   ];
   const rowStyle = (active: boolean) => [
     styles.row,
+    layout === "aside" && styles.rowAside,
     compact && styles.rowCompact,
     active && styles.rowActive,
     webCursor,
   ];
+  const avatarSize = compact || layout === "aside" ? AVATAR_SIZE_COMPACT : AVATAR_SIZE;
 
   if (loading) {
     return (
@@ -64,9 +159,15 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
     );
   }
 
-  if (matches.length === 0) {
+  if (enrichedMatches.length === 0) {
     return (
-      <View style={[styles.emptyWrap, compact && styles.emptyWrapCompact]}>
+      <View
+        style={[
+          styles.emptyWrap,
+          layout === "aside" && styles.emptyWrapAside,
+          compact && styles.emptyWrapCompact,
+        ]}
+      >
         <Text style={[styles.emptyTitle, compact && styles.emptyTitleCompact]}>
           No driver profile for this number
         </Text>
@@ -81,46 +182,64 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
   return (
     <View style={wrapStyle}>
       <Text style={[styles.sectionLabel, compact && styles.sectionLabelCompact]}>
-        {matches.length === 1 ? "Recommended driver" : "Select driver"}
+        {enrichedMatches.length === 1 ? "Recommended driver" : "Select driver"}
       </Text>
-      <View style={layout === "aside" && matches.length > 1 ? styles.gridAside : undefined}>
-      {matches.map((m) => {
-        const active = selectedUserId === m.user_id;
-        const label = m.full_name?.trim() || "Driver";
-        return (
-          <Pressable
-            key={m.user_id}
-            style={rowStyle(active)}
-            onPress={() => onSelect(m)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-          >
-            <View style={[styles.avatar, active && styles.avatarActive]}>
-              <User size={16} color={active ? Theme.buttonPrimaryText : Theme.iconPrimary} />
-            </View>
-            <View style={styles.rowText}>
-              <Text
-                style={[styles.name, compact && styles.nameCompact, active && styles.nameActive]}
-                numberOfLines={1}
-              >
-                {label}
-              </Text>
-              {m.is_in_fleet ? (
-                <Text style={[styles.meta, compact && styles.metaCompact, active && styles.metaActive]}>
-                  In your fleet
+      <View
+        style={
+          layout === "aside" && enrichedMatches.length > 1 ? styles.gridAside : undefined
+        }
+      >
+        {enrichedMatches.map((m) => {
+          const active = selectedUserId === m.user_id;
+          const label = m.full_name?.trim() || "Driver";
+          const meta = avatarByUserId[m.user_id];
+          const inYourFleet = isDriverMatchInOrgFleet(m, fleetDrivers);
+          const statusLabel = inYourFleet ? "In your fleet" : "Driver is in app";
+          return (
+            <Pressable
+              key={m.user_id}
+              style={rowStyle(active)}
+              onPress={() => onSelect(m)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <View style={[styles.avatarSlot, { width: avatarSize, height: avatarSize }]}>
+                <PartyAvatar
+                  name={label}
+                  entityType="driver"
+                  avatarUrl={meta?.avatarUrl ?? m.avatar_url ?? null}
+                  avatarSeed={meta?.avatarSeed ?? m.avatar_seed ?? null}
+                  size={avatarSize}
+                  shape="circle"
+                />
+              </View>
+              <View style={styles.rowText}>
+                <Text
+                  style={[
+                    styles.name,
+                    compact && styles.nameCompact,
+                    active && styles.nameActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {label}
                 </Text>
-              ) : (
-                <Text style={[styles.meta, compact && styles.metaCompact, active && styles.metaActive]}>
-                  On Pulse platform
+                <Text
+                  style={[
+                    styles.meta,
+                    compact && styles.metaCompact,
+                    active && styles.metaActive,
+                  ]}
+                >
+                  {statusLabel}
                 </Text>
-              )}
-            </View>
-            {active ? (
-              <CheckCircle2 size={compact ? 16 : 18} color={Theme.textOnPrimary} />
-            ) : null}
-          </Pressable>
-        );
-      })}
+              </View>
+              {active ? (
+                <CheckCircle2 size={compact ? 14 : 16} color={Theme.buttonPrimaryText} />
+              ) : null}
+            </Pressable>
+          );
+        })}
       </View>
       {!selectedUserId ? (
         <Text style={[styles.hint, compact && styles.hintCompact]}>
@@ -171,6 +290,16 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
   },
+  emptyWrapAside: {
+    marginTop: 0,
+    marginBottom: 0,
+    flex: 1,
+    minHeight: 52,
+    justifyContent: "center",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
   emptyTitle: {
     fontSize: 13,
     fontWeight: "600",
@@ -193,8 +322,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -205,34 +334,38 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  rowCompact: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  rowAside: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 8,
     borderRadius: 10,
+  },
+  rowCompact: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    gap: 8,
   },
   rowActive: {
     borderColor: Theme.primary,
     backgroundColor: Theme.buttonPrimary,
   },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Theme.surfaceLight,
+  avatarSlot: {
     alignItems: "center",
     justifyContent: "center",
-  },
-  avatarActive: {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    flexShrink: 0,
   },
   rowText: {
     flex: 1,
     minWidth: 0,
+    justifyContent: "center",
+    gap: 1,
   },
   name: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
+    lineHeight: 18,
   },
   nameActive: {
     color: Theme.buttonPrimaryText,
@@ -241,10 +374,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: Theme.textMuted,
-    marginTop: 2,
+    lineHeight: 14,
   },
   metaActive: {
-    color: "rgba(255,255,255,0.85)",
+    /** Soft primary fill (`buttonPrimary`) — keep dark ink for contrast. */
+    color: Theme.textSecondary,
   },
   hint: {
     fontSize: 11,
@@ -272,9 +406,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
   },
   nameCompact: {
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 17,
   },
   metaCompact: {
     fontSize: 10,
+    lineHeight: 13,
   },
 });

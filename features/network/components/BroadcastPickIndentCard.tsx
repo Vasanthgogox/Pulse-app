@@ -112,7 +112,7 @@ export function BroadcastPickIndentCard({
         <View style={styles.headRight}>
           {selected ? (
             <View style={styles.checkBubble}>
-              <Check size={12} color="#fff" strokeWidth={3} />
+              <Check size={12} color={Theme.buttonPrimaryText} strokeWidth={3} />
             </View>
           ) : null}
           <Text style={styles.loadCardDate}>{formatIndentCardDate(load.pickup_date)}</Text>
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   },
   loadTypePillText: {
     ...FinanceTxnTypography.chipLabel,
-    color: Theme.textSecondary,
+    color: Theme.textRouteCard,
     fontWeight: "600",
   },
   loadStatePill: {
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     ...FinanceTxnTypography.chipLabel,
     flex: 1,
     minWidth: 0,
-    color: Theme.textMuted,
+    color: Theme.textRouteCard,
     fontWeight: "500",
   },
 });

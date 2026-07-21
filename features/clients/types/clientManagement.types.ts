@@ -25,8 +25,7 @@ export type ClientProfileTab =
   | 'contracts'
   | 'commercials'
   | 'finance'
-  | 'vault'
-  | 'audit';
+  | 'vault';
 
 export type ContractAgreementStatus =
   | 'draft'

@@ -12,10 +12,14 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { showAppAlert } from "@/lib/appAlert";
+
+const DRIVER_BUSY_ALERT_LOTTIE = require("@/assets/Animated folder/person-driving-car.json");
 import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
 import { CreateTripDesktopStepper } from "./CreateTripDesktopStepper";
+import { CreateTripDesktopWizard } from "./CreateTripDesktopWizard";
 import { AddTripWizardProgress } from "./AddTripWizardProgress";
 import type {
   AddTripCompleteOptions,
@@ -29,15 +33,18 @@ import {
   ADD_TRIP_WIZARD_STEPS,
   addTripWizardStepFields,
   addTripWizardStepLabel,
+  addTripWizardStepShortLabel,
   addTripWizardStepSubtitle,
-  computeCommodityClientStepIssues,
+  computeClientStepIssues,
+  sourceStepFields,
   type AddTripWizardStep,
 } from "./addTripWizardSteps";
-import { useAddTripForm } from "./useAddTripForm";
+import { computeCommodityStepIssues, useAddTripForm } from "./useAddTripForm";
 import { useClientsForTrip } from "./useClientsForTrip";
 import {
   allocationSubStepFields,
   allocationSubStepLabel,
+  desktopAllocationStepFields,
   getAllocationSubSteps,
   type AllocationSubStep,
 } from "./allocationWizardSteps";
@@ -80,12 +87,15 @@ export function AddTripModal({
 }: AddTripModalProps) {
   const { width: winW } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
-  /** Desktop + mobile: one wizard step at a time (no multi-card enterprise grid). */
+  const isDesktopWizard =
+    isWeb && WIZARD_FULL_PAGE_STEPPED && winW >= Layout.wizardDesktopGridMinWidth;
+  /** Desktop + mobile: shared enterprise step UI (CreateTripDesktopWizard). */
   const wizardEnabled = WIZARD_FULL_PAGE_STEPPED;
+  const useEnterpriseSteps = wizardEnabled;
   /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
   const webAllocSubSteps = false;
   const form = useAddTripForm();
-  const [wizardStep, setWizardStep] = useState<WizardStep>("route");
+  const [wizardStep, setWizardStep] = useState<WizardStep>("client");
   const [allocationSubStep, setAllocationSubStep] =
     useState<AllocationSubStep>("supply");
   const allocationFlowActive =
@@ -96,6 +106,7 @@ export function AddTripModal({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [driverBusyAlertVisible, setDriverBusyAlertVisible] = useState(false);
   const {
     clients,
     loading: clientsLoading,
@@ -104,7 +115,7 @@ export function AddTripModal({
 
   useEffect(() => {
     if (!wizardEnabled) return;
-    setWizardStep("route");
+    setWizardStep("client");
     setAllocationSubStep("supply");
   }, [wizardEnabled, organizationId]);
 
@@ -130,9 +141,26 @@ export function AddTripModal({
     );
   }, [allocationFlowActive, wizardEnabled, wizardStep, allocationSteps]);
 
+  /** Mobile enterprise aggregate: party-style full-page phone / name / vehicle keypads. */
+  const mobileAggregateFleetKeypads =
+    useEnterpriseSteps &&
+    !isDesktopWizard &&
+    wizardStep === "allocation" &&
+    form.state.supplySource === "aggregate" &&
+    !form.state.assignLater;
+
   const stepFieldSet = useMemo(() => {
     if (wizardEnabled) {
+      if (wizardStep === "source") {
+        return sourceStepFields(form.state);
+      }
       if (wizardStep === "allocation") {
+        if (useEnterpriseSteps && !mobileAggregateFleetKeypads) {
+          return desktopAllocationStepFields(form.state);
+        }
+        if (useEnterpriseSteps && mobileAggregateFleetKeypads) {
+          return allocationSubStepFields(allocationSubStep, form.state);
+        }
         return allocationSubStepFields(allocationSubStep, form.state);
       }
       return addTripWizardStepFields(wizardStep);
@@ -144,6 +172,8 @@ export function AddTripModal({
   }, [
     wizardEnabled,
     webAllocSubSteps,
+    useEnterpriseSteps,
+    mobileAggregateFleetKeypads,
     wizardStep,
     allocationSubStep,
     form.state.supplySource,
@@ -152,11 +182,11 @@ export function AddTripModal({
 
   const stepIssues = useMemo(() => {
     if (!stepFieldSet) return form.validationIssues;
-    if (wizardEnabled && wizardStep === "commodityClient") {
-      return computeCommodityClientStepIssues(
-        form.state,
-        form.validationIssues,
-      );
+    if (wizardEnabled && wizardStep === "client") {
+      return computeClientStepIssues(form.validationIssues);
+    }
+    if (wizardEnabled && wizardStep === "commodity") {
+      return computeCommodityStepIssues(form.state);
     }
     return form.validationIssues.filter((i) => stepFieldSet.has(i.field));
   }, [wizardEnabled, stepFieldSet, wizardStep, form.state, form.validationIssues]);
@@ -179,24 +209,23 @@ export function AddTripModal({
 
   const wizardSubmitLabel = steppedFormActive
     ? wizardEnabled && wizardStep !== "allocation"
-      ? wizardStep === "route" ||
-        wizardStep === "commodityClient" ||
-        wizardStep === "sale"
-        ? "Continue"
-        : "Create Trip"
-      : isLastAllocationStep
-        ? "Create Trip"
-        : "Continue"
+      ? "Continue"
+      : mobileAggregateFleetKeypads
+        ? isLastAllocationStep
+          ? "Create Trip"
+          : "Continue"
+        : useEnterpriseSteps || isLastAllocationStep
+          ? "Create Trip"
+          : "Continue"
     : "Create Trip";
-
-  const isDesktopWizard =
-    isWeb && wizardEnabled && winW >= Layout.wizardDesktopGridMinWidth;
 
   const wizardStepMeta = useMemo(() => {
     if (!wizardEnabled) return null;
     const topSteps = ADD_TRIP_WIZARD_STEPS.map((id) => ({
       id,
-      label: addTripWizardStepLabel(id),
+      label: isDesktopWizard
+        ? addTripWizardStepLabel(id)
+        : addTripWizardStepShortLabel(id),
     }));
     const topIndex = topSteps.findIndex((s) => s.id === wizardStep);
     if (wizardStep !== "allocation") {
@@ -206,7 +235,12 @@ export function AddTripModal({
         stepIndex: topIndex >= 0 ? topIndex + 1 : 1,
         stepTotal: topSteps.length,
         title: "Create Trip",
-        subtitle: addTripWizardStepSubtitle(wizardStep),
+        subtitle:
+          wizardStep === "source"
+            ? form.state.supplySource === "aggregate"
+              ? "Select transport partner and partner cost."
+              : addTripWizardStepSubtitle(wizardStep)
+            : addTripWizardStepSubtitle(wizardStep),
       };
     }
     return {
@@ -214,14 +248,14 @@ export function AddTripModal({
       currentId: "allocation",
       stepIndex: topIndex >= 0 ? topIndex + 1 : topSteps.length,
       stepTotal: topSteps.length,
-      title: "Allocation",
-      subtitle: isDesktopWizard
+      title: "Create Trip",
+      subtitle: useEnterpriseSteps
         ? form.state.supplySource === "asset"
           ? "Assign vehicle and driver, or choose Assign later"
           : form.state.assignLater
-            ? "Partner and rates — assign fleet on trip detail"
-            : "Partner, rates, and fleet details"
-        : `Assign supply · ${allocationSubStepLabel(allocationSubStep)}`,
+            ? "Fleet can be linked on trip detail"
+            : "Enter partner driver phone and vehicle"
+        : `Assign · ${allocationSubStepLabel(allocationSubStep)}`,
     };
   }, [
     wizardEnabled,
@@ -229,21 +263,64 @@ export function AddTripModal({
     allocationSteps,
     allocationSubStep,
     isDesktopWizard,
+    useEnterpriseSteps,
     form.state.supplySource,
     form.state.assignLater,
   ]);
 
-  const saleFillBody = wizardEnabled && wizardStep === "sale" && !isDesktopWizard;
-  const allocationFillBodyModal =
-    allocationFlowActive &&
-    (allocationSubStep === "rates" ||
-      allocationSubStep === "driverPhone" ||
-      allocationSubStep === "vehicle") &&
-    !isDesktopWizard;
+  const saleFillBody =
+    useEnterpriseSteps &&
+    !isDesktopWizard &&
+    wizardStep === "client" &&
+    Boolean(form.state.clientId);
+  const partnerRateFillBody =
+    useEnterpriseSteps &&
+    !isDesktopWizard &&
+    wizardStep === "source" &&
+    form.state.supplySource === "aggregate" &&
+    Boolean(form.state.supplierId);
+  const allocationKeypadFillBody =
+    mobileAggregateFleetKeypads &&
+    (allocationSubStep === "driverPhone" || allocationSubStep === "vehicle");
   const desktopAllocationFillBody =
-    isDesktopWizard && wizardEnabled && wizardStep === "allocation";
+    useEnterpriseSteps && wizardStep === "allocation" && isDesktopWizard;
   const wizardFillBody =
-    saleFillBody || allocationFillBodyModal || desktopAllocationFillBody;
+    saleFillBody ||
+    partnerRateFillBody ||
+    allocationKeypadFillBody ||
+    desktopAllocationFillBody;
+
+  const runCreate = async (opts?: { skipDriverAssign?: boolean }) => {
+    setDriverBusyAlertVisible(false);
+    setSubmitting(true);
+    try {
+      const options: AddTripCompleteOptions = {
+        supplySource: form.state.supplySource,
+        driverPhone: opts?.skipDriverAssign
+          ? undefined
+          : form.state.driverPhone.trim() || undefined,
+        driverName: opts?.skipDriverAssign
+          ? undefined
+          : form.state.aggregateDriverName.trim() || undefined,
+      };
+      const result = await Promise.resolve(onComplete(form.buildPayload(), options));
+      const typed = result as AddTripCompleteResult | undefined;
+      if (typed?.trip && typed?.otp) {
+        setCreatedResult({
+          ...typed,
+          otpScreenContext: buildOtpScreenContext(form.state),
+        });
+        return;
+      }
+      onClose();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to create trip.";
+      setSubmitError(msg);
+      showAppAlert("Could not create trip", msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setValidationAttempted(true);
@@ -264,31 +341,25 @@ export function AddTripModal({
       showAppAlert("Missing details", msg);
       return;
     }
-    setSubmitting(true);
-    try {
-      const options: AddTripCompleteOptions = {
-        supplySource: form.state.supplySource,
-        driverPhone: form.state.driverPhone.trim() || undefined,
-        driverName: form.state.aggregateDriverName.trim() || undefined,
-      };
-      const result = await Promise.resolve(onComplete(form.buildPayload(), options));
-      const typed = result as AddTripCompleteResult | undefined;
-      if (typed?.trip && typed?.otp) {
-        setCreatedResult({
-          ...typed,
-          otpScreenContext: buildOtpScreenContext(form.state),
-        });
-        return;
-      }
-      onClose();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to create trip.";
-      setSubmitError(msg);
-      showAppAlert("Could not create trip", msg);
-    } finally {
-      setSubmitting(false);
+
+    if (
+      form.state.supplySource === "aggregate" &&
+      form.state.driverPhoneTripConflict &&
+      form.state.driverPhone.trim()
+    ) {
+      setDriverBusyAlertVisible(true);
+      return;
     }
+
+    await runCreate();
   };
+
+  const driverBusyWho = form.state.driverPhoneName?.trim() || "This driver";
+  const driverBusyTripLabel =
+    form.state.driverPhoneTripConflictLabel?.trim() || null;
+  const driverBusyMessage = driverBusyTripLabel
+    ? `${driverBusyWho} is already on ${driverBusyTripLabel}. Ask them to complete that trip first — then you can assign them to this one.`
+    : `${driverBusyWho} is already on another trip. Ask them to complete it first — then you can assign them here.`;
 
   const advanceAllocationSubStep = () => {
     const allocIdx = allocationSteps.indexOf(allocationSubStep);
@@ -317,6 +388,14 @@ export function AddTripModal({
       void handleSubmit();
       return;
     }
+    if (wizardStep === "client") {
+      if (stepIssues.length > 0) {
+        Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
+        return;
+      }
+      setWizardStep("route");
+      return;
+    }
     if (wizardStep === "route") {
       if (stepIssues.length > 0) {
         const msg = stepIssues[0]?.message ?? "Fill required fields.";
@@ -324,18 +403,18 @@ export function AddTripModal({
         showAppAlert("Missing details", msg);
         return;
       }
-      setWizardStep("commodityClient");
+      setWizardStep("commodity");
       return;
     }
-    if (wizardStep === "commodityClient") {
+    if (wizardStep === "commodity") {
       if (stepIssues.length > 0) {
         Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
         return;
       }
-      setWizardStep("sale");
+      setWizardStep("source");
       return;
     }
-    if (wizardStep === "sale") {
+    if (wizardStep === "source") {
       if (stepIssues.length > 0) {
         const msg = stepIssues[0]?.message ?? "Fill required fields.";
         setSubmitError(msg);
@@ -346,7 +425,18 @@ export function AddTripModal({
       setWizardStep("allocation");
       return;
     }
-    if (advanceAllocationSubStep()) return;
+    if (wizardStep === "allocation" && mobileAggregateFleetKeypads) {
+      if (stepIssues.length > 0) {
+        const msg = stepIssues[0]?.message ?? "Fill required fields.";
+        setSubmitError(msg);
+        showAppAlert("Missing details", msg);
+        return;
+      }
+      if (advanceAllocationSubStep()) return;
+      void handleSubmit();
+      return;
+    }
+    if (!useEnterpriseSteps && advanceAllocationSubStep()) return;
     void handleSubmit();
   };
 
@@ -360,21 +450,40 @@ export function AddTripModal({
     }
     if (!wizardEnabled) return;
     if (wizardStep === "allocation") {
-      const allocIdx = allocationSteps.indexOf(allocationSubStep);
-      if (allocIdx > 0) {
-        setAllocationSubStep(allocationSteps[allocIdx - 1]!);
-        return;
+      if (!useEnterpriseSteps || mobileAggregateFleetKeypads) {
+        const allocIdx = allocationSteps.indexOf(allocationSubStep);
+        if (allocIdx > 0) {
+          setAllocationSubStep(allocationSteps[allocIdx - 1]!);
+          return;
+        }
       }
-      setWizardStep("sale");
+      setWizardStep("source");
       return;
     }
-    if (wizardStep === "sale") {
-      setWizardStep("commodityClient");
+    if (wizardStep === "source") {
+      setWizardStep("commodity");
       return;
     }
-    if (wizardStep === "commodityClient") {
+    if (wizardStep === "commodity") {
       setWizardStep("route");
       return;
+    }
+    if (wizardStep === "route") {
+      setWizardStep("client");
+      return;
+    }
+  };
+
+  /** Jump back to a completed step (desktop + mobile enterprise wizard). */
+  const handleWizardStepPress = (_stepId: string, index: number) => {
+    if (!wizardEnabled || !useEnterpriseSteps) return;
+    const currentIdx = ADD_TRIP_WIZARD_STEPS.indexOf(wizardStep);
+    if (index < 0 || index > currentIdx) return;
+    const target = ADD_TRIP_WIZARD_STEPS[index];
+    if (!target || target === wizardStep) return;
+    setWizardStep(target);
+    if (target === "allocation") {
+      setAllocationSubStep(getAllocationSubSteps(form.state)[0] ?? "supply");
     }
   };
 
@@ -393,23 +502,29 @@ export function AddTripModal({
       return;
     }
     if (wizardStep === "allocation") {
-      const allocIdx = allocationSteps.indexOf(allocationSubStep);
-      if (allocIdx > 0) {
-        setAllocationSubStep(allocationSteps[allocIdx - 1]!);
-        return;
+      if (!useEnterpriseSteps || mobileAggregateFleetKeypads) {
+        const allocIdx = allocationSteps.indexOf(allocationSubStep);
+        if (allocIdx > 0) {
+          setAllocationSubStep(allocationSteps[allocIdx - 1]!);
+          return;
+        }
       }
-      setWizardStep("sale");
+      setWizardStep("source");
       return;
     }
-    if (wizardStep === "sale") {
-      setWizardStep("commodityClient");
+    if (wizardStep === "source") {
+      setWizardStep("commodity");
       return;
     }
-    if (wizardStep === "commodityClient") {
+    if (wizardStep === "commodity") {
       setWizardStep("route");
       return;
     }
     if (wizardStep === "route") {
+      setWizardStep("client");
+      return;
+    }
+    if (wizardStep === "client") {
       onClose();
       return;
     }
@@ -454,6 +569,7 @@ export function AddTripModal({
   }
 
   return (
+    <>
     <AddTripModalLayout
       title={wizardStepMeta?.title ?? "Create Trip"}
       insightPreset="trip"
@@ -484,16 +600,38 @@ export function AddTripModal({
               title: addTripWizardStepLabel(id),
             }))}
             currentStepId={wizardStep}
+            onStepPress={handleWizardStepPress}
           />
         ) : wizardStepMeta ? (
           <AddTripWizardProgress
             steps={wizardStepMeta.steps}
             currentStepId={wizardStepMeta.currentId}
+            onStepPress={useEnterpriseSteps ? handleWizardStepPress : undefined}
           />
         ) : null
       }
     >
-      <View style={{ flex: 1, minHeight: 0 }}>
+      {/**
+       * Shell ScrollView owns vertical scroll on mobile — avoid flex:1 wrappers that
+       * expand the body past the viewport and push the Continue footer off-screen.
+       */}
+      <View style={wizardFillBody || isDesktopWizard ? { flex: 1, minHeight: 0 } : undefined}>
+      {useEnterpriseSteps ? (
+        <CreateTripDesktopWizard
+          layout={isDesktopWizard ? "desktop" : "mobile"}
+          wizardStep={wizardStep}
+          state={form.state}
+          setters={form.setters}
+          clients={clients}
+          clientsLoading={clientsLoading}
+          organizationId={organizationId}
+          validationIssues={visibleIssues}
+          sourceIndent={sourceIndent ?? null}
+          allocationSubStep={
+            mobileAggregateFleetKeypads ? allocationSubStep : undefined
+          }
+        />
+      ) : (
       <AddTripFormFields
         state={form.state}
         setters={form.setters}
@@ -507,7 +645,7 @@ export function AddTripModal({
         validationIssues={visibleIssues}
         validationMessage={visibleValidationMessage}
         wizardSection={wizardEnabled ? wizardStep : undefined}
-        desktopWizardChrome={isDesktopWizard}
+        desktopWizardChrome={false}
         enterpriseFormGrid={false}
         mobileWizardMode={wizardEnabled}
         sourceIndent={sourceIndent ?? null}
@@ -516,7 +654,25 @@ export function AddTripModal({
         showInlineCta={false}
         submitting={submitting}
       />
+      )}
       </View>
     </AddTripModalLayout>
+
+    <ThemedAlertModal
+      visible={driverBusyAlertVisible}
+      variant="warning"
+      okVariant="primary"
+      title="Driver is on another trip"
+      message={driverBusyMessage}
+      okText="Got it"
+      onOk={() => setDriverBusyAlertVisible(false)}
+      onRequestClose={() => setDriverBusyAlertVisible(false)}
+      secondaryText="Create without assigning"
+      onSecondary={() => void runCreate({ skipDriverAssign: true })}
+      lottieSource={DRIVER_BUSY_ALERT_LOTTIE}
+      lottieLoop
+      lottieSize={112}
+    />
+    </>
   );
 }

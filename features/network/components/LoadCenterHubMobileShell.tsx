@@ -19,7 +19,7 @@ import {
   View,
 } from "react-native";
 
-export const LOADS_HUB_PAGE_BG = Theme.screenBackground;
+export const LOADS_HUB_PAGE_BG = Theme.surface;
 
 type MainTab = {
   key: "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
