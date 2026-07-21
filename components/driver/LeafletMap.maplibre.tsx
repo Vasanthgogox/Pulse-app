@@ -2,11 +2,16 @@ import Theme from '@/constants/Theme';
 import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker';
 import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomControls';
 import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
-// TODO(types): this native-only variant targets an older @maplibre/maplibre-react-native
-// API (MapView/PointAnnotation/setCamera). The installed v11 renamed these (Map/Marker/setStop);
-// a full API migration is out of scope for a type-only pass and needs on-device verification.
-// @ts-expect-error - default import kept for the legacy namespace usage below (MapView/Camera/etc.)
-import MapLibreGL, { type CameraRef } from '@maplibre/maplibre-react-native';
+// Migrated to @maplibre/maplibre-react-native v11 API: MapView->Map,
+// PointAnnotation->Marker (lngLat), ShapeSource->GeoJSONSource, setCamera->setStop.
+import {
+  Camera,
+  type CameraRef,
+  GeoJSONSource,
+  Layer,
+  Map,
+  Marker,
+} from '@maplibre/maplibre-react-native';
 import React, { useCallback, useImperativeHandle, useMemo, useRef } from 'react';
 import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -107,11 +112,7 @@ export const LeafletMapMapLibre = React.forwardRef<
       (next: number, animationDuration = lowPower ? 0 : 280) => {
         const clamped = Math.max(3, Math.min(16, next));
         zoomLevelRef.current = clamped;
-        // @ts-expect-error - legacy setCamera API (v11 renamed to setStop); see import TODO
-        cameraRef.current?.setCamera({
-          zoomLevel: clamped,
-          animationDuration,
-        });
+        cameraRef.current?.zoomTo(clamped, { duration: animationDuration });
       },
       [lowPower],
     );
@@ -126,11 +127,10 @@ export const LeafletMapMapLibre = React.forwardRef<
           ),
         );
         zoomLevelRef.current = z;
-        // @ts-expect-error - legacy setCamera API (v11 renamed to setStop); see import TODO
-        cameraRef.current?.setCamera({
-          centerCoordinate: toLngLat(currentCenter),
-          zoomLevel: z,
-          animationDuration: lowPower ? 0 : 450,
+        cameraRef.current?.setStop({
+          center: toLngLat(currentCenter),
+          zoom: z,
+          duration: lowPower ? 0 : 450,
         });
       },
       setMarkerCoordinate: (_id, _coordinate) => {
@@ -139,11 +139,16 @@ export const LeafletMapMapLibre = React.forwardRef<
       },
       fitBounds: (ne, sw, paddingPx = 80, _maxZoom) => {
         cameraRef.current?.fitBounds?.(
-          [ne.longitude, ne.latitude],
-          [sw.longitude, sw.latitude],
-          // @ts-expect-error - legacy 4-arg fitBounds signature (v11 uses (bounds, options?)); see import TODO
-          paddingPx,
-          lowPower ? 0 : 600,
+          [sw.longitude, sw.latitude, ne.longitude, ne.latitude],
+          {
+            padding: {
+              top: paddingPx,
+              right: paddingPx,
+              bottom: paddingPx,
+              left: paddingPx,
+            },
+            duration: lowPower ? 0 : 600,
+          },
         );
       },
       zoomIn: () => setCameraZoom(zoomLevelRef.current + 1),
@@ -159,28 +164,28 @@ export const LeafletMapMapLibre = React.forwardRef<
 
     return (
       <View style={[style, styles.mapHost]}>
-        <MapLibreGL.MapView
+        <Map
           style={StyleSheet.absoluteFill}
           mapStyle={MAP_STYLE}
-          logoEnabled={false}
-          attributionEnabled={false}
-          compassEnabled={false}
-          scrollEnabled={!interactionLocked}
-          zoomEnabled={!interactionLocked}
+          logo={false}
+          attribution={false}
+          compass={false}
+          dragPan={!interactionLocked}
+          doubleTapZoom={!interactionLocked}
         >
-          <MapLibreGL.Camera
+          <Camera
             ref={cameraRef}
-            defaultSettings={{
-              centerCoordinate: toLngLat(center),
-              zoomLevel: zoom,
+            initialViewState={{
+              center: toLngLat(center),
+              zoom,
             }}
           />
 
           {safePolylineLayers.map((layer) => (
-            <MapLibreGL.ShapeSource
+            <GeoJSONSource
               key={layer.id}
               id={`leaflet-polyline-source-${layer.id}`}
-              shape={{
+              data={{
                 type: 'Feature',
                 geometry: {
                   type: 'LineString',
@@ -189,8 +194,10 @@ export const LeafletMapMapLibre = React.forwardRef<
                 properties: {},
               }}
             >
-              <MapLibreGL.LineLayer
+              <Layer
                 id={`leaflet-polyline-layer-${layer.id}`}
+                type="line"
+                source={`leaflet-polyline-source-${layer.id}`}
                 style={{
                   lineColor: layer.color ?? polylineColor,
                   lineWidth: layer.width ?? 5,
@@ -199,29 +206,29 @@ export const LeafletMapMapLibre = React.forwardRef<
                   ...(layer.dashed ? { lineDasharray: [2, 2.5] } : {}),
                 }}
               />
-            </MapLibreGL.ShapeSource>
+            </GeoJSONSource>
           ))}
 
           {(routeLabels ?? []).map((label) => (
-            <MapLibreGL.PointAnnotation
+            <Marker
               key={label.id}
               id={`leaflet-route-label-${label.id}`}
-              coordinate={toLngLat(label.coordinate)}
-              anchor={{ x: 0.5, y: 0.5 }}
+              lngLat={toLngLat(label.coordinate)}
+              anchor="center"
             >
               <View style={styles.routeDistanceLabel}>
                 <Text style={styles.routeDistanceLabelText}>{label.text}</Text>
               </View>
-            </MapLibreGL.PointAnnotation>
+            </Marker>
           ))}
 
           {(markers ?? []).map((m) => (
-            <MapLibreGL.PointAnnotation
+            <Marker
               key={m.id}
               id={`leaflet-marker-${m.id}`}
-              coordinate={toLngLat(m.coordinate)}
+              lngLat={toLngLat(m.coordinate)}
               anchor={
-                tripMapMarkerRoleFromId(m.id) === 'driver' ? { x: 0.5, y: 1 } : { x: 0.5, y: 0.5 }
+                tripMapMarkerRoleFromId(m.id) === 'driver' ? 'bottom' : 'center'
               }
             >
               <MarkerContent
@@ -232,9 +239,9 @@ export const LeafletMapMapLibre = React.forwardRef<
                 isOnline={m.isOnline}
                 onPress={m.onPress}
               />
-            </MapLibreGL.PointAnnotation>
+            </Marker>
           ))}
-        </MapLibreGL.MapView>
+        </Map>
         {showZoom ? (
           <LeafletMapZoomControls
             onZoomIn={() => setCameraZoom(zoomLevelRef.current + 1)}

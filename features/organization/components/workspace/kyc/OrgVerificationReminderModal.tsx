@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import Reanimated, {
   Easing,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -142,7 +143,11 @@ export function OrgVerificationReminderModal({ visible, copy, onVerify, onLater 
       sheetOpacity.value = withTiming(0, { duration: 160 });
       sheetScale.value = withTiming(0.97, { duration: 160 });
       sheetLift.value = withTiming(isWebDesktop ? 8 : 20, { duration: 160 }, (finished) => {
-        if (finished) onDone();
+        // This callback runs on the reanimated UI/worklet thread; onDone is a
+        // JS-thread React setter, so it must be marshalled back via runOnJS or
+        // it throws "Object is not a function" and hard-crashes the app on native.
+        'worklet';
+        if (finished) runOnJS(onDone)();
       });
     },
     [backdropOpacity, isWebDesktop, sheetLift, sheetOpacity, sheetScale],
