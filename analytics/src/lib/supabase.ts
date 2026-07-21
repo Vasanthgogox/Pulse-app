@@ -1,13 +1,20 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string;
-// Admin console uses service role key to bypass RLS — never expose this in a public app
-const key = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string;
+const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? "";
+// Admin console uses service role to bypass RLS — local/dev only; never ship publicly.
+const key =
+  (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string | undefined)?.trim() ??
+  "";
 
-if (!url || !key) {
-  throw new Error('VITE_SUPABASE_URL and VITE_SUPABASE_SERVICE_ROLE_KEY must be set');
-}
+export const supabaseConfigError =
+  !url || !key
+    ? "Missing Supabase admin env. Add SUPABASE_SERVICE_ROLE_KEY (and EXPO_PUBLIC_SUPABASE_URL) to the repo-root .env, then restart `npm run dev` in analytics/."
+    : null;
 
-export const supabase = createClient(url, key, {
-  auth: { persistSession: false },
-});
+export const supabase: SupabaseClient = createClient(
+  url || "https://placeholder.supabase.co",
+  key || "placeholder",
+  {
+    auth: { persistSession: false },
+  },
+);

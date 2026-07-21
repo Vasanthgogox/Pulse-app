@@ -186,24 +186,41 @@ export type AssignerDisplayResult = {
 /** Cross-fleet placeholder when the assigning org name cannot be resolved client-side. */
 export const DRIVER_ASSIGNING_FLEET_UNKNOWN_LABEL = "Assigning fleet";
 
+function isGenericAssignerPerson(name: string): boolean {
+  const t = name.trim().toLowerCase();
+  return (
+    !t ||
+    t === "fleet dispatcher" ||
+    t === "dispatcher" ||
+    t === "partner"
+  );
+}
+
 /**
- * Driver-facing “Assigned by” line: lead with organization when we know it;
- * when the org is unknown, keep the person first so the line stays informative.
+ * Driver-facing “Assigned by” line: lead with organization when we know it.
+ * Do not surface internal dispatcher / reassignment actors (e.g. “Kamesh”) —
+ * drivers need the fleet brand, not staff roster names from assignment audit.
+ * When the org is unknown, keep a real person name first so the line stays useful.
  */
 export function assignerPrimarySecondaryForDriver(
   assignedByOrgName: string,
   assignerPersonDisplay: string,
 ): Pick<AssignerDisplayResult, "assignerLinePrimary" | "assignerLineSecondary"> {
   const unknownPeerOrg = assignedByOrgName === DRIVER_ASSIGNING_FLEET_UNKNOWN_LABEL;
-  return unknownPeerOrg
-    ? {
-        assignerLinePrimary: assignerPersonDisplay,
-        assignerLineSecondary: assignedByOrgName,
-      }
-    : {
-        assignerLinePrimary: assignedByOrgName,
-        assignerLineSecondary: assignerPersonDisplay,
-      };
+  const person = assignerPersonDisplay.trim();
+  const genericPerson = isGenericAssignerPerson(person);
+
+  if (unknownPeerOrg) {
+    return {
+      assignerLinePrimary: genericPerson ? assignedByOrgName : person,
+      assignerLineSecondary: genericPerson ? "" : assignedByOrgName,
+    };
+  }
+
+  return {
+    assignerLinePrimary: assignedByOrgName,
+    assignerLineSecondary: "",
+  };
 }
 
 /**
@@ -307,7 +324,10 @@ export function buildAssignerDisplayForTrip(
 
   const { assignerLinePrimary, assignerLineSecondary } =
     assignerPrimarySecondaryForDriver(assignedByOrgName, assignerPersonDisplay);
-  const assignedByName = `${assignerLinePrimary} · ${assignerLineSecondary}`;
+  const assignedByName = [assignerLinePrimary, assignerLineSecondary]
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join(" · ");
 
   return {
     assignedByUserName,

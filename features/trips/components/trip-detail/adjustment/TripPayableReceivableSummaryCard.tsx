@@ -53,7 +53,7 @@ function SettlementLaneCard({
 
   const content = (
     <>
-      <View style={styles.cardHead}>
+      <View style={[styles.cardHead, isDesktop && styles.cardHeadDesktop]}>
         <EntityAvatar
           name={partyName}
           avatarUrl={avatarUrl}
@@ -71,14 +71,30 @@ function SettlementLaneCard({
           </Text>
           <Text
             style={[styles.partyName, isDesktop && styles.partyNameDesktop]}
-            numberOfLines={2}
+            numberOfLines={1}
           >
             {partyName}
           </Text>
         </View>
+        <View style={styles.dueBlock}>
+          <Text style={[styles.metricLabel, styles.metricLabelEnd, isDesktop && styles.metricLabelDesktop]}>
+            Due
+          </Text>
+          <Text
+            style={[
+              styles.dueHero,
+              isDesktop && styles.dueHeroDesktop,
+              { color: dueColor },
+            ]}
+            numberOfLines={1}
+          >
+            {isSettled ? "Settled" : formatINR(dueAmount)}
+          </Text>
+        </View>
       </View>
+
       <View style={[styles.metricsBar, isDesktop && styles.metricsBarDesktop]}>
-        <View style={[styles.metricCell, isDesktop && styles.metricCellDesktop]}>
+        <View style={styles.metricCell}>
           <Text style={[styles.metricLabel, isDesktop && styles.metricLabelDesktop]}>
             Revised
           </Text>
@@ -87,6 +103,7 @@ function SettlementLaneCard({
               styles.metricValueMuted,
               isDesktop && styles.metricValueMutedDesktop,
             ]}
+            numberOfLines={1}
           >
             {formatINR(revisedAmount)}
           </Text>
@@ -95,61 +112,31 @@ function SettlementLaneCard({
           name="arrow-right"
           size={isDesktop ? 16 : 14}
           color={Theme.textMuted}
-          style={[styles.metricArrow, isDesktop && styles.metricArrowDesktop]}
+          style={styles.metricArrow}
         />
-        <View
-          style={[
-            styles.metricCell,
-            styles.metricCellEnd,
-            isDesktop && styles.metricCellEndDesktop,
-          ]}
-        >
-          <Text
-            style={[
-              styles.metricLabel,
-              styles.metricLabelEnd,
-              isDesktop && styles.metricLabelDesktop,
-            ]}
-          >
-            Due
-          </Text>
-          <Text
-            style={[
-              styles.metricValueHero,
-              isDesktop && styles.metricValueHeroDesktop,
-              { color: dueColor },
-            ]}
-          >
-            {isSettled ? "Settled" : formatINR(dueAmount)}
-          </Text>
+        <View style={[styles.metricCell, styles.metricCellEnd]}>
           <Text
             style={[
               styles.metricDeltaHero,
               isDesktop && styles.metricDeltaHeroDesktop,
               { color: settledDeltaColor },
             ]}
+            numberOfLines={1}
           >
             {settledAmount > 0 ? "−" : ""}
             {settledAmount > 0 ? formatINR(settledAmount) : "Nothing recorded"}
           </Text>
-          <View
-            style={[
-              styles.metricSettledHintSlot,
-              isDesktop && styles.metricSettledHintSlotDesktop,
-            ]}
-          >
-            {settledAmount > 0 ? (
-              <Text
-                style={[
-                  styles.metricSettledHint,
-                  styles.metricLabelEnd,
-                  isDesktop && styles.metricSettledHintDesktop,
-                ]}
-              >
-                {entityType === "client" ? "Collected" : "Paid"}
-              </Text>
-            ) : null}
-          </View>
+          {settledAmount > 0 ? (
+            <Text
+              style={[
+                styles.metricSettledHint,
+                styles.metricLabelEnd,
+                isDesktop && styles.metricSettledHintDesktop,
+              ]}
+            >
+              {entityType === "client" ? "Collected" : "Paid"}
+            </Text>
+          ) : null}
         </View>
       </View>
     </>
@@ -224,18 +211,32 @@ function LaneActionFooter({
         isDesktop && styles.laneActionFooterDesktop,
       ]}
     >
-      <View style={[styles.laneActionBtnSlot, !isDesktop && styles.laneActionBtnSlotMobile]}>
+      <View
+        style={[
+          styles.laneActionBtnSlot,
+          !isDesktop && styles.laneActionBtnSlotMobile,
+        ]}
+      >
         {action}
       </View>
-      <View style={[styles.laneActionHintSlot, isDesktop && styles.laneActionHintSlotDesktop]}>
-        {hint ?? null}
-      </View>
+      {hint ? (
+        <View
+          style={[
+            styles.laneActionHintSlot,
+            isDesktop && styles.laneActionHintSlotDesktop,
+          ]}
+        >
+          {hint}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 export const TripPayableReceivableSummaryCard = memo(
-  function TripPayableReceivableSummaryCard(props: TripPayableReceivableSummaryCardProps) {
+  function TripPayableReceivableSummaryCard(
+    props: TripPayableReceivableSummaryCardProps,
+  ) {
     const showReceivable = props.showReceivable !== false;
     const showPayable = Boolean(props.showPayable);
     const layout = props.layout ?? "mobile";
@@ -245,8 +246,10 @@ export const TripPayableReceivableSummaryCard = memo(
     return (
       <View style={[styles.wrap, isDesktop && styles.wrapDesktop]}>
         {showReceivable ? (
-          <View style={[styles.laneColumn, isDesktop && styles.laneColumnDesktop]}>
-            <View style={styles.laneCardGrow}>
+          <View
+            style={[styles.laneColumn, isDesktop && styles.laneColumnDesktop]}
+          >
+            <View style={[styles.laneCardGrow, isDesktop && styles.laneCardGrowDesktop]}>
               <SettlementLaneCard
                 partyName={props.clientName}
                 avatarUrl={props.clientAvatarUrl}
@@ -272,8 +275,10 @@ export const TripPayableReceivableSummaryCard = memo(
           </View>
         ) : null}
         {showPayable ? (
-          <View style={[styles.laneColumn, isDesktop && styles.laneColumnDesktop]}>
-            <View style={styles.laneCardGrow}>
+          <View
+            style={[styles.laneColumn, isDesktop && styles.laneColumnDesktop]}
+          >
+            <View style={[styles.laneCardGrow, isDesktop && styles.laneCardGrowDesktop]}>
               <SettlementLaneCard
                 partyName={props.payablePartyName}
                 avatarUrl={props.payableAvatarUrl}
@@ -305,41 +310,49 @@ export const TripPayableReceivableSummaryCard = memo(
 
 const styles = StyleSheet.create({
   wrap: {
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "stretch",
-    gap: 8,
+    gap: 12,
     marginBottom: 4,
+    width: "100%",
   },
   wrapDesktop: {
+    flexDirection: "row",
+    alignItems: "stretch",
     gap: 14,
     marginBottom: 6,
   },
   laneColumn: {
-    flex: 1,
-    flexBasis: 0,
+    width: "100%",
     minWidth: 0,
     flexDirection: "column",
     alignItems: "stretch",
+  },
+  laneColumnDesktop: {
+    flex: 1,
+    flexBasis: 0,
     alignSelf: "stretch",
   },
-  laneColumnDesktop: {},
   laneCardGrow: {
+    width: "100%",
+    minWidth: 0,
+  },
+  laneCardGrowDesktop: {
     flex: 1,
     minHeight: 0,
-    minWidth: 0,
   },
   laneActionFooter: {
     width: "100%",
     minWidth: 0,
-    marginTop: 6,
+    marginTop: 8,
     gap: 4,
   },
   laneActionFooterMobile: {
-    marginTop: "auto",
-    paddingTop: 6,
+    marginTop: 8,
   },
   laneActionFooterDesktop: {
-    marginTop: 8,
+    marginTop: "auto" as const,
+    paddingTop: 8,
   },
   laneActionBtnSlot: {
     width: "100%",
@@ -352,23 +365,24 @@ const styles = StyleSheet.create({
   },
   laneActionHintSlot: {
     width: "100%",
-    minHeight: 15,
     justifyContent: "flex-start",
   },
   laneActionHintSlotDesktop: {
     minHeight: 16,
   },
   card: {
-    flex: 1,
-    minHeight: 0,
+    width: "100%",
     borderWidth: 1,
     borderColor: "#e6edf5",
     borderRadius: 12,
-    padding: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: "#fff",
-    gap: 6,
+    gap: 8,
   },
   cardDesktop: {
+    flex: 1,
+    minHeight: 0,
     minWidth: 0,
     padding: 12,
     borderRadius: 14,
@@ -386,7 +400,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  cardHeadText: { flex: 1, minWidth: 0, gap: 2 },
+  cardHeadDesktop: {
+    gap: 10,
+  },
+  cardHeadText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  dueBlock: {
+    flexShrink: 0,
+    alignItems: "flex-end",
+    gap: 2,
+    maxWidth: "46%",
+    paddingLeft: 6,
+  },
   laneLabel: {
     fontSize: 8,
     fontWeight: "800",
@@ -401,37 +429,53 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   partyName: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
-    lineHeight: 14,
+    lineHeight: 16,
     letterSpacing: -0.1,
   },
   partyNameDesktop: {
     fontSize: 13,
     lineHeight: 17,
   },
+  dueHero: {
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: -0.35,
+    fontVariant: ["tabular-nums"],
+    lineHeight: 20,
+    textAlign: "right",
+  },
+  dueHeroDesktop: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
   metricsBar: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingTop: 8,
-    paddingBottom: 4,
-    paddingHorizontal: 2,
+    paddingBottom: 2,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#eef2f7",
   },
   metricsBarDesktop: {
     gap: 14,
     paddingTop: 10,
-    paddingBottom: 6,
+    paddingBottom: 4,
   },
-  metricCell: { flex: 1, minWidth: 0, gap: 3 },
-  metricCellDesktop: { maxWidth: 168 },
-  metricCellEnd: { alignItems: "flex-end" },
-  metricCellEndDesktop: { marginLeft: "auto" as const },
-  metricArrow: { flexShrink: 0 },
-  metricArrowDesktop: { marginHorizontal: 2 },
+  metricCell: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  metricCellEnd: {
+    alignItems: "flex-end",
+  },
+  metricArrow: {
+    flexShrink: 0,
+  },
   metricLabel: {
     fontSize: 8,
     fontWeight: "800",
@@ -459,36 +503,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
   },
-  metricValueHero: {
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: -0.35,
-    fontVariant: ["tabular-nums"],
-    lineHeight: 22,
-  },
-  metricValueHeroDesktop: {
-    fontSize: 24,
-    lineHeight: 28,
-  },
   metricDeltaHero: {
-    marginTop: 1,
     fontSize: 12,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
     letterSpacing: -0.15,
     lineHeight: 15,
+    textAlign: "right",
   },
   metricDeltaHeroDesktop: {
     fontSize: 13,
     lineHeight: 16,
-  },
-  metricSettledHintSlot: {
-    minHeight: 10,
-    marginTop: 1,
-    justifyContent: "flex-start",
-  },
-  metricSettledHintSlotDesktop: {
-    minHeight: 11,
   },
   metricSettledHint: {
     fontSize: 7,

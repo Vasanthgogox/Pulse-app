@@ -111,6 +111,7 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
             disabled={!isDesktopWeb}
             style={({ pressed }) => [
               flow.displayRow,
+              wizardShell && styles.displayRowWizard,
               error && flow.displayRowError,
               isDesktopWeb && pressed && styles.displayRowPressed,
             ]}
@@ -209,12 +210,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   displayValueWizard: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "700",
     letterSpacing: 1.2,
   },
+  displayRowWizard: {
+    minHeight: 48,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
   cursorWizard: {
-    height: 28,
+    height: 24,
     backgroundColor: Theme.buttonPrimary,
   },
   displayRowPressed: {

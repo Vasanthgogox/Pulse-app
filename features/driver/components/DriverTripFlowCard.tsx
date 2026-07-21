@@ -1319,23 +1319,45 @@ export function DriverTripFlowCard({
             )}
           </View>
           <View style={[sheetStyles.insetCard, styles.podCard]}>
-            <TouchableOpacity
-              style={[styles.podUploadBtn, { backgroundColor: Theme.textPrimaryDark }, podUploading && styles.btnDisabled]}
-              onPress={uploadPod}
-              disabled={podUploading}
-              activeOpacity={0.9}
-            >
-              <FontAwesome name="cloud-upload" size={16} color={Theme.textOnPrimary} />
-              <Text style={styles.podUploadText}>{podUploading ? 'Uploading…' : 'Upload POD'}</Text>
-            </TouchableOpacity>
-            {podUploading ? (
-              <TouchableOpacity onPress={cancelPodUpload} activeOpacity={0.8} style={styles.podCancelLink}>
-                <Text style={[styles.podCancelLinkText, { color: Theme.textMuted }]}>Cancel upload</Text>
+            <View style={styles.podActionsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.podUploadBtn,
+                  styles.podUploadBtnCompact,
+                  { backgroundColor: Theme.textPrimaryDark },
+                  podUploading && styles.btnDisabled,
+                ]}
+                onPress={uploadPod}
+                disabled={podUploading}
+                activeOpacity={0.9}
+              >
+                <FontAwesome name="cloud-upload" size={13} color={Theme.textOnPrimary} />
+                <Text style={styles.podUploadTextCompact}>
+                  {podUploading ? 'Uploading…' : 'Upload POD'}
+                </Text>
               </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity onPress={() => setPodSkipped(true)} activeOpacity={0.8} style={styles.skipLink}>
-              <Text style={[styles.skipLinkText, { color: colors.emerald }]}>Skip POD</Text>
-            </TouchableOpacity>
+              {podUploading ? (
+                <TouchableOpacity
+                  onPress={cancelPodUpload}
+                  activeOpacity={0.8}
+                  style={styles.podSkipBtn}
+                >
+                  <Text style={[styles.podSkipBtnText, { color: Theme.textMuted }]}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setPodSkipped(true)}
+                  activeOpacity={0.8}
+                  style={styles.podSkipBtn}
+                >
+                  <Text style={[styles.podSkipBtnText, { color: colors.emerald }]}>
+                    Skip POD
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
             {podDocuments.length >= 1 ? (
               <View style={[styles.podListWrap, { borderColor: Theme.border }]}>
                 {podDocuments.map((doc, index) => (
@@ -1699,6 +1721,12 @@ const styles = StyleSheet.create({
   podCard: {
     gap: 8,
   },
+  podActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
   podUploadBtn: {
     minHeight: TRIP_SHEET_BTN_HEIGHT,
     borderRadius: 10,
@@ -1707,7 +1735,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  podUploadBtnCompact: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 36,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+    gap: 6,
+  },
   podUploadText: { ...sheetStyles.bodyBtnText, color: Theme.textOnPrimary },
+  podUploadTextCompact: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+    color: Theme.textOnPrimary,
+  },
+  podSkipBtn: {
+    flexShrink: 0,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+  },
+  podSkipBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
   skipLink: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 },
   skipLinkText: { ...sheetStyles.bodyLinkText, fontWeight: '800' },
   podCancelLink: { alignSelf: 'center', paddingTop: 2, paddingBottom: 0 },

@@ -483,6 +483,9 @@ export default function DriverTripsScreen() {
   const [assignerTripOrgNameByTripId, setAssignerTripOrgNameByTripId] = useState<
     Record<string, string>
   >({});
+  const [assignerTripOrgIdByTripId, setAssignerTripOrgIdByTripId] = useState<
+    Record<string, string>
+  >({});
   const [organizationLogoById, setOrganizationLogoById] = useState<
     Record<string, string>
   >({});
@@ -615,6 +618,7 @@ export default function DriverTripsScreen() {
           setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
           setAssignerTripOrgNameByTripId({});
+          setAssignerTripOrgIdByTripId({});
           setOrganizationLogoById({});
         }
         return;
@@ -625,26 +629,40 @@ export default function DriverTripsScreen() {
         { p_trip_ids: tripIds },
       );
       const rpcAssignerUserIdByTrip: Record<string, string> = {};
+      let rpcOrgIdByTrip: Record<string, string> = {};
       if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
         const byTrip: Record<string, string> = {};
         const orgByTrip: Record<string, string> = {};
+        const orgIdByTrip: Record<string, string> = {};
+        const logosFromRpc: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
           assigner_user_id?: string | null;
           assigning_organization_name?: string | null;
+          assigning_organization_id?: string | null;
+          assigning_organization_logo_url?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : "";
           const dn = normalizeAssignerName(row.display_name ?? "");
           const uid = String(row.assigner_user_id ?? "").trim();
           const orgName = String(row.assigning_organization_name ?? "").trim();
+          const orgId = String(row.assigning_organization_id ?? "").trim();
+          const logo = String(row.assigning_organization_logo_url ?? "").trim();
           if (tid && dn) byTrip[tid] = dn;
           if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
           if (tid && orgName) orgByTrip[tid] = orgName;
+          if (tid && orgId) orgIdByTrip[tid] = orgId;
+          if (orgId && logo) logosFromRpc[orgId] = logo;
         }
+        rpcOrgIdByTrip = orgIdByTrip;
         setAssignerDisplayByTripId(byTrip);
         setRpcAssignerUserIdByTripId(rpcAssignerUserIdByTrip);
         setAssignerTripOrgNameByTripId(orgByTrip);
+        setAssignerTripOrgIdByTripId(orgIdByTrip);
+        if (Object.keys(logosFromRpc).length > 0) {
+          setOrganizationLogoById((prev) => ({ ...prev, ...logosFromRpc }));
+        }
       }
 
       const userIds = Array.from(
@@ -664,8 +682,7 @@ export default function DriverTripsScreen() {
           setAssignerNamesByUserId({});
           setAssignerOrgNameByUserId({});
         }
-        return;
-      }
+      } else {
       const { data, error } = await supabase()
         .from("profiles")
         .select("id, full_name, email, company_name")
@@ -741,12 +758,14 @@ export default function DriverTripsScreen() {
         setAssignerNamesByUserId(byId);
         setAssignerOrgNameByUserId(orgById);
       }
+      }
 
       const organizationIds = Array.from(
         new Set(
-          trips
-            .map((trip) => String(trip.organization_id ?? "").trim())
-            .filter((id) => id.length > 0),
+          [
+            ...trips.map((trip) => String(trip.organization_id ?? "").trim()),
+            ...Object.values(rpcOrgIdByTrip),
+          ].filter((id) => id.length > 0),
         ),
       );
       if (organizationIds.length > 0) {
@@ -763,10 +782,8 @@ export default function DriverTripsScreen() {
             const logo = String(row.logo_url ?? "").trim();
             if (logo) logosById[row.id] = logo;
           }
-          setOrganizationLogoById(logosById);
+          setOrganizationLogoById((prev) => ({ ...prev, ...logosById }));
         }
-      } else if (!cancelled) {
-        setOrganizationLogoById({});
       }
     };
     void loadAssignerSources();
@@ -843,6 +860,7 @@ export default function DriverTripsScreen() {
           assignerOrgNameByUserId,
           assignerDisplayByTripId,
           assignerTripOrgNameByTripId,
+          assignerTripOrgIdByTripId,
           organizationNamesById,
         },
       );
@@ -882,6 +900,7 @@ export default function DriverTripsScreen() {
     assignerOrgNameByUserId,
     assignerDisplayByTripId,
     assignerTripOrgNameByTripId,
+    assignerTripOrgIdByTripId,
     invites,
     organizationNamesById,
     organizationLogoById,

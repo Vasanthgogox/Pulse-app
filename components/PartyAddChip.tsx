@@ -1,6 +1,10 @@
 /**
  * Elegant party-add pill — compact capsule with icon well + label.
  * Used by Finance FAB and finance promo empty states.
+ *
+ * FAB (`expandOnHover`): desktop web collapses until hover; mobile / narrow
+ * viewports play the same slide-open once on mount, then stay expanded.
+ * Promo rows leave the chip always expanded (no collapse).
  */
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
@@ -14,7 +18,7 @@ import {
   Warehouse,
   type LucideIcon,
 } from "lucide-react-native";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useEffect } from "react";
 import {
   Platform,
   Pressable,
@@ -27,11 +31,17 @@ import Animated, {
   interpolate,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withTiming,
 } from "react-native-reanimated";
 
 const MOTION_MS = 180;
+const ENTRANCE_MS = 300;
 const motion = { duration: MOTION_MS, easing: Easing.out(Easing.cubic) };
+const entranceMotion = {
+  duration: ENTRANCE_MS,
+  easing: Easing.out(Easing.cubic),
+};
 
 const DESKTOP_MIN_WIDTH = 768;
 
@@ -45,7 +55,10 @@ export type PartyAddChipProps = {
   icon?: PartyAddChipIcon;
   onPress?: () => void;
   accessibilityLabel?: string;
-  /** Desktop FAB: collapse to icon until hover. Promo / mobile: always expanded. */
+  /**
+   * FAB: collapse to icon until hover (desktop web), or play slide-open
+   * entrance then stay expanded (mobile / narrow). Promo: leave false.
+   */
   expandOnHover?: boolean;
   /** Cross-axis alignment when placed in a flex parent. */
   align?: "start" | "center" | "end";
@@ -87,9 +100,12 @@ export const PartyAddChip = memo(function PartyAddChip({
 }: PartyAddChipProps) {
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = windowWidth >= DESKTOP_MIN_WIDTH;
+  /** Pointer hover collapses/expands repeatedly — desktop web only. */
   const canHoverExpand = expandOnHover && isDesktop && Platform.OS === "web";
+  /** Same slide morph on mobile / narrow — once on mount, then stays open. */
+  const playEntranceSlide = expandOnHover && !canHoverExpand;
 
-  const hover = useSharedValue(0);
+  const expand = useSharedValue(expandOnHover ? 0 : 1);
   const pressed = useSharedValue(0);
   const PartyIcon = resolvePartyIcon(icon);
 
@@ -100,24 +116,46 @@ export const PartyAddChip = memo(function PartyAddChip({
   const padRight = isDesktop ? 12 : 11;
   const padLeft = isDesktop ? 5 : 6;
 
-  const setHover = useCallback(
+  useEffect(() => {
+    if (!expandOnHover) {
+      expand.value = 1;
+      return;
+    }
+    if (canHoverExpand) {
+      expand.value = 0;
+      return;
+    }
+    // Mobile / narrow: plus → truck + label slide (matches desktop morph).
+    expand.value = 0;
+    expand.value = withDelay(70, withTiming(1, entranceMotion));
+  }, [canHoverExpand, expand, expandOnHover]);
+
+  const setExpanded = useCallback(
     (active: boolean) => {
-      hover.value = withTiming(active ? 1 : 0, motion);
+      expand.value = withTiming(active ? 1 : 0, motion);
     },
-    [hover],
+    [expand],
   );
 
-  const onHoverIn = useCallback(() => setHover(true), [setHover]);
-  const onHoverOut = useCallback(() => setHover(false), [setHover]);
+  const onHoverIn = useCallback(() => setExpanded(true), [setExpanded]);
+  const onHoverOut = useCallback(() => {
+    if (canHoverExpand) setExpanded(false);
+  }, [canHoverExpand, setExpanded]);
+
   const onPressIn = useCallback(() => {
     pressed.value = withTiming(1, { duration: 80 });
-  }, [pressed]);
+    // Touch / narrow: press also drives the morph when still collapsed.
+    if (playEntranceSlide && expand.value < 0.95) {
+      setExpanded(true);
+    }
+  }, [expand, playEntranceSlide, pressed, setExpanded]);
+
   const onPressOut = useCallback(() => {
     pressed.value = withTiming(0, { duration: 110 });
   }, [pressed]);
 
   const shellStyle = useAnimatedStyle(() => {
-    const h = canHoverExpand ? hover.value : hover.value;
+    const h = expandOnHover ? expand.value : 1;
     const p = pressed.value;
     const active = canHoverExpand ? h : Math.max(h, p * 0.5);
     return {
@@ -127,7 +165,7 @@ export const PartyAddChip = memo(function PartyAddChip({
       ],
       backgroundColor: active > 0.35 ? Theme.brandBlueSoft : Theme.cardWhite,
       borderColor: active > 0.2 ? Theme.brandBlueRing : Theme.borderMedium,
-      paddingRight: canHoverExpand
+      paddingRight: expandOnHover
         ? interpolate(h, [0, 1], [padLeft, padRight])
         : padRight,
       paddingLeft: padLeft,
@@ -137,8 +175,10 @@ export const PartyAddChip = memo(function PartyAddChip({
   });
 
   const iconWellStyle = useAnimatedStyle(() => {
-    const h = hover.value;
-    const active = canHoverExpand ? h : Math.max(h, pressed.value * 0.5);
+    const h = expandOnHover ? expand.value : 1;
+    const active = canHoverExpand
+      ? h
+      : Math.max(h, pressed.value * 0.5);
     return {
       backgroundColor:
         active > 0.45 ? Theme.brandBlue : Theme.brandBlueWash,
@@ -147,11 +187,11 @@ export const PartyAddChip = memo(function PartyAddChip({
   });
 
   const partyIconStyle = useAnimatedStyle(() => {
-    const h = hover.value;
-    if (!canHoverExpand) {
+    const h = expandOnHover ? expand.value : 1;
+    if (!expandOnHover) {
       return {
         opacity: 1,
-        transform: [{ scale: 1 + h * 0.04 }],
+        transform: [{ scale: 1 }],
       };
     }
     return {
@@ -161,26 +201,27 @@ export const PartyAddChip = memo(function PartyAddChip({
   });
 
   const plusStyle = useAnimatedStyle(() => {
-    if (!canHoverExpand) {
+    if (!expandOnHover) {
       return { opacity: 0 };
     }
+    const h = expand.value;
     return {
-      opacity: interpolate(hover.value, [0, 0.35, 1], [1, 0.2, 0]),
-      transform: [{ rotate: `${interpolate(hover.value, [0, 1], [0, 90])}deg` }],
+      opacity: interpolate(h, [0, 0.35, 1], [1, 0.2, 0]),
+      transform: [{ rotate: `${interpolate(h, [0, 1], [0, 90])}deg` }],
     };
   });
 
   const labelWrapStyle = useAnimatedStyle(() => {
-    const h = canHoverExpand ? hover.value : 1;
-    if (!canHoverExpand) {
+    if (!expandOnHover) {
       return {
         maxWidth: fullWidth ? 9999 : isDesktop ? 148 : 132,
         opacity: 1,
         marginLeft: labelGap,
       };
     }
+    const h = expand.value;
     return {
-      maxWidth: interpolate(h, [0, 1], [0, 148]),
+      maxWidth: interpolate(h, [0, 1], [0, isDesktop ? 148 : 132]),
       opacity: interpolate(h, [0, 0.5, 1], [0, 0.35, 1]),
       marginLeft: interpolate(h, [0, 1], [0, labelGap]),
       transform: [{ translateX: interpolate(h, [0, 1], [-6, 0]) }],
@@ -251,8 +292,8 @@ export const PartyAddChip = memo(function PartyAddChip({
       onPress={onPress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
-      onHoverIn={Platform.OS === "web" ? onHoverIn : undefined}
-      onHoverOut={Platform.OS === "web" ? onHoverOut : undefined}
+      onHoverIn={Platform.OS === "web" && expandOnHover ? onHoverIn : undefined}
+      onHoverOut={Platform.OS === "web" && expandOnHover ? onHoverOut : undefined}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
@@ -310,7 +351,8 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
     ...Platform.select({
       web: {
-        boxShadow: "0 1px 2px rgba(77, 54, 54, 0.06), 0 4px 12px rgba(77, 54, 54, 0.05)",
+        boxShadow:
+          "0 1px 2px rgba(77, 54, 54, 0.06), 0 4px 12px rgba(77, 54, 54, 0.05)",
         cursor: "pointer",
       } as object,
       default: {
@@ -329,7 +371,8 @@ const styles = StyleSheet.create({
   chipDesktop: {
     ...Platform.select({
       web: {
-        boxShadow: "0 1px 3px rgba(77, 54, 54, 0.07), 0 6px 16px rgba(77, 54, 54, 0.06)",
+        boxShadow:
+          "0 1px 3px rgba(77, 54, 54, 0.07), 0 6px 16px rgba(77, 54, 54, 0.06)",
       } as object,
       default: {},
     }),
