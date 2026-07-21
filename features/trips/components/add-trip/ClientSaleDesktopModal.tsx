@@ -1,0 +1,262 @@
+/**
+ * Desktop popup — mobile GPay client-sale keypad (keyboard + on-screen keys).
+ * Mirrors PartnerRateDesktopModal.
+ */
+import { memo, useEffect } from "react";
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { MotiView } from "moti";
+import { Easing } from "react-native-reanimated";
+import { X } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import Theme from "@/constants/Theme";
+import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
+import { platformShadow } from "@/lib/platformShadow";
+
+import { ClientSaleKeypadFlow } from "./ClientSaleKeypadFlow";
+
+const SHEET_EASE = Easing.bezier(0.16, 1, 0.3, 1);
+
+export type ClientSaleDesktopModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  onDone: () => void;
+  clientPrice: string;
+  onClientPriceChange: (value: string) => void;
+  partyPreview?: NumericEntryPartyPreview;
+  onChangeClient?: () => void;
+  priceError?: boolean;
+};
+
+export const ClientSaleDesktopModal = memo(function ClientSaleDesktopModal({
+  visible,
+  onClose,
+  onDone,
+  clientPrice,
+  onClientPriceChange,
+  partyPreview,
+  onChangeClient,
+  priceError = false,
+}: ClientSaleDesktopModalProps) {
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const sheetMaxH = Math.min(640, Math.round(height * 0.88));
+
+  useEffect(() => {
+    if (!visible || typeof document === "undefined") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      } else if (e.key === "Enter") {
+        const target = e.target as HTMLElement | null;
+        const tag = target?.tagName?.toLowerCase();
+        if (tag === "input" || tag === "textarea" || target?.isContentEditable) {
+          return;
+        }
+        e.preventDefault();
+        onDone();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [visible, onClose, onDone]);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View
+        style={[
+          styles.root,
+          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 },
+        ]}
+      >
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <MotiView
+          from={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ type: "timing", duration: 200 }}
+          style={styles.backdrop}
+          pointerEvents="none"
+        />
+        <MotiView
+          key={visible ? "open" : "closed"}
+          from={{ opacity: 0, scale: 0.94, translateY: 28 }}
+          animate={{ opacity: 1, scale: 1, translateY: 0 }}
+          transition={{ type: "timing", duration: 320, easing: SHEET_EASE }}
+          style={[styles.sheet, { maxHeight: sheetMaxH }]}
+        >
+          <View style={styles.sheetHeader}>
+            <View style={styles.sheetHeaderCopy}>
+              <Text style={styles.sheetEyebrow}>Client sale</Text>
+              <Text style={styles.sheetTitle}>Enter sale value</Text>
+            </View>
+            <Pressable
+              onPress={onClose}
+              style={styles.closeBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              hitSlop={8}
+            >
+              <X size={16} color={Theme.textRouteCard} strokeWidth={2.25} />
+            </Pressable>
+          </View>
+
+          <View style={styles.keypadHost}>
+            <ClientSaleKeypadFlow
+              forceMobileLayout
+              compact
+              clientPrice={clientPrice}
+              onClientPriceChange={onClientPriceChange}
+              partyPreview={partyPreview}
+              onPartyPress={onChangeClient}
+              errorMessage={
+                priceError ? "Enter a sale price greater than 0" : undefined
+              }
+            />
+          </View>
+
+          <View style={styles.sheetFooter}>
+            <Text style={styles.keyboardHint}>
+              Type on your keyboard or use the keypad
+            </Text>
+            <Pressable
+              onPress={onDone}
+              style={styles.doneBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Done"
+            >
+              <Text style={styles.doneBtnText}>Done</Text>
+            </Pressable>
+          </View>
+        </MotiView>
+      </View>
+    </Modal>
+  );
+});
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.52)",
+  },
+  sheet: {
+    width: "100%",
+    maxWidth: 400,
+    minHeight: 520,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    overflow: "hidden",
+    ...platformShadow("0 20px 40px rgba(15, 23, 42, 0.18)", {
+      color: Theme.shadow,
+      opacity: 0.18,
+      radius: 28,
+      offsetY: 16,
+      elevation: 14,
+    }),
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  sheetHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  sheetEyebrow: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  sheetTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  keypadHost: {
+    flex: 1,
+    minHeight: 380,
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    paddingBottom: 4,
+  },
+  sheetFooter: {
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  keyboardHint: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    textAlign: "center",
+  },
+  doneBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 42,
+    borderRadius: 999,
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  doneBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+  },
+});

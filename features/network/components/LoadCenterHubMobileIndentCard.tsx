@@ -527,12 +527,12 @@ const styles = StyleSheet.create({
   bodyComfort: {
     paddingHorizontal: indentReviewHubLayout.hubCardPaddingComfort,
     paddingTop: indentReviewHubLayout.hubCardPaddingComfort,
-    paddingBottom: indentReviewHubLayout.hubCardPaddingComfort,
+    paddingBottom: 10,
   },
   bodyDense: {
     paddingHorizontal: indentReviewHubLayout.hubCardPaddingDense,
     paddingTop: indentReviewHubLayout.hubCardPaddingDense,
-    paddingBottom: indentReviewHubLayout.hubCardPaddingDense,
+    paddingBottom: 8,
   },
   bodyGridPad: {
     paddingHorizontal: 14,
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   bodyGrid: {
     flex: 1,
     flexDirection: "column",
-    paddingBottom: 12,
+    paddingBottom: 10,
   },
   actionsSlot: {
     marginTop: "auto",
@@ -569,7 +569,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 12,
+    minHeight: HUB_CARD_HEAD_AVATAR,
   },
   headGrid: {
     marginBottom: HUB_GRID_HEAD_MARGIN_BOTTOM,
@@ -584,7 +585,6 @@ const styles = StyleSheet.create({
   headText: {
     flex: 1,
     minWidth: 0,
-    minHeight: HUB_CARD_HEAD_AVATAR,
     justifyContent: "center",
   },
   brand: {
@@ -594,6 +594,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     fontStyle: "normal",
     color: REF.ink,
+    includeFontPadding: false,
   },
   brandHub: {
     fontSize: 12,
@@ -602,17 +603,20 @@ const styles = StyleSheet.create({
   headMetaCol: {
     flexShrink: 0,
     maxWidth: "42%",
+    minHeight: HUB_CARD_HEAD_AVATAR,
     alignItems: "flex-end",
+    justifyContent: "center",
   },
   headMeta: {
     fontSize: 10,
-    lineHeight: 13,
+    lineHeight: 15,
     fontWeight: "500",
     color: REF.muted,
     textAlign: "right",
     textTransform: "uppercase",
     letterSpacing: 0.25,
     flexShrink: 0,
+    includeFontPadding: false,
   },
   headMetaHub: {
     maxWidth: "100%",
@@ -696,8 +700,8 @@ const styles = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: REF.hairline,
-    marginTop: 12,
-    marginBottom: 10,
+    marginTop: 10,
+    marginBottom: 8,
   },
   dividerGrid: {
     marginTop: HUB_GRID_DIVIDER_MARGIN_TOP,
@@ -742,18 +746,17 @@ const styles = StyleSheet.create({
   },
   partyRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    marginTop: 6,
-    minHeight: 18,
+    marginTop: 4,
     width: "100%",
   },
   partyRowGrid: {
     marginTop: 4,
     minHeight: 24,
     flexShrink: 0,
-    alignItems: "flex-start",
+    alignItems: "center",
   },
   footerLabel: {
     flex: 1,
@@ -775,7 +778,6 @@ const styles = StyleSheet.create({
   },
   footerLabelEnd: {
     textAlign: "right",
-    alignItems: "flex-end",
   },
   stub: {
     minWidth: 0,

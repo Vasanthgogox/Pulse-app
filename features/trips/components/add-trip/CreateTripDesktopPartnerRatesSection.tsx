@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 
 import { SmartInput } from "@/components/mobile-input";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
@@ -32,15 +32,18 @@ export const CreateTripDesktopPartnerRatesSection = memo(
     return (
       <View style={s.allocationForm}>
         {partyPreview && !suppressPartyPreview ? (
-          <WizardEntitySummaryCard
-            label="Partner"
-            name={partyPreview.name}
-            subtitle={partyPreview.subtitle ?? null}
-            entityType={partyPreview.entityType ?? "supplier"}
-            avatarUrl={partyPreview.avatarUrl ?? null}
-            avatarSeed={partyPreview.avatarSeed ?? null}
-          />
+          <View style={s.summaryCardFull}>
+            <WizardEntitySummaryCard
+              label="Partner"
+              name={partyPreview.name}
+              subtitle={partyPreview.subtitle ?? null}
+              entityType={partyPreview.entityType ?? "supplier"}
+              avatarUrl={partyPreview.avatarUrl ?? null}
+              avatarSeed={partyPreview.avatarSeed ?? null}
+            />
+          </View>
         ) : null}
+        <Text style={s.sectionHeading}>Partner rates</Text>
         <View style={s.allocationFormRow}>
           <View style={s.allocationFormCol}>
             <SmartInput

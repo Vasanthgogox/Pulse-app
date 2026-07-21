@@ -42,6 +42,14 @@ export function mapRowToWarehouseRecord(row: Record<string, unknown>): Record<st
     manager_phone: (row.manager_phone as string | null) ?? null,
     contact_name: (row.contact_name as string | null) ?? null,
     contact_phone: (row.contact_phone as string | null) ?? null,
+    latitude:
+      row.latitude == null || row.latitude === ''
+        ? null
+        : Number(row.latitude),
+    longitude:
+      row.longitude == null || row.longitude === ''
+        ? null
+        : Number(row.longitude),
     created_at: String(row.created_at ?? ''),
     updated_at: String(row.updated_at ?? ''),
   };

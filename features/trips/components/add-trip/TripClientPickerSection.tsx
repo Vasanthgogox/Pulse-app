@@ -6,6 +6,7 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import {
   WizardClientPicker,
   WizardClientSummaryCard,
+  WIZARD_PARTY_GRID_COLUMNS,
 } from "@/components/full-page-wizard";
 import Theme from "@/constants/Theme";
 import { resolveWizardClientPhone } from "@/features/clients/utils/clientContactDisplay.util";
@@ -36,8 +37,12 @@ export type TripClientPickerSectionProps = {
   hasError?: boolean;
   /** Stepped mobile wizard — flat picker / summary card only. */
   wizardMode?: boolean;
+  /** Party grid columns (desktop create-trip uses 4). */
+  columns?: number;
   fieldLabelStyle?: StyleProp<TextStyle>;
   isDenseForm?: boolean;
+  /** Left-align “Add client” under the party grid (desktop create-trip). */
+  addClientAlign?: "start" | "center" | "stretch";
 };
 
 export function TripClientPickerSection({
@@ -50,8 +55,10 @@ export function TripClientPickerSection({
   onAddClient,
   hasError = false,
   wizardMode = false,
+  columns,
   fieldLabelStyle,
   isDenseForm = false,
+  addClientAlign = "stretch",
 }: TripClientPickerSectionProps) {
   const selectedClientRow =
     clients.find((c) => c.id === clientId) ?? null;
@@ -61,20 +68,23 @@ export function TripClientPickerSection({
   );
   const webPointer =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
+  const pickerColumns = columns ?? WIZARD_PARTY_GRID_COLUMNS;
 
   if (wizardMode) {
     return (
       <View style={styles.wrap}>
         {showClientSummary && selectedClientRow ? (
-          <WizardClientSummaryCard
-            name={selectedClientRow.name ?? "Client"}
-            subtitle={
-              resolveWizardClientPhone(selectedClientRow.phone) ?? undefined
-            }
-            avatarUrl={selectedClientRow.avatar_url ?? null}
-            avatarSeed={selectedClientRow.avatar_seed ?? null}
-            onPress={() => setClientListExpanded(true)}
-          />
+          <View style={styles.summaryCardFull}>
+            <WizardClientSummaryCard
+              name={selectedClientRow.name ?? "Client"}
+              subtitle={
+                resolveWizardClientPhone(selectedClientRow.phone) ?? undefined
+              }
+              avatarUrl={selectedClientRow.avatar_url ?? null}
+              avatarSeed={selectedClientRow.avatar_seed ?? null}
+              onPress={() => setClientListExpanded(true)}
+            />
+          </View>
         ) : (
           <WizardClientPicker
             clients={clients}
@@ -82,6 +92,9 @@ export function TripClientPickerSection({
             selectedClientId={clientId}
             onSelect={onSelectClient}
             onAddClient={onAddClient}
+            columns={pickerColumns}
+            addClientAlign={addClientAlign}
+            showListShell={false}
           />
         )}
         {hasError ? (
@@ -251,7 +264,12 @@ export function TripClientPickerSection({
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
+    alignSelf: "stretch",
     gap: 8,
+  },
+  summaryCardFull: {
+    width: "100%",
+    alignSelf: "stretch",
   },
   fieldGroupRing: {
     borderRadius: 10,
@@ -286,17 +304,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 36,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
   },
   changeSelectionBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -305,17 +324,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 8,
+    minHeight: 36,
   },
   addClientBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   clientList: {
-    maxHeight: 260,
+    maxHeight: 320,
   },
   clientCard: {
     flexDirection: "row",

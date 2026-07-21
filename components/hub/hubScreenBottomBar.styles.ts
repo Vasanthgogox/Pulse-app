@@ -8,7 +8,7 @@ export const hubScreenBottomBarStyles = StyleSheet.create({
     flexShrink: 0,
     marginTop: "auto",
     width: "100%",
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
     paddingHorizontal: Layout.screenPaddingHorizontal,

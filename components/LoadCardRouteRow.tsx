@@ -14,8 +14,10 @@ const REF = {
   muted: "#9aa3ad",
 } as const;
 
-const ROUTE_ARROW_TOP = 2;
 const ROUTE_PIN_SIZE = 8;
+/** City line box — pins + arrow share this so the mid glyph sits on the city axis. */
+const CITY_LINE = 15;
+const CITY_LINE_COMPACT = 13;
 
 export type LoadCardRouteRowProps = {
   origin: string;
@@ -55,38 +57,39 @@ function RouteLeg({
 }) {
   const { city, state } = splitHubRouteLocationDisplay(location);
   const end = align === "right";
+  const cityLine = compact ? CITY_LINE_COMPACT : CITY_LINE;
 
   return (
     <View style={[styles.leg, end && styles.legEnd]}>
-      <View style={[styles.legRow, end && styles.legRowEnd]}>
-        {!end ? <RoutePin variant={variant} /> : null}
-        <View style={[styles.legText, end && styles.legTextEnd]}>
-          <Text
-            style={[
-              styles.legCity,
-              compact && styles.legCityCompact,
-              end && styles.textEnd,
-            ]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {asRouteLabel(city)}
-          </Text>
-          <Text
-            style={[
-              styles.legState,
-              compact && styles.legStateCompact,
-              end && styles.textEnd,
-              !state && styles.legStatePlaceholder,
-            ]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {state ? asRouteLabel(state) : "\u00a0"}
-          </Text>
-        </View>
-        {end ? <RoutePin variant={variant} /> : null}
+      <View style={[styles.legCityRow, end && styles.legCityRowEnd, { minHeight: cityLine }]}>
+        <RoutePin variant={variant} />
+        <Text
+          style={[
+            styles.legCity,
+            compact && styles.legCityCompact,
+            end && styles.textEnd,
+            { lineHeight: cityLine },
+          ]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {asRouteLabel(city)}
+        </Text>
       </View>
+      <Text
+        style={[
+          styles.legState,
+          compact && styles.legStateCompact,
+          end && styles.textEnd,
+          !state && styles.legStatePlaceholder,
+          // Indent state under city so it clears the pin column on both sides.
+          end ? styles.legStateEnd : styles.legStateStart,
+        ]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {state ? asRouteLabel(state) : "\u00a0"}
+      </Text>
     </View>
   );
 }
@@ -101,11 +104,15 @@ export function LoadCardRouteRow({
   style,
   compact,
 }: LoadCardRouteRowProps) {
+  const cityLine = compact ? CITY_LINE_COMPACT : CITY_LINE;
+
   return (
     <View style={[styles.row, compact && styles.rowCompact, style]}>
       <RouteLeg location={origin} variant="origin" align="left" compact={compact} />
-      <View style={[styles.routeMid, compact && styles.routeMidCompact]}>
-        <Text style={styles.routeArrow}>→</Text>
+      <View style={[styles.routeMid, { height: cityLine }]}>
+        <Text style={[styles.routeArrow, { lineHeight: cityLine, fontSize: compact ? 14 : 16 }]}>
+          →
+        </Text>
       </View>
       <RouteLeg
         location={destination}
@@ -143,32 +150,21 @@ const styles = StyleSheet.create({
   legEnd: {
     alignItems: "flex-end",
   },
-  legRow: {
+  legCityRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 6,
     minWidth: 0,
+    width: "100%",
   },
-  legRowEnd: {
-    justifyContent: "flex-end",
-  },
-  legText: {
-    flex: 1,
-    minWidth: 0,
-    overflow: "hidden",
-    ...Platform.select({
-      web: { width: "100%" } as ViewStyle,
-      default: {},
-    }),
-  },
-  legTextEnd: {
-    alignItems: "flex-end",
+  legCityRowEnd: {
+    flexDirection: "row-reverse",
+    justifyContent: "flex-start",
   },
   routePin: {
     width: ROUTE_PIN_SIZE,
     height: ROUTE_PIN_SIZE,
     borderRadius: ROUTE_PIN_SIZE / 2,
-    marginTop: 2,
     flexShrink: 0,
   },
   routePinOrigin: {
@@ -178,17 +174,20 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.positive,
   },
   legCity: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 12,
     fontWeight: "600",
     color: REF.ink,
     letterSpacing: -0.1,
-    lineHeight: 15,
     textTransform: "uppercase",
-    width: "100%",
+    ...Platform.select({
+      web: { width: "100%" } as ViewStyle,
+      default: {},
+    }),
   },
   legCityCompact: {
     fontSize: 10,
-    lineHeight: 13,
   },
   legState: {
     marginTop: 1,
@@ -197,6 +196,13 @@ const styles = StyleSheet.create({
     color: REF.muted,
     lineHeight: 12,
     width: "100%",
+  },
+  legStateStart: {
+    paddingLeft: ROUTE_PIN_SIZE + 6,
+  },
+  legStateEnd: {
+    paddingRight: ROUTE_PIN_SIZE + 6,
+    textAlign: "right",
   },
   legStateCompact: {
     fontSize: 8,
@@ -210,18 +216,14 @@ const styles = StyleSheet.create({
   },
   routeMid: {
     width: 24,
-    paddingTop: ROUTE_ARROW_TOP,
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
     flexShrink: 0,
   },
-  routeMidCompact: {
-    paddingTop: ROUTE_ARROW_TOP,
-  },
   routeArrow: {
-    fontSize: 16,
     fontWeight: "300",
     color: REF.muted,
-    lineHeight: 18,
+    textAlign: "center",
+    includeFontPadding: false,
   },
 });

@@ -185,6 +185,8 @@ type NetworkProfileNode = {
   gstin?: string | null;
   operating_model?: string | null;
   member_since_year?: number | null;
+  vehicle_count?: number;
+  indent_count?: number;
 };
 
 function useAnimatedCount(target: number, durationMs = 720): number {
@@ -489,6 +491,8 @@ function NetworkScreenInner() {
               gstin: maskGstin(snap.gstin),
               operating_model: snap.operating_model ?? null,
               member_since_year: snap.member_since_year ?? prev.member_since_year ?? null,
+              vehicle_count: snap.vehicle_count ?? 0,
+              indent_count: snap.indent_count ?? 0,
             };
           });
         }
@@ -1400,7 +1404,7 @@ function NetworkScreenInner() {
         onClose={() => setMutualModalTarget(null)}
         onOpenProfile={handleOpenMutualProfile}
       />
-      {selectedProfileNode ? (
+      {selectedProfileNode && !protocolRoleModalOpen ? (
       <Modal
         visible
         transparent

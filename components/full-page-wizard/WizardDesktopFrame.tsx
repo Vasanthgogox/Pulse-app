@@ -30,7 +30,17 @@ export function WizardDesktopFrame({
   const hasRight = showRails && contextPanel != null;
 
   if (!hasLeft && !hasRight) {
-    return <View style={styles.desktopFrameSingle}>{children}</View>;
+    const isNarrow = width < Layout.wizardDesktopGridMinWidth;
+    return (
+      <View
+        style={[
+          styles.desktopFrameSingle,
+          isNarrow && styles.desktopFrameSingleMobile,
+        ]}
+      >
+        {children}
+      </View>
+    );
   }
 
   return (

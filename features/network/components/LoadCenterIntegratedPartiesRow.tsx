@@ -22,7 +22,8 @@ import {
 const MAX_VISIBLE = 4;
 const FACE_SIZE = 30;
 const RING_SIZE = FACE_SIZE + 2;
-const SLOT_SIZE = RING_SIZE + 4;
+/** Ring + white halo — kept inside the shared track so dots don’t drop the stack. */
+const SLOT_SIZE = RING_SIZE + 2;
 
 type Props = {
   mode: "supplier" | "client";
@@ -31,9 +32,15 @@ type Props = {
   onPartyPress: (party: LoadCenterIntegratedParty) => void;
 };
 
-function PartyFaceSlot({ children }: { children: ReactNode }) {
+function PartyFaceSlot({
+  slotSize,
+  children,
+}: {
+  slotSize: number;
+  children: ReactNode;
+}) {
   return (
-    <View style={styles.faceSlot}>
+    <View style={[styles.faceSlot, { width: slotSize, height: slotSize }]}>
       <View style={styles.faceRing}>{children}</View>
       <View style={styles.integratedDot} />
     </View>
@@ -55,18 +62,28 @@ export function LoadCenterIntegratedPartiesRow({
   const overflow = Math.max(0, parties.length - MAX_VISIBLE);
   const overlap = 10;
   const nudgeMode = mode === "supplier" ? "give" : "get";
+  const slotSize = Math.min(SLOT_SIZE, trackHeight);
 
   const stackWidth = useMemo(() => {
     const slots = visible.length + (overflow > 0 ? 1 : 0);
     if (slots <= 0) return 0;
-    return SLOT_SIZE + Math.max(0, slots - 1) * (SLOT_SIZE - overlap);
-  }, [overflow, visible.length]);
+    return slotSize + Math.max(0, slots - 1) * (slotSize - overlap);
+  }, [overflow, slotSize, visible.length]);
 
   return (
-    <View style={[styles.row, compact && styles.rowCompact, { minHeight: trackHeight }]}>
+    <View
+      style={[
+        styles.row,
+        compact && styles.rowCompact,
+        { height: trackHeight, minHeight: trackHeight },
+      ]}
+    >
       {parties.length > 0 ? (
         <View
-          style={[styles.stackWrap, { minWidth: stackWidth, height: trackHeight }]}
+          style={[
+            styles.stackWrap,
+            { minWidth: stackWidth, height: trackHeight },
+          ]}
           accessibilityRole="toolbar"
           accessibilityLabel={
             mode === "supplier"
@@ -80,6 +97,7 @@ export function LoadCenterIntegratedPartiesRow({
               onPress={() => onPartyPress(party)}
               style={({ pressed }) => [
                 styles.facePressable,
+                { width: slotSize, height: trackHeight },
                 index > 0 && { marginLeft: -overlap },
                 { zIndex: index + 1 },
                 pressed && styles.facePressed,
@@ -88,7 +106,7 @@ export function LoadCenterIntegratedPartiesRow({
               accessibilityLabel={party.displayName}
               hitSlop={4}
             >
-              <PartyFaceSlot>
+              <PartyFaceSlot slotSize={slotSize}>
                 <EntityAvatar
                   name={party.displayName}
                   entityType={party.entityType}
@@ -108,6 +126,7 @@ export function LoadCenterIntegratedPartiesRow({
               onPress={onAddToNetwork}
               style={({ pressed }) => [
                 styles.facePressable,
+                { width: slotSize, height: trackHeight },
                 { marginLeft: -overlap, zIndex: MAX_VISIBLE + 1 },
                 pressed && styles.facePressed,
               ]}
@@ -115,7 +134,7 @@ export function LoadCenterIntegratedPartiesRow({
               accessibilityLabel={`${overflow} more integrated ${mode === "supplier" ? "suppliers" : "clients"}`}
               hitSlop={4}
             >
-              <View style={styles.faceSlot}>
+              <View style={[styles.faceSlot, { width: slotSize, height: slotSize }]}>
                 <View style={[styles.faceRing, styles.overflowFrame]}>
                   <Text style={styles.overflowText}>+{overflow}</Text>
                 </View>
@@ -126,14 +145,16 @@ export function LoadCenterIntegratedPartiesRow({
       ) : null}
 
       {parties.length > 0 ? (
-        <View style={[styles.divider, { height: trackHeight - 8 }]} />
+        <View style={[styles.divider, { height: Math.max(16, trackHeight - 12) }]} />
       ) : null}
 
-      <LoadCenterNetworkGrowNudge
-        mode={nudgeMode}
-        onPress={onAddToNetwork}
-        compact={compact}
-      />
+      <View style={[styles.nudgeWrap, { height: trackHeight }]}>
+        <LoadCenterNetworkGrowNudge
+          mode={nudgeMode}
+          onPress={onAddToNetwork}
+          compact={compact}
+        />
+      </View>
     </View>
   );
 }
@@ -149,13 +170,18 @@ const styles = StyleSheet.create({
   },
   rowCompact: {
     gap: 11,
-    flexWrap: "wrap",
   },
   stackWrap: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
     flexShrink: 0,
+  },
+  nudgeWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    justifyContent: "center",
   },
   divider: {
     width: 1,
@@ -165,14 +191,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   facePressable: {
-    width: SLOT_SIZE,
-    height: SLOT_SIZE,
     alignItems: "center",
     justifyContent: "center",
   },
   faceSlot: {
-    width: SLOT_SIZE,
-    height: SLOT_SIZE,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -202,8 +224,8 @@ const styles = StyleSheet.create({
   },
   integratedDot: {
     position: "absolute",
-    right: 1,
-    bottom: 1,
+    right: 0,
+    bottom: 0,
     width: 8,
     height: 8,
     borderRadius: 4,

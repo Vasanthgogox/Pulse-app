@@ -35,6 +35,7 @@ export interface IndianVehicleRegistrationKeypadFlowProps {
   error?: boolean;
   testID?: string;
   wizardShell?: boolean;
+  label?: string;
 }
 
 export const IndianVehicleRegistrationKeypadFlow = memo(
@@ -44,6 +45,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
     error = false,
     testID = "indian-vehicle-keypad-flow",
     wizardShell = false,
+    label = "Registration",
   }: IndianVehicleRegistrationKeypadFlowProps) {
     const normLen = getIndianVehicleNormalizedLength(value);
     const keyboardKind = getIndianVehicleKeyboardKind(normLen);
@@ -82,7 +84,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
       <View style={groupTop ? styles.rootGrouped : styles.root} testID={testID}>
         <View style={[styles.main, wizardShell && styles.mainWizard]}>
           <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.regLabel}>
-            Registration
+            {label}
           </Text>
           <Text style={styles.formatHint}>{formatHint}</Text>
 

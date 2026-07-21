@@ -12829,6 +12829,8 @@ export type Database = {
       get_driver_invitee_by_phone: {
         Args: { p_phone: string }
         Returns: {
+          avatar_seed: string
+          avatar_url: string
           email: string
           emergency_contact_name: string
           emergency_contact_phone: string

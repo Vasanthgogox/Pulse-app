@@ -1,8 +1,8 @@
 /**
  * Full-page client sale value entry — Create Trip wizard (mobile).
- * Pay-style centered layout (supplier target parity) + attribution typography.
+ * Google Pay payout layout — identical shell to PartnerRatesKeypadFlow (wizardShell).
  */
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, type ReactNode } from "react";
 
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
 import {
@@ -24,6 +24,14 @@ export interface ClientSaleKeypadFlowProps {
   onClientPriceChange: (value: string) => void;
   partyPreview?: NumericEntryPartyPreview;
   errorMessage?: string;
+  /** e.g. payment terms row above the keypad. */
+  accessory?: ReactNode;
+  /** Tap recipient to change billing client. */
+  onPartyPress?: () => void;
+  /** Force mobile GPay layout on wide screens (desktop popup). */
+  forceMobileLayout?: boolean;
+  /** Tighter type for desktop popup sheets. */
+  compact?: boolean;
 }
 
 export const ClientSaleKeypadFlow = memo(function ClientSaleKeypadFlow({
@@ -31,6 +39,10 @@ export const ClientSaleKeypadFlow = memo(function ClientSaleKeypadFlow({
   onClientPriceChange,
   partyPreview,
   errorMessage,
+  accessory,
+  onPartyPress,
+  forceMobileLayout = false,
+  compact = false,
 }: ClientSaleKeypadFlowProps) {
   const raw = fieldToRaw(clientPrice);
 
@@ -58,7 +70,11 @@ export const ClientSaleKeypadFlow = memo(function ClientSaleKeypadFlow({
     <WizardNumericKeypadFlow
       fields={fields}
       partyPreview={partyPreview}
+      onPartyPress={onPartyPress}
+      forceMobileLayout={forceMobileLayout}
+      compact={compact}
       hint="Revenue should match what you bill this client for this lane."
+      accessory={accessory}
     />
   );
 });

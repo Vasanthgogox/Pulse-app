@@ -14,6 +14,7 @@ import {
   BadgeCheck,
   Building2,
   Calendar,
+  ClipboardList,
   MapPin,
   Package,
   Phone,
@@ -49,9 +50,12 @@ type Props = {
   onClose?: () => void;
   /** Profile modal on narrow viewports — stacked meta, stat grid, lighter type. */
   compact?: boolean;
+  vehicleCount?: number;
+  indentCount?: number;
+  profileStatsLoading?: boolean;
 };
 
-type MetaTone = "role" | "location" | "phone";
+type MetaTone = "role" | "location" | "phone" | "vehicles" | "indents";
 type StatTone = "trips" | "rating" | "mutuals" | "default";
 
 const META_TONE: Record<
@@ -61,6 +65,8 @@ const META_TONE: Record<
   role: { bg: Theme.surface, icon: Theme.textSecondary },
   location: { bg: Theme.surface, icon: Theme.textSecondary },
   phone: { bg: Theme.surface, icon: Theme.textSecondary },
+  vehicles: { bg: Theme.surface, icon: Theme.textSecondary },
+  indents: { bg: Theme.surface, icon: Theme.textSecondary },
 };
 
 const STAT_TONE: Record<
@@ -112,7 +118,11 @@ function IconWell({
   size?: number;
 }) {
   const palette =
-    tone === "role" || tone === "location" || tone === "phone"
+    tone === "role" ||
+    tone === "location" ||
+    tone === "phone" ||
+    tone === "vehicles" ||
+    tone === "indents"
       ? META_TONE[tone]
       : STAT_TONE[tone];
   return (
@@ -133,7 +143,7 @@ function MetaRow({
 }) {
   return (
     <View style={styles.metaRow}>
-      <IconWell Icon={icon} tone={tone} />
+      <IconWell Icon={icon} tone={tone} size={13} />
       <Text style={styles.metaRowText} numberOfLines={2}>
         {text}
       </Text>
@@ -208,6 +218,9 @@ export function NetworkProfileHubHero({
   stats,
   onClose,
   compact = false,
+  vehicleCount = 0,
+  indentCount = 0,
+  profileStatsLoading = false,
 }: Props) {
   const locationLabel =
     location?.trim() && location.trim() !== "Not available"
@@ -217,6 +230,12 @@ export function NetworkProfileHubHero({
   const roleText = roleDisplayLabel(roleLabel);
   const RoleIcon = roleIcon(entityType);
   const avatarSize = compact ? 72 : 88;
+  const vehiclesLabel = profileStatsLoading
+    ? "Vehicles owned · …"
+    : `${vehicleCount} vehicle${vehicleCount === 1 ? "" : "s"} owned`;
+  const indentsLabel = profileStatsLoading
+    ? "Indents created · …"
+    : `${indentCount} indent${indentCount === 1 ? "" : "s"} created`;
 
   return (
     <View
@@ -289,12 +308,18 @@ export function NetworkProfileHubHero({
             <MetaRow icon={MapPin} text={locationLabel} tone="location" />
             <View style={styles.metaDivider} />
             <MetaRow icon={Phone} text={phoneLabel} tone="phone" />
+            <View style={styles.metaDivider} />
+            <MetaRow icon={Truck} text={vehiclesLabel} tone="vehicles" />
+            <View style={styles.metaDivider} />
+            <MetaRow icon={ClipboardList} text={indentsLabel} tone="indents" />
           </View>
         ) : (
           <View style={styles.metaCardInline}>
             <MetaRow icon={RoleIcon} text={roleText.toUpperCase()} tone="role" />
             <MetaRow icon={MapPin} text={locationLabel} tone="location" />
             <MetaRow icon={Phone} text={phoneLabel} tone="phone" />
+            <MetaRow icon={Truck} text={vehiclesLabel} tone="vehicles" />
+            <MetaRow icon={ClipboardList} text={indentsLabel} tone="indents" />
           </View>
         )}
 
@@ -435,9 +460,9 @@ const styles = StyleSheet.create({
     }),
   },
   iconWell: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -450,7 +475,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 2,
   },
   metaCardInline: {
@@ -469,22 +494,23 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     minWidth: 0,
-    paddingVertical: 10,
+    paddingVertical: 9,
   },
   metaDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: Theme.borderLight,
-    marginLeft: 44,
+    marginLeft: 38,
   },
   metaRowText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "400",
     color: METRONIC.text,
-    lineHeight: 19,
+    lineHeight: 16,
+    includeFontPadding: false,
   },
   statsRow: {
     alignSelf: "stretch",

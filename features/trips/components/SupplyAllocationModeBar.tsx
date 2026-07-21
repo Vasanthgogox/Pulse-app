@@ -29,6 +29,10 @@ export type SupplyAllocationModeBarProps = {
   variant?: "classic" | "wizard";
   /** When set, only these modes are selectable (asset-only / aggregate-only RBAC). */
   allowedModes?: readonly SupplyAllocationMode[];
+  /** Show Asset / Aggregate toggle (default true). */
+  showModeToggle?: boolean;
+  /** Show Assign later row (default true). */
+  showAssignLater?: boolean;
 };
 
 export function SupplyAllocationModeBar({
@@ -41,17 +45,19 @@ export function SupplyAllocationModeBar({
   layout = "stack",
   variant = "classic",
   allowedModes = ["asset", "aggregate"],
+  showModeToggle: showModeToggleProp = true,
+  showAssignLater = true,
 }: SupplyAllocationModeBarProps) {
   const isAsset = mode === "asset";
   const isInline = layout === "inline";
   const isWizard = variant === "wizard";
   const showAsset = allowedModes.includes("asset");
   const showAggregate = allowedModes.includes("aggregate");
-  const showModeToggle = showAsset && showAggregate;
+  const canToggleModes = showAsset && showAggregate;
 
   /** Single-mode orgs: show affirmative label (own fleet / partner) — not a locked toggle. */
   const singleModeBanner =
-    !showModeToggle && (showAsset || showAggregate) ? (
+    showModeToggleProp && !canToggleModes && (showAsset || showAggregate) ? (
       <View
         style={[
           isWizard ? fullPageWizardStyles.modeRow : assignmentShellStyles.supplySegmentSection,
@@ -85,7 +91,7 @@ export function SupplyAllocationModeBar({
       </View>
     ) : null;
 
-  const segmentPill = !showModeToggle
+  const segmentPill = !canToggleModes
     ? singleModeBanner
     : isWizard ? (
     <View
@@ -105,7 +111,11 @@ export function SupplyAllocationModeBar({
         accessibilityState={{ selected: isAsset }}
       >
         <View style={styles.wizardChipInner}>
-          <Truck size={13} color={isAsset ? Theme.primary : Theme.textMuted} />
+          <Truck
+            size={15}
+            color={isAsset ? Theme.textPrimaryDark : Theme.textMuted}
+            strokeWidth={2.25}
+          />
           <Text
             style={[
               fullPageWizardStyles.modeChipText,
@@ -127,7 +137,11 @@ export function SupplyAllocationModeBar({
         accessibilityState={{ selected: !isAsset }}
       >
         <View style={styles.wizardChipInner}>
-          <Building2 size={13} color={!isAsset ? Theme.primary : Theme.textMuted} />
+          <Building2
+            size={15}
+            color={!isAsset ? Theme.textPrimaryDark : Theme.textMuted}
+            strokeWidth={2.25}
+          />
           <Text
             style={[
               fullPageWizardStyles.modeChipText,
@@ -201,7 +215,7 @@ export function SupplyAllocationModeBar({
     >
       <View style={styles.wizardAssignLaterRow}>
         <View style={styles.wizardAssignLaterIcon}>
-          <ListChecks size={16} color={Theme.primary} />
+          <ListChecks size={16} color={Theme.textPrimaryDark} />
         </View>
         <View style={fullPageWizardStyles.partyTextWrap}>
           <Text style={fullPageWizardStyles.partyName} numberOfLines={1}>
@@ -217,7 +231,7 @@ export function SupplyAllocationModeBar({
           value={assignLater}
           onValueChange={onAssignLaterChange}
           disabled={assignLaterDisabled}
-          trackColor={{ false: Theme.borderLight, true: Theme.primary }}
+          trackColor={{ false: Theme.borderLight, true: Theme.textPrimaryDark }}
           thumbColor="#ffffff"
         />
       </View>
@@ -262,16 +276,16 @@ export function SupplyAllocationModeBar({
   if (isInline) {
     return (
       <View style={styles.supplyModeRowInline}>
-        {segmentPill}
-        {assignLaterRow}
+        {showModeToggleProp ? segmentPill : null}
+        {showAssignLater ? assignLaterRow : null}
       </View>
     );
   }
 
   return (
     <View style={isWizard ? styles.wizardStack : undefined}>
-      {segmentPill}
-      {assignLaterRow}
+      {showModeToggleProp ? segmentPill : null}
+      {showAssignLater ? assignLaterRow : null}
     </View>
   );
 }

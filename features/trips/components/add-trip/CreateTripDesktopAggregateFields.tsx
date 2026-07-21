@@ -1,11 +1,11 @@
 import { memo } from "react";
 import { Platform, Text, TextInput, View } from "react-native";
 
-import { SmartInput } from "@/components/mobile-input";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
+import { IndiaFlagIcon } from "@/components/party/IndiaFlagIcon";
 import { WizardEntitySummaryCard } from "@/components/full-page-wizard";
 import Theme from "@/constants/Theme";
-import type { ExistingDriverMatch } from "@/features/drivers/services/drivers.service";
+import type { DriverRow, ExistingDriverMatch } from "@/features/drivers/services/drivers.service";
 import { DriverPhoneRecommendations } from "@/features/trips/components/add-trip/DriverPhoneRecommendations";
 import { normalizeIndianMobileLast10 } from "@/features/trips/utils/driverPhoneLookup.util";
 import {
@@ -13,8 +13,14 @@ import {
   getIndianVehicleKeyboardType,
   getIndianVehicleNormalizedLength,
 } from "@/lib/indianVehicleInput.util";
+import { formatMobileNumber } from "@/lib/format";
 import type { AddTripIssueField } from "./useAddTripForm";
 
+import {
+  DesktopFieldLabel,
+  DesktopInputShell,
+  DesktopSectionHeading,
+} from "./CreateTripDesktopUi";
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
 
 export type CreateTripDesktopAggregateFieldsProps = {
@@ -38,6 +44,11 @@ export type CreateTripDesktopAggregateFieldsProps = {
   selectedDriverMatchId?: string | null;
   onSelectDriverMatch?: (match: ExistingDriverMatch) => void;
   driverPhoneInTrip?: boolean;
+  fleetDrivers?: readonly DriverRow[];
+  /** When true, hide partner rate/advance (already captured on Source step). */
+  fleetOnly?: boolean;
+  /** Stack phone + lookup and rate columns on mobile. */
+  compact?: boolean;
 };
 
 export const CreateTripDesktopAggregateFields = memo(
@@ -61,63 +72,141 @@ export const CreateTripDesktopAggregateFields = memo(
     driverPhoneLookupLoading = false,
     selectedDriverMatchId = null,
     onSelectDriverMatch,
+    driverPhoneInTrip = false,
+    fleetDrivers = [],
+    fleetOnly = false,
+    compact = false,
   }: CreateTripDesktopAggregateFieldsProps) {
     const phoneLast10 = normalizeIndianMobileLast10(driverPhone);
     const phoneComplete = phoneLast10.length >= 10;
     const vehicleLen = getIndianVehicleNormalizedLength(vehicleText);
     const vehicleKeyboard = getIndianVehicleKeyboardType(vehicleLen);
 
+    const currencyInputProps = Platform.select({
+      web: { outlineStyle: "none" } as object,
+      default: {},
+    });
+
     return (
       <View style={s.allocationForm}>
         {partyPreview && !suppressPartyPreview ? (
-          <WizardEntitySummaryCard
-            label="Partner"
-            name={partyPreview.name}
-            subtitle={partyPreview.subtitle ?? null}
-            entityType={partyPreview.entityType ?? "supplier"}
-            avatarUrl={partyPreview.avatarUrl ?? null}
-            avatarSeed={partyPreview.avatarSeed ?? null}
-          />
+          <View style={s.summaryCardFull}>
+            <WizardEntitySummaryCard
+              label="Partner"
+              name={partyPreview.name}
+              subtitle={partyPreview.subtitle ?? null}
+              entityType={partyPreview.entityType ?? "supplier"}
+              avatarUrl={partyPreview.avatarUrl ?? null}
+              avatarSeed={partyPreview.avatarSeed ?? null}
+            />
+          </View>
         ) : null}
 
-        <View style={s.allocationFormRow}>
-          <View style={s.allocationFormCol}>
-            <SmartInput
-              type="currency"
-              label="Partner rate"
-              value={partnerRate}
-              onChange={onPartnerRateChange}
-              variant="field"
-              required
-              errorMessage={rateError ? "Enter partner rate" : undefined}
-            />
+        {fleetOnly ? (
+          <DesktopSectionHeading>Fleet details</DesktopSectionHeading>
+        ) : (
+          <DesktopSectionHeading>Partner rates & fleet details</DesktopSectionHeading>
+        )}
+        {!fleetOnly ? (
+        <View style={compact ? s.compactStackTight : s.allocationFormRow}>
+          <View style={compact ? s.compactCol : s.allocationFormCol}>
+            <DesktopFieldLabel>Partner rate (₹) *</DesktopFieldLabel>
+            <DesktopInputShell error={rateError}>
+              <View style={s.salePriceInputShell}>
+                <Text style={s.aggregateCurrency}>₹</Text>
+                <TextInput
+                  style={s.aggregateAmountInput}
+                  placeholder="42000"
+                  placeholderTextColor={Theme.placeholder}
+                  value={partnerRate}
+                  onChangeText={onPartnerRateChange}
+                  keyboardType="numeric"
+                  {...currencyInputProps}
+                />
+              </View>
+            </DesktopInputShell>
+            {rateError ? (
+              <Text style={s.salePriceError}>Enter partner rate</Text>
+            ) : null}
           </View>
-          <View style={s.allocationFormCol}>
-            <SmartInput
-              type="currency"
-              label="Advance paid"
-              value={advancePaid}
-              onChange={onAdvancePaidChange}
-              variant="field"
-              errorMessage={advanceError ? "Invalid advance amount" : undefined}
-            />
+          <View style={compact ? s.compactCol : s.allocationFormCol}>
+            <DesktopFieldLabel>Advance paid (₹)</DesktopFieldLabel>
+            <DesktopInputShell error={advanceError}>
+              <View style={s.salePriceInputShell}>
+                <Text style={s.aggregateCurrency}>₹</Text>
+                <TextInput
+                  style={s.aggregateAmountInput}
+                  placeholder="10000"
+                  placeholderTextColor={Theme.placeholder}
+                  value={advancePaid}
+                  onChangeText={onAdvancePaidChange}
+                  keyboardType="numeric"
+                  {...currencyInputProps}
+                />
+              </View>
+            </DesktopInputShell>
+            {advanceError ? (
+              <Text style={s.salePriceError}>Invalid advance amount</Text>
+            ) : null}
           </View>
         </View>
+        ) : null}
 
-        <View style={[s.allocationFormRow, s.allocationFormRowTop]}>
-          <View style={s.allocationFormCol}>
-            <View style={s.allocationFieldBlock}>
-              <Text style={s.routeFieldLabel}>Driver phone *</Text>
-              <TextInput
-                style={[s.dateInput, invalid("driverPhone") && s.routeInputShellError]}
-                placeholder="+91 mobile number"
-                placeholderTextColor={Theme.placeholder}
-                value={driverPhone}
-                onChangeText={onDriverPhoneChange}
-                keyboardType="phone-pad"
-                maxLength={14}
-              />
-            </View>
+        <View
+          style={
+            compact
+              ? s.compactStackTight
+              : [s.allocationFormRow, s.allocationFormRowTop, s.allocationPhoneAlertRow]
+          }
+        >
+          <View style={compact ? s.compactCol : s.allocationFormCol}>
+            <DesktopFieldLabel>Driver phone *</DesktopFieldLabel>
+            <DesktopInputShell error={invalid("driverPhone") || driverPhoneInTrip}>
+              <View style={s.inPhoneFieldRow}>
+                <View style={s.inPhoneCcBlock} accessibilityLabel="India +91">
+                  <IndiaFlagIcon width={20} height={14} />
+                  <Text style={s.inPhoneCcText}>+91</Text>
+                </View>
+                <TextInput
+                  style={s.inPhoneDigitsInput}
+                  placeholder="98765 43210"
+                  placeholderTextColor={Theme.placeholder}
+                  value={phoneLast10}
+                  onChangeText={(v) => onDriverPhoneChange(formatMobileNumber(v))}
+                  keyboardType="phone-pad"
+                  inputMode="tel"
+                  maxLength={10}
+                  textContentType="telephoneNumber"
+                  autoComplete="tel"
+                  {...currencyInputProps}
+                />
+              </View>
+            </DesktopInputShell>
+            {phoneLast10.length > 0 && phoneLast10.length < 10 ? (
+              <Text style={s.inPhoneDigitHint}>{phoneLast10.length}/10 digits</Text>
+            ) : null}
+            {driverPhoneInTrip && !invalid("driverPhone") ? (
+              <Text style={[s.allocationWarnCompactText, { marginTop: 6, flex: 0 }]}>
+                Driver is on another trip — ask them to finish it before assigning here.
+              </Text>
+            ) : null}
+          </View>
+
+          <View
+            style={
+              compact
+                ? s.compactCol
+                : [s.allocationFormCol, s.allocationPhoneAlertCol]
+            }
+          >
+            {compact ? null : (
+              <Text
+                style={[s.desktopFieldLabel, s.allocationPhoneAlertSpacer]}
+                accessibilityElementsHidden
+              >
+                Lookup
+              </Text>
+            )}
             {onSelectDriverMatch ? (
               <DriverPhoneRecommendations
                 matches={driverPhoneMatches}
@@ -125,43 +214,44 @@ export const CreateTripDesktopAggregateFields = memo(
                 selectedUserId={selectedDriverMatchId}
                 onSelect={onSelectDriverMatch}
                 phoneComplete={phoneComplete}
-                layout="stack"
+                layout={compact ? "stack" : "aside"}
                 emptyHint="Enter the driver’s real name in the field below, or invite them to Pulse first."
+                fleetDrivers={fleetDrivers}
               />
             ) : null}
-          </View>
-
-          <View style={s.allocationFormCol}>
-            <View style={s.allocationFieldBlock}>
-              <Text style={s.routeFieldLabel}>Vehicle number *</Text>
-              <TextInput
-                style={[s.dateInput, invalid("vehicleNumber") && s.routeInputShellError]}
-                placeholder="e.g. TN 12 AB 3456"
-                placeholderTextColor={Theme.placeholder}
-                value={vehicleText}
-                onChangeText={(v) => onVehicleTextChange(applyIndianVehicleKeystroke(v))}
-                keyboardType={vehicleKeyboard}
-                autoCapitalize={vehicleKeyboard === "number-pad" ? "none" : "characters"}
-                autoCorrect={false}
-                {...Platform.select({
-                  web: { outlineStyle: "none" } as object,
-                  default: {},
-                })}
-              />
-            </View>
           </View>
         </View>
 
         <View style={s.allocationFieldBlockFull}>
-          <Text style={s.routeFieldLabel}>Driver name *</Text>
-          <TextInput
-            style={[s.dateInput, invalid("driverName") && s.routeInputShellError]}
-            placeholder="Enter driver’s full name"
-            placeholderTextColor={Theme.placeholder}
-            value={driverName}
-            onChangeText={onDriverNameChange}
-            autoCapitalize="words"
-          />
+          <DesktopFieldLabel>Vehicle number *</DesktopFieldLabel>
+          <DesktopInputShell error={invalid("vehicleNumber")}>
+            <TextInput
+              style={s.desktopPlainInput}
+              placeholder="e.g. TN 12 AB 3456"
+              placeholderTextColor={Theme.placeholder}
+              value={vehicleText}
+              onChangeText={(v) => onVehicleTextChange(applyIndianVehicleKeystroke(v))}
+              keyboardType={vehicleKeyboard}
+              autoCapitalize={vehicleKeyboard === "number-pad" ? "none" : "characters"}
+              autoCorrect={false}
+              {...currencyInputProps}
+            />
+          </DesktopInputShell>
+        </View>
+
+        <View style={s.allocationFieldBlockFull}>
+          <DesktopFieldLabel>Driver name *</DesktopFieldLabel>
+          <DesktopInputShell error={invalid("driverName")}>
+            <TextInput
+              style={s.desktopPlainInput}
+              placeholder="Enter driver’s full name"
+              placeholderTextColor={Theme.placeholder}
+              value={driverName}
+              onChangeText={onDriverNameChange}
+              autoCapitalize="words"
+              {...currencyInputProps}
+            />
+          </DesktopInputShell>
         </View>
       </View>
     );

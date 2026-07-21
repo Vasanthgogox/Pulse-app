@@ -26,6 +26,8 @@ export interface ClientWarehouse {
   manager_phone: string | null;
   contact_name: string | null;
   contact_phone: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   created_at: string;
   updated_at: string;
 }

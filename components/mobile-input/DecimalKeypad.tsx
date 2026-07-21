@@ -108,7 +108,8 @@ export const DecimalKeypad = memo(function DecimalKeypad({
   const rowGapStyle = [
     styles.row,
     isApple && styles.rowApple,
-    isCompact && !isApple && styles.rowCompact,
+    isPay && styles.rowPay,
+    isCompact && !isApple && !isPay && styles.rowCompact,
   ];
 
   const renderDigitKey = (key: KeypadKey, isSpecial: boolean) => {
@@ -232,17 +233,17 @@ const styles = StyleSheet.create({
   },
   gridPay: {
     backgroundColor: Theme.surfaceGray,
-    paddingTop: 8,
-    paddingBottom: 6,
-    paddingHorizontal: 8,
-    gap: 5,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.border,
+    paddingTop: 0,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+    gap: 8,
+    borderTopWidth: 0,
+    width: '100%',
   },
   gridPayCompact: {
-    paddingTop: 4,
-    paddingBottom: 4,
-    gap: 4,
+    paddingTop: 0,
+    paddingBottom: 0,
+    gap: 8,
     backgroundColor: 'transparent',
     borderTopWidth: 0,
   },
@@ -250,9 +251,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
     width: '100%',
+    alignItems: 'stretch',
   },
   rowApple: {
     gap: 7,
+  },
+  rowPay: {
+    gap: 8,
   },
   rowCompact: {
     gap: 3,
@@ -290,8 +295,12 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   keyPay: {
+    flex: 1,
+    minWidth: 0,
     backgroundColor: Theme.cardWhite,
-    borderRadius: 10,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -299,7 +308,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   keyPayCompact: {
-    borderRadius: 8,
+    borderRadius: 12,
   },
   keyPaySpecial: {
     backgroundColor: Theme.cardWhite,

@@ -117,24 +117,22 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
     if (err8) push('driverPhone', `Driver for tracking: ${err8}`);
   }
 
-  if (state.supplySource === 'aggregate' && state.driverPhoneTripConflict) {
-    const lab = state.driverPhoneTripConflictLabel?.trim();
-    const who = state.driverPhoneName?.trim() || 'This driver';
-    push(
-      'driverPhone',
-      lab
-        ? `${who} is already on trip ${lab}. Finish or reassign that trip first.`
-        : `${who} is already on another trip. Use a different number or complete that trip first.`,
-    );
-  }
+  // Trip-conflict is a soft warning (PRD: dispatcher can still create / force-assign).
+  // Do not push a blocking validation issue — UI shows the warning separately.
 
+  // Platform phone lookup suggested a name — require picking it (or matching typed name).
+  // When there is no platform match, free-text aggregateDriverName is enough.
   if (
     state.supplySource === 'aggregate' &&
+    !state.assignLater &&
     state.driverPhoneName &&
-    !state.driverPhoneConfirmed &&
-    !state.driverPhoneTripConflict
+    !state.driverPhoneConfirmed
   ) {
-    push('driverConfirm', 'Select a driver name from the recommendations');
+    const typed = state.aggregateDriverName.trim();
+    const suggested = state.driverPhoneName.trim();
+    if (!typed || typed.toLowerCase() !== suggested.toLowerCase()) {
+      push('driverConfirm', 'Select a driver name from the recommendations');
+    }
   }
 
   return issues;
@@ -216,7 +214,11 @@ export function useAddTripForm(options?: {
     dropLocation: v,
     ...(v.trim() ? {} : { dropLat: null, dropLon: null }),
   })), []);
-  const setPickupCoords = useCallback((lat: number, lon: number) => setState((s) => ({ ...s, pickupLat: lat, pickupLon: lon })), []);
+  const setPickupCoords = useCallback(
+    (lat: number | null, lon: number | null) =>
+      setState((s) => ({ ...s, pickupLat: lat, pickupLon: lon })),
+    [],
+  );
   const setDropCoords = useCallback((lat: number, lon: number) => setState((s) => ({ ...s, dropLat: lat, dropLon: lon })), []);
   const setTripStartDate = useCallback((v: string) => setState((s) => ({ ...s, tripStartDate: v })), []);
   const setTons = useCallback((v: string) => setState((s) => ({ ...s, tons: v })), []);
@@ -323,7 +325,23 @@ export function useAddTripForm(options?: {
   const setDriverPhoneName = useCallback((v: string | null) => setState((s) => ({ ...s, driverPhoneName: v })), []);
   const setDriverPhoneConfirmed = useCallback((v: boolean) => setState((s) => ({ ...s, driverPhoneConfirmed: v })), []);
   const setAggregateVehicleText = useCallback((v: string) => setState((s) => ({ ...s, aggregateVehicleText: v })), []);
-  const setAggregateDriverName = useCallback((v: string) => setState((s) => ({ ...s, aggregateDriverName: v })), []);
+  const setAggregateDriverName = useCallback((v: string) => {
+    setState((s) => {
+      const typed = v.trim();
+      const suggested = s.driverPhoneName?.trim() ?? "";
+      const confirmed =
+        s.driverPhoneConfirmed ||
+        (!suggested && typed.length > 0) ||
+        (suggested.length > 0 &&
+          typed.length > 0 &&
+          typed.toLowerCase() === suggested.toLowerCase());
+      return {
+        ...s,
+        aggregateDriverName: v,
+        driverPhoneConfirmed: confirmed,
+      };
+    });
+  }, []);
 
   const clearClientSelection = useCallback(() => setState((s) => ({ ...s, clientId: null, clientName: '' })), []);
 

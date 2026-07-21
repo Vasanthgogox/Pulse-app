@@ -136,8 +136,8 @@ type ToolbarDateFilter = Exclude<DateFilter, "tomorrow">;
 
 type TripsListLayout = "cards" | "table";
 type ActiveMetricTabId = TripMetricId | "all";
-/** Mobile hub list — light page; white ticket cards only (no list shell). */
-const TRIPS_PAGE_BG = Theme.screenBackground;
+/** Hub list canvas — soft gray so white trip cards lift; footer is white. */
+const TRIPS_PAGE_BG = Theme.surface;
 const TRIPS_LIST_LAYOUT_KEY = "@pulse/trips-list-layout";
 /** Native mobile: render trips in batches so the hub stays responsive at scale. */
 const MOBILE_HUB_INITIAL_BATCH = 20;

@@ -8,7 +8,8 @@ import Theme from "@/constants/Theme";
 import { addToPlacesCache, getPopularPlacesInIndia, searchPlacesInIndia, type PlaceResult } from "@/lib/placesService";
 import { scrollFocusedWebInputIntoView } from "@/lib/webKeyboard";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { MapPin, Search, X } from "lucide-react-native";
+import { MapPin, Search, X, ChevronDown } from "lucide-react-native";
+import { createTripDesktopStyles as desktopShellStyles } from "@/features/trips/components/add-trip/createTripDesktop.styles";
 import { type ReactNode, forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -59,6 +60,8 @@ export interface LocationSearchFieldProps {
    * so mobile-web keyboard scroll stays on the parent RN ScrollView.
    */
   onFocusScroll?: () => void;
+  /** Desktop create-trip wizard — single rounded shell with icon box + chevron. */
+  presentation?: "default" | "desktopShell";
 }
 
 const DEBOUNCE_MS = 300;
@@ -88,12 +91,17 @@ export function LocationSearchField({
   sheetTitle,
   sheetSubtitle,
   onFocusScroll,
+  presentation = "default",
 }: LocationSearchFieldProps) {
+  const isDesktopShell = presentation === "desktopShell";
   const isSignupSheet = sheetVariant === "signup";
   const { width: winW } = useWindowDimensions();
   const horizontalPad = Layout.screenPaddingHorizontal * 2;
   /** Explicit width avoids RN Web % layout quirks so the sheet stays visually centered on mobile. */
-  const sheetWidth = Math.min(winW - horizontalPad, 440);
+  const sheetWidth = Math.min(
+    winW - horizontalPad,
+    isDesktopShell ? 448 : 440,
+  );
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -201,10 +209,12 @@ export function LocationSearchField({
 
   const sheetType = isSignupSheet
     ? signupSheetTypography
-    : compact
-      ? sheetTypography.compact
-      : sheetTypography.default;
-  const rowIconSize = isSignupSheet ? 14 : compact ? 13 : 14;
+    : isDesktopShell
+      ? sheetTypography.wizard
+      : compact
+        ? sheetTypography.compact
+        : sheetTypography.default;
+  const rowIconSize = isSignupSheet ? 14 : isDesktopShell ? 16 : compact ? 13 : 14;
   const resolvedSheetTitle =
     sheetTitle ?? (isSignupSheet ? "Pick area on map" : "Pick a place in India");
   const resolvedSheetSubtitle =
@@ -251,10 +261,15 @@ export function LocationSearchField({
                 key={place.placeId}
                 style={[
                   styles.placeRow,
-                  compact && !isSignupSheet && styles.placeRowCompact,
+                  isDesktopShell && styles.placeRowWizard,
+                  compact && !isSignupSheet && !isDesktopShell && styles.placeRowCompact,
                   isSignupSheet && signupSheetStyles.placeRow,
                   selected &&
-                    (isSignupSheet ? signupSheetStyles.placeRowSelected : styles.placeRowSelected),
+                    (isSignupSheet
+                      ? signupSheetStyles.placeRowSelected
+                      : isDesktopShell
+                        ? styles.placeRowSelectedWizard
+                        : styles.placeRowSelected),
                   webCursor,
                 ]}
                 onPress={() => handleSelect(place)}
@@ -263,7 +278,8 @@ export function LocationSearchField({
                 <View
                   style={[
                     styles.rowIconCircle,
-                    compact && !isSignupSheet && styles.rowIconCircleCompact,
+                    isDesktopShell && styles.rowIconCircleWizard,
+                    compact && !isSignupSheet && !isDesktopShell && styles.rowIconCircleCompact,
                     isSignupSheet && signupSheetStyles.rowIconCircle,
                   ]}
                 >
@@ -274,14 +290,25 @@ export function LocationSearchField({
                   />
                 </View>
                 <View style={styles.placeRowTextCol}>
-                  <Text style={sheetType.placeRowPrimary} numberOfLines={1}>
-                    {primary}
-                  </Text>
-                  {secondary ? (
-                    <Text style={sheetType.placeRowSecondary} numberOfLines={1}>
-                      {secondary}
+                  {isDesktopShell ? (
+                    <Text style={sheetType.placeRowPrimary} numberOfLines={2}>
+                      {primary}
+                      {secondary ? (
+                        <Text style={sheetType.placeRowSecondary}>{`, ${secondary}`}</Text>
+                      ) : null}
                     </Text>
-                  ) : null}
+                  ) : (
+                    <>
+                      <Text style={sheetType.placeRowPrimary} numberOfLines={2}>
+                        {primary}
+                      </Text>
+                      {secondary ? (
+                        <Text style={sheetType.placeRowSecondary} numberOfLines={1}>
+                          {secondary}
+                        </Text>
+                      ) : null}
+                    </>
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -292,7 +319,8 @@ export function LocationSearchField({
         <TouchableOpacity
           style={[
             styles.customAddressRow,
-            compact && !isSignupSheet && styles.customAddressRowCompact,
+            isDesktopShell && styles.customAddressRowWizard,
+            compact && !isSignupSheet && !isDesktopShell && styles.customAddressRowCompact,
             isSignupSheet && signupSheetStyles.customAddressRow,
             webCursor,
           ]}
@@ -302,14 +330,22 @@ export function LocationSearchField({
           <View
             style={[
               styles.rowIconCircle,
-              compact && !isSignupSheet && styles.rowIconCircleCompact,
+              isDesktopShell && styles.rowIconCircleWizard,
+              compact && !isSignupSheet && !isDesktopShell && styles.rowIconCircleCompact,
               isSignupSheet && signupSheetStyles.rowIconCircle,
               !isSignupSheet && styles.customIconCircle,
+              isDesktopShell && styles.customIconCircleWizard,
             ]}
           >
             <MapPin
               size={rowIconSize}
-              color={isSignupSheet ? SIGNUP_SHEET.ink : Theme.primary}
+              color={
+                isSignupSheet
+                  ? SIGNUP_SHEET.ink
+                  : isDesktopShell
+                    ? Theme.positive
+                    : Theme.primary
+              }
               strokeWidth={isSignupSheet ? 2 : 2.5}
             />
           </View>
@@ -326,14 +362,38 @@ export function LocationSearchField({
   return (
     <View style={[styles.wrapper, compact && styles.wrapperCompact]} collapsable={false}>
       <Text style={labelStyle}>{label}</Text>
+      {isDesktopShell ? (
+        <Pressable
+          onPress={openDropdown}
+          style={[
+            desktopShellStyles.inputBoxClean,
+            desktopShellStyles.desktopLocationShell,
+            inputStyle as ViewStyle,
+          ]}
+        >
+          <View style={desktopShellStyles.desktopLocationIconBox}>{leadingIcon}</View>
+          <Text
+            style={[
+              desktopShellStyles.desktopLocationValue,
+              value.trim() ? desktopShellStyles.desktopLocationValueFilled : null,
+            ]}
+            numberOfLines={1}
+          >
+            {value.trim() ? value : placeholder}
+          </Text>
+          <ChevronDown size={16} color={Theme.textMuted} strokeWidth={2} />
+        </Pressable>
+      ) : (
       <View
         style={[
           styles.inputRow,
-          inlineIcon && styles.inputRowInline,
+          inlineIcon ? styles.inputRowInline : null,
         ]}
       >
         {inlineIcon ? (
-          <View style={styles.leadingIconInline}>{leadingIcon}</View>
+          <View style={styles.leadingIconInline}>
+            <View style={styles.inlineIconSlot}>{leadingIcon}</View>
+          </View>
         ) : leadingIcon ? (
           <View
             style={[styles.leadingIconWrap, compact && styles.leadingIconWrapCompact]}
@@ -346,11 +406,11 @@ export function LocationSearchField({
           activeOpacity={0.85}
           onPress={openDropdown}
           style={[
-            styles.input,
+            styles.input as ViewStyle,
             compact && styles.inputCompact,
-            inputStyle,
+            inputStyle as ViewStyle,
             styles.inputPressable,
-            inlineIcon && styles.inputInlineRail,
+            inlineIcon ? styles.inputInlineRail : null,
             !inlineIcon && leadingIcon ? styles.inputWithLeadingIcon : null,
             !inlineIcon && leadingIcon && compact ? styles.inputWithLeadingIconCompact : null,
           ]}
@@ -359,6 +419,7 @@ export function LocationSearchField({
             style={[
               styles.inputValueText,
               compact && styles.inputValueTextCompact,
+              isDesktopShell && styles.inputValueTextDesktopShell,
               {
                 color: value.trim()
                   ? isSignupSheet
@@ -400,6 +461,7 @@ export function LocationSearchField({
           </TouchableOpacity>
         )}
       </View>
+      )}
       {dropdownOpen && (
         <Modal
           visible
@@ -416,6 +478,7 @@ export function LocationSearchField({
               <View
                 style={[
                   styles.sheet,
+                  isDesktopShell && styles.sheetWizard,
                   isSignupSheet && signupSheetStyles.sheet,
                   { width: sheetWidth, maxWidth: sheetWidth, alignSelf: "center" },
                 ]}
@@ -423,7 +486,8 @@ export function LocationSearchField({
                 <View
                   style={[
                     styles.sheetHead,
-                    compact && !isSignupSheet && styles.sheetHeadCompact,
+                    isDesktopShell && styles.sheetHeadWizard,
+                    compact && !isSignupSheet && !isDesktopShell && styles.sheetHeadCompact,
                     isSignupSheet && signupSheetStyles.sheetHead,
                   ]}
                 >
@@ -435,7 +499,8 @@ export function LocationSearchField({
                     onPress={closeDropdown}
                     style={[
                       styles.closeBtn,
-                      compact && !isSignupSheet && styles.closeBtnCompact,
+                      isDesktopShell && styles.closeBtnWizard,
+                      compact && !isSignupSheet && !isDesktopShell && styles.closeBtnCompact,
                       isSignupSheet && signupSheetStyles.closeBtn,
                       webCursor,
                     ]}
@@ -444,7 +509,7 @@ export function LocationSearchField({
                     accessibilityLabel="Close"
                   >
                     <X
-                      size={14}
+                      size={isDesktopShell ? 18 : 14}
                       color={Theme.textMuted}
                       strokeWidth={2.5}
                     />
@@ -468,7 +533,8 @@ export function LocationSearchField({
                   <View
                     style={[
                       styles.sheetSearchBand,
-                      compact && styles.sheetSearchBandCompact,
+                      isDesktopShell && styles.sheetSearchBandWizard,
+                      compact && !isDesktopShell && styles.sheetSearchBandCompact,
                     ]}
                   >
                     <CreateTripSheetSearchInput
@@ -478,24 +544,36 @@ export function LocationSearchField({
                         setDraft(t);
                         onChangeText(t);
                       }}
-                      placeholder={placeholder}
+                      placeholder={
+                        isDesktopShell
+                          ? "Search cities, areas, or landmarks"
+                          : placeholder
+                      }
                       autoCapitalize="words"
                       spellCheck={false}
                       autoComplete="off"
                       autoFocus
                       compactChat
-                      compactChatSize="sm"
-                      shellStyle={styles.searchShellInner}
+                      compactChatSize={isDesktopShell ? "md" : "sm"}
+                      shellStyle={
+                        isDesktopShell
+                          ? styles.searchShellWizard
+                          : styles.searchShellInner
+                      }
                       accessibilityLabel="Search places"
                     />
                   </View>
                 )}
 
                 <ScrollView
-                  style={styles.sheetScroll}
+                  style={[
+                    styles.sheetScroll,
+                    isDesktopShell && styles.sheetScrollWizard,
+                  ]}
                   contentContainerStyle={[
                     styles.sheetScrollContent,
-                    compact && styles.sheetScrollContentCompact,
+                    isDesktopShell && styles.sheetScrollContentWizard,
+                    compact && !isDesktopShell && styles.sheetScrollContentCompact,
                   ]}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator
@@ -517,9 +595,11 @@ const styles = StyleSheet.create({
     position: "relative",
     zIndex: 1,
     marginBottom: 12,
+    width: "100%",
   },
   wrapperCompact: {
     marginBottom: 0,
+    width: "100%",
   },
   inputRow: {
     position: "relative",
@@ -528,11 +608,13 @@ const styles = StyleSheet.create({
   inputRowInline: {
     flexDirection: "row",
     alignItems: "stretch",
+    minHeight: 48,
   },
   leadingIconInline: {
     width: 48,
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "stretch",
     backgroundColor: Theme.surface,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -541,9 +623,16 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 12,
     flexShrink: 0,
   },
+  inlineIconSlot: {
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   inputInlineRail: {
     flex: 1,
     minWidth: 0,
+    alignSelf: "stretch",
     borderTopLeftRadius: 0,
     borderBottomLeftRadius: 0,
   },
@@ -590,6 +679,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
+    alignSelf: "stretch",
   },
   inputValueText: {
     fontSize: 15,
@@ -600,6 +690,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: "normal",
     fontWeight: "400",
+  },
+  inputValueTextDesktopShell: {
+    fontSize: 13,
+    fontWeight: "600",
+    fontStyle: "normal",
+    color: Theme.textPrimaryDark,
   },
   clearBtn: {
     position: "absolute",
@@ -667,6 +763,16 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  sheetWizard: {
+    borderRadius: 28,
+    maxHeight: "82%",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 20px 50px rgba(15, 23, 42, 0.18)",
+      } as object,
+      default: {},
+    }),
+  },
   sheetHead: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -677,6 +783,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
+  },
+  sheetHeadWizard: {
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 8,
+    borderBottomWidth: 0,
   },
   sheetTitles: {
     flex: 1,
@@ -712,6 +824,13 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     flexShrink: 0,
   },
+  closeBtnWizard: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderLight,
+  },
   closeBtnCompact: {
     width: 28,
     height: 28,
@@ -724,6 +843,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
+  },
+  sheetSearchBandWizard: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 14,
+    backgroundColor: Theme.cardWhite,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
   },
   sheetSearchBandCompact: {
     paddingHorizontal: 14,
@@ -739,13 +866,32 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingVertical: 6,
   },
+  searchShellWizard: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
+  },
   sheetScroll: {
     maxHeight: 320,
     minHeight: 100,
     backgroundColor: Theme.cardWhite,
   },
+  sheetScrollWizard: {
+    maxHeight: 360,
+  },
   sheetScrollContent: {
     paddingBottom: 12,
+  },
+  sheetScrollContentWizard: {
+    paddingBottom: 16,
+    paddingTop: 4,
   },
   sheetScrollContentCompact: {
     paddingBottom: 10,
@@ -766,12 +912,23 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: Theme.cardWhite,
   },
+  placeRowWizard: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    gap: 12,
+  },
   placeRowCompact: {
     paddingVertical: 8,
     paddingHorizontal: 14,
     gap: 8,
   },
   placeRowSelected: {
+    backgroundColor: Theme.surface,
+  },
+  placeRowSelectedWizard: {
     backgroundColor: Theme.surface,
   },
   placeRowTextCol: {
@@ -790,6 +947,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
+  rowIconCircleWizard: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    backgroundColor: Theme.surface,
+    borderWidth: 0,
+  },
   rowIconCircleCompact: {
     width: 26,
     height: 26,
@@ -797,6 +961,10 @@ const styles = StyleSheet.create({
   },
   customIconCircle: {
     backgroundColor: Theme.positiveMuted,
+  },
+  customIconCircleWizard: {
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: 0,
   },
   placeRowPrimary: {
     fontSize: 12,
@@ -820,6 +988,17 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     backgroundColor: Theme.surface,
+  },
+  customAddressRowWizard: {
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 0,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 0,
+    borderTopWidth: 0,
+    gap: 12,
+    backgroundColor: Theme.positiveMutedDark,
   },
   customAddressRowCompact: {
     paddingVertical: 7,
@@ -873,6 +1052,62 @@ const sheetTypography = {
     customAddressText: styles.customAddressText,
     loadingText: styles.loadingText,
     emptyListSubtext: styles.emptyListSubtext,
+  }),
+  wizard: StyleSheet.create({
+    sheetTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      letterSpacing: -0.3,
+      color: Theme.textPrimaryDark,
+    },
+    sheetSubtitle: {
+      fontSize: 12,
+      fontWeight: "500",
+      color: Theme.textMuted,
+      lineHeight: 17,
+      marginTop: 2,
+    },
+    sectionLabelWrap: {
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: 8,
+      backgroundColor: Theme.cardWhite,
+    },
+    sectionLabel: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.7,
+      textTransform: "uppercase",
+      color: Theme.textMuted,
+    },
+    placeRowPrimary: {
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "700",
+      color: Theme.textPrimaryDark,
+    },
+    placeRowSecondary: {
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "500",
+      color: Theme.textMuted,
+    },
+    customAddressText: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: "600",
+      color: Theme.primary,
+      lineHeight: 18,
+    },
+    loadingText: {
+      fontSize: 13,
+      color: Theme.textMuted,
+    },
+    emptyListSubtext: {
+      fontSize: 13,
+      color: Theme.textMuted,
+      lineHeight: 18,
+    },
   }),
   compact: StyleSheet.create({
     sheetTitle: {

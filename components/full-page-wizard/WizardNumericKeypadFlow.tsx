@@ -1,13 +1,17 @@
 /**
- * Centered pay-style numeric entry for wizard shells — matches FullscreenNumericEntry
- * mobile layout with attribution wizard typography (small labels, docked keypad).
+ * Google Pay payout–style centered numeric entry for wizard shells.
+ * Shared by Client sale price and Partner rate so both look identical.
+ *
+ * Layout (mobile): centered recipient (avatar → name → phone) → optional field
+ * switch → title/hint → hero amount → keypad — matches GPay “Paying …” screen.
  */
-import { memo, useCallback, useMemo } from "react";
-import { Pressable, Text, useWindowDimensions, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
 
 import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
 import { NumericDisplay } from "@/components/mobile-input/NumericDisplay";
+import { NumericEntryRecipientHero } from "@/components/mobile-input/NumericEntryRecipientHero";
 import {
   applyKeypadPress,
   type KeypadKey,
@@ -22,6 +26,10 @@ export type WizardNumericKeypadField = {
   id: string;
   /** Centered title above amount (e.g. "Client sale price"). */
   label: string;
+  /** Short label for segmented switch (defaults to label). */
+  switchLabel?: string;
+  /** Field-specific hint; falls back to flow-level `hint`. */
+  hint?: string;
   rawValue: string;
   onRawValueChange: (raw: string) => void;
   optional?: boolean;
@@ -33,14 +41,31 @@ export type WizardNumericKeypadFlowProps = {
   activeFieldId?: string;
   onActiveFieldChange?: (id: string) => void;
   partyPreview?: NumericEntryPartyPreview;
-  /** Secondary line under title (attribution subtitle scale). */
+  /** Tap recipient (e.g. change partner). */
+  onPartyPress?: () => void;
+  /** Secondary line under title when a field has no own hint. */
   hint?: string;
   showDecimal?: boolean;
   prefix?: string;
   placeholder?: string;
+  /** Optional content between amount and keypad. */
+  accessory?: ReactNode;
+  /**
+   * Always use the mobile GPay layout (centered recipient + hero amount + keypad),
+   * even on wide viewports — e.g. desktop partner-rate popup.
+   */
+  forceMobileLayout?: boolean;
+  /** Tighter type + spacing for desktop popup sheets. */
+  compact?: boolean;
 };
 
-function KeypadDock({ onKey, showDecimal }: { onKey: (key: KeypadKey) => void; showDecimal: boolean }) {
+function KeypadDock({
+  onKey,
+  showDecimal,
+}: {
+  onKey: (key: KeypadKey) => void;
+  showDecimal: boolean;
+}) {
   return (
     <DecimalKeypad
       onKey={onKey}
@@ -56,19 +81,25 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   activeFieldId,
   onActiveFieldChange,
   partyPreview,
+  onPartyPress,
   hint,
   showDecimal = true,
   prefix = "₹",
   placeholder = "0",
+  accessory,
+  forceMobileLayout = false,
+  compact = false,
 }: WizardNumericKeypadFlowProps) {
   const { width } = useWindowDimensions();
-  const isDesktopKeypad = width >= Layout.wizardSteppedMaxWidth;
+  const isDesktopKeypad =
+    !forceMobileLayout && width >= Layout.wizardSteppedMaxWidth;
 
   const resolvedActiveId = activeFieldId ?? fields[0]?.id ?? "";
   const activeField =
     fields.find((field) => field.id === resolvedActiveId) ?? fields[0] ?? null;
 
   const showFieldSwitch = fields.length > 1 && onActiveFieldChange != null;
+  const activeHint = activeField?.hint ?? hint;
 
   const handleKey = useCallback(
     (key: KeypadKey) => {
@@ -80,17 +111,63 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
     [activeField],
   );
 
-  const partyCell = useMemo(() => {
+  // Web: physical keyboard mirrors the on-screen keypad (desktop popup + web mobile).
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || target?.isContentEditable) {
+        return;
+      }
+      let mapped: KeypadKey | null = null;
+      if (e.key >= "0" && e.key <= "9") mapped = e.key as KeypadKey;
+      else if (e.key === "." || e.key === ",") mapped = ".";
+      else if (e.key === "Backspace" || e.key === "Delete") mapped = "⌫";
+      if (!mapped) return;
+      e.preventDefault();
+      handleKey(mapped);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleKey]);
+
+  const partyRoleLabel =
+    partyPreview?.entityType === "supplier"
+      ? "Partner"
+      : partyPreview?.entityType === "driver"
+        ? "Driver"
+        : "Client";
+
+  /** GPay: “Paying {name}” / “Billing {name}” above the amount. */
+  const recipientCaption =
+    partyPreview?.entityType === "supplier"
+      ? "Paying"
+      : partyPreview
+        ? "Billing"
+        : undefined;
+
+  const recipientHero = useMemo(() => {
+    if (!partyPreview) return null;
+    return (
+      <NumericEntryRecipientHero
+        party={partyPreview}
+        caption={recipientCaption}
+        nameInline={Boolean(recipientCaption)}
+        compact
+        dense={compact}
+        onPress={onPartyPress}
+      />
+    );
+  }, [compact, onPartyPress, partyPreview, recipientCaption]);
+
+  /** Desktop keeps compact party row inside the card chrome. */
+  const desktopPartyCell = useMemo(() => {
     if (!partyPreview) return null;
     return (
       <WizardEntityPartyCell
-        label={
-          partyPreview.entityType === "supplier"
-            ? "Partner"
-            : partyPreview.entityType === "driver"
-              ? "Driver"
-              : "Client"
-        }
+        label={partyRoleLabel}
         name={partyPreview.name}
         subtitle={partyPreview.subtitle}
         entityType={partyPreview.entityType ?? "client"}
@@ -98,49 +175,37 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         avatarSeed={partyPreview.avatarSeed}
         organizationImageUrl={partyPreview.organizationImageUrl}
         organizationAvatarSeed={partyPreview.organizationAvatarSeed}
-        style={isDesktopKeypad ? undefined : styles.wizardKeypadPartyCard}
+        avatarSize={40}
+        onPress={onPartyPress}
+        showChevron={Boolean(onPartyPress)}
+        style={styles.wizardKeypadPartyCard}
       />
     );
-  }, [partyPreview, isDesktopKeypad]);
+  }, [onPartyPress, partyPreview, partyRoleLabel]);
 
   if (!activeField) return null;
 
-  const labelBlock = (
-    <View style={styles.wizardKeypadLabelBlock}>
-      <Text style={styles.wizardKeypadTitle}>
-        {activeField.label}
-        {!showFieldSwitch && activeField.optional ? " (optional)" : ""}
-      </Text>
-      {hint ? <Text style={styles.wizardKeypadHint}>{hint}</Text> : null}
-    </View>
-  );
-
-  const amountDisplay = (
-    <>
-      {labelBlock}
-      <NumericDisplay
-        rawValue={activeField.rawValue}
-        type="currency"
-        prefix={prefix}
-        placeholder={placeholder}
-        variant="wizard"
-      />
-      {activeField.errorMessage ? (
-        <Text style={styles.wizardKeypadError} accessibilityRole="alert">
-          {activeField.errorMessage}
-        </Text>
-      ) : null}
-    </>
-  );
-
   const fieldSwitch = showFieldSwitch ? (
-    <View style={[styles.modeRow, styles.wizardKeypadFieldSwitch]}>
+    <View
+      style={[
+        styles.modeRow,
+        styles.wizardKeypadFieldSwitch,
+        compact && styles.wizardKeypadFieldSwitchCompact,
+      ]}
+    >
       {fields.map((field) => {
         const selected = field.id === activeField.id;
+        const chipLabel =
+          field.switchLabel ??
+          (field.optional ? `${field.label} (opt.)` : field.label);
         return (
           <Pressable
             key={field.id}
-            style={[styles.modeChip, selected && styles.modeChipActive]}
+            style={[
+              styles.modeChip,
+              compact && styles.modeChipCompact,
+              selected && styles.modeChipActive,
+            ]}
             onPress={() => onActiveFieldChange?.(field.id)}
             accessibilityRole="button"
             accessibilityState={{ selected }}
@@ -148,12 +213,12 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
             <Text
               style={[
                 styles.modeChipText,
+                compact && styles.modeChipTextCompact,
                 selected && styles.modeChipTextActive,
               ]}
               numberOfLines={1}
             >
-              {field.label}
-              {field.optional ? " (opt.)" : ""}
+              {chipLabel}
             </Text>
           </Pressable>
         );
@@ -161,19 +226,65 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
     </View>
   ) : null;
 
+  // Field switch / modal chrome already name the field — skip duplicate title.
+  const showLabelBlock = !showFieldSwitch && !compact;
+  const showHintUnderAmount = Boolean(activeHint) && !compact;
+
+  const payoutStage = (
+    <View
+      style={[
+        styles.wizardKeypadPayoutStage,
+        compact && styles.wizardKeypadPayoutStageCompact,
+      ]}
+    >
+      {showLabelBlock ? (
+        <View style={styles.wizardKeypadLabelBlock}>
+          <Text
+            style={[
+              styles.wizardKeypadTitle,
+              compact && styles.wizardKeypadTitleCompact,
+            ]}
+          >
+            {activeField.label}
+            {activeField.optional ? " (optional)" : ""}
+          </Text>
+          {activeHint && !compact ? (
+            <Text style={styles.wizardKeypadHint}>{activeHint}</Text>
+          ) : null}
+        </View>
+      ) : null}
+      <NumericDisplay
+        rawValue={activeField.rawValue}
+        type="currency"
+        prefix={prefix}
+        placeholder={placeholder}
+        variant={compact ? "wizardCompact" : "hero"}
+      />
+      {activeField.errorMessage ? (
+        <Text style={styles.wizardKeypadError} accessibilityRole="alert">
+          {activeField.errorMessage}
+        </Text>
+      ) : showHintUnderAmount && showFieldSwitch ? (
+        <Text style={styles.wizardKeypadHintMuted}>{activeHint}</Text>
+      ) : (
+        <View style={styles.wizardKeypadErrorSpacer} />
+      )}
+    </View>
+  );
+
   if (isDesktopKeypad) {
     return (
       <View style={styles.wizardKeypadRoot}>
         <View style={styles.wizardKeypadDesktopCenter}>
           <View style={styles.wizardKeypadDesktopCard}>
-            {partyCell ? (
-              <View style={styles.wizardKeypadPartyInCard}>{partyCell}</View>
+            {desktopPartyCell ? (
+              <View style={styles.wizardKeypadPartyInCard}>{desktopPartyCell}</View>
+            ) : null}
+            {fieldSwitch ? (
+              <View style={styles.wizardKeypadDesktopSwitch}>{fieldSwitch}</View>
             ) : null}
             <View style={styles.wizardKeypadDesktopRow}>
-              <View style={styles.wizardKeypadAmountPane}>
-                {fieldSwitch}
-                {amountDisplay}
-              </View>
+              <View style={styles.wizardKeypadAmountPane}>{payoutStage}</View>
               <View style={styles.wizardKeypadKeysPane}>
                 <View style={styles.wizardKeypadKeysCard}>
                   <KeypadDock onKey={handleKey} showDecimal={showDecimal} />
@@ -186,20 +297,25 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
     );
   }
 
-  const amountPane = (
-    <>
-      {partyCell ? (
-        <View style={styles.wizardKeypadPartyWrap}>{partyCell}</View>
-      ) : null}
-      {fieldSwitch}
-      {amountDisplay}
-    </>
-  );
-
   return (
     <View style={styles.wizardKeypadRoot}>
-      <View style={styles.wizardKeypadBody}>{amountPane}</View>
-      <View style={flow.keypadDockWizard}>
+      <View
+        style={[
+          styles.wizardKeypadBody,
+          styles.wizardKeypadBodyMobilePay,
+          compact && styles.wizardKeypadBodyCompact,
+        ]}
+      >
+        {recipientHero ? (
+          <View style={styles.wizardKeypadRecipientWrap}>{recipientHero}</View>
+        ) : null}
+        {fieldSwitch}
+        {payoutStage}
+      </View>
+      {accessory ? (
+        <View style={styles.wizardKeypadAccessory}>{accessory}</View>
+      ) : null}
+      <View style={[flow.keypadDockWizard, flow.keypadDockWizardBleed]}>
         <KeypadDock onKey={handleKey} showDecimal={showDecimal} />
       </View>
     </View>

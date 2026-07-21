@@ -20,6 +20,7 @@ import {
 } from "@/components/mobile-input/keypad";
 import Theme from "@/constants/Theme";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
+import { PartnerRateSaleMarginStrip } from "@/features/trips/components/add-trip/PartnerRateSaleMarginStrip";
 
 type ActiveField = "rate" | "advance";
 
@@ -45,6 +46,16 @@ export interface PartnerRatesKeypadFlowProps {
   wizardShell?: boolean;
   /** Hide centered party card when parent already shows context row. */
   suppressPartyPreview?: boolean;
+  rateErrorMessage?: string;
+  advanceErrorMessage?: string;
+  /** Tap partner card to change selection (GPay recipient affordance). */
+  onPartyPress?: () => void;
+  /** Force mobile GPay layout on wide screens (desktop popup). */
+  forceMobileLayout?: boolean;
+  /** Tighter type for desktop popup sheets. */
+  compact?: boolean;
+  /** Client sale value — live sale / margin under the amount. */
+  saleValue?: string;
 }
 
 export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
@@ -57,6 +68,12 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
   keypadInset = false,
   wizardShell = false,
   suppressPartyPreview = false,
+  rateErrorMessage,
+  advanceErrorMessage,
+  onPartyPress,
+  forceMobileLayout = false,
+  compact = false,
+  saleValue,
 }: PartnerRatesKeypadFlowProps) {
   const [active, setActive] = useState<ActiveField>("rate");
   const inputPlatform = useInputPlatform();
@@ -78,12 +95,17 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
     [active, advanceRaw, onAdvancePaidChange, onPartnerRateChange, rateRaw],
   );
 
-  // Web: mirror the on-screen keypad with the physical keyboard (there is no
-  // focusable TextInput here, so keydown must be routed through handleKey).
+  // Web non-wizardShell: physical keyboard mirrors keypad (wizardShell uses
+  // WizardNumericKeypadFlow’s listener — avoid double-applying keys).
   useEffect(() => {
-    if (Platform.OS !== "web") return;
+    if (Platform.OS !== "web" || wizardShell) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || target?.isContentEditable) {
+        return;
+      }
       let mapped: KeypadKey | null = null;
       if (e.key >= "0" && e.key <= "9") mapped = e.key as KeypadKey;
       else if (e.key === "." || e.key === ",") mapped = ".";
@@ -94,7 +116,7 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleKey]);
+  }, [handleKey, wizardShell]);
 
   const useInset = keypadInset || wizardShell;
 
@@ -103,19 +125,54 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
       {
         id: "rate",
         label: "Partner rate",
+        switchLabel: "Partner rate",
+        hint,
         rawValue: rateRaw,
         onRawValueChange: onPartnerRateChange,
+        errorMessage: rateErrorMessage,
+      },
+      {
+        id: "advance",
+        label: "Advance paid",
+        switchLabel: "Advance (opt.)",
+        hint: "Optional advance already paid to this partner.",
+        rawValue: advanceRaw,
+        onRawValueChange: onAdvancePaidChange,
+        optional: true,
+        errorMessage: advanceErrorMessage,
       },
     ],
-    [onPartnerRateChange, rateRaw],
+    [
+      advanceErrorMessage,
+      advanceRaw,
+      hint,
+      onAdvancePaidChange,
+      onPartnerRateChange,
+      rateErrorMessage,
+      rateRaw,
+    ],
   );
 
   if (wizardShell) {
     return (
       <WizardNumericKeypadFlow
         fields={wizardFields}
+        activeFieldId={active}
+        onActiveFieldChange={(id) =>
+          setActive(id === "advance" ? "advance" : "rate")
+        }
         partyPreview={suppressPartyPreview ? undefined : partyPreview}
-        hint={hint}
+        onPartyPress={onPartyPress}
+        forceMobileLayout={forceMobileLayout}
+        compact={compact}
+        accessory={
+          saleValue !== undefined ? (
+            <PartnerRateSaleMarginStrip
+              saleValue={saleValue}
+              partnerRate={partnerRate}
+            />
+          ) : null
+        }
       />
     );
   }

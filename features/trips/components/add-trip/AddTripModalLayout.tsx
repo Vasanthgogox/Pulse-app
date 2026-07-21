@@ -111,9 +111,7 @@ export function AddTripModalLayout({
       stepIndex={stepIndex}
       stepTotal={stepTotal}
       onBack={onBack ?? onClose}
-      backLabel={
-        stepIndex != null && stepIndex > 1 ? "← Back" : "← Close"
-      }
+      backLabel={stepIndex != null && stepIndex > 1 ? "Back" : "Close"}
       progress={progress}
       fillBody={fillBody}
       scrollBody={scrollBody}
@@ -134,6 +132,7 @@ export function AddTripModalLayout({
             onPrimaryPress={onSubmit}
             primaryDisabled={submitDisabled}
             loading={submitting}
+            primaryTone="ink"
             hint={
               submitDisabled && !submitting
                 ? validationMessage ?? "Fill required fields to continue"

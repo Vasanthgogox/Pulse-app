@@ -40,13 +40,13 @@ export const PartyMobileWizardReview = memo(function PartyMobileWizardReview({
 }: PartyMobileWizardReviewProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const summaryMaxHeight = Math.min(300, Math.round(windowHeight * 0.34));
+  const summaryMaxHeight = Math.min(260, Math.round(windowHeight * 0.32));
 
   return (
     <View
       style={[
         styles.reviewOverlay,
-        { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 },
+        { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 },
       ]}
     >
       <View style={styles.reviewCard}>

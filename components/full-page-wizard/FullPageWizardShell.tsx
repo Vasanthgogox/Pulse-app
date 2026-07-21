@@ -9,7 +9,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ArrowLeft } from "lucide-react-native";
 
+import Theme from "@/constants/Theme";
 import { Layout } from "@/constants/Layout";
 import { dockPaddingBottom, useKeyboardVisible } from "@/lib/hooks/useKeyboardVisible";
 import { isDesktopWizardForm } from "@/lib/wizardLayout.util";
@@ -109,15 +111,33 @@ export function FullPageWizardShell({
         isSteppedDesktop && styles.pageRootSteppedDesktop,
         {
           paddingTop: insets.top + (isKeypadStep || isSteppedDesktop ? 4 : 6),
-          paddingBottom: Math.max(insets.bottom, isKeypadStep || isSteppedDesktop ? 6 : 10),
+          /** Safe area lives on the footer dock so Continue stays above the home indicator. */
+          paddingBottom: footer
+            ? 0
+            : Math.max(insets.bottom, isKeypadStep || isSteppedDesktop ? 6 : 10),
         },
       ]}
     >
-      <View style={styles.headerBar}>
-        <Pressable style={styles.headerBackBtn} onPress={onBack} accessibilityLabel="Back">
-          <Text style={styles.headerBackBtnText}>{backLabel}</Text>
+      <View
+        style={[
+          styles.headerBar,
+          isMobileWizardLayout && styles.headerBarMobile,
+          isKeypadStep && styles.headerBarKeypad,
+        ]}
+      >
+        <Pressable
+          style={[styles.headerBackBtn, isMobileWizardLayout && styles.headerBackBtnMobile]}
+          onPress={onBack}
+          accessibilityRole="button"
+          accessibilityLabel={backLabel.replace(/^←\s*/, "") || "Back"}
+          hitSlop={8}
+        >
+          <ArrowLeft size={18} color={Theme.textPrimaryDark} strokeWidth={2.5} />
+          <Text style={styles.headerBackBtnText}>
+            {backLabel.replace(/^←\s*/, "") || "Back"}
+          </Text>
         </Pressable>
-        <View style={styles.headerTitleCluster}>
+        <View style={styles.headerTitleCluster} pointerEvents="none">
           <Text
             style={[styles.titleInline, isKeypadStep && styles.titleInlineKeypad]}
             numberOfLines={1}
@@ -125,30 +145,50 @@ export function FullPageWizardShell({
             {title}
           </Text>
         </View>
-        {stepLabel ? <Text style={styles.headerStepText}>{stepLabel}</Text> : null}
+        {stepLabel ? (
+          <View style={styles.headerStepBadge}>
+            <Text style={styles.headerStepText}>{stepLabel}</Text>
+          </View>
+        ) : (
+          <View style={styles.headerStepBadgeSpacer} />
+        )}
       </View>
 
       {subtitle ? (
         <View style={[styles.pageHeaderBlock, isKeypadStep && styles.pageHeaderBlockKeypad]}>
           <Text
             style={[styles.subtitle, isKeypadStep && styles.subtitleKeypad]}
-            numberOfLines={isKeypadStep ? 2 : 4}
+            numberOfLines={isKeypadStep ? 2 : 3}
           >
             {subtitle}
           </Text>
         </View>
       ) : null}
 
-      {progress ? <View style={{ flexShrink: 0 }}>{progress}</View> : null}
+      {progress ? (
+        <View
+          style={[
+            { flexShrink: 0 },
+            isKeypadStep && styles.progressPadKeypad,
+          ]}
+        >
+          {progress}
+        </View>
+      ) : null}
 
       {body}
 
       {footer ? (
         <View
-          style={{
-            flexShrink: 0,
-            paddingBottom: dockPaddingBottom(insets.bottom, keyboardVisible, 0),
-          }}
+          style={[
+            {
+              flexShrink: 0,
+              width: "100%",
+              backgroundColor: Theme.cardWhite,
+              paddingBottom: dockPaddingBottom(insets.bottom, keyboardVisible, 8),
+            },
+            isKeypadStep && styles.footerDockKeypad,
+          ]}
         >
           {footer}
         </View>
@@ -159,15 +199,15 @@ export function FullPageWizardShell({
   return (
     <View style={styles.root}>
       <KeyboardAvoidingView
-        style={{ flex: 1, width: "100%" }}
+        style={{ flex: 1, width: "100%", minHeight: 0 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         enabled={Platform.OS !== "web"}
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
       >
         <WizardDesktopFrame
           width={width}
-          leftInsights={leftInsights}
-          rightInsights={rightInsights}
+          leftInsights={[...leftInsights]}
+          rightInsights={[...rightInsights]}
           contextPanel={contextPanel}
         >
           {page}
