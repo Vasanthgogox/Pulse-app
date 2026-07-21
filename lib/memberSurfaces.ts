@@ -32,38 +32,82 @@ export type MemberSurfaceId =
   | "finance.ledger.vehicle"
   | "finance.ledger.driver"
   | "finance.add_transaction"
+  | "finance.edit_transaction"
+  | "finance.void_adjustments"
   | "finance.invoicing"
   | "finance.pod_reconciliation"
   | "finance.business_pulse"
+  | "finance.reports"
+  | "finance.shared_ledger"
+  | "finance.trip_ledger"
+  | "finance.branding"
+  | "finance.documents_center"
+  | "finance.expenses.view"
+  | "finance.expenses.approve"
   // Sales / network
   | "sales.tab"
   | "sales.clients.view"
   | "sales.clients.create"
   | "sales.clients.edit"
+  | "sales.clients.detail"
+  | "sales.clients.analytics"
   | "sales.marketplace.post"
   | "sales.marketplace.bid"
   | "sales.network.connect"
+  | "sales.network.discover"
+  | "sales.network.stories"
   | "sales.suppliers.view"
   | "sales.suppliers.create"
+  | "sales.suppliers.edit"
+  | "sales.suppliers.detail"
+  | "sales.suppliers.analytics"
+  | "sales.load_board"
+  | "sales.from_clients"
+  | "sales.chat"
   // TripOps / dispatch
   | "tripops.tab"
   | "tripops.trips.view"
+  | "tripops.trips.detail"
   | "tripops.trips.create_asset"
   | "tripops.trips.create_aggregate"
   | "tripops.trips.assign"
-  | "tripops.trips.detail"
+  | "tripops.trips.reassign"
+  | "tripops.trips.tracking"
+  | "tripops.trips.docs"
+  | "tripops.trips.expenses"
+  | "tripops.trips.finance"
+  | "tripops.trips.verification"
+  | "tripops.trips.simulate"
+  | "tripops.trips.ratings"
   | "tripops.indents.view"
   | "tripops.indents.create"
+  | "tripops.indents.edit"
+  | "tripops.indents.cancel"
+  | "tripops.indents.broadcast"
+  | "tripops.indents.bid"
+  | "tripops.indents.award"
   | "tripops.indents.allocate"
+  | "tripops.pulse_loads"
   // Fleet (asset path)
   | "fleet.vehicles.view"
   | "fleet.vehicles.create"
+  | "fleet.vehicles.edit"
+  | "fleet.vehicles.analytics"
+  | "fleet.vehicles.documents"
   | "fleet.drivers.view"
   | "fleet.drivers.create"
-  // Team
+  | "fleet.drivers.edit"
+  | "fleet.drivers.invite"
+  | "fleet.drivers.analytics"
+  | "fleet.drivers.assign_vehicle"
+  // Team / workspace
   | "team.manage"
   | "team.invite"
-  | "team.audit";
+  | "team.audit"
+  | "workspace.settings"
+  | "workspace.kyc"
+  | "workspace.products"
+  | "workspace.notifications";
 
 export type MemberSurfaceMap = Partial<Record<MemberSurfaceId, boolean>>;
 
@@ -82,6 +126,10 @@ export type MemberSurfaceDef = {
   requires?: MemberSurfaceId;
 };
 
+const DISP: readonly Capability[] = ["dispatch", "dispatch_for_own_fleet"];
+const FIN: readonly Capability[] = ["finance_view", "finance_manage"];
+const FLEET: readonly Capability[] = ["fleet_management", "dispatch_for_own_fleet"];
+
 export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   // ── Finance ──────────────────────────────────────────────────────────────
   {
@@ -89,14 +137,14 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Finance tab",
     hint: "Open the Fiscal tab",
     domain: "finance",
-    anyOfCaps: ["finance_view", "finance_manage"],
+    anyOfCaps: FIN,
   },
   {
     id: "finance.view",
     label: "View finance",
     hint: "Ledgers, balances, reports (read)",
     domain: "finance",
-    anyOfCaps: ["finance_view", "finance_manage"],
+    anyOfCaps: FIN,
     requires: "finance.tab",
   },
   {
@@ -112,15 +160,15 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Cash sub-tab",
     hint: "Finance → Cash",
     domain: "finance",
-    anyOfCaps: ["finance_view", "finance_manage"],
+    anyOfCaps: FIN,
     requires: "finance.view",
   },
   {
     id: "finance.subtab.customers",
     label: "Customers sub-tab",
-    hint: "Finance → Customers (needs clients)",
+    hint: "Finance → Customers",
     domain: "finance",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: DISP,
     requires: "finance.view",
   },
   {
@@ -136,7 +184,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Garage sub-tab",
     hint: "Finance → Garage (asset / hybrid)",
     domain: "finance",
-    anyOfCaps: ["fleet_management", "dispatch_for_own_fleet"],
+    anyOfCaps: FLEET,
     requires: "finance.view",
   },
   {
@@ -144,7 +192,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Drivers sub-tab",
     hint: "Finance → Drivers (asset / hybrid)",
     domain: "finance",
-    anyOfCaps: ["fleet_management", "dispatch_for_own_fleet"],
+    anyOfCaps: FLEET,
     requires: "finance.view",
   },
   {
@@ -152,7 +200,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Ledger · customers",
     hint: "Cash-tab party filter: customers",
     domain: "finance",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: DISP,
     requires: "finance.subtab.cash",
   },
   {
@@ -168,7 +216,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Ledger · vehicles",
     hint: "Cash-tab party filter: vehicles",
     domain: "finance",
-    anyOfCaps: ["fleet_management", "dispatch_for_own_fleet"],
+    anyOfCaps: FLEET,
     requires: "finance.subtab.cash",
   },
   {
@@ -176,7 +224,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Ledger · drivers",
     hint: "Cash-tab party filter: drivers",
     domain: "finance",
-    anyOfCaps: ["fleet_management", "dispatch_for_own_fleet"],
+    anyOfCaps: FLEET,
     requires: "finance.subtab.cash",
   },
   {
@@ -188,11 +236,27 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     requires: "finance.manage",
   },
   {
+    id: "finance.edit_transaction",
+    label: "Edit transaction",
+    hint: "Edit existing ledger entries",
+    domain: "finance",
+    anyOfCaps: ["finance_manage"],
+    requires: "finance.manage",
+  },
+  {
+    id: "finance.void_adjustments",
+    label: "Void / adjust entries",
+    hint: "Trip finance adjustments, voids, provisions",
+    domain: "finance",
+    anyOfCaps: ["finance_manage"],
+    requires: "finance.manage",
+  },
+  {
     id: "finance.invoicing",
     label: "Invoicing",
     hint: "Execute invoices & PDF preview",
     domain: "finance",
-    anyOfCaps: ["finance_view", "finance_manage"],
+    anyOfCaps: FIN,
     requires: "finance.view",
   },
   {
@@ -200,7 +264,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "POD reconciliation",
     hint: "POD reconcile & log incoming PODs",
     domain: "finance",
-    anyOfCaps: ["finance_view", "finance_manage", "dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: [...FIN, ...DISP],
     requires: "finance.view",
   },
   {
@@ -208,8 +272,64 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Business Pulse",
     hint: "Business pulse dashboard",
     domain: "finance",
-    anyOfCaps: ["finance_view", "finance_manage"],
+    anyOfCaps: FIN,
     requires: "finance.view",
+  },
+  {
+    id: "finance.reports",
+    label: "Finance reports",
+    hint: "Report tab / export summaries",
+    domain: "finance",
+    anyOfCaps: FIN,
+    requires: "finance.view",
+  },
+  {
+    id: "finance.shared_ledger",
+    label: "Shared ledger",
+    hint: "Integrated party shared ledger views",
+    domain: "finance",
+    anyOfCaps: FIN,
+    requires: "finance.view",
+  },
+  {
+    id: "finance.trip_ledger",
+    label: "Trip ledger page",
+    hint: "Open /trip-ledger and trip cash history",
+    domain: "finance",
+    anyOfCaps: FIN,
+    requires: "finance.view",
+  },
+  {
+    id: "finance.branding",
+    label: "Invoice branding",
+    hint: "Branding settings for invoice PDFs",
+    domain: "finance",
+    anyOfCaps: FIN,
+    requires: "finance.invoicing",
+  },
+  {
+    id: "finance.documents_center",
+    label: "Documents center",
+    hint: "Org documents vault / documents-center",
+    domain: "finance",
+    anyOfCaps: [...FIN, ...DISP],
+    requires: "finance.view",
+  },
+  {
+    id: "finance.expenses.view",
+    label: "View trip expenses",
+    hint: "Fuel / toll / other expense hub (read)",
+    domain: "finance",
+    anyOfCaps: [...FIN, ...DISP],
+    requires: "finance.view",
+  },
+  {
+    id: "finance.expenses.approve",
+    label: "Approve trip expenses",
+    hint: "Approve / settle driver expense claims",
+    domain: "finance",
+    anyOfCaps: ["finance_manage"],
+    requires: "finance.expenses.view",
   },
 
   // ── Sales ────────────────────────────────────────────────────────────────
@@ -218,14 +338,14 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Network tab",
     hint: "Open Network / sales home",
     domain: "sales",
-    anyOfCaps: ["marketplace_post", "marketplace_bid", "dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: ["marketplace_post", "marketplace_bid", ...DISP],
   },
   {
     id: "sales.clients.view",
     label: "View clients",
     hint: "Clients list & party customers",
     domain: "sales",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: DISP,
     requires: "sales.tab",
   },
   {
@@ -233,7 +353,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Add client",
     hint: "Create client records",
     domain: "sales",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: DISP,
     requires: "sales.clients.view",
   },
   {
@@ -241,8 +361,24 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Edit client",
     hint: "Edit client profiles",
     domain: "sales",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: DISP,
     requires: "sales.clients.view",
+  },
+  {
+    id: "sales.clients.detail",
+    label: "Client detail",
+    hint: "Open client detail & trips",
+    domain: "sales",
+    anyOfCaps: DISP,
+    requires: "sales.clients.view",
+  },
+  {
+    id: "sales.clients.analytics",
+    label: "Client analytics",
+    hint: "Client analytics / ranking views",
+    domain: "sales",
+    anyOfCaps: DISP,
+    requires: "sales.clients.detail",
   },
   {
     id: "sales.marketplace.post",
@@ -265,7 +401,23 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Network connect",
     hint: "Send connection requests",
     domain: "sales",
-    anyOfCaps: ["marketplace_post", "marketplace_bid", "dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: ["marketplace_post", "marketplace_bid", ...DISP],
+    requires: "sales.tab",
+  },
+  {
+    id: "sales.network.discover",
+    label: "Discover network",
+    hint: "Discover orgs / grow network",
+    domain: "sales",
+    anyOfCaps: ["marketplace_post", "marketplace_bid", ...DISP],
+    requires: "sales.tab",
+  },
+  {
+    id: "sales.network.stories",
+    label: "Stories & feed",
+    hint: "View / interact with network stories",
+    domain: "sales",
+    anyOfCaps: ["marketplace_post", "marketplace_bid", ...DISP],
     requires: "sales.tab",
   },
   {
@@ -284,6 +436,54 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     anyOfCaps: ["dispatch"],
     requires: "sales.suppliers.view",
   },
+  {
+    id: "sales.suppliers.edit",
+    label: "Edit supplier",
+    hint: "Edit supplier profiles",
+    domain: "sales",
+    anyOfCaps: ["dispatch"],
+    requires: "sales.suppliers.view",
+  },
+  {
+    id: "sales.suppliers.detail",
+    label: "Supplier detail",
+    hint: "Open supplier detail & trips",
+    domain: "sales",
+    anyOfCaps: ["dispatch"],
+    requires: "sales.suppliers.view",
+  },
+  {
+    id: "sales.suppliers.analytics",
+    label: "Supplier analytics",
+    hint: "Supplier analytics views",
+    domain: "sales",
+    anyOfCaps: ["dispatch"],
+    requires: "sales.suppliers.detail",
+  },
+  {
+    id: "sales.load_board",
+    label: "Load board",
+    hint: "Open load board marketplace",
+    domain: "sales",
+    anyOfCaps: DISP,
+    requires: "sales.tab",
+  },
+  {
+    id: "sales.from_clients",
+    label: "From clients",
+    hint: "Loads / requests from clients hub",
+    domain: "sales",
+    anyOfCaps: DISP,
+    requires: "sales.tab",
+  },
+  {
+    id: "sales.chat",
+    label: "Business chat",
+    hint: "Org / partner chat threads",
+    domain: "sales",
+    anyOfCaps: [...DISP, "marketplace_post", "marketplace_bid"],
+    requires: "sales.tab",
+  },
 
   // ── TripOps ──────────────────────────────────────────────────────────────
   {
@@ -291,22 +491,22 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Trips tab",
     hint: "Open Trips home",
     domain: "tripops",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: DISP,
   },
   {
     id: "tripops.trips.view",
     label: "View trips",
     hint: "Trips list",
     domain: "tripops",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: DISP,
     requires: "tripops.tab",
   },
   {
     id: "tripops.trips.detail",
     label: "Trip detail",
-    hint: "Open trip detail, ops, verification",
+    hint: "Open trip detail page",
     domain: "tripops",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet", "finance_view", "finance_manage"],
+    anyOfCaps: [...DISP, ...FIN],
     requires: "tripops.trips.view",
   },
   {
@@ -314,7 +514,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Create trip · own fleet",
     hint: "Asset / hybrid supply mode",
     domain: "tripops",
-    anyOfCaps: ["fleet_management", "dispatch_for_own_fleet"],
+    anyOfCaps: FLEET,
     requires: "tripops.trips.view",
   },
   {
@@ -328,23 +528,127 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   {
     id: "tripops.trips.assign",
     label: "Assign driver / vehicle",
-    hint: "Assignment on trip cards & detail",
+    hint: "First assignment on trip cards & detail",
     domain: "tripops",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: DISP,
+    requires: "tripops.trips.detail",
+  },
+  {
+    id: "tripops.trips.reassign",
+    label: "Reassign assets",
+    hint: "Change driver / vehicle mid-trip",
+    domain: "tripops",
+    anyOfCaps: DISP,
+    requires: "tripops.trips.assign",
+  },
+  {
+    id: "tripops.trips.tracking",
+    label: "Trip tracking",
+    hint: "Live map, ping, location trail",
+    domain: "tripops",
+    anyOfCaps: DISP,
+    requires: "tripops.trips.detail",
+  },
+  {
+    id: "tripops.trips.docs",
+    label: "Trip documents",
+    hint: "POD / LR / trip docs tab",
+    domain: "tripops",
+    anyOfCaps: DISP,
+    requires: "tripops.trips.detail",
+  },
+  {
+    id: "tripops.trips.expenses",
+    label: "Trip expenses tab",
+    hint: "Expense hub on trip detail",
+    domain: "tripops",
+    anyOfCaps: [...DISP, ...FIN],
+    requires: "tripops.trips.detail",
+  },
+  {
+    id: "tripops.trips.finance",
+    label: "Trip finance tab",
+    hint: "Trip-level finance / settlement tab",
+    domain: "tripops",
+    anyOfCaps: [...DISP, ...FIN],
+    requires: "tripops.trips.detail",
+  },
+  {
+    id: "tripops.trips.verification",
+    label: "Trip verification",
+    hint: "Pickup / drop verification flows",
+    domain: "tripops",
+    anyOfCaps: DISP,
+    requires: "tripops.trips.detail",
+  },
+  {
+    id: "tripops.trips.simulate",
+    label: "Simulate trip status",
+    hint: "Business-simulated status advances",
+    domain: "tripops",
+    anyOfCaps: DISP,
+    requires: "tripops.trips.detail",
+  },
+  {
+    id: "tripops.trips.ratings",
+    label: "Trip ratings",
+    hint: "View / submit trip ratings",
+    domain: "tripops",
+    anyOfCaps: DISP,
     requires: "tripops.trips.detail",
   },
   {
     id: "tripops.indents.view",
     label: "View indents / pulse loads",
-    hint: "Indent list & detail (give-load path)",
+    hint: "Indent list & detail",
     domain: "tripops",
-    anyOfCaps: ["dispatch", "dispatch_for_own_fleet"],
+    anyOfCaps: DISP,
     requires: "tripops.tab",
   },
   {
     id: "tripops.indents.create",
     label: "Create indent",
-    hint: "Give-load create (aggregate / hybrid only)",
+    hint: "Give-load create (aggregate / hybrid)",
+    domain: "tripops",
+    anyOfCaps: ["dispatch"],
+    requires: "tripops.indents.view",
+  },
+  {
+    id: "tripops.indents.edit",
+    label: "Edit indent",
+    hint: "Edit draft / open loads",
+    domain: "tripops",
+    anyOfCaps: ["dispatch"],
+    requires: "tripops.indents.view",
+  },
+  {
+    id: "tripops.indents.cancel",
+    label: "Cancel indent",
+    hint: "Cancel / close a load",
+    domain: "tripops",
+    anyOfCaps: ["dispatch"],
+    requires: "tripops.indents.view",
+  },
+  {
+    id: "tripops.indents.broadcast",
+    label: "Broadcast / share load",
+    hint: "Share draft to network / stories",
+    domain: "tripops",
+    anyOfCaps: ["dispatch"],
+    requires: "tripops.indents.view",
+  },
+  {
+    id: "tripops.indents.bid",
+    label: "Bid on indent",
+    hint: "Submit supplier quotes",
+    domain: "tripops",
+    anyOfCaps: DISP,
+    requires: "tripops.indents.view",
+  },
+  {
+    id: "tripops.indents.award",
+    label: "Award bid",
+    hint: "Accept a quote / award partner",
     domain: "tripops",
     anyOfCaps: ["dispatch"],
     requires: "tripops.indents.view",
@@ -352,17 +656,25 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   {
     id: "tripops.indents.allocate",
     label: "Allocate indent",
-    hint: "Indent allocation & supplier assign",
+    hint: "Indent allocation & supplier assign vehicle",
     domain: "tripops",
     anyOfCaps: ["dispatch"],
     requires: "tripops.indents.view",
+  },
+  {
+    id: "tripops.pulse_loads",
+    label: "Pulse loads hub",
+    hint: "Pulse loads / load center home",
+    domain: "tripops",
+    anyOfCaps: DISP,
+    requires: "tripops.tab",
   },
 
   // ── Fleet ────────────────────────────────────────────────────────────────
   {
     id: "fleet.vehicles.view",
     label: "View vehicles",
-    hint: "Resources / party vehicles (asset / hybrid)",
+    hint: "Resources / party vehicles",
     domain: "fleet",
     anyOfCaps: ["fleet_management"],
   },
@@ -375,9 +687,33 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     requires: "fleet.vehicles.view",
   },
   {
+    id: "fleet.vehicles.edit",
+    label: "Edit vehicle",
+    hint: "Edit vehicle profile & docs",
+    domain: "fleet",
+    anyOfCaps: ["fleet_management"],
+    requires: "fleet.vehicles.view",
+  },
+  {
+    id: "fleet.vehicles.analytics",
+    label: "Vehicle analytics",
+    hint: "Vehicle PnL / analytics",
+    domain: "fleet",
+    anyOfCaps: ["fleet_management"],
+    requires: "fleet.vehicles.view",
+  },
+  {
+    id: "fleet.vehicles.documents",
+    label: "Vehicle documents",
+    hint: "RC / insurance / fitness vault",
+    domain: "fleet",
+    anyOfCaps: ["fleet_management"],
+    requires: "fleet.vehicles.view",
+  },
+  {
     id: "fleet.drivers.view",
     label: "View drivers",
-    hint: "Resources / party drivers (asset / hybrid)",
+    hint: "Resources / party drivers",
     domain: "fleet",
     anyOfCaps: ["fleet_management"],
   },
@@ -389,21 +725,55 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     anyOfCaps: ["fleet_management"],
     requires: "fleet.drivers.view",
   },
+  {
+    id: "fleet.drivers.edit",
+    label: "Edit driver",
+    hint: "Edit driver profile",
+    domain: "fleet",
+    anyOfCaps: ["fleet_management"],
+    requires: "fleet.drivers.view",
+  },
+  {
+    id: "fleet.drivers.invite",
+    label: "Invite driver to app",
+    hint: "Send fleet driver invite / OTP link",
+    domain: "fleet",
+    anyOfCaps: ["fleet_management"],
+    requires: "fleet.drivers.view",
+  },
+  {
+    id: "fleet.drivers.analytics",
+    label: "Driver analytics",
+    hint: "Driver ranking / analytics",
+    domain: "fleet",
+    anyOfCaps: ["fleet_management"],
+    requires: "fleet.drivers.view",
+  },
+  {
+    id: "fleet.drivers.assign_vehicle",
+    label: "Assign vehicle to driver",
+    hint: "Link driver ↔ vehicle on roster",
+    domain: "fleet",
+    anyOfCaps: ["fleet_management"],
+    requires: "fleet.drivers.view",
+  },
 
-  // ── Team ─────────────────────────────────────────────────────────────────
+  // ── Team / workspace ─────────────────────────────────────────────────────
+  // Not operating-model gated: every business org can invite/manage team.
+  // `team_manage` is membership-role based and never emitted by getCapabilitiesFromProfile.
   {
     id: "team.manage",
     label: "Manage team",
     hint: "Access control & member roles",
     domain: "team",
-    anyOfCaps: ["team_manage"],
+    anyOfCaps: [...DISP, ...FIN, "fleet_management"],
   },
   {
     id: "team.invite",
     label: "Invite members",
     hint: "Send team invites",
     domain: "team",
-    anyOfCaps: ["team_manage"],
+    anyOfCaps: [...DISP, ...FIN, "fleet_management"],
     requires: "team.manage",
   },
   {
@@ -411,8 +781,36 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Audit trail",
     hint: "Workspace audit log",
     domain: "team",
-    anyOfCaps: ["team_manage"],
+    anyOfCaps: [...DISP, ...FIN, "fleet_management"],
     requires: "team.manage",
+  },
+  {
+    id: "workspace.settings",
+    label: "Workspace settings",
+    hint: "Org settings / operating model (non-owner fields)",
+    domain: "team",
+    anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+  },
+  {
+    id: "workspace.kyc",
+    label: "KYC / business verify",
+    hint: "View or update org KYC documents",
+    domain: "team",
+    anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+  },
+  {
+    id: "workspace.products",
+    label: "Workspace products",
+    hint: "Product catalog / modules panel",
+    domain: "team",
+    anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+  },
+  {
+    id: "workspace.notifications",
+    label: "Notifications",
+    hint: "Org notification center",
+    domain: "team",
+    anyOfCaps: [...DISP, ...FIN, "fleet_management"],
   },
 ] as const;
 
@@ -464,6 +862,27 @@ export function orgAllowsSurface(
 }
 
 /**
+ * When catalog grows, fill missing child surfaces under already-enabled parents
+ * so existing members keep access until an owner explicitly turns them off.
+ */
+export function hydrateMemberSurfaces(
+  stored: MemberSurfaceMap,
+  orgCaps: Capability[],
+): MemberSurfaceMap {
+  const out: MemberSurfaceMap = { ...stored };
+  // Topological-ish: walk catalog order (parents declared before children).
+  for (const def of MEMBER_SURFACE_CATALOG) {
+    if (out[def.id] !== undefined) continue;
+    if (!orgAllowsSurface(orgCaps, def.id)) continue;
+    if (!def.requires) continue;
+    if (out[def.requires] === true) {
+      out[def.id] = true;
+    }
+  }
+  return out;
+}
+
+/**
  * Default surface map for a platform role preset.
  * Only surfaces the org allows should be persisted as true by the UI.
  */
@@ -488,9 +907,7 @@ export function defaultSurfacesForRole(
       );
     case "sales":
       return allOn(
-        MEMBER_SURFACE_CATALOG.filter(
-          (s) => s.domain === "sales" || s.id === "sales.clients.view",
-        ).map((s) => s.id),
+        MEMBER_SURFACE_CATALOG.filter((s) => s.domain === "sales").map((s) => s.id),
       );
     case "tripops":
       return allOn(
@@ -499,21 +916,26 @@ export function defaultSurfacesForRole(
         ).map((s) => s.id),
       );
     case "planner":
-      return allOn([
-        "sales.tab",
-        "sales.clients.view",
-        "sales.clients.create",
-        "tripops.tab",
-        "tripops.indents.view",
-        "tripops.indents.create",
-        "tripops.indents.allocate",
-      ]);
+      return allOn(
+        MEMBER_SURFACE_CATALOG.filter(
+          (s) =>
+            s.id.startsWith("sales.") ||
+            s.id.startsWith("tripops.indents.") ||
+            s.id === "tripops.tab" ||
+            s.id === "tripops.pulse_loads",
+        ).map((s) => s.id),
+      );
     case "operator":
       return allOn([
         "tripops.tab",
         "tripops.trips.view",
         "tripops.trips.detail",
         "tripops.trips.assign",
+        "tripops.trips.reassign",
+        "tripops.trips.tracking",
+        "tripops.trips.docs",
+        "tripops.trips.expenses",
+        "tripops.trips.verification",
         "fleet.drivers.view",
         "fleet.vehicles.view",
       ]);
@@ -607,21 +1029,33 @@ function dependsOn(child: MemberSurfaceId, parent: MemberSurfaceId): boolean {
   return false;
 }
 
+export type SurfaceDomainKey = FunctionalRole | "team";
+
 /** Sync domain master switches → surface bulk on/off for that domain. */
 export function applyDomainToggle(
   current: MemberSurfaceMap,
-  domain: FunctionalRole,
+  domain: SurfaceDomainKey,
   next: boolean,
   orgCaps: Capability[],
 ): MemberSurfaceMap {
   const out: MemberSurfaceMap = { ...current };
   const domains: MemberSurfaceDef["domain"][] =
-    domain === "tripops" ? ["tripops", "fleet"] : [domain];
+    domain === "tripops"
+      ? ["tripops", "fleet"]
+      : domain === "team"
+        ? ["team"]
+        : [domain];
   const ids = MEMBER_SURFACE_CATALOG.filter((s) =>
     domains.includes(s.domain),
   ).map((s) => s.id);
   if (!next) {
     for (const id of ids) out[id] = false;
+    return out;
+  }
+  if (domain === "team") {
+    for (const id of ids) {
+      if (orgAllowsSurface(orgCaps, id)) out[id] = true;
+    }
     return out;
   }
   const defaults = defaultSurfacesForRole(domain, orgCaps);
@@ -630,7 +1064,6 @@ export function applyDomainToggle(
       out[id] = true;
       continue;
     }
-    // Sensible defaults when enabling a domain: tab + view surfaces
     if (
       orgAllowsSurface(orgCaps, id) &&
       (id.endsWith(".tab") ||

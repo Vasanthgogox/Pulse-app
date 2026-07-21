@@ -7,6 +7,7 @@ import type { Capability } from "@/lib/capabilities";
 import {
   defaultSurfacesForRole,
   domainsFromSurfaces,
+  hydrateMemberSurfaces,
   type MemberSurfaceMap,
 } from "@/lib/memberSurfaces";
 
@@ -190,14 +191,14 @@ export function domainsFromMember(
   return domainsFromPlatformRole(platformRoleFromMember(member));
 }
 
-/** Resolve surface map — explicit surfaces, else derive from role (unfiltered). */
+/** Resolve surface map — explicit surfaces (hydrated), else derive from role. */
 export function surfacesFromMember(
   member: Pick<OrgMember, "role" | "permissions">,
   orgCaps: Capability[] = [],
 ): MemberSurfaceMap {
   const raw = member.permissions as TeamInvitePermissions | null | undefined;
   if (raw?.surfaces && typeof raw.surfaces === "object") {
-    return { ...raw.surfaces };
+    return hydrateMemberSurfaces({ ...raw.surfaces }, orgCaps);
   }
   const role = platformRoleFromMember(member);
   if (!role) return {};

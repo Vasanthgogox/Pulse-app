@@ -6,6 +6,7 @@
 import { useOptionalActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import {
   defaultSurfacesForRole,
+  hydrateMemberSurfaces,
   memberHasSurface,
   type MemberSurfaceId,
   type MemberSurfaceMap,
@@ -38,7 +39,7 @@ export function useMemberAccess(): MemberAccessApi {
   const surfaces = useMemo<MemberSurfaceMap>(() => {
     if (!workspace) return {};
     if (workspace.memberSurfaces && Object.keys(workspace.memberSurfaces).length > 0) {
-      return workspace.memberSurfaces;
+      return hydrateMemberSurfaces(workspace.memberSurfaces, orgCapabilities);
     }
     if (workspace.memberPlatformRole) {
       return defaultSurfacesForRole(workspace.memberPlatformRole, orgCapabilities);

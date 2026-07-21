@@ -30,12 +30,14 @@ import {
   TEAM_INVITE_ROLE_OPTIONS,
   type MemberDomainFlags,
   type PlatformTeamRole,
+  type FunctionalRole,
 } from "@/features/organization/utils/teamInviteRoles.util";
 import {
   canAccessClients,
   canAccessFinance,
   canAccessIndents,
   canAccessTrips,
+  hasBusinessCapabilities,
 } from "@/lib/capabilities";
 import {
   applyDomainToggle,
@@ -155,8 +157,18 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
         orgCaps.includes("marketplace_bid") ||
         canAccessClients(orgCaps),
       tripops: canAccessIndents(orgCaps) || canAccessTrips(orgCaps),
+      // team_manage is never on org-model caps — any business org can grant team surfaces
+      team: hasBusinessCapabilities(orgCaps),
     }),
     [orgCaps],
+  );
+
+  const teamDomainEnabled = useMemo(
+    () =>
+      MEMBER_SURFACE_CATALOG.some(
+        (s) => s.domain === "team" && surfaces[s.id] === true,
+      ),
+    [surfaces],
   );
 
   const canEdit = isOwner && member?.role !== "owner";
@@ -187,20 +199,22 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
   );
 
   const handleToggleDomain = useCallback(
-    (key: keyof MemberDomainFlags, next: boolean) => {
+    (key: FunctionalRole | "team", next: boolean) => {
       setSurfaces((prev) => {
         const updated = applyDomainToggle(prev, key, next, orgCaps);
-        setDomains(domainsFromSurfaces(updated));
-        if (platformRole === "admin" && !next) {
-          setPlatformRole(
-            domainsFromSurfaces(updated).tripops
-              ? "tripops"
-              : domainsFromSurfaces(updated).finance
-                ? "finance"
-                : domainsFromSurfaces(updated).sales
-                  ? "sales"
-                  : "tripops",
-          );
+        if (key !== "team") {
+          setDomains(domainsFromSurfaces(updated));
+          if (platformRole === "admin" && !next) {
+            setPlatformRole(
+              domainsFromSurfaces(updated).tripops
+                ? "tripops"
+                : domainsFromSurfaces(updated).finance
+                  ? "finance"
+                  : domainsFromSurfaces(updated).sales
+                    ? "sales"
+                    : "tripops",
+            );
+          }
         }
         return updated;
       });
@@ -547,7 +561,9 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
           <DomainPermissionToggleRow
             key={def.key}
             def={def}
-            domainEnabled={domains[def.key]}
+            domainEnabled={
+              def.key === "team" ? teamDomainEnabled : domains[def.key]
+            }
             surfaces={surfaces}
             orgCaps={orgCaps}
             canEdit={canEdit && !busy}

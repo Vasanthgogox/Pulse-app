@@ -26,6 +26,7 @@ import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPa
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import { ROUTES, tripExpenseEntryEditRoute } from "@/lib/routes";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { formatPhoneForDisplay } from "@/lib/phoneLookup";
 import { supabase } from "@/lib/supabase";
@@ -712,6 +713,12 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+  const { can: canSurface } = useMemberAccess();
+  const canTripFinanceTab = canSurface("tripops.trips.finance");
+  const canTripExpensesTab = canSurface("tripops.trips.expenses");
+  const canTripDocsTab = canSurface("tripops.trips.docs");
+  const canTripTrackingTab = canSurface("tripops.trips.tracking");
+  const canTripReassign = canSurface("tripops.trips.reassign");
 
   const manifestRefAssetInsights = useManifestRefAssetInsights({
     orgId:
@@ -1992,7 +1999,8 @@ export default function TripDetailScreen({
   };
 
   const tripCompleted = isTripCompleted(trip);
-  const canChangeManifestAssets = detail.canAssign && !tripCompleted;
+  const canChangeManifestAssets =
+    detail.canAssign && canTripReassign && !tripCompleted;
   const canOpenReassign =
     canChangeManifestAssets && (!isAggregate || !reassignMigrationBlocked);
   const effectiveStatusLower = tripCompleted
@@ -2992,29 +3000,31 @@ export default function TripDetailScreen({
                   Journey
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.refTabBtn,
-                  activeTab === "finance" && styles.refTabBtnActive,
-                ]}
-                onPress={() => setActiveTab("finance")}
-                activeOpacity={0.85}
-              >
-                <Feather
-                  name="credit-card"
-                  size={12}
-                  color={activeTab === "finance" ? "#818cf8" : "#94a3b8"}
-                />
-                <Text
+              {canTripFinanceTab ? (
+                <TouchableOpacity
                   style={[
-                    styles.refTabBtnText,
-                    activeTab === "finance" && styles.refTabBtnTextActive,
+                    styles.refTabBtn,
+                    activeTab === "finance" && styles.refTabBtnActive,
                   ]}
+                  onPress={() => setActiveTab("finance")}
+                  activeOpacity={0.85}
                 >
-                  Finance
-                </Text>
-              </TouchableOpacity>
-              {!isAggregate ? (
+                  <Feather
+                    name="credit-card"
+                    size={12}
+                    color={activeTab === "finance" ? "#818cf8" : "#94a3b8"}
+                  />
+                  <Text
+                    style={[
+                      styles.refTabBtnText,
+                      activeTab === "finance" && styles.refTabBtnTextActive,
+                    ]}
+                  >
+                    Finance
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              {!isAggregate && canTripExpensesTab ? (
                 <TouchableOpacity
                   style={[
                     styles.refTabBtn,
@@ -3038,33 +3048,36 @@ export default function TripDetailScreen({
                   </Text>
                 </TouchableOpacity>
               ) : null}
-              <TouchableOpacity
-                style={[
-                  styles.refTabBtn,
-                  activeTab === "docs" && styles.refTabBtnActive,
-                ]}
-                onPress={() => setActiveTab("docs")}
-                activeOpacity={0.85}
-              >
-                <Feather
-                  name="shield"
-                  size={12}
-                  color={activeTab === "docs" ? "#818cf8" : "#94a3b8"}
-                />
-                <Text
+              {canTripDocsTab ? (
+                <TouchableOpacity
                   style={[
-                    styles.refTabBtnText,
-                    activeTab === "docs" && styles.refTabBtnTextActive,
+                    styles.refTabBtn,
+                    activeTab === "docs" && styles.refTabBtnActive,
                   ]}
+                  onPress={() => setActiveTab("docs")}
+                  activeOpacity={0.85}
                 >
-                  Vault
-                </Text>
-              </TouchableOpacity>
+                  <Feather
+                    name="shield"
+                    size={12}
+                    color={activeTab === "docs" ? "#818cf8" : "#94a3b8"}
+                  />
+                  <Text
+                    style={[
+                      styles.refTabBtnText,
+                      activeTab === "docs" && styles.refTabBtnTextActive,
+                    ]}
+                  >
+                    Vault
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <PersistentTabPanel active={activeTab === "trip"}>
               <>
-                {isTripTrackingActive(trip?.status, trip?.completed_at) ? (
+                {canTripTrackingTab &&
+                isTripTrackingActive(trip?.status, trip?.completed_at) ? (
                   <TripDetailTrackingHub
                     onOpenLiveTracking={() => detail.setShowTrackingModal(true)}
                     deliveryPlan={liveTrackingDeliveryPlan}
@@ -3547,12 +3560,16 @@ export default function TripDetailScreen({
                         label: "Journey Log",
                         icon: "activity" as const,
                       },
-                      {
-                        id: "finance" as const,
-                        label: "Finance Hub",
-                        icon: "credit-card" as const,
-                      },
-                      ...(!isAggregate
+                      ...(canTripFinanceTab
+                        ? [
+                            {
+                              id: "finance" as const,
+                              label: "Finance Hub",
+                              icon: "credit-card" as const,
+                            },
+                          ]
+                        : []),
+                      ...(!isAggregate && canTripExpensesTab
                         ? [
                             {
                               id: "expenses" as const,
@@ -3561,11 +3578,15 @@ export default function TripDetailScreen({
                             },
                           ]
                         : []),
-                      {
-                        id: "docs" as const,
-                        label: "Asset Vault",
-                        icon: "shield" as const,
-                      },
+                      ...(canTripDocsTab
+                        ? [
+                            {
+                              id: "docs" as const,
+                              label: "Asset Vault",
+                              icon: "shield" as const,
+                            },
+                          ]
+                        : []),
                     ] as const
                   ).map((tab) => {
                     const active = activeTab === tab.id;

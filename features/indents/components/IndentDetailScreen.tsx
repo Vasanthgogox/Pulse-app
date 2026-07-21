@@ -689,19 +689,33 @@ export function IndentDetailScreen({
       ? Math.round(((clientPriceNum - supplierTargetNum) / clientPriceNum) * 100)
       : null;
   const hasMyPendingQuote = myQuoteStatus === "pending";
-  const canSupplierBid =
-    !isOwner && SUPPLIER_BID_ENABLED_STATUSES.has(statusLower);
-  const canOpenQuoteModal =
-    canSupplierBid && statusLower !== "awarded" && statusLower !== "completed";
   const isLockedStatus = LOCKED_INDENT_STATUSES.has(statusLower);
-  const canCancelLoad = canUseSuppliers && isOwner && !isLockedStatus;
-  const canEditLoad = canUseSuppliers && isOwner && !isLockedStatus;
+  const canCancelLoad =
+    canUseSuppliers &&
+    isOwner &&
+    !isLockedStatus &&
+    canSurface("tripops.indents.cancel");
+  const canEditLoad =
+    canUseSuppliers &&
+    isOwner &&
+    !isLockedStatus &&
+    canSurface("tripops.indents.edit");
   const canBroadcast =
-    canUseSuppliers && isOwner && statusLower === "draft";
+    canUseSuppliers &&
+    isOwner &&
+    statusLower === "draft" &&
+    canSurface("tripops.indents.broadcast");
   const canAward =
     statusLower !== "awarded" &&
     statusLower !== "completed" &&
-    statusLower !== "deployed";
+    statusLower !== "deployed" &&
+    canSurface("tripops.indents.award");
+  const canSupplierBid =
+    !isOwner &&
+    SUPPLIER_BID_ENABLED_STATUSES.has(statusLower) &&
+    canSurface("tripops.indents.bid");
+  const canOpenQuoteModal =
+    canSupplierBid && statusLower !== "awarded" && statusLower !== "completed";
   const liveBidsCount = isOwner ? quotes.length : myQuote ? 1 : 0;
   const isListeningForBids =
     isOwner &&

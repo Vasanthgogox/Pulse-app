@@ -33,7 +33,7 @@ const DOMAIN_ACCENT: Record<FunctionalRole | "fleet" | "team", string> = {
 };
 
 export type DomainToggleRowDef = {
-  key: FunctionalRole;
+  key: FunctionalRole | "team";
   label: string;
   hint: string;
 };
@@ -183,17 +183,22 @@ export const DOMAIN_TOGGLE_ROWS: DomainToggleRowDef[] = [
   {
     key: "finance",
     label: "Finance",
-    hint: "Fiscal tab, ledgers, invoicing, POD",
+    hint: "Fiscal tab, ledgers, invoicing, POD, reports",
   },
   {
     key: "sales",
     label: "Sales / Network",
-    hint: "Network, clients, marketplace, suppliers",
+    hint: "Network, clients, suppliers, chat, load board",
   },
   {
     key: "tripops",
     label: "TripOps + Fleet",
-    hint: "Trips, indents, assign, vehicles, drivers",
+    hint: "Trips, indents, tracking, docs, vehicles, drivers",
+  },
+  {
+    key: "team",
+    label: "Team / Workspace",
+    hint: "Access control, invites, audit, settings, KYC",
   },
 ];
 

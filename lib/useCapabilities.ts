@@ -13,6 +13,7 @@ import {
 import {
   capabilitiesFromMemberSurfaces,
   defaultSurfacesForRole,
+  hydrateMemberSurfaces,
 } from "@/lib/memberSurfaces";
 import { useMemo } from "react";
 
@@ -59,7 +60,7 @@ export function useCapabilities(): Capability[] {
 
     const surfaces =
       memberSurfaces && Object.keys(memberSurfaces).length > 0
-        ? memberSurfaces
+        ? hydrateMemberSurfaces(memberSurfaces, orgCaps)
         : memberPlatformRole
           ? defaultSurfacesForRole(memberPlatformRole, orgCaps)
           : {};
