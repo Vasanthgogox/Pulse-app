@@ -1691,14 +1691,17 @@ export default function DriverDashboard() {
                 <View
                   style={[
                     styles.assignedMapCallout,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    {
+                      backgroundColor: Theme.buttonDark,
+                      borderColor: 'rgba(255,255,255,0.16)',
+                    },
                   ]}
                 >
-                  <Text style={[styles.assignedMapCalloutTitle, { color: colors.text }]}>
+                  <Text style={[styles.assignedMapCalloutTitle, { color: Theme.buttonDarkText }]}>
                     You
                   </Text>
                   <Text
-                    style={[styles.assignedMapCalloutSub, { color: colors.textMuted }]}
+                    style={[styles.assignedMapCalloutSub, { color: Theme.textOnDarkMuted }]}
                     numberOfLines={2}
                   >
                     {locationLabel ?? 'Current location'}
@@ -1719,14 +1722,17 @@ export default function DriverDashboard() {
                 <View
                   style={[
                     styles.assignedMapCallout,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    {
+                      backgroundColor: Theme.buttonDark,
+                      borderColor: 'rgba(255,255,255,0.16)',
+                    },
                   ]}
                 >
-                  <Text style={[styles.assignedMapCalloutTitle, { color: colors.text }]}>
+                  <Text style={[styles.assignedMapCalloutTitle, { color: Theme.buttonDarkText }]}>
                     Truck
                   </Text>
                   <Text
-                    style={[styles.assignedMapCalloutSub, { color: colors.textMuted }]}
+                    style={[styles.assignedMapCalloutSub, { color: Theme.textOnDarkMuted }]}
                     numberOfLines={2}
                   >
                     {activeGuidanceStep === 'transit' ? 'Moving to drop-off' : 'On trip'}
@@ -2006,12 +2012,12 @@ export default function DriverDashboard() {
             {
               top: insets.top + 12,
               alignSelf: 'center',
-              backgroundColor: colors.text,
+              backgroundColor: Theme.buttonDark,
               pointerEvents: 'none',
             },
           ]}
         >
-          <Text style={[styles.toastText, { color: colors.surface }]} numberOfLines={2}>
+          <Text style={[styles.toastText, { color: Theme.buttonDarkText }]} numberOfLines={2}>
             {toastMessage}
           </Text>
         </View>
@@ -2996,7 +3002,7 @@ const styles = StyleSheet.create({
   toastText: {
     fontSize: 14,
     fontWeight: '700',
-    color: Theme.textOnDark,
+    color: Theme.buttonDarkText,
     letterSpacing: 0.5,
   },
   locationRow: {

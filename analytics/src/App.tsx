@@ -6,6 +6,7 @@ import { AuditTrail } from '@/components/queue/AuditTrail';
 import { OrgWorkspace } from '@/components/workspace/OrgWorkspace';
 import { VerificationActionPanel } from '@/components/workspace/VerificationActionPanel';
 import { Badge } from '@/components/ui/badge';
+import { supabaseConfigError } from '@/lib/supabase';
 
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
@@ -125,6 +126,35 @@ function AdminShell() {
 }
 
 export default function App() {
+  if (supabaseConfigError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+        <div className="max-w-lg space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Shield className="size-4 text-primary" />
+            <h1 className="text-sm font-bold">Admin Console — config required</h1>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">{supabaseConfigError}</p>
+          <ol className="list-decimal space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+            <li>
+              Open Supabase Dashboard → Project Settings → API
+            </li>
+            <li>
+              Copy the <span className="font-semibold text-foreground">service_role</span> secret
+              into repo-root <code className="rounded bg-muted px-1">.env</code> as{" "}
+              <code className="rounded bg-muted px-1">SUPABASE_SERVICE_ROLE_KEY=...</code>
+            </li>
+            <li>
+              Restart analytics:{" "}
+              <code className="rounded bg-muted px-1">npm run dev</code> in{" "}
+              <code className="rounded bg-muted px-1">analytics/</code>
+            </li>
+          </ol>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <AdminDataProvider>
       <AdminShell />

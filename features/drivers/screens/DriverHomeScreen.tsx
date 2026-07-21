@@ -4517,15 +4517,15 @@ export default function DriverRadarScreen() {
                     style={[
                       styles.assignedMapCallout,
                       {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
+                        backgroundColor: Theme.buttonDark,
+                        borderColor: "rgba(255,255,255,0.16)",
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.assignedMapCalloutTitle,
-                        { color: colors.text },
+                        { color: Theme.buttonDarkText },
                       ]}
                     >
                       You
@@ -4533,7 +4533,7 @@ export default function DriverRadarScreen() {
                     <Text
                       style={[
                         styles.assignedMapCalloutSub,
-                        { color: colors.textMuted },
+                        { color: Theme.textOnDarkMuted },
                       ]}
                       numberOfLines={2}
                     >
@@ -5718,14 +5718,14 @@ export default function DriverRadarScreen() {
             {
               top: insets.top + 12,
               alignSelf: "center",
-              backgroundColor: colors.text,
+              backgroundColor: Theme.buttonDark,
             },
           ]}
           pointerEvents="none"
         >
-          <FontAwesome name="location-arrow" size={14} color={colors.surface} />
+          <FontAwesome name="location-arrow" size={14} color={Theme.buttonDarkText} />
           <Text
-            style={[styles.toastText, { color: colors.surface }]}
+            style={[styles.toastText, { color: Theme.buttonDarkText }]}
             numberOfLines={2}
           >
             {toastMessage}
@@ -6322,7 +6322,7 @@ const styles = withWebSafeShadows(
   toastText: {
     fontSize: 14,
     fontWeight: "700",
-    color: Theme.textOnDark,
+    color: Theme.buttonDarkText,
     letterSpacing: 0.5,
   },
   locationRow: {

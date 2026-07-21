@@ -690,7 +690,9 @@ export function TripPhoneAssignmentWizard({
                   {showReassignRail ? (
                     <View
                       style={
-                        reassignRailDesktop ? styles.reassignRailColumn : undefined
+                        (reassignRailDesktop
+                          ? styles.reassignRailColumn
+                          : styles.reassignMobileRail) as ViewStyle
                       }
                     >
                       <TripPhoneReassignContextRail
@@ -719,6 +721,9 @@ export function TripPhoneAssignmentWizard({
                   <View
                     style={[
                       styles.reassignStepMain,
+                      !reassignRailDesktop && showReassignRail
+                        ? styles.reassignStepMainMobile
+                        : null,
                       reassignRailDesktop && styles.reassignStepMainDesktop,
                     ]}
                   >
@@ -1012,13 +1017,22 @@ const styles = {
     flex: 1,
     minHeight: 0,
     width: "100%",
-    gap: 0,
+    gap: 8,
+  },
+  reassignMobileRail: {
+    flexShrink: 0,
+    width: "100%",
   },
   reassignStepMain: {
     flex: 1,
     minWidth: 0,
     minHeight: 0,
     gap: 12,
+  },
+  reassignStepMainMobile: {
+    gap: 6,
+    flexGrow: 1,
+    flexShrink: 1,
   },
   reassignStepMainDesktop: {
     paddingTop: 4,

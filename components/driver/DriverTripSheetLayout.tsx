@@ -111,6 +111,9 @@ export function HeroAssignerBlock({
             borderStyle={sheetStyles.heroAvatarBorder}
           />
           <View style={sheetStyles.heroAssignerTextCol}>
+            <Text style={sheetStyles.heroAssignLabel} numberOfLines={1}>
+              Assigned by
+            </Text>
             {primary ? (
               <Text style={sheetStyles.heroAssignPrimary} numberOfLines={1}>
                 {primary}
@@ -319,6 +322,13 @@ export const sheetStyles = StyleSheet.create({
     minWidth: 0,
     gap: 1,
     justifyContent: "center",
+  },
+  heroAssignLabel: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.72)",
+    letterSpacing: 0.2,
+    lineHeight: 11,
   },
   heroAssignPrimary: {
     fontSize: 12,

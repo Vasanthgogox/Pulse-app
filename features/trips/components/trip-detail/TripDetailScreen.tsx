@@ -8619,9 +8619,10 @@ const neoStyles = StyleSheet.create({
   },
   laneActionBtnMobile: {
     minHeight: 44,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    gap: 5,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    gap: 8,
+    borderRadius: 14,
   },
   laneActionBtnPrimary: {
     backgroundColor: Theme.buttonPrimary,
@@ -8643,7 +8644,7 @@ const neoStyles = StyleSheet.create({
     lineHeight: 14,
   },
   laneActionBtnTextMobile: {
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 13,
     letterSpacing: 0.1,
   },

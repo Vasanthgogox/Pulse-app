@@ -22,14 +22,14 @@ export function TripListAssignerRow({
   const primary = assigner?.linePrimary.trim() ?? "";
   const secondary = assigner?.lineSecondary.trim() ?? "";
   const hasLines = Boolean(primary || secondary);
-  const avatarSize = compact ? 30 : 34;
+  const avatarSize = compact ? 28 : 34;
   const labelStyle = compact ? styles.labelCompact : styles.label;
   const primaryStyle = compact ? styles.primaryCompact : styles.primary;
   const secondaryStyle = compact ? styles.secondaryCompact : styles.secondary;
 
   if (!assigner || !hasLines) {
     return (
-      <View style={styles.row}>
+      <View style={[styles.row, compact && styles.rowCompact]}>
         <View style={styles.avatarWrap}>
           <PartyAvatar
             name={fallback}
@@ -50,10 +50,10 @@ export function TripListAssignerRow({
     );
   }
 
-  const avatarName = primary || assigner.orgName || "Fleet";
+  const avatarName = assigner.orgName || primary || "Fleet";
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, compact && styles.rowCompact]}>
       <View style={styles.avatarWrap}>
         <PartyAvatar
           name={avatarName}
@@ -71,7 +71,9 @@ export function TripListAssignerRow({
           Assigned by
         </Text>
         <Text style={styles.partyLine} numberOfLines={1}>
-          <Text style={[primaryStyle, { color: textColor }]}>{primary}</Text>
+          <Text style={[primaryStyle, { color: textColor }]}>
+            {primary || avatarName}
+          </Text>
           {secondary ? (
             <>
               <Text style={[styles.dot, { color: mutedColor }]}> · </Text>
@@ -89,24 +91,27 @@ export function TripListAssignerRow({
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 7,
-    marginTop: 7,
-    paddingTop: 2,
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
     minWidth: 0,
+  },
+  rowCompact: {
+    marginTop: 6,
+    gap: 7,
   },
   avatarWrap: {
     flexShrink: 0,
+    alignSelf: "center",
   },
   textCol: {
     flex: 1,
     minWidth: 0,
     justifyContent: "center",
     gap: 1,
-    paddingTop: 2,
   },
   partyLine: {
-    lineHeight: 13,
+    lineHeight: 14,
   },
   avatarBorder: {
     borderWidth: 1,
@@ -114,29 +119,29 @@ const styles = StyleSheet.create({
   },
   labelCompact: {
     fontSize: 9,
-    fontWeight: "500",
+    fontWeight: "600",
     letterSpacing: 0.25,
     lineHeight: 11,
   },
   primaryCompact: {
-    fontSize: 10,
-    fontWeight: "600",
-    letterSpacing: 0.1,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: -0.1,
   },
   secondaryCompact: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
     letterSpacing: 0.1,
   },
   label: {
     fontSize: 10,
-    fontWeight: "500",
+    fontWeight: "600",
     lineHeight: 12,
     letterSpacing: 0.2,
   },
   primary: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
   },
   secondary: {
     fontSize: 12,
