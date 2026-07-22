@@ -29,6 +29,7 @@ import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { getClientsByOrganization, type ClientRow } from "@/features/clients/services/clients.service";
 import { ClientLaneSearchPicker } from "@/features/clients/components/ClientLaneSearchPicker";
 import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
 import { buildClientLanePrefill } from "@/features/clients/utils/clientLanePrefill.util";
