@@ -29,7 +29,11 @@ import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getClientsByOrganization, type ClientRow } from "@/features/clients/services/clients.service";
+import { ClientLaneSearchPicker } from "@/features/clients/components/ClientLaneSearchPicker";
+import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
+import { buildClientLanePrefill } from "@/features/clients/utils/clientLanePrefill.util";
+import { useClientLaneRatesQuery } from "@/lib/queries/useClientLaneRatesQuery";
+import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
 import { createIndent, type CreateIndentInput } from "@/features/indents/services/indents.service";
 import { LOAD_TYPES } from "@/features/indents/constants";
 import {
@@ -288,6 +292,7 @@ export default function CreateIndentScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   /** Match Create Trip: full client list vs compact selected card. */
   const [clientListExpanded, setClientListExpanded] = useState(true);
+  const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
   const [pickupLat, setPickupLat] = useState<number | null>(null);
   const [pickupLon, setPickupLon] = useState<number | null>(null);
   const [dropLat, setDropLat] = useState<number | null>(null);
@@ -723,6 +728,36 @@ export default function CreateIndentScreen() {
     [clients, form.client_id],
   );
 
+  const { data: contractLanes = [], isLoading: lanesLoading } =
+    useClientLaneRatesQuery(orgId, form.client_id);
+  const { data: clientWarehouses = [] } = useClientWarehousesQuery(
+    orgId,
+    form.client_id,
+  );
+
+  const handleSelectLane = useCallback(
+    (lane: ClientLaneRate) => {
+      const prefill = buildClientLanePrefill(lane);
+      setSelectedLaneId(lane.id);
+      const wh = clientWarehouses.find((w) => w.id === prefill.originWarehouseId);
+      update({
+        ...(prefill.pickup ? { pickup_area: prefill.pickup } : {}),
+        ...(prefill.drop ? { drop_location: prefill.drop } : {}),
+        ...(prefill.vehicleType ? { vehicle_type: prefill.vehicleType } : {}),
+        ...(prefill.clientPrice ? { client_price: prefill.clientPrice } : {}),
+      });
+      if (wh?.latitude != null && wh?.longitude != null) {
+        setPickupLat(wh.latitude);
+        setPickupLon(wh.longitude);
+      }
+    },
+    [clientWarehouses, update],
+  );
+
+  const handleClearLane = useCallback(() => {
+    setSelectedLaneId(null);
+  }, []);
+
   const indentWizardContextRow = useMemo(() => {
     if (!isMobileWizard || !selectedClientRow) return null;
     if (wizardStep === "route" || wizardStep === "client") return null;
@@ -770,6 +805,7 @@ export default function CreateIndentScreen() {
         client_id: client.id,
         client_name: clientName,
       });
+      setSelectedLaneId(null);
       setClientListExpanded(false);
       focusField(clientPriceInputRef);
     },
@@ -1086,7 +1122,7 @@ export default function CreateIndentScreen() {
     ? wizardStep === "route"
       ? "Pickup, drop and load date."
       : wizardStep === "client"
-        ? "Select the shipper client."
+        ? "Select client, then search a contract lane to auto-fill."
         : wizardStep === "prices"
           ? "Client price and supplier target."
           : wizardStep === "vehicle"
@@ -1612,6 +1648,16 @@ export default function CreateIndentScreen() {
                         {errors.client_name ? (
                           <Text style={styles.errorText}>{errors.client_name}</Text>
                         ) : null}
+                        {form.client_id ? (
+                          <ClientLaneSearchPicker
+                            compact
+                            lanes={contractLanes}
+                            loading={lanesLoading}
+                            selectedLaneId={selectedLaneId}
+                            onSelect={handleSelectLane}
+                            onClear={handleClearLane}
+                          />
+                        ) : null}
                       </>
                     ) : (
                     <>
@@ -1782,6 +1828,16 @@ export default function CreateIndentScreen() {
                     )}
                     {errors.client_name ? (
                       <Text style={styles.errorText}>{errors.client_name}</Text>
+                    ) : null}
+                    {form.client_id ? (
+                      <ClientLaneSearchPicker
+                        compact={isMobileWizard}
+                        lanes={contractLanes}
+                        loading={lanesLoading}
+                        selectedLaneId={selectedLaneId}
+                        onSelect={handleSelectLane}
+                        onClear={handleClearLane}
+                      />
                     ) : null}
                     </>
                     )}

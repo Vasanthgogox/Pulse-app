@@ -61,7 +61,7 @@ export function addTripWizardStepShortLabel(step: AddTripWizardStep): string {
 export function addTripWizardStepSubtitle(step: AddTripWizardStep): string {
   switch (step) {
     case "client":
-      return "Select billing client and sale value.";
+      return "Select billing client, optional contract lane, and sale value.";
     case "route":
       return "Enter pickup, drop and trip date.";
     case "commodity":

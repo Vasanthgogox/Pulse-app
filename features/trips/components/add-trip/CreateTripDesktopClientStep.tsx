@@ -19,6 +19,8 @@ import {
 } from "./CreateTripDesktopPickers";
 import { DesktopSectionHeading } from "./CreateTripDesktopUi";
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
+import { ClientLaneSearchPicker } from "@/features/clients/components/ClientLaneSearchPicker";
+import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
 
 function formatInr(raw: string): string | null {
   const n = Number(String(raw).replace(/[^\d.]/g, ""));
@@ -41,6 +43,11 @@ export type CreateTripDesktopClientStepProps = {
   clientPriceError?: boolean;
   onClearClient: () => void;
   compact?: boolean;
+  contractLanes?: readonly ClientLaneRate[];
+  contractLanesLoading?: boolean;
+  selectedLaneId?: string | null;
+  onSelectLane?: (lane: ClientLaneRate) => void;
+  onClearLane?: () => void;
 };
 
 export const CreateTripDesktopClientStep = memo(
@@ -59,6 +66,11 @@ export const CreateTripDesktopClientStep = memo(
     clientPriceError = false,
     onClearClient,
     compact = false,
+    contractLanes = [],
+    contractLanesLoading = false,
+    selectedLaneId = null,
+    onSelectLane,
+    onClearLane,
   }: CreateTripDesktopClientStepProps) {
     const showClientChange = Boolean(clientId);
     const [saleModalOpen, setSaleModalOpen] = useState(false);
@@ -107,12 +119,8 @@ export const CreateTripDesktopClientStep = memo(
     const handleSelectClient = useCallback(
       (client: ClientRow) => {
         onSelectClient(client);
-        if (!compact) {
-          setSaleDoneAttempted(false);
-          setSaleModalOpen(true);
-        }
       },
-      [compact, onSelectClient],
+      [onSelectClient],
     );
 
     const handleChangeClientFromModal = useCallback(() => {
@@ -134,6 +142,16 @@ export const CreateTripDesktopClientStep = memo(
     if (showMobileSaleKeypad) {
       return (
         <View style={s.saleMobileKeypadRoot}>
+          {onSelectLane ? (
+            <ClientLaneSearchPicker
+              compact
+              lanes={contractLanes}
+              loading={contractLanesLoading}
+              selectedLaneId={selectedLaneId}
+              onSelect={onSelectLane}
+              onClear={onClearLane}
+            />
+          ) : null}
           <ClientSaleKeypadFlow
             clientPrice={clientPrice}
             onClientPriceChange={onClientPriceChange}
@@ -197,6 +215,17 @@ export const CreateTripDesktopClientStep = memo(
             onSelectClient={handleSelectClient}
             hasError={clientError}
           />
+
+          {clientId && onSelectLane ? (
+            <ClientLaneSearchPicker
+              compact={compact}
+              lanes={contractLanes}
+              loading={contractLanesLoading}
+              selectedLaneId={selectedLaneId}
+              onSelect={onSelectLane}
+              onClear={onClearLane}
+            />
+          ) : null}
 
           {clientId && !compact ? (
             <View style={s.sourceRatesBlock}>

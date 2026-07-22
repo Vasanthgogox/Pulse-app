@@ -22,7 +22,10 @@ import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/suppli
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
+import { useClientLaneRatesQuery } from "@/lib/queries/useClientLaneRatesQuery";
 import { useLinkedClientOrgLocationsQuery } from "@/lib/queries/useLinkedClientOrgLocationsQuery";
+import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
+import { buildClientLanePrefill } from "@/features/clients/utils/clientLanePrefill.util";
 
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
 import { CreateTripDesktopAllocationStep } from "./CreateTripDesktopAllocationStep";
@@ -77,6 +80,7 @@ export function CreateTripDesktopWizard({
   const [driverListExpanded, setDriverListExpanded] = useState(() => !state.driverId);
   const [vehicleListExpanded, setVehicleListExpanded] = useState(() => !state.vehicleId);
   const [partnerListExpanded, setPartnerListExpanded] = useState(() => !state.supplierId);
+  const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!state.clientId) setClientListExpanded(true);
@@ -121,6 +125,8 @@ export function CreateTripDesktopWizard({
     Boolean(clientForPickup?.linked_organization_id);
   const { data: clientWarehouses = [], isLoading: warehousesLoading } =
     useClientWarehousesQuery(organizationId, state.clientId);
+  const { data: contractLanes = [], isLoading: lanesLoading } =
+    useClientLaneRatesQuery(organizationId, state.clientId);
   const { data: linkedOrgLocations = [], isLoading: linkedLocLoading } =
     useLinkedClientOrgLocationsQuery(
       organizationId,
@@ -170,8 +176,9 @@ export function CreateTripDesktopWizard({
       if (state.clientId === client.id) return;
       Keyboard.dismiss();
       setters.setClientSelection(client.id, client.name);
-      // Fresh client → clear prior pickup so warehouse chips can be chosen anew.
+      // Fresh client → clear prior pickup / lane so warehouse chips can be chosen anew.
       setters.setPickupArea("");
+      setSelectedLaneId(null);
       setClientListExpanded(false);
     },
     [setters, state.clientId],
@@ -179,8 +186,29 @@ export function CreateTripDesktopWizard({
 
   const handleClearClient = useCallback(() => {
     setters.setClientSelection(null, "");
+    setSelectedLaneId(null);
     setClientListExpanded(true);
   }, [setters]);
+
+  const handleSelectLane = useCallback(
+    (lane: ClientLaneRate) => {
+      const prefill = buildClientLanePrefill(lane);
+      setSelectedLaneId(lane.id);
+      if (prefill.pickup) setters.setPickupArea(prefill.pickup);
+      if (prefill.drop) setters.setDropLocation(prefill.drop);
+      if (prefill.vehicleType) setters.setVehicleType(prefill.vehicleType);
+      if (prefill.clientPrice) setters.setClientPrice(prefill.clientPrice);
+      const wh = clientWarehouses.find((w) => w.id === prefill.originWarehouseId);
+      if (wh?.latitude != null && wh?.longitude != null) {
+        setters.setPickupCoords(wh.latitude, wh.longitude);
+      }
+    },
+    [clientWarehouses, setters],
+  );
+
+  const handleClearLane = useCallback(() => {
+    setSelectedLaneId(null);
+  }, []);
 
   const handleAddClient = useCallback(() => {
     router.push({
@@ -239,6 +267,11 @@ export function CreateTripDesktopWizard({
           onClientPriceChange={setters.setClientPrice}
           clientPriceError={invalid("clientPrice")}
           onClearClient={handleClearClient}
+          contractLanes={contractLanes}
+          contractLanesLoading={lanesLoading}
+          selectedLaneId={selectedLaneId}
+          onSelectLane={handleSelectLane}
+          onClearLane={handleClearLane}
         />
       );
       break;
