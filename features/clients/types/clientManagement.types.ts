@@ -22,10 +22,12 @@ export type ClientProfileTab =
   | 'contacts'
   | 'kyc'
   | 'warehouses'
-  | 'contracts'
-  | 'commercials'
   | 'finance'
-  | 'vault';
+  | 'vault'
+  /** @deprecated Nested under warehouses — kept for deep-link redirects */
+  | 'contracts'
+  /** @deprecated Nested under warehouses — kept for deep-link redirects */
+  | 'commercials';
 
 export type ContractAgreementStatus =
   | 'draft'

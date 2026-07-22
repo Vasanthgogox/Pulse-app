@@ -10,13 +10,13 @@ import {
   METRONIC,
 } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { createClientContact } from "@/features/clients/services/clientContacts.service";
-import { createWarehouse } from "@/features/clients/services/clientWarehouses.service";
 import {
   createClientContractAgreement,
 } from "@/features/clients/services/clientContractAgreements.service";
 import { createClientLaneRate } from "@/features/clients/services/clientLaneRates.service";
 import { upsertClientFinanceProfile } from "@/features/clients/services/clientFinanceProfile.service";
 import { ClientProfileLaneRateCard } from "@/features/clients/components/desktop/ClientProfileLaneRateCard";
+import { ClientProfileWarehouseTreePanel } from "@/features/clients/components/desktop/ClientProfileWarehouseTreePanel";
 import {
   INVOICE_FREQUENCY_OPTIONS,
   LANE_PRICING_MODEL_OPTIONS,
@@ -358,110 +358,13 @@ export function ClientProfileContactsPanel({ bundle, orgId, clientId, onRefresh 
 // ── TAB: Warehouses ────────────────────────────────────────────────────────────
 
 export function ClientProfileWarehousesPanel({ bundle, orgId, clientId, onRefresh }: BaseProps) {
-  const compact = useProfileHubCompact();
-  const panelWrapStyle = usePanelWrapStyle();
-  const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    warehouse_code: "",
-    name: "",
-    warehouse_zone: "",
-    address: "",
-    city: "",
-    state: "",
-    pincode: "",
-    local_gstin: "",
-    dock_count: "",
-    capacity_tons: "",
-    manager_name: "",
-    manager_phone: "",
-    contact_name: "",
-    contact_phone: "",
-  });
-
-  const reset = () => {
-    setForm({
-      warehouse_code: "", name: "", warehouse_zone: "", address: "", city: "", state: "",
-      pincode: "", local_gstin: "", dock_count: "", capacity_tons: "",
-      manager_name: "", manager_phone: "", contact_name: "", contact_phone: "",
-    });
-    setError(null);
-  };
-
-  const handleSave = async () => {
-    if (!form.name.trim()) { setError("Warehouse name is required."); return; }
-    const docks = form.dock_count.trim() ? parseInt(form.dock_count, 10) : null;
-    const capacity = form.capacity_tons.trim() ? parseFloat(form.capacity_tons) : null;
-    if (form.dock_count.trim() && isNaN(docks!)) { setError("Dock count must be a number."); return; }
-    if (form.capacity_tons.trim() && isNaN(capacity!)) { setError("Capacity must be a number."); return; }
-    setSaving(true); setError(null);
-    const { error: err } = await createWarehouse(orgId, clientId, {
-      warehouse_code: form.warehouse_code.trim() || null,
-      name: form.name.trim(),
-      warehouse_zone: form.warehouse_zone.trim() || null,
-      address: form.address.trim() || null,
-      city: form.city.trim() || null,
-      state: form.state.trim() || null,
-      pincode: form.pincode.trim() || null,
-      local_gstin: form.local_gstin.trim() || null,
-      dock_count: docks,
-      capacity_tons: capacity,
-      manager_name: form.manager_name.trim() || null,
-      manager_phone: form.manager_phone.trim() || null,
-      contact_name: form.contact_name.trim() || null,
-      contact_phone: form.contact_phone.trim() || null,
-    });
-    setSaving(false);
-    if (err) { setError(err.message); return; }
-    reset(); setShowForm(false); onRefresh();
-  };
-
-  const rows = bundle.warehouses.map((w) => [
-    w.warehouse_code ?? "—",
-    w.name,
-    [w.warehouse_zone, w.city, w.state].filter(Boolean).join(" · ") || "—",
-    w.local_gstin ?? "—",
-    w.pincode ?? "—",
-    w.dock_count != null ? String(w.dock_count) : "—",
-    w.capacity_tons != null ? `${w.capacity_tons}T` : "—",
-    w.manager_name ?? w.contact_name ?? "—",
-  ]);
-
   return (
-    <View style={panelWrapStyle}>
-      <View style={f.panelHeaderRow}>
-        <Text style={styles.sectionTitle}>Warehouse network</Text>
-        {!showForm && <AddButton label="Add warehouse" onPress={() => { reset(); setShowForm(true); }} />}
-      </View>
-
-      {showForm && (
-        <FormCard title="Add warehouse" onClose={() => setShowForm(false)} onSave={handleSave} saving={saving} error={error}>
-          <View style={[f.formGrid, compact && mobile.formGridCompact]}>
-            <FormField compact={compact} label="Warehouse code" value={form.warehouse_code} onChangeText={(v) => setForm({ ...form, warehouse_code: v })} placeholder="WH-001" />
-            <FormField compact={compact} label="Warehouse name" value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} required />
-            <FormField compact={compact} label="Zone" value={form.warehouse_zone} onChangeText={(v) => setForm({ ...form, warehouse_zone: v })} placeholder="e.g. North, Zone A" />
-            <FormField compact={compact} label="Full address" value={form.address} onChangeText={(v) => setForm({ ...form, address: v })} multiline />
-            <FormField compact={compact} label="City" value={form.city} onChangeText={(v) => setForm({ ...form, city: v })} />
-            <FormField compact={compact} label="State" value={form.state} onChangeText={(v) => setForm({ ...form, state: v })} />
-            <FormField compact={compact} label="Pincode" value={form.pincode} onChangeText={(v) => setForm({ ...form, pincode: v })} keyboardType="numeric" />
-            <FormField compact={compact} label="Local GSTIN" value={form.local_gstin} onChangeText={(v) => setForm({ ...form, local_gstin: v })} />
-            <FormField compact={compact} label="Dock count" value={form.dock_count} onChangeText={(v) => setForm({ ...form, dock_count: v })} keyboardType="numeric" />
-            <FormField compact={compact} label="Capacity (tons)" value={form.capacity_tons} onChangeText={(v) => setForm({ ...form, capacity_tons: v })} keyboardType="numeric" />
-            <FormField compact={compact} label="Manager name" value={form.manager_name} onChangeText={(v) => setForm({ ...form, manager_name: v })} />
-            <FormField compact={compact} label="Manager phone" value={form.manager_phone} onChangeText={(v) => setForm({ ...form, manager_phone: v })} keyboardType="phone-pad" />
-            <FormField compact={compact} label="Gate contact" value={form.contact_name} onChangeText={(v) => setForm({ ...form, contact_name: v })} />
-            <FormField compact={compact} label="Gate phone" value={form.contact_phone} onChangeText={(v) => setForm({ ...form, contact_phone: v })} keyboardType="phone-pad" />
-          </View>
-        </FormCard>
-      )}
-
-      {rows.length === 0 && !showForm ? (
-        <Empty message="No warehouses yet" sub="Add client warehouse locations to track pickup points, GSTIN, and contacts." />
-      ) : (
-        <ResponsiveDataTable compact={compact} headers={["Code", "Name", "Zone / location", "GSTIN", "Pin", "Docks", "Capacity", "Manager"]} rows={rows} />
-      )}
-    </View>
+    <ClientProfileWarehouseTreePanel
+      bundle={bundle}
+      orgId={orgId}
+      clientId={clientId}
+      onRefresh={onRefresh}
+    />
   );
 }
 

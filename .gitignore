@@ -77,6 +77,9 @@ apps/web/.next/
 # Playwright MCP local cache/state
 .playwright-mcp/
 
+# Local client agreement PDFs / rate sheets (not for git)
+docs/warehouse-contracts/
+
 # OpenClaw (local agent workspace — not app source)
 .openclaw/
 AGENTS.md

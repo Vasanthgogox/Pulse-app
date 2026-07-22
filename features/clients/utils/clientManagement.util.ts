@@ -57,13 +57,15 @@ export function formatClientPhoneDisplay(phone: string | null | undefined): stri
 }
 
 export function parseClientProfileTab(raw: string | undefined) {
+  // Legacy Contracts / Commercials tabs now live nested under Warehouses.
+  if (raw === 'contracts' || raw === 'commercials' || raw === 'lanes') {
+    return 'warehouses' as const;
+  }
   if (
     raw === 'overview' ||
     raw === 'contacts' ||
     raw === 'kyc' ||
     raw === 'warehouses' ||
-    raw === 'contracts' ||
-    raw === 'commercials' ||
     raw === 'finance' ||
     raw === 'vault' ||
     raw === 'audit'
