@@ -83,7 +83,8 @@ const NETLIFY_ROUTE_PROXY_PATH = '/.netlify/functions/route-proxy';
  * Expo web on localhost would otherwise GET /.netlify/functions/... → 404 noise every route fetch.
  */
 function buildWebRouteProxyUrl(from: LatLon, to: LatLon): string | null {
-  if (typeof window === 'undefined') return null;
+  // RN/Hermes polyfills a global `window` but not `window.location`, so guard both.
+  if (typeof window === 'undefined' || !window.location) return null;
 
   const explicit =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ROUTE_PROXY_URL?.trim();

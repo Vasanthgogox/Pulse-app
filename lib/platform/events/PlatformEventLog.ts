@@ -1,3 +1,4 @@
+import { uuidv7 } from '@/lib/uuidv7';
 import type { PlatformDomainEvent, PlatformDomainEventName } from './types';
 
 export type PlatformEventLogEntry = {
@@ -40,7 +41,7 @@ export function recordPlatformEventLog(event: PlatformDomainEvent): void {
   if (!enabled) return;
   const { aggregateType, aggregateId } = aggregateFromEvent(event);
   entries.push({
-    id: crypto.randomUUID(),
+    id: uuidv7(),
     correlationId: event.correlationId,
     eventType: event.name,
     aggregateType,

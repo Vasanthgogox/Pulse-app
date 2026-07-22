@@ -194,6 +194,15 @@ export const LeafletMapRnMaps = React.forwardRef<
     const { lat: initLatD, lng: initLngD } = zoomToRegionDeltas(zoom);
     const showZoom = showZoomControls && !interactionLocked;
 
+    // Defensive: this path is only meant for Expo Go, where react-native-maps is
+    // available. If the environment was mis-detected in a standalone build that
+    // ships MapLibre (not react-native-maps), MapView resolves to undefined and
+    // rendering it throws "Cannot read property 'MapView' of undefined". Render an
+    // empty host instead of crashing the whole screen via the error boundary.
+    if (!MapView) {
+      return <View style={[style, styles.mapHost]} />;
+    }
+
     return (
       <View style={[style, styles.mapHost]}>
         <MapView

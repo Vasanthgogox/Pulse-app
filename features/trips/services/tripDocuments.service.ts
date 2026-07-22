@@ -255,7 +255,7 @@ function publishPodUploadedEvent(tripId: string, doc: TripDocumentRow): void {
       return getPlatformEventBus().publish({
         name: "PODUploaded",
         workspaceId,
-        correlationId: crypto.randomUUID(),
+        correlationId: randomUUID(),
         occurredAt: new Date().toISOString(),
         payload: {
           tripId,

@@ -11,6 +11,7 @@ import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { supabase } from "@/lib/supabase";
 import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
+import { uuidv7 } from "@/lib/uuidv7";
 import { TRIP_REASSIGN_STALE_ERROR } from "@/features/trips/utils/tripReassignConflict.util";
 import { shouldMarkAssignedOnFirstAssign } from "@/features/trips/utils/tripReassign.util";
 import {
@@ -1880,7 +1881,7 @@ export async function updateTripAssignment(
       .publish({
         name: "TripAssigned",
         workspaceId: updatedTrip.organization_id,
-        correlationId: crypto.randomUUID(),
+        correlationId: uuidv7(),
         occurredAt: new Date().toISOString(),
         payload: {
           tripId: updatedTrip.id,
@@ -2540,7 +2541,7 @@ export async function updateTripStatus(
       .publish({
         name: "TripDelivered",
         workspaceId: updatedTrip.organization_id,
-        correlationId: crypto.randomUUID(),
+        correlationId: uuidv7(),
         occurredAt: new Date().toISOString(),
         payload: {
           tripId: updatedTrip.id,
@@ -2559,7 +2560,7 @@ export async function updateTripStatus(
       .publish({
         name: "TripStarted",
         workspaceId: updatedTrip.organization_id,
-        correlationId: crypto.randomUUID(),
+        correlationId: uuidv7(),
         occurredAt: new Date().toISOString(),
         payload: {
           tripId: updatedTrip.id,
