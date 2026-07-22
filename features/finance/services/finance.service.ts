@@ -1290,10 +1290,14 @@ export async function createLedgerEntry(
       .eq("id", tripContext.tripId)
       .maybeSingle();
     if (tripRow) {
-      const isIntegratedShipperReceipt =
-        tripRow.indent_id != null && tripRow.organization_id === orgId;
+      // Mirror computeTripEntryFinancialSnapshot's sales basis: the trip owner
+      // collects its client_price; a partner org on an indent-linked trip
+      // collects the supplier_rate. Using owner === orgId here (as before)
+      // inverted this and blocked valid owner receipts up to client_price.
+      const isOwner = tripRow.organization_id === orgId;
+      const isPartnerIndentReceipt = tripRow.indent_id != null && !isOwner;
       const sales = Number(
-        (isIntegratedShipperReceipt
+        (isPartnerIndentReceipt
           ? tripRow.supplier_rate
           : tripRow.client_price) ?? 0,
       );
