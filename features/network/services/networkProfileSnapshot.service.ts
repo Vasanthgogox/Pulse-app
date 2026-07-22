@@ -26,6 +26,8 @@ export type NetworkProfileSnapshot = {
   avatar_url: string | null;
   avatar_seed: string | null;
   is_integrated: boolean;
+  /** Admin / KYC verified (`organizations.verification_status = verified`). */
+  is_kyc_verified: boolean;
   /** Enriched fields shown in public profile */
   registered_address: string | null;
   branch_count: number;
@@ -35,9 +37,9 @@ export type NetworkProfileSnapshot = {
   operating_model: string | null;
   total_trips: number;
   member_since_year: number | null;
-  /** Vehicles owned by this party in Pulse (org fleet and/or supplier-tagged). */
+  /** Fleet asset vehicles owned by the partner organization. */
   vehicle_count: number;
-  /** Indents created for/by this party in Pulse. */
+  /** Indents the partner has shared/broadcast to the Pulse network. */
   indent_count: number;
 };
 
@@ -55,6 +57,7 @@ type OrganizationSnapshotRow = {
   gstin: string | null;
   operating_model: string | null;
   created_at: string | null;
+  verification_status: string | null;
 };
 
 type PartnerDisplayBatchRow = {
@@ -66,6 +69,9 @@ type PartnerDisplayBatchRow = {
   averageRating?: number | null;
   orgCreatedAt?: string | null;
   ownerSignedUpAt?: string | null;
+  verificationStatus?: string | null;
+  vehicleCount?: number | null;
+  networkIndentCount?: number | null;
 };
 
 type PartnerDisplaySingleRow = {
@@ -80,7 +86,16 @@ type PartnerDisplaySingleRow = {
   website?: string | null;
   orgCreatedAt?: string | null;
   ownerSignedUpAt?: string | null;
+  verificationStatus?: string | null;
+  vehicleCount?: number | null;
+  networkIndentCount?: number | null;
 };
+
+function isKycVerifiedStatus(value: string | null | undefined): boolean {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase() === "verified";
+}
 
 function yearFromTimestamp(iso: string | null | undefined): number | null {
   if (!iso?.trim()) return null;
@@ -116,7 +131,7 @@ async function loadOrganizationRow(
   const orgWithLogo = await supabase()
     .from("organizations")
     .select(
-      "id, name, avatar_seed, logo_url, city, state, address_line, owner_id, profile_sector, profile_website, gstin, operating_model, created_at",
+      "id, name, avatar_seed, logo_url, city, state, address_line, owner_id, profile_sector, profile_website, gstin, operating_model, created_at, verification_status",
     )
     .eq("id", targetOrgId)
     .maybeSingle();
@@ -149,6 +164,7 @@ async function loadOrganizationRow(
         gstin: null,
         operating_model: null,
         created_at: null,
+        verification_status: null,
       },
     };
   }
@@ -187,6 +203,9 @@ function buildOrganizationRowFromPartnerDisplay(
     gstin: nonEmptyString(singleRow?.gstin),
     operating_model: null,
     created_at: null,
+    verification_status:
+      nonEmptyString(singleRow?.verificationStatus) ??
+      nonEmptyString(batchRow?.verificationStatus),
   };
 }
 
@@ -266,6 +285,13 @@ export async function getOrgProfileSnapshot(
     orgRow = { ...orgRow, created_at: partnerSignupAt };
   }
 
+  const partnerVerificationStatus =
+    nonEmptyString(partnerBatch?.verificationStatus) ??
+    nonEmptyString(partnerProfile?.verificationStatus);
+  if (!orgRow.verification_status && partnerVerificationStatus) {
+    orgRow = { ...orgRow, verification_status: partnerVerificationStatus };
+  }
+
   let phone =
     nonEmptyString(partnerBatch?.phone) ?? nonEmptyString(partnerProfile?.phone);
   let ownerAvatarUrl =
@@ -303,9 +329,6 @@ export async function getOrgProfileSnapshot(
 
   // 2) Connection request between viewer and target (either direction).
   let role: NetworkProfileSnapshotRole = "SUPPLIER";
-  let linkedClientId: string | null = null;
-  let linkedClientName: string | null = null;
-  let linkedSupplierId: string | null = null;
 
   const clientLink = await supabase()
     .from("clients")
@@ -317,10 +340,6 @@ export async function getOrgProfileSnapshot(
     .maybeSingle();
   if (clientLink.data?.id) {
     role = "CLIENT";
-    linkedClientId = String(clientLink.data.id);
-    linkedClientName = nonEmptyString(
-      (clientLink.data as { name?: string | null }).name,
-    );
   } else {
     const supplierLink = await supabase()
       .from("suppliers")
@@ -332,7 +351,6 @@ export async function getOrgProfileSnapshot(
       .maybeSingle();
     if (supplierLink.data?.id) {
       role = "SUPPLIER";
-      linkedSupplierId = String(supplierLink.data.id);
     }
   }
 
@@ -418,61 +436,20 @@ export async function getOrgProfileSnapshot(
     }
   }
 
-  // 6c) Vehicles owned + indents created (party records in Pulse).
-  let vehicleCount = 0;
-  let indentCount = 0;
-  {
-    const partyName = linkedClientName ?? orgRow.name?.trim() ?? null;
-
-    const [ownFleetRes, supplierFleetRes, orgIndentsRes, clientIndentsRes] =
-      await Promise.all([
-        supabase()
-          .from("vehicles")
-          .select("id", { count: "exact", head: true })
-          .eq("organization_id", targetOrgId)
-          .is("deleted_at", null),
-        linkedSupplierId
-          ? supabase()
-              .from("vehicles")
-              .select("id", { count: "exact", head: true })
-              .eq("organization_id", viewerOrgId)
-              .eq("supplier_id", linkedSupplierId)
-              .is("deleted_at", null)
-          : Promise.resolve({ count: 0, error: null }),
-        supabase()
-          .from("indents")
-          .select("id", { count: "exact", head: true })
-          .eq("organization_id", targetOrgId)
-          .is("deleted_at", null),
-        partyName
-          ? supabase()
-              .from("indents")
-              .select("id", { count: "exact", head: true })
-              .eq("organization_id", viewerOrgId)
-              .ilike("client_name", partyName)
-              .is("deleted_at", null)
-          : Promise.resolve({ count: 0, error: null }),
-      ]);
-
-    const ownFleet = ownFleetRes.error ? 0 : (ownFleetRes.count ?? 0);
-    const supplierFleet = supplierFleetRes.error
-      ? 0
-      : (supplierFleetRes.count ?? 0);
-    // Prefer org-owned fleet; fall back to vehicles tagged to the supplier party in Pulse.
-    vehicleCount = ownFleet > 0 ? ownFleet : supplierFleet;
-
-    const createdByOrg = orgIndentsRes.error ? 0 : (orgIndentsRes.count ?? 0);
-    const createdForClient = clientIndentsRes.error
-      ? 0
-      : (clientIndentsRes.count ?? 0);
-    // Client party → indents created for them in this workspace; else their org's indents.
-    indentCount =
-      role === "CLIENT" && (linkedClientId || partyName)
-        ? createdForClient
-        : createdByOrg > 0
-          ? createdByOrg
-          : createdForClient;
-  }
+  // 6c) Partner fleet assets + indents shared to the network (SECURITY DEFINER RPC).
+  // Direct vehicle/indent reads on other orgs are RLS-blocked.
+  const vehicleCount =
+    typeof partnerBatch?.vehicleCount === "number"
+      ? partnerBatch.vehicleCount
+      : typeof partnerProfile?.vehicleCount === "number"
+        ? partnerProfile.vehicleCount
+        : 0;
+  const indentCount =
+    typeof partnerBatch?.networkIndentCount === "number"
+      ? partnerBatch.networkIndentCount
+      : typeof partnerProfile?.networkIndentCount === "number"
+        ? partnerProfile.networkIndentCount
+        : 0;
 
   // 7) Rating — prefer viewer-given scores; fall back to partner aggregate.
   let rating: number | null = null;
@@ -505,6 +482,7 @@ export async function getOrgProfileSnapshot(
     avatar_url: resolvedAvatarUrl,
     avatar_seed: orgRow.avatar_seed,
     is_integrated: isIntegrated,
+    is_kyc_verified: isKycVerifiedStatus(orgRow.verification_status),
     registered_address: registeredAddress,
     branch_count: branchCount,
     sector,

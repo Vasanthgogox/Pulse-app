@@ -18,11 +18,13 @@ import {
 import { networkCompactListStyle } from "@/features/network/components/NetworkCompactRows";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
 import { formatPartyContactPhone } from "@/features/network/utils/partyContactDisplay.util";
+import { isOrgKycVerified } from "@/features/network/utils/orgVerification.util";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import {
     getOrganizationLocationsByIds,
     getOrganizationLocationsByNames,
 } from "@/features/organization/services/organization.service";
+import { supabase } from "@/lib/supabase";
 import {
     averageRatingForRatedParty,
     averageScoreDeduped,
@@ -133,6 +135,9 @@ export interface ConnectedOrg {
   name: string;
   role: "CLIENT" | "SUPPLIER" | "DRIVER";
   is_integrated: boolean;
+  /** Admin KYC verified (`organizations.verification_status = verified`). */
+  is_kyc_verified?: boolean;
+  verification_status?: string | null;
   avatar_url?: string | null;
   avatar_seed?: string | null;
   mutual_count?: number | null;
@@ -192,6 +197,32 @@ function rolePillsForConnection(item: ConnectedOrg): NetworkPartyRolePill[] {
       borderColor: Theme.networkBadgeIntegratedBorder,
       highlightColor: Theme.networkBadgeIntegratedHighlight,
     });
+  }
+  if (item.role !== "DRIVER") {
+    if (item.is_kyc_verified) {
+      pills.push({
+        label: "VERIFIED",
+        backgroundColor: Theme.networkBadgeSupplierBg,
+        gradientTop: Theme.networkBadgeSupplierGradientTop,
+        color: Theme.darkGreen,
+        borderColor: Theme.networkBadgeSupplierBorder,
+      });
+      pills.push({
+        label: "RECOMMENDED",
+        backgroundColor: Theme.aggregatePillBg,
+        gradientTop: Theme.aggregatePillBg,
+        color: Theme.aggregatePillText,
+        borderColor: Theme.aggregatePillBorder,
+      });
+    } else {
+      pills.push({
+        label: "NOT VERIFIED",
+        backgroundColor: Theme.surface,
+        gradientTop: Theme.surface,
+        color: Theme.textSecondary,
+        borderColor: Theme.borderLight,
+      });
+    }
   }
   return pills;
 }
@@ -626,6 +657,47 @@ export function ConnectionsView({
     return map;
   }, [organizationLocationsByNameQ.data]);
 
+  const linkedOrgIdsForKyc = useMemo(
+    () =>
+      [
+        ...new Set(
+          [
+            ...((clientsQ.data ?? []) as { linked_organization_id?: string | null }[])
+              .map((row) => row.linked_organization_id)
+              .filter((id): id is string => Boolean(id)),
+            ...((suppliersQ.data ?? []) as { linked_organization_id?: string | null }[])
+              .map((row) => row.linked_organization_id)
+              .filter((id): id is string => Boolean(id)),
+          ],
+        ),
+      ].sort(),
+    [clientsQ.data, suppliersQ.data],
+  );
+
+  const kycByLinkedOrgIdQ = useQuery({
+    queryKey: ["network", "connections", "kyc-verification", linkedOrgIdsForKyc],
+    queryFn: async () => {
+      const { data, error } = await supabase().rpc(
+        "get_connection_partner_display_batch",
+        { p_linked_organization_ids: linkedOrgIdsForKyc },
+      );
+      if (error || !data || typeof data !== "object") return {} as Record<string, boolean>;
+      const map = data as Record<
+        string,
+        { verificationStatus?: string | null; verification_status?: string | null }
+      >;
+      const out: Record<string, boolean> = {};
+      for (const [id, row] of Object.entries(map)) {
+        out[id] = isOrgKycVerified({
+          verification_status: row.verificationStatus ?? row.verification_status,
+        });
+      }
+      return out;
+    },
+    enabled: linkedOrgIdsForKyc.length > 0,
+  });
+  const kycByLinkedOrgId = kycByLinkedOrgIdQ.data ?? {};
+
 
   useEffect(() => {
     let cancelled = false;
@@ -794,6 +866,10 @@ export function ConnectionsView({
       name: c.name,
       role: "CLIENT" as const,
       is_integrated: c.is_integrated ?? Boolean(c.linked_organization_id),
+      is_kyc_verified: Boolean(
+        c.linked_organization_id &&
+          kycByLinkedOrgId[c.linked_organization_id],
+      ),
       avatar_url: c.avatar_url ?? null,
       avatar_seed: c.avatar_seed ?? null,
       mutual_count: c.mutual_count ?? c.mutual_connections_count ?? null,
@@ -850,6 +926,10 @@ export function ConnectionsView({
       is_integrated:
         s.is_integrated ??
         (s.supplier_type === "integrated" || Boolean(s.linked_organization_id)),
+      is_kyc_verified: Boolean(
+        s.linked_organization_id &&
+          kycByLinkedOrgId[s.linked_organization_id],
+      ),
       avatar_url: s.avatar_url ?? null,
       avatar_seed: s.avatar_seed ?? null,
       mutual_count: s.mutual_count ?? s.mutual_connections_count ?? null,
@@ -944,6 +1024,7 @@ export function ConnectionsView({
     globalAverages,
     organizationLocationById,
     organizationLocationByName,
+    kycByLinkedOrgId,
     tripCountByClientId,
     tripCountBySupplierId,
     tripCountByDriverId,

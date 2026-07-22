@@ -11,8 +11,10 @@ import {
   growConnectionCardStyles as growStyles,
 } from "@/features/network/components/desktop/networkDesktopConnectionCard.styles";
 import { NetworkDesktopSalesStars } from "@/features/network/components/desktop/NetworkDesktopSalesStars";
+import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
+import { isOrgKycVerified } from "@/features/network/utils/orgVerification.util";
 import { BadgeCheck, X } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
@@ -56,7 +58,13 @@ function roleTone(pendingRole: ConnectionInviteRole | null | undefined) {
 export type NetworkDesktopGrowConnectionCardProps = {
   org: Pick<
     DiscoverOrg,
-    "id" | "name" | "avatar_seed" | "avatar_url" | "connection_status"
+    | "id"
+    | "name"
+    | "avatar_seed"
+    | "avatar_url"
+    | "connection_status"
+    | "is_kyc_verified"
+    | "verification_status"
   >;
   locationLabel: string;
   ratingValue?: number | null;
@@ -90,6 +98,7 @@ export function NetworkDesktopGrowConnectionCard({
   const status = String(org.connection_status ?? "none").toLowerCase();
   const isPending = status === "pending" || Boolean(pendingRole);
   const isConnected = status === "approved";
+  const isKycVerified = isOrgKycVerified(org);
   const tone = roleTone(pendingRole);
   const filledStars = ratingFilledCount(ratingValue);
   const ratingLabel = formatRating(ratingValue);
@@ -175,10 +184,16 @@ export function NetworkDesktopGrowConnectionCard({
         <Text style={[styles.name, growStyles.name]} numberOfLines={1}>
           {org.name}
         </Text>
-        {isConnected ? (
-          <BadgeCheck size={13} color={Theme.primary} strokeWidth={2} />
+        {isKycVerified || isConnected ? (
+          <BadgeCheck size={13} color={Theme.darkGreen} strokeWidth={2} />
         ) : null}
       </View>
+
+      <OrgVerificationBadges
+        verification={org}
+        compact
+        style={growStyles.trustBadgesRow}
+      />
 
       <Text style={[styles.handle, growStyles.handle]} numberOfLines={1}>
         {locationLabel}

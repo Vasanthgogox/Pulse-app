@@ -45,6 +45,7 @@ export const connectionCardStyles = StyleSheet.create({
   topMetaLeft: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
     gap: 4,
     flexShrink: 1,
     minWidth: 0,
@@ -75,6 +76,34 @@ export const connectionCardStyles = StyleSheet.create({
   },
   ratingTextEmpty: {
     color: "#A1A5B7",
+  },
+  trustBadgesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  verifiedTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(21, 128, 61, 0.12)",
+    borderColor: "rgba(21, 128, 61, 0.28)",
+  },
+  verifiedTagText: {
+    color: Theme.darkGreen,
+    fontWeight: "700",
+  },
+  recommendedTag: {
+    backgroundColor: Theme.aggregatePillBg,
+    borderColor: Theme.aggregatePillBorder,
+  },
+  recommendedTagText: {
+    color: Theme.aggregatePillText,
+    fontWeight: "700",
   },
   avatarWrap: {
     width: 56,
@@ -258,6 +287,34 @@ export const growConnectionCardStyles = StyleSheet.create({
     fontSize: 8,
     fontWeight: "500",
     letterSpacing: 0.35,
+  },
+  verifiedTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(21, 128, 61, 0.12)",
+    borderColor: "rgba(21, 128, 61, 0.28)",
+  },
+  verifiedTagText: {
+    color: Theme.darkGreen,
+    fontWeight: "700",
+  },
+  recommendedTag: {
+    backgroundColor: Theme.aggregatePillBg,
+    borderColor: Theme.aggregatePillBorder,
+  },
+  recommendedTagText: {
+    color: Theme.aggregatePillText,
+    fontWeight: "700",
+  },
+  trustBadgesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 2,
+    marginBottom: 2,
   },
   ratingText: {
     fontSize: 10,

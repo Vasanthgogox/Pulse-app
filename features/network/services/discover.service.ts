@@ -1,6 +1,7 @@
 /**
  * Discover service — search organizations outside your current network.
  */
+import { isOrgKycVerified } from '@/features/network/utils/orgVerification.util';
 import { supabase } from '@/lib/supabase';
 
 type PartnerDisplayBatch = Record<
@@ -8,41 +9,56 @@ type PartnerDisplayBatch = Record<
   {
     avatarUrl?: string | null;
     avatarSeed?: string | null;
+    verificationStatus?: string | null;
+    verification_status?: string | null;
   }
 >;
 
 /**
- * Resolve org logo / owner photo via SECURITY DEFINER batch RPC — same path as
- * the network profile modal (`getOrgProfileSnapshot`). Remote `discover_organizations`
- * may omit `avatar_url` or only return `avatar_seed`; logos still live on
- * `organizations.logo_url` and must be merged here.
+ * Resolve org logo / owner photo + KYC verification via SECURITY DEFINER batch RPC —
+ * same path as the network profile modal (`getOrgProfileSnapshot`). Remote
+ * `discover_organizations` may omit `avatar_url` or only return `avatar_seed`; logos
+ * still live on `organizations.logo_url` and must be merged here. Verification is
+ * also merged so home/grow cards can show Verified + Recommended tags.
  */
 async function enrichDiscoverOrgsWithPartnerDisplay(
   orgs: DiscoverOrg[],
 ): Promise<DiscoverOrg[]> {
   if (orgs.length === 0) return orgs;
 
-  const idsMissingLogo = orgs
-    .filter((o) => !(o.avatar_url ?? "").trim())
-    .map((o) => o.id);
-  if (idsMissingLogo.length === 0) return orgs;
-
+  const ids = orgs.map((o) => o.id);
   const { data, error } = await supabase().rpc(
     "get_connection_partner_display_batch",
-    { p_linked_organization_ids: idsMissingLogo },
+    { p_linked_organization_ids: ids },
   );
-  if (error || !data || typeof data !== "object") return orgs;
 
-  const map = data as PartnerDisplayBatch;
+  const map =
+    !error && data && typeof data === "object"
+      ? (data as PartnerDisplayBatch)
+      : null;
+
   return orgs.map((org) => {
-    const row = map[org.id];
-    if (!row) return org;
-    const batchUrl = (row.avatarUrl ?? "").trim();
-    const batchSeed = (row.avatarSeed ?? "").trim();
+    const row = map?.[org.id];
+    const batchUrl = (row?.avatarUrl ?? "").trim();
+    const batchSeed = (row?.avatarSeed ?? "").trim();
+    const verificationStatus =
+      (
+        row?.verificationStatus ??
+        row?.verification_status ??
+        org.verification_status ??
+        ""
+      )
+        .toString()
+        .trim() || null;
     return {
       ...org,
       avatar_url: (org.avatar_url ?? "").trim() || batchUrl || null,
       avatar_seed: (org.avatar_seed ?? "").trim() || batchSeed || org.avatar_seed,
+      verification_status: verificationStatus,
+      is_kyc_verified: isOrgKycVerified({
+        verification_status: verificationStatus,
+        is_kyc_verified: org.is_kyc_verified,
+      }),
     };
   });
 }
@@ -73,6 +89,10 @@ export interface DiscoverOrg {
   recommendation_score?: number | null;
   is_in_user_trip_city?: boolean | null;
   connection_status: 'none' | 'pending' | 'approved' | 'rejected' | string;
+  /** Admin KYC status from discover RPC / partner display enrichment. */
+  verification_status?: string | null;
+  /** True when `verification_status === 'verified'`. */
+  is_kyc_verified?: boolean;
 }
 
 export async function discoverOrganizations(
@@ -90,8 +110,18 @@ export async function discoverOrganizations(
   });
 
   if (error) return { error: new Error(error.message), orgs: [] };
-  const orgs = await enrichDiscoverOrgsWithPartnerDisplay(
-    (data ?? []) as DiscoverOrg[],
-  );
+  const raw = ((data ?? []) as DiscoverOrg[]).map((org) => {
+    const verificationStatus =
+      (org.verification_status ?? "").toString().trim() || null;
+    return {
+      ...org,
+      verification_status: verificationStatus,
+      is_kyc_verified: isOrgKycVerified({
+        verification_status: verificationStatus,
+        is_kyc_verified: org.is_kyc_verified,
+      }),
+    };
+  });
+  const orgs = await enrichDiscoverOrgsWithPartnerDisplay(raw);
   return { error: null, orgs };
 }

@@ -99,7 +99,8 @@ export function clientToPublicEntity(c: ClientRow): PublicProfileEntity {
     avatarUrl: null,
     avatarSeed: c.avatar_seed ?? null,
     isIntegrated,
-    isVerified: isIntegrated,
+    isVerified: false,
+    verificationStatus: null,
     subtitle: c.contact_person ?? null,
     bio:
       c.address
@@ -176,7 +177,8 @@ export function supplierToPublicEntity(s: SupplierRow): PublicProfileEntity {
     avatarUrl: null,
     avatarSeed: s.avatar_seed ?? null,
     isIntegrated,
-    isVerified: s.is_verified || isIntegrated,
+    isVerified: false,
+    verificationStatus: null,
     subtitle: s.contact_person ?? null,
     bio:
       s.address

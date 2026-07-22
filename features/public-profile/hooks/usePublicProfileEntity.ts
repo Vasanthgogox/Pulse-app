@@ -20,11 +20,21 @@ import type {
   PublicProfileEntity,
   PublicProfileEntityType,
 } from "@/features/public-profile/types";
+import { isOrgKycVerified } from "@/features/network/utils/orgVerification.util";
 import {
   getLinkedOrgProfileForSupplier,
   getSupplierDetails,
 } from "@/features/suppliers/services/suppliers.service";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+
+function applyLinkedOrgVerification(
+  mapped: PublicProfileEntity,
+  verificationStatus: string | null | undefined,
+): void {
+  const status = (verificationStatus ?? "").trim() || null;
+  mapped.verificationStatus = status;
+  mapped.isVerified = isOrgKycVerified({ verification_status: status });
+}
 
 function getDriverFallbackSeed(driverId: string): string {
   return `driver-${driverId}`;
@@ -92,6 +102,7 @@ export function usePublicProfileEntity(
             );
             mapped.avatarUrl = resolved.avatarUrl;
             mapped.avatarSeed = resolved.avatarSeed;
+            applyLinkedOrgVerification(mapped, profile?.verificationStatus);
           }
           if (mounted) setEntity(mapped);
           return;
@@ -112,6 +123,7 @@ export function usePublicProfileEntity(
             );
             mapped.avatarUrl = resolved.avatarUrl;
             mapped.avatarSeed = resolved.avatarSeed;
+            applyLinkedOrgVerification(mapped, profile?.verificationStatus);
           }
           if (mounted) setEntity(mapped);
           return;

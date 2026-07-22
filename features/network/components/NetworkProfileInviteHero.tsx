@@ -4,8 +4,13 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { PartyEntityAvatarGlow } from "@/components/PartyEntityAvatarGlow";
 import Theme from "@/constants/Theme";
+import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
 import { networkProfileInviteStyles as s } from "@/features/network/components/networkProfileInvite.styles";
 import { publicProfileInviteCompact as compactS } from "@/features/party/components/publicProfileMobile.styles";
+import {
+  resolveOrgVerificationState,
+  type OrgVerificationState,
+} from "@/features/network/utils/orgVerification.util";
 import {
   partyAccentFromConnectionRole,
   type PartyRoleLabel,
@@ -27,6 +32,10 @@ export type NetworkProfileInviteHeroProps = {
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   showVerified?: boolean;
+  /** Explicit KYC state for Verified / Not verified tags. */
+  verificationState?: OrgVerificationState;
+  /** When false, hide verification tags (e.g. some driver views). Default true. */
+  showVerificationTags?: boolean;
   metaChips?: { label: string }[];
   phone?: string | null;
   onPressPhone?: () => void;
@@ -56,6 +65,8 @@ export function NetworkProfileInviteHero({
   avatarUrl,
   avatarSeed,
   showVerified = false,
+  verificationState: verificationStateProp,
+  showVerificationTags = true,
   metaChips,
   phone,
   onPressPhone,
@@ -67,6 +78,10 @@ export function NetworkProfileInviteHero({
   const accent = partyAccentFromConnectionRole(roleLabel);
   const resolvedEntity = entityType ?? roleToEntityType(roleLabel);
   const resolvedAvatarSize = compact ? Math.min(avatarSize, 68) : avatarSize;
+  const verificationState: OrgVerificationState =
+    verificationStateProp ??
+    resolveOrgVerificationState({ is_kyc_verified: showVerified });
+  const isKycVerified = verificationState === "verified";
   const chips =
     metaChips ??
     (subtitle.trim().length > 0
@@ -120,7 +135,7 @@ export function NetworkProfileInviteHero({
               borderStyle={{ borderWidth: 0 }}
             />
           </PartyEntityAvatarGlow>
-          {showVerified ? (
+          {isKycVerified ? (
             <View style={s.verifiedDot} pointerEvents="none">
               <Verified size={10} color={Theme.textOnPrimary} strokeWidth={2.6} />
             </View>
@@ -131,6 +146,13 @@ export function NetworkProfileInviteHero({
           <Text style={[s.name, compact && compactS.name]} numberOfLines={1}>
             {name.toUpperCase()}
           </Text>
+          {showVerificationTags ? (
+            <OrgVerificationBadges
+              state={verificationState}
+              compact={compact}
+              style={{ marginTop: 6, marginBottom: 2 }}
+            />
+          ) : null}
           {subtitle ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4, maxWidth: "100%" }}>
               <MapPin size={compact ? 8 : 9} color={Theme.textMutedDemo} strokeWidth={2} />

@@ -216,6 +216,7 @@ export async function getLinkedOrgProfile(linkedOrganizationId: string): Promise
     gstin?: string | null;
     address?: string | null;
     website?: string | null;
+    verificationStatus?: string | null;
   } | null;
 }> {
   const { data, error } = await supabase().rpc('get_connection_partner_display', {
@@ -237,6 +238,7 @@ export async function getLinkedOrgProfile(linkedOrganizationId: string): Promise
     gstin?: string | null;
     address?: string | null;
     website?: string | null;
+    verificationStatus?: string | null;
   };
   return {
     error: null,
@@ -250,6 +252,7 @@ export async function getLinkedOrgProfile(linkedOrganizationId: string): Promise
       gstin: raw.gstin ?? null,
       address: raw.address ?? null,
       website: raw.website ?? null,
+      verificationStatus: (raw.verificationStatus ?? '').trim() || null,
     },
   };
 }
@@ -268,6 +271,7 @@ type OrgDisplayProfile = {
   tripCount?: number;
   averageRating?: number | null;
   ratingCount?: number;
+  verificationStatus?: string | null;
 };
 
 /** Batch-fetch display profiles for multiple linked orgs in one RPC call. */
@@ -293,6 +297,7 @@ export async function getLinkedOrgProfilesBatch(
     tripCount?: number;
     averageRating?: number | null;
     ratingCount?: number;
+    verificationStatus?: string | null;
   }>;
   const result: Record<string, OrgDisplayProfile> = {};
   for (const [oid, entry] of Object.entries(raw)) {
@@ -304,6 +309,7 @@ export async function getLinkedOrgProfilesBatch(
     const avatarUrl = (entry.avatarUrl ?? '').trim();
     const avatarSeed = (entry.avatarSeed ?? '').trim();
     const orgCreatedAt = (entry.orgCreatedAt ?? '').trim();
+    const verificationStatus = (entry.verificationStatus ?? '').trim() || null;
     const tripCount =
       typeof entry.tripCount === 'number' && Number.isFinite(entry.tripCount)
         ? entry.tripCount
@@ -332,6 +338,7 @@ export async function getLinkedOrgProfilesBatch(
       ...(tripCount !== undefined ? { tripCount } : {}),
       ...(averageRating !== undefined ? { averageRating } : {}),
       ...(ratingCount !== undefined ? { ratingCount } : {}),
+      ...(verificationStatus ? { verificationStatus } : { verificationStatus: null }),
     };
   }
   return result;

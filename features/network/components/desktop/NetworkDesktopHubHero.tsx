@@ -12,6 +12,9 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspaceOrgLogo } from "@/features/organization/hooks/useWorkspaceOrgLogo";
 import { useOrganizationOfficeMap } from "@/features/network/hooks/useOrganizationOfficeMap";
+import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
+import { getOrgVerificationBannerFields } from "@/features/organization/services/organization.service";
+import { resolveOrgVerificationState } from "@/features/network/utils/orgVerification.util";
 import {
   METRONIC,
   networkDesktopHubStyles as styles,
@@ -72,6 +75,27 @@ export function NetworkDesktopHubHero({
     useWorkspaceOrgLogo();
 
   const [userAvatarUri, setUserAvatarUri] = useState<string | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!orgId) {
+      setVerificationStatus(null);
+      return;
+    }
+    let cancelled = false;
+    void getOrgVerificationBannerFields(orgId).then(({ fields }) => {
+      if (cancelled) return;
+      setVerificationStatus(fields?.verification_status ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
+  const verificationState = resolveOrgVerificationState({
+    verification_status: verificationStatus,
+  });
+  const isKycVerified = verificationState === "verified";
 
   const userDisplayName =
     profile?.full_name?.trim() ||
@@ -155,8 +179,15 @@ export function NetworkDesktopHubHero({
           <View style={heroLocal.narrowTextCol}>
             <View style={heroLocal.narrowNameRow}>
               <Text style={heroLocal.narrowName} numberOfLines={1}>{orgName}</Text>
-              <BadgeCheck size={13} color={METRONIC.link} strokeWidth={2.2} />
+              {isKycVerified ? (
+                <BadgeCheck size={13} color={Theme.darkGreen} strokeWidth={2.2} />
+              ) : null}
             </View>
+            <OrgVerificationBadges
+              state={verificationState}
+              compact
+              style={{ justifyContent: "flex-start", marginTop: 4 }}
+            />
             <View style={heroLocal.narrowMeta}>
               <View style={styles.heroMetaItem}>
                 <Building2 size={11} color={METRONIC.subtle} strokeWidth={2} />
@@ -243,8 +274,15 @@ export function NetworkDesktopHubHero({
 
           <View style={styles.heroNameRow}>
             <Text style={styles.heroName}>{orgName}</Text>
-            <BadgeCheck size={15} color={METRONIC.link} strokeWidth={2.2} />
+            {isKycVerified ? (
+              <BadgeCheck size={15} color={Theme.darkGreen} strokeWidth={2.2} />
+            ) : null}
           </View>
+          <OrgVerificationBadges
+            state={verificationState}
+            compact
+            style={{ marginTop: 6, marginBottom: 2 }}
+          />
 
           <View style={styles.heroMetaRow}>
             <View style={styles.heroMetaItem}>

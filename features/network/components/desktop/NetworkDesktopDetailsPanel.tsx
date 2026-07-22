@@ -17,6 +17,8 @@ import {
 } from "@/features/network/components/desktop/NetworkDesktopWorkspaceProfileModal";
 import { useOrganizationOfficeMap } from "@/features/network/hooks/useOrganizationOfficeMap";
 import { networkHubProfileCompletion } from "@/features/network/utils/networkHubProfileCompletion.util";
+import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
+import { resolveOrgVerificationState } from "@/features/network/utils/orgVerification.util";
 import { buildProjectPeopleStack } from "@/features/network/utils/networkProjectPeople.util";
 import {
   buildHeadquarterLocationCard,
@@ -729,16 +731,19 @@ export function NetworkDesktopDetailsPanel({
                   <ShieldCheck size={14} color={kyc?.verification_status === 'verified' ? '#50CD89' : METRONIC.subtle} strokeWidth={2} />
                   <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact, { marginBottom: 0 }]}>Identity & Compliance</Text>
                 </View>
-                {kyc?.verification_status ? (
-                  <View style={{
-                    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
-                    backgroundColor: kyc.verification_status === 'verified' ? '#E8FFF3' : kyc.verification_status === 'pending' ? '#FFF8DD' : '#F1F1F4',
-                  }}>
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: kyc.verification_status === 'verified' ? '#50CD89' : kyc.verification_status === 'pending' ? '#F6C000' : METRONIC.subtle }}>
-                      {kyc.verification_status.toUpperCase()}
-                    </Text>
-                  </View>
-                ) : null}
+                {(() => {
+                  const state = resolveOrgVerificationState({
+                    verification_status: kyc?.verification_status,
+                  });
+                  return (
+                    <OrgVerificationBadges
+                      state={state}
+                      compact
+                      showRecommended={state === "verified"}
+                      style={{ justifyContent: "flex-end" }}
+                    />
+                  );
+                })()}
               </View>
               {(() => {
                 const kycPct = kycCompletionPct(kyc);
