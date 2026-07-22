@@ -8,6 +8,7 @@ import type {
   ClientManagementBundle,
   ClientWarehouseExtended,
 } from "@/features/clients/types/clientManagement.types";
+import { ClientProfileDateField } from "@/features/clients/components/desktop/ClientProfileDateField";
 import { ClientProfileLaneRateTable } from "@/features/clients/components/desktop/ClientProfileLaneRateTable";
 import {
   createClientLaneRate,
@@ -300,17 +301,17 @@ export function ClientProfileEmbeddedLanes({
               onToggle={() => setOpenSelect((o) => (o === "rate_type" ? null : "rate_type"))}
               onChange={(v) => { setForm({ ...form, rate_type: v }); setOpenSelect(null); }}
             />
-            <Field
+            <ClientProfileDateField
               label="Valid from"
               value={form.valid_from}
               onChange={(v) => setForm({ ...form, valid_from: v })}
-              placeholder="YYYY-MM-DD"
+              fullWidth
             />
-            <Field
+            <ClientProfileDateField
               label="Valid to"
               value={form.valid_to}
               onChange={(v) => setForm({ ...form, valid_to: v })}
-              placeholder="YYYY-MM-DD"
+              fullWidth
             />
           </View>
 

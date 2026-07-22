@@ -9,7 +9,7 @@ import {
 } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { formatINR } from "@/lib/format";
 import { Pencil, Trash2 } from "lucide-react-native";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 function primaryRate(lane: ClientLaneRate): string {
   if (lane.rate != null) {
@@ -39,11 +39,7 @@ export function ClientProfileLaneRateTable({ lanes, onEdit, onDelete }: TablePro
   if (lanes.length === 0) return null;
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={cpStyles.laneTableScroll}
-    >
+    <View style={cpStyles.laneTableScroll}>
       <View style={cpStyles.laneTable}>
         <View style={[cpStyles.laneTableRow, cpStyles.laneTableHead]}>
           <Text style={[cpStyles.laneTableHeadCell, cpStyles.laneColFrom]}>From</Text>
@@ -74,7 +70,7 @@ export function ClientProfileLaneRateTable({ lanes, onEdit, onDelete }: TablePro
             <Text style={[cpStyles.laneTableCell, cpStyles.laneColRate, cpStyles.laneTableRate]} numberOfLines={2}>
               {primaryRate(lane)}
             </Text>
-            <Text style={[cpStyles.laneTableCell, cpStyles.laneColValid]} numberOfLines={1}>
+            <Text style={[cpStyles.laneTableCell, cpStyles.laneColValid]} numberOfLines={2}>
               {validity(lane)}
             </Text>
             <View style={[cpStyles.laneColActions, cpStyles.laneTableActions]}>
@@ -102,6 +98,6 @@ export function ClientProfileLaneRateTable({ lanes, onEdit, onDelete }: TablePro
           </View>
         ))}
       </View>
-    </ScrollView>
+    </View>
   );
 }

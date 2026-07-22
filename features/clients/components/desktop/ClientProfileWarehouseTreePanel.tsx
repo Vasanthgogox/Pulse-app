@@ -8,6 +8,7 @@ import {
   hubStyles as styles,
   METRONIC,
 } from "@/features/clients/components/desktop/clientProfileHub.styles";
+import { ClientProfileDateField } from "@/features/clients/components/desktop/ClientProfileDateField";
 import { ClientProfileEmbeddedLanes } from "@/features/clients/components/desktop/ClientProfileEmbeddedLanes";
 import { createWarehouse } from "@/features/clients/services/clientWarehouses.service";
 import { createClientContractAgreement } from "@/features/clients/services/clientContractAgreements.service";
@@ -389,8 +390,18 @@ export function ClientProfileWarehouseTreePanel({ bundle, orgId, clientId, onRef
                               onChange={(v) => { setContractForm({ ...contractForm, commercial_model: v }); setOpenSelect(null); }}
                               compact={compact}
                             />
-                            <Field label="Effective (YYYY-MM-DD)" value={contractForm.effective_date} onChange={(v) => setContractForm({ ...contractForm, effective_date: v })} placeholder="2026-01-01" compact={compact} />
-                            <Field label="Expiry (YYYY-MM-DD)" value={contractForm.expiry_date} onChange={(v) => setContractForm({ ...contractForm, expiry_date: v })} placeholder="2027-01-01" compact={compact} />
+                            <ClientProfileDateField
+                              label="Effective"
+                              value={contractForm.effective_date}
+                              onChange={(v) => setContractForm({ ...contractForm, effective_date: v })}
+                              compact={compact}
+                            />
+                            <ClientProfileDateField
+                              label="Expiry"
+                              value={contractForm.expiry_date}
+                              onChange={(v) => setContractForm({ ...contractForm, expiry_date: v })}
+                              compact={compact}
+                            />
                             <Field label="Credit days" value={contractForm.credit_days} onChange={(v) => setContractForm({ ...contractForm, credit_days: v })} keyboardType="numeric" compact={compact} />
                           </View>
                           <Pressable onPress={() => setShowContractMore((v) => !v)} style={t.linkRow}>

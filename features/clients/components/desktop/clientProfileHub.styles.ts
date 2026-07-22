@@ -499,9 +499,12 @@ export const clientProfileStyles = StyleSheet.create({
   },
   laneTableScroll: {
     flexGrow: 1,
+    width: "100%",
   },
   laneTable: {
-    minWidth: 720,
+    width: "100%",
+    minWidth: "100%",
+    alignSelf: "stretch",
     borderWidth: 1,
     borderColor: METRONIC.border,
     borderRadius: 8,
@@ -514,8 +517,9 @@ export const clientProfileStyles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
     paddingVertical: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     minHeight: 40,
+    gap: 4,
   },
   laneTableHead: {
     backgroundColor: "#F5F8FA",
@@ -540,11 +544,11 @@ export const clientProfileStyles = StyleSheet.create({
   laneTableRate: {
     fontWeight: "800",
   },
-  laneColFrom: { width: 160, flexShrink: 0 },
-  laneColTo: { width: 200, flexShrink: 0 },
-  laneColVehicle: { width: 100, flexShrink: 0 },
-  laneColRate: { width: 130, flexShrink: 0 },
-  laneColValid: { width: 130, flexShrink: 0 },
+  laneColFrom: { flex: 1.2, minWidth: 140 },
+  laneColTo: { flex: 1, minWidth: 100 },
+  laneColVehicle: { width: 110, flexShrink: 0 },
+  laneColRate: { width: 140, flexShrink: 0 },
+  laneColValid: { width: 200, flexShrink: 0 },
   laneColActions: {
     width: 64,
     flexShrink: 0,
