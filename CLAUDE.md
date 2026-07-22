@@ -42,6 +42,25 @@ Stop investigating when:
 
 Do not continue searching for alternative explanations.
 
+## Runtime & Ops Context
+
+### Sentry
+- Org slug `gogox-gr`, region `https://de.sentry.io`
+- Projects: `gx-pulse` (web + Android prod) and `react-native`
+- Live release: `pulse@1.0.0`
+
+### Hermes / RN platform gotchas
+- No global `crypto` on Android Hermes — never call `crypto.randomUUID()` / `crypto.getRandomValues()` bare on the client. Use `uuidv7()` from `lib/uuidv7.ts` (or an existing local Hermes-safe `randomUUID()`). Bare `crypto.*` is fine only in `supabase/functions/*` (Deno) and `oms/`, `packages/platform/*` (Node).
+- RN polyfills a global `window` but NOT `window.location` — guard both (`typeof window === 'undefined' || !window.location`) before reading `location.*`.
+- Maps: MapLibre in standalone builds, `react-native-maps` only in Expo Go — always go through the compat shims (`lib/mapLibreCompat.*`, `components/driver/LeafletMap.*`), never import `react-native-maps` directly.
+
+### Known Sentry noise (do NOT "fix" in code)
+- `AsyncRequireError: Loading module … failed` = stale chunk after a Netlify redeploy; recovery listeners already reload. Ignore.
+- `[AuthGuard] refresh_invalid_session_cleared` = expected warning-level auth signal (session cleared on expiry), funneled via `captureMessage`. Ignore.
+
+### Deploy
+- Web → Netlify (`gx-pulse.netlify.app`). Native → new build required; no OTA (`ota_updates` disabled), so client-side fixes need a fresh Android/iOS build.
+
 ## Key Conventions
 - Routes: always `ROUTES.*` from `lib/routes.ts`
 - Query keys: always `queryKeys.*` from `lib/queryKeys.ts`
