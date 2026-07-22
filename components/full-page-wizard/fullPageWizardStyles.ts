@@ -578,8 +578,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: 48,
     borderRadius: 14,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
   },
   submitBtnInk: {
     flexDirection: "row",
@@ -622,9 +620,6 @@ export const fullPageWizardStyles = StyleSheet.create({
     color: Theme.buttonPrimaryText,
     fontSize: 14,
     fontWeight: "700",
-  },
-  submitBtnTextDisabled: {
-    color: Theme.textMuted,
   },
   submitBtnTextDisabled: {
     color: Theme.textMuted,
