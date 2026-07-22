@@ -3412,6 +3412,10 @@ export function AddTransactionModal({
         setCategory(null);
         setDriverPaymentType(null);
         onClose();
+      } catch {
+        // onSubmit surfaces its own error to the user (Alert) before rejecting.
+        // Swallow here so the modal stays open (no success/dismiss) without the
+        // rejection escaping this fire-and-forget IIFE as an unhandled rejection.
       } finally {
         setLedgerSubmitting(false);
       }

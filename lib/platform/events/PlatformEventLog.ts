@@ -1,4 +1,4 @@
-import { uuidv7 } from '@/lib/uuidv7';
+import { uuidv7 } from '../../uuidv7';
 import type { PlatformDomainEvent, PlatformDomainEventName } from './types';
 
 export type PlatformEventLogEntry = {
