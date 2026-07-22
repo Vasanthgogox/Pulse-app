@@ -215,8 +215,10 @@ function ledgerHistoryTitle(tx: LedgerRow, isIn: boolean) {
 }
 
 /** Revenue additions + supplier credits (cost −) improve simplified net. */
-function adjustmentsCountingAsIncome(adjustments: TripAdjustment[]) {
-  return adjustments.filter(
+function adjustmentsCountingAsIncome(
+  adjustments: TripAdjustment[] | null | undefined,
+) {
+  return (Array.isArray(adjustments) ? adjustments : []).filter(
     (a) =>
       !isAdjustmentVoided(a) &&
       ((a.type === "revenue" && a.impact === "plus") ||
@@ -225,8 +227,10 @@ function adjustmentsCountingAsIncome(adjustments: TripAdjustment[]) {
 }
 
 /** Revenue deductions + supplier add-ons (cost +) reduce simplified net. */
-function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
-  return adjustments.filter(
+function adjustmentsCountingAsDeductions(
+  adjustments: TripAdjustment[] | null | undefined,
+) {
+  return (Array.isArray(adjustments) ? adjustments : []).filter(
     (a) =>
       !isAdjustmentVoided(a) &&
       ((a.type === "revenue" && a.impact === "minus") ||
@@ -1641,7 +1645,10 @@ export default function TripDetailScreen({
   );
   const deductions = deductionAdjustmentRows.reduce((s, a) => s + a.amount, 0);
 
-  const received = detail.tripLedgerEntries.reduce(
+  const ledgerEntries = Array.isArray(detail.tripLedgerEntries)
+    ? detail.tripLedgerEntries
+    : [];
+  const received = ledgerEntries.reduce(
     (s, tx) => s + Number(tx.amount_in ?? 0),
     0,
   );
@@ -1650,12 +1657,20 @@ export default function TripDetailScreen({
   const tripSettlement = computeTripSettlementDues({
     trip,
     viewerOrgId: currentOrganization?.id ?? null,
-    ledgerEntries: detail.tripLedgerEntries,
+    ledgerEntries,
     adjustments: detail.adjustments,
     subcontractRate: detail.subcontractRate ?? null,
     driverOffer: assetDriverOffer,
     assetProvisionCostInr: assetProvisionCostPreview?.totalBaseCostInr ?? null,
   });
+  // Mover_asset trip: the client payment lives on the aggregator's trip, not
+  // here. We show what the aggregator has paid as a read-only INFO BADGE
+  // ("<client> marked paid ₹X") — it does NOT count as a local receipt, so
+  // Lenovo's own collected/due stay untouched until Lenovo confirms receipt.
+  const isMoverAssetTrip = String(trip.source ?? "") === "mover_asset";
+  const moverClientMarkedPaid = isMoverAssetTrip
+    ? (detail.moverClientPaid ?? 0)
+    : 0;
   const collectedFromClient = tripSettlement.clientReceived;
   const supplierPaid = tripSettlement.payablePaid;
 
@@ -1667,7 +1682,7 @@ export default function TripDetailScreen({
   };
   const financeHistoryRows: FinanceHistoryRow[] = (() => {
     const rows: FinanceHistoryRow[] = [];
-    for (const tx of detail.tripLedgerEntries) {
+    for (const tx of ledgerEntries) {
       const inAmt = Number(tx.amount_in ?? 0);
       const outAmt = Number(tx.amount_out ?? 0);
       if (inAmt > 0)
@@ -1682,7 +1697,7 @@ export default function TripDetailScreen({
     });
     return rows;
   })();
-  const driverCashPayoutsForExpenses = detail.tripLedgerEntries
+  const driverCashPayoutsForExpenses = ledgerEntries
     .filter(
       (tx) =>
         tx.contact_type === "driver" && Number(tx.amount_out ?? 0) > 0,
@@ -1701,7 +1716,7 @@ export default function TripDetailScreen({
     }));
   const driverReimbursementDueInr =
     tripOperationsSummaryQuery.data?.financialSnapshot?.payableOutstandingInr ?? 0;
-  const paymentCaptured = detail.tripLedgerEntries.some(
+  const paymentCaptured = ledgerEntries.some(
     (row) => row.contact_type === "client" && Number(row.amount_in ?? 0) > 0,
   );
 
@@ -2086,13 +2101,17 @@ export default function TripDetailScreen({
     hasMarketSupplierPayable &&
     !isPartnerSettlementView &&
     isTripOwner;
+  // Asset trips: the mover can pay its driver at any time, even before a cost
+  // is recorded (previously gated on adjCost/cost > 0, which hid the button on
+  // a fresh asset trip — chicken-and-egg). Still owner-only and not a partner view.
   const showRecordDriverPayoutCta =
     isAssetTripFinance &&
     !isPartnerSettlementView &&
-    isTripOwner &&
-    (adjCost > 0 || cost > 0);
+    isTripOwner;
+  /** Partner settlement tile is receivable-only; expenses live on the mover_asset trip. */
   const showPayableSettlementLane =
-    hasMarketSupplierPayable || isAssetTripFinance;
+    !isPartnerSettlementView &&
+    (hasMarketSupplierPayable || isAssetTripFinance);
   const tripLedgerNavContext = {
     trip,
     router,
@@ -2106,7 +2125,7 @@ export default function TripDetailScreen({
   const openSettlementLanePreview = (lane: "receivable" | "payable") => {
     const payableEntityType = isAssetTripFinance ? "driver" : "supplier";
     const tx = latestTripSettlementLedgerEntry(
-      detail.tripLedgerEntries,
+      ledgerEntries,
       lane,
       payableEntityType,
     );
@@ -2140,6 +2159,11 @@ export default function TripDetailScreen({
         revisedReceivable={adjSales}
         collectedAmount={collectedFromClient}
         receivableDue={receivableAfterAdjustments}
+        receivableInfoNote={
+          moverClientMarkedPaid > 0
+            ? `${clientNameForParty} marked ${formatINR(moverClientMarkedPaid)} paid`
+            : undefined
+        }
         showPayable={showPayableSettlementLane}
         payablePartyName={provisionCostPartyName}
         payableAvatarUrl={

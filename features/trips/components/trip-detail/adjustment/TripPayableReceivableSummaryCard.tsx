@@ -21,6 +21,11 @@ export interface SettlementLaneProps {
   dueAmount: number;
   accentColor: string;
   onPress?: () => void;
+  /**
+   * Read-only informational note under the lane, e.g. "MAX marked ₹63,000 paid".
+   * Does NOT count toward settled/due — pure shared-ledger visibility.
+   */
+  infoNote?: string;
 }
 
 function SettlementLaneCard({
@@ -37,6 +42,7 @@ function SettlementLaneCard({
   dueAmount,
   accentColor,
   onPress,
+  infoNote,
   layout = "mobile",
 }: SettlementLaneProps & { layout?: ProvisionFinanceLayout }) {
   const isDesktop = layout === "desktop";
@@ -139,6 +145,13 @@ function SettlementLaneCard({
           ) : null}
         </View>
       </View>
+      {infoNote ? (
+        <View style={styles.infoNoteRow}>
+          <Text style={styles.infoNoteText} numberOfLines={1}>
+            {infoNote}
+          </Text>
+        </View>
+      ) : null}
     </>
   );
 
@@ -172,6 +185,8 @@ export interface TripPayableReceivableSummaryCardProps {
   revisedReceivable: number;
   collectedAmount: number;
   receivableDue: number;
+  /** Read-only note under the receivable, e.g. "MAX marked ₹63,000 paid". Non-counting. */
+  receivableInfoNote?: string;
   showPayable?: boolean;
   payablePartyName: string;
   payableAvatarUrl?: string | null;
@@ -262,6 +277,7 @@ export const TripPayableReceivableSummaryCard = memo(
                 revisedAmount={props.revisedReceivable}
                 settledAmount={props.collectedAmount}
                 dueAmount={props.receivableDue}
+                infoNote={props.receivableInfoNote}
                 accentColor={Theme.primary}
                 onPress={props.onPressReceivable}
                 layout={layout}
@@ -526,5 +542,16 @@ const styles = StyleSheet.create({
   metricSettledHintDesktop: {
     fontSize: 8,
     lineHeight: 10,
+  },
+  infoNoteRow: {
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: Theme.border,
+  },
+  infoNoteText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
   },
 });

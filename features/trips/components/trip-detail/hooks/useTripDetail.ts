@@ -53,6 +53,7 @@ import type { DisputeRow } from "@/features/finance/services/sharedLedger.servic
 import {
     acceptPartnerView,
     createDispute,
+    getMoverAssetClientPaid,
     getSharedLedgerEntriesForPartner,
     resolveDispute,
     resolveDisputeTableOnly,
@@ -308,6 +309,9 @@ export function useTripDetail({
   // ── Finance / adjustments ─────────────────────────────────────────────────
   const [financeRefreshKey, setFinanceRefreshKey] = useState(0);
   const [adjustments, setAdjustments] = useState<TripAdjustment[]>([]);
+  // Mover_asset trips: amount the aggregator has already paid the mover on the
+  // linked load (read-only shared-ledger visibility; no row on mover's books).
+  const [moverClientPaid, setMoverClientPaid] = useState<number>(0);
   const [counterpartyEntries, setCounterpartyEntries] = useState<
     Array<{
       id: string;
@@ -2077,14 +2081,17 @@ export function useTripDetail({
     loadCompletedForIdRef.current = bundle.trip.id;
     initialLoadDoneRef.current = true;
 
-    const sorted = [...bundle.assignment_audit].sort(
+    const auditRows = Array.isArray(bundle.assignment_audit)
+      ? bundle.assignment_audit
+      : [];
+    const sorted = [...auditRows].sort(
       (a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime(),
     );
     setAssignmentAuditRows(sorted as unknown as TripAssignmentAuditRow[]);
 
     const driverNames: Record<string, string> = {};
     const vehicleLabels: Record<string, string> = {};
-    for (const aa of bundle.assignment_audit) {
+    for (const aa of auditRows) {
       if (aa.driver_id_new && aa.driver_new_name) driverNames[aa.driver_id_new] = aa.driver_new_name;
       if (aa.driver_id_prev && aa.driver_prev_name) driverNames[aa.driver_id_prev] = aa.driver_prev_name;
       if (aa.vehicle_id_new && aa.vehicle_new_label) vehicleLabels[aa.vehicle_id_new] = aa.vehicle_new_label;
@@ -2093,9 +2100,14 @@ export function useTripDetail({
     setAssignmentDriverNames(driverNames);
     setAssignmentVehicleLabels(vehicleLabels);
 
-    setAdjustments(bundle.adjustments as unknown as TripAdjustment[]);
+    setAdjustments(
+      (Array.isArray(bundle.adjustments)
+        ? bundle.adjustments
+        : []) as unknown as TripAdjustment[],
+    );
+    const docs = Array.isArray(bundle.documents) ? bundle.documents : [];
     setTripDocuments(
-      bundle.documents.map((d) => ({
+      docs.map((d) => ({
         ...(d as unknown as tripDocumentsService.TripDocumentRow),
         document_type: d.document_type ?? 'pod',
       })),
@@ -2460,6 +2472,27 @@ export function useTripDetail({
     };
   }, [currentOrganization?.id, trip?.id, trip?.supplier_id, trip?.client_id, counterpartyIntegrated]);
 
+  // Mover_asset: fetch how much the aggregator has paid on the linked load, so
+  // the mover's receivable shows "<client> marked paid ₹X" instead of nothing.
+  useEffect(() => {
+    const tid = trip?.id;
+    if (!tid || String(trip?.source ?? "") !== "mover_asset") {
+      setMoverClientPaid(0);
+      return;
+    }
+    let cancelled = false;
+    getMoverAssetClientPaid(tid)
+      .then((res) => {
+        if (!cancelled) setMoverClientPaid(res.paid);
+      })
+      .catch(() => {
+        if (!cancelled) setMoverClientPaid(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [trip?.id, trip?.source]);
+
   // Dispute refresh
   useEffect(() => {
     void refreshTripDispute();
@@ -2651,6 +2684,7 @@ export function useTripDetail({
     adjustments,
     subcontractRate,
     counterpartyEntries,
+    moverClientPaid,
     paidToDriver,
     tripDispute,
     tripDisputeDirection,

@@ -391,27 +391,39 @@ export function getTripDisplayNumber(
 }
 
 /**
- * Optional secondary label for cross-org supplier viewers (e.g. "Job #26").
- * Primary label remains `getTripDisplayNumber()`.
+ * Optional secondary label under the trip number on hub tiles.
+ * Distinguishes the mover's own asset job from the aggregator's settlement tile
+ * when both appear in the mover's list (same TRP display code).
  */
 export function getTripDisplayMeta(
   row: TripRow | SupplierTripRow,
   viewerOrgId?: string | null,
-): { secondaryLabel?: string } {
+): { secondaryLabelKey?: "tripHubLabelMoverAsset" | "tripHubLabelSettlement" | "tripHubLabelJob"; secondaryLabel?: string } {
   if (!("organization_id" in row)) {
     if (row.supplier_trip_sequence != null && row.supplier_trip_sequence > 0) {
-      return { secondaryLabel: `Job #${row.supplier_trip_sequence}` };
+      return {
+        secondaryLabelKey: "tripHubLabelJob",
+        secondaryLabel: `Job #${row.supplier_trip_sequence}`,
+      };
     }
     return {};
+  }
+  const source = String((row as TripRow).source ?? "").trim().toLowerCase();
+  if (source === "mover_asset") {
+    return { secondaryLabelKey: "tripHubLabelMoverAsset" };
   }
   if (
     viewerOrgId &&
     row.organization_id &&
-    row.organization_id !== viewerOrgId &&
-    row.supplier_trip_sequence != null &&
-    row.supplier_trip_sequence > 0
+    row.organization_id !== viewerOrgId
   ) {
-    return { secondaryLabel: `Job #${row.supplier_trip_sequence}` };
+    if (row.supplier_trip_sequence != null && row.supplier_trip_sequence > 0) {
+      return {
+        secondaryLabelKey: "tripHubLabelJob",
+        secondaryLabel: `Job #${row.supplier_trip_sequence}`,
+      };
+    }
+    return { secondaryLabelKey: "tripHubLabelSettlement" };
   }
   return {};
 }
@@ -2260,6 +2272,15 @@ export interface UpdateTripStatusData {
 
 const COMPLETED_STATUS_SET = new Set(["completed", "delivered", "done"]);
 
+// Statuses that mean the trip is physically underway; entering any of these
+// requires a started_at. Used to auto-stamp it when a caller omits it.
+const MOVING_STATUS_SET = new Set([
+  "in_progress",
+  "picked_up",
+  "in_transit",
+  "at_drop",
+]);
+
 function resolveTripPayoutModeForCompletion(
   trip:
     | Pick<TripRow, "trip_payout_mode" | "supplier_id" | "driver_id" | "vehicle_id">
@@ -2483,6 +2504,22 @@ export async function updateTripStatus(
   };
   if (data.started_at !== undefined)
     updates.started_at = data.started_at ?? null;
+  // Guard: a trip cannot enter a moving state without a start timestamp.
+  // If the caller transitions into transit but never passes started_at, stamp
+  // it now so status and started_at can't diverge (e.g. in_transit with null
+  // started_at, which breaks duration/SLA and the driver timeline).
+  else if (MOVING_STATUS_SET.has(status)) {
+    const before = await supabase()
+      .from("trips")
+      .select("started_at")
+      .eq("id", tripId)
+      .maybeSingle();
+    const existingStartedAt = String(
+      (before.data as { started_at?: string | null } | null)?.started_at ?? "",
+    ).trim();
+    if (!before.error && existingStartedAt === "")
+      updates.started_at = updates.updated_at;
+  }
   if (data.completed_at !== undefined)
     updates.completed_at = data.completed_at ?? null;
   if (data.status_change_origin !== undefined)

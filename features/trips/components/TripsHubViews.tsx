@@ -69,7 +69,11 @@ import Animated, {
     withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getTripDisplayNumber, type TripRow } from "../services/trips.service";
+import {
+  getTripDisplayMeta,
+  getTripDisplayNumber,
+  type TripRow,
+} from "../services/trips.service";
 import { TripHubInTransitPingLines } from "./TripHubInTransitPingLines";
 import type { TripHubInTransitPingMeta } from "../hooks/useTripHubInTransitPings";
 import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
@@ -483,6 +487,12 @@ function TripsHubTripCardInner({
   const origin = trip.pickup_area ?? "—";
   const dest = trip.drop_location ?? "—";
   const tripNo = getTripDisplayNumber(trip, currentOrganizationId);
+  const tripMeta = getTripDisplayMeta(trip, currentOrganizationId);
+  const tripSecondaryLabel = tripMeta.secondaryLabelKey
+    ? tripMeta.secondaryLabelKey === "tripHubLabelJob" && tripMeta.secondaryLabel
+      ? tripMeta.secondaryLabel
+      : tr(tripMeta.secondaryLabelKey)
+    : tripMeta.secondaryLabel ?? null;
   const aging = agingLine(trip, tr);
 
   const supplierNameResolved = (displaySupplierName ?? "").trim();
@@ -566,6 +576,7 @@ function TripsHubTripCardInner({
     style: rowWebStyle,
     viewerOrgId: currentOrganizationId,
     inTransitPing,
+    secondaryLabel: tripSecondaryLabel,
   };
 
   const receivedForReceivable =
@@ -637,6 +648,11 @@ function TripsHubTripCardInner({
                 </View>
               </View>
               <Text style={styles.fleetTripId}>{tripNo}</Text>
+              {tripSecondaryLabel ? (
+                <Text style={styles.fleetTripSecondary} numberOfLines={1}>
+                  {tripSecondaryLabel}
+                </Text>
+              ) : null}
             </View>
           </View>
           <View style={styles.fleetHeadRight}>
@@ -1630,6 +1646,13 @@ export function TripsHubTableView({
             const typeLabel = showAssetTripIcon
               ? tr("tripAsset")
               : tr("tripAggregate");
+            const tableTripMeta = getTripDisplayMeta(t, currentOrganizationId);
+            const tableSecondaryLabel = tableTripMeta.secondaryLabelKey
+              ? tableTripMeta.secondaryLabelKey === "tripHubLabelJob" &&
+                tableTripMeta.secondaryLabel
+                ? tableTripMeta.secondaryLabel
+                : tr(tableTripMeta.secondaryLabelKey)
+              : tableTripMeta.secondaryLabel ?? null;
             const routeShort = `${t.pickup_area ?? "—"} → ${t.drop_location ?? "—"}`;
             const routeDisplay = routeShort.toUpperCase();
             const pnl = tripHubPnl(t, currentOrganizationId, rowAdj, hubCostOpts);
@@ -1800,6 +1823,14 @@ export function TripsHubTableView({
                                 {typeLabel}
                               </Text>
                             </View>
+                            {tableSecondaryLabel ? (
+                              <Text
+                                style={styles.manifestSecondaryLabel}
+                                numberOfLines={1}
+                              >
+                                {tableSecondaryLabel}
+                              </Text>
+                            ) : null}
                           </View>
                         </View>
                       </View>
@@ -2898,6 +2929,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.15,
     textTransform: "uppercase",
   },
+  fleetTripSecondary: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    marginTop: 2,
+    letterSpacing: 0.2,
+  },
   fleetHeadRight: { alignItems: "flex-end", gap: 4 },
   fleetHeadStatusCol: { alignItems: "flex-end", gap: 2 },
   fleetMissionPill: {
@@ -3142,6 +3180,13 @@ const styles = StyleSheet.create({
   },
   manifestIdentityBadges: {
     marginTop: 2,
+  },
+  manifestSecondaryLabel: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    letterSpacing: 0.2,
   },
   manifestTelemetryStatusTag: {
     marginTop: 3,

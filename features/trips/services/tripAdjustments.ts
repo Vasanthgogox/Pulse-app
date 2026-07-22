@@ -345,8 +345,12 @@ export async function updateTripAdjustment(
   }
 }
 
-export function adjustedRevenue(baseSales: number, adjustments: TripAdjustment[]): number {
-  const revenueAdj = adjustments.filter((a) => a.type === "revenue" && !isAdjustmentVoided(a));
+export function adjustedRevenue(
+  baseSales: number,
+  adjustments: TripAdjustment[] | null | undefined,
+): number {
+  const list = Array.isArray(adjustments) ? adjustments : [];
+  const revenueAdj = list.filter((a) => a.type === "revenue" && !isAdjustmentVoided(a));
   const delta = revenueAdj.reduce(
     (sum, a) => sum + (a.impact === "plus" ? a.amount : -a.amount),
     0,
@@ -354,8 +358,12 @@ export function adjustedRevenue(baseSales: number, adjustments: TripAdjustment[]
   return Math.max(0, baseSales + delta);
 }
 
-export function adjustedCost(baseCost: number, adjustments: TripAdjustment[]): number {
-  const costAdj = adjustments.filter((a) => a.type === "cost" && !isAdjustmentVoided(a));
+export function adjustedCost(
+  baseCost: number,
+  adjustments: TripAdjustment[] | null | undefined,
+): number {
+  const list = Array.isArray(adjustments) ? adjustments : [];
+  const costAdj = list.filter((a) => a.type === "cost" && !isAdjustmentVoided(a));
   const delta = costAdj.reduce(
     (sum, a) => sum + (a.impact === "plus" ? a.amount : -a.amount),
     0,

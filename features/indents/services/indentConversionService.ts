@@ -152,3 +152,54 @@ export async function batchAwardIndentsToTrips(
 
   return { error: null, result: { created: Number(data ?? 0) } };
 }
+
+export interface CreateMoverAssetTripOptions {
+  driverId?: string | null;
+  vehicleId?: string | null;
+  vehicleDisplayNumber?: string | null;
+}
+
+/**
+ * Create the MOVER's own asset trip for an awarded load.
+ *
+ * When an aggregator awards a load to a mover, the shared aggregator-owned trip
+ * is billed 'market' (mover = payable) and cannot double as the mover's asset
+ * record (trips_one_per_indent). This creates the mover's own 'asset' trip
+ * (owned by the mover org, linked via source_indent_id) so the mover can log
+ * fuel / toll / driver salary. Idempotent per (mover org, indent).
+ * Backed by public.create_mover_asset_trip.
+ */
+export async function createMoverAssetTrip(
+  indentId: string,
+  options?: CreateMoverAssetTripOptions,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  if (!indentId) {
+    return { error: new Error('indentId is required'), trip: null };
+  }
+
+  const payload: {
+    p_indent_id: string;
+    p_driver_id?: string | null;
+    p_vehicle_id?: string | null;
+    p_vehicle_display_number?: string | null;
+  } = { p_indent_id: indentId };
+
+  if (options?.driverId != null) payload.p_driver_id = options.driverId;
+  if (options?.vehicleId != null) payload.p_vehicle_id = options.vehicleId;
+  if (options?.vehicleDisplayNumber != null) {
+    payload.p_vehicle_display_number =
+      options.vehicleDisplayNumber.trim() || null;
+  }
+
+  const { data, error } = await supabase().rpc(
+    'create_mover_asset_trip',
+    payload,
+  );
+
+  if (error) {
+    return { error: new Error(error.message), trip: null };
+  }
+
+  const rows = (data ?? []) as TripRow[];
+  return { error: null, trip: rows[0] ?? null };
+}

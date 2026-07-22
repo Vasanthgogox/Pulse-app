@@ -68,13 +68,12 @@ export type AggregateTripKindPillContext = {
 
 /**
  * Whether the UI should show the **AGGREGATE** (vs ASSET) trip-kind pill for the current viewer.
- * When the awarded supplier’s org is viewing and the trip is a Load Hub roster assignment
- * (`direct_quote` + driver + vehicle), shows **ASSET** while marketplace semantics stay unchanged elsewhere.
  *
- * **Fallback:** `trip.supplier_id` usually points at the shipper’s supplier row, which is often missing from
- * the awarded supplier’s local `suppliers` list — so `supplierLinkedOrganizationId` is empty in hub meta.
- * In that case, if the viewer org is not the trip owner org and the trip has an assigned driver + vehicle
- * (and not an OTP-only driver), we still show **ASSET** for the supplier executing the load.
+ * Cross-org partner views (awarded supplier looking at the aggregator's trip) always stay
+ * **AGGREGATE** — that tile is settlement-only. The mover's own `mover_asset` trip (owned by
+ * the supplier org, supplier_id null) is the ASSET tile where fuel/toll/driver pay live.
+ * Do not re-introduce the old "infer Asset for supplier on shipper trip" workaround: it made
+ * both tiles look identical and routed movers into a screen with no expense entry.
  */
 export function shouldShowAggregateTripKindPill(
   trip: TripWithSupplier &
@@ -83,25 +82,8 @@ export function shouldShowAggregateTripKindPill(
 ): boolean {
   if (!isAggregateTrip(trip)) return false;
   if (ctx?.driverTrackingOnly === true) return true;
-
-  const viewer = (ctx?.viewerOrganizationId ?? "").trim();
-  const supplierOrg = (ctx?.supplierLinkedOrganizationId ?? "").trim();
-  const tripOrg = (trip.organization_id ?? "").trim();
-
-  const hasFleetAssignment =
-    !!(trip.driver_id && String(trip.driver_id).trim()) &&
-    !!(trip.vehicle_id && String(trip.vehicle_id).trim());
-
-  // Integrated supplier row present in hub meta (same linked org as viewer).
-  if (viewer && supplierOrg && viewer === supplierOrg && isRosterTrip(trip)) {
-    return false;
-  }
-
-  // Awarded supplier: trip owned by shipper org; supplier UUID often missing from viewer hub meta — infer Asset.
-  if (viewer && tripOrg && viewer !== tripOrg && hasFleetAssignment) {
-    return false;
-  }
-
+  // All remaining supplier-linked trips are Aggregate — including cross-org
+  // partner settlement tiles (mover's ASSET job is a separate mover_asset row).
   return true;
 }
 

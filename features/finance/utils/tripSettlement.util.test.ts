@@ -70,6 +70,52 @@ describe("tripSettlement.util", () => {
     expect(settlement.payablePaid).toBe(500);
   });
 
+  it("reflects the aggregator's supplier payout as received in the partner view", () => {
+    // Aggregator (org-1) owns the trip and paid the awarded supplier (org-2)
+    // ₹63,000 (stored as a supplier-tagged amount_out on the owner's books).
+    // The partner viewing this trip should see ₹63,000 as received.
+    const partnerTrip = trip({
+      organization_id: "org-1",
+      indent_id: "indent-1",
+      trip_payout_mode: "market",
+      supplier_rate: 70000,
+      client_price: 80000,
+    });
+    const settlement = computeTripSettlementDues({
+      trip: partnerTrip,
+      viewerOrgId: "org-2", // awarded supplier (partner), not the owner
+      ledgerEntries: [
+        ledger({ id: "out-63k", contact_type: "supplier", amount_out: 63000 }),
+      ],
+    });
+    // Partner receivable target = supplier_rate ₹70k; received = ₹63k; due ₹7k.
+    expect(settlement.receivableTarget).toBe(70000);
+    expect(settlement.clientReceived).toBe(63000);
+    expect(settlement.receivableDue).toBe(7000);
+    expect(settlement.payableTarget).toBe(0);
+    expect(settlement.payableDue).toBe(0);
+  });
+
+  it("does not treat supplier payout as received for the trip owner", () => {
+    const ownerTrip = trip({
+      organization_id: "org-1",
+      indent_id: "indent-1",
+      trip_payout_mode: "market",
+      supplier_rate: 70000,
+      client_price: 80000,
+    });
+    const settlement = computeTripSettlementDues({
+      trip: ownerTrip,
+      viewerOrgId: "org-1", // the owner
+      ledgerEntries: [
+        ledger({ id: "out-63k", contact_type: "supplier", amount_out: 63000 }),
+      ],
+    });
+    // Owner's payout is NOT a receipt; clientReceived stays 0.
+    expect(settlement.clientReceived).toBe(0);
+    expect(settlement.payablePaid).toBe(63000);
+  });
+
   it("rolls client receipts separately from other inflows", () => {
     const rollup = rollupTripSettlementLedger(
       [

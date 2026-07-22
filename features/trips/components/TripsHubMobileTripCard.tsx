@@ -297,6 +297,8 @@ export type TripsHubMobileTripCardProps = {
   style?: StyleProp<ViewStyle>;
   /** Viewer org id — used to show BKG ref instead of TRP001 for cross-org supplier trips. */
   viewerOrgId?: string | null;
+  /** Distinguishes mover asset job vs shipper settlement tile (same TRP code). */
+  secondaryLabel?: string | null;
   /** Last ping time / offline for in-transit trips (no location line). */
   inTransitPing?: TripHubInTransitPingMeta | null;
 };
@@ -333,6 +335,7 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
   fillGrid = false,
   style,
   viewerOrgId,
+  secondaryLabel = null,
   inTransitPing,
 }: TripsHubMobileTripCardProps) {
   const tripNo = asLabel(getTripDisplayNumber(trip, viewerOrgId));
@@ -472,6 +475,11 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                   <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
                 </Text>
               </View>
+              {secondaryLabel ? (
+                <Text style={styles.secondaryLabel} numberOfLines={1}>
+                  {secondaryLabel}
+                </Text>
+              ) : null}
               <View style={[styles.partyRow, styles.partyRowGrid]}>
                 <PartyChip
                   name={supplierChipName}
@@ -500,6 +508,11 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                   <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
                 </Text>
               </View>
+              {secondaryLabel ? (
+                <Text style={styles.secondaryLabel} numberOfLines={1}>
+                  {secondaryLabel}
+                </Text>
+              ) : null}
               <View style={styles.partyRow}>
                 <PartyChip
                   name={supplierChipName}
@@ -812,6 +825,13 @@ const styles = StyleSheet.create({
     color: REF.muted,
     lineHeight: 12,
     fontVariant: ["tabular-nums"],
+  },
+  secondaryLabel: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "600",
+    color: REF.inkMid,
+    letterSpacing: 0.2,
   },
   partyRow: {
     flexDirection: "row",

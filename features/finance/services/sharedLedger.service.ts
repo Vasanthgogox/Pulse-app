@@ -171,6 +171,22 @@ export async function getSharedLedgerConnections(orgId: string): Promise<{
  * Prefer getSharedLedgerTripSummary for aggregates; use this for entry lists.
  * Caps payload size — pass referenceId for trip-scoped fetches (limit 10).
  */
+/**
+ * How much the aggregator has paid the mover on a mover_asset trip's linked
+ * load. Read-only shared-ledger visibility ("MAX marked paid ₹X") — the payment
+ * lives on the aggregator's trip, never mirrored onto the mover's books.
+ * Backed by public.get_mover_asset_client_paid.
+ */
+export async function getMoverAssetClientPaid(
+  tripId: string,
+): Promise<{ error: Error | null; paid: number }> {
+  const { data, error } = await supabase().rpc('get_mover_asset_client_paid', {
+    p_trip_id: tripId,
+  });
+  if (error) return { error: new Error(error.message), paid: 0 };
+  return { error: null, paid: Number(data ?? 0) };
+}
+
 export async function getSharedLedgerEntriesForPartner(
   orgId: string,
   partnerKey: string,

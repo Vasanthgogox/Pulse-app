@@ -4,7 +4,10 @@
  */
 
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
-import { createTripFromAssignedIndent } from "@/features/indents/services/indentConversionService";
+import {
+  createMoverAssetTrip,
+  createTripFromAssignedIndent,
+} from "@/features/indents/services/indentConversionService";
 import { getAcceptedDirectQuoteForIndent } from "@/features/indents/services/direct-quotes.service";
 import { updateIndent, type DirectQuoteRow, type IndentRow } from "@/features/indents";
 import { resolveIndentDeployQuoteWithFreshQuote } from "@/features/indents/utils/resolveIndentDeployQuote.util";
@@ -79,6 +82,26 @@ export function useTripDeployment({
 
       // Mark indent completed so it leaves Claimed list. Ignore status-update failure; trip is source of truth.
       await updateIndent(load.id, { status: "completed" });
+
+      // Mover path: the deploying org is NOT the load owner (aggregator). The
+      // trip just created is the aggregator's 'market' row on which the mover
+      // is a payable. Give the mover its own 'asset' trip (own driver+vehicle)
+      // so it can log fuel/toll/salary. Best-effort: failure must not block the
+      // primary deploy — the aggregator trip is the source of truth.
+      const isMover = load.organization_id !== orgId;
+      if (isMover && trip.driver_id && trip.vehicle_id) {
+        const { error: moverErr } = await createMoverAssetTrip(load.id, {
+          driverId: trip.driver_id,
+          vehicleId: trip.vehicle_id,
+          vehicleDisplayNumber: trip.vehicle_display_number,
+        });
+        if (moverErr) {
+          console.warn(
+            "[useTripDeployment] mover asset trip not created",
+            moverErr.message,
+          );
+        }
+      }
 
       onSuccess("Trip Initialized");
       if (orgId) {

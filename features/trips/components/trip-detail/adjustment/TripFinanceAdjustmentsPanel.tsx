@@ -71,7 +71,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
 ) {
   const rows = useMemo(
     () =>
-      [...props.adjustments].sort(
+      [...(Array.isArray(props.adjustments) ? props.adjustments : [])].sort(
         (a, b) =>
           new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
       ),
@@ -87,7 +87,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
   const passThroughRecommendations = useMemo(
     () =>
       selectClientPassThroughRecommendations({
-        adjustments: props.adjustments,
+        adjustments: Array.isArray(props.adjustments) ? props.adjustments : [],
         isAssetExecution: Boolean(props.isAssetExecution),
         driverOrSupplierName: props.supplierName,
       }),

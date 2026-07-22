@@ -49,7 +49,9 @@ export class AppErrorBoundary extends Component<Props, State> {
     }
     this.setState({ componentStack: info.componentStack ?? null });
     logger.error('[AppErrorBoundary] render error', {
-      error,
+      message: error?.message ?? String(error),
+      name: error?.name ?? typeof error,
+      stack: error?.stack ?? null,
       componentStack: info.componentStack ?? undefined,
     });
   }

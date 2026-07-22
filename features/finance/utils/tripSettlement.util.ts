@@ -30,6 +30,13 @@ export type TripSettlementLedgerRollup = {
   driverPaid: number;
   receivedTotal: number;
   paidTotal: number;
+  /**
+   * Supplier-tagged outflows on this trip. From the trip OWNER's side this is
+   * "what we paid the supplier"; from the awarded SUPPLIER's (partner) side the
+   * same rows are "what the owner paid us" — used to reflect the counterparty's
+   * payment in the partner-settlement view without mirroring any ledger row.
+   */
+  supplierOutflowTotal: number;
 };
 
 /** Party-aware ledger rollups for settlement due math (not raw hub totals). */
@@ -71,6 +78,7 @@ export function rollupTripSettlementLedger(
     driverPaid: roundCurrency(driverPaid),
     receivedTotal: roundCurrency(receivedTotal),
     paidTotal: roundCurrency(paidTotal),
+    supplierOutflowTotal: roundCurrency(supplierPaid),
   };
 }
 
@@ -206,6 +214,34 @@ export function computeTripSettlementDues(input: {
     ),
     0,
   );
+
+  // Partner-settlement view: the awarded supplier is viewing the aggregator's
+  // trip. The aggregator's supplier-payout (amount_out) is money the partner
+  // RECEIVED. Reflect it as clientReceived so "MAX marked paid ₹X" shows on the
+  // partner's receivable lane — shared-ledger visibility, no row mirrored.
+  // Partner has no payable on this tile (driver/truck costs live on their own
+  // mover_asset trip).
+  const isOwner =
+    input.viewerOrgId != null &&
+    input.trip.organization_id != null &&
+    input.trip.organization_id === input.viewerOrgId;
+  const isPartnerView = input.trip.indent_id != null && !isOwner;
+
+  if (isPartnerView) {
+    const clientReceived = Math.max(
+      rollup.clientReceived,
+      rollup.supplierOutflowTotal,
+    );
+    return {
+      tripType,
+      receivableTarget,
+      payableTarget: 0,
+      clientReceived,
+      payablePaid: 0,
+      receivableDue: Math.max(receivableTarget - clientReceived, 0),
+      payableDue: 0,
+    };
+  }
 
   const payablePaid =
     tripType === "asset"

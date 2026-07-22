@@ -104,11 +104,17 @@ function costDeductionMatchesSource(
   const costAmt = Math.max(0, Number(costAdj.amount) || 0);
   if (sourceAmt !== costAmt) return false;
   const costR = normalizeReason(
-    costAdj.reason.replace(/\s*·\s*(driver|supplier)\s+deduction.*$/i, ""),
+    String(costAdj.reason ?? "").replace(
+      /\s*·\s*(driver|supplier)\s+deduction.*$/i,
+      "",
+    ),
   );
   const mapped = normalizeReason(costReason);
   const sourceR = normalizeReason(
-    source.reason.replace(/\s*\(mirrors client sale cn\)\s*$/i, ""),
+    String(source.reason ?? "").replace(
+      /\s*\(mirrors client sale cn\)\s*$/i,
+      "",
+    ),
   );
   if (costR === mapped) return true;
   if (costR === sourceR) return true;
