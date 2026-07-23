@@ -34,6 +34,7 @@ import { ClientLaneSearchPicker } from "@/features/clients/components/ClientLane
 import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
 import { buildClientLanePrefill } from "@/features/clients/utils/clientLanePrefill.util";
 import { useClientLaneRatesQuery } from "@/lib/queries/useClientLaneRatesQuery";
+import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
 import { createIndent, type CreateIndentInput } from "@/features/indents/services/indents.service";
 import { LOAD_TYPES } from "@/features/indents/constants";
@@ -294,6 +295,8 @@ export default function CreateIndentScreen() {
   /** Match Create Trip: full client list vs compact selected card. */
   const [clientListExpanded, setClientListExpanded] = useState(true);
   const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
+  const [laneSearch, setLaneSearch] = useState("");
+  const debouncedLaneSearch = useDebouncedValue(laneSearch, 250);
   const [pickupLat, setPickupLat] = useState<number | null>(null);
   const [pickupLon, setPickupLon] = useState<number | null>(null);
   const [dropLat, setDropLat] = useState<number | null>(null);
@@ -730,7 +733,7 @@ export default function CreateIndentScreen() {
   );
 
   const { data: contractLanes = [], isLoading: lanesLoading } =
-    useClientLaneRatesQuery(orgId, form.client_id);
+    useClientLaneRatesQuery(orgId, form.client_id, debouncedLaneSearch);
   const { data: clientWarehouses = [] } = useClientWarehousesQuery(
     orgId,
     form.client_id,
@@ -807,6 +810,7 @@ export default function CreateIndentScreen() {
         client_name: clientName,
       });
       setSelectedLaneId(null);
+      setLaneSearch("");
       setClientListExpanded(false);
       focusField(clientPriceInputRef);
     },
@@ -1657,6 +1661,8 @@ export default function CreateIndentScreen() {
                             selectedLaneId={selectedLaneId}
                             onSelect={handleSelectLane}
                             onClear={handleClearLane}
+                            search={laneSearch}
+                            onSearchChange={setLaneSearch}
                           />
                         ) : null}
                       </>
@@ -1838,6 +1844,8 @@ export default function CreateIndentScreen() {
                         selectedLaneId={selectedLaneId}
                         onSelect={handleSelectLane}
                         onClear={handleClearLane}
+                        search={laneSearch}
+                        onSearchChange={setLaneSearch}
                       />
                     ) : null}
                     </>

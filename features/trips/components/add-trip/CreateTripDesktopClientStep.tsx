@@ -48,6 +48,8 @@ export type CreateTripDesktopClientStepProps = {
   selectedLaneId?: string | null;
   onSelectLane?: (lane: ClientLaneRate) => void;
   onClearLane?: () => void;
+  laneSearch?: string;
+  onLaneSearchChange?: (value: string) => void;
 };
 
 export const CreateTripDesktopClientStep = memo(
@@ -71,6 +73,8 @@ export const CreateTripDesktopClientStep = memo(
     selectedLaneId = null,
     onSelectLane,
     onClearLane,
+    laneSearch,
+    onLaneSearchChange,
   }: CreateTripDesktopClientStepProps) {
     const showClientChange = Boolean(clientId);
     const [saleModalOpen, setSaleModalOpen] = useState(false);
@@ -150,6 +154,8 @@ export const CreateTripDesktopClientStep = memo(
               selectedLaneId={selectedLaneId}
               onSelect={onSelectLane}
               onClear={onClearLane}
+              search={laneSearch}
+              onSearchChange={onLaneSearchChange}
             />
           ) : null}
           <ClientSaleKeypadFlow
@@ -224,6 +230,8 @@ export const CreateTripDesktopClientStep = memo(
               selectedLaneId={selectedLaneId}
               onSelect={onSelectLane}
               onClear={onClearLane}
+              search={laneSearch}
+              onSearchChange={onLaneSearchChange}
             />
           ) : null}
 

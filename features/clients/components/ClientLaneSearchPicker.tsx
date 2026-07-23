@@ -12,11 +12,11 @@ import {
 } from "@/features/clients/utils/clientLanePrefill.util";
 import { METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { CheckCircle2, MapPinned, Search, X } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -30,6 +30,13 @@ type Props = {
   onSelect: (lane: ClientLaneRate) => void;
   onClear?: () => void;
   compact?: boolean;
+  /**
+   * Controlled search. When provided, filtering is delegated to the parent
+   * (server-side, debounced). When omitted, the picker filters `lanes`
+   * locally — the original small-list behavior.
+   */
+  search?: string;
+  onSearchChange?: (value: string) => void;
 };
 
 export function ClientLaneSearchPicker({
@@ -39,11 +46,26 @@ export function ClientLaneSearchPicker({
   onSelect,
   onClear,
   compact = false,
+  search,
+  onSearchChange,
 }: Props) {
-  const [query, setQuery] = useState("");
+  const serverControlled = onSearchChange != null;
+  const [localQuery, setLocalQuery] = useState("");
+  const query = serverControlled ? (search ?? "") : localQuery;
+  const setQuery = useCallback(
+    (value: string) => {
+      if (serverControlled) onSearchChange!(value);
+      else setLocalQuery(value);
+    },
+    [serverControlled, onSearchChange],
+  );
+  // Server already filtered when controlled; only sort. Otherwise filter locally.
   const filtered = useMemo(
-    () => filterClientLanes(lanes, query),
-    [lanes, query],
+    () =>
+      serverControlled
+        ? filterClientLanes(lanes, "")
+        : filterClientLanes(lanes, query),
+    [lanes, query, serverControlled],
   );
   const selected = useMemo(
     () => lanes.find((l) => l.id === selectedLaneId) ?? null,
@@ -116,54 +138,63 @@ export function ClientLaneSearchPicker({
 
       {loading ? (
         <ActivityIndicator color={METRONIC.link} style={{ marginVertical: 12 }} />
+      ) : filtered.length === 0 ? (
+        <Text style={s.noMatch}>
+          {query.trim()
+            ? `No lanes match “${query.trim()}”.`
+            : "No contract lanes yet."}
+        </Text>
       ) : (
-        <ScrollView
+        <FlatList
+          data={filtered}
+          keyExtractor={(lane) => lane.id}
           style={[s.list, compact && s.listCompact]}
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
-        >
-          {filtered.length === 0 ? (
-            <Text style={s.noMatch}>No lanes match “{query.trim()}”.</Text>
-          ) : (
-            filtered.map((lane) => {
-              const active = lane.id === selectedLaneId;
-              const valid = isLaneCurrentlyValid(lane);
-              return (
-                <Pressable
-                  key={lane.id}
-                  onPress={() => onSelect(lane)}
-                  style={({ pressed }) => [
-                    s.row,
-                    active && s.rowActive,
-                    pressed && { opacity: 0.92 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <View style={s.rowCopy}>
-                    <Text style={[s.rowTitle, active && s.rowTitleActive]} numberOfLines={2}>
-                      {lane.origin_label} → {lane.destination_label}
-                    </Text>
-                    <Text style={s.rowMeta} numberOfLines={2}>
-                      {[
-                        lane.vehicle_type ?? "Any vehicle",
-                        lanePrimaryRateLabel(lane),
-                        laneValidityLabel(lane),
-                        !valid ? "Outside validity" : null,
-                        lane.is_spot_rate ? "SPOT" : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </Text>
-                  </View>
-                  {active ? (
-                    <CheckCircle2 size={15} color={METRONIC.link} strokeWidth={2.4} />
-                  ) : null}
-                </Pressable>
-              );
-            })
-          )}
-        </ScrollView>
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
+          removeClippedSubviews
+          renderItem={({ item: lane }) => {
+            const active = lane.id === selectedLaneId;
+            const valid = isLaneCurrentlyValid(lane);
+            return (
+              <Pressable
+                onPress={() => onSelect(lane)}
+                style={({ pressed }) => [
+                  s.row,
+                  active && s.rowActive,
+                  pressed && { opacity: 0.92 },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                <View style={s.rowCopy}>
+                  <Text
+                    style={[s.rowTitle, active && s.rowTitleActive]}
+                    numberOfLines={2}
+                  >
+                    {lane.origin_label} → {lane.destination_label}
+                  </Text>
+                  <Text style={s.rowMeta} numberOfLines={2}>
+                    {[
+                      lane.vehicle_type ?? "Any vehicle",
+                      lanePrimaryRateLabel(lane),
+                      laneValidityLabel(lane),
+                      !valid ? "Outside validity" : null,
+                      lane.is_spot_rate ? "SPOT" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </Text>
+                </View>
+                {active ? (
+                  <CheckCircle2 size={15} color={METRONIC.link} strokeWidth={2.4} />
+                ) : null}
+              </Pressable>
+            );
+          }}
+        />
       )}
     </View>
   );

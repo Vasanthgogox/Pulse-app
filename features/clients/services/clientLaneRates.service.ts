@@ -28,17 +28,46 @@ export type CreateLaneRateData = {
   notes?: string | null;
 };
 
+/** Escape PostgREST `or(...)` reserved chars in a user search term. */
+function sanitizeLaneSearch(term: string): string {
+  // Commas/parens break the or() grammar; % and _ are ilike wildcards.
+  return term.replace(/[(),%_]/g, ' ').trim();
+}
+
+export type GetLaneRatesOptions = {
+  /** Server-side substring match on origin / destination / vehicle. */
+  search?: string | null;
+  /** Cap rows returned; keeps payload small for high-volume clients. */
+  limit?: number;
+};
+
+/** Default page size for the lane picker (search-first, not browse-all). */
+export const LANE_RATES_PAGE_SIZE = 50;
+
 export async function getClientLaneRates(
   orgId: string,
   clientId: string,
+  options: GetLaneRatesOptions = {},
 ): Promise<{ error: Error | null; laneRates: ClientLaneRate[] }> {
-  const { data, error } = await supabase()
+  const limit = options.limit ?? LANE_RATES_PAGE_SIZE;
+  let query = supabase()
     .from('client_lane_rates')
     .select('*')
     .eq('organization_id', orgId)
     .eq('client_id', clientId)
-    .is('deleted_at', null)
-    .order('valid_from', { ascending: false, nullsFirst: false });
+    .is('deleted_at', null);
+
+  const search = sanitizeLaneSearch(options.search ?? '');
+  if (search) {
+    const like = `%${search}%`;
+    query = query.or(
+      `origin_label.ilike.${like},destination_label.ilike.${like},destination_address.ilike.${like},vehicle_type.ilike.${like}`,
+    );
+  }
+
+  const { data, error } = await query
+    .order('valid_from', { ascending: false, nullsFirst: false })
+    .limit(limit);
   if (error) return { error: new Error(error.message), laneRates: [] };
   return { error: null, laneRates: (data ?? []) as ClientLaneRate[] };
 }

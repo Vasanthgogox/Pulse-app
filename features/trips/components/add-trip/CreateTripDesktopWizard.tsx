@@ -23,6 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
 import { useClientLaneRatesQuery } from "@/lib/queries/useClientLaneRatesQuery";
+import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useLinkedClientOrgLocationsQuery } from "@/lib/queries/useLinkedClientOrgLocationsQuery";
 import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
 import { buildClientLanePrefill } from "@/features/clients/utils/clientLanePrefill.util";
@@ -81,6 +82,8 @@ export function CreateTripDesktopWizard({
   const [vehicleListExpanded, setVehicleListExpanded] = useState(() => !state.vehicleId);
   const [partnerListExpanded, setPartnerListExpanded] = useState(() => !state.supplierId);
   const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
+  const [laneSearch, setLaneSearch] = useState("");
+  const debouncedLaneSearch = useDebouncedValue(laneSearch, 250);
 
   useEffect(() => {
     if (!state.clientId) setClientListExpanded(true);
@@ -126,7 +129,7 @@ export function CreateTripDesktopWizard({
   const { data: clientWarehouses = [], isLoading: warehousesLoading } =
     useClientWarehousesQuery(organizationId, state.clientId);
   const { data: contractLanes = [], isLoading: lanesLoading } =
-    useClientLaneRatesQuery(organizationId, state.clientId);
+    useClientLaneRatesQuery(organizationId, state.clientId, debouncedLaneSearch);
   const { data: linkedOrgLocations = [], isLoading: linkedLocLoading } =
     useLinkedClientOrgLocationsQuery(
       organizationId,
@@ -179,6 +182,7 @@ export function CreateTripDesktopWizard({
       // Fresh client → clear prior pickup / lane so warehouse chips can be chosen anew.
       setters.setPickupArea("");
       setSelectedLaneId(null);
+      setLaneSearch("");
       setClientListExpanded(false);
     },
     [setters, state.clientId],
@@ -187,6 +191,7 @@ export function CreateTripDesktopWizard({
   const handleClearClient = useCallback(() => {
     setters.setClientSelection(null, "");
     setSelectedLaneId(null);
+    setLaneSearch("");
     setClientListExpanded(true);
   }, [setters]);
 
@@ -272,6 +277,8 @@ export function CreateTripDesktopWizard({
           selectedLaneId={selectedLaneId}
           onSelectLane={handleSelectLane}
           onClearLane={handleClearLane}
+          laneSearch={laneSearch}
+          onLaneSearchChange={setLaneSearch}
         />
       );
       break;
