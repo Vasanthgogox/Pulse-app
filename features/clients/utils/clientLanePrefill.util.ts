@@ -59,9 +59,14 @@ export function resolveLaneSaleAmount(lane: ClientLaneRate): number | null {
 
 export function buildClientLanePrefill(lane: ClientLaneRate): ClientLanePrefill {
   const amount = resolveLaneSaleAmount(lane);
+  // Drop must come from destination_label (the lane's named destination,
+  // e.g. "Bangalore") — this is what the UI shows as `origin → destination`.
+  // destination_address is a free-text secondary field (often a state or
+  // street) and must never override the label, or the indent captures the
+  // wrong drop (e.g. "MAHARASHTRA" instead of "Bangalore").
   const drop =
-    lane.destination_address?.trim() ||
     lane.destination_label?.trim() ||
+    lane.destination_address?.trim() ||
     "";
   return {
     pickup: lane.origin_label?.trim() || "",
