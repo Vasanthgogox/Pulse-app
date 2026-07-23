@@ -155,6 +155,7 @@ const TripExpensesScreen = lazy(() =>
   ),
 );
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
+import { getMoverAssetTripIdForIndent } from "@/features/trips/services/trips.service";
 import {
   shouldShowManifestHeroDriverParty,
   type AggregateTripKindPillContext,
@@ -821,6 +822,31 @@ export default function TripDetailScreen({
       setActiveTab("trip");
     }
   }, [detail.trip, activeTab]);
+
+  // Mover opened the AGGREGATOR's shared trip directly (deep link). The trip
+  // list hides this row for the mover (get_trips_for_org), but a by-id deep link
+  // bypasses that, landing the mover on the settlement view with no Expense Hub.
+  // If the mover has its own mover_asset trip for this load, redirect to it so
+  // driver payout / fuel / toll are reachable. Owner keeps the aggregator view.
+  const moverAssetRedirectedRef = useRef(false);
+  useEffect(() => {
+    const t = detail.trip;
+    const viewerOrgId = currentOrganization?.id;
+    if (!t || !viewerOrgId || moverAssetRedirectedRef.current) return;
+    const indentId = t.indent_id;
+    const isMover = t.organization_id != null && t.organization_id !== viewerOrgId;
+    // Already on an asset trip, or owner, or no indent — nothing to redirect.
+    if (!isMover || !indentId || String(t.source ?? "") === "mover_asset") return;
+    let cancelled = false;
+    getMoverAssetTripIdForIndent(viewerOrgId, indentId).then((assetTripId) => {
+      if (cancelled || !assetTripId || assetTripId === t.id) return;
+      moverAssetRedirectedRef.current = true;
+      router.replace(ROUTES.tripDetail(assetTripId) as never);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail.trip, currentOrganization?.id, router]);
 
   const trackingState = useTrackingState(
     detail.trip?.id ?? null,
@@ -2067,9 +2093,14 @@ export default function TripDetailScreen({
     adjustedSaleInr: adjSales,
     adjustedCostInr: adjCost,
   });
-  const marginBasisLabel = isAssetTripFinance
-    ? "Client sale − trip cost"
-    : "Client sale − supplier cost";
+  const marginBasisLabel = isPartnerSettlementView
+    ? // Partner (mover) view: sales = what they're paid (supplier_rate), cost = their
+      // own freight cost — not a client-sale spread. Labeling it "Client sale −
+      // supplier cost" wrongly framed the amount as the owner's margin.
+      "Partner amount − your cost"
+    : isAssetTripFinance
+      ? "Client sale − trip cost"
+      : "Client sale − supplier cost";
   const revenueSideDelta = adjSales - sales;
   const costSideDelta = adjCost - cost;
   const receivableAfterAdjustments = tripSettlement.receivableDue;

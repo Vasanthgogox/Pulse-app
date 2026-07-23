@@ -89,7 +89,14 @@ export function useTripDeployment({
       // so it can log fuel/toll/salary. Best-effort: failure must not block the
       // primary deploy — the aggregator trip is the source of truth.
       const isMover = load.organization_id !== orgId;
-      if (isMover && trip.driver_id && trip.vehicle_id) {
+      // Asset trips are often assigned by typing a plate (vehicle_display_number)
+      // with no linked vehicle_id. Requiring vehicle_id here silently skipped the
+      // mover asset trip for those deploys, so the mover fell back to the
+      // aggregator's supplier-settlement view (no Expense Hub). create_mover_asset_trip
+      // accepts a null vehicle_id and stores the display number, so accept either.
+      const hasVehicle =
+        Boolean(trip.vehicle_id) || Boolean(trip.vehicle_display_number?.trim());
+      if (isMover && trip.driver_id && hasVehicle) {
         const { error: moverErr } = await createMoverAssetTrip(load.id, {
           driverId: trip.driver_id,
           vehicleId: trip.vehicle_id,

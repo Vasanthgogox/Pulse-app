@@ -429,6 +429,31 @@ export function getTripDisplayMeta(
 }
 
 /**
+ * For a mover viewing an aggregator's shared trip: find the mover's own
+ * `mover_asset` trip for the same load, so the detail screen can redirect to
+ * the trip that actually carries the Expense Hub. Mirrors the hide-clause in
+ * get_trips_for_org (m.source='mover_asset' AND m.source_indent_id=tr.indent_id).
+ * Returns null when none exists (e.g. asset trip not created yet).
+ */
+export async function getMoverAssetTripIdForIndent(
+  moverOrgId: string,
+  indentId: string,
+): Promise<string | null> {
+  if (!moverOrgId || !indentId) return null;
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("id")
+    .eq("organization_id", moverOrgId)
+    .eq("source", "mover_asset")
+    .eq("source_indent_id", indentId)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data as { id: string }).id ?? null;
+}
+
+/**
  * Replace this trip's UUID in Postgres/RPC error strings with TRP-style labels so users never see raw IDs.
  */
 export function humanizeTripIdInRpcError(message: string, trip: TripRow): string {
