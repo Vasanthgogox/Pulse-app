@@ -49,6 +49,27 @@ Give-load (indent) lifecycle, traced with real data for indent **IND011** create
 - Trip TRP001 is still `assigned` / payment `pending` — no status changes, no location checkpoints, no documents recorded yet.
 - Lenovo's margin on the subcontract: ₹74,000 − ₹73,000 = **₹1,000**.
 
+## Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    actor P as Paperkraft
+    participant I as Indent IND011
+    actor L as Lenovo company
+    participant T as Trip TRP001
+    actor A as ABI Logistics
+
+    P->>I: Create (MAX · Delhi→Bengaluru · ₹75,000 / target ₹74,000)
+    P->>I: Share (integrated_supplier)
+    L-->>I: Direct quote ₹74,000
+    P->>L: Award / accept quote
+    I->>I: status = completed
+    Note over I,T: Indent converts to trip
+    I->>T: Create TRP001 (driver Ravi · TN 11 DD 2580 · ₹74,000)
+    L->>A: Subcontract ₹73,000 (LEN946-SUB-cmsb89)
+    Note over A,T: ABI has not accepted — subcontract pending, trip still "assigned"
+```
+
 ## Award Summary
 
 - **Who bid:** Lenovo company (single direct quote) — ₹74,000
