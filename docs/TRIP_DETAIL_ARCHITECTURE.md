@@ -3,6 +3,80 @@
 > Status: **DESIGN ONLY. No code until approved.** Behavior must remain 100% identical.
 > Line-count reduction is explicitly a non-goal; the goal is bounded contexts,
 > single responsibility, low coupling, and rendering close to its domain.
+>
+> Progress: Steps 0–2 implemented & committed (48fe4c99) — TripContext,
+> useTripDetailUi, useTripRatings. The **Refresh Coordinator** (below) is the
+> prerequisite that unblocks all remaining domain-hook extractions AND the render
+> split; design it before attempting Steps 3–9.
+
+---
+
+## PREREQUISITE — The Refresh Coordinator (unblocks Steps 3–9)
+
+### Why the remaining slices are blocked
+`useTripRatings` extracted cleanly because it has **no loader** — nothing else
+triggers it. Every other domain (timeline, finance, documents, tracking) owns a
+loader (`loadAssignmentAudit`, `loadAdjustments`, `loadTripDocuments`, `loadTripOtp`)
+that is **orchestrated together** by three coordinators inside `useTripDetail`:
+
+- `handleRefresh` (pull-to-refresh) — L1565
+- `handleAssignmentUpdated` — L1582
+- `handleReassignCompleted` — L2609
+
+Each does the same shape: bump `financeRefreshKey`, refetch transactions, then
+**either** invalidate the bundle query (when `bundleActive`, the default for all
+orgs) **or** fan out to the individual loaders (legacy path). Extracting a domain
+hook naively would strand its loader outside these coordinators → refresh-after-
+reassign silently stops updating that domain. That timing bug is invisible to tsc.
+
+### Design: `useTripRefreshCoordinator`
+A tiny registry hook that owns the fan-out decision; domain hooks register their
+`reload`. Preserves the exact current behavior (bundle-invalidate vs legacy fan-out).
+
+```
+type ReloadFn = () => void | Promise<void>;
+
+useTripRefreshCoordinator({ tripId, bundleActive, queryClient })
+  returns {
+    register(key: string, reload: ReloadFn): void   // domain hook registers on mount
+    refreshAll(reason: 'pull' | 'assignment' | 'reassign'): void
+  }
+```
+- `refreshAll` reproduces today's logic exactly:
+  - always: `setFinanceRefreshKey(k+1)` + `refetchTransactions()` (kept in core).
+  - if `bundleActive && tripId`: invalidate `queryKeys.trips.bundle(tripId)` — **domain
+    hooks re-read from the bundle via their own selectors; no reload fan-out needed.**
+  - else (legacy): call every registered `reload()` — same set/order as today.
+- The three coordinators (`handleRefresh` / `handleAssignmentUpdated` /
+  `handleReassignCompleted`) become thin wrappers over `refreshAll(reason)` plus
+  their reason-specific extras (e.g. reassign sets `waitingForNewDriverLocation`).
+
+### Why this is the right unlock
+- Domain hooks no longer need the screen or god-hook to drive their refresh — they
+  register once and read the bundle. **This is what makes Steps 3–7 clean** (each
+  hook self-contained) **and Step 9 possible** (tabs call `useTripX()` directly,
+  ~0 props).
+- Behavior identical: on the live (bundle) path, refresh is already just a bundle
+  invalidation — the coordinator formalizes that. Legacy path keeps the exact
+  fan-out.
+
+### Migration order for the coordinator (each compiles, reversible)
+- **Step 3a** — introduce `useTripRefreshCoordinator` inside `useTripDetail`; route
+  the 3 coordinators through `refreshAll`. No hook moved yet. Verify: pull-to-refresh
+  + reassign still update every tab (bundle path) and legacy path unchanged.
+- **Step 3b onward** — extract one domain hook at a time (order: documents →
+  timeline → finance → tracking). Each registers its `reload` with the coordinator
+  and reads its bundle slice. `useTripDetail` composes them and spreads their return
+  to keep its public surface identical until Step 8.
+- Only after the domain hooks exist: **Step 9** splits the render into `tabs/`,
+  each tab consuming its domain hook via context (this is where the screen finally
+  drops from ~6k toward ~1.5k).
+
+### Verification gate (why this needs a dedicated session)
+The coordinator and every domain-hook step change *refresh timing*, verifiable only
+by driving the app: pull-to-refresh, assignment, and **reassignment** must still
+refresh every tab; live tracking must still update. Requires a test account —
+**not available in the current environment.** Do this work where the app can run.
 
 ---
 
