@@ -84,7 +84,29 @@ export function FullPageWizardShell({
       : wizardInsightCardsForPreset(insightPreset, { desktopForm: isDesktopForm });
 
   const body = fillBody ? (
-    <View style={styles.bodyFill}>{children}</View>
+    // Keypad steps don't use a ScrollView, but `pageRoot` clips overflow to keep
+    // the footer docked. At in-between widths (≈600–1080) the keypad card is
+    // taller than the body, so the bottom rows get clipped (only "1 2 3" visible).
+    // Letting the fill body scroll on overflow makes the full keypad reachable;
+    // when content fits (true mobile), it renders identically.
+    //
+    // UNVERIFIED IN-APP: This fix assumes the flex chain (root → frame → pageRoot →
+    // bodyFill) resolves to a real pixel height at this step. Isolated-DOM repro at
+    // 820×640 confirmed (a) overflow:hidden clips a taller non-scrolling keypad and
+    // (b) this ScrollView makes the last row reachable — BUT ONLY when an ancestor
+    // has a resolved height. If the real mounted `pageRoot` measures 0px (pure
+    // flex:1 with no bounded ancestor), a ScrollView inside it is also 0px and this
+    // is a no-op. BEFORE MERGE: on the running rates step, confirm `pageRoot` height
+    // > 0 (DevTools). If it's 0, the real fix is to bound the chain height, not to
+    // add scroll here.
+    <ScrollView
+      style={styles.bodyFill}
+      contentContainerStyle={styles.bodyFillScrollContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {children}
+    </ScrollView>
   ) : scrollBody ? (
     <ScrollView
       style={styles.bodyScroll}

@@ -295,6 +295,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     width: "100%",
     gap: 0,
   },
+  /** ScrollView content for keypad fill body: fills when there's room, scrolls on overflow. */
+  bodyFillScrollContent: {
+    flexGrow: 1,
+    width: "100%",
+  },
   bodyWide: {
     width: "100%",
     maxWidth: 860,
