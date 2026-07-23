@@ -20,6 +20,7 @@ import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOp
 import { queryKeys } from '@/lib/queryKeys';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 import { STALE } from '@/lib/queryClient';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 const loadIndentsService = () =>
@@ -170,6 +171,12 @@ export function useVisibleIndentQuery(
 
 /** All direct quotes on a specific indent (Give Load owner side). */
 export function useIndentDirectQuotesQuery(indentId: string | null) {
+  // RPC is SECURITY DEFINER + GRANT to `authenticated` only; anon EXECUTE was
+  // revoked (see 20260728210000_v2_audit_anon_rpc_revoke). A cached/persisted
+  // query refetching on the sign-in screen fires as `anon` → "permission
+  // denied for function get_direct_quotes_with_bidder_names" (GX-PULSE-W).
+  // Gate on an authenticated session so it never runs while signed out.
+  const { status } = useAuth();
   return useQuery<DirectQuoteRow[]>({
     queryKey: ['indents', indentId, 'direct-quotes'],
     queryFn: async () => {
@@ -178,7 +185,7 @@ export function useIndentDirectQuotesQuery(indentId: string | null) {
       if (res.error) throw res.error;
       return res.quotes;
     },
-    enabled: !!indentId,
+    enabled: !!indentId && status === 'authenticated',
     staleTime: STALE.frequent,
   });
 }

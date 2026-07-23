@@ -89,6 +89,13 @@ const runtimeKindPolyfillPath = path.resolve(
   projectRoot,
   'polyfills/runtimeKind.js',
 );
+// Native-only. Installs a `crypto.getRandomValues`/`randomUUID` shim before the
+// Supabase client initializes — Hermes has no Web Crypto global, so bare
+// `crypto` access throws ReferenceError (see polyfills/cryptoGetRandomValues.js).
+const cryptoPolyfillPath = path.resolve(
+  projectRoot,
+  'polyfills/cryptoGetRandomValues.js',
+);
 // Web-only, RN-free. Attaches stale-chunk recovery listeners before the first
 // lazy import runs (the useEffect install in _layout.tsx was too late — see
 // polyfills/webChunkRecovery.js). No-op on native (guards on `document`).
@@ -134,7 +141,7 @@ config.serializer = {
   ...config.serializer,
   getModulesRunBeforeMainModule: () => {
     const upstream = upstreamGetModulesRunBeforeMainModule?.() ?? [];
-    return [runtimeKindPolyfillPath, webChunkRecoveryPolyfillPath, ...upstream];
+    return [cryptoPolyfillPath, runtimeKindPolyfillPath, webChunkRecoveryPolyfillPath, ...upstream];
   },
 };
 

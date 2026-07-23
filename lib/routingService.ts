@@ -100,9 +100,13 @@ function buildWebRouteProxyUrl(from: LatLon, to: LatLon): string | null {
     return base.includes('route-proxy') ? `${base}?${params}` : `${base}${NETLIFY_ROUTE_PROXY_PATH}?${params}`;
   }
 
-  const host = window.location.hostname;
-  if (host.endsWith('.netlify.app')) {
-    return `${window.location.origin}${NETLIFY_ROUTE_PROXY_PATH}?${params}`;
+  // `window.location` can be a partially-polyfilled object on native (RN/Hermes),
+  // so it may pass the truthy guard above yet still lack `hostname`/`origin`.
+  // Read both defensively — a missing hostname just means "not a Netlify deploy".
+  const loc = window.location;
+  const host = typeof loc?.hostname === 'string' ? loc.hostname : '';
+  if (host.endsWith('.netlify.app') && typeof loc?.origin === 'string') {
+    return `${loc.origin}${NETLIFY_ROUTE_PROXY_PATH}?${params}`;
   }
 
   return null;
