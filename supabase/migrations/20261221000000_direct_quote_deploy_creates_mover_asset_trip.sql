@@ -21,15 +21,41 @@
 --   After this ships, delete the client-side createMoverAssetTrip() call in
 --   useTripDeployment.ts (DB becomes the single source of truth).
 --
--- ⚠️ NOT YET APPLIED. This touches the most critical write path (deploy).
---    Must be validated against the live flow (indent → award → deploy as mover:
---    exactly one asset trip appears, no duplicates, aggregator row intact) with a
---    test account before `npm run db:push`. The RPC-body edits below are written
---    against the current function definitions captured 2026-07-23; re-diff before
---    applying in case upstream changed them.
+-- Dry-run verified 2026-07-23 against prod data (rolled back). Sections 0+1+3
+-- ship here. Section 2 (RPC wiring) remains documented-only until completed
+-- against live function defs + tested with a real deploy.
+--
+-- VERIFIED FINDING: creating the asset trip tripped
+-- enforce_single_active_trip_per_driver, because the mover asset trip reuses the
+-- aggregator trip's (active) driver by design. Fix: exempt source='mover_asset'
+-- from that trigger — it is a parallel finance/expense record, not a dispatch.
 -- ============================================================================
 
 BEGIN;
+
+-- ── 0. Exempt mover_asset trips from the single-active-trip-per-driver rule ────
+-- They intentionally mirror the aggregator trip's driver; they are a books/expense
+-- record, never a real second dispatch. Without this, asset-trip creation fails
+-- whenever the driver is mid-trip (verified via dry-run 2026-07-23).
+CREATE OR REPLACE FUNCTION public.enforce_single_active_trip_per_driver()
+RETURNS trigger LANGUAGE plpgsql SET search_path TO 'public' AS $t$
+DECLARE v_status text; v_old_status text;
+BEGIN
+  IF NEW.driver_id IS NULL THEN RETURN NEW; END IF;
+  IF lower(trim(coalesce(NEW.source::text,''))) = 'mover_asset' THEN RETURN NEW; END IF;
+  v_status := lower(trim(coalesce(NEW.status::text,'')));
+  IF v_status IN ('completed','cancelled','done','delivered') THEN RETURN NEW; END IF;
+  IF TG_OP='UPDATE' THEN
+    v_old_status := lower(trim(coalesce(OLD.status::text,'')));
+    IF NEW.driver_id IS NOT DISTINCT FROM OLD.driver_id AND NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
+    IF NEW.driver_id IS NOT DISTINCT FROM OLD.driver_id AND v_old_status NOT IN ('completed','cancelled','done','delivered') THEN RETURN NEW; END IF;
+  END IF;
+  IF public.driver_has_other_active_trip(NEW.driver_id, NEW.id)
+     OR public.driver_phone_has_other_active_trip(NEW.driver_id, NEW.id) THEN
+    RAISE EXCEPTION 'Driver is already assigned to another active trip. Complete or unassign that trip first.';
+  END IF;
+  RETURN NEW;
+END; $t$;
 
 -- ── 1. Internal helper: create mover asset trip, membership check SKIPPED ──────
 -- Mirrors public.create_mover_asset_trip EXCEPT it omits `is_org_member(mover)` —
@@ -101,7 +127,12 @@ BEGIN
     coalesce((SELECT o.name FROM public.organizations o WHERE o.id = v_indent.organization_id), 'Client'),
     v_revenue, 0, NULL, 'asset',
     p_driver_id, p_vehicle_id, v_vehicle_display,
-    'assigned', v_indent.pickup_date, coalesce(v_indent.load_type, ''),
+    -- 'draft', NOT 'assigned': the asset trip is a finance/expense shell for the
+    -- mover, not a dispatch. Draft is exempt from enforce_single_active_trip_per_driver,
+    -- so this never fails when the driver is already on the aggregator's active trip
+    -- (verified via dry-run 2026-07-23). Expense Hub + trip list are status-independent
+    -- (source='mover_asset' drives both), so draft renders identically.
+    'draft', v_indent.pickup_date, coalesce(v_indent.load_type, ''),
     0, 0, 'pending', 0
   );
 END;
