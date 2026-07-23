@@ -18,7 +18,7 @@ import {
 import { openTripLedgerEntryChooser } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
-import { averageScore, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
+import { useTripRatings } from "./useTripRatings";
 import {
     getLinkedOrgProfileForSupplier,
     getSupplierById,
@@ -371,7 +371,6 @@ export function useTripDetail({
   const [expandedTimelineEntryIds, setExpandedTimelineEntryIds] = useState<
     Record<string, boolean>
   >({});
-  const [tripRatings, setTripRatings] = useState<{ score: number }[]>([]);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const isRefreshingRef = useRef(false);
@@ -405,6 +404,7 @@ export function useTripDetail({
   // ── Derived flags ─────────────────────────────────────────────────────────
   const isAggregate = useMemo(() => (trip ? isAggregateTrip(trip) : false), [trip]);
   const tripCompleted = trip != null && isTripCompleted(trip);
+  const { driverRatingAvg } = useTripRatings(trip?.id, tripCompleted);
   const currentUserId = user?.uid ?? null;
 
   const capabilities = useCapabilities();
@@ -571,7 +571,6 @@ export function useTripDetail({
     liveTracking.seedPoint?.recorded_at,
   ]);
 
-  const driverRatingAvg = useMemo(() => averageScore(tripRatings), [tripRatings]);
 
   const previousDriverName = useMemo(() => {
     const prev = assignmentAuditRows.find((r) => r.driver_id_prev != null);
@@ -2498,22 +2497,6 @@ export function useTripDetail({
     void refreshTripDispute();
   }, [refreshTripDispute, financeRefreshKey]);
 
-  // Ratings (completed trips only)
-  useEffect(() => {
-    if (!trip?.id || !tripCompleted) {
-      setTripRatings([]);
-      return;
-    }
-    let isActive = true;
-    getRatingsForTrip(trip.id).then(({ error, ratings }) => {
-      if (!isActive || error) return;
-      const driverRatings = (ratings ?? []).filter((r) => r.rated_type === "driver");
-      setTripRatings(driverRatings);
-    });
-    return () => {
-      isActive = false;
-    };
-  }, [trip?.id, tripCompleted]);
 
   // Driver location — Mapbox/Nominatim label (no raw lat/lon in UI).
   // When broadcast is active, the store subscriber above handles geocoding instead.
