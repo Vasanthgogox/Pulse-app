@@ -25,6 +25,7 @@ import {
   pickGrowRecommendations,
   type ScoredDiscoverOrg,
 } from "@/features/network/utils/discoverRecommendations.util";
+import { useEnsureVerified } from "@/features/network/utils/verifiedActionGuard";
 import { showAppAlert } from "@/lib/appAlert";
 import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
 import {
@@ -200,6 +201,7 @@ export function NetworkDesktopSalesGrowWidget({
   const invalidateNetwork = useInvalidateNetwork(orgId);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
+  const ensureVerified = useEnsureVerified();
 
   const atDailyInviteLimit = useMemo(() => {
     const todayInviteCount = todayPendingInviteCountFromSent(sentQ.data ?? []);
@@ -250,6 +252,8 @@ export function NetworkDesktopSalesGrowWidget({
         showInviteLimitExceededAlert();
         return;
       }
+      // Verified-org only — shows a "Verify now" dialog and opens KYC on confirm.
+      if (!(await ensureVerified())) return;
       setConnectingId(org.id);
       const { error: reqErr } = await createConnectionRequest(orgId, org.id, {
         requestShipperClient: true,
@@ -260,7 +264,7 @@ export function NetworkDesktopSalesGrowWidget({
         if (looksLikeConnectionRateLimitError(reqErr.message)) {
           showInviteLimitExceededAlert();
         } else {
-          Alert.alert("Could not send request", reqErr.message);
+          showAppAlert("Could not send request", reqErr.message);
         }
         return;
       }
@@ -275,6 +279,7 @@ export function NetworkDesktopSalesGrowWidget({
       orgId,
       refetch,
       showInviteLimitExceededAlert,
+      ensureVerified,
     ],
   );
 

@@ -29,6 +29,7 @@ import { useNetworkDiscovery } from '@/features/network/hooks/useNetworkDiscover
 import type { DiscoverOrg } from '@/features/network/services/discover.service';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { allowedConnectionRoles } from '@/lib/capabilities';
+import { useEnsureVerified } from "@/features/network/utils/verifiedActionGuard";
 import { showAppAlert } from "@/lib/appAlert";
 import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
 import {
@@ -294,6 +295,7 @@ export function DiscoverView({
 }: DiscoverViewProps) {
   const { t } = useLanguage();
   const capabilities = useCapabilities();
+  const ensureVerified = useEnsureVerified();
   const windowWidth = useWebLayoutWidth();
   const { height: windowHeight } = useWindowDimensions();
   const isNativeApp = Platform.OS !== "web";
@@ -508,9 +510,12 @@ export function DiscoverView({
         );
         return;
       }
-      setRequestRoleModalOrg(org);
+      // Verified-org only — shows a "Verify now" dialog and opens KYC on confirm.
+      void ensureVerified().then((ok) => {
+        if (ok) setRequestRoleModalOrg(org);
+      });
     },
-    [atDailyInviteLimit, showInviteLimitExceededAlert, capabilities],
+    [atDailyInviteLimit, showInviteLimitExceededAlert, capabilities, ensureVerified],
   );
 
   const handleConnect = async (org: ScoredOrg, mode: "client" | "supplier") => {
@@ -539,7 +544,7 @@ export function DiscoverView({
       if (looksLikeConnectionRateLimitError(msg)) {
         showInviteLimitExceededAlert();
       } else {
-        Alert.alert("Could not connect", msg);
+        showAppAlert("Could not connect", msg);
       }
       return;
     }

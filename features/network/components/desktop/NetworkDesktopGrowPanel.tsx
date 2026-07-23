@@ -38,6 +38,7 @@ import {
   scoreDiscoverOrg,
   type ScoredDiscoverOrg,
 } from "@/features/network/utils/discoverRecommendations.util";
+import { useEnsureVerified } from "@/features/network/utils/verifiedActionGuard";
 import { showAppAlert } from "@/lib/appAlert";
 import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
 import {
@@ -183,6 +184,7 @@ export function NetworkDesktopGrowPanel({
   onOpenMutualProfile,
 }: Props) {
   const layout = useProfileHubCompactLayout();
+  const ensureVerified = useEnsureVerified();
   const queryClient = useQueryClient();
   const invalidateNetwork = useInvalidateNetwork(orgId);
   const { orgs, loading, error, refetch, invalidateCache } = useNetworkDiscovery({
@@ -345,9 +347,12 @@ export function NetworkDesktopGrowPanel({
         showInviteLimitExceededAlert();
         return;
       }
-      setRequestRoleModalOrg(org);
+      // Verified-org only — shows a "Verify now" dialog and opens KYC on confirm.
+      void ensureVerified().then((ok) => {
+        if (ok) setRequestRoleModalOrg(org);
+      });
     },
-    [atDailyInviteLimit, showInviteLimitExceededAlert],
+    [atDailyInviteLimit, showInviteLimitExceededAlert, ensureVerified],
   );
 
   const handleConnect = async (
@@ -370,7 +375,7 @@ export function NetworkDesktopGrowPanel({
       if (looksLikeConnectionRateLimitError(reqErr.message)) {
         showInviteLimitExceededAlert();
       } else {
-        Alert.alert("Could not connect", reqErr.message);
+        showAppAlert("Could not connect", reqErr.message);
       }
       return;
     }

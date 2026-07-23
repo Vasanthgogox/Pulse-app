@@ -7,6 +7,7 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from '@/constants/Theme';
 import { getLinkedOrgProfilesBatch } from '@/features/clients/services/clients.service';
 import { BidSheet } from '@/features/network/components/bidding/BidSheet';
+import { useVerifiedActionGuard } from '@/features/network/utils/verifiedActionGuard';
 import { useNetworkFeedQuery, useAfterPostDeleted } from '@/lib/queries/usePostsQuery';
 import {
   useBidsForPostQuery,
@@ -130,6 +131,7 @@ export default function PostDetailScreen() {
   const orgId = organization?.id ?? null;
 
   const [bidSheetPost, setBidSheetPost] = useState<PostRow | null>(null);
+  const guardVerified = useVerifiedActionGuard();
 
   const feedQ = useNetworkFeedQuery(orgId);
   const afterPostDeleted = useAfterPostDeleted(orgId);
@@ -439,7 +441,7 @@ export default function PostDetailScreen() {
       {/* CTA for non-owners on load posts */}
       {isLoad && !isOwner && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
-          <Pressable style={styles.bidCta} onPress={() => setBidSheetPost(post)}>
+          <Pressable style={styles.bidCta} onPress={() => guardVerified(() => setBidSheetPost(post))}>
             <ThumbsUp size={18} color="#fff" />
             <Text style={styles.bidCtaText}>Place Your Bid</Text>
           </Pressable>

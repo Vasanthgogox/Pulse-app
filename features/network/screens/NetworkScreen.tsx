@@ -29,6 +29,8 @@ import { NetworkSupportHelpCards } from "@/features/network/components/NetworkSu
 import { discoverSearchTermForOrgs } from "@/lib/networkPhoneSearch";
 import { connectedOrgLedgerDetailRoute } from "@/features/network/utils/connectionDetailNavigation.util";
 import { maskGstin } from "@/features/network/utils/partyContactDisplay.util";
+import { useVerifiedActionGuard } from "@/features/network/utils/verifiedActionGuard";
+import { showAppAlert } from "@/lib/appAlert";
 import { ROUTES } from "@/lib/routes";
 import { MutualConnectionsModal } from "@/features/network/components/MutualConnectionsModal";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
@@ -303,6 +305,7 @@ function NetworkScreenInner() {
   const { inviteActionId, handleInviteAction } =
     useInboundProtocolInviteActions(orgId);
   const businessConnectionModal = useOptionalBusinessConnectionRequestModal();
+  const guardVerified = useVerifiedActionGuard();
 
   const filterTabs = useMemo(
     () =>
@@ -720,13 +723,15 @@ function NetworkScreenInner() {
       allowedConnectionRoles(capabilities, selectedProfileNode.operating_model)
         .length === 0
     ) {
-      Alert.alert(
+      showAppAlert(
         "Cannot connect",
         "Your organization and this one can't form a client or supplier link.",
       );
       return;
     }
-    setProtocolRoleModalOpen(true);
+    // Connecting is verified-org only — unverified users are routed to the KYC
+    // panel instead of opening the role picker.
+    guardVerified(() => setProtocolRoleModalOpen(true));
   };
 
   const handleSendProtocolWithRole = async (mode: ConnectionInviteRole) => {
@@ -751,7 +756,7 @@ function NetworkScreenInner() {
         );
         return;
       }
-      Alert.alert("Could not connect", error.message);
+      showAppAlert("Could not connect", error.message);
       return;
     }
 

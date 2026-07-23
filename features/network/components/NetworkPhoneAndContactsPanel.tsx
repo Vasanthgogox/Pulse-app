@@ -28,6 +28,7 @@ import {
 } from "@/lib/contactPicker";
 import { isPhoneLikeNetworkSearch } from "@/lib/networkPhoneSearch";
 import { queryKeys } from "@/lib/queryKeys";
+import { useEnsureVerified } from "@/features/network/utils/verifiedActionGuard";
 import { showAppAlert } from "@/lib/appAlert";
 import {
   cancelPendingConnectionRequestByOrgPair,
@@ -195,6 +196,7 @@ export function NetworkPhoneAndContactsPanel({
 
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [roleModalOrgId, setRoleModalOrgId] = useState<string | null>(null);
+  const ensureVerified = useEnsureVerified();
   const [roleModalName, setRoleModalName] = useState("");
   const [sentRoles, setSentRoles] = useState<Record<string, ConnectionInviteRole>>({});
   const [importLoading, setImportLoading] = useState(false);
@@ -329,10 +331,14 @@ export function NetworkPhoneAndContactsPanel({
         showInviteLimitAlert();
         return;
       }
-      setRoleModalOrgId(targetOrgId);
-      setRoleModalName(name);
+      // Verified-org only — shows a "Verify now" dialog and opens KYC on confirm.
+      void ensureVerified().then((ok) => {
+        if (!ok) return;
+        setRoleModalOrgId(targetOrgId);
+        setRoleModalName(name);
+      });
     },
-    [atDailyLimit, showInviteLimitAlert],
+    [atDailyLimit, showInviteLimitAlert, ensureVerified],
   );
 
   const handleConnect = useCallback(
@@ -357,7 +363,7 @@ export function NetworkPhoneAndContactsPanel({
         if (looksLikeConnectionRateLimitError(msg)) {
           showInviteLimitAlert();
         } else {
-          Alert.alert(t("networkDiscoverConnect"), msg);
+          showAppAlert(t("networkDiscoverConnect"), msg);
         }
         return;
       }

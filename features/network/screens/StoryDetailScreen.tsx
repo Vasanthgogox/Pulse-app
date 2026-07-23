@@ -8,6 +8,7 @@ import Layout from "@/constants/Layout";
 import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { BidSheet } from "@/features/network/components/bidding/BidSheet";
+import { useVerifiedActionGuard } from "@/features/network/utils/verifiedActionGuard";
 import { StoryBroadcastPreview } from "@/features/network/components/StoryBroadcastPreview";
 import { StoryOwnerFooterActions } from "@/features/network/components/StoryDetailFooterActions";
 import { StoryOwnerBidsSheet } from "@/features/network/components/bidding/StoryOwnerBidsSheet";
@@ -256,6 +257,7 @@ export default function StoryDetailScreen() {
 
   const [current, setCurrent] = useState(0);
   const [bidPost, setBidPost] = useState<PostRow | null>(null);
+  const guardVerified = useVerifiedActionGuard();
   const [editBidMode, setEditBidMode] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [showViewers, setShowViewers] = useState(false);
@@ -629,7 +631,7 @@ export default function StoryDetailScreen() {
               {myBid.status === "pending" && (
                 <Pressable
                   style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
-                  onPress={() => { setEditBidMode(true); setBidPost(post); }}
+                  onPress={() => guardVerified(() => { setEditBidMode(true); setBidPost(post); })}
                 >
                   <Edit3 size={16} color={INK} />
                   <Text style={styles.authorizeBtnText}>Edit bid</Text>
@@ -639,7 +641,7 @@ export default function StoryDetailScreen() {
           ) : (
             <Pressable
               style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
-              onPress={() => { setEditBidMode(false); setBidPost(post); }}
+              onPress={() => guardVerified(() => { setEditBidMode(false); setBidPost(post); })}
             >
               <Send size={16} color={INK} />
               <Text style={styles.authorizeBtnText}>Place bid on indent</Text>

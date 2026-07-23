@@ -336,6 +336,10 @@ async function findPendingSentToPartnerOwner(
 const PENDING_INVITE_SAME_CONTACT_MESSAGE =
   "You already have a pending invitation to this contact. Recall it from Sent invites before sending another.";
 
+/** Shown when an unverified org tries to connect. UI paths surface this via their existing error Alert. */
+export const CONNECT_REQUIRES_VERIFICATION_MESSAGE =
+  "Verify your business to connect with other organisations. Complete KYC in Workspace → Org identity & KYC.";
+
 /**
  * Create a connection request (invite another org as client and/or supplier).
  * Validates at least one role and rejects self-invite. On duplicate insert returns alreadyInvited (no error).
@@ -362,6 +366,26 @@ export async function createConnectionRequest(
       requestId: null,
       alreadyInvited: false,
     };
+
+  // Verified-org gate: only KYC-verified orgs may send connection requests. This
+  // is the single choke point every connect entry point funnels through, so the
+  // check lives here rather than per-UI (which is bypassable). UI still guards
+  // for a fast prompt; this is the enforcement backstop.
+  {
+    const { data: fromOrg, error: verifyErr } = await supabase()
+      .from('organizations')
+      .select('verification_status')
+      .eq('id', fromOrgId)
+      .maybeSingle();
+    if (verifyErr)
+      return { error: verifyErr as Error, requestId: null, alreadyInvited: false };
+    if (fromOrg?.verification_status !== 'verified')
+      return {
+        error: new Error(CONNECT_REQUIRES_VERIFICATION_MESSAGE),
+        requestId: null,
+        alreadyInvited: false,
+      };
+  }
 
   // Preflight: same org pair — merge roles on existing pending row (client + supplier to one org).
   const existingId = await selectConnectionRequestIdForOrgPair(fromOrgId, toOrgId);

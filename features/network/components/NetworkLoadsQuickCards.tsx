@@ -6,6 +6,7 @@ import {
   NETWORK_HUB_GRID_ROW_PADDING_H,
   SPLIT_STACK_BREAKPOINT,
 } from "@/features/network/constants/networkHubGrid";
+import { useVerifiedActionGuard } from "@/features/network/utils/verifiedActionGuard";
 import {
   fitNetworkLoadsIllustration,
   NETWORK_LOADS_QUICK_ACTIONS,
@@ -234,15 +235,20 @@ export function NetworkLoadsQuickCards({
   layout = "default",
 }: NetworkLoadsQuickCardsProps) {
   const router = useRouter();
+  const guardVerified = useVerifiedActionGuard();
   const { width } = useWindowDimensions();
   const sidebar = layout === "sidebar";
   const isMobile = !sidebar && (NATIVE_APP || width < SPLIT_STACK_BREAKPOINT);
 
   const openLoadCenter = () => {
-    if (Platform.OS !== "web") {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.push(ROUTES.PULSE_LOADS);
+    // Give / get load are verified-org only. Unverified taps route to the KYC
+    // panel instead of the Load Center.
+    guardVerified(() => {
+      if (Platform.OS !== "web") {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      router.push(ROUTES.PULSE_LOADS);
+    });
   };
 
   const renderCard = (
