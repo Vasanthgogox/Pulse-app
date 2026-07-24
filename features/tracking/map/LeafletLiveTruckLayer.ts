@@ -34,7 +34,14 @@ export class LeafletLiveTruckLayer {
     private readonly L: typeof LeafletNS,
   ) {
     this.interp = new MarkerInterpolationEngine((pos) => {
-      this.marker?.setLatLng([pos.latitude, pos.longitude]);
+      // A queued interpolation frame can fire after the map/marker was torn
+      // down (effect re-run or unmount → map.remove()). The marker object
+      // survives but its internal position (_leaflet_pos) is gone, so
+      // setLatLng throws "Cannot read property '_leaflet_pos' of undefined".
+      // Only move the marker while it is still attached to a live map.
+      const marker = this.marker;
+      if (!marker || !this.map.hasLayer(marker)) return;
+      marker.setLatLng([pos.latitude, pos.longitude]);
     });
   }
 
@@ -75,7 +82,7 @@ export class LeafletLiveTruckLayer {
       this.marker?.setOpacity(0);
       return;
     }
-    if (!this.marker) return;
+    if (!this.marker || !this.map.hasLayer(this.marker)) return;
 
     this.marker.setOpacity(point.stale ? 0.55 : 1);
 

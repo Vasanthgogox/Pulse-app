@@ -26,6 +26,25 @@ const ENVIRONMENT =
  * Initialize crash reporting. Call once at app startup (app/_layout.tsx).
  * Disabled in dev and when no DSN is configured.
  */
+/**
+ * Postgres/PostgREST errors that mean "no valid session" rather than a real
+ * bug. They fire when a signed-out or expired session briefly hits org-scoped
+ * RPCs (e.g. on the /sign-in page while cached queries drain) and the JWT is
+ * anon/expired, so every `is_org_member`-gated function returns
+ * "permission denied". This is expected auth noise, not an actionable crash.
+ */
+const AUTH_NOISE_PATTERNS = [
+  'permission denied for function',
+  'permission denied for table',
+];
+
+function isAuthNoise(event: Sentry.ErrorEvent): boolean {
+  const values = event.exception?.values ?? [];
+  return values.some((v) =>
+    AUTH_NOISE_PATTERNS.some((p) => (v.value ?? '').includes(p)),
+  );
+}
+
 export function initCrashReporter(): void {
   if (initialized || __DEV__ || !DSN) return;
   Sentry.init({
@@ -35,6 +54,8 @@ export function initCrashReporter(): void {
     enableNative: true,
     release: RELEASE,
     environment: ENVIRONMENT,
+    // Drop expected "no session" permission-denied noise before it reports.
+    beforeSend: (event) => (isAuthNoise(event) ? null : event),
   });
   initialized = true;
 }

@@ -1451,7 +1451,18 @@ export default function DriverRadarScreen() {
   }, [activeMission?.id, fetchLocation]);
 
   const incomingTrips = useMemo(
-    () => allTrips.filter((t) => isAssignedNotStarted(t.status)),
+    () =>
+      allTrips.filter(
+        (t) =>
+          isAssignedNotStarted(t.status) ||
+          // mover_asset shell trips are created in 'draft' (exempt from the
+          // single-active-trip guard) but still dispatched to this driver.
+          // Draft matches neither isActiveMission nor isAssignedNotStarted, so
+          // without this it renders in fleet/history but vanishes from the
+          // driver's own dashboard. Surface it as an incoming/assigned card.
+          (String(t.status ?? "").toLowerCase() === "draft" &&
+            String(t.source ?? "").toLowerCase() === "mover_asset"),
+      ),
     [allTrips],
   );
   const mergedIncomingTrips = useMemo(() => {

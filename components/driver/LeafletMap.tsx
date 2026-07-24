@@ -58,13 +58,18 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       return <LeafletMapWeb ref={webRef} {...props} />;
     }
 
-    let NativeImpl: NativeLeafletCtor;
+    // Load the MapLibre implementation (standalone builds). Only fall back to
+    // the react-native-maps path when actually running in Expo Go — where
+    // MapLibre's native module is unavailable. Loading rnmaps in a standalone
+    // build resolves react-native-maps to undefined and crashes on render with
+    // "Cannot read property 'MapView' of undefined" (GX-PULSE-J).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const MapLibreImpl: NativeLeafletCtor = require("@/components/driver/LeafletMap.maplibre").LeafletMapMapLibre;
+
+    let NativeImpl: NativeLeafletCtor = MapLibreImpl;
     if (isExpoGo()) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports -- MapLibre must not load in Expo Go
-      NativeImpl = require("@/components/driver/LeafletMap.rnmaps").LeafletMapRnMaps;
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      NativeImpl = require("@/components/driver/LeafletMap.maplibre").LeafletMapMapLibre;
+      NativeImpl = require("@/components/driver/LeafletMap.rnmaps").LeafletMapRnMaps ?? MapLibreImpl;
     }
 
     return <NativeImpl ref={nativeRef} {...props} />;

@@ -609,6 +609,7 @@ const DRIVER_TRIP_FALLBACK_COLUMNS = [
   "driver_display_trip_id",
   "trip_number",
   "status",
+  "source",
   "pickup_area",
   "drop_location",
   "pickup_date",
