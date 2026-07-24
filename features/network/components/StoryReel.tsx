@@ -3,6 +3,7 @@
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -223,11 +224,25 @@ function BroadcastStory({
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const accent = seedColor(post.organization_id);
-  const rawPost = post as PostRow & {
-    org_avatar_url?: string | null;
-    avatar_url?: string | null;
-  };
-  const postAvatarUrl = rawPost.org_avatar_url ?? rawPost.avatar_url ?? null;
+  // org_avatar_url is a storage PATH (org-logo-*.jpg), not a URL — sign it before
+  // rendering. Same pattern as NetworkDesktopProfilePanel: http passthrough, else sign.
+  const rawLogo = post.org_avatar_url?.trim() ?? "";
+  const [postAvatarUrl, setPostAvatarUrl] = useState<string | null>(
+    rawLogo.startsWith("http") ? rawLogo : null,
+  );
+  useEffect(() => {
+    let mounted = true;
+    if (!rawLogo || rawLogo.startsWith("http")) {
+      setPostAvatarUrl(rawLogo || null);
+      return;
+    }
+    getSignedAvatarUrl(rawLogo).then((signed) => {
+      if (mounted) setPostAvatarUrl(signed ?? null);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [rawLogo]);
   const ringColors = seen
     ? RING_SEEN
     : ([accent, RING_UNSEEN[1], RING_UNSEEN[2]] as const);

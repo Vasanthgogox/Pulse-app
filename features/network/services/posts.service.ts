@@ -45,6 +45,8 @@ export interface PostRow {
   organization_id: string;
   org_name: string;
   org_avatar_seed: string | null;
+  /** Org logo image (organizations.logo_url) — rendered as the story cover. */
+  org_avatar_url: string | null;
   author_user_id: string;
   type: PostType;
   content: string | null;
