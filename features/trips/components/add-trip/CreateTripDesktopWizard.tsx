@@ -202,6 +202,8 @@ export function CreateTripDesktopWizard({
       if (prefill.pickup) setters.setPickupArea(prefill.pickup);
       if (prefill.drop) setters.setDropLocation(prefill.drop);
       if (prefill.vehicleType) setters.setVehicleType(prefill.vehicleType);
+      if (prefill.loadType) setters.setLoadType(prefill.loadType);
+      if (prefill.tons) setters.setTons(prefill.tons);
       if (prefill.clientPrice) setters.setClientPrice(prefill.clientPrice);
       const wh = clientWarehouses.find((w) => w.id === prefill.originWarehouseId);
       if (wh?.latitude != null && wh?.longitude != null) {

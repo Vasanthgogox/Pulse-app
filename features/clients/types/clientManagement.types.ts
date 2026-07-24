@@ -197,6 +197,10 @@ export interface ClientLaneRate {
   vehicle_type: string | null;
   rate: number | null;
   rate_type: LaneRateType;
+  /** Optional default load/commodity type auto-filled into indents. */
+  default_load_type: string | null;
+  /** Optional default load weight in TONS auto-filled into indents. */
+  default_load_tons: number | null;
   min_billing: number | null;
   fuel_clause: string | null;
   toll_included: boolean;

@@ -18,6 +18,8 @@ export type CreateLaneRateData = {
   vehicle_type?: string | null;
   rate?: number | null;
   rate_type?: LaneRateType;
+  default_load_type?: string | null;
+  default_load_tons?: number | null;
   min_billing?: number | null;
   fuel_clause?: string | null;
   toll_included?: boolean;

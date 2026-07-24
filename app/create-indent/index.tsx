@@ -748,6 +748,8 @@ export default function CreateIndentScreen() {
         ...(prefill.pickup ? { pickup_area: prefill.pickup } : {}),
         ...(prefill.drop ? { drop_location: prefill.drop } : {}),
         ...(prefill.vehicleType ? { vehicle_type: prefill.vehicleType } : {}),
+        ...(prefill.loadType ? { load_type: prefill.loadType } : {}),
+        ...(prefill.tons ? { weight: prefill.tons } : {}),
         ...(prefill.clientPrice ? { client_price: prefill.clientPrice } : {}),
       });
       if (wh?.latitude != null && wh?.longitude != null) {

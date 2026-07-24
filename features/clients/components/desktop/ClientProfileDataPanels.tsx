@@ -535,6 +535,8 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
     distance_km: "",
     pricing_model: "per_mt_km",
     vehicle_type: "",
+    default_load_type: "",
+    default_load_tons: "",
     rate: "",
     base_rate: "",
     per_mt_rate: "",
@@ -562,6 +564,8 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
       distance_km: "",
       pricing_model: "per_mt_km",
       vehicle_type: "",
+      default_load_type: "",
+      default_load_tons: "",
       rate: "",
       base_rate: "",
       per_mt_rate: "",
@@ -609,6 +613,8 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
     const perMt = parseOpt(form.per_mt_rate);
     const perKm = parseOpt(form.per_km_rate);
     const distance = parseOpt(form.distance_km);
+    const defaultTons = parseOpt(form.default_load_tons);
+    if (form.default_load_tons.trim() && defaultTons !== null && isNaN(defaultTons)) { setError("Default tons must be a number."); return; }
     if (form.rate.trim() && rate !== null && isNaN(rate)) { setError("Rate must be a number."); return; }
     if (form.base_rate.trim() && baseRate !== null && isNaN(baseRate)) { setError("Base rate must be a number."); return; }
     if (form.per_mt_rate.trim() && perMt !== null && isNaN(perMt)) { setError("Per MT rate must be a number."); return; }
@@ -626,6 +632,8 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
       distance_km: distance,
       pricing_model: form.pricing_model || null,
       vehicle_type: form.vehicle_type.trim() || null,
+      default_load_type: form.default_load_type.trim() || null,
+      default_load_tons: form.default_load_tons.trim() ? defaultTons : null,
       rate: form.rate.trim() ? rate : null,
       base_rate: form.base_rate.trim() ? baseRate : null,
       per_mt_rate: form.per_mt_rate.trim() ? perMt : null,
@@ -696,6 +704,8 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
               onChange={(v) => setForm({ ...form, pricing_model: v })}
             />
             <FormField compact={compact} label="Vehicle type" value={form.vehicle_type} onChangeText={(v) => setForm({ ...form, vehicle_type: v })} placeholder="e.g. 24ft, 10T" />
+            <FormField compact={compact} label="Load type" value={form.default_load_type} onChangeText={(v) => setForm({ ...form, default_load_type: v })} placeholder="e.g. Electronics" />
+            <FormField compact={compact} label="Tons" value={form.default_load_tons} onChangeText={(v) => setForm({ ...form, default_load_tons: v })} keyboardType="numeric" placeholder="e.g. 35" />
             <FormField compact={compact} label="Base rate (₹)" value={form.base_rate} onChangeText={(v) => setForm({ ...form, base_rate: v })} keyboardType="numeric" placeholder="0" />
             <FormField compact={compact} label="Per MT rate (₹)" value={form.per_mt_rate} onChangeText={(v) => setForm({ ...form, per_mt_rate: v })} keyboardType="numeric" />
             <FormField compact={compact} label="Per KM rate (₹)" value={form.per_km_rate} onChangeText={(v) => setForm({ ...form, per_km_rate: v })} keyboardType="numeric" />

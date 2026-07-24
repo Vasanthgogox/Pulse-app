@@ -8,6 +8,10 @@ export type ClientLanePrefill = {
   pickup: string;
   drop: string;
   vehicleType: string | null;
+  /** Default load/commodity type from the lane, if set. */
+  loadType: string | null;
+  /** Default load weight in TONS (as a form-ready string), if set. */
+  tons: string | null;
   /** Digits-only amount string for form fields (no ₹ / commas). */
   clientPrice: string | null;
   originWarehouseId: string | null;
@@ -68,10 +72,16 @@ export function buildClientLanePrefill(lane: ClientLaneRate): ClientLanePrefill 
     lane.destination_label?.trim() ||
     lane.destination_address?.trim() ||
     "";
+  const tons =
+    lane.default_load_tons != null && Number.isFinite(lane.default_load_tons)
+      ? String(lane.default_load_tons)
+      : null;
   return {
     pickup: lane.origin_label?.trim() || "",
     drop,
     vehicleType: lane.vehicle_type?.trim() || null,
+    loadType: lane.default_load_type?.trim() || null,
+    tons,
     clientPrice: amount != null ? String(Math.round(amount)) : null,
     originWarehouseId: lane.origin_warehouse_id,
     agreementId: lane.agreement_id,

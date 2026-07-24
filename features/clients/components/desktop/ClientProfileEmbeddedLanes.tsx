@@ -43,6 +43,8 @@ const RATE_TYPES = [
 type FormState = {
   destination_label: string;
   vehicle_type: string;
+  default_load_type: string;
+  default_load_tons: string;
   rate: string;
   rate_type: string;
   valid_from: string;
@@ -61,6 +63,8 @@ type FormState = {
 const emptyForm = (zone?: string | null): FormState => ({
   destination_label: "",
   vehicle_type: "",
+  default_load_type: "",
+  default_load_tons: "",
   rate: "",
   rate_type: "per_trip",
   valid_from: "",
@@ -80,6 +84,9 @@ function laneToForm(lane: ClientLaneRate): FormState {
   return {
     destination_label: lane.destination_label ?? "",
     vehicle_type: lane.vehicle_type ?? "",
+    default_load_type: lane.default_load_type ?? "",
+    default_load_tons:
+      lane.default_load_tons != null ? String(lane.default_load_tons) : "",
     rate: lane.rate != null ? String(lane.rate) : "",
     rate_type: lane.rate_type ?? "per_trip",
     valid_from: lane.valid_from ?? "",
@@ -181,6 +188,11 @@ export function ClientProfileEmbeddedLanes({
     const perMt = parseOpt(form.per_mt_rate);
     const perKm = parseOpt(form.per_km_rate);
     const distance = parseOpt(form.distance_km);
+    const defaultTons = parseOpt(form.default_load_tons);
+    if (form.default_load_tons.trim() && defaultTons !== null && Number.isNaN(defaultTons)) {
+      setError("Default tons must be a number.");
+      return;
+    }
     if (form.rate.trim() && rate !== null && Number.isNaN(rate)) { setError("Rate must be a number."); return; }
     if (form.base_rate.trim() && baseRate !== null && Number.isNaN(baseRate)) { setError("Base rate must be a number."); return; }
     if (form.per_mt_rate.trim() && perMt !== null && Number.isNaN(perMt)) { setError("Per MT must be a number."); return; }
@@ -198,6 +210,8 @@ export function ClientProfileEmbeddedLanes({
       distance_km: distance,
       pricing_model: form.pricing_model || null,
       vehicle_type: form.vehicle_type.trim() || null,
+      default_load_type: form.default_load_type.trim() || null,
+      default_load_tons: form.default_load_tons.trim() ? defaultTons : null,
       rate: form.rate.trim() ? rate : null,
       base_rate: form.base_rate.trim() ? baseRate : null,
       per_mt_rate: form.per_mt_rate.trim() ? perMt : null,
@@ -285,6 +299,19 @@ export function ClientProfileEmbeddedLanes({
               value={form.vehicle_type}
               onChange={(v) => setForm({ ...form, vehicle_type: v })}
               placeholder="e.g. 32 Ft MXL"
+            />
+            <Field
+              label="Load type"
+              value={form.default_load_type}
+              onChange={(v) => setForm({ ...form, default_load_type: v })}
+              placeholder="e.g. Electronics"
+            />
+            <Field
+              label="Tons"
+              value={form.default_load_tons}
+              onChange={(v) => setForm({ ...form, default_load_tons: v })}
+              keyboardType="numeric"
+              placeholder="e.g. 35"
             />
             <Field
               label="Rate (₹)"
