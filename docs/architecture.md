@@ -1,5 +1,7 @@
 # Architecture
 
+**Domain & team ownership blueprint:** [DOMAIN_ORG_AUDIT.md](./DOMAIN_ORG_AUDIT.md) (personas, feature domains, suggested team mapping, audit checklist).
+
 ## Pattern
 Modular monolith (feature-driven). Single Expo app, feature modules under `features/[domain]/`.
 

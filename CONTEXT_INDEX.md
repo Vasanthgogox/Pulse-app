@@ -3,6 +3,7 @@
 This file has been modularized. See `docs/` for domain-specific reference.
 
 - Architecture & data flow → `docs/architecture.md`
+- Domain / team ownership audit → `docs/DOMAIN_ORG_AUDIT.md`
 - Auth & session → `docs/auth.md`
 - Routing → `docs/routing.md`
 - Conventions & naming → `docs/conventions.md`
