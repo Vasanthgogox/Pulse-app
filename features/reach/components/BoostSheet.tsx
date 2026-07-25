@@ -1,5 +1,7 @@
 /**
- * Boost sheet — pick a Reach plan, pay with Pulse Credits or cash, publish.
+ * Boost sheet — pick a Reach plan, choose distribution (fleet / driver
+ * stories), optionally enable flat driver referral rewards with an escrowed
+ * budget (Boost V2), pay with Pulse Credits or cash, publish.
  * Modeled on StoryOwnerBidsSheet.tsx's Modal/sheet pattern.
  */
 import Theme from "@/constants/Theme";
@@ -8,7 +10,7 @@ import { useReachPlansQuery, usePublishReachCampaignMutation } from "@/lib/queri
 import { useReachWalletQuery } from "@/lib/queries/useReachWalletQuery";
 import { describeReachPlan, getReachPlanDisplay } from "@/lib/reachPlanRegistry";
 import type { ReachPlanRow } from "@/features/reach/services/campaigns.service";
-import { Check, CheckCircle2, Coins, CreditCard, Rocket, X } from "lucide-react-native";
+import { Check, CheckCircle2, Coins, CreditCard, Rocket, Users, X, Zap } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,9 +20,14 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+/** Flat rewards only in this release (1 credit == ₹1). */
+const REWARD_PRESETS = [250, 500, 1000] as const;
+const DEFAULT_REWARD_BUDGET = "5000";
 
 const INK = Theme.loadAddButtonText;
 const MUTED = Theme.loadStatusTabTextMuted;
@@ -52,6 +59,11 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"credits" | "money">("credits");
   const [justBoosted, setJustBoosted] = useState<{ plan: ReachPlanRow; pending: boolean } | null>(null);
+  // Boost V2 — driver distribution + referral escrow
+  const [driverChannel, setDriverChannel] = useState(false);
+  const [rewardEnabled, setRewardEnabled] = useState(false);
+  const [rewardAmount, setRewardAmount] = useState<number>(500);
+  const [rewardBudgetText, setRewardBudgetText] = useState(DEFAULT_REWARD_BUDGET);
 
   useEffect(() => {
     if (visible && plansQ.data && plansQ.data.length > 0 && !selectedPlanId) {
@@ -61,20 +73,38 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
       setSelectedPlanId(null);
       setPaymentMethod("credits");
       setJustBoosted(null);
+      setDriverChannel(false);
+      setRewardEnabled(false);
+      setRewardAmount(500);
+      setRewardBudgetText(DEFAULT_REWARD_BUDGET);
     }
   }, [visible, plansQ.data, selectedPlanId]);
 
   const selectedPlan = plansQ.data?.find((p) => p.id === selectedPlanId) ?? null;
   const balance = walletQ.data ?? 0;
-  const canAffordCredits = selectedPlan ? balance >= selectedPlan.credit_price : false;
+
+  const driverRewardOn = driverChannel && rewardEnabled;
+  const rewardBudget = driverRewardOn ? Math.max(0, parseInt(rewardBudgetText, 10) || 0) : 0;
+  const rewardConfigValid = !driverRewardOn || rewardBudget >= rewardAmount;
+  // Referral escrow is ALWAYS reserved from the credits wallet (wallet lock),
+  // even when the boost fee itself is paid with cash.
+  const requiredCredits =
+    (paymentMethod === "credits" ? (selectedPlan?.credit_price ?? 0) : 0) + rewardBudget;
+  const canAffordCredits = balance >= requiredCredits;
 
   const handleConfirm = async () => {
-    if (!selectedPlan) return;
+    if (!selectedPlan || !rewardConfigValid) return;
     const { error, result } = await publishMutation.mutateAsync({
       orgId,
       postId,
       planId: selectedPlan.id,
       paymentMethod,
+      rewardConfig: {
+        distributionChannels: driverChannel ? ["fleet", "driver"] : ["fleet"],
+        driverRewardEnabled: driverRewardOn,
+        rewardAmount: driverRewardOn ? rewardAmount : 0,
+        rewardBudget,
+      },
     });
     if (error || !result) {
       Alert.alert("Couldn't boost this load", error?.message ?? "Unknown error");
@@ -192,6 +222,124 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
                   </Pressable>
                 );
               })}
+
+              {/* ── Distribution ── */}
+              <Text style={styles.v2SectionLabel}>Distribution</Text>
+              <View style={styles.checkRow}>
+                <View style={[styles.checkBox, styles.checkBoxOn, styles.checkBoxLocked]}>
+                  <Check size={11} color={Theme.textOnPrimary} strokeWidth={3.5} />
+                </View>
+                <Text style={styles.checkLabel}>Fleet Owner Stories</Text>
+                <Text style={styles.checkHint}>Always on</Text>
+              </View>
+              <Pressable style={styles.checkRow} onPress={() => setDriverChannel((v) => !v)}>
+                <View style={[styles.checkBox, driverChannel && styles.checkBoxOn]}>
+                  {driverChannel ? <Check size={11} color={Theme.textOnPrimary} strokeWidth={3.5} /> : null}
+                </View>
+                <Text style={styles.checkLabel}>Driver Stories</Text>
+                <Users size={13} color={MUTED} />
+              </Pressable>
+
+              {/* ── Driver Incentive — a campaign-funded, escrow-backed reward,
+                   never a gratuity ("tip" deliberately avoided). ── */}
+              {driverChannel ? (
+                <>
+                  <Text style={styles.v2SectionLabel}>Driver Incentive</Text>
+                  <Pressable style={styles.checkRow} onPress={() => setRewardEnabled((v) => !v)}>
+                    <View style={[styles.checkBox, rewardEnabled && styles.checkBoxOn]}>
+                      {rewardEnabled ? <Check size={11} color={Theme.textOnPrimary} strokeWidth={3.5} /> : null}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.checkLabel}>Add a Driver Incentive</Text>
+                      <Text style={styles.checkSub}>
+                        Drivers recommend this load to their fleet owner and earn the reward only
+                        when the trip converts.
+                      </Text>
+                    </View>
+                  </Pressable>
+
+                  {!rewardEnabled ? (
+                    <View style={styles.tipNudge}>
+                      <Zap size={13} color={Theme.accentGold} />
+                      <Text style={styles.tipNudgeText}>
+                        Campaigns with a driver incentive get quicker bids — it gives drivers a
+                        reason to push your load to their fleet owner right away.
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {rewardEnabled ? (
+                    <View style={styles.rewardConfig}>
+                      <Text style={styles.rewardLabel}>Reward per converted recommendation</Text>
+                      <View style={styles.rewardPresets}>
+                        {REWARD_PRESETS.map((amt) => (
+                          <Pressable
+                            key={amt}
+                            style={[styles.rewardPreset, rewardAmount === amt && styles.rewardPresetActive]}
+                            onPress={() => setRewardAmount(amt)}
+                          >
+                            <Text
+                              style={[
+                                styles.rewardPresetText,
+                                rewardAmount === amt && styles.rewardPresetTextActive,
+                              ]}
+                            >
+                              {formatINR(amt)}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+
+                      <Text style={styles.rewardLabel}>Maximum Incentive Budget</Text>
+                      <TextInput
+                        style={styles.budgetInput}
+                        value={rewardBudgetText}
+                        onChangeText={setRewardBudgetText}
+                        keyboardType="number-pad"
+                        placeholder={DEFAULT_REWARD_BUDGET}
+                        placeholderTextColor={Theme.textMuted}
+                      />
+                      {!rewardConfigValid ? (
+                        <Text style={styles.rewardError}>
+                          Budget must cover at least one reward ({formatINR(rewardAmount)}).
+                        </Text>
+                      ) : (
+                        <Text style={styles.rewardHintText}>
+                          Reserved as escrow from your credits wallet. Unused incentive budget is
+                          refunded automatically when the campaign ends.
+                        </Text>
+                      )}
+                    </View>
+                  ) : null}
+                </>
+              ) : null}
+
+              {/* ── Campaign Summary ── */}
+              {selectedPlan && rewardBudget > 0 ? (
+                <View style={styles.summaryCard}>
+                  <Text style={styles.v2SectionLabel}>Campaign Summary</Text>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Boost Fee</Text>
+                    <Text style={styles.summaryValue}>
+                      {paymentMethod === "credits"
+                        ? `${selectedPlan.credit_price} credits`
+                        : formatINR(selectedPlan.price_inr)}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Reserved Incentive Pool (escrow)</Text>
+                    <Text style={styles.summaryValue}>{rewardBudget} credits</Text>
+                  </View>
+                  <View style={[styles.summaryRow, styles.summaryTotalRow]}>
+                    <Text style={styles.summaryTotalLabel}>Total Required Balance</Text>
+                    <Text style={styles.summaryTotalValue}>
+                      {paymentMethod === "credits"
+                        ? `${selectedPlan.credit_price + rewardBudget} credits`
+                        : `${formatINR(selectedPlan.price_inr)} + ${rewardBudget} credits`}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
             </ScrollView>
           )}
 
@@ -218,12 +366,15 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
                 </Pressable>
               </View>
 
-              {paymentMethod === "credits" && !canAffordCredits ? (
+              {!canAffordCredits ? (
                 <View style={styles.needCreditsCard}>
                   <Text style={styles.needCreditsTitle}>Need credits?</Text>
                   <Text style={styles.needCreditsBody}>
-                    Not enough credits ({balance} available, {selectedPlan.credit_price} needed). Pay with cash
-                    instead, or contact your Pulse administrator to receive promotional credits.
+                    Not enough credits ({balance} available, {requiredCredits} needed
+                    {rewardBudget > 0 ? " including the incentive escrow" : ""}).{" "}
+                    {paymentMethod === "credits" && rewardBudget === 0
+                      ? "Pay with cash instead, or contact your Pulse administrator to receive promotional credits."
+                      : "The incentive escrow is always reserved from your credits wallet — lower the budget or top up credits."}
                   </Text>
                 </View>
               ) : null}
@@ -231,16 +382,19 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
               <Pressable
                 style={[
                   styles.confirmBtn,
-                  (paymentMethod === "credits" && !canAffordCredits) && styles.confirmBtnDisabled,
+                  (!canAffordCredits || !rewardConfigValid) && styles.confirmBtnDisabled,
                 ]}
-                disabled={publishMutation.isPending || (paymentMethod === "credits" && !canAffordCredits)}
+                disabled={publishMutation.isPending || !canAffordCredits || !rewardConfigValid}
                 onPress={handleConfirm}
               >
                 {publishMutation.isPending ? (
                   <ActivityIndicator color={INK} size="small" />
                 ) : (
                   <Text style={styles.confirmBtnText}>
-                    Boost with {paymentMethod === "credits" ? `${selectedPlan.credit_price} credits` : formatINR(selectedPlan.price_inr)}
+                    Boost with{" "}
+                    {paymentMethod === "credits"
+                      ? `${selectedPlan.credit_price + rewardBudget} credits`
+                      : `${formatINR(selectedPlan.price_inr)}${rewardBudget > 0 ? ` + ${rewardBudget} credits escrow` : ""}`}
                   </Text>
                 )}
               </Pressable>
@@ -314,6 +468,124 @@ const styles = StyleSheet.create({
   planPriceRow: { flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 2 },
   planPrice: { fontSize: 15, fontWeight: "900", color: Theme.textPrimaryDark },
   planPriceOr: { fontSize: 11, fontWeight: "600", color: Theme.textMuted },
+  v2SectionLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    marginBottom: 8,
+  },
+  checkBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.cardWhite,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  checkBoxOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  checkBoxLocked: { opacity: 0.55 },
+  checkLabel: { flex: 1, fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
+  checkSub: { fontSize: 10, fontWeight: "500", color: Theme.textSecondary, marginTop: 2, lineHeight: 14 },
+  checkHint: { fontSize: 9, fontWeight: "700", color: Theme.textMuted, textTransform: "uppercase" },
+  tipNudge: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.accentGoldBorder,
+    backgroundColor: Theme.accentGoldMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  tipNudgeText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    lineHeight: 14,
+  },
+  rewardConfig: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 12,
+    gap: 8,
+    marginBottom: 8,
+  },
+  rewardLabel: { fontSize: 10, fontWeight: "800", color: Theme.textSecondary, textTransform: "uppercase", letterSpacing: 0.3 },
+  rewardPresets: { flexDirection: "row", gap: 8 },
+  rewardPreset: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  rewardPresetActive: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  rewardPresetText: { fontSize: 12, fontWeight: "800", color: Theme.textPrimaryDark },
+  rewardPresetTextActive: { color: Theme.textOnPrimary },
+  budgetInput: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  rewardError: { fontSize: 10, fontWeight: "700", color: Theme.negative },
+  rewardHintText: { fontSize: 10, fontWeight: "500", color: Theme.textMuted, lineHeight: 14 },
+  summaryCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.accentGoldBorder,
+    backgroundColor: Theme.accentGoldMuted,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    marginBottom: 8,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+  },
+  summaryLabel: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary },
+  summaryValue: { fontSize: 11, fontWeight: "800", color: Theme.textPrimaryDark, fontVariant: ["tabular-nums"] },
+  summaryTotalRow: {
+    marginTop: 4,
+    paddingTop: 7,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.accentGoldBorder,
+  },
+  summaryTotalLabel: { fontSize: 12, fontWeight: "900", color: Theme.textPrimaryDark },
+  summaryTotalValue: { fontSize: 12, fontWeight: "900", color: Theme.textPrimaryDark, fontVariant: ["tabular-nums"] },
+
   paymentRow: { flexDirection: "row", gap: 8 },
   paymentBtn: {
     flex: 1,

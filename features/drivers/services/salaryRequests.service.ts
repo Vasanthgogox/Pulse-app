@@ -5,7 +5,7 @@
  */
 import { supabase } from '@/lib/supabase';
 
-export type SalaryRequestType = 'monthly' | 'advance' | 'trip_based';
+export type SalaryRequestType = 'monthly' | 'advance' | 'trip_based' | 'reward';
 
 /** Max amount (₹) to avoid typos; DB allows numeric(12,2). */
 const MAX_AMOUNT = 99_99_99_999;

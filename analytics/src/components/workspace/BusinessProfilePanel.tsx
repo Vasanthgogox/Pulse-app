@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Copy, Check, User, Building2, MapPin, Phone } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { useKyc } from '@/context/KycDataProvider';
+import { useAdmin } from '@/context/AdminDataProvider';
 import { cn } from '@/lib/utils';
-import type { CheckStatus, AutomatedCheck } from '@/types/kyc';
+import type { CheckStatus, AutomatedCheck } from '@/types/admin';
 
 // ─── Copy Field ───────────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ function SectionHeader({ icon: Icon, title }: { icon: React.FC<{ className?: str
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export function BusinessProfilePanel() {
-  const { selectedApp } = useKyc();
+  const { selectedApp } = useAdmin();
 
   if (!selectedApp) {
     return (

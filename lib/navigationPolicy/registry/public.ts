@@ -87,6 +87,12 @@ export const PUBLIC_POLICIES: readonly PolicyRecord[] = [
     priority: 90,
   },
   {
+    id: 'public.referral-landing',
+    pattern: '/r/:code',
+    experience: 'public_content',
+    priority: 90,
+  },
+  {
     id: 'public.not-found',
     pattern: '/+not-found',
     experience: 'public_content',

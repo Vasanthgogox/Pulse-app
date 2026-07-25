@@ -1,14 +1,19 @@
 /**
- * Shared 4-metric grid (Impressions, Views, Bids, Credits Used) — used by
- * ReachHistoryScreen (list of all campaigns) and BoostProgressSheet (single
- * campaign, in-context). No CTR/CPM/CPC by design.
+ * Shared 4-metric grid (Impressions, Views, Bids, Credits Used). No CTR/CPM/CPC
+ * by design. Compact boxed cells matching the Pulse Reach HTML mock density.
  */
 import Theme from "@/constants/Theme";
 import { useReachCampaignMetricsQuery } from "@/lib/queries/useReachCampaignsQuery";
-import { Coins, Eye, Gavel, Zap } from "lucide-react-native";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-export function ReachMetricsGrid({ campaignId }: { campaignId: string }) {
+export function ReachMetricsGrid({
+  campaignId,
+  withDivider = false,
+}: {
+  campaignId: string;
+  /** Top rule used inside campaign cards; leave off in sheets/detail. */
+  withDivider?: boolean;
+}) {
   const metricsQ = useReachCampaignMetricsQuery(campaignId);
   const m = metricsQ.data;
 
@@ -21,26 +26,24 @@ export function ReachMetricsGrid({ campaignId }: { campaignId: string }) {
   }
 
   return (
-    <View style={styles.metricsRow}>
+    <View style={[styles.metricsRow, withDivider && styles.metricsRowDivided]}>
       <View style={styles.metricCell}>
-        <Eye size={13} color={Theme.textMuted} />
-        <Text style={styles.metricValue}>{m.impressions}</Text>
+        <Text style={styles.metricValue}>{m.impressions.toLocaleString()}</Text>
         <Text style={styles.metricLabel}>Impressions</Text>
       </View>
       <View style={styles.metricCell}>
-        <Zap size={13} color={Theme.textMuted} />
-        <Text style={styles.metricValue}>{m.views}</Text>
-        <Text style={styles.metricLabel}>Viewed</Text>
+        <Text style={styles.metricValue}>{m.views.toLocaleString()}</Text>
+        <Text style={styles.metricLabel}>Story Views</Text>
       </View>
       <View style={styles.metricCell}>
-        <Gavel size={13} color={Theme.textMuted} />
-        <Text style={styles.metricValue}>{m.bids}</Text>
-        <Text style={styles.metricLabel}>Bids</Text>
+        <Text style={[styles.metricValue, styles.metricValueBids]}>
+          {m.bids}{m.bids === 1 ? " Bid" : " Bids"}
+        </Text>
+        <Text style={styles.metricLabel}>Driver Bids</Text>
       </View>
-      <View style={styles.metricCell}>
-        <Coins size={13} color={Theme.textMuted} />
-        <Text style={styles.metricValue}>{m.creditsUsed}</Text>
-        <Text style={styles.metricLabel}>Credits</Text>
+      <View style={[styles.metricCell, styles.metricCellCredits]}>
+        <Text style={[styles.metricValue, styles.metricValueCredits]}>{m.creditsUsed}</Text>
+        <Text style={[styles.metricLabel, styles.metricLabelCredits]}>Credits Spent</Text>
       </View>
     </View>
   );
@@ -49,18 +52,39 @@ export function ReachMetricsGrid({ campaignId }: { campaignId: string }) {
 const styles = StyleSheet.create({
   metricsRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    paddingTop: 2,
+    gap: 6,
   },
-  metricsLoading: { paddingVertical: 12, alignItems: "center" },
-  metricCell: { alignItems: "center", justifyContent: "flex-start", gap: 3, flex: 1, minWidth: 0 },
-  metricValue: { fontSize: 15, fontWeight: "900", color: Theme.textPrimaryDark, lineHeight: 18 },
+  metricsRowDivided: {
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  metricsLoading: { paddingVertical: 10, alignItems: "center" },
+  metricCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    gap: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+  },
+  metricCellCredits: {
+    backgroundColor: Theme.accentGoldMuted,
+    borderWidth: 1,
+    borderColor: Theme.accentGoldBorder,
+  },
+  metricValue: { fontSize: 13, fontWeight: "800", color: Theme.textPrimaryDark },
+  metricValueBids: { color: Theme.success },
+  metricValueCredits: { color: Theme.textPrimaryDark },
   metricLabel: {
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
+    letterSpacing: 0.3,
     textAlign: "center",
   },
+  metricLabelCredits: { color: Theme.accentGoldPressed },
 });

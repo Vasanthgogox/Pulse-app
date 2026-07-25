@@ -30,7 +30,9 @@ export interface AutomatedCheck {
 export interface BusinessDocument {
   id: string; type: DocumentType; file_name: string; status: DocumentStatus;
   flag_reason?: string; uploaded_at: string; url: string;
-  mime_type: 'application/pdf' | 'image/jpeg' | 'image/png';
+  /** Storage object path — kept so signed preview URLs can be refreshed. */
+  storage_path?: string;
+  mime_type: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
   size_kb: number; page_count?: number;
 }
 

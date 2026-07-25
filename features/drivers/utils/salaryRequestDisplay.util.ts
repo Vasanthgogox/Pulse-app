@@ -4,6 +4,7 @@ const SALARY_REQUEST_TYPE_LABELS: Record<string, string> = {
   monthly: 'Monthly salary',
   advance: 'Advance',
   trip_based: 'Trip commission',
+  reward: 'Referral reward',
 };
 
 export function salaryRequestTypeLabel(type: string): string {

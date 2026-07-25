@@ -48,7 +48,7 @@ import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
 import { useIndentDirectQuotesQuery } from "@/lib/queries";
 import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
 import { recordReachEvent } from "@/features/reach/services/events.service";
-import { useReachCampaignsQuery, useCancelReachCampaignMutation } from "@/lib/queries/useReachCampaignsQuery";
+import { useReachCampaignsQuery, useMarkReachCampaignSourceDeletedMutation } from "@/lib/queries/useReachCampaignsQuery";
 import { confirmDialog } from "@/lib/confirmDialog";
 import { ROUTES, buildPulseStoryPublicUrl } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -170,7 +170,16 @@ export default function StoryDetailScreen() {
   const insets = useSafeAreaInsets();
   const { width: viewportWidth } = useWindowDimensions();
   const isDesktopPreview = viewportWidth >= 1024;
-  const params = useLocalSearchParams<{ orgId?: string; postId?: string; storyType?: string; queue?: string }>();
+  const params = useLocalSearchParams<{
+    orgId?: string;
+    postId?: string;
+    storyType?: string;
+    queue?: string;
+    /** Boost V2 pre-filled bid — driver's suggested rate + note from an
+     * approved Opportunities recommendation. */
+    suggestedRate?: string;
+    refNote?: string;
+  }>();
   const { currentOrganization } = useOrganization();
   const myOrgId = currentOrganization?.id ?? "";
   const invalidatePosts = useInvalidatePosts(myOrgId);
@@ -377,18 +386,18 @@ export default function StoryDetailScreen() {
   const storyDateLabel = useMemo(() => post ? formatStoryDate(post.created_at) : "", [post]);
   const heroLabel = useMemo(() => (post ? storyTypeLabel(post.type) : ""), [post]);
 
-  const cancelCampaignMutation = useCancelReachCampaignMutation();
+  const markSourceDeletedMutation = useMarkReachCampaignSourceDeletedMutation();
 
   const handleDeletePost = useCallback(async () => {
     if (!post || !isOwnPost || isDeletingCurrent) return;
     const ok = activeCampaignForPost
       ? await confirmDialog(
           "Delete story?",
-          "This story has an active Pulse Reach campaign.\n\nDeleting it will:\n" +
-            "• Stop Reach delivery immediately\n" +
-            "• Cancel the active campaign\n" +
-            "• Credits already spent will not be refunded\n\n" +
-            "This action cannot be undone.",
+          "This story has an active Pulse Reach campaign.\n\nThe story will be removed, but your paid campaign continues:\n" +
+            "• Delivery keeps running from the campaign snapshot\n" +
+            "• Analytics and campaign history stay intact\n" +
+            "• The campaign ends on its normal schedule\n\n" +
+            "Deleting the story cannot be undone.",
           { confirmText: "Delete", destructive: true },
         )
       : await confirmDialog(
@@ -399,16 +408,12 @@ export default function StoryDetailScreen() {
     if (!ok) return;
     setDeletingPostId(post.id);
     if (activeCampaignForPost) {
-      const { error: cancelError } = await cancelCampaignMutation.mutateAsync({
+      // Transparency stamp only — the campaign is NOT cancelled. The customer
+      // bought distribution; delivery continues from the campaign snapshot.
+      await markSourceDeletedMutation.mutateAsync({
         campaignId: activeCampaignForPost.id,
-        reason: "source_deleted",
         orgId: myOrgId,
       });
-      if (cancelError) {
-        setDeletingPostId(null);
-        Alert.alert("Could not delete", cancelError.message);
-        return;
-      }
     }
     const { error } = await deactivatePost(post.id, myOrgId);
     setDeletingPostId(null);
@@ -418,7 +423,7 @@ export default function StoryDetailScreen() {
     }
     await afterPostDeleted(post.id);
     router.back();
-  }, [post, isOwnPost, isDeletingCurrent, myOrgId, afterPostDeleted, router, activeCampaignForPost, cancelCampaignMutation]);
+  }, [post, isOwnPost, isDeletingCurrent, myOrgId, afterPostDeleted, router, activeCampaignForPost, markSourceDeletedMutation]);
 
   const handleShareWhatsApp = useCallback(async () => {
     if (!post || !myOrgId) return;
@@ -709,6 +714,8 @@ export default function StoryDetailScreen() {
         post={bidPost}
         orgId={myOrgId}
         existingBid={editBidMode ? myBid : null}
+        initialAmount={params.suggestedRate ? Number(params.suggestedRate) : null}
+        initialNote={params.refNote ?? null}
         onClose={() => { setBidPost(null); setEditBidMode(false); }}
         onSuccess={() => {
           invalidatePosts();

@@ -1,8 +1,7 @@
 /**
- * Trip-grouped campaign card. Multiple campaigns on the same post (e.g. Starter
- * then Growth) collapse into one identity block with a drill-down list of plans.
- * Snapshot_* fields keep the load identity accurate even if the source story
- * was later edited or deleted. Shared by Reach Home and Campaign History.
+ * Trip-grouped campaign card — compact HTML-mock density. Multiple campaigns on
+ * the same post collapse into one identity block with plan drill-down.
+ * Snapshot_* fields keep load identity accurate if the source story changes.
  */
 import Theme from "@/constants/Theme";
 import type { ReachCampaignRow, ReachCampaignStatus, ReachPlanRow } from "@/features/reach/services/campaigns.service";
@@ -19,32 +18,49 @@ import {
 } from "@/features/network/utils/storyDisplay";
 import { formatINR } from "@/lib/format";
 import { getReachPlanDisplay } from "@/lib/reachPlanRegistry";
-import { ChevronDown, ChevronRight, Hash, MapPin, Rocket, Truck } from "lucide-react-native";
+import { ChevronDown, ChevronRight, MapPin, Truck, Zap } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 interface ReachCampaignCardProps {
-  /** One or more campaigns for the same post (newest first). */
   campaigns: ReachCampaignRow[];
   planById: Map<string, ReachPlanRow>;
   onCampaignPress: (campaignId: string) => void;
 }
 
-function statusColor(status: ReachCampaignStatus): string {
-  if (status === "active") return Theme.success;
-  if (status === "cancelled") return Theme.textMuted;
-  return Theme.textSecondary;
+function statusPillColors(status: ReachCampaignStatus): { bg: string; border: string; text: string } {
+  if (status === "active") {
+    return {
+      bg: Theme.positiveMuted,
+      border: Theme.networkHubListCardConnectedBorder,
+      text: Theme.success,
+    };
+  }
+  if (status === "cancelled") {
+    return { bg: Theme.surface, border: Theme.borderLight, text: Theme.textMuted };
+  }
+  return { bg: Theme.surface, border: Theme.borderLight, text: Theme.textSecondary };
+}
+
+function StatusPill({ status }: { status: ReachCampaignStatus }) {
+  const c = statusPillColors(status);
+  return (
+    <View style={[styles.statusPill, { backgroundColor: c.bg, borderColor: c.border }]}>
+      <Text style={[styles.statusPillText, { color: c.text }]}>{status}</Text>
+    </View>
+  );
 }
 
 function PlanChip({ plan }: { plan: ReachPlanRow | undefined }) {
   const display = plan ? getReachPlanDisplay(plan.code) : undefined;
+  const color = display?.color ?? Theme.primary;
   return (
-    <View style={styles.planChip}>
-      <Rocket size={12} color={display?.color ?? Theme.primary} />
-      <Text style={[styles.planChipName, { color: display?.color ?? Theme.primary }]}>
+    <View style={[styles.planChip, { backgroundColor: color + "14", borderColor: color + "40" }]}>
+      <Zap size={10} color={color} />
+      <Text style={[styles.planChipName, { color }]}>
         {plan?.name ?? "Boost"}
+        {plan ? ` · ${formatINR(plan.price_inr)}` : ""}
       </Text>
-      {plan ? <Text style={styles.planChipPrice}>{formatINR(plan.price_inr)}</Text> : null}
     </View>
   );
 }
@@ -64,14 +80,12 @@ function CampaignPlanRow({
       <View style={styles.planRowHeader}>
         <PlanChip plan={plan} />
         <View style={styles.planRowRight}>
-          <Text style={[styles.statusText, { color: statusColor(campaign.status) }]}>
-            {campaign.status}
-          </Text>
-          <ChevronRight size={14} color={Theme.textMuted} />
+          <StatusPill status={campaign.status} />
+          <ChevronRight size={13} color={Theme.textMuted} />
         </View>
       </View>
       {reason ? <Text style={styles.reasonText}>Reason: {reason}</Text> : null}
-      <ReachMetricsGrid campaignId={campaign.id} />
+      <ReachMetricsGrid campaignId={campaign.id} withDivider />
     </Pressable>
   );
 }
@@ -94,7 +108,7 @@ export function ReachCampaignCard({ campaigns, planById, onCampaignPress }: Reac
   const subtitle = isVehicle ? content?.trim() || null : null;
   const hasRoute = isLoad && !!primary.snapshot_origin && !!primary.snapshot_destination;
   const postedLabel = primary.snapshot_posted_at ? formatStoryDate(primary.snapshot_posted_at) : null;
-  const tripId = formatReachTripId(primary.post_id, primary.id);
+  const tripId = formatReachTripId(primary);
   const groupStatus = rollupCampaignStatus(campaigns);
 
   const singlePlan = !isMulti ? planById.get(primary.plan_id) : undefined;
@@ -110,68 +124,76 @@ export function ReachCampaignCard({ campaigns, planById, onCampaignPress }: Reac
         }}
         style={styles.identityPress}
       >
-        <View style={styles.titleRow}>
-          <Text style={styles.identityTitle} numberOfLines={1}>{title}</Text>
-          <View style={styles.titleRowRight}>
-            <Text style={[styles.statusText, { color: statusColor(groupStatus) }]}>
-              {groupStatus}
-            </Text>
-            {isMulti ? (
-              expanded ? (
-                <ChevronDown size={16} color={Theme.textMuted} />
-              ) : (
-                <ChevronRight size={16} color={Theme.textMuted} />
-              )
-            ) : null}
+        <View style={styles.topRow}>
+          <View style={styles.topLeft}>
+            <View style={styles.titleRow}>
+              <Text style={styles.identityTitle} numberOfLines={1}>{title}</Text>
+              <StatusPill status={groupStatus} />
+              {isMulti ? (
+                expanded ? (
+                  <ChevronDown size={14} color={Theme.textMuted} />
+                ) : (
+                  <ChevronRight size={14} color={Theme.textMuted} />
+                )
+              ) : null}
+            </View>
+
+            {subtitle ? <Text style={styles.identityMeta} numberOfLines={1}>{subtitle}</Text> : null}
+
+            <View style={styles.metaRow}>
+              {hasRoute ? (
+                <View style={styles.metaItem}>
+                  <MapPin size={11} color={Theme.textMuted} />
+                  <Text style={styles.metaStrong} numberOfLines={1}>
+                    {primary.snapshot_origin} → {primary.snapshot_destination}
+                  </Text>
+                </View>
+              ) : null}
+              {isVehicle && primary.snapshot_origin ? (
+                <View style={styles.metaItem}>
+                  <MapPin size={11} color={Theme.textMuted} />
+                  <Text style={styles.metaStrong} numberOfLines={1}>
+                    {primary.snapshot_origin}
+                  </Text>
+                </View>
+              ) : null}
+              {primary.snapshot_vehicle_type ? (
+                <>
+                  {(hasRoute || (isVehicle && primary.snapshot_origin)) ? (
+                    <Text style={styles.metaDot}>·</Text>
+                  ) : null}
+                  <View style={styles.metaItem}>
+                    <Truck size={11} color={Theme.textMuted} />
+                    <Text style={styles.identityMeta} numberOfLines={1}>
+                      {primary.snapshot_vehicle_type}
+                    </Text>
+                  </View>
+                </>
+              ) : null}
+            </View>
           </View>
+
+          <Text style={styles.tripIdText}>{tripId}</Text>
         </View>
 
-        {subtitle ? <Text style={styles.identityMeta} numberOfLines={1}>{subtitle}</Text> : null}
-        {hasRoute ? (
-          <View style={styles.metaRow}>
-            <MapPin size={11} color={Theme.textMuted} />
-            <Text style={styles.identityMeta} numberOfLines={1}>
-              {primary.snapshot_origin} → {primary.snapshot_destination}
-            </Text>
-          </View>
-        ) : null}
-        {isVehicle && primary.snapshot_origin ? (
-          <View style={styles.metaRow}>
-            <MapPin size={11} color={Theme.textMuted} />
-            <Text style={styles.identityMeta} numberOfLines={1}>
-              Current location: {primary.snapshot_origin}
-            </Text>
-          </View>
-        ) : null}
-        {primary.snapshot_vehicle_type ? (
-          <View style={styles.metaRow}>
-            <Truck size={11} color={Theme.textMuted} />
-            <Text style={styles.identityMeta} numberOfLines={1}>{primary.snapshot_vehicle_type}</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.metaFooter}>
+        <View style={styles.midRow}>
+          {!isMulti ? <PlanChip plan={singlePlan} /> : (
+            <Text style={styles.campaignCount}>{campaigns.length} campaigns</Text>
+          )}
           {postedLabel ? <Text style={styles.postedText}>Posted {postedLabel}</Text> : null}
-          <View style={styles.tripIdRow}>
-            <Hash size={10} color={Theme.textMuted} />
-            <Text style={styles.tripIdText}>{tripId}</Text>
-          </View>
         </View>
+
+        {singleReason ? <Text style={styles.reasonText}>Reason: {singleReason}</Text> : null}
       </Pressable>
 
       {!isMulti ? (
-        <Pressable onPress={() => onCampaignPress(primary.id)} style={styles.singleBody}>
-          <View style={styles.planAlignRow}>
-            <PlanChip plan={singlePlan} />
-            {singleReason ? <Text style={styles.reasonText}>Reason: {singleReason}</Text> : null}
-          </View>
-          <ReachMetricsGrid campaignId={primary.id} />
+        <Pressable onPress={() => onCampaignPress(primary.id)}>
+          <ReachMetricsGrid campaignId={primary.id} withDivider />
         </Pressable>
       ) : (
         <View style={styles.multiBody}>
           {!expanded ? (
             <Pressable style={styles.collapsedPlans} onPress={() => setExpanded(true)}>
-              <Text style={styles.campaignCount}>{campaigns.length} campaigns</Text>
               <View style={styles.planChipRow}>
                 {campaigns.map((c) => (
                   <PlanChip key={c.id} plan={planById.get(c.plan_id)} />
@@ -202,68 +224,84 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    padding: 14,
+    padding: 12,
+    gap: 8,
+  },
+  identityPress: { gap: 6 },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     gap: 10,
   },
-  identityPress: { gap: 4 },
+  topLeft: { flex: 1, minWidth: 0, gap: 4 },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    gap: 6,
+    flexWrap: "wrap",
   },
-  titleRowRight: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
-  identityTitle: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: "800", color: Theme.textPrimaryDark },
-  identityMeta: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: "600", color: Theme.textSecondary },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  metaFooter: {
+  identityTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  identityMeta: { fontSize: 11, fontWeight: "500", color: Theme.textMuted },
+  metaStrong: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary, flexShrink: 1 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap" },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 3, maxWidth: "100%" },
+  metaDot: { fontSize: 11, color: Theme.textMuted },
+  tripIdText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+    flexShrink: 0,
+  },
+  midRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    marginTop: 2,
     flexWrap: "wrap",
   },
-  postedText: { fontSize: 10, fontWeight: "600", color: Theme.textMuted },
-  tripIdRow: { flexDirection: "row", alignItems: "center", gap: 3 },
-  tripIdText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 0.3,
+  postedText: { fontSize: 10, fontWeight: "500", color: Theme.textMuted },
+  statusPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
   },
-  statusText: { fontSize: 11, fontWeight: "700", textTransform: "capitalize" },
+  statusPillText: { fontSize: 9, fontWeight: "800", textTransform: "capitalize" },
   reasonText: { fontSize: 9, fontWeight: "600", color: Theme.textMuted },
 
-  singleBody: { gap: 10 },
-  planAlignRow: { gap: 4 },
   planChip: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: Theme.surface,
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 7,
+    borderWidth: 1,
   },
-  planChipName: { fontSize: 12, fontWeight: "800" },
-  planChipPrice: { fontSize: 11, fontWeight: "700", color: Theme.textMuted },
-
-  multiBody: { gap: 8 },
-  collapsedPlans: { gap: 8 },
+  planChipName: { fontSize: 10, fontWeight: "800" },
   campaignCount: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
-  planChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  expandedList: { gap: 8 },
+
+  multiBody: { gap: 6 },
+  collapsedPlans: { gap: 6 },
+  planChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
+  expandedList: { gap: 6 },
   planRow: {
-    gap: 8,
-    padding: 10,
+    gap: 6,
+    padding: 8,
     borderRadius: 10,
     backgroundColor: Theme.surface,
     borderWidth: 1,
@@ -273,7 +311,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 6,
   },
   planRowRight: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
 });

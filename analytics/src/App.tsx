@@ -1,15 +1,18 @@
 import { useState } from 'react';
-import { Shield, Moon, Sun, ChevronRightSquare, Coins } from 'lucide-react';
+import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket } from 'lucide-react';
 import { AdminDataProvider, useAdmin } from '@/context/AdminDataProvider';
 import { ApplicationQueue } from '@/components/queue/ApplicationQueue';
 import { AuditTrail } from '@/components/queue/AuditTrail';
 import { OrgWorkspace } from '@/components/workspace/OrgWorkspace';
 import { VerificationActionPanel } from '@/components/workspace/VerificationActionPanel';
 import { CreditsPanel } from '@/components/credits/CreditsPanel';
+import { ReferralsPanel } from '@/components/growth/ReferralsPanel';
+import { RewardRulesPanel } from '@/components/growth/RewardRulesPanel';
+import { BoostControlCenterPanel } from '@/components/growth/BoostControlCenterPanel';
 import { Badge } from '@/components/ui/badge';
 import { supabaseConfigError } from '@/lib/supabase';
 
-type ConsoleView = 'verification' | 'credits';
+type ConsoleView = 'verification' | 'credits' | 'referrals' | 'reward-rules' | 'boost-ops';
 
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
@@ -57,6 +60,30 @@ function Topbar({
             }`}
           >
             <Coins className="size-3" /> Growth · Credits
+          </button>
+          <button
+            onClick={() => setView('referrals')}
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              view === 'referrals' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            <Users className="size-3" /> Growth · Referrals
+          </button>
+          <button
+            onClick={() => setView('reward-rules')}
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              view === 'reward-rules' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            <SlidersHorizontal className="size-3" /> Growth · Reward Rules
+          </button>
+          <button
+            onClick={() => setView('boost-ops')}
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              view === 'boost-ops' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            <Rocket className="size-3" /> Boost · Control Center
           </button>
         </nav>
       </div>
@@ -135,6 +162,12 @@ function AdminShell() {
 
         {view === 'credits' ? (
           <CreditsPanel />
+        ) : view === 'referrals' ? (
+          <ReferralsPanel />
+        ) : view === 'reward-rules' ? (
+          <RewardRulesPanel />
+        ) : view === 'boost-ops' ? (
+          <BoostControlCenterPanel />
         ) : (
           <div className="flex flex-1 overflow-hidden">
             {/* Left sidebar: queue (60%) + audit (40%) */}

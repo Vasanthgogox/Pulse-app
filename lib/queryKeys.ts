@@ -224,9 +224,22 @@ export const queryKeys = {
   reach: {
     plans: () => ["q", "reach", "plans"] as const,
     campaignsForOrg: (orgId: string) => ["q", "reach", "campaigns", orgId] as const,
+    campaignPurchasesForOrg: (orgId: string) => ["q", "reach", "campaign-purchases", orgId] as const,
     campaignMetrics: (campaignId: string) => ["q", "reach", "metrics", campaignId] as const,
     wallet: (orgId: string) => ["q", "reach", "wallet", orgId] as const,
     orgSummary: (orgId: string) => ["q", "reach", "org-summary", orgId] as const,
+    myReferralCode: (orgId: string) => ["q", "reach", "referral-code", orgId] as const,
+    referralsForOrg: (orgId: string) => ["q", "reach", "referrals", orgId] as const,
+    referrerName: (code: string) => ["q", "reach", "referrer-name", code] as const,
+    driverReferralsForCampaign: (campaignId: string) =>
+      ["q", "reach", "driver-referrals", "campaign", campaignId] as const,
+    driverReferralsForFleetOrg: (orgId: string) =>
+      ["q", "reach", "driver-referrals", "fleet", orgId] as const,
+    campaignDelivery: (campaignId: string) =>
+      ["q", "reach", "delivery", campaignId] as const,
+    driverStories: (userId: string) => ["q", "reach", "driver-stories", userId] as const,
+    driverRewardEarnings: (userId: string) =>
+      ["q", "reach", "driver-reward-earnings", userId] as const,
   },
 
   discover: {

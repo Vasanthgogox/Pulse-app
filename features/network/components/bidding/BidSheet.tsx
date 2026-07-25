@@ -52,6 +52,11 @@ interface BidSheetProps {
   post: PostRow | null;
   orgId: string;
   existingBid?: BidRow | null;
+  /** Pre-fill for a fresh bid (e.g. a driver's suggested rate from an
+   * approved Boost recommendation). Ignored in edit mode. */
+  initialAmount?: number | null;
+  /** Pre-fill note for a fresh bid (e.g. the recommending driver's note). */
+  initialNote?: string | null;
   onClose: () => void;
   onSuccess?: () => void;
 }
@@ -64,7 +69,7 @@ function splitLocation(label: string | null | undefined): { primary: string; sec
   return { primary: parts[0], secondary: parts.slice(1).join(', ') };
 }
 
-export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess }: BidSheetProps) {
+export function BidSheet({ visible, post, orgId, existingBid, initialAmount, initialNote, onClose, onSuccess }: BidSheetProps) {
   const insets = useSafeAreaInsets();
   const { currentOrganization } = useOrganization();
   const { width: viewportWidth } = useWindowDimensions();
@@ -119,8 +124,14 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
 
   useEffect(() => {
     if (visible) {
-      setAmount(existingBid?.amount ? String(Math.round(existingBid.amount)) : '');
-      setNote(existingBid?.note ?? '');
+      setAmount(
+        existingBid?.amount
+          ? String(Math.round(existingBid.amount))
+          : initialAmount && initialAmount > 0
+            ? String(Math.round(initialAmount))
+            : '',
+      );
+      setNote(existingBid?.note ?? initialNote ?? '');
       setSuccess(false);
       if (isDesktop) {
         dialogOpacity.setValue(0);
@@ -146,7 +157,7 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
         useNativeDriver: true,
       }).start();
     }
-  }, [visible, isDesktop, existingBid?.amount, existingBid?.note]);
+  }, [visible, isDesktop, existingBid?.amount, existingBid?.note, initialAmount, initialNote]);
 
   const invalidateQuoteCaches = async (matchedIndentId: string) => {
     await Promise.allSettled([

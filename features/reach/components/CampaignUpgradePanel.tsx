@@ -11,19 +11,25 @@ import { ChevronRight, Coins, CreditCard } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
-const INK = Theme.loadAddButtonText;
 const MUTED = Theme.loadStatusTabTextMuted;
 
 interface CampaignUpgradePanelProps {
   orgId: string;
   campaignId: string;
   currentPlanId: string;
+  /** Open the tier picker immediately (e.g. header "Upgrade Plan" button). */
+  defaultExpanded?: boolean;
 }
 
-export function CampaignUpgradePanel({ orgId, campaignId, currentPlanId }: CampaignUpgradePanelProps) {
+export function CampaignUpgradePanel({
+  orgId,
+  campaignId,
+  currentPlanId,
+  defaultExpanded = false,
+}: CampaignUpgradePanelProps) {
   const plansQ = useReachPlansQuery();
   const upgradeMutation = useUpgradeReachCampaignMutation();
-  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(defaultExpanded);
   const [upgradePaymentMethod, setUpgradePaymentMethod] = useState<"credits" | "money">("credits");
 
   const plan = plansQ.data?.find((p) => p.id === currentPlanId);
@@ -72,7 +78,7 @@ export function CampaignUpgradePanel({ orgId, campaignId, currentPlanId }: Campa
           style={[styles.paymentBtn, upgradePaymentMethod === "credits" && styles.paymentBtnActive]}
           onPress={() => setUpgradePaymentMethod("credits")}
         >
-          <Coins size={13} color={upgradePaymentMethod === "credits" ? INK : MUTED} />
+          <Coins size={13} color={upgradePaymentMethod === "credits" ? Theme.textOnPrimary : MUTED} />
           <Text style={[styles.paymentBtnText, upgradePaymentMethod === "credits" && styles.paymentBtnTextActive]}>
             Credits
           </Text>
@@ -81,7 +87,7 @@ export function CampaignUpgradePanel({ orgId, campaignId, currentPlanId }: Campa
           style={[styles.paymentBtn, upgradePaymentMethod === "money" && styles.paymentBtnActive]}
           onPress={() => setUpgradePaymentMethod("money")}
         >
-          <CreditCard size={13} color={upgradePaymentMethod === "money" ? INK : MUTED} />
+          <CreditCard size={13} color={upgradePaymentMethod === "money" ? Theme.textOnPrimary : MUTED} />
           <Text style={[styles.paymentBtnText, upgradePaymentMethod === "money" && styles.paymentBtnTextActive]}>
             Cash
           </Text>
@@ -89,7 +95,7 @@ export function CampaignUpgradePanel({ orgId, campaignId, currentPlanId }: Campa
       </View>
       <Pressable style={styles.upgradeConfirmBtn} disabled={upgradeMutation.isPending} onPress={handleUpgrade}>
         {upgradeMutation.isPending ? (
-          <ActivityIndicator size="small" color={INK} />
+          <ActivityIndicator size="small" color={Theme.buttonPrimaryText} />
         ) : (
           <Text style={styles.upgradeConfirmBtnText}>Confirm upgrade</Text>
         )}
@@ -103,14 +109,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
     borderRadius: 12,
     backgroundColor: Theme.accentGoldMuted,
+    borderWidth: 1,
+    borderColor: Theme.accentGoldBorder,
   },
-  upgradeRowText: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark, flexShrink: 1 },
-  upgradeCard: { borderRadius: 14, borderWidth: 1, borderColor: Theme.borderLight, padding: 12, gap: 10 },
-  upgradeCardTitle: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
+  upgradeRowText: { fontSize: 12, fontWeight: "800", color: Theme.textPrimaryDark, flexShrink: 1 },
+  upgradeCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    padding: 14,
+    gap: 10,
+  },
+  upgradeCardTitle: { fontSize: 12, fontWeight: "800", color: Theme.textPrimaryDark },
   paymentRow: { flexDirection: "row", gap: 8 },
   paymentBtn: {
     flex: 1,
@@ -118,21 +133,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 10,
     backgroundColor: Theme.surface,
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
-  paymentBtnActive: { backgroundColor: Theme.loadAddButtonBg, borderColor: Theme.loadStatusTabBorderSoft },
+  paymentBtnActive: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+  },
   paymentBtnText: { fontSize: 11, fontWeight: "700", color: MUTED },
-  paymentBtnTextActive: { color: INK },
+  paymentBtnTextActive: { color: Theme.textOnPrimary },
   upgradeConfirmBtn: {
     minHeight: 42,
-    borderRadius: 12,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.loadAddButtonBg,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
   },
-  upgradeConfirmBtnText: { fontSize: 12, fontWeight: "800", color: INK },
+  upgradeConfirmBtnText: { fontSize: 12, fontWeight: "900", color: Theme.buttonPrimaryText },
 });

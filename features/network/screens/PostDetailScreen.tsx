@@ -15,7 +15,7 @@ import {
   useRejectBidMutation,
 } from '@/lib/queries/useBidsQuery';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useReachCampaignsQuery, useCancelReachCampaignMutation } from '@/lib/queries/useReachCampaignsQuery';
+import { useReachCampaignsQuery, useMarkReachCampaignSourceDeletedMutation } from '@/lib/queries/useReachCampaignsQuery';
 import { deactivatePost, isPostVisibleForOrg, type PostRow } from '@/features/network/services/posts.service';
 import { type BidRow, RelationshipRequiredError } from '@/features/network/services/bids.service';
 import { createConnectionRequest } from '@/features/connections/services/connectionRequests.service';
@@ -161,7 +161,7 @@ export default function PostDetailScreen() {
       ) ?? null,
     [myCampaignsQ.data, post?.id],
   );
-  const cancelCampaignMutation = useCancelReachCampaignMutation();
+  const markSourceDeletedMutation = useMarkReachCampaignSourceDeletedMutation();
   const color = post ? orgColor(post.organization_id) : Theme.primary;
   const bids = bidsQ.data ?? [];
   const [bidderBrandingByOrgId, setBidderBrandingByOrgId] = useState<
@@ -277,11 +277,11 @@ export default function PostDetailScreen() {
     const ok = activeCampaignForPost
       ? await confirmDialog(
           'Delete story?',
-          'This story has an active Pulse Reach campaign.\n\nDeleting it will:\n' +
-            '• Stop Reach delivery immediately\n' +
-            '• Cancel the active campaign\n' +
-            '• Credits already spent will not be refunded\n\n' +
-            'This action cannot be undone.',
+          'This story has an active Pulse Reach campaign.\n\nThe story will be removed, but your paid campaign continues:\n' +
+            '• Delivery keeps running from the campaign snapshot\n' +
+            '• Analytics and campaign history stay intact\n' +
+            '• The campaign ends on its normal schedule\n\n' +
+            'Deleting the story cannot be undone.',
           { confirmText: 'Delete', destructive: true },
         )
       : await confirmDialog(
@@ -292,16 +292,12 @@ export default function PostDetailScreen() {
     if (!ok) return;
     setIsDeleting(true);
     if (activeCampaignForPost) {
-      const { error: cancelError } = await cancelCampaignMutation.mutateAsync({
+      // Transparency stamp only — the campaign is NOT cancelled. The customer
+      // bought distribution; delivery continues from the campaign snapshot.
+      await markSourceDeletedMutation.mutateAsync({
         campaignId: activeCampaignForPost.id,
-        reason: 'source_deleted',
         orgId,
       });
-      if (cancelError) {
-        setIsDeleting(false);
-        Alert.alert('Could not delete', cancelError.message);
-        return;
-      }
     }
     const { error } = await deactivatePost(post.id, orgId);
     setIsDeleting(false);
@@ -311,7 +307,7 @@ export default function PostDetailScreen() {
     }
     await afterPostDeleted(post.id);
     router.back();
-  }, [post, isOwner, orgId, isDeleting, afterPostDeleted, router, activeCampaignForPost, cancelCampaignMutation]);
+  }, [post, isOwner, orgId, isDeleting, afterPostDeleted, router, activeCampaignForPost, markSourceDeletedMutation]);
 
   if (!post) {
     return (

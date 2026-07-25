@@ -17,6 +17,13 @@ export const DRIVER_POLICIES: readonly PolicyRecord[] = [
     onDeny: { type: 'experience_home', experience: 'driver' },
   },
   {
+    id: 'driver.stories',
+    pattern: '/(driver)/stories',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
     id: 'driver.chat',
     pattern: '/(driver)/chat',
     experience: 'driver',

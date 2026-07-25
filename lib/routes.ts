@@ -257,6 +257,10 @@ export const ROUTES = {
     /** Placeholder only (Phase 2.2) — no referral/verification backend yet;
      * every card reads "Coming Soon". Educational, not functional. */
     EARN_CREDITS: '/reach/earn-credits' as const,
+    /** Opportunities (Boost V2) — business opportunities recommended by
+     * drivers, priority-scored; approval hands off to a pre-filled bid in the
+     * normal bid flow. */
+    INBOX: '/reach/inbox' as const,
     /** Single campaign — identity (from its snapshot_* columns), plan/spend,
      * metrics, status/countdown, and actions (View Original Story / Boost
      * Again / Share). The single source of truth for one campaign. */

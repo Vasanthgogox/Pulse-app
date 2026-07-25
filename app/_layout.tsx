@@ -79,6 +79,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { PendingOnboardingProvider } from '@/contexts/PendingOnboardingContext';
 import { PendingInviteResumeGate } from '@/components/PendingInviteResumeGate';
+import { ReferralCaptureGate } from '@/components/ReferralCaptureGate';
 import { PushTokenRegistration } from '@/components/PushTokenRegistration';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { NavigationPolicyShadowHost } from '@/lib/navigationPolicy/NavigationPolicyShadowHost';
@@ -400,6 +401,7 @@ export default function RootLayout() {
                 <OrganizationProvider>
                   <ActiveWorkspaceProvider>
                   <PendingInviteResumeGate />
+                  <ReferralCaptureGate />
                   <WalletProvider>
                     <KeyboardAccessoryProvider>
                       <GlobalSyncProvider>

@@ -2,11 +2,25 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getReachPlans,
   getReachCampaignsForOrg,
+  getReachCampaignPurchasesForOrg,
+  getReachCampaignDelivery,
+  markReachCampaignSourceDeleted,
   publishReachCampaign,
   upgradeReachCampaign,
   cancelReachCampaign,
+  type ReachDriverRewardConfig,
   type ReachPaymentMethod,
 } from '@/features/reach/services/campaigns.service';
+import {
+  getDriverReachStories,
+  getDriverReferralEarnings,
+  getDriverReferralsForCampaign,
+  getReachReferralInbox,
+  decideReachReferral,
+  recommendReachCampaign,
+  type RecommendReachCampaignInput,
+} from '@/features/reach/services/driverReferrals.service';
+import { createSalaryRequest } from '@/features/drivers/services/salaryRequests.service';
 import { getReachCampaignMetrics, getReachOrgSummary } from '@/features/reach/services/analytics.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
@@ -30,6 +44,20 @@ export function useReachCampaignsQuery(orgId: string | null) {
       const res = await getReachCampaignsForOrg(orgId!);
       if (res.error) throw res.error;
       return res.campaigns;
+    },
+    enabled: !!orgId,
+    staleTime: STALE.frequent,
+  });
+}
+
+/** Plan-tier timeline source — see getReachCampaignPurchasesForOrg. */
+export function useReachCampaignPurchasesQuery(orgId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.reach.campaignPurchasesForOrg(orgId ?? ''),
+    queryFn: async () => {
+      const res = await getReachCampaignPurchasesForOrg(orgId!);
+      if (res.error) throw res.error;
+      return res.purchases;
     },
     enabled: !!orgId,
     staleTime: STALE.frequent,
@@ -62,6 +90,79 @@ export function useReachOrgSummaryQuery(orgId: string | null) {
   });
 }
 
+/** Per-wave delivery stats for the campaign detail Delivery panel. */
+export function useReachCampaignDeliveryQuery(campaignId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.reach.campaignDelivery(campaignId ?? ''),
+    queryFn: async () => {
+      const res = await getReachCampaignDelivery(campaignId!);
+      if (res.error) throw res.error;
+      return res.waves;
+    },
+    enabled: !!campaignId,
+    staleTime: STALE.frequent,
+  });
+}
+
+/** Driver Story tab feed for the authenticated driver. */
+export function useDriverReachStoriesQuery(userId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.reach.driverStories(userId ?? ''),
+    queryFn: async () => {
+      const res = await getDriverReachStories();
+      if (res.error) throw res.error;
+      return res.stories;
+    },
+    enabled: !!userId,
+    staleTime: STALE.frequent,
+  });
+}
+
+/** Referral reward earnings + withdrawal state for the Stories green card. */
+export function useDriverRewardEarningsQuery(userId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.reach.driverRewardEarnings(userId ?? ''),
+    queryFn: async () => {
+      const res = await getDriverReferralEarnings();
+      if (res.error) throw res.error;
+      return res.data;
+    },
+    enabled: !!userId,
+    staleTime: STALE.frequent,
+  });
+}
+
+/** Driver withdraws referral rewards — a driver_salary_requests row
+ * (request_type='reward') the fleet owner approves & pays like any salary
+ * request. */
+export function useRequestRewardWithdrawalMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      driverId,
+      orgId,
+      amount,
+    }: {
+      driverId: string;
+      orgId: string;
+      amount: number;
+      /** Invalidation target. */
+      userId: string;
+    }) => {
+      const res = await createSalaryRequest(driverId, orgId, 'reward', amount, {
+        note: 'Referral reward withdrawal',
+      });
+      if (res.error) throw res.error;
+      return res.request;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.reach.driverRewardEarnings(variables.userId),
+      });
+    },
+  });
+}
+
 export function usePublishReachCampaignMutation() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -70,14 +171,89 @@ export function usePublishReachCampaignMutation() {
       postId,
       planId,
       paymentMethod,
+      rewardConfig,
     }: {
       orgId: string;
       postId: string;
       planId: string;
       paymentMethod: ReachPaymentMethod;
-    }) => publishReachCampaign(orgId, postId, planId, paymentMethod),
+      /** Boost V2: driver distribution + referral escrow (optional). */
+      rewardConfig?: ReachDriverRewardConfig;
+    }) => publishReachCampaign(orgId, postId, planId, paymentMethod, rewardConfig),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.reach.campaignsForOrg(variables.orgId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.reach.campaignPurchasesForOrg(variables.orgId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.reach.wallet(variables.orgId) });
+    },
+  });
+}
+
+export function useReachDriverReferralsQuery(campaignId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.reach.driverReferralsForCampaign(campaignId ?? ''),
+    queryFn: async () => {
+      const res = await getDriverReferralsForCampaign(campaignId!);
+      if (res.error) throw res.error;
+      return res.referrals;
+    },
+    enabled: !!campaignId,
+    staleTime: STALE.frequent,
+  });
+}
+
+export function useRecommendReachCampaignMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RecommendReachCampaignInput) => recommendReachCampaign(input),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.reach.driverReferralsForCampaign(variables.campaignId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.reach.driverReferralsForFleetOrg(variables.fleetOrgId),
+      });
+    },
+  });
+}
+
+/** Fleet Owner Recommendation Inbox — recommendations drivers sent this org. */
+export function useReachReferralInboxQuery(fleetOrgId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.reach.driverReferralsForFleetOrg(fleetOrgId ?? ''),
+    queryFn: async () => {
+      const res = await getReachReferralInbox(fleetOrgId!);
+      if (res.error) throw res.error;
+      return res.inbox;
+    },
+    enabled: !!fleetOrgId,
+    staleTime: STALE.frequent,
+  });
+}
+
+export function useDecideReachReferralMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      referralId,
+      approve,
+    }: {
+      referralId: string;
+      approve: boolean;
+      /** Invalidation targets — pass whichever contexts are known. */
+      campaignId?: string;
+      fleetOrgId?: string;
+    }) => decideReachReferral(referralId, approve),
+    onSuccess: (_data, variables) => {
+      if (variables.campaignId) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.reach.driverReferralsForCampaign(variables.campaignId),
+        });
+      }
+      if (variables.fleetOrgId) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.reach.driverReferralsForFleetOrg(variables.fleetOrgId),
+        });
+      }
     },
   });
 }
@@ -95,6 +271,24 @@ export function useUpgradeReachCampaignMutation() {
       paymentMethod: ReachPaymentMethod;
       orgId: string; // only used to invalidate the right query below
     }) => upgradeReachCampaign(campaignId, newPlanId, paymentMethod),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.reach.campaignsForOrg(variables.orgId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.reach.campaignPurchasesForOrg(variables.orgId) });
+    },
+  });
+}
+
+/** Snapshot lifecycle: the source story was deleted but the campaign lives
+ * on, serving from its snapshot. Stamps source_deleted_at (transparency). */
+export function useMarkReachCampaignSourceDeletedMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      campaignId,
+    }: {
+      campaignId: string;
+      orgId: string; // only used to invalidate the right query below
+    }) => markReachCampaignSourceDeleted(campaignId),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.reach.campaignsForOrg(variables.orgId) });
     },
