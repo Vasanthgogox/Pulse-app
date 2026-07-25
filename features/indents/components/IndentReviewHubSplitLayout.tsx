@@ -55,6 +55,9 @@ export type IndentReviewHubBidsPaneProps = {
   onBroadcast?: () => void;
   onShareStory?: () => void;
   onShareWhatsApp?: () => void;
+  onCounterOffer?: (quoteId: string) => void;
+  onAwardBid?: (quoteId: string) => void;
+  awarding?: boolean;
   // Supplier — get load
   myQuote: DirectQuoteRow | null;
   supplierQuoteActionHint: SupplierQuoteActionHint;
@@ -138,6 +141,9 @@ export function IndentReviewHubBidsBody(props: IndentReviewHubBidsPaneProps) {
     onBroadcast,
     onShareStory,
     onShareWhatsApp,
+    onCounterOffer,
+    onAwardBid,
+    awarding,
     myQuote,
     supplierQuoteActionHint,
     supplierQuoteAlert,
@@ -189,6 +195,9 @@ export function IndentReviewHubBidsBody(props: IndentReviewHubBidsPaneProps) {
           selectedQuoteId={selectedQuoteId}
           onSelectQuote={onSelectQuote}
           canSelect={canAward}
+          onCounterOffer={onCounterOffer}
+          onAwardBid={onAwardBid}
+          awarding={awarding}
         />
       </View>
     );

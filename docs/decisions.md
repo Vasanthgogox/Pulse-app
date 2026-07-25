@@ -138,3 +138,34 @@ This is currently *derived* in the Credits panel UI from the existing `type` col
 
 **Naming direction, not implemented — "Credit Adjustment" over "Grant/Deduct Credits."** The Credits panel's underlying operation is broader than its two current buttons suggest: Grant, Deduct, Correction, Refund, and Reversal are all the same shape (an admin-initiated ledger entry with a reason). The UI can keep exposing Grant/Deduct as the two buttons that cover 95% of real usage, but if a third action (e.g. Correction) is ever added, model it as another instance of the same "Credit Adjustment" concept rather than a bespoke new flow.
 
+## `organization_members` is canonical for driver participation (ADR-010, accepted — Pilot Entry blocker)
+
+**Status:** Accepted. **Not implemented.** **Pilot Entry blocker** (blocks gate P1; P2 cannot start). Raised by the P1 pilot rehearsal, 2026-07-26 — see `docs/PILOT_ENTRY_VALIDATION.md`.
+
+**Architectural outcome:** elevates **authorization to a first-class platform concern** (Permanent Platform Principle 5). Identity (belonging), operational authority (staff), and data ownership (own-row resources) must remain distinct in schema, helpers, RLS, and application logic. Every new feature must answer independently: belong? (`is_org_member`) · act on behalf? (`is_org_staff`) · which rows? (resource RLS). Design review checklist lives in `docs/ADR-010-RLS-AUDIT.md` and Principle 5.
+
+**Decision:** `organization_members` remains the single canonical identity and authorization model for organization participation, **including drivers**. The driver onboarding flow (`accept_driver_invite`, and invite creation for the pending state) must create/update the membership row. Boost must **not** be changed to read participation from `drivers`, and no `organization_members → drivers → driver_invites` fallback chain may be introduced — cascading identity lookups become permanent technical debt and make permission bugs undiagnosable.
+
+**Why this is not a one-line onboarding fix:**
+
+The root defect is that **`is_org_member()` encodes the wrong security boundary** — it conflates tenancy (“belongs to the org”) with operational authority (“acts on behalf of the org”). The 87 role-blind inline policies and ~95 policies that call that helper are symptoms. ADR-010 is an **authorization model refactor**, not an RLS cleanup count.
+
+1. **The constraint forbids driver memberships today.** `chk_org_members_role` is `CHECK (role = ANY (ARRAY['owner','admin','member','dispatcher','finance']))` — `'driver'` is not an allowed value. Boost V2 predicates on `organization_members.role = 'driver'` can therefore never match.
+
+2. **Populating memberships naively escalates privileges.** Any active membership satisfies `is_org_member` and most OM checks — including finance, banking, master data, and ops.
+
+**Step 1 artifact:** `docs/ADR-010-RLS-AUDIT.md` — inventory, helper contract (`is_org_member` vs `is_org_staff`), role matrix with Read/CUD/own-row columns, and sign-off criteria. **Step 2 must not start until the role matrix is signed off.**
+
+**Required implementation order (do not reorder — partial delivery is a security regression):**
+
+1. **Step 1 (complete — awaiting sign-off):** RLS audit & patch strategy — inventory, role matrix, helper contract (`docs/ADR-010-RLS-AUDIT.md`). **Do not patch policies until the role matrix is signed off.**
+2. Introduce `is_org_staff` and patch the 87 role-blind policies **plus** staff policies that call role-blind `is_org_member` (~95) so driver memberships are excluded from staff-scoped access.
+3. Widen `chk_org_members_role` to allow `'driver'`.
+4. Wire onboarding: invite sent → `organization_members (role='driver', status='pending')`; invite accepted → `status='active'`; `leave_fleet` → `status='inactive'`.
+5. Backfill the 38 existing linked drivers that have `drivers` rows but no membership.
+6. Re-run P1 (Independent screenshot + Fleet + Pending); only then start P2.
+
+**Freeze classification:** Correctness and security blocker. **Allowed under Pilot Freeze** — preserves correctness and security; does not introduce new product functionality. Pilot Entry is **deferred until ADR-010 is implemented and P1 passes**.
+
+**Do not re-scope the pilot to Independent-only** unless that is an explicit business decision with documented acceptance criteria. Doing so would invalidate documented product behaviour (Fleet / Pending personas) and reduce the value of pilot evidence. Until such a decision is recorded, Pilot Entry waits on ADR-010.
+

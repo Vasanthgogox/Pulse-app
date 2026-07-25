@@ -351,7 +351,7 @@ export function CreditsPanel() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto max-w-4xl space-y-4 p-4">
+            <div className="space-y-4 p-4">
               {/* Org identity */}
               <div className="flex items-center gap-3">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">

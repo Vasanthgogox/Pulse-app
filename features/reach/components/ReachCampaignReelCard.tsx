@@ -4,16 +4,18 @@
  */
 import Theme from "@/constants/Theme";
 import type { ReachCampaignRow, ReachPlanRow } from "@/features/reach/services/campaigns.service";
-import { useReachCampaignMetricsQuery } from "@/lib/queries/useReachCampaignsQuery";
 import { getCampaignIdentity } from "@/features/reach/utils/campaignIdentity";
-import { getReachPlanDisplay } from "@/lib/reachPlanRegistry";
 import { formatINR } from "@/lib/format";
+import { useReachTripMetricsQuery } from "@/lib/queries/useReachCampaignsQuery";
+import { getReachPlanDisplay } from "@/lib/reachPlanRegistry";
 import { MapPin, Rocket, Smartphone, Zap } from "lucide-react-native";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 interface ReachCampaignReelCardProps {
   /** The trip's current/highest-tier campaign — one card per trip, never one per boost. */
   campaign: ReachCampaignRow;
+  /** Every campaign on this trip (re-boost / upgrade siblings). Metrics are summed. */
+  tripCampaignIds: string[];
   plan: ReachPlanRow | undefined;
   /** How many boosts (re-broadcasts/upgrades) this trip has had in total. */
   boostCount: number;
@@ -27,6 +29,7 @@ interface ReachCampaignReelCardProps {
 
 export function ReachCampaignReelCard({
   campaign,
+  tripCampaignIds,
   plan,
   boostCount,
   planTimeline,
@@ -38,7 +41,9 @@ export function ReachCampaignReelCard({
   const id = getCampaignIdentity(campaign);
   const display = plan ? getReachPlanDisplay(plan.code) : undefined;
   const planColor = display?.color ?? Theme.primary;
-  const metricsQ = useReachCampaignMetricsQuery(campaign.id);
+  const metricsQ = useReachTripMetricsQuery(
+    tripCampaignIds.length > 0 ? tripCampaignIds : [campaign.id],
+  );
   const m = metricsQ.data;
   const isActive = campaign.status === "active";
   // Collapse consecutive repeats ("Starter → Starter → Growth" reads as noise).

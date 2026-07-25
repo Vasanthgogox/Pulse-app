@@ -116,7 +116,7 @@ export function UsageGovernanceTab() {
       <div className="grid grid-cols-1 gap-0 divide-y divide-border xl:grid-cols-2 xl:divide-x xl:divide-y-0">
 
         {/* ─── Left: Usage metrics ─────────────────────────────────── */}
-        <div className="px-5 py-4">
+        <div className="px-4 py-4">
           <div className="mb-3">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
               Resource Usage
@@ -156,7 +156,7 @@ export function UsageGovernanceTab() {
         </div>
 
         {/* ─── Right: Feature flags ─────────────────────────────────── */}
-        <div className="px-5 py-4">
+        <div className="px-4 py-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
               Feature Flags

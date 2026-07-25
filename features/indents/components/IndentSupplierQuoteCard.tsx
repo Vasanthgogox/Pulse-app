@@ -214,6 +214,11 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
   const amount = Number(quote?.amount ?? 0);
   const amountDisplay = hasQuote ? stripCurrencyPrefix(formatINR(amount)) : "—";
   const status = (quote?.status ?? "").trim().toLowerCase();
+  const counterAmount =
+    quote?.counter_amount != null && Number(quote.counter_amount) > 0
+      ? Number(quote.counter_amount)
+      : null;
+  const isCountered = hasQuote && status === "pending" && counterAmount != null;
   const isAccepted = status === "accepted";
   const isRejected = status === "rejected";
   const isPending = !hasQuote || status === "pending";
@@ -232,7 +237,9 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
         ? "Awarded"
         : isRejected
           ? "Rejected"
-          : "Pending";
+          : isCountered
+            ? "Countered"
+            : "Pending";
 
   const alertPanel = alertInfo ? alertPanelStyles(alertInfo.tone) : null;
   const hintText = actionHintCopy(actionHint);
@@ -289,6 +296,7 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
               styles.statusPill,
               isAccepted && styles.statusPillAwarded,
               isRejected && styles.statusPillRejected,
+              isCountered && styles.statusPillCountered,
             ]}
           >
             <Text
@@ -296,6 +304,7 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
                 styles.statusText,
                 isAccepted && styles.statusTextAwarded,
                 isRejected && styles.statusTextRejected,
+                isCountered && styles.statusTextCountered,
               ]}
             >
               {statusLabel}
@@ -329,6 +338,11 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
             ) : null}
           </View>
         )}
+        {isCountered ? (
+          <Text style={styles.counterHint}>
+            Shipper counter · ₹ {stripCurrencyPrefix(formatINR(counterAmount!))}
+          </Text>
+        ) : null}
       </View>
 
       {hasFooter ? (
@@ -503,6 +517,10 @@ const styles = StyleSheet.create({
   statusPillRejected: {
     backgroundColor: CARD.statusRejectedBg,
   },
+  statusPillCountered: {
+    backgroundColor: Theme.aggregatePillBg,
+    borderColor: Theme.aggregatePillBorder,
+  },
   statusText: {
     fontSize: 9,
     fontWeight: "800",
@@ -515,6 +533,15 @@ const styles = StyleSheet.create({
   },
   statusTextRejected: {
     color: CARD.statusRejectedText,
+  },
+  statusTextCountered: {
+    color: Theme.aggregatePillText,
+  },
+  counterHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.aggregatePillText,
   },
   tapHint: {
     fontSize: 9,

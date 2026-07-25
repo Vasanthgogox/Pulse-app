@@ -6,49 +6,49 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import {
-  useReachCampaignsQuery,
-  useReachCampaignPurchasesQuery,
-  useReachPlansQuery,
-  useReachOrgSummaryQuery,
-  useReachReferralInboxQuery,
-} from "@/lib/queries/useReachCampaignsQuery";
 import { ReachCampaignReelCard } from "@/features/reach/components/ReachCampaignReelCard";
-import { ReachStoryPostPreview } from "@/features/reach/components/ReachStoryPostPreview";
-import { groupReachCampaignsByPost } from "@/features/reach/utils/campaignFormat";
 import { ReachLiveTicker } from "@/features/reach/components/ReachLiveTicker";
 import { ReachMarketingInsights } from "@/features/reach/components/ReachMarketingInsights";
+import { ReachStoryPostPreview } from "@/features/reach/components/ReachStoryPostPreview";
+import { groupReachCampaignsByPost } from "@/features/reach/utils/campaignFormat";
+import {
+    useReachCampaignPurchasesQuery,
+    useReachCampaignsQuery,
+    useReachOrgSummaryQuery,
+    useReachPlansQuery,
+    useReachReferralInboxQuery,
+} from "@/lib/queries/useReachCampaignsQuery";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import {
-  ArrowLeft,
-  ArrowLeftRight,
-  ChevronLeft,
-  ChevronRight,
-  Coins,
-  Eye,
-  Gavel,
-  Inbox as InboxIcon,
-  Plus,
-  Rocket,
-  Search,
-  Sparkles,
-  TrendingUp,
-  Zap,
+    ArrowLeft,
+    ArrowLeftRight,
+    ChevronLeft,
+    ChevronRight,
+    Coins,
+    Eye,
+    Gavel,
+    Inbox as InboxIcon,
+    Plus,
+    Rocket,
+    Search,
+    Sparkles,
+    TrendingUp,
+    Zap,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
+    ActivityIndicator,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    useWindowDimensions,
+    View,
+    type NativeScrollEvent,
+    type NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -126,6 +126,7 @@ export default function ReachHomeScreen({
           : [planById.get(primary.plan_id)?.name ?? "Boost"];
       return {
         primary,
+        campaignIds: camps.map((c) => c.id),
         bucket: (activeOnes.length > 0 ? "active" : "history") as ReelFilter,
         boostCount: Math.max(tripPurchases.length, camps.length),
         planTimeline,
@@ -468,10 +469,11 @@ export default function ReachHomeScreen({
                   onMomentumScrollEnd={onDeckScroll}
                   onScrollEndDrag={onDeckScroll}
                 >
-                  {groups.map(({ primary: c, boostCount, planTimeline }) => (
+                  {groups.map(({ primary: c, campaignIds, boostCount, planTimeline }) => (
                     <ReachCampaignReelCard
                       key={c.id}
                       campaign={c}
+                      tripCampaignIds={campaignIds}
                       plan={planById.get(c.plan_id)}
                       boostCount={boostCount}
                       planTimeline={planTimeline}

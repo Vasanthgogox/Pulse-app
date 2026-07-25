@@ -4,6 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
@@ -16,6 +17,9 @@ import { canAccessSuppliers } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import { IndentBidAmountEntry } from "@/features/indents/components/bidding/IndentBidAmountEntry";
+import { IndentAwardCelebrationModal } from "@/features/indents/components/bidding/IndentAwardCelebrationModal";
+import type { IndentAwardCelebrationData } from "@/features/indents/components/bidding/IndentAwardCelebrationModal";
+import { IndentCounterOfferEntry } from "@/features/indents/components/bidding/IndentCounterOfferEntry";
 import { IndentGiveLoadPartiesStrip } from "@/features/indents/components/IndentGiveLoadPartiesStrip";
 import { IndentLinkedTripCard } from "@/features/indents/components/IndentLinkedTripCard";
 import { IndentReviewHubCard } from "@/features/indents/components/IndentReviewHubCard";
@@ -27,11 +31,15 @@ import {
 import { IndentSupplierPartySummary } from "@/features/indents/components/IndentSupplierPartySummary";
 import type { SupplierQuoteActionHint } from "@/features/indents/components/IndentSupplierQuoteCard";
 import { shareIndentOnWhatsApp } from "@/features/indents/utils/indentShare.util";
-import { buildSupplierQuoteFooterInsight } from "@/features/indents/utils/bidding/indentLiveBids.util";
+import {
+  bidMarginFromClient,
+  buildSupplierQuoteFooterInsight,
+} from "@/features/indents/utils/bidding/indentLiveBids.util";
 import { buildIndentAwardedBidAlert } from "@/features/indents/utils/bidding/indentBidAlert.util";
 import { resolveIndentClientEntityDisplayName } from "@/features/indents/utils/indentPartyDisplay.util";
 import {
     createDirectQuote,
+    submitDirectQuoteCounterOffer,
     updateDirectQuoteStatus,
 } from "@/features/indents/services/direct-quotes.service";
 import {
@@ -199,6 +207,14 @@ export function IndentDetailScreen({
   const [broadcastError, setBroadcastError] = useState<string | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
+  const [awardConfirmQuoteId, setAwardConfirmQuoteId] = useState<string | null>(
+    null,
+  );
+  const [counterModalVisible, setCounterModalVisible] = useState(false);
+  const [counterQuoteId, setCounterQuoteId] = useState<string | null>(null);
+  const [submittingCounter, setSubmittingCounter] = useState(false);
+  const [awardCelebration, setAwardCelebration] =
+    useState<IndentAwardCelebrationData | null>(null);
   const [quoteModalVisible, setQuoteModalVisible] = useState(false);
   const [quoteEntryError, setQuoteEntryError] = useState<string | undefined>();
   const [submittingQuote, setSubmittingQuote] = useState(false);
@@ -322,88 +338,182 @@ export function IndentDetailScreen({
     [router],
   );
 
-  const handleAwardQuote = useCallback(async () => {
-    if (!indentId || !indent || !selectedQuoteId) return;
-    const pendingQuotes = quotes.filter(
-      (q) => (q.status || "").toLowerCase() === "pending",
-    );
-    const winner = pendingQuotes.find((q) => q.id === selectedQuoteId);
-    if (!winner) {
-      Alert.alert(
-        "Invalid selection",
-        "Please select a pending offer to award.",
+  const executeAwardQuote = useCallback(
+    async (quoteIdOverride?: string) => {
+      if (!indentId || !indent) return;
+      const targetId = quoteIdOverride ?? selectedQuoteId;
+      if (!targetId) return;
+      const pendingQuotes = quotes.filter(
+        (q) => (q.status || "").toLowerCase() === "pending",
       );
-      return;
-    }
-    const indentStatus = normalizeStatus(indent.status);
-    if (indentStatus === "awarded" || indentStatus === "completed") {
-      Alert.alert("Already awarded", "This load has already been awarded.");
-      return;
-    }
-    try {
-      setAwarding(true);
-      const { error: acceptErr } = await updateDirectQuoteStatus(
-        winner.id,
-        "accepted",
-      );
-      if (acceptErr) {
-        Alert.alert("Could not award", acceptErr.message);
+      const winner = pendingQuotes.find((q) => q.id === targetId);
+      if (!winner) {
+        Alert.alert(
+          "Invalid selection",
+          "Please select a pending offer to award.",
+        );
         return;
       }
-      await Promise.allSettled(
-        pendingQuotes
-          .filter((q) => q.id !== winner.id)
-          .map((q) => updateDirectQuoteStatus(q.id, "rejected")),
-      );
-      const awardedAmount = Number(winner.amount ?? 0);
-      const { error: indentErr } = await updateIndent(indentId, {
-        status: "awarded",
-        // Keep indent economics aligned with the awarded supplier quote.
-        supplier_target:
-          Number.isFinite(awardedAmount) && awardedAmount > 0
-            ? awardedAmount
-            : Number(indent.supplier_target ?? 0),
-      });
-      if (indentErr) {
-        Alert.alert(
-          "Quote accepted but status update failed",
-          indentErr.message +
-            "\n\nThe quote was accepted. The supplier can assign and deploy from Claimed.",
+      const indentStatus = normalizeStatus(indent.status);
+      if (indentStatus === "awarded" || indentStatus === "completed") {
+        Alert.alert("Already awarded", "This load has already been awarded.");
+        return;
+      }
+      try {
+        setAwarding(true);
+        setSelectedQuoteId(winner.id);
+        const { error: acceptErr } = await updateDirectQuoteStatus(
+          winner.id,
+          "accepted",
         );
+        if (acceptErr) {
+          Alert.alert("Could not award", acceptErr.message);
+          return;
+        }
+        await Promise.allSettled(
+          pendingQuotes
+            .filter((q) => q.id !== winner.id)
+            .map((q) => updateDirectQuoteStatus(q.id, "rejected")),
+        );
+        const awardedAmount = Number(winner.amount ?? 0);
+        const { error: indentErr } = await updateIndent(indentId, {
+          status: "awarded",
+          supplier_target:
+            Number.isFinite(awardedAmount) && awardedAmount > 0
+              ? awardedAmount
+              : Number(indent.supplier_target ?? 0),
+        });
+        if (indentErr) {
+          Alert.alert(
+            "Quote accepted but status update failed",
+            indentErr.message +
+              "\n\nThe quote was accepted. The supplier can assign and deploy from Claimed.",
+          );
+        }
+        const clientRate = Number(indent.client_price ?? 0);
+        const margin = clientRate > 0 ? clientRate - awardedAmount : 0;
+        const marginPercent =
+          clientRate > 0
+            ? (((clientRate - awardedAmount) / clientRate) * 100).toFixed(1)
+            : "0";
+        setAwardCelebration({
+          carrier: winner.bidder_organization_name?.trim() || "Supplier",
+          finalAmount: awardedAmount,
+          margin,
+          marginPercent,
+        });
+        setSelectedQuoteId(null);
+        if (orgId) {
+          invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
+          invalidatePosts();
+        }
+        queryClient.invalidateQueries({
+          queryKey: ["indents", indentId, "direct-quotes"],
+        });
+        await load();
+        refetchQuotes();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error.";
+        Alert.alert("Could not award", msg);
+      } finally {
+        setAwarding(false);
       }
-      setSelectedQuoteId(null);
-      if (orgId) {
-        invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
-        invalidatePosts();
-      }
-      queryClient.invalidateQueries({
-        queryKey: ["indents", indentId, "direct-quotes"],
-      });
-      await load();
-      refetchQuotes();
-      Alert.alert(
-        "Load awarded",
-        `${winner.bidder_organization_name ?? "Supplier"} can assign driver and vehicle from Claimed, then deploy.`,
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error.";
-      Alert.alert("Could not award", msg);
-    } finally {
-      setAwarding(false);
-    }
-  }, [
-    indentId,
-    indent,
-    selectedQuoteId,
-    quotes,
-    orgId,
-    invalidateIndents,
-    invalidatePosts,
-    queryClient,
-    load,
-    refetchQuotes,
-  ]);
+    },
+    [
+      indentId,
+      indent,
+      selectedQuoteId,
+      quotes,
+      orgId,
+      invalidateIndents,
+      invalidatePosts,
+      queryClient,
+      load,
+      refetchQuotes,
+    ],
+  );
 
+  const handleAwardQuote = useCallback(
+    (quoteIdOverride?: string) => {
+      if (!indentId || !indent || awarding) return;
+      const targetId = quoteIdOverride ?? selectedQuoteId;
+      if (!targetId) return;
+      const winner = quotes.find(
+        (q) =>
+          q.id === targetId && (q.status || "").toLowerCase() === "pending",
+      );
+      if (!winner) {
+        Alert.alert(
+          "Invalid selection",
+          "Please select a pending offer to award.",
+        );
+        return;
+      }
+      const indentStatus = normalizeStatus(indent.status);
+      if (indentStatus === "awarded" || indentStatus === "completed") {
+        Alert.alert("Already awarded", "This load has already been awarded.");
+        return;
+      }
+
+      setSelectedQuoteId(winner.id);
+      setAwardConfirmQuoteId(winner.id);
+    },
+    [indentId, indent, awarding, selectedQuoteId, quotes],
+  );
+
+  const awardConfirmQuote =
+    awardConfirmQuoteId != null
+      ? (quotes.find((q) => q.id === awardConfirmQuoteId) ?? null)
+      : null;
+
+  const closeAwardConfirm = useCallback(() => {
+    if (awarding) return;
+    setAwardConfirmQuoteId(null);
+  }, [awarding]);
+
+  const confirmAwardQuote = useCallback(() => {
+    if (!awardConfirmQuoteId || awarding) return;
+    const id = awardConfirmQuoteId;
+    setAwardConfirmQuoteId(null);
+    void executeAwardQuote(id);
+  }, [awardConfirmQuoteId, awarding, executeAwardQuote]);
+
+  const openCounterOffer = useCallback((quoteId: string) => {
+    setSelectedQuoteId(quoteId);
+    setCounterQuoteId(quoteId);
+    setCounterModalVisible(true);
+  }, []);
+
+  const handleSubmitCounter = useCallback(
+    async (amount: number): Promise<boolean> => {
+      if (!counterQuoteId) return false;
+      try {
+        setSubmittingCounter(true);
+        const { error } = await submitDirectQuoteCounterOffer(
+          counterQuoteId,
+          amount,
+        );
+        if (error) {
+          Alert.alert("Could not send counter", error.message);
+          return false;
+        }
+        setCounterModalVisible(false);
+        setCounterQuoteId(null);
+        queryClient.invalidateQueries({
+          queryKey: ["indents", indentId, "direct-quotes"],
+        });
+        refetchQuotes();
+        return true;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error.";
+        Alert.alert("Could not send counter", msg);
+        return false;
+      } finally {
+        setSubmittingCounter(false);
+      }
+    },
+    [counterQuoteId, indentId, queryClient, refetchQuotes],
+  );
   const handleCancelLoad = useCallback(() => {
     if (!indent || cancelling) return;
     Alert.alert(
@@ -762,6 +872,31 @@ export function IndentDetailScreen({
       statusLower,
     );
 
+  const selectedQuote =
+    selectedQuoteId != null
+      ? (quotes.find((q) => q.id === selectedQuoteId) ?? null)
+      : null;
+  const selectedPendingQuote =
+    selectedQuote && normalizeStatus(selectedQuote.status) === "pending"
+      ? selectedQuote
+      : null;
+  const selectedAwardMargin = selectedPendingQuote
+    ? bidMarginFromClient(
+        clientPriceNum,
+        Number(selectedPendingQuote.amount ?? 0),
+      )
+    : null;
+  const canAwardSelected =
+    canAward &&
+    !!selectedPendingQuote &&
+    !awarding &&
+    quotes.some((q) => normalizeStatus(q.status) === "pending");
+
+  const counterQuote =
+    counterQuoteId != null
+      ? (quotes.find((q) => q.id === counterQuoteId) ?? null)
+      : null;
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -786,11 +921,25 @@ export function IndentDetailScreen({
             {displayNumber}
           </Text>
           <View style={styles.headerSubtitleRow}>
-            <View style={styles.headerStatusDot} />
+            {(statusLower === "open" ||
+              statusLower === "broadcast" ||
+              statusLower === "quoted" ||
+              statusLower === "pending") &&
+            !["awarded", "completed", "deployed", "cancelled"].includes(
+              statusLower,
+            ) ? (
+              <View style={styles.headerLiveDot} />
+            ) : (
+              <View style={styles.headerStatusDot} />
+            )}
             <Text style={styles.headerSubtitle} numberOfLines={1}>
               {compactHub
                 ? `Review Hub · ${status === "OPEN" ? "Active" : status}`
-                : `Review Hub • ${status === "OPEN" ? "Active" : status} Indent${
+                : `Review Hub · ${status === "OPEN" ? "Active" : status}${
+                    clientEntityRawName && clientEntityRawName !== "—"
+                      ? ` · ${clientEntityRawName}`
+                      : ""
+                  }${
                     getTripOperationalDisplay({
                       trip_number: indent.trip_number ?? null,
                     }) !== "—"
@@ -970,6 +1119,15 @@ export function IndentDetailScreen({
             onBroadcast={handleBroadcast}
             onShareStory={isOwner ? handleOpenShareStory : undefined}
             onShareWhatsApp={isOwner ? handleShareWhatsApp : undefined}
+            onCounterOffer={isOwner && canAward ? openCounterOffer : undefined}
+            onAwardBid={
+              isOwner && canAward
+                ? (id) => {
+                    void handleAwardQuote(id);
+                  }
+                : undefined
+            }
+            awarding={awarding}
             myQuote={myQuote}
             supplierQuoteActionHint={supplierQuoteActionHint}
             supplierQuoteAlert={supplierQuoteAlert}
@@ -987,13 +1145,13 @@ export function IndentDetailScreen({
         }
       />
 
-      {/* Fixed footer (light style) */}
+      {/* Sticky award / action footer */}
       <View
         style={[
           styles.footer,
           compactHub && styles.footerCompact,
           {
-            paddingBottom: (compactHub ? 10 : 16) + insets.bottom,
+            paddingBottom: (compactHub ? 10 : 14) + insets.bottom,
           },
         ]}
       >
@@ -1009,48 +1167,61 @@ export function IndentDetailScreen({
             >
               <FontAwesome
                 name="pencil"
-                size={18}
+                size={16}
                 color={canEditLoad ? Theme.textSecondary : Theme.textMuted}
               />
             </TouchableOpacity>
             {canAward &&
             quotes.some((q) => normalizeStatus(q.status) === "pending") ? (
-              <TouchableOpacity
-                style={[
-                  styles.footerAwardBtn,
-                  (awarding ||
-                    !selectedQuoteId ||
-                    !quotes.some(
-                      (q) =>
-                        q.id === selectedQuoteId &&
-                        (q.status || "").toLowerCase() === "pending",
-                    )) &&
-                    styles.footerAwardBtnDisabled,
-                ]}
-                onPress={handleAwardQuote}
-                disabled={
-                  awarding ||
-                  !selectedQuoteId ||
-                  !quotes.some(
-                    (q) =>
-                      q.id === selectedQuoteId &&
-                      (q.status || "").toLowerCase() === "pending",
-                  )
-                }
-                activeOpacity={0.9}
-                accessibilityLabel="Award selected bid"
-                hitSlop={Layout.touchTargetHitSlop}
-              >
-                {awarding ? (
-                  <LoadingIndicator size="small" color={Theme.textOnDark} />
-                ) : (
-                  <Text style={styles.footerAwardBtnText}>Award selected</Text>
-                )}
-              </TouchableOpacity>
+              <>
+                <View style={styles.footerSelectionMeta}>
+                  <Text style={styles.footerMetaKicker}>Selected carrier</Text>
+                  <Text style={styles.footerMetaValue} numberOfLines={1}>
+                    {selectedPendingQuote?.bidder_organization_name?.trim() ||
+                      "Tap a bid to select"}
+                  </Text>
+                  {selectedAwardMargin ? (
+                    <Text style={styles.footerMetaMargin} numberOfLines={1}>
+                      Margin {formatINR(selectedAwardMargin.marginInr)} (
+                      {selectedAwardMargin.marginPct}%)
+                    </Text>
+                  ) : null}
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.footerAwardBtn,
+                    !canAwardSelected && styles.footerAwardBtnDisabled,
+                  ]}
+                  onPress={() => {
+                    void handleAwardQuote();
+                  }}
+                  disabled={!canAwardSelected}
+                  activeOpacity={0.9}
+                  accessibilityLabel="Award selected bid"
+                  hitSlop={Layout.touchTargetHitSlop}
+                >
+                  {awarding ? (
+                    <LoadingIndicator size="small" color={Theme.textOnDark} />
+                  ) : (
+                    <>
+                      <FontAwesome
+                        name="trophy"
+                        size={12}
+                        color={Theme.textOnDark}
+                      />
+                      <Text style={styles.footerAwardBtnText}>
+                        Award selected
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
             ) : isListeningForBids ? (
               <View style={styles.footerListeningPill}>
                 <View style={styles.footerListeningDot} />
-                <Text style={styles.footerListeningText}>Awaiting bids</Text>
+                <Text style={styles.footerListeningText}>
+                  Live bidding · awaiting quotes
+                </Text>
               </View>
             ) : !canCancelLoad ? (
               <View style={styles.footerLockedPill}>
@@ -1224,6 +1395,57 @@ export function IndentDetailScreen({
           onSuccess={handleStoryShareSuccess}
         />
       ) : null}
+
+      <IndentCounterOfferEntry
+        visible={counterModalVisible && !!counterQuote}
+        carrierName={
+          counterQuote?.bidder_organization_name?.trim() || "Supplier"
+        }
+        currentBidAmount={Number(counterQuote?.amount ?? 0)}
+        indentDisplayNumber={displayNumber}
+        origin={origin}
+        destination={destination}
+        initialCounterAmount={
+          counterQuote?.counter_amount != null &&
+          Number(counterQuote.counter_amount) > 0
+            ? Number(counterQuote.counter_amount)
+            : Number(counterQuote?.amount ?? 0) > 0
+              ? Number(counterQuote?.amount) - 1000
+              : null
+        }
+        submitting={submittingCounter}
+        onClose={() => {
+          if (submittingCounter) return;
+          setCounterModalVisible(false);
+          setCounterQuoteId(null);
+        }}
+        onSubmitAmount={handleSubmitCounter}
+      />
+
+      <ThemedConfirmModal
+        visible={awardConfirmQuote != null && !awardCelebration}
+        title="Award this load?"
+        message={
+          awardConfirmQuote
+            ? `Award to ${
+                awardConfirmQuote.bidder_organization_name?.trim() || "supplier"
+              } at ${formatINR(Number(awardConfirmQuote.amount ?? 0))}?\n\nOther pending bids will be rejected. The supplier can then assign and deploy.`
+            : ""
+        }
+        cancelText="Cancel"
+        confirmText={awarding ? "Awarding…" : "Award load"}
+        variant="positive"
+        confirmVariant="primary"
+        onCancel={closeAwardConfirm}
+        onConfirm={confirmAwardQuote}
+        onRequestClose={closeAwardConfirm}
+      />
+
+      <IndentAwardCelebrationModal
+        visible={awardCelebration != null}
+        data={awardCelebration}
+        onClose={() => setAwardCelebration(null)}
+      />
     </View>
   );
 }
@@ -1274,7 +1496,14 @@ const styles = StyleSheet.create({
   headerStatusDot: {
     width: 4,
     height: 4,
-    backgroundColor: Theme.darkBackground,
+    borderRadius: 2,
+    backgroundColor: Theme.accentGold,
+  },
+  headerLiveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Theme.driverPrimary,
   },
   headerSubtitle: {
     ...indentReviewHubText.headerSubtitle,
@@ -1747,29 +1976,60 @@ const styles = StyleSheet.create({
   footerEditBtn: {
     width: 44,
     height: 44,
+    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
   },
-  footerAwardBtn: {
+  footerSelectionMeta: {
     flex: 1,
+    minWidth: 0,
+    marginRight: 10,
+    justifyContent: "center",
+  },
+  footerMetaKicker: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  footerMetaValue: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  footerMetaMargin: {
+    marginTop: 1,
+    fontSize: 11,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+    color: Theme.positive,
+  },
+  footerAwardBtn: {
+    minWidth: 132,
     height: 44,
-    backgroundColor: Theme.buttonPrimary,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: Theme.driverPrimary,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 8,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
   },
   footerAwardBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
   footerAwardBtnText: {
     ...indentReviewHubText.buttonLabel,
-    fontSize: 9,
+    fontSize: 10,
     color: Theme.textOnDark,
     textTransform: "uppercase",
   },
@@ -1779,26 +2039,28 @@ const styles = StyleSheet.create({
   },
   footerBidBtn: {
     flex: 1,
-    height: 42,
-    backgroundColor: Theme.buttonPrimary,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: Theme.driverPrimary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
   },
   footerCancelText: {
     ...indentReviewHubText.buttonLabel,
-    fontSize: 9,
+    fontSize: 10,
     color: Theme.textOnDark,
   },
   footerLockedPill: {
     flex: 1,
     height: 44,
+    borderRadius: 14,
     backgroundColor: Theme.surfaceGray,
     flexDirection: "row",
     alignItems: "center",
@@ -1813,7 +2075,8 @@ const styles = StyleSheet.create({
   footerListeningPill: {
     flex: 1,
     height: 44,
-    backgroundColor: Theme.pulseIndigoWash,
+    borderRadius: 14,
+    backgroundColor: Theme.positiveMuted,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1822,7 +2085,8 @@ const styles = StyleSheet.create({
   footerListeningDot: {
     width: 7,
     height: 7,
-    backgroundColor: Theme.positive,
+    borderRadius: 4,
+    backgroundColor: Theme.driverPrimary,
   },
   footerListeningText: {
     ...indentReviewHubText.buttonLabel,

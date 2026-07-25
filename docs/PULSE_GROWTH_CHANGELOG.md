@@ -6,6 +6,8 @@ Simple, append-only version history. Rules:
 - **Minor/major** — requires a new epic with its own definition of done (e.g. Pulse Intelligence). "Boost V2" does not grow indefinitely.
 - Each entry: version, date, and short bullets. Reference migration files where relevant.
 
+**This document's ownership:** platform evolution, deferred items, and release history. Architecture / governance / Final Sign-off → `docs/PULSE_GROWTH_PLATFORM.md`. Pilot entry gates / rehearsal evidence → `docs/PILOT_ENTRY_VALIDATION.md`.
+
 ---
 
 ## 2.0.3 — Driver Referral Earnings Card & Withdrawal Flow · January 2027
@@ -26,7 +28,11 @@ Growth → Credits is treated as an **Operations Workspace** (select org → rev
 
 **Deferred (usage-driven, after pilot):** short transaction Ref in the ledger table UI (`pulse_credit_transactions.id` already exists — display only, no schema change); adjustment preview (current → delta → new balance); CSV export of ledger / wallet history; activity filters (Grants / Deductions / System / Admin / User); Control Center org-level credit metrics (granted/deducted today, net issued, largest adjustments, low balances). Do not add preemptively.
 
-**Release gate:** Ready for Pilot. Before GA — live-validate driver personas (independent / fleet / pending), one Opportunity Inbox E2E referral path, and one narrow-device layout pass. Backlog (non-blocker): suppress Health “Upgrade to a higher tier” when already on max plan.
+### Admin Console — Pilot Ready (operations platform)
+
+Select → Understand → Act → Verify across Credits / Referrals / Reward Rules / Boost Control Center / Verification / Team / Document Preview. Maturity aligned with Pulse Growth. Reward Rules & Boost Control Center refinements are usability/visibility only (no evaluation, settlement, delivery, or marketplace changes). Document Preview keeps original MIME + re-signable `storage_path`. Shared two-question change policy in `docs/PULSE_GROWTH_PLATFORM.md`. Verification checklist + post-pilot backlog in `docs/PILOT_ENTRY_VALIDATION.md`. **No pre-pilot UI expansion** — next priorities from operator experience.
+
+**Lifecycle:** Architecture Complete → Implementation Complete → **Pilot Ready** → Operational Validation (ADR-010 → P1–P3) → Pilot Review → GA Decision. Both Growth and Admin Console are Pilot Ready under one freeze; **Pilot Entry is deferred** until ADR-010 (`organization_members` driver role + RLS hardening) ships and P1 passes. Do not re-scope to Independent-only without explicit business acceptance.
 
 ## 2.0.2 — Delivery Correctness & Platform Governance · January 2027
 

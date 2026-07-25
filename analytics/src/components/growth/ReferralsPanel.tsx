@@ -1,6 +1,7 @@
 /**
- * Growth > Referrals — platform-wide pulse_credit_referrals workspace.
- * Settled automatically by record_referral / platform_approve_verification.
+ * Growth > Referrals — platform-wide referral activity over pulse_credit_referrals.
+ * Read-only ops view; settlement is automatic via record_referral /
+ * platform_approve_verification.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -9,6 +10,7 @@ import {
   RefreshCw,
   Search,
   Users,
+  UserPlus,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
@@ -52,21 +54,19 @@ function formatDate(iso: string | null): string {
   });
 }
 
-function StatPill({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">{value}</p>
-    </div>
-  );
+function orgInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
 }
 
 export function ReferralsPanel() {
   const [rows, setRows] = useState<ReferralRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | ReferralStatus>('all');
   const [query, setQuery] = useState('');
-  const [error, setError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -79,7 +79,7 @@ export function ReferralsPanel() {
       .order('created_at', { ascending: false })
       .limit(200);
     if (err) setError(err.message);
-    setRows((data ?? []) as unknown as ReferralRow[]);
+    else setRows((data ?? []) as unknown as ReferralRow[]);
     setLoading(false);
   }
 
@@ -88,9 +88,9 @@ export function ReferralsPanel() {
   }, []);
 
   const counts = useMemo(() => {
-    const base = { all: rows.length, pending: 0, milestone_met: 0, credited: 0, rejected: 0 };
-    for (const r of rows) base[r.status] += 1;
-    return base;
+    const c: Record<string, number> = { all: rows.length };
+    for (const r of rows) c[r.status] = (c[r.status] ?? 0) + 1;
+    return c;
   }, [rows]);
 
   const filtered = useMemo(() => {
@@ -114,11 +114,11 @@ export function ReferralsPanel() {
             <ChevronRight className="size-3" />
             <span className="font-semibold text-foreground">Referrals</span>
             <Badge variant="secondary" appearance="light" size="sm" className="ml-1">
-              Read-only
+              Auto-settled
             </Badge>
           </div>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Platform-wide referral activity — settlements run automatically on verification.
+            Platform-wide referral activity — credits settle automatically on verification.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
@@ -127,36 +127,29 @@ export function ReferralsPanel() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 border-b border-border px-4 py-3">
-        <StatPill label="Total" value={counts.all} />
-        <StatPill label="Pending" value={counts.pending} />
-        <StatPill label="Credited" value={counts.credited} />
-        <StatPill label="Rejected" value={counts.rejected} />
-      </div>
-
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              filter === f.key
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent'
-            }`}
-          >
-            {f.label}
-            <span className="ml-1 tabular-nums opacity-70">
-              {f.key === 'all' ? counts.all : counts[f.key]}
-            </span>
-          </button>
-        ))}
-        <div className="ml-auto flex w-56 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1.5">
+        <div className="flex items-center gap-1">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                filter === f.key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-accent'
+              }`}
+            >
+              {f.label}
+              <span className="ml-1.5 tabular-nums opacity-70">{counts[f.key] ?? 0}</span>
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex min-w-[220px] items-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1.5">
           <Search className="size-3.5 shrink-0 text-muted-foreground" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search organizations…"
+            placeholder="Search referrer or referred…"
             className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -169,63 +162,70 @@ export function ReferralsPanel() {
             Loading referrals…
           </div>
         ) : error ? (
-          <div className="p-4 text-xs text-destructive">Couldn&apos;t load referrals: {error}</div>
+          <div className="p-4 text-xs text-destructive">Couldn't load referrals: {error}</div>
         ) : filtered.length === 0 ? (
           <div className="flex h-full items-center justify-center p-8">
             <div className="max-w-xs text-center">
-              <Users className="mx-auto size-8 text-muted-foreground/40" />
-              <p className="mt-2 text-sm font-semibold text-foreground">No referrals match</p>
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-border bg-muted/40">
+                <UserPlus className="size-5 text-muted-foreground" />
+              </div>
+              <h3 className="mt-3 text-sm font-semibold text-foreground">No referrals match</h3>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Adjust the status filter or search to find referral activity.
+                Adjust filters or wait for invitees to join and verify.
               </p>
             </div>
           </div>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10 bg-card">
-              <tr className="border-b border-border text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th className="px-4 py-2.5 font-semibold">Referrer</th>
-                <th className="px-4 py-2.5 font-semibold">Referred organization</th>
-                <th className="px-4 py-2.5 font-semibold">Status</th>
-                <th className="px-4 py-2.5 font-semibold">Joined</th>
-                <th className="px-4 py-2.5 font-semibold">Credited</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => {
-                const badge = STATUS_BADGE[r.status];
-                return (
-                  <tr
-                    key={r.id}
-                    className="border-b border-border/60 transition-colors hover:bg-muted/30"
-                  >
-                    <td className="px-4 py-2.5 font-medium text-foreground">
-                      {r.referrer?.name ?? '—'}
-                    </td>
-                    <td className="px-4 py-2.5 font-medium text-foreground">
-                      {r.referred?.name ?? '—'}
-                    </td>
-                    <td className="px-4 py-2.5">
+          <div className="p-4">
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_100px_110px_110px] items-center gap-2 border-b border-border bg-muted/30 px-3.5 py-2 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <span>Referrer</span>
+                <span>Referred organization</span>
+                <span>Status</span>
+                <span>Joined</span>
+                <span>Credited</span>
+              </div>
+              <div className="divide-y divide-border/60">
+                {filtered.map((r) => {
+                  const badge = STATUS_BADGE[r.status];
+                  return (
+                    <div
+                      key={r.id}
+                      className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_100px_110px_110px] items-center gap-2 px-3.5 py-2.5 text-xs transition-colors hover:bg-muted/20"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-bold text-primary">
+                          {orgInitials(r.referrer?.name ?? '?')}
+                        </span>
+                        <span className="truncate font-medium text-foreground">
+                          {r.referrer?.name ?? '—'}
+                        </span>
+                      </div>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Users className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate font-medium text-foreground">
+                          {r.referred?.name ?? '—'}
+                        </span>
+                      </div>
                       <Badge variant={badge.variant} appearance="light" size="xs">
                         {badge.label}
                       </Badge>
-                    </td>
-                    <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
-                      {formatDate(r.created_at)}
-                    </td>
-                    <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
-                      {formatDate(r.credited_at)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <span className="text-[11px] tabular-nums text-muted-foreground">
+                        {formatDate(r.created_at)}
+                      </span>
+                      <span className="text-[11px] tabular-nums text-muted-foreground">
+                        {formatDate(r.credited_at)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              Showing {filtered.length} of {rows.length} referrals
+            </p>
+          </div>
         )}
-      </div>
-
-      <div className="border-t border-border px-4 py-2 text-[10px] text-muted-foreground">
-        Showing {filtered.length} of {rows.length} referrals
       </div>
     </div>
   );

@@ -404,34 +404,37 @@ export function LiveBidsSectionHeader({
   showTrophy?: boolean;
 }) {
   return (
-    <View style={styles.sectionHeaderRow}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {showTrophy ? (
-        <IndentHubTrophyGlyph size={18} />
-      ) : isListening && count === 0 ? (
-        <View style={styles.listeningChip}>
-          <IndentHubLivePulseDot />
-          <Text style={styles.listeningChipText}>LIVE</Text>
-        </View>
-      ) : count > 0 ? (
-        <IndentHubAuctionGlyph size={18} />
-      ) : null}
-      <View
-        style={[
-          styles.countBadge,
-          isListening && count === 0 && styles.countBadgeListening,
-          count > 0 && styles.countBadgeActive,
-        ]}
-      >
-        <Text
+    <View style={styles.liveBidsHeaderBar}>
+      <View style={styles.sectionHeaderRow}>
+        <FontAwesome name="gavel" size={14} color={Theme.driverPrimary} />
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {showTrophy ? (
+          <IndentHubTrophyGlyph size={18} />
+        ) : isListening && count === 0 ? (
+          <View style={styles.listeningChip}>
+            <IndentHubLivePulseDot />
+            <Text style={styles.listeningChipText}>LIVE</Text>
+          </View>
+        ) : count > 0 ? (
+          <IndentHubAuctionGlyph size={18} />
+        ) : null}
+        <View
           style={[
-            styles.countBadgeText,
-            isListening && count === 0 && styles.countBadgeTextListening,
-            count > 0 && styles.countBadgeTextActive,
+            styles.countBadge,
+            isListening && count === 0 && styles.countBadgeListening,
+            count > 0 && styles.countBadgeActive,
           ]}
         >
-          {count}
-        </Text>
+          <Text
+            style={[
+              styles.countBadgeText,
+              isListening && count === 0 && styles.countBadgeTextListening,
+              count > 0 && styles.countBadgeTextActive,
+            ]}
+          >
+            {count}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -666,6 +669,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  liveBidsHeaderBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 2,
+  },
   sectionTitle: indentReviewHubText.sectionTitle,
   listeningChip: {
     flexDirection: "row",
@@ -699,9 +708,8 @@ const styles = StyleSheet.create({
     borderColor: Theme.loadStatusTabBorderSoft,
   },
   countBadgeActive: {
-    backgroundColor: "rgba(21,128,61,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(21,128,61,0.28)",
+    backgroundColor: Theme.driverPrimary,
+    borderWidth: 0,
   },
   countBadgeText: {
     fontSize: 9,
@@ -712,7 +720,7 @@ const styles = StyleSheet.create({
     color: INK,
   },
   countBadgeTextActive: {
-    color: Theme.positive,
+    color: Theme.textOnDark,
   },
   card: {
     position: "relative",

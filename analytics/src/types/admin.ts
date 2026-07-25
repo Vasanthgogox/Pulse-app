@@ -30,9 +30,10 @@ export interface AutomatedCheck {
 export interface BusinessDocument {
   id: string; type: DocumentType; file_name: string; status: DocumentStatus;
   flag_reason?: string; uploaded_at: string; url: string;
-  /** Storage object path — kept so signed preview URLs can be refreshed. */
-  storage_path?: string;
-  mime_type: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+  /** Original storage object path — required to re-sign preview URLs. */
+  storage_path: string;
+  /** Original upload MIME (jpeg/png/webp/heic/pdf). Keep as-is for re-preview. */
+  mime_type: string;
   size_kb: number; page_count?: number;
 }
 

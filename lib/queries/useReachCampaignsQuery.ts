@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getReachPlans,
   getReachCampaignsForOrg,
@@ -21,7 +21,11 @@ import {
   type RecommendReachCampaignInput,
 } from '@/features/reach/services/driverReferrals.service';
 import { createSalaryRequest } from '@/features/drivers/services/salaryRequests.service';
-import { getReachCampaignMetrics, getReachOrgSummary } from '@/features/reach/services/analytics.service';
+import {
+  getReachCampaignMetrics,
+  getReachOrgSummary,
+  type ReachCampaignMetrics,
+} from '@/features/reach/services/analytics.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
@@ -75,6 +79,46 @@ export function useReachCampaignMetricsQuery(campaignId: string | null) {
     enabled: !!campaignId,
     staleTime: STALE.frequent,
   });
+}
+
+/**
+ * Trip-level metrics for the Story reel. One card groups every campaign that
+ * shares an indent (re-boost / upgrade siblings). Reading only the primary
+ * row drops impressions that landed on an earlier sibling — e.g. Starter got
+ * 6 impressions, then Business became primary and the card showed Reach 0
+ * while the org KPI still counted 6. Sum across the whole trip group.
+ */
+export function useReachTripMetricsQuery(campaignIds: string[]) {
+  const ids = campaignIds.filter(Boolean);
+  const queries = useQueries({
+    queries: ids.map((campaignId) => ({
+      queryKey: queryKeys.reach.campaignMetrics(campaignId),
+      queryFn: async () => {
+        const res = await getReachCampaignMetrics(campaignId);
+        if (res.error) throw res.error;
+        return res.metrics;
+      },
+      staleTime: STALE.frequent,
+    })),
+  });
+
+  const isLoading = ids.length > 0 && queries.some((q) => q.isLoading);
+  const isError = queries.some((q) => q.isError);
+  const ready = ids.length > 0 && queries.every((q) => q.data != null);
+
+  let data: ReachCampaignMetrics | null = null;
+  if (ready) {
+    data = { impressions: 0, views: 0, bids: 0, creditsUsed: 0 };
+    for (const q of queries) {
+      const m = q.data!;
+      data.impressions += m.impressions;
+      data.views += m.views;
+      data.bids += m.bids;
+      data.creditsUsed += m.creditsUsed;
+    }
+  }
+
+  return { data, isLoading, isError };
 }
 
 export function useReachOrgSummaryQuery(orgId: string | null) {

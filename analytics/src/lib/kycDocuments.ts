@@ -3,8 +3,7 @@ import { mapDbDocTypeToAdmin } from '@/lib/kycDocumentMatrix';
 import type { BusinessDocument, DocumentStatus } from '@/types/admin';
 
 const VERIFICATION_BUCKET = 'verification-documents';
-/** Signed URL lifetime — preview can re-sign via storage_path when this expires. */
-const SIGNED_URL_TTL_SEC = 3600;
+const SIGNED_URL_TTL_SEC = 60 * 60; // 1 hour
 
 type KycDocRow = {
   id: string;
@@ -35,61 +34,48 @@ function mapDocStatus(row: KycDocRow): DocumentStatus {
   }
 }
 
-function extensionOf(pathOrName: string | null | undefined): string {
-  if (!pathOrName) return '';
-  const base = pathOrName.split('?')[0].split('#')[0];
-  const leaf = base.split('/').pop() ?? base;
-  const dot = leaf.lastIndexOf('.');
-  return dot >= 0 ? leaf.slice(dot + 1).toLowerCase() : '';
-}
-
-/** Resolve a previewable MIME from DB mime + file name + storage path. */
-export function resolveKycMime(
+/** Preserve the uploaded MIME so preview/download stay in the original format. */
+export function resolveDocumentMime(
   mime: string | null | undefined,
   fileName: string | null | undefined,
-  storagePath?: string | null,
-): BusinessDocument['mime_type'] {
-  const m = (mime ?? '').toLowerCase().trim();
-  if (m === 'application/pdf') return 'application/pdf';
-  if (m === 'image/png') return 'image/png';
-  if (m === 'image/webp') return 'image/webp';
-  if (m === 'image/gif') return 'image/gif';
-  if (m === 'image/jpeg' || m === 'image/jpg') return 'image/jpeg';
+): string {
+  const cleaned = (mime ?? '').trim().toLowerCase();
+  if (cleaned && cleaned !== 'application/octet-stream') return cleaned;
 
-  const ext = extensionOf(fileName) || extensionOf(storagePath);
-  if (ext === 'pdf') return 'application/pdf';
-  if (ext === 'png') return 'image/png';
-  if (ext === 'webp') return 'image/webp';
-  if (ext === 'gif') return 'image/gif';
-  if (ext === 'jpg' || ext === 'jpeg' || ext === 'jfif') return 'image/jpeg';
-
-  // KYC uploads are usually PDF when mime is missing/octet-stream.
-  return 'application/pdf';
+  const name = (fileName ?? '').toLowerCase();
+  if (name.endsWith('.pdf')) return 'application/pdf';
+  if (name.endsWith('.png')) return 'image/png';
+  if (name.endsWith('.webp')) return 'image/webp';
+  if (name.endsWith('.heic') || name.endsWith('.heif')) return 'image/heic';
+  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+  return cleaned || 'application/octet-stream';
 }
 
-export type KycPreviewKind = 'image' | 'pdf' | 'other';
-
-export function kycPreviewKind(doc: Pick<BusinessDocument, 'mime_type' | 'file_name' | 'storage_path'>): KycPreviewKind {
-  const mime = resolveKycMime(doc.mime_type, doc.file_name, doc.storage_path);
-  if (mime === 'application/pdf') return 'pdf';
-  if (mime.startsWith('image/')) return 'image';
-  return 'other';
+export function isImageMime(mime: string): boolean {
+  return mime.startsWith('image/') && !mime.includes('heic') && !mime.includes('heif');
 }
 
-/** Fresh signed URL for an uploaded KYC object — call again when a preview expires. */
-export async function signKycDocumentUrl(
+export function isPdfMime(mime: string): boolean {
+  return mime === 'application/pdf' || mime.includes('pdf');
+}
+
+/** Browser-native preview (iframe/img). HEIC/HEIF need download/open. */
+export function canInlinePreview(mime: string): boolean {
+  return isPdfMime(mime) || isImageMime(mime);
+}
+
+export async function createDocumentSignedUrl(
   storagePath: string,
-  ttlSec: number = SIGNED_URL_TTL_SEC,
 ): Promise<{ url: string | null; error: string | null }> {
   const path = storagePath.trim();
   if (!path) return { url: null, error: 'Missing storage path' };
 
   const { data, error } = await supabase.storage
     .from(VERIFICATION_BUCKET)
-    .createSignedUrl(path, ttlSec);
+    .createSignedUrl(path, SIGNED_URL_TTL_SEC);
 
   if (error) return { url: null, error: error.message };
-  return { url: data?.signedUrl ?? null, error: data?.signedUrl ? null : 'No signed URL returned' };
+  return { url: data?.signedUrl ?? null, error: data?.signedUrl ? null : 'Signed URL empty' };
 }
 
 export async function fetchKycDocumentsByOrg(): Promise<Record<string, BusinessDocument[]>> {
@@ -109,7 +95,7 @@ export async function fetchKycDocumentsByOrg(): Promise<Record<string, BusinessD
 
   await Promise.all(
     paths.map(async (path) => {
-      const { url } = await signKycDocumentUrl(path);
+      const { url } = await createDocumentSignedUrl(path);
       if (url) signedByPath[path] = url;
     }),
   );
@@ -119,16 +105,17 @@ export async function fetchKycDocumentsByOrg(): Promise<Record<string, BusinessD
     const orgId = row.organization_id;
     if (!byOrg[orgId]) byOrg[orgId] = [];
     const path = row.storage_path?.trim() ?? '';
+    const fileName = row.file_name ?? row.doc_label ?? row.doc_type;
     byOrg[orgId].push({
       id: row.id,
       type: mapDbDocTypeToAdmin(row.doc_type),
-      file_name: row.file_name ?? row.doc_label ?? row.doc_type,
+      file_name: fileName,
       status: mapDocStatus(row),
       flag_reason: row.rejection_notes ?? undefined,
       uploaded_at: row.updated_at ?? row.created_at,
-      storage_path: path || undefined,
+      storage_path: path,
       url: path ? (signedByPath[path] ?? '') : '',
-      mime_type: resolveKycMime(row.mime_type, row.file_name, path),
+      mime_type: resolveDocumentMime(row.mime_type, fileName),
       size_kb: row.file_size_bytes ? Math.round(row.file_size_bytes / 1024) : 0,
     });
   }

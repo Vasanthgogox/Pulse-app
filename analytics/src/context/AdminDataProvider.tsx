@@ -33,7 +33,7 @@ function docSatisfiesSlot(
     (d) =>
       satisfyWith.includes(d.type) &&
       d.status !== 'Missing' &&
-      (!!d.url || !!d.file_name),
+      (!!d.storage_path || !!d.url || !!d.file_name),
   );
 }
 
@@ -58,6 +58,7 @@ function ensureRequiredDocuments(
       status: 'Missing',
       uploaded_at: '',
       url: '',
+      storage_path: '',
       mime_type: 'application/pdf',
       size_kb: 0,
     });
@@ -66,7 +67,7 @@ function ensureRequiredDocuments(
   // GST skipped: drop a Missing GST Certificate placeholder if present
   if (gstNotApplicable) {
     return result.filter(
-      (d) => !(d.type === 'GST Certificate' && d.status === 'Missing' && !d.url),
+      (d) => !(d.type === 'GST Certificate' && d.status === 'Missing' && !d.url && !d.storage_path),
     );
   }
 

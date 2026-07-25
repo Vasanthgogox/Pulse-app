@@ -210,8 +210,13 @@ export function TeamMembersTab() {
       {/* Table */}
       <div className="flex-1 overflow-auto">
         {users.length === 0 ? (
-          <div className="flex h-32 items-center justify-center">
-            <p className="text-sm text-muted-foreground">No team members yet</p>
+          <div className="flex h-full min-h-[200px] items-center justify-center p-8">
+            <div className="text-center">
+              <p className="text-sm font-semibold text-foreground">No team members yet</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Members appear once they join this organisation.
+              </p>
+            </div>
           </div>
         ) : (
           <table className="w-full text-left">

@@ -1,5 +1,5 @@
 import { CheckCircle, AlertTriangle, XCircle, AlertOctagon, User, Send, Bot, RefreshCcw, Flag, MessageSquare } from 'lucide-react';
-import { useAdmin } from '@/context/AdminDataProvider';
+import { useKyc } from '@/context/KycDataProvider';
 import { formatDateTime } from '@/lib/utils';
 import type { AuditEntry, AuditEventType } from '@/types/kyc';
 import { cn } from '@/lib/utils';
@@ -67,7 +67,7 @@ function AuditRow({ entry, isLast }: { entry: AuditEntry; isLast: boolean }) {
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export function AuditTrail() {
-  const { selectedApp } = useAdmin();
+  const { selectedApp } = useKyc();
 
   if (!selectedApp) {
     return (

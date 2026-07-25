@@ -243,15 +243,32 @@ Architecture is frozen: schema changes ship only as bug fixes (v2.0.x). For each
 
 ### 9a. Pilot readiness gate (before GA)
 
-**Status: Ready for Pilot.** Architecture / finance / governance / delivery are closed. Before **General Availability**, complete these validation passes during the pilot readiness phase (verification, not redesign):
+**Status: Ready for Pilot (architecture). Pilot Entry deferred** — gate P1 is ⛔ **Blocked by ADR-010** (`docs/decisions.md`). Treat v2.0 as a **pilot program**, not an open engineering project. Execute remaining gates as an **operational rehearsal** — capture Scenario / Expected / Actual / Evidence / Outcome / Follow-up for each (template: `docs/PILOT_ENTRY_VALIDATION.md`).
 
-| # | Validation | Pass criteria |
-|---|---|---|
-| P1 | Driver personas | Independent → Bid Now / no recommend; Active fleet → Recommend + reward; Pending member → Join fleet. Restrictions hold. |
-| P2 | Opportunity Inbox E2E | One live referral: Recommend → Inbox → Confidence → Suggested Rate → Reason → Bid → Award |
-| P3 | Mobile layout | One narrow-width pass: story cards, timeline, preview, bottom sheets usable |
+**Order is mandatory:** ADR-010 → P1 → P2 → P3 (each depends on the previous).
 
-Non-blocker backlog: suppress “Upgrade to a higher tier” when campaign is already on max plan (`campaignHealth` suggestion `upgrade_plan`).
+| # | Validation | Status | Pass criteria |
+|---|---|---|---|
+| — | ADR-010 (driver `organization_members`) | ⛔ Blocker | RLS patch → role CHECK → onboarding → backfill; freeze-allowed (correctness + security) |
+| P1 | Driver personas | ⛔ Blocked by ADR-010 | Independent → bid directly, no recommend incentive; Active fleet → recommend + incentive on conversion; Pending → join-fleet CTA, cannot recommend/bid as fleet driver |
+| P2 | Opportunity Inbox E2E | Not Started (depends on P1) | One live path: Recommend → Inbox → Confidence → Reason/Rate → Bid → Award → Conversion → `driver_ledger` reward |
+| P3 | Mobile layout | Pending | One narrow-width pass: Reach Home, story cards, timeline, opportunity card, driver earnings card, bottom sheets, credit dialog if used |
+
+**Pilot Entry Criteria** (pilot officially starts only when all are true):
+
+1. ADR-010 implemented  
+2. P1 passes  
+3. P2 passes  
+4. P3 passes  
+5. Runbook executed successfully once (§1–5)  
+6. Control Center operational  
+7. First Pilot Review template ready  
+
+Do **not** re-scope to Independent-only without explicit business acceptance criteria.
+
+**Pilot vs GA:** Pilot = works correctly with real customers. GA = consistent reliability across multiple customers/campaigns.
+
+Non-blocker backlog (keep out of the gate): suppress “Upgrade to a higher tier” when campaign is already on max plan (`campaignHealth` suggestion `upgrade_plan`).
 
 ## 10. Incident Contacts
 

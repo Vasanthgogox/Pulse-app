@@ -6,6 +6,35 @@
 
 *A short, non-technical product overview. This document is meant to evolve phase by phase rather than be replaced — see `docs/decisions.md` (ADR-009) for the underlying architectural decisions, the migration files under `supabase/migrations/2026122*`–`2027010*` for implementation detail, and `docs/PULSE_GROWTH_CHANGELOG.md` for the version history going forward.*
 
+**This document's ownership:** platform architecture, governance (principles, freeze, change policy), Final Sign-off. Pilot entry gates and rehearsal evidence live in `docs/PILOT_ENTRY_VALIDATION.md`. Release history and deferred items live in `docs/PULSE_GROWTH_CHANGELOG.md`.
+
+## Pilot Baseline (unified operating model)
+
+One operating model covers both major workstreams. Both are **operational platforms** — not active feature development — under the same change policy.
+
+| Workstream | Scope |
+|---|---|
+| **Pulse Growth Platform v2.0** | Campaign Engine · Marketplace Engine · Financial Engine · Intelligence Layer |
+| **Admin Console** | Credits · Referrals · Reward Rules · Boost Control Center · Verification · Team · Document Preview |
+
+**Unified change policy** (same for Growth and Admin Console) — answer in order:
+
+1. **Preserve correctness?** Production defects, reliability, security, performance that blocks ops → implement as operational improvement.
+2. **Pilot evidence justifies it?** Repeated operator behaviour, customer feedback, Pilot Reviews, operational metrics, incident learnings → ADR (or equivalent) **before** implementation.
+3. **Otherwise** → backlog until recurring operational evidence demonstrates value.
+
+**Lifecycle:** Operate → Observe → Learn → Improve. Success = operational outcomes (efficient KYC, successful campaigns, correct settlement/reconciliation, effective operator workflows, actionable Pilot Reviews, reliable support) — not feature throughput.
+
+**Documentation set:**
+
+| Document | Primary responsibility |
+|---|---|
+| `docs/PULSE_GROWTH_PLATFORM.md` | Platform architecture, governance, Final Sign-off |
+| `docs/PILOT_ENTRY_VALIDATION.md` | Pilot entry criteria, validation gates (P1–P3), rehearsal evidence |
+| `docs/PULSE_GROWTH_CHANGELOG.md` (v2.0.3+) | Platform evolution, deferred items, release history |
+
+From here the highest-value work is: execute the documented **P1→P2→P3** rehearsal, begin pilot operations, and let future changes be driven by observed evidence — not anticipated requirements.
+
 **Versioning:** the platform is formally versioned from here on. `2.0.0` is the Boost V2 production milestone; patch releases (`2.0.1`, `2.0.2`, …) cover bug fixes, performance work, analytics improvements, and UI polish under the frozen architecture. A new minor/major version requires a new epic with its own definition of done — "Boost V2" does not grow indefinitely. History: `v0.1` established the core architecture everything else extends (Reach engine, Credits, Wallet, Ledger, Campaigns, Admin adjustments, Platform IAM, Upgrade flow); `2.0.0` completed the campaign engine on top of it.
 
 ## The Product in One Diagram
@@ -226,7 +255,7 @@ Target Record  (reach_campaign_targets — the fact table)
 
 ## Permanent Platform Principles
 
-Four rules that never change without an Architecture Decision Record in `docs/decisions.md`. The first two restate Growth Principles 7 and 8; the last two are equally binding:
+Five rules that never change without an Architecture Decision Record in `docs/decisions.md`. The first two restate Growth Principles 7 and 8; the rest are equally binding:
 
 **1. Campaign snapshots are immutable.** Editing stories never changes campaigns; deleting stories never cancels campaigns; analytics always use the published snapshot.
 
@@ -241,6 +270,44 @@ Campaign → Delivery → Marketplace → Settlement → Facts → Intelligence
 ```
 
 Never `AI → Settlement`. A human (or a deterministic, ADR-approved rule) sits between every recommendation and every transaction.
+
+**5. Authorization separates identity, authority, and data ownership.** Identity establishes organisational belonging. Authority grants permission to act on behalf of an organisation. Data ownership governs access to resources through least-privilege policies. These concerns must remain distinct in schema, helper functions, RLS policies, and application logic.
+
+```
+User → Organization Membership (identity / belonging)
+         → Operational Authority (staff permissions)
+         → Resource Access (RLS)
+
+Separately: Driver → Own-row resources (trips, ledger, salary/reward requests)
+```
+
+**Test for every new feature or ADR** — if any question cannot be answered independently, the design likely violates Principle 5:
+
+| Question | Canonical source |
+|---|---|
+| Does this user belong to the organisation? | `is_org_member()` / `organization_members` |
+| Can this user perform this organisational action? | `is_org_staff()` (or another explicit authority helper) |
+| Which specific rows may this user access? | Resource-specific RLS (including own-row policies where applicable) |
+
+**Enforceability:** Any proposal that conflates organisational membership, operational authority, and data ownership must either be **redesigned** or **explicitly justify why Principle 5 does not apply**.
+
+**Design review checklist** (every new table, helper, or RLS policy):
+
+- [ ] Does this check **identity**?
+- [ ] Does this check **authority**?
+- [ ] Does this enforce **least-privilege data ownership**?
+- [ ] Could adding a new role inadvertently **widen** access?
+- [ ] Is the policy intent **obvious from the helper names**?
+
+**Governance chain for ADR-010:** Principle 5 → ADR-010 → **Approved Role Matrix** (named sign-off) → Helper contract → RLS → P1–P3 → Pilot Entry. Implementation must not start without matrix sign-off (`docs/ADR-010-RLS-AUDIT.md`).
+
+**RLS traceability (security review):** every policy must answer:
+
+1. Which **matrix row** authorizes this policy?  
+2. Which Principle 5 concern is enforced — **identity**, **authority**, or **data ownership**?  
+3. Does the helper / predicate (`is_org_member`, `is_org_staff`, or resource-specific own-row logic) **match that intent**?
+
+If any answer is missing, the policy is **non-conformant** until corrected or explicitly exempted under Principle 5.
 
 ## Milestone: v2.0.0 — Pulse Boost V2 Production Complete ✅
 
@@ -265,26 +332,33 @@ Shipped and live (migrations `20270101000000`–`20270106000000`). What started 
 
 ### Pilot Freeze (highest-priority operating rule)
 
-**The core platform is frozen for the duration of the pilot.** Changing foundational behaviour during a pilot invalidates customer feedback and makes metrics impossible to interpret — the freeze is what makes pilot data trustworthy.
+**Pulse Growth Platform v2.0 and the Admin Console are both Pilot Ready and share one freeze.** Changing foundational behaviour during a pilot invalidates customer feedback and makes metrics impossible to interpret — the freeze is what makes pilot data trustworthy.
 
-Allowed during the pilot: **bug fixes, performance improvements, accessibility improvements, copy refinements, analytics enhancements.** Every layout change must be justified by pilot feedback rather than internal preference.
+| Allowed during pilot | Not allowed during pilot (ADR + pilot evidence required) |
+|---|---|
+| Production bug fixes | New UI features |
+| Reliability / security / performance improvements | Workflow redesign |
+| Documentation corrections | New campaign mechanics |
+| Operational tooling that does **not** alter platform behaviour | Financial model / ledger / settlement changes |
+| Accessibility and copy refinements justified by pilot feedback | Marketplace or delivery engine changes |
+| **Correctness/security blockers that preserve documented behaviour** (e.g. ADR-010) | AI workflow changes |
 
-NOT changeable during the pilot, under any framing: campaign lifecycle, delivery engine, wave logic, driver participation model, settlement engine, escrow accounting, campaign snapshots, marketplace workflows. If work seems to require touching one of these, it is post-pilot work — and per the governance model, it starts with an **ADR** (`docs/decisions.md`) before any implementation. This applies permanently, not just during the pilot: any future change to the campaign lifecycle, settlement, or delivery model begins with an Architecture Decision Record.
+Late-cycle operator UX polish (e.g. Reward Rules dirty-state, Control Center refresh) is allowed only when it does not alter campaign evaluation, settlement, ledger behaviour, marketplace logic, delivery, or financial accounting.
+
+NOT changeable under any framing without an ADR (`docs/decisions.md`): campaign lifecycle, delivery engine, wave logic, driver participation model, settlement engine, escrow accounting, campaign snapshots, marketplace workflows.
 
 Two UI rules ride along with the freeze:
 
-- **The Campaign Timeline is read-only and factual.** It reflects actual backend state (`published_at`, released waves, escalation, `expires_at`/completion) and never shows optimistic or planned steps. It is an operational timeline, not a planning tool — this completes the campaign experience and is the final UI addition of v2.0.
-- **Intelligence stays explainable.** Campaign Health, Smart Suggestions, and Opportunity Scoring remain explainable, deterministic, and measurable. Later AI enhances these rules with evidence, never replaces them with opaque output — a suggestion should read "Campaigns on this route with a ₹750 incentive achieved a 28% higher recommendation-to-bid conversion over the past 90 days", not "Increase incentive to ₹750".
+- **The Campaign Timeline is read-only and factual.** It reflects actual backend state (`published_at`, released waves, escalation, `expires_at`/completion) and never shows optimistic or planned steps.
+- **Intelligence stays explainable.** Campaign Health, Smart Suggestions, and Opportunity Scoring remain explainable, deterministic, and measurable. Later AI enhances these rules with evidence, never replaces them with opaque output.
 
-Focus shifts to: customer onboarding, pilot customers, usage analytics, performance tuning, feedback collection. Deliberately NOT built yet: driver reputation leaderboards (data is accumulating in `reach_referrals`; launch reputation once volume makes it trustworthy), and a third **Shipper** perspective in the story preview (Driver/Fleet exist today; Shipper would summarize Campaign → Delivery → Performance → Health and complete the three-sided marketplace story — post-pilot).
+**Lifecycle:** Architecture Complete → Implementation Complete → **Pilot Ready** → Operational Validation (ADR-010 → P1–P3) → Pilot Review → GA Decision. Remaining before Pilot Entry: implement **ADR-010** (driver `organization_members` + RLS hardening — freeze-allowed correctness/security blocker), then complete live rehearsals in `docs/PILOT_ENTRY_VALIDATION.md`. Do not re-scope to Independent-only without explicit business acceptance criteria.
 
-**Next initiative — Pulse Intelligence** *(separate epic, not Boost V3, gated on pilot evidence)*: optimisation, not workflow — the pilot's workflows are frozen and validated first. Sequencing is strict: v2.0 → Pilot → Operational Findings → Customer Behaviour → Pulse Intelligence → v3.0, so AI solves observed problems rather than hypothetical ones. Three tracks, one per pillar:
+**Next initiative — Pulse Intelligence** *(separate epic, not Boost V3, gated on pilot evidence)*: optimisation, not workflow. Sequencing: v2.0 → Pilot → Operational Findings → Customer Behaviour → Pulse Intelligence → v3.0.
 
 - **Campaign Intelligence** — best launch time, audience, duration, incentive, tier.
 - **Marketplace Intelligence** — best drivers, best fleets, lane recommendations, capacity prediction.
 - **Financial Intelligence** — incentive ROI, escrow optimisation, budget forecasting.
-
-The structured delivery engine is a key competitive advantage and the pilot's job is to validate it specifically: verified-first targeting, wave pacing, escalation effectiveness, impression quality, delivery completion, and Campaign Health accuracy. That data decides whether optimisation effort goes to targeting, pacing, or incentives.
 
 **Operations:** `docs/RUNBOOK.md` is the production runbook — health checks, escrow reconciliation, settlement verification, recovery, rollback, and release checklist for whoever gets paged.
 
@@ -380,24 +454,40 @@ decide when the gate opens, the four **Permanent Platform Principles** are bindi
 rules, and any change to the campaign lifecycle, settlement, or delivery model starts with an
 **ADR**. Future epics earn their place through evidence rather than enthusiasm.
 
-**Change control until the pilot concludes:** every commit to this platform should fall into one
-of four categories — (1) **Pilot Findings**: evidence from customer usage, adoption and
-operational learnings, data-backed recommendations; (2) **Bug Fixes**: correctness, reliability,
-performance, accessibility; (3) **Operational Improvements**: monitoring, reconciliation,
-diagnostics, observability; (4) **ADRs**: any proposal that alters a permanent principle, a
-platform layer, or a pilot-freeze boundary. Anything outside those four categories has a very
-high bar for inclusion before the pilot concludes.
+**Change control until the pilot concludes** (Growth Platform **and** Admin Console — same policy):
 
-The same rule as a two-question test — every proposed change answers one of these:
-1. **Does it preserve platform correctness?** If yes → bug fix or operational improvement.
-2. **Does pilot evidence justify changing the platform?** If yes → ADR first, then implementation.
+Every proposed change answers these two questions **in order**:
 
-If the answer to both is "no", it waits until after the pilot.
+1. **Does it preserve correctness?**  
+   Examples: production bugs, data integrity, security, operational reliability, performance that blocks usability.  
+   If yes → treat as an operational improvement and implement through the normal engineering process (no ADR required unless a permanent principle or freeze boundary is touched).
 
-**Operating discipline until pilot completion:** engineering optimises reliability,
-observability, and correctness; product collects structured customer feedback; operations
-executes the runbook and documents incidents; leadership evaluates outcomes against the
-predefined KPIs and exit criteria. Everyone works from the same evidence.
+2. **Does pilot evidence justify the change?**  
+   Evidence must come from: repeated operator behaviour, customer feedback across multiple accounts, Pilot Review findings, operational metrics, or incident postmortems.  
+   If yes → document rationale in an ADR (`docs/decisions.md`) **before** implementation.
+
+**Otherwise** the request stays in the backlog until there is sufficient operational evidence. Speculative enhancements must not compete with verified operational needs.
+
+Commit categories that fit this policy: (1) Pilot Findings, (2) Bug Fixes, (3) Operational Improvements, (4) ADRs that alter a permanent principle, platform layer, or freeze boundary.
+
+**Operating philosophy (lifecycle shift):**
+
+```
+Build → Ship          (complete for v2.0 + Admin Console)
+         ↓
+Operate → Observe → Learn → Improve
+```
+
+Engineering effort during the pilot primarily supports **reliability**, **customer success**, **operational excellence**, and **measured learning** — not expanding functionality.
+
+**Success is measured by operational outcomes**, not features delivered / screens redesigned / components added. Examples:
+
+- Operators complete KYC reviews efficiently
+- Fleet owners successfully manage campaigns
+- Drivers participate as intended
+- Rewards and settlements reconcile correctly
+- Support resolves issues with existing tooling
+- Pilot Reviews produce actionable, evidence-backed improvements
 
 **Post-Pilot Assessment (intentionally unwritten).** One governance artifact is deliberately
 deferred until real usage exists: when the pilot ends, create `docs/POST_PILOT_ASSESSMENT.md`
@@ -436,6 +526,19 @@ The differentiator stops being what the platform can do and becomes how well it 
 
 ## Final Sign-off
 
+**Pilot-ready workstreams (governed as operational platforms — not active feature development):**
+
+| Workstream | Status |
+|---|---|
+| Pulse Growth Platform v2.0 | ✅ Pilot Ready |
+| Admin Console — Credits | ✅ Pilot Ready |
+| Admin Console — Referrals | ✅ Pilot Ready |
+| Admin Console — Reward Rules | ✅ Pilot Ready |
+| Admin Console — Boost Control Center | ✅ Pilot Ready |
+| Admin Console — Verification | ✅ Pilot Ready |
+| Admin Console — Team | ✅ Pilot Ready |
+| Admin Console — Document Preview | ✅ Pilot Ready |
+
 **Pulse Growth Platform v2.0 is formally regarded as a production-ready Campaign Distribution & Incentive Platform.** It is no longer a campaign feature. Its strengths:
 
 - **Transactional integrity** — immutable snapshots, escrow, ledger-based settlement.
@@ -443,29 +546,12 @@ The differentiator stops being what the platform can do and becomes how well it 
 - **Analytical integrity** — a single delivery fact table, explainable health scoring, measurable KPIs.
 - **Governance integrity** — permanent platform principles, ADR-controlled change management, versioning, documentation, pilot gates.
 
-With these foundations in place, **the platform has crossed from building to learning.** The next major evolution is shaped by customer behaviour, operational evidence, and pilot outcomes — not by additional architectural expansion.
+The Admin Console has reached the same maturity: operationally complete for KYC, credits, referrals, reward rules, and Boost ops — with future refinements intentionally deferred until usage data justifies them. Freezing architecture and UI before the pilot creates a stable baseline so genuine product learning can be distinguished from ad hoc feature requests.
 
-### Release recommendation (controlled pilot)
-
-| Status | Meaning |
-|---|---|
-| **Ready for Pilot** | Architecture, financial model, governance, and delivery model are frozen and sufficient for controlled deployment with real customers. |
-| **Required before General Availability** | Three **validation** gaps (not redesign). Complete during the pilot readiness phase — do not defer indefinitely. |
-
-**Verified with real data (pilot-approved surfaces):** campaign grouping · upgrade lifecycle · purchase-history timeline · Campaign Health · story preview (desktop) · driver reward withdrawal · Credits operations workspace · Referral Inbox backend.
-
-**Open before calling the feature fully production-ready / GA:**
-
-| Priority | Item | What “done” means |
-|---|---|---|
-| P1 | **Driver personas** | Live check of Independent / Active fleet / Pending member — each sees correct CTAs and restrictions (`resolveDriverParticipation` is code-traced; UI must be exercised). |
-| P2 | **Opportunity Inbox E2E** | One genuine referral through Recommend → Fleet Inbox → Confidence Score → Suggested Rate → Reason Chip → Create Bid → Award (last major user-facing path not visually exercised end-to-end). |
-| P3 | **Mobile layout** | One successful pass at typical narrow width: story cards, timeline, preview, bottom sheets remain usable. Not exhaustive device matrix. |
-
-**Backlog (non-blocker, post-pilot polish):** suppress Campaign Health / upgrade suggestions when the campaign is already on the maximum available tier (`upgrade_plan` in `campaignHealth.ts` — logic refinement only; `CampaignUpgradePanel` already returns null when no higher `sort_order` exists).
+With these foundations in place, **the platform has crossed from building to learning** (`Operate → Observe → Learn → Improve`). The next major evolution is shaped by customer behaviour, operational evidence, and pilot outcomes — not by additional architectural expansion.
 
 **Formal approval (architecture review closing statement):**
 
-> Pulse Growth Platform v2.0 is approved as the production baseline for **controlled pilot deployment**, on the explicit condition that the three validation items above (driver personas, Opportunity Inbox live path, mobile layout pass) are completed during the pilot readiness phase rather than deferred indefinitely. No architectural, financial-model, governance, or delivery-model changes remain. Future evolution should be driven by measured pilot outcomes rather than additional speculative feature development.
+> Pulse Growth Platform v2.0 and the Admin Console are approved as the production baseline for pilot deployment. The architecture, operations, governance, and documentation are sufficiently complete to support real-world validation. Future evolution should be driven by measured pilot outcomes rather than additional speculative feature development.
 
 From here, the most important document in the repository is no longer a design document — it is the first completed Pilot Review and, eventually, the Post-Pilot Assessment. Those artifacts decide whether v3.0 optimises targeting, delivery, incentives, marketplace dynamics, or something only real usage reveals.

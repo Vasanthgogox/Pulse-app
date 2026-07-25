@@ -6,7 +6,7 @@ import { FINITE_LIST_CAP } from '@/lib/pagination';
 import { supabase } from '@/lib/supabase';
 
 const MY_DIRECT_QUOTES_SELECT =
-  'id, indent_id, bidder_organization_id, amount, notes, status, created_at, updated_at, driver_id, vehicle_id' as const;
+  'id, indent_id, bidder_organization_id, amount, notes, status, created_at, updated_at, driver_id, vehicle_id, counter_amount' as const;
 
 export interface DirectQuoteRow {
   id: string;
@@ -21,6 +21,8 @@ export interface DirectQuoteRow {
   /** Assigned at quote time (parity with marketplace bid). */
   driver_id?: string | null;
   vehicle_id?: string | null;
+  /** Owner counter-offer (INR). Null = none. Status stays pending until award/reject. */
+  counter_amount?: number | null;
 }
 
 /**
@@ -133,6 +135,41 @@ export async function updateDirectQuoteStatus(
     .eq('id', quoteId);
 
   if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
+
+/**
+ * Owner counter-offer on a pending direct quote.
+ * Persists counter_amount; status remains pending so award still works.
+ * RLS: indent owner (existing UPDATE policy).
+ */
+export async function submitDirectQuoteCounterOffer(
+  quoteId: string,
+  counterAmount: number,
+): Promise<{ error: Error | null }> {
+  const amount = Number(counterAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: new Error('Counter offer must be a positive amount.') };
+  }
+  const { data, error } = await supabase()
+    .from('direct_quotes')
+    .update({
+      counter_amount: amount,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', quoteId)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle();
+
+  if (error) return { error: new Error(error.message) };
+  if (!data?.id) {
+    return {
+      error: new Error(
+        'Could not send counter offer (quote not pending or permission denied).',
+      ),
+    };
+  }
   return { error: null };
 }
 
