@@ -15,6 +15,7 @@ import {
   useRejectBidMutation,
 } from '@/lib/queries/useBidsQuery';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useReachCampaignsQuery, useCancelReachCampaignMutation } from '@/lib/queries/useReachCampaignsQuery';
 import { deactivatePost, isPostVisibleForOrg, type PostRow } from '@/features/network/services/posts.service';
 import { type BidRow, RelationshipRequiredError } from '@/features/network/services/bids.service';
 import { createConnectionRequest } from '@/features/connections/services/connectionRequests.service';
@@ -152,6 +153,15 @@ export default function PostDetailScreen() {
 
   const isOwner = post?.organization_id === orgId;
   const isLoad = post?.type === 'LOAD';
+  const myCampaignsQ = useReachCampaignsQuery(isOwner ? orgId : null);
+  const activeCampaignForPost = useMemo(
+    () =>
+      myCampaignsQ.data?.find(
+        (c) => c.post_id === post?.id && (c.status === 'draft' || c.status === 'active'),
+      ) ?? null,
+    [myCampaignsQ.data, post?.id],
+  );
+  const cancelCampaignMutation = useCancelReachCampaignMutation();
   const color = post ? orgColor(post.organization_id) : Theme.primary;
   const bids = bidsQ.data ?? [];
   const [bidderBrandingByOrgId, setBidderBrandingByOrgId] = useState<
@@ -264,13 +274,35 @@ export default function PostDetailScreen() {
 
   const handleDeletePost = useCallback(async () => {
     if (!post || !isOwner || !orgId || isDeleting) return;
-    const ok = await confirmDialog(
-      'Delete post?',
-      'This broadcast will be removed from your network feed.',
-      { confirmText: 'Delete', destructive: true },
-    );
+    const ok = activeCampaignForPost
+      ? await confirmDialog(
+          'Delete story?',
+          'This story has an active Pulse Reach campaign.\n\nDeleting it will:\n' +
+            '• Stop Reach delivery immediately\n' +
+            '• Cancel the active campaign\n' +
+            '• Credits already spent will not be refunded\n\n' +
+            'This action cannot be undone.',
+          { confirmText: 'Delete', destructive: true },
+        )
+      : await confirmDialog(
+          'Delete post?',
+          'This broadcast will be removed from your network feed.',
+          { confirmText: 'Delete', destructive: true },
+        );
     if (!ok) return;
     setIsDeleting(true);
+    if (activeCampaignForPost) {
+      const { error: cancelError } = await cancelCampaignMutation.mutateAsync({
+        campaignId: activeCampaignForPost.id,
+        reason: 'source_deleted',
+        orgId,
+      });
+      if (cancelError) {
+        setIsDeleting(false);
+        Alert.alert('Could not delete', cancelError.message);
+        return;
+      }
+    }
     const { error } = await deactivatePost(post.id, orgId);
     setIsDeleting(false);
     if (error) {
@@ -279,7 +311,7 @@ export default function PostDetailScreen() {
     }
     await afterPostDeleted(post.id);
     router.back();
-  }, [post, isOwner, orgId, isDeleting, afterPostDeleted, router]);
+  }, [post, isOwner, orgId, isDeleting, afterPostDeleted, router, activeCampaignForPost, cancelCampaignMutation]);
 
   if (!post) {
     return (

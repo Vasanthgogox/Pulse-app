@@ -4,6 +4,7 @@ import {
   getReachCampaignsForOrg,
   publishReachCampaign,
   upgradeReachCampaign,
+  cancelReachCampaign,
   type ReachPaymentMethod,
 } from '@/features/reach/services/campaigns.service';
 import { getReachCampaignMetrics, getReachOrgSummary } from '@/features/reach/services/analytics.service';
@@ -94,6 +95,23 @@ export function useUpgradeReachCampaignMutation() {
       paymentMethod: ReachPaymentMethod;
       orgId: string; // only used to invalidate the right query below
     }) => upgradeReachCampaign(campaignId, newPlanId, paymentMethod),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.reach.campaignsForOrg(variables.orgId) });
+    },
+  });
+}
+
+export function useCancelReachCampaignMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      campaignId,
+      reason,
+    }: {
+      campaignId: string;
+      reason: string;
+      orgId: string; // only used to invalidate the right query below
+    }) => cancelReachCampaign(campaignId, reason),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.reach.campaignsForOrg(variables.orgId) });
     },

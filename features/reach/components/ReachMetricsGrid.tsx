@@ -47,9 +47,20 @@ export function ReachMetricsGrid({ campaignId }: { campaignId: string }) {
 }
 
 const styles = StyleSheet.create({
-  metricsRow: { flexDirection: "row", justifyContent: "space-between" },
+  metricsRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingTop: 2,
+  },
   metricsLoading: { paddingVertical: 12, alignItems: "center" },
-  metricCell: { alignItems: "center", gap: 2, flex: 1 },
-  metricValue: { fontSize: 15, fontWeight: "900", color: Theme.textPrimaryDark },
-  metricLabel: { fontSize: 9, fontWeight: "600", color: Theme.textMuted, textTransform: "uppercase" },
+  metricCell: { alignItems: "center", justifyContent: "flex-start", gap: 3, flex: 1, minWidth: 0 },
+  metricValue: { fontSize: 15, fontWeight: "900", color: Theme.textPrimaryDark, lineHeight: 18 },
+  metricLabel: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
 });

@@ -39,6 +39,7 @@ import {
   NETWORK_HUB_SPLIT_COLUMN_GAP_PX,
 } from "@/features/network/constants/networkHubGrid";
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
+import { ReachDiscoveryCard } from "@/features/reach/components/ReachDiscoveryCard";
 import { NetworkProfileDirectMessageButton } from "@/features/network/components/NetworkProfileDirectMessageButton";
 import { NetworkProfileModalBody } from "@/features/network/components/NetworkProfileModalBody";
 import { getOrgProfileSnapshot } from "@/features/network/services/networkProfileSnapshot.service";
@@ -984,6 +985,7 @@ function NetworkScreenInner() {
                 </View>
                 <View style={styles.storyLoadsRowMarketplace}>
                   <NetworkLoadsQuickCards layout="sidebar" />
+                  <ReachDiscoveryCard layout="sidebar" />
                 </View>
               </View>
             ) : (
@@ -999,7 +1001,10 @@ function NetworkScreenInner() {
               </View>
         </View>
         {!showStoryLoadsSplit ? (
-          <NetworkLoadsQuickCards compact={isCompactPhone} />
+          <>
+            <NetworkLoadsQuickCards compact={isCompactPhone} />
+            <ReachDiscoveryCard />
+          </>
         ) : null}
         {ENABLE_UNLINKED_COUNTERPARTIES && orgId ? (
           <UnlinkedCounterpartiesSection orgId={orgId} />

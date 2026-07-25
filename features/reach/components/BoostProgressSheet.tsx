@@ -5,19 +5,16 @@
  */
 import Theme from "@/constants/Theme";
 import { formatINR, formatLedgerDateTime } from "@/lib/format";
-import {
-  useReachCampaignsQuery,
-  useReachPlansQuery,
-  useUpgradeReachCampaignMutation,
-} from "@/lib/queries/useReachCampaignsQuery";
+import { useReachCampaignsQuery, useReachPlansQuery } from "@/lib/queries/useReachCampaignsQuery";
 import { ReachMetricsGrid } from "@/features/reach/components/ReachMetricsGrid";
+import { CampaignUpgradePanel } from "@/features/reach/components/CampaignUpgradePanel";
 import { useReachCampaignMetricsQuery } from "@/lib/queries/useReachCampaignsQuery";
 import { getReachPlanDisplay } from "@/lib/reachPlanRegistry";
+import { formatRemaining } from "@/features/reach/utils/campaignFormat";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
-import { ChevronRight, Coins, CreditCard, Rocket, X } from "lucide-react-native";
-import { useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ChevronRight, Rocket, X } from "lucide-react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const INK = Theme.loadAddButtonText;
@@ -31,17 +28,6 @@ const STATUS_VISUAL: Record<CampaignStatus, { dot: string; label: string }> = {
   completed: { dot: "🔵", label: "Completed" },
   cancelled: { dot: "🔵", label: "Cancelled" },
 };
-
-function formatRemaining(expiresAt: string | null): string {
-  if (!expiresAt) return "—";
-  const ms = new Date(expiresAt).getTime() - Date.now();
-  if (ms <= 0) return "Ending soon";
-  const hours = Math.floor(ms / (60 * 60 * 1000));
-  if (hours < 1) return "< 1h";
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ${hours % 24}h`;
-}
 
 interface BoostProgressSheetProps {
   visible: boolean;
@@ -57,10 +43,6 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
   const campaignsQ = useReachCampaignsQuery(visible ? orgId : null);
   const plansQ = useReachPlansQuery();
   const metricsQ = useReachCampaignMetricsQuery(visible ? campaignId : null);
-  const upgradeMutation = useUpgradeReachCampaignMutation();
-
-  const [showUpgrade, setShowUpgrade] = useState(false);
-  const [upgradePaymentMethod, setUpgradePaymentMethod] = useState<"credits" | "money">("credits");
 
   const campaign = campaignsQ.data?.find((c) => c.id === campaignId);
   const plan = plansQ.data?.find((p) => p.id === campaign?.plan_id);
@@ -68,32 +50,10 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
   const statusVisual = campaign ? STATUS_VISUAL[campaign.status] : null;
   const metrics = metricsQ.data;
 
-  const nextPlan = plan
-    ? plansQ.data?.filter((p) => p.sort_order > plan.sort_order).sort((a, b) => a.sort_order - b.sort_order)[0]
-    : undefined;
-  const upgradeDiffCredits = nextPlan && plan ? nextPlan.credit_price - plan.credit_price : 0;
-  const upgradeDiffInr = nextPlan && plan ? nextPlan.price_inr - plan.price_inr : 0;
-
   const isActive = campaign?.status === "active";
   const isCompleted = campaign?.status === "completed" || campaign?.status === "cancelled";
   const isDraft = campaign?.status === "draft";
   const isFresh = metrics && metrics.impressions === 0 && metrics.views === 0;
-
-  const handleUpgrade = async () => {
-    if (!nextPlan) return;
-    const { error } = await upgradeMutation.mutateAsync({
-      campaignId,
-      newPlanId: nextPlan.id,
-      paymentMethod: upgradePaymentMethod,
-      orgId,
-    });
-    if (error) {
-      Alert.alert("Couldn't upgrade", error.message);
-      return;
-    }
-    setShowUpgrade(false);
-    Alert.alert("Upgraded", `This campaign is now on the ${nextPlan.name} plan.`);
-  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -123,17 +83,15 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
             <View style={styles.statusRow}>
               <Text style={styles.statusDot}>{statusVisual.dot}</Text>
               <View style={styles.statusTextCol}>
-                <Text style={styles.statusLabel}>
-                  {isCompleted && metrics ? `Reached ${metrics.impressions} fleet owners` : statusVisual.label}
-                </Text>
+                <Text style={styles.statusLabel}>{statusVisual.label}</Text>
                 <Text style={styles.statusSublabel}>
                   {isCompleted
                     ? "This campaign has ended."
                     : isDraft
                       ? "Awaiting payment confirmation — not live yet."
                       : isFresh
-                        ? "Reach just started — we're delivering your load now."
-                        : "Reaching verified fleet owners"}
+                        ? "Just started — promoting your load now."
+                        : "Promoting your load across Pulse"}
                 </Text>
               </View>
             </View>
@@ -148,7 +106,7 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
           {plan && metrics ? (
             <View style={styles.progressBlock}>
               <View style={styles.progressLabelRow}>
-                <Text style={styles.progressLabel}>Reach delivered</Text>
+                <Text style={styles.progressLabel}>Campaign Reach</Text>
                 <Text style={styles.progressValue}>
                   {Math.min(metrics.impressions, plan.estimated_reach_max)} / {plan.estimated_reach_max}
                 </Text>
@@ -186,48 +144,8 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
             </View>
           ) : null}
 
-          {isActive && nextPlan ? (
-            showUpgrade ? (
-              <View style={styles.upgradeCard}>
-                <Text style={styles.upgradeCardTitle}>
-                  Upgrade to {nextPlan.name} — only {upgradePaymentMethod === "credits" ? `${upgradeDiffCredits} credits` : formatINR(upgradeDiffInr)} more
-                </Text>
-                <View style={styles.paymentRow}>
-                  <Pressable
-                    style={[styles.paymentBtn, upgradePaymentMethod === "credits" && styles.paymentBtnActive]}
-                    onPress={() => setUpgradePaymentMethod("credits")}
-                  >
-                    <Coins size={13} color={upgradePaymentMethod === "credits" ? INK : MUTED} />
-                    <Text style={[styles.paymentBtnText, upgradePaymentMethod === "credits" && styles.paymentBtnTextActive]}>
-                      Credits
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.paymentBtn, upgradePaymentMethod === "money" && styles.paymentBtnActive]}
-                    onPress={() => setUpgradePaymentMethod("money")}
-                  >
-                    <CreditCard size={13} color={upgradePaymentMethod === "money" ? INK : MUTED} />
-                    <Text style={[styles.paymentBtnText, upgradePaymentMethod === "money" && styles.paymentBtnTextActive]}>
-                      Cash
-                    </Text>
-                  </Pressable>
-                </View>
-                <Pressable style={styles.upgradeConfirmBtn} disabled={upgradeMutation.isPending} onPress={handleUpgrade}>
-                  {upgradeMutation.isPending ? (
-                    <ActivityIndicator size="small" color={INK} />
-                  ) : (
-                    <Text style={styles.upgradeConfirmBtnText}>Confirm upgrade</Text>
-                  )}
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable style={styles.upgradeRow} onPress={() => setShowUpgrade(true)}>
-                <Text style={styles.upgradeRowText}>
-                  Upgrade to {nextPlan.name} — only {upgradeDiffCredits} credits more
-                </Text>
-                <ChevronRight size={13} color={Theme.textMuted} />
-              </Pressable>
-            )
+          {isActive && campaign ? (
+            <CampaignUpgradePanel orgId={orgId} campaignId={campaignId} currentPlanId={campaign.plan_id} />
           ) : null}
 
           {isCompleted && onBoostAgain ? (
@@ -244,6 +162,17 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
           ) : null}
 
           <View style={styles.divider} />
+
+          <Pressable
+            style={styles.viewAllRow}
+            onPress={() => {
+              onClose();
+              router.push(ROUTES.REACH.campaignDetail(campaignId) as never);
+            }}
+          >
+            <Text style={styles.viewAllText}>View full campaign</Text>
+            <ChevronRight size={14} color={Theme.textMuted} />
+          </Pressable>
 
           <Pressable
             style={styles.viewAllRow}
@@ -322,42 +251,6 @@ const styles = StyleSheet.create({
   timelineCell: { alignItems: "center", flex: 1, gap: 2 },
   timelineLabel: { fontSize: 9, fontWeight: "700", color: Theme.textMuted, textTransform: "uppercase" },
   timelineValue: { fontSize: 11, fontWeight: "700", color: Theme.textPrimaryDark, textAlign: "center" },
-  upgradeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: Theme.accentGoldMuted,
-  },
-  upgradeRowText: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark, flexShrink: 1 },
-  upgradeCard: { borderRadius: 14, borderWidth: 1, borderColor: Theme.borderLight, padding: 12, gap: 10 },
-  upgradeCardTitle: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
-  paymentRow: { flexDirection: "row", gap: 8 },
-  paymentBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  paymentBtnActive: { backgroundColor: Theme.loadAddButtonBg, borderColor: Theme.loadStatusTabBorderSoft },
-  paymentBtnText: { fontSize: 11, fontWeight: "700", color: MUTED },
-  paymentBtnTextActive: { color: INK },
-  upgradeConfirmBtn: {
-    minHeight: 42,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.loadAddButtonBg,
-  },
-  upgradeConfirmBtnText: { fontSize: 12, fontWeight: "800", color: INK },
   boostAgainBtn: {
     flexDirection: "row",
     alignItems: "center",

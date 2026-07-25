@@ -110,13 +110,12 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
               </View>
               {justBoosted.pending ? (
                 <Text style={styles.successPending}>
-                  Awaiting payment confirmation — your load will go live and reach up to{" "}
-                  {justBoosted.plan.estimated_reach_max} verified fleet owners once confirmed.
+                  Awaiting payment confirmation — your load will go live and be promoted to relevant fleet owners and shippers across Pulse once confirmed.
                 </Text>
               ) : (
                 <>
                   <Text style={styles.successBody}>
-                    Reaching up to {justBoosted.plan.estimated_reach_max} verified fleet owners
+                    Promoting your load to relevant fleet owners and shippers across Pulse
                   </Text>
                   <Text style={styles.successStartNote}>Campaign starts immediately.</Text>
                 </>

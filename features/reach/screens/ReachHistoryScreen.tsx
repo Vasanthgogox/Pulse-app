@@ -2,13 +2,19 @@
  * Reach History — org's Reach campaigns, 4 metrics each (Impressions, Views,
  * Bids, Credits Used). No CTR/CPM/CPC by design. Named "Reach" not "Boost"
  * since future campaign types (RFQs, hiring, fleet requirements) land here too.
+ *
+ * Tapping a campaign navigates to ReachCampaignDetailScreen — the single
+ * source of truth for one campaign (identity, plan/spend, metrics, status,
+ * actions). BoostProgressSheet stays only as the in-place quick-glance
+ * opened from a story's "Boosted" pill.
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getReachPlanDisplay } from "@/lib/reachPlanRegistry";
 import { useReachCampaignsQuery, useReachPlansQuery, useReachOrgSummaryQuery } from "@/lib/queries/useReachCampaignsQuery";
-import { ReachMetricsGrid } from "@/features/reach/components/ReachMetricsGrid";
+import { ReachCampaignCard } from "@/features/reach/components/ReachCampaignCard";
+import { groupReachCampaignsByPost } from "@/features/reach/utils/campaignFormat";
+import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Coins, Rocket } from "lucide-react-native";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -23,7 +29,7 @@ export default function ReachHistoryScreen() {
   const campaignsQ = useReachCampaignsQuery(orgId);
   const plansQ = useReachPlansQuery();
   const summaryQ = useReachOrgSummaryQuery(orgId);
-  const campaigns = campaignsQ.data ?? [];
+  const tripGroups = groupReachCampaignsByPost(campaignsQ.data ?? []);
   const planById = new Map((plansQ.data ?? []).map((p) => [p.id, p]));
   const summary = summaryQ.data;
 
@@ -55,7 +61,7 @@ export default function ReachHistoryScreen() {
             {summary.reach.promised > 0 ? (
               <View style={styles.reachDeliveredBlock}>
                 <View style={styles.reachDeliveredLabelRow}>
-                  <Text style={styles.reachDeliveredLabel}>Reach delivered</Text>
+                  <Text style={styles.reachDeliveredLabel}>Campaign Reach</Text>
                   <Text style={styles.reachDeliveredValue}>
                     {summary.reach.delivered} / {summary.reach.promised}
                   </Text>
@@ -98,7 +104,7 @@ export default function ReachHistoryScreen() {
           <View style={styles.emptyWrap}>
             <ActivityIndicator color={Theme.primary} />
           </View>
-        ) : campaigns.length === 0 ? (
+        ) : tripGroups.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Rocket size={32} color={Theme.textMuted} />
             <Text style={styles.emptyTitle}>No boosted loads yet</Text>
@@ -107,24 +113,14 @@ export default function ReachHistoryScreen() {
             </Text>
           </View>
         ) : (
-          campaigns.map((c) => {
-            const plan = planById.get(c.plan_id);
-            const display = plan ? getReachPlanDisplay(plan.code) : undefined;
-            return (
-              <View key={c.id} style={styles.card}>
-                <View style={styles.cardTop}>
-                  <View style={styles.planBadge}>
-                    <Rocket size={11} color={display?.color ?? Theme.primary} />
-                    <Text style={[styles.planBadgeText, { color: display?.color ?? Theme.primary }]}>
-                      {plan?.name ?? "Boost"}
-                    </Text>
-                  </View>
-                  <Text style={styles.statusText}>{c.status}</Text>
-                </View>
-                <ReachMetricsGrid campaignId={c.id} />
-              </View>
-            );
-          })
+          tripGroups.map((group) => (
+            <ReachCampaignCard
+              key={group[0].post_id ?? group[0].id}
+              campaigns={group}
+              planById={planById}
+              onCampaignPress={(id) => router.push(ROUTES.REACH.campaignDetail(id) as never)}
+            />
+          ))
         )}
       </ScrollView>
     </View>
@@ -156,18 +152,6 @@ const styles = StyleSheet.create({
   emptyWrap: { alignItems: "center", paddingVertical: 60, gap: 8 },
   emptyTitle: { fontSize: 14, fontWeight: "700", color: Theme.textPrimaryDark },
   emptyBody: { fontSize: 12, color: Theme.textMuted, textAlign: "center", paddingHorizontal: 24 },
-  card: {
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    padding: 14,
-    gap: 10,
-  },
-  cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  planBadge: { flexDirection: "row", alignItems: "center", gap: 5 },
-  planBadgeText: { fontSize: 12, fontWeight: "800" },
-  statusText: { fontSize: 11, fontWeight: "600", color: Theme.textMuted, textTransform: "capitalize" },
 
   summaryCard: {
     backgroundColor: Theme.textPrimaryDark,

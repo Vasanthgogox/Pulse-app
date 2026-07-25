@@ -35,12 +35,20 @@ import {
   storyOwnerViewsLabel,
   toStoryViewRows,
 } from "@/features/network/utils/storyOwnerViews.util";
+import {
+  formatStoryDate,
+  storyHeadline,
+  storyTypeLabel,
+  splitLocationParts,
+  loadMaterialLabel,
+} from "@/features/network/utils/storyDisplay";
 import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts } from "@/lib/queries/usePostsQuery";
 import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
 import { useIndentDirectQuotesQuery } from "@/lib/queries";
 import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
 import { recordReachEvent } from "@/features/reach/services/events.service";
+import { useReachCampaignsQuery, useCancelReachCampaignMutation } from "@/lib/queries/useReachCampaignsQuery";
 import { confirmDialog } from "@/lib/confirmDialog";
 import { ROUTES, buildPulseStoryPublicUrl } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -96,50 +104,6 @@ function timeAgo(d: string): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
-}
-
-function formatStoryDate(d: string): string {
-  const dt = new Date(d);
-  if (Number.isNaN(dt.getTime())) return "";
-  return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function storyHeadline(post: PostRow, isLoad: boolean, isVehicle: boolean): string {
-  const t = post.content?.trim();
-  if (t) return t;
-  if (isLoad && post.origin && post.destination) {
-    const mat = post.material?.trim();
-    if (mat) return `${mat} · ${post.origin} → ${post.destination}`;
-    return `${post.origin} → ${post.destination}`;
-  }
-  if (isVehicle && post.origin) return `Available @ ${post.origin}`;
-  return "Active broadcast";
-}
-
-function storyTypeLabel(post: PostRow): string {
-  if (post.type === "LOAD") return "LOAD BROADCAST";
-  if (post.type === "VEHICLE_AVAILABILITY") return "CAPACITY ALERT";
-  return "NETWORK UPDATE";
-}
-
-function splitLocationParts(value: string | null | undefined): {
-  city: string;
-  state: string;
-} {
-  const raw = (value ?? "").trim();
-  if (!raw) return { city: "—", state: "" };
-  const [city, ...rest] = raw.split(",").map((part) => part.trim()).filter(Boolean);
-  return {
-    city: city || raw,
-    state: rest.join(", "),
-  };
-}
-
-function loadMaterialLabel(post: PostRow, fallbackHeadline: string): string {
-  const material = post.material?.trim();
-  if (material) return material;
-  const beforeRoute = fallbackHeadline.split("→")[0]?.split("•")[0]?.split("·")[0]?.trim();
-  return beforeRoute || "Load";
 }
 
 // ── Progress segment ────────────────────────────────────────────────────────
@@ -337,6 +301,14 @@ export default function StoryDetailScreen() {
   const isVehicle = post?.type === "VEHICLE_AVAILABILITY";
 
   const isOwnPost = useMemo(() => !!myOrgId && !!post && post.organization_id === myOrgId, [myOrgId, post]);
+  const myCampaignsQ = useReachCampaignsQuery(isOwnPost ? myOrgId : null);
+  const activeCampaignForPost = useMemo(
+    () =>
+      myCampaignsQ.data?.find(
+        (c) => c.post_id === post?.id && (c.status === "draft" || c.status === "active"),
+      ) ?? null,
+    [myCampaignsQ.data, post?.id],
+  );
   const canBidOnLoad = Boolean(isLoad && !isOwnPost && myOrgId && post);
   const canContactVehicle = Boolean(isVehicle && !isOwnPost && myOrgId);
   const isDeletingCurrent = deletingPostId != null && deletingPostId === post?.id;
@@ -354,16 +326,12 @@ export default function StoryDetailScreen() {
     recordedViewsRef.current.add(post.id);
     if (__DEV__) console.log('[story-views] recording view for post', post.id, 'org', myOrgId);
     recordViewMutate({ postId: post.id, orgId: myOrgId, orgName: currentOrganization?.name ?? "" });
-    // Reach impressions/views were never actually wired to a call site before
-    // this fix — the RPC and service function existed, but nothing invoked
-    // them, so every campaign's counts stayed stuck at 0 regardless of real
-    // traffic. "Impression" and "view" both fire here, at the same
-    // granularity as the story-view tracking above (story opened, not
-    // feed-scroll-past) — not a deeper dwell-time signal.
+    // Reach "view" = story opened. "Impression" = feed placement, recorded
+    // separately in StoryReel.tsx (see docs/REACH_DELIVERY_ENGINE_DESIGN.md,
+    // "Current instrumentation gap") — the two used to fire together here,
+    // which meant Impressions could never diverge from Views.
     if (post.is_sponsored && post.reach_campaign_id) {
-      const campaignId = post.reach_campaign_id;
-      recordReachEvent(campaignId, "impression", myOrgId);
-      recordReachEvent(campaignId, "view", myOrgId);
+      recordReachEvent(post.reach_campaign_id, "view", myOrgId);
     }
   }, [post?.id, post?.is_sponsored, post?.reach_campaign_id, isOwnPost, myOrgId, currentOrganization?.name, recordViewMutate]);
 
@@ -407,17 +375,41 @@ export default function StoryDetailScreen() {
   const vehicleTypeHeadline = useMemo(() => (!post || !isVehicle) ? "" : post.vehicle_type?.trim().toUpperCase() || "VEHICLE", [post, isVehicle]);
   const vehicleAvailabilityText = useMemo(() => (!post || !isVehicle) ? "" : availabilityLabel || "Available now", [post, isVehicle, availabilityLabel]);
   const storyDateLabel = useMemo(() => post ? formatStoryDate(post.created_at) : "", [post]);
-  const heroLabel = useMemo(() => post ? storyTypeLabel(post) : "", [post]);
+  const heroLabel = useMemo(() => (post ? storyTypeLabel(post.type) : ""), [post]);
+
+  const cancelCampaignMutation = useCancelReachCampaignMutation();
 
   const handleDeletePost = useCallback(async () => {
     if (!post || !isOwnPost || isDeletingCurrent) return;
-    const ok = await confirmDialog(
-      "Delete story?",
-      "This story will be removed from your network broadcasts.",
-      { confirmText: "Delete", destructive: true },
-    );
+    const ok = activeCampaignForPost
+      ? await confirmDialog(
+          "Delete story?",
+          "This story has an active Pulse Reach campaign.\n\nDeleting it will:\n" +
+            "• Stop Reach delivery immediately\n" +
+            "• Cancel the active campaign\n" +
+            "• Credits already spent will not be refunded\n\n" +
+            "This action cannot be undone.",
+          { confirmText: "Delete", destructive: true },
+        )
+      : await confirmDialog(
+          "Delete story?",
+          "This story will be removed from your network broadcasts.",
+          { confirmText: "Delete", destructive: true },
+        );
     if (!ok) return;
     setDeletingPostId(post.id);
+    if (activeCampaignForPost) {
+      const { error: cancelError } = await cancelCampaignMutation.mutateAsync({
+        campaignId: activeCampaignForPost.id,
+        reason: "source_deleted",
+        orgId: myOrgId,
+      });
+      if (cancelError) {
+        setDeletingPostId(null);
+        Alert.alert("Could not delete", cancelError.message);
+        return;
+      }
+    }
     const { error } = await deactivatePost(post.id, myOrgId);
     setDeletingPostId(null);
     if (error) {
@@ -426,7 +418,7 @@ export default function StoryDetailScreen() {
     }
     await afterPostDeleted(post.id);
     router.back();
-  }, [post, isOwnPost, isDeletingCurrent, myOrgId, afterPostDeleted, router]);
+  }, [post, isOwnPost, isDeletingCurrent, myOrgId, afterPostDeleted, router, activeCampaignForPost, cancelCampaignMutation]);
 
   const handleShareWhatsApp = useCallback(async () => {
     if (!post || !myOrgId) return;

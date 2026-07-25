@@ -7,11 +7,11 @@ import { supabase } from '@/lib/supabase';
 export type PostType = 'UPDATE' | 'LOAD' | 'VEHICLE_AVAILABILITY';
 const VEHICLE_POST_MARKER = '[VEHICLE_AVAILABILITY]';
 
-function hasVehicleMarker(content: string | null | undefined): boolean {
+export function hasVehicleMarker(content: string | null | undefined): boolean {
   return (content ?? '').trimStart().startsWith(VEHICLE_POST_MARKER);
 }
 
-function stripVehicleMarker(content: string | null): string | null {
+export function stripVehicleMarker(content: string | null): string | null {
   if (!content) return content;
   return content.replace(VEHICLE_POST_MARKER, '').trimStart();
 }

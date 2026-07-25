@@ -26,11 +26,13 @@ export function getReachPlanDisplay(code: string): ReachPlanDisplayMeta | undefi
   return REACH_PLAN_DISPLAY[code as ReachPlanCode];
 }
 
-/** "Reach up to 25 verified fleet owners" — driven by the plan row, not restated in code. */
-export function describeReachPlan(plan: {
+/** Deliberately no exact audience count — "reach up to N" implied a delivery
+ * guarantee this product doesn't (yet) enforce. Real accounted delivery is
+ * Phase 2.3 (see docs/REACH_DELIVERY_ENGINE_DESIGN.md); until then, promise
+ * outcomes, not counts. */
+export function describeReachPlan(_plan: {
   estimated_reach_max: number;
   audience_scope: string;
 }): string {
-  const audience = plan.audience_scope.replace(/_/g, ' ');
-  return `Reach up to ${plan.estimated_reach_max} ${audience}`;
+  return 'Promote your load to relevant fleet owners and shippers across Pulse';
 }

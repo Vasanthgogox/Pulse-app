@@ -8,6 +8,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { type PostRow } from "@/features/network/services/posts.service";
+import { recordReachEvent } from "@/features/reach/services/events.service";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -286,6 +287,16 @@ export function StoryReel({
   const { profile } = useAuth();
   const [seenKeys, setSeenKeys] = useState<Record<string, true>>({});
   const seenStorageKey = `q:stories:seen:${orgId ?? "global"}`;
+  /** Impression (v1): sponsored story rendered into this strip — NOT "seen
+   * by the user". This ScrollView isn't virtualized, so every story mounts
+   * immediately on render; a 5-story strip records 5 impressions even if
+   * the user only ever looks at the first one. That's an intentional,
+   * documented proxy (see docs/REACH_DELIVERY_ENGINE_DESIGN.md, "Current
+   * instrumentation gap") — Impression (v2), viewport-based visibility, is
+   * a later refinement if the pilot's Views/Impressions ratio shows this
+   * proxy inflating impressions materially. Deduped per campaign per
+   * session. */
+  const recordedImpressionsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let mounted = true;
@@ -351,6 +362,19 @@ export function StoryReel({
   const storyQueueIds = stories.map((s) => s.id).join(",");
   const ownStoryQueueIds = ownStoryQueue.map((s) => s.id).join(",");
   const hasOwnStories = ownStoryQueue.length > 0;
+
+  useEffect(() => {
+    if (!orgId) return;
+    for (const post of stories) {
+      if (!post.is_sponsored || !post.reach_campaign_id) continue;
+      if (recordedImpressionsRef.current.has(post.reach_campaign_id)) continue;
+      recordedImpressionsRef.current.add(post.reach_campaign_id);
+      recordReachEvent(post.reach_campaign_id, "impression", orgId);
+    }
+    // storyQueueIds (not `stories`, a fresh array every render) is the stable
+    // signal for "the set of rendered story ids changed".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyQueueIds, orgId]);
 
   const mineRing = hasOwnStories ? RING_MINE_ACTIVE : RING_MINE_IDLE;
   const metrics = storyMetricsFor(embedded);

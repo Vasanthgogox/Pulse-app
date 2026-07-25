@@ -247,10 +247,20 @@ export const ROUTES = {
   /** DBA audit tool — web only. */
   DBA_AUDIT:     '/audit'          as const,
   REACH: {
+    /** Product home — Credits Balance, Reach Delivered, Active Campaigns,
+     * Quick Actions, Recent Campaigns. The discovery entry point (Phase 2.2). */
+    HOME: '/reach' as const,
     /** Org's Reach campaigns with Impressions/Views/Bids/Credits Used — not
      * load-only long-term (RFQs, hiring, fleet requirements can all become
      * Reach campaigns later), hence "Reach" not "Boost" in the screen name. */
     HISTORY: '/reach/history' as const,
+    /** Placeholder only (Phase 2.2) — no referral/verification backend yet;
+     * every card reads "Coming Soon". Educational, not functional. */
+    EARN_CREDITS: '/reach/earn-credits' as const,
+    /** Single campaign — identity (from its snapshot_* columns), plan/spend,
+     * metrics, status/countdown, and actions (View Original Story / Boost
+     * Again / Share). The single source of truth for one campaign. */
+    campaignDetail: (campaignId: string) => `/reach/campaign/${campaignId}` as const,
   },
   /** Story-detail share landing (Broadcast Load / Pulse story bidding page). */
   storyDetail: (

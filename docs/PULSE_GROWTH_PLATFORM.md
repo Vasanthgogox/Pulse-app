@@ -135,17 +135,27 @@ Broadcasts Created → Boost Conversion % → Credits Used → Campaign Completi
 - Does the 4-metric analytics view answer "how is my campaign doing?"
 - Does the Grant Credits admin workflow feel operationally practical to Ops?
 
-## Phase 2.2 — Reach Home *(not started)*
+## Phase 2.2 — Reach Home *(complete)*
 
-Customer-facing Reach entry in the Pulse app: a dedicated nav destination with Overview, Campaigns, and Earn Credits.
+Customer-facing Reach entry in the Pulse app: `/reach` (Credits Balance, Reach Delivered, Active Campaigns, Quick Actions, Recent Campaigns, link to Campaign History), `/reach/earn-credits` (customer-facing placeholder only — no referral/verification automation yet, see Phase 2.4), and a discovery card in the Network screen so Reach doesn't require opening a Story first to be found. No schema, RPC, payment, or lifecycle changes — purely navigation and UI reusing Phase 2.1's existing screens/components (`ReachCampaignCard`, `BoostProgressSheet`, `BoostSheet`).
 
-## Phase 2.3 — Growth Rules *(not started)*
+**Follow-up: Campaign Identity & Lifecycle Integrity** *(complete)* — campaign cards showed only a plan badge with no indication of which load/story was boosted, and deleting a story silently left its campaign in a stale `active` state (or, in a rare RLS-fallback hard-delete path, would have cascade-deleted the campaign and its purchase/event/metrics history outright). Fixed with: a `reach_campaigns` snapshot (route, vehicle, material, post type, posted-at, captured at publish time so it survives the source story being edited or deleted), a `cancel_reach_campaign` RPC wired into the story-deletion flow (with a warning dialog naming the consequence before deleting), the `post_id` foreign key changed from `ON DELETE CASCADE` to `ON DELETE SET NULL` so campaign history is never destroyed by a source-post deletion, and a dedicated Campaign Detail screen (`/reach/campaign/:id`) as the single source of truth for one campaign. **Campaigns cannot be refunded once activated** — cancelling a campaign (including via story deletion) stops delivery but does not reverse any credits or cash already spent; this is a deliberate policy, not a missing feature, since Reach delivery may already have occurred by the time a campaign is cancelled.
 
-Operations configures growth without engineering: Reward Rules, Reach Plans, Invitation Rules, Promotions — one Growth admin module (Credits, Reach Plans, Reward Rules, Invitation Rules, Promotions, Ledger, Analytics), not split into separate admin products.
+**Pilot-period messaging change:** every "Reach up to N verified fleet owners" style copy (plan picker, boost confirmation, campaign progress) has been replaced with outcome language — "Promote your load to relevant fleet owners and shippers across Pulse" — and the customer-facing "Reach Delivered" label has been renamed to **"Campaign Reach"** everywhere (Reach Home, Campaign History, BoostProgressSheet, Campaign Detail). This is a UI-copy-only change, not a computation change: the underlying number is still `min(impressions, plan.estimated_reach_max)` (see Phase 2.3 doc). Exact audience counts implied a delivery guarantee the product doesn't yet enforce — once Phase 2.3 ships real accounted delivery, "Reach Delivered" is the correct name to bring back.
 
-**Future simplification, not for MVP:** Reward Rules and Invitation Rules will likely converge into one rule engine with a type field (Verification / Invitation / Promotion / Campaign) rather than staying as separate screens — one rule engine, not many rule screens. Don't build this distinction now; build it if/when adding a third rule type makes the duplication actually hurt.
+## Phase 2.3 — Reach Delivery Engine *(not started — design doc first)*
 
-## Phase 2.4 — Automation *(not started)*
+**Reordered ahead of Growth Rules/Automation**, on the reasoning that today's distribution mechanism doesn't yet make the product's core promise true. `get_network_feed` currently shows any actively-boosted post to every organization on the platform, unfiltered and undeduplicated — see `docs/REACH_DELIVERY_ENGINE_DESIGN.md` for the full design, but in short:
+
+- No filtering to verified fleet owners/shippers specifically.
+- No de-duplication — "Reach Delivered" is currently `min(impressions, plan.estimated_reach_max)`, an approximation from raw impressions, not a count of distinct organizations.
+- No enforcement of the plan's promised cap (25 / 60 / 150) — today all three plans differ only in price and duration, not in who actually sees the post or how many.
+
+Phase 2.3 introduces an internal eligibility → ranking → accounting → enforcement pipeline behind `get_network_feed` to close that gap — entirely invisible to the customer. No audience builder, no targeting UI; the customer still only ever sees one number, "Reach Delivered," which becomes accurate instead of approximate.
+
+**Before writing implementation code:** `docs/REACH_DELIVERY_ENGINE_DESIGN.md` should be reviewed — it leaves one real open question (this schema has no stable fleet-owner-vs-shipper classification on organizations) for explicit sign-off before implementation starts.
+
+## Phase 2.4 — Growth Automation *(not started)*
 
 ```
 Verification Approved
@@ -154,12 +164,16 @@ Verification Approved
         ↓
   Credits Issued
         ↓
-  Wallet Updated
-        ↓
- Notification Sent
+  Notification Sent
 ```
 
-Manual credit grants become the exception rather than the normal workflow.
+Operations configures growth without engineering — Reward Rules, Invitation Rules, Promotions become admin-configurable (one Growth admin module: Credits, Reach Plans, Reward Rules, Invitation Rules, Promotions, Ledger, Analytics — not split into separate admin products) — and manual credit grants become the exception rather than the normal workflow. Deliberately sequenced *after* Phase 2.3: automating credit issuance is only worth building once delivery itself is reliable — otherwise automation just scales up rewards for a promise (accurate reach) that isn't being kept yet.
+
+**Future simplification, not for this phase:** Reward Rules and Invitation Rules will likely converge into one rule engine with a type field (Verification / Invitation / Promotion / Campaign) rather than staying as separate screens. Don't build this distinction now; build it if/when a third rule type makes the duplication actually hurt.
+
+## Phase 3 — Intelligence *(not started, optimization layer only)*
+
+Optimization layers on top of a proven, reliable product — not a prerequisite for anything above: delivery optimization, AI-driven recommendations, campaign performance predictions, fraud detection, best-posting-time suggestions, smart audience ranking (replacing Phase 2.3's deterministic ranking with a scored/learned one). Nothing here is required for Reach to work correctly; it makes an already-working system smarter.
 
 ## Roadmap Status
 
@@ -167,12 +181,12 @@ Manual credit grants become the exception rather than the normal workflow.
 Pulse Growth Platform
 
 ✓ Phase 2.1   Reach MVP
-□ Phase 2.2   Reach Home
-□ Phase 2.3   Growth Rules
-□ Phase 2.4   Automation
+✓ Phase 2.2   Reach Home
+□ Phase 2.3   Reach Delivery Engine  (design doc: docs/REACH_DELIVERY_ENGINE_DESIGN.md)
+□ Phase 2.4   Growth Automation
 □ Phase 3     Intelligence
 ```
 
 ## Recommendation
 
-Phase 2.1 is officially closed. Accept this milestone and stop building new capabilities for now. Spend the next effort on running the internal demo and collecting structured feedback — the validation questions and Success Metrics above — before starting Phase 2.2.
+Phase 2.1 and 2.2 are both complete: Reach can be discovered, purchased, monitored, and returned to, and Operations can support it. Before building further capability, validate with internal users whether Reach is actually generating qualified business — the validation questions and Success Metrics above — and let that feedback, not an assumption that more features are the next highest-value investment, set the priority for Phase 2.3. If Phase 2.3 does move forward, `docs/REACH_DELIVERY_ENGINE_DESIGN.md` should be reviewed and its one open question (fleet-owner/shipper classification) resolved before implementation starts.
