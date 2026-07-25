@@ -28,7 +28,8 @@ export type ProductId =
   | 'pulse_marketplace'
   | 'pulse_exchange'
   | 'pulse_compliance'
-  | 'pulse_ai';
+  | 'pulse_ai'
+  | 'pulse_reach';
 
 // ── Status types ─────────────────────────────────────────────────────────────
 
@@ -228,6 +229,32 @@ export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
       { name: 'Media & Documents',   description: 'Photos, PODs, and files in conversation context',   icon: 'Paperclip' },
     ],
     vision: 'One inbox for every trip and every partner — no more WhatsApp chaos.',
+  },
+
+  pulse_reach: {
+    id: 'pulse_reach',
+    name: 'Pulse Reach',
+    tagline: 'Turn your Story into a paid campaign',
+    description: 'Boost any Story into a targeted campaign with CTAs, scheduling, and full engagement analytics — pay with cash or Pulse Credits, reach verified fleet owners across the network.',
+    icon: 'Megaphone',
+    color: '#E82127',
+    status: 'early_access',
+    badge: { label: 'Early Access', variant: 'rose' },
+    pricing: {
+      model: 'usage_based',
+      startsAt: 250,
+      unit: 'per campaign (credits or cash)',
+    },
+    dependencies: ['pulse_core', 'pulse_network'],
+    capabilities: ['reach_campaigns', 'reach_analytics', 'pulse_credits'],
+    modules: [
+      { name: 'Campaign Studio',      description: 'Turn a Story into a scheduled, CTA-driven campaign', icon: 'Megaphone' },
+      { name: 'Audience Builder',     description: 'Target by role, geography, org type, or device',      icon: 'Users' },
+      { name: 'Engagement Analytics', description: 'Reach, completion rate, CTA CTR, replies, shares',     icon: 'BarChart3' },
+      { name: 'Pulse Credits',        description: 'Earn credits via referral or verification, spend on Reach', icon: 'Coins' },
+    ],
+    vision: 'Every Story can become a campaign — verified reach, real analytics, paid in cash or credits you already earned.',
+    upgradeFrom: 'pulse_network',
   },
 
   pulse_pod_pro: {

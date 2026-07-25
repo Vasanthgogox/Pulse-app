@@ -240,6 +240,7 @@ const PRODUCT_SUITE_MAP: Record<ProductId, PlatformSuiteId> = {
   pulse_talent: "workforce",
   pulse_ai: "intelligence",
   pulse_chat: "collaboration",
+  pulse_reach: "network",
 };
 
 export function getPlatformModuleCount(): number {

@@ -12,6 +12,8 @@ import { useVerifiedActionGuard } from "@/features/network/utils/verifiedActionG
 import { StoryBroadcastPreview } from "@/features/network/components/StoryBroadcastPreview";
 import { StoryOwnerFooterActions } from "@/features/network/components/StoryDetailFooterActions";
 import { StoryOwnerBidsSheet } from "@/features/network/components/bidding/StoryOwnerBidsSheet";
+import { BoostSheet } from "@/features/reach/components/BoostSheet";
+import { BoostProgressSheet } from "@/features/reach/components/BoostProgressSheet";
 import { StoryViewersSheet } from "@/features/network/components/StoryViewersSheet";
 import {
   deactivatePost,
@@ -38,6 +40,7 @@ import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
 import { useIndentDirectQuotesQuery } from "@/lib/queries";
 import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
+import { recordReachEvent } from "@/features/reach/services/events.service";
 import { confirmDialog } from "@/lib/confirmDialog";
 import { ROUTES, buildPulseStoryPublicUrl } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -49,6 +52,7 @@ import {
   Edit3,
   MapPin,
   MessageSquare,
+  Rocket,
   Send,
   Sparkles,
   Trash2,
@@ -262,6 +266,9 @@ export default function StoryDetailScreen() {
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [showViewers, setShowViewers] = useState(false);
   const [showBids, setShowBids] = useState(false);
+  const [showBoost, setShowBoost] = useState(false);
+  const [showBoostProgress, setShowBoostProgress] = useState(false);
+  const [freshCampaignId, setFreshCampaignId] = useState<string | null>(null);
   const progress = useRef(new Animated.Value(0)).current;
   const footerFade = useRef(new Animated.Value(0)).current;
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -347,7 +354,18 @@ export default function StoryDetailScreen() {
     recordedViewsRef.current.add(post.id);
     if (__DEV__) console.log('[story-views] recording view for post', post.id, 'org', myOrgId);
     recordViewMutate({ postId: post.id, orgId: myOrgId, orgName: currentOrganization?.name ?? "" });
-  }, [post?.id, isOwnPost, myOrgId, currentOrganization?.name, recordViewMutate]);
+    // Reach impressions/views were never actually wired to a call site before
+    // this fix — the RPC and service function existed, but nothing invoked
+    // them, so every campaign's counts stayed stuck at 0 regardless of real
+    // traffic. "Impression" and "view" both fire here, at the same
+    // granularity as the story-view tracking above (story opened, not
+    // feed-scroll-past) — not a deeper dwell-time signal.
+    if (post.is_sponsored && post.reach_campaign_id) {
+      const campaignId = post.reach_campaign_id;
+      recordReachEvent(campaignId, "impression", myOrgId);
+      recordReachEvent(campaignId, "view", myOrgId);
+    }
+  }, [post?.id, post?.is_sponsored, post?.reach_campaign_id, isOwnPost, myOrgId, currentOrganization?.name, recordViewMutate]);
 
   // Fetch viewers (own posts only)
   const viewsQ = useStoryViewsQuery(isOwnPost ? (post?.id ?? null) : null, isOwnPost);
@@ -472,7 +490,23 @@ export default function StoryDetailScreen() {
               </Text>
               {(post.org_name ?? '').trim().toUpperCase() === "PULSE" ? <View style={styles.pulseGreenDot} /> : null}
             </View>
-            <Text style={styles.timeAgoLabel}>{timeAgo(post.created_at)}</Text>
+            <View style={styles.topBarSubRow}>
+              <Text style={styles.timeAgoLabel}>{timeAgo(post.created_at)}</Text>
+              {post.is_sponsored ? (
+                <Pressable
+                  style={styles.sponsoredTag}
+                  onPress={() =>
+                    Alert.alert("Sponsored", "This load has been promoted through Pulse Reach.")
+                  }
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Why am I seeing this? This load has been promoted through Pulse Reach."
+                >
+                  <Rocket size={9} color={Theme.accentGold} strokeWidth={2.25} />
+                  <Text style={styles.sponsoredTagText}>Sponsored</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         </View>
         <View style={styles.topBarActions}>
@@ -600,6 +634,12 @@ export default function StoryDetailScreen() {
             onBidsPress={ownerIndentId ? () => setShowBids(true) : undefined}
             onPrimaryPress={() => router.push(ROUTES.PULSE_LOADS)}
             onShareWhatsApp={handleShareWhatsApp}
+            boostLabel={post.reach_campaign_id ? "Boosted" : "Boost"}
+            onBoostPress={
+              post.reach_campaign_id
+                ? () => setShowBoostProgress(true)
+                : () => setShowBoost(true)
+            }
           />
         )}
 
@@ -706,6 +746,30 @@ export default function StoryDetailScreen() {
             : undefined
         }
       />
+
+      {post && myOrgId ? (
+        <BoostSheet
+          visible={showBoost}
+          onClose={() => setShowBoost(false)}
+          orgId={myOrgId}
+          postId={post.id}
+          onBoosted={(campaignId) => {
+            invalidatePosts();
+            setFreshCampaignId(campaignId);
+          }}
+          onViewCampaign={() => setShowBoostProgress(true)}
+        />
+      ) : null}
+
+      {post && myOrgId && (post.reach_campaign_id ?? freshCampaignId) ? (
+        <BoostProgressSheet
+          visible={showBoostProgress}
+          onClose={() => setShowBoostProgress(false)}
+          orgId={myOrgId}
+          campaignId={(post.reach_campaign_id ?? freshCampaignId)!}
+          onBoostAgain={() => setShowBoost(true)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -771,6 +835,17 @@ const styles = StyleSheet.create({
   orgTitlePulse: { fontStyle: "italic", letterSpacing: -0.45 },
   pulseGreenDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: Theme.darkGreen, marginTop: 1, flexShrink: 0 },
   timeAgoLabel: { fontSize: 8, fontWeight: "700", color: MUTED, letterSpacing: 1, textTransform: "uppercase", marginTop: 1 },
+  topBarSubRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 },
+  sponsoredTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    backgroundColor: "rgba(212, 175, 55, 0.14)",
+  },
+  sponsoredTagText: { fontSize: 8, fontWeight: "800", color: Theme.accentGold, letterSpacing: 0.4, textTransform: "uppercase" },
   tapZones: { position: "absolute", top: 100, left: 0, right: 0, bottom: 200, flexDirection: "row", zIndex: 30 },
   tapLeft: { flex: 1 },
   tapRight: { flex: 2.2 },

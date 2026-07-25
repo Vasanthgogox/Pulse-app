@@ -4,7 +4,7 @@
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Feather from "@expo/vector-icons/Feather";
-import { ArrowUpRight, Eye } from "lucide-react-native";
+import { ArrowUpRight, Eye, Rocket } from "lucide-react-native";
 import {
   Platform,
   Pressable,
@@ -27,6 +27,9 @@ type StoryOwnerActionsProps = {
   onBidsPress?: () => void;
   onPrimaryPress: () => void;
   onShareWhatsApp: () => void;
+  /** Reach boost — omitted entirely for non-LOAD stories. */
+  boostLabel?: string;
+  onBoostPress?: () => void;
 };
 
 export function StoryOwnerFooterActions({
@@ -38,18 +41,21 @@ export function StoryOwnerFooterActions({
   onBidsPress,
   onPrimaryPress,
   onShareWhatsApp,
+  boostLabel,
+  onBoostPress,
 }: StoryOwnerActionsProps) {
   const { width } = useWindowDimensions();
   const sideBySide = width >= 380;
   const showBids = Boolean(onBidsPress && bidsLabel);
+  const showBoost = Boolean(onBoostPress && boostLabel);
 
   return (
     <View style={styles.wrap}>
-      <View style={[styles.metricsRow, showBids && styles.metricsRowSplit]}>
+      <View style={[styles.metricsRow, (showBids || showBoost) && styles.metricsRowSplit]}>
         <Pressable
           style={({ pressed }) => [
             styles.metricPill,
-            showBids && styles.metricPillSplit,
+            (showBids || showBoost) && styles.metricPillSplit,
             pressed && styles.pressedSoft,
           ]}
           onPress={onViewersPress}
@@ -80,6 +86,26 @@ export function StoryOwnerFooterActions({
               <Feather name="inbox" size={12} color={INK} />
             </View>
             <Text style={styles.viewersPillText}>{bidsLabel}</Text>
+          </Pressable>
+        ) : null}
+
+        {showBoost ? (
+          <Pressable
+            style={({ pressed }) => [
+              styles.metricPill,
+              styles.metricPillSplit,
+              styles.boostPill,
+              pressed && styles.pressedSoft,
+            ]}
+            onPress={onBoostPress}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Boost this load"
+          >
+            <View style={[styles.viewersIconWrap, styles.boostIconWrap]}>
+              <Rocket size={12} color={INK} strokeWidth={2.25} />
+            </View>
+            <Text style={styles.viewersPillText}>{boostLabel}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -193,6 +219,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   bidsIconWrap: {
+    backgroundColor: "rgba(255,255,255,0.92)",
+  },
+  boostPill: {
+    backgroundColor: Theme.accentGoldMuted,
+    borderColor: Theme.accentGoldBorder,
+  },
+  boostIconWrap: {
     backgroundColor: "rgba(255,255,255,0.92)",
   },
   viewersPillText: {

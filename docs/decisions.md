@@ -114,3 +114,27 @@ Products are **platform-owned catalog**, not Commerce-owned — reusable across 
 
 **The question:** is Trip Room (`chatPlatform.service.ts`, `chat_messages`/`chat_conversations`) intended to replace legacy per-lane Driver/User/Dispatcher chat (`chat.service.ts`, `trip_messages`/`trip_conversations`), observe it permanently, or is neither schema the right long-term canonical model? The mirror trigger bridging the two tables is either temporary migration scaffolding or permanent, load-bearing sync infrastructure depending on the answer — this is a product-intent question, not something resolvable from code.
 
+## Reach is a platform capability, not a Stories feature (ADR-009)
+
+**Decision:** Pulse Reach (`features/reach/`, `reach_campaigns`/`reach_events`/`reach_plans`/`pulse_credit_*` tables) is a reusable promotion/growth capability. Stories (`posts`, `features/network/`) are its first *consumer*, not its owner. `reach_campaigns.post_id` was deliberately built as a generic FK to `public.posts` rather than a Story-specific table, so any future promotable object — marketplace listings, vehicle/driver listings, business profiles — can become a second consumer without duplicating campaign/payment/lifecycle/analytics logic, as long as it can be represented as (or bridged to) a `posts` row or a future generalization of that FK.
+
+**Reason:** Reach was built inside the Network/Stories surface for delivery speed (Phase 0–2.1), but its actual shape — plans, credits, campaign lifecycle, upgrade, analytics — has no dependency on Stories-specific concepts. Keeping it structurally separate (`features/reach/` already does this) avoids the common failure mode where a feature quietly calcifies around its first UI host and becomes expensive to re-platform later.
+
+**Not decided here:** how Reach's home fits into this repo's existing frozen platform vocabulary (`docs/architecture/platform/01-platform-principles.md` — Platform/Workspace/Product/Experience/Module/Feature/Entity). A separate "Growth" *domain* was proposed in conversation (alongside Identity/Network/Operations/Commerce/Intelligence) — that's a taxonomy decision for whoever owns the platform docs to reconcile with the frozen model, not something this ADR resolves unilaterally.
+
+**Backlog (Growth Platform, not started) — the Growth admin module is exactly these seven children, nothing more:** Credits, Reach Plans, Reward Rules, Invitation Rules, Promotions, Ledger, Analytics — as one module, not split into separate admin products. Plus: customer-facing Reach home (Overview/Campaigns/Earn Credits) as its own nav destination; the Platform Events → Growth Rules → Credits Ledger → Wallet → Notifications pipeline; Growth Experiments (no-code configurable reward campaigns) — deliberately sequenced *before* AI/Control Tower work, per product direction.
+
+**Manual credit adjustments are a bootstrap mechanism, not the end-state.** Today every credit comes from ADMIN (the `analytics/` Credits panel). That's expected to *decrease* over time as SYSTEM-origin rules (verification, invitation, promotion) come online in Phase 2.4 — manual grants become the exception, not the normal workflow.
+
+**Product rule, not implemented — Credit Issuance Hierarchy.** Every `pulse_credit_transactions` row should eventually trace to exactly one of three origins:
+
+- **SYSTEM** — Verification, Invitation, Promotion (automated, once the Growth Engine pipeline exists)
+- **ADMIN** — Adjustment, Support, Compensation (today's `analytics/` Credits panel)
+- **TRANSACTIONAL** — Purchase, Refund, Campaign Spend (`spend_reach` already fits here; named "transactional" rather than "user" because campaign spend is a business-operations movement, not a thing a user *earns* — this framing also scales better if subscriptions, cashback, or partner-funded credits show up later)
+
+This is currently *derived* in the Credits panel UI from the existing `type` column (see `SOURCE_BY_TYPE` in `analytics/src/components/credits/CreditsPanel.tsx`) rather than stored as its own column — deliberately, to avoid two overlapping fields drifting out of sync. If/when the type vocabulary grows enough that a clean 1:1 mapping onto these three origins stops holding, promoting `source` to a real stored (and ideally generated/computed) column is the natural next step — not before.
+
+**Future ADR (not now, no commercial need yet) — Credit Lifecycle.** Do promotional credits expire? Purchased credits? Refunded credits? These are business rules, not implementation details — deferred until there's a real commercial reason to answer them, but tracked here so the question isn't lost.
+
+**Naming direction, not implemented — "Credit Adjustment" over "Grant/Deduct Credits."** The Credits panel's underlying operation is broader than its two current buttons suggest: Grant, Deduct, Correction, Refund, and Reversal are all the same shape (an admin-initiated ledger entry with a reason). The UI can keep exposing Grant/Deduct as the two buttons that cover 95% of real usage, but if a third action (e.g. Correction) is ever added, model it as another instance of the same "Credit Adjustment" concept rather than a bespoke new flow.
+

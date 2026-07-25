@@ -76,4 +76,10 @@ export const PRODUCT_LOTTIE_ASSETS: Record<ProductId, ProductLottieAsset> = {
     source: require("@/assets/Animated folder/robot.json"),
     glyphScale: 1.1,
   },
+  pulse_reach: {
+    // Reuses the bidding glyph (Reach boosts a load into more bids) — same
+    // asset already shared by pulse_network_bidding/pulse_marketplace.
+    source: require("@/assets/Animated folder/auction.json"),
+    glyphScale: 1.12,
+  },
 };

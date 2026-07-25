@@ -15,6 +15,7 @@ import {
   Clock3,
   MessageSquare,
   Package,
+  Rocket,
   ThumbsUp,
   Truck,
 } from 'lucide-react-native';
@@ -32,6 +33,8 @@ interface PostCardProps {
   orgId: string;
   onBid?: (post: PostRow) => void;
   onDetail?: (post: PostRow) => void;
+  /** Owner-only — opens the Boost picker for this (not-yet-boosted) post. */
+  onBoost?: (post: PostRow) => void;
 }
 
 /** Tesla theme accents — no arbitrary neon; cycles through brand palette. */
@@ -116,11 +119,12 @@ function UpdateCard({ post, color, onPress }: { post: PostRow; color: string; on
 
 // ─── Load Card ────────────────────────────────────────────────────────────────
 
-function LoadCard({ post, isOwner, onBid, onPress }: {
+function LoadCard({ post, isOwner, onBid, onBoost, onPress }: {
   post: PostRow;
   color: string;
   isOwner: boolean;
   onBid?: () => void;
+  onBoost?: () => void;
   onPress: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -149,9 +153,17 @@ function LoadCard({ post, isOwner, onBid, onPress }: {
               </View>
             </View>
           </View>
-          <View style={styles.loadBadge}>
-            <Truck size={9} color={Theme.teslaRed} />
-            <Text style={styles.loadBadgeText}>LOAD</Text>
+          <View style={styles.loadBadgeGroup}>
+            {post.is_sponsored ? (
+              <View style={styles.sponsoredBadge}>
+                <Rocket size={9} color={Theme.accentGold} />
+                <Text style={styles.sponsoredBadgeText}>SPONSORED</Text>
+              </View>
+            ) : null}
+            <View style={styles.loadBadge}>
+              <Truck size={9} color={Theme.teslaRed} />
+              <Text style={styles.loadBadgeText}>LOAD</Text>
+            </View>
           </View>
         </View>
 
@@ -213,6 +225,11 @@ function LoadCard({ post, isOwner, onBid, onPress }: {
               <ThumbsUp size={13} color={Theme.textOnPrimary} />
               <Text style={styles.bidBtnText}>Bid Now</Text>
             </Pressable>
+          ) : !post.is_sponsored && onBoost ? (
+            <Pressable style={styles.boostBtn} onPress={onBoost}>
+              <Rocket size={13} color={Theme.textPrimaryDark} />
+              <Text style={styles.boostBtnText}>Boost</Text>
+            </Pressable>
           ) : post.bid_count > 0 ? (
             <Pressable style={styles.viewBidsBtn} onPress={onPress}>
               <Text style={styles.viewBidsBtnText}>{post.bid_count} Bid{post.bid_count !== 1 ? 's' : ''}</Text>
@@ -226,7 +243,7 @@ function LoadCard({ post, isOwner, onBid, onPress }: {
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 
-export function PostCard({ post, orgId, onBid, onDetail }: PostCardProps) {
+export function PostCard({ post, orgId, onBid, onDetail, onBoost }: PostCardProps) {
   const router = useRouter();
   const color = seedColor(post.organization_id);
   const isOwner = post.organization_id === orgId;
@@ -243,6 +260,7 @@ export function PostCard({ post, orgId, onBid, onDetail }: PostCardProps) {
         color={color}
         isOwner={isOwner}
         onBid={() => onBid?.(post)}
+        onBoost={onBoost ? () => onBoost(post) : undefined}
         onPress={handlePress}
       />
     );
@@ -387,6 +405,19 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232, 33, 39, 0.35)',
   },
   loadBadgeText: { ...Typography.subTabLabel, fontSize: 7, color: Theme.teslaRed },
+  loadBadgeGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sponsoredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(212, 175, 55, 0.14)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.35)',
+  },
+  sponsoredBadgeText: { ...Typography.subTabLabel, fontSize: 7, color: Theme.accentGold },
 
   routeRow: {
     flexDirection: 'row',
@@ -464,4 +495,15 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)',
   },
   viewBidsBtnText: { fontSize: 12, fontWeight: '900', color: '#fff' },
+
+  boostBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: Theme.accentGold,
+  },
+  boostBtnText: { fontSize: 11, fontWeight: '800', color: Theme.textPrimaryDark, letterSpacing: 0.2 },
 });

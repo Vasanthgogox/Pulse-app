@@ -5,6 +5,7 @@ import {
   Brain,
   FileCheck,
   Gavel,
+  Megaphone,
   MessageSquare,
   Network,
   Receipt,
@@ -39,6 +40,7 @@ const PRODUCT_ICON: Record<ProductId, LucideIcon> = {
   pulse_exchange: ArrowLeftRight,
   pulse_compliance: ShieldCheck,
   pulse_ai: Brain,
+  pulse_reach: Megaphone,
 };
 
 const INACTIVE_ICON = "#A1A5B7";

@@ -70,6 +70,9 @@ export interface PostRow {
   audience?: string | null;
   viewer_role?: string | null;
   visible_to?: string[] | null;
+  /** Reach boost — undefined until 20261224050000_network_feed_sponsored_badge.sql is applied. */
+  is_sponsored?: boolean | null;
+  reach_campaign_id?: string | null;
 }
 
 /**

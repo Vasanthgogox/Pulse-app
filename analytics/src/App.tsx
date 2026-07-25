@@ -1,16 +1,29 @@
 import { useState } from 'react';
-import { Shield, Moon, Sun, ChevronRightSquare } from 'lucide-react';
+import { Shield, Moon, Sun, ChevronRightSquare, Coins } from 'lucide-react';
 import { AdminDataProvider, useAdmin } from '@/context/AdminDataProvider';
 import { ApplicationQueue } from '@/components/queue/ApplicationQueue';
 import { AuditTrail } from '@/components/queue/AuditTrail';
 import { OrgWorkspace } from '@/components/workspace/OrgWorkspace';
 import { VerificationActionPanel } from '@/components/workspace/VerificationActionPanel';
+import { CreditsPanel } from '@/components/credits/CreditsPanel';
 import { Badge } from '@/components/ui/badge';
 import { supabaseConfigError } from '@/lib/supabase';
 
+type ConsoleView = 'verification' | 'credits';
+
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
-function Topbar({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => void }) {
+function Topbar({
+  dark,
+  setDark,
+  view,
+  setView,
+}: {
+  dark: boolean;
+  setDark: (v: boolean) => void;
+  view: ConsoleView;
+  setView: (v: ConsoleView) => void;
+}) {
   const { applications } = useAdmin();
   const pendingCount   = applications.filter(a => ['Pending', 'Under Review'].includes(a.status)).length;
   const escalatedCount = applications.filter(a => a.status === 'Escalated').length;
@@ -27,13 +40,34 @@ function Topbar({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => voi
             Org &amp; User Management
           </span>
         </div>
+
+        <nav className="ml-4 flex items-center gap-1 border-l border-border pl-4">
+          <button
+            onClick={() => setView('verification')}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              view === 'verification' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            Verification
+          </button>
+          <button
+            onClick={() => setView('credits')}
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              view === 'credits' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            <Coins className="size-3" /> Growth · Credits
+          </button>
+        </nav>
       </div>
 
       <div className="flex items-center gap-2">
-        {escalatedCount > 0 && (
+        {view === 'verification' && escalatedCount > 0 && (
           <Badge variant="destructive" appearance="light" size="sm">{escalatedCount} escalated</Badge>
         )}
-        <Badge variant="warning" appearance="light" size="sm">{pendingCount} pending</Badge>
+        {view === 'verification' && (
+          <Badge variant="warning" appearance="light" size="sm">{pendingCount} pending</Badge>
+        )}
         <span className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           INTERNAL
         </span>
@@ -92,34 +126,39 @@ function OrgStrip() {
 
 function AdminShell() {
   const [dark, setDark] = useState(false);
+  const [view, setView] = useState<ConsoleView>('verification');
 
   return (
     <div className={dark ? 'dark' : ''}>
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
-        <Topbar dark={dark} setDark={setDark} />
+        <Topbar dark={dark} setDark={setDark} view={view} setView={setView} />
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left sidebar: queue (60%) + audit (40%) */}
-          <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-border">
-            <div className="flex-[3] overflow-hidden border-b border-border">
-              <ApplicationQueue />
-            </div>
-            <div className="flex-[2] overflow-hidden">
-              <AuditTrail />
-            </div>
-          </aside>
+        {view === 'credits' ? (
+          <CreditsPanel />
+        ) : (
+          <div className="flex flex-1 overflow-hidden">
+            {/* Left sidebar: queue (60%) + audit (40%) */}
+            <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-border">
+              <div className="flex-[3] overflow-hidden border-b border-border">
+                <ApplicationQueue />
+              </div>
+              <div className="flex-[2] overflow-hidden">
+                <AuditTrail />
+              </div>
+            </aside>
 
-          {/* Main content */}
-          <main className="flex flex-1 flex-col overflow-hidden">
-            <OrgStrip />
-            {/* 3-tab workspace */}
-            <div className="flex-1 overflow-hidden">
-              <OrgWorkspace />
-            </div>
-            {/* KYC action panel — always visible */}
-            <VerificationActionPanel />
-          </main>
-        </div>
+            {/* Main content */}
+            <main className="flex flex-1 flex-col overflow-hidden">
+              <OrgStrip />
+              {/* 3-tab workspace */}
+              <div className="flex-1 overflow-hidden">
+                <OrgWorkspace />
+              </div>
+              {/* KYC action panel — always visible */}
+              <VerificationActionPanel />
+            </main>
+          </div>
+        )}
       </div>
     </div>
   );

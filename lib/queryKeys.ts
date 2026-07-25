@@ -221,6 +221,14 @@ export const queryKeys = {
     forPost: (postId: string) => ["q", "story-views", postId] as const,
   },
 
+  reach: {
+    plans: () => ["q", "reach", "plans"] as const,
+    campaignsForOrg: (orgId: string) => ["q", "reach", "campaigns", orgId] as const,
+    campaignMetrics: (campaignId: string) => ["q", "reach", "metrics", campaignId] as const,
+    wallet: (orgId: string) => ["q", "reach", "wallet", orgId] as const,
+    orgSummary: (orgId: string) => ["q", "reach", "org-summary", orgId] as const,
+  },
+
   discover: {
     search: (orgId: string, search: string) =>
       ["q", "discover", orgId, search] as const,

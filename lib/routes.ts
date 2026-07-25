@@ -246,6 +246,12 @@ export const ROUTES = {
   PULSE_LOADS:   '/pulse-loads'   as const,
   /** DBA audit tool — web only. */
   DBA_AUDIT:     '/audit'          as const,
+  REACH: {
+    /** Org's Reach campaigns with Impressions/Views/Bids/Credits Used — not
+     * load-only long-term (RFQs, hiring, fleet requirements can all become
+     * Reach campaigns later), hence "Reach" not "Boost" in the screen name. */
+    HISTORY: '/reach/history' as const,
+  },
   /** Story-detail share landing (Broadcast Load / Pulse story bidding page). */
   storyDetail: (
     postId: string,
