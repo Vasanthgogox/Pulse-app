@@ -19,6 +19,7 @@ import {
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import Layout from "@/constants/Layout";
 
+import { WizardActionBarHost } from "./WizardActionBarContext";
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
 import { WizardEntityPartyCell } from "./WizardEntityPartyCell";
 
@@ -148,6 +149,9 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         ? "Billing"
         : undefined;
 
+  // Mobile always uses compact type so the shell footer stays on-screen.
+  const useCompactChrome = compact || !isDesktopKeypad;
+
   const recipientHero = useMemo(() => {
     if (!partyPreview) return null;
     return (
@@ -156,11 +160,11 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         caption={recipientCaption}
         nameInline={Boolean(recipientCaption)}
         compact
-        dense={compact}
+        dense={useCompactChrome}
         onPress={onPartyPress}
       />
     );
-  }, [compact, onPartyPress, partyPreview, recipientCaption]);
+  }, [onPartyPress, partyPreview, recipientCaption, useCompactChrome]);
 
   /** Desktop keeps compact party row inside the card chrome. */
   const desktopPartyCell = useMemo(() => {
@@ -227,14 +231,14 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   ) : null;
 
   // Field switch / modal chrome already name the field — skip duplicate title.
-  const showLabelBlock = !showFieldSwitch && !compact;
-  const showHintUnderAmount = Boolean(activeHint) && !compact;
+  const showLabelBlock = !showFieldSwitch && !useCompactChrome;
+  const showHintUnderAmount = Boolean(activeHint) && !useCompactChrome;
 
   const payoutStage = (
     <View
       style={[
         styles.wizardKeypadPayoutStage,
-        compact && styles.wizardKeypadPayoutStageCompact,
+        useCompactChrome && styles.wizardKeypadPayoutStageCompact,
       ]}
     >
       {showLabelBlock ? (
@@ -242,23 +246,28 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
           <Text
             style={[
               styles.wizardKeypadTitle,
-              compact && styles.wizardKeypadTitleCompact,
+              useCompactChrome && styles.wizardKeypadTitleCompact,
             ]}
           >
             {activeField.label}
             {activeField.optional ? " (optional)" : ""}
           </Text>
-          {activeHint && !compact ? (
+          {activeHint && !useCompactChrome ? (
             <Text style={styles.wizardKeypadHint}>{activeHint}</Text>
           ) : null}
         </View>
+      ) : useCompactChrome ? (
+        <Text style={styles.wizardKeypadTitleCompact} numberOfLines={1}>
+          {activeField.label}
+          {activeField.optional ? " (optional)" : ""}
+        </Text>
       ) : null}
       <NumericDisplay
         rawValue={activeField.rawValue}
         type="currency"
         prefix={prefix}
         placeholder={placeholder}
-        variant={compact ? "wizardCompact" : "hero"}
+        variant={useCompactChrome ? "wizardCompact" : "hero"}
       />
       {activeField.errorMessage ? (
         <Text style={styles.wizardKeypadError} accessibilityRole="alert">
@@ -303,7 +312,7 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         style={[
           styles.wizardKeypadBody,
           styles.wizardKeypadBodyMobilePay,
-          compact && styles.wizardKeypadBodyCompact,
+          useCompactChrome && styles.wizardKeypadBodyCompact,
         ]}
       >
         {recipientHero ? (
@@ -315,7 +324,15 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
       {accessory ? (
         <View style={styles.wizardKeypadAccessory}>{accessory}</View>
       ) : null}
-      <View style={[flow.keypadDockWizard, flow.keypadDockWizardBleed]}>
+      {/* Continue / Close — hosted above the pad so CTAs never sit under keys. */}
+      <WizardActionBarHost style={styles.wizardKeypadActionBar} />
+      <View
+        style={[
+          flow.keypadDockWizard,
+          flow.keypadDockWizardBleed,
+          useCompactChrome && flow.keypadDockWizardCompact,
+        ]}
+      >
         <KeypadDock onKey={handleKey} showDecimal={showDecimal} />
       </View>
     </View>

@@ -40,8 +40,10 @@ export const CreateTripDesktopCommodityStep = memo(
   }: CreateTripDesktopCommodityStepProps) {
     return (
       <View style={[s.stepBody, compact && s.compactStepBody]}>
-        <View style={s.commodityClientSection}>
-          <Text style={s.sectionHeading}>Load details</Text>
+        <View style={[s.commodityClientSection, compact && { gap: 8 }]}>
+          <Text style={[s.sectionHeading, compact && s.compactSectionHeading]}>
+            Load details
+          </Text>
           <View style={s.fieldSection}>
             <TripCommodityFields
               vehicleType={vehicleType}
@@ -59,7 +61,10 @@ export const CreateTripDesktopCommodityStep = memo(
               useFormChrome
               preferWebSelect={Platform.OS === "web" && !compact}
               desktopChrome
-              fieldLabelStyle={s.desktopFieldLabel}
+              fieldLabelStyle={[
+                s.desktopFieldLabel,
+                compact && s.compactSectionHeading,
+              ]}
               fieldInputStyle={[s.inputBoxClean, s.formFieldInput]}
             />
           </View>

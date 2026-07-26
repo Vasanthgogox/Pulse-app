@@ -75,9 +75,11 @@ export function ClientLaneSearchPicker({
   if (!loading && lanes.length === 0) {
     return (
       <View style={[s.root, compact && s.rootCompact]}>
-        <Text style={s.kicker}>Contract lane</Text>
-        <Text style={s.emptyHint}>
-          No warehouse contract lanes for this client yet. Add them on the customer profile (Warehouses → Contract → Lanes), or enter route and sale manually.
+        <Text style={[s.kicker, compact && s.kickerCompact]}>Contract lane</Text>
+        <Text style={[s.emptyHint, compact && s.emptyHintCompact]} numberOfLines={compact ? 2 : undefined}>
+          {compact
+            ? "No contract lanes yet — enter route and sale manually, or add lanes on the customer profile."
+            : "No warehouse contract lanes for this client yet. Add them on the customer profile (Warehouses → Contract → Lanes), or enter route and sale manually."}
         </Text>
       </View>
     );
@@ -211,8 +213,11 @@ const s = StyleSheet.create({
     padding: 12,
   },
   rootCompact: {
-    marginTop: 10,
-    padding: 10,
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    gap: 4,
   },
   headerRow: {
     flexDirection: "row",
@@ -227,6 +232,10 @@ const s = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
+  kickerCompact: {
+    fontSize: 10,
+    letterSpacing: 0.45,
+  },
   sub: {
     fontSize: 12,
     fontWeight: "500",
@@ -238,6 +247,10 @@ const s = StyleSheet.create({
     fontWeight: "500",
     color: METRONIC.subtle,
     lineHeight: 17,
+  },
+  emptyHintCompact: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   clearBtn: { paddingVertical: 2, paddingHorizontal: 4 },
   clearText: { fontSize: 12, fontWeight: "700", color: METRONIC.link },

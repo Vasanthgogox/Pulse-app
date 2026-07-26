@@ -328,6 +328,89 @@ export async function checkOrgsConnected(
   return { error: null, connected: Boolean(data) };
 }
 
+/** Why a shared story link is no longer bid-able. */
+export type StoryClosedReason =
+  /** Source indent was awarded / assigned / deployed / completed. */
+  | 'assigned'
+  /** Broadcast passed its expiry window. */
+  | 'expired'
+  /** Load giver cancelled the indent. */
+  | 'withdrawn'
+  /** Post deleted or not visible — nothing left to show. */
+  | 'removed'
+  /** Deactivated with no richer signal available. */
+  | 'closed';
+
+export interface StoryClosedInfo {
+  reason: StoryClosedReason;
+  indentStatus: string | null;
+}
+
+const INDENT_ASSIGNED_STATUSES = new Set([
+  'awarded',
+  'assigned',
+  'deployed',
+  'completed',
+]);
+
+/**
+ * Best-effort explanation for a dead story link (deleted, deactivated or
+ * expired). Reads the post row and, when the broadcast came from an indent,
+ * the indent status — so the share page can say "load assigned" instead of a
+ * generic error. All reads are RLS-guarded; any miss degrades gracefully.
+ */
+export async function getStoryClosedInfo(
+  postId: string,
+): Promise<StoryClosedInfo> {
+  const fallback: StoryClosedInfo = { reason: 'removed', indentStatus: null };
+  if (!postId) return fallback;
+
+  let post: {
+    is_active: boolean | null;
+    expires_at: string | null;
+    source_indent_id: string | null;
+  } | null = null;
+  try {
+    const { data } = await supabase()
+      .from('posts')
+      .select('is_active, expires_at, source_indent_id')
+      .eq('id', postId)
+      .maybeSingle();
+    post = data ?? null;
+  } catch {
+    post = null;
+  }
+
+  // Post row gone (deleted) or hidden — check nothing else.
+  if (!post) return fallback;
+
+  if (post.source_indent_id) {
+    try {
+      const { data: indent } = await supabase()
+        .from('indents')
+        .select('status')
+        .eq('id', post.source_indent_id)
+        .maybeSingle();
+      const status = (indent?.status ?? '').trim().toLowerCase();
+      if (INDENT_ASSIGNED_STATUSES.has(status)) {
+        return { reason: 'assigned', indentStatus: status };
+      }
+      if (status === 'cancelled') {
+        return { reason: 'withdrawn', indentStatus: status };
+      }
+    } catch {
+      // RLS-hidden indent — fall through to time-based reasons.
+    }
+  }
+
+  const expired =
+    post.expires_at != null &&
+    new Date(post.expires_at).getTime() <= Date.now();
+  if (expired) return { reason: 'expired', indentStatus: null };
+  if (post.is_active === false) return { reason: 'closed', indentStatus: null };
+  return { reason: 'expired', indentStatus: null };
+}
+
 export async function incrementPostViewCount(postId: string): Promise<void> {
   try {
     await supabase().rpc('increment_post_view_count', { p_post_id: postId });

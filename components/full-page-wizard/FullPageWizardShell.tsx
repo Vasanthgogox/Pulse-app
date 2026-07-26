@@ -12,10 +12,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft } from "lucide-react-native";
 
 import Theme from "@/constants/Theme";
-import { Layout } from "@/constants/Layout";
+import Layout from "@/constants/Layout";
 import { dockPaddingBottom, useKeyboardVisible } from "@/lib/hooks/useKeyboardVisible";
 import { isDesktopWizardForm } from "@/lib/wizardLayout.util";
 
+import { WizardActionBarProvider } from "./WizardActionBarContext";
 import { WizardDesktopFrame } from "./WizardDesktopFrame";
 import type { WizardInsightCard } from "./WizardInsightRail";
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
@@ -64,7 +65,7 @@ export function FullPageWizardShell({
   steppedLayout = false,
 }: FullPageWizardShellProps) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const { keyboardVisible } = useKeyboardVisible();
   const isDesktopRails = width >= Layout.wizardDesktopGridMinWidth;
   const isDesktopForm = steppedLayout ? false : isDesktopWizardForm(width);
@@ -72,6 +73,18 @@ export function FullPageWizardShell({
     steppedLayout ? false : width < Layout.wizardDesktopGridMinWidth;
   const isSteppedDesktop = steppedLayout && width >= 768;
   const isKeypadStep = fillBody && !isSteppedDesktop;
+  /** Phone keypad steps host Continue above the pad via context. */
+  const hoistFooterIntoKeypad = Boolean(footer && isKeypadStep);
+  /**
+   * Mobile scroll/fill steps: pin the action bar to the viewport bottom so long
+   * forms (Route, Load, …) cannot push Continue off-screen on RN Web.
+   */
+  const pinFooterToViewport = Boolean(
+    footer && isMobileWizardLayout && !hoistFooterIntoKeypad,
+  );
+  const mobileFooterReserve = pinFooterToViewport
+    ? 88 + dockPaddingBottom(insets.bottom, keyboardVisible, 8)
+    : 0;
   const stepLabel =
     stepIndex != null && stepTotal != null && stepTotal > 0
       ? `Step ${stepIndex} of ${stepTotal}`
@@ -83,34 +96,49 @@ export function FullPageWizardShell({
       ? { left: [] as WizardInsightCard[], right: [] as WizardInsightCard[] }
       : wizardInsightCardsForPreset(insightPreset, { desktopForm: isDesktopForm });
 
-  const body = fillBody ? (
-    // Keypad steps don't use a ScrollView, but `pageRoot` clips overflow to keep
-    // the footer docked. At in-between widths (≈600–1080) the keypad card is
-    // taller than the body, so the bottom rows get clipped (only "1 2 3" visible).
-    // Letting the fill body scroll on overflow makes the full keypad reachable;
-    // when content fits (true mobile), it renders identically.
-    //
-    // UNVERIFIED IN-APP: This fix assumes the flex chain (root → frame → pageRoot →
-    // bodyFill) resolves to a real pixel height at this step. Isolated-DOM repro at
-    // 820×640 confirmed (a) overflow:hidden clips a taller non-scrolling keypad and
-    // (b) this ScrollView makes the last row reachable — BUT ONLY when an ancestor
-    // has a resolved height. If the real mounted `pageRoot` measures 0px (pure
-    // flex:1 with no bounded ancestor), a ScrollView inside it is also 0px and this
-    // is a no-op. BEFORE MERGE: on the running rates step, confirm `pageRoot` height
-    // > 0 (DevTools). If it's 0, the real fix is to bound the chain height, not to
-    // add scroll here.
-    <ScrollView
-      style={styles.bodyFill}
-      contentContainerStyle={styles.bodyFillScrollContent}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
+  const footerNode = footer ? (
+    <View
+      style={[
+        styles.footerDock,
+        isMobileWizardLayout && styles.footerDockMobile,
+        isKeypadStep && styles.footerDockKeypadInline,
+        pinFooterToViewport && styles.footerDockMobilePinned,
+        {
+          paddingBottom: hoistFooterIntoKeypad
+            ? 4
+            : dockPaddingBottom(insets.bottom, keyboardVisible, 8),
+        },
+        isKeypadStep && !hoistFooterIntoKeypad && styles.footerDockKeypad,
+      ]}
     >
-      {children}
-    </ScrollView>
+      {footer}
+    </View>
+  ) : null;
+
+  const body = fillBody ? (
+    isKeypadStep && width < Layout.wizardSteppedMaxWidth ? (
+      <View style={styles.bodyFill}>{children}</View>
+    ) : (
+      <ScrollView
+        style={styles.bodyFill}
+        contentContainerStyle={[
+          styles.bodyFillScrollContent,
+          pinFooterToViewport && { paddingBottom: mobileFooterReserve },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {children}
+      </ScrollView>
+    )
   ) : scrollBody ? (
     <ScrollView
       style={styles.bodyScroll}
-      contentContainerStyle={styles.bodyScrollContent}
+      contentContainerStyle={[
+        styles.bodyScrollContent,
+        isMobileWizardLayout && styles.bodyScrollContentMobile,
+        pinFooterToViewport && { paddingBottom: mobileFooterReserve },
+      ]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
@@ -119,7 +147,14 @@ export function FullPageWizardShell({
       {children}
     </ScrollView>
   ) : (
-    <View style={styles.bodyFill}>{children}</View>
+    <View
+      style={[
+        styles.bodyFill,
+        pinFooterToViewport && { paddingBottom: mobileFooterReserve },
+      ]}
+    >
+      {children}
+    </View>
   );
 
   const page = (
@@ -132,11 +167,25 @@ export function FullPageWizardShell({
         isKeypadStep && styles.pageRootKeypad,
         isSteppedDesktop && styles.pageRootSteppedDesktop,
         {
+          /** Keep header + body + footer inside the visible viewport. */
+          ...(pinFooterToViewport && {
+            height,
+            maxHeight: height,
+          }),
+          ...(hoistFooterIntoKeypad && !pinFooterToViewport
+            ? { maxHeight: height }
+            : null),
           paddingTop: insets.top + (isKeypadStep || isSteppedDesktop ? 4 : 6),
-          /** Safe area lives on the footer dock so Continue stays above the home indicator. */
-          paddingBottom: footer
-            ? 0
-            : Math.max(insets.bottom, isKeypadStep || isSteppedDesktop ? 6 : 10),
+          paddingBottom: hoistFooterIntoKeypad
+            ? Math.max(insets.bottom, 6)
+            : pinFooterToViewport
+              ? 0
+              : footer
+                ? 0
+                : Math.max(
+                    insets.bottom,
+                    isKeypadStep || isSteppedDesktop ? 6 : 10,
+                  ),
         },
       ]}
     >
@@ -154,14 +203,27 @@ export function FullPageWizardShell({
           accessibilityLabel={backLabel.replace(/^←\s*/, "") || "Back"}
           hitSlop={8}
         >
-          <ArrowLeft size={18} color={Theme.textPrimaryDark} strokeWidth={2.5} />
-          <Text style={styles.headerBackBtnText}>
+          <ArrowLeft
+            size={isMobileWizardLayout ? 16 : 18}
+            color={Theme.textPrimaryDark}
+            strokeWidth={2.5}
+          />
+          <Text
+            style={[
+              styles.headerBackBtnText,
+              isMobileWizardLayout && styles.headerBackBtnTextMobile,
+            ]}
+          >
             {backLabel.replace(/^←\s*/, "") || "Back"}
           </Text>
         </Pressable>
         <View style={styles.headerTitleCluster} pointerEvents="none">
           <Text
-            style={[styles.titleInline, isKeypadStep && styles.titleInlineKeypad]}
+            style={[
+              styles.titleInline,
+              isMobileWizardLayout && styles.titleInlineMobile,
+              isKeypadStep && styles.titleInlineKeypad,
+            ]}
             numberOfLines={1}
           >
             {title}
@@ -169,18 +231,28 @@ export function FullPageWizardShell({
         </View>
         {stepLabel ? (
           <View style={styles.headerStepBadge}>
-            <Text style={styles.headerStepText}>{stepLabel}</Text>
+            <Text
+              style={[
+                styles.headerStepText,
+                isMobileWizardLayout && styles.headerStepTextMobile,
+              ]}
+            >
+              {stepLabel}
+            </Text>
           </View>
         ) : (
           <View style={styles.headerStepBadgeSpacer} />
         )}
       </View>
 
-      {subtitle ? (
-        <View style={[styles.pageHeaderBlock, isKeypadStep && styles.pageHeaderBlockKeypad]}>
+      {subtitle && !isKeypadStep ? (
+        <View style={styles.pageHeaderBlock}>
           <Text
-            style={[styles.subtitle, isKeypadStep && styles.subtitleKeypad]}
-            numberOfLines={isKeypadStep ? 2 : 3}
+            style={[
+              styles.subtitle,
+              isMobileWizardLayout && styles.subtitleMobile,
+            ]}
+            numberOfLines={3}
           >
             {subtitle}
           </Text>
@@ -200,40 +272,28 @@ export function FullPageWizardShell({
 
       {body}
 
-      {footer ? (
-        <View
-          style={[
-            {
-              flexShrink: 0,
-              width: "100%",
-              backgroundColor: Theme.cardWhite,
-              paddingBottom: dockPaddingBottom(insets.bottom, keyboardVisible, 8),
-            },
-            isKeypadStep && styles.footerDockKeypad,
-          ]}
-        >
-          {footer}
-        </View>
-      ) : null}
+      {!hoistFooterIntoKeypad ? footerNode : null}
     </View>
   );
 
   return (
     <View style={styles.root}>
       <KeyboardAvoidingView
-        style={{ flex: 1, width: "100%", minHeight: 0 }}
+        style={styles.shellKeyboard}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         enabled={Platform.OS !== "web"}
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
       >
-        <WizardDesktopFrame
-          width={width}
-          leftInsights={[...leftInsights]}
-          rightInsights={[...rightInsights]}
-          contextPanel={contextPanel}
-        >
-          {page}
-        </WizardDesktopFrame>
+        <WizardActionBarProvider value={hoistFooterIntoKeypad ? footerNode : null}>
+          <WizardDesktopFrame
+            width={width}
+            leftInsights={[...leftInsights]}
+            rightInsights={[...rightInsights]}
+            contextPanel={contextPanel}
+          >
+            {page}
+          </WizardDesktopFrame>
+        </WizardActionBarProvider>
       </KeyboardAvoidingView>
     </View>
   );

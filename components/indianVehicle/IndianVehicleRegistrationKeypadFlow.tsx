@@ -15,6 +15,7 @@ import { Truck } from "lucide-react-native";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
+import { WizardActionBarHost } from "@/components/full-page-wizard/WizardActionBarContext";
 import { KeypadDisplayValueWithCaret } from "@/components/party/keypad/KeypadDisplayValueWithCaret";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import { IndianVehicleRegistrationKeypad } from "@/components/indianVehicle/IndianVehicleRegistrationKeypad";
@@ -139,6 +140,8 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
             />
           </Pressable>
         </View>
+
+        {wizardShell ? <WizardActionBarHost style={flow.actionBarHost} /> : null}
 
         {/* On desktop web the physical keyboard drives entry (useIndianVehiclePhysicalKeypad),
             so the on-screen QWERTY is hidden — it only dominates the layout on laptops/PCs. */}

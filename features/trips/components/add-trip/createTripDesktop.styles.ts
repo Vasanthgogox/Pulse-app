@@ -7,6 +7,9 @@ export const CREATE_TRIP_DESKTOP_RAIL = {
   paddingHorizontal: 32,
 } as const;
 
+/** Touch target floor (Apple HIG / Android) — literal to avoid runtime Layout import issues in StyleSheet. */
+const TOUCH = 44;
+
 /** Desktop create-trip overlay — solid surfaces, aligned workspace rail. */
 export const createTripDesktopStyles = StyleSheet.create({
   root: {
@@ -265,10 +268,64 @@ export const createTripDesktopStyles = StyleSheet.create({
   compactSourceModeCard: {
     minWidth: "100%",
     flexBasis: "100%",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    gap: 12,
+    minHeight: TOUCH,
+  },
+  compactSourceModeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+  },
+  compactSourceModeTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  compactSourceModeSub: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  compactSourceGuidanceBanner: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    gap: 4,
+  },
+  compactSourceGuidanceTitle: {
+    fontSize: 10,
+  },
+  compactSourceGuidanceText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   compactEntityGridItem: {
     width: "100%",
     minWidth: 0,
+  },
+  compactDesktopClientGrid: {
+    gap: 8,
+  },
+  compactDesktopEntityCard: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    gap: 10,
+    minHeight: TOUCH,
+  },
+  compactDesktopEntityCardLeft: {
+    gap: 10,
+  },
+  compactDesktopEntityTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 17,
+  },
+  compactDesktopEntitySubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    lineHeight: 15,
   },
   compactAllocationStepBody: {
     flex: 0,
@@ -322,8 +379,59 @@ export const createTripDesktopStyles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
+  /** Mobile party picker — label + add on one row, full-width search below. */
+  compactPartyToolbar: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
+    marginBottom: 4,
+    width: "100%",
+  },
+  compactPartyToolbarTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    width: "100%",
+    minHeight: TOUCH,
+  },
+  compactPartySearchFull: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "auto",
+    maxWidth: "100%",
+    minWidth: 0,
+    width: "100%",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    minHeight: TOUCH,
+  },
+  compactSectionHeading: {
+    fontSize: 10,
+    letterSpacing: 0.5,
+    marginBottom: 0,
+    lineHeight: 14,
+  },
+  compactAddClientBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    minHeight: TOUCH,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  compactAddClientBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
   compactStepBody: {
-    gap: 16,
+    gap: 10,
+  },
+  compactStepSection: {
+    gap: 6,
   },
   /** Mobile route — single column, no flex:1 children inside ScrollView. */
   compactRouteBody: {
@@ -333,19 +441,20 @@ export const createTripDesktopStyles = StyleSheet.create({
   },
   compactRouteFieldsStack: {
     position: "relative",
-    gap: 10,
+    gap: 8,
     width: "100%",
   },
   compactRouteSwapRow: {
     justifyContent: "center",
     paddingRight: 0,
-    marginTop: 0,
-    marginBottom: 0,
+    marginTop: -2,
+    marginBottom: -2,
     zIndex: 1,
   },
   compactQuickDateRow: {
     width: "100%",
     flexWrap: "nowrap",
+    gap: 6,
   },
   compactQuickDateChip: {
     flexGrow: 1,
@@ -353,6 +462,12 @@ export const createTripDesktopStyles = StyleSheet.create({
     flexBasis: 0,
     minWidth: 0,
     paddingHorizontal: 8,
+    paddingVertical: 8,
+    minHeight: 36,
+  },
+  compactRouteDateInputShell: {
+    minHeight: 40,
+    paddingVertical: 8,
   },
   wizardWorkspaceMainFill: Platform.select({
     web: {
@@ -948,6 +1063,10 @@ export const createTripDesktopStyles = StyleSheet.create({
     width: "100%",
     marginBottom: 6,
   },
+  pickupRecommendBlockCompact: {
+    gap: 6,
+    marginBottom: 2,
+  },
   pickupRecommendLabel: {
     fontSize: 11,
     fontWeight: "700",
@@ -1034,7 +1153,7 @@ export const createTripDesktopStyles = StyleSheet.create({
     width: "100%",
   },
   pickupLocSectionsCompact: {
-    gap: 14,
+    gap: 8,
   },
   pickupLocSection: {
     gap: 8,
@@ -1111,6 +1230,13 @@ export const createTripDesktopStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     minHeight: 88,
   },
+  pickupLocCardCompact: {
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    minHeight: 56,
+  },
   pickupLocCardSelected: {
     borderColor: Theme.textPrimaryDark,
     backgroundColor: Theme.surface,
@@ -1123,6 +1249,11 @@ export const createTripDesktopStyles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
     flexShrink: 0,
+  },
+  pickupLocIconWrapCompact: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
   },
   pickupLocIconWrapSelected: {
     backgroundColor: Theme.textPrimaryDark,
@@ -1165,6 +1296,10 @@ export const createTripDesktopStyles = StyleSheet.create({
     lineHeight: 18,
     letterSpacing: -0.15,
   },
+  pickupLocCardTitleCompact: {
+    fontSize: 13,
+    lineHeight: 16,
+  },
   pickupLocCardTitleSelected: {
     color: Theme.textPrimaryDark,
   },
@@ -1173,6 +1308,10 @@ export const createTripDesktopStyles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textMuted,
     lineHeight: 16,
+  },
+  pickupLocCardAddressCompact: {
+    fontSize: 11,
+    lineHeight: 14,
   },
   pickupLocCardAddressSelected: {
     color: Theme.textSecondary,

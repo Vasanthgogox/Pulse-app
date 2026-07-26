@@ -13,9 +13,16 @@ import { ArrowUpRight, Rocket } from "lucide-react-native";
 import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 const cardShadow = Platform.select({
-  ios: { shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12 },
-  android: { elevation: 2 },
-  web: { boxShadow: "0 4px 18px rgba(15, 23, 42, 0.05)" } as ViewStyle,
+  ios: {
+    shadowColor: Theme.accentBrownDeep,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+  },
+  android: { elevation: 3 },
+  web: {
+    boxShadow: "0 8px 22px rgba(77, 54, 54, 0.1)",
+  } as ViewStyle,
   default: {},
 });
 
@@ -39,16 +46,21 @@ export function ReachDiscoveryCard({ layout = "default" }: ReachDiscoveryCardPro
       accessibilityRole="button"
       accessibilityLabel="Open Pulse Reach"
     >
+      <View style={styles.glowBlob} pointerEvents="none" />
       <View style={styles.iconWrap}>
-        <Rocket size={18} color={Theme.accentGold} />
+        <Rocket size={17} color={Theme.textOnPrimary} strokeWidth={2.25} />
       </View>
       <View style={styles.textCol}>
-        <Text style={styles.chip}>GROWTH</Text>
+        <View style={styles.chipRow}>
+          <Text style={styles.chip}>GROWTH</Text>
+          <View style={styles.chipDot} />
+          <Text style={styles.chipMeta}>BOOST</Text>
+        </View>
         <Text style={styles.title}>Pulse Reach</Text>
         <Text style={styles.sub}>Boost loads, earn credits</Text>
       </View>
       <View style={styles.arrowOrb}>
-        <ArrowUpRight size={13} color={Theme.accentGold} strokeWidth={2.2} />
+        <ArrowUpRight size={13} color={Theme.accentBrown} strokeWidth={2.4} />
       </View>
     </Pressable>
   );
@@ -59,14 +71,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: Theme.accentGoldMuted,
-    borderRadius: 14,
+    backgroundColor: Theme.accentBrownWash,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Theme.accentGoldBorder,
+    borderColor: Theme.accentBrownBorder,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     marginHorizontal: 16,
     marginTop: 10,
+    overflow: "hidden",
+    position: "relative",
     ...cardShadow,
   },
   cardSidebar: {
@@ -75,26 +89,71 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   cardPressed: { opacity: 0.94, transform: [{ scale: 0.99 }] },
+  glowBlob: {
+    position: "absolute",
+    right: -18,
+    top: -22,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: Theme.accentBrownSoft,
+    opacity: 0.7,
+  },
   iconWrap: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: Theme.accentBrownDeep,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
   },
-  textCol: { flex: 1, minWidth: 0, gap: 1 },
-  chip: { fontSize: 8, fontWeight: "700", letterSpacing: 0.8, color: Theme.accentGold, textTransform: "uppercase" },
-  title: { fontSize: 14, fontWeight: "700", color: Theme.textPrimaryDark },
-  sub: { fontSize: 11, fontWeight: "500", color: Theme.textSecondary },
+  textCol: { flex: 1, minWidth: 0, gap: 2 },
+  chipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  chip: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.9,
+    color: Theme.accentBrown,
+    textTransform: "uppercase",
+  },
+  chipDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: Theme.accentBrownBorder,
+  },
+  chipMeta: {
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+    color: Theme.textRouteCard,
+    textTransform: "uppercase",
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+    color: Theme.accentBrownDeep,
+  },
+  sub: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textRouteCard,
+  },
   arrowOrb: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.accentGoldBorder,
+    borderColor: Theme.accentBrownBorder,
   },
 });

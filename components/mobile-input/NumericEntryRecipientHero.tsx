@@ -32,7 +32,7 @@ export function NumericEntryRecipientHero({
   dense = false,
   onPress,
 }: NumericEntryRecipientHeroProps) {
-  const avatarSize = dense ? 44 : compact ? 56 : 64;
+  const avatarSize = dense ? 36 : compact ? 44 : 64;
   const title =
     caption && nameInline ? `${caption} ${party.name}`.trim() : party.name;
 

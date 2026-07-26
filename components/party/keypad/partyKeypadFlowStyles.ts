@@ -162,6 +162,15 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     borderTopRightRadius: 20,
     backgroundColor: Theme.surfaceGray,
   },
+  /** Tighter dock so wizard shell footer (Continue) stays visible on phones. */
+  keypadDockWizardCompact: {
+    paddingTop: 4,
+    paddingBottom: 2,
+    paddingHorizontal: 8,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    marginTop: 0,
+  },
   /** Full-bleed iOS-style dial pad (no side margins, system gray chrome). */
   keypadDockApple: {
     flexShrink: 0,
@@ -177,7 +186,15 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   extras: {
+    width: "100%",
+    flexShrink: 0,
+    gap: 8,
     marginTop: 12,
+  },
+  actionBarHost: {
+    flexShrink: 0,
+    width: "100%",
+    zIndex: 5,
   },
   hiddenInput: {
     position: "absolute",

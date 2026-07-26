@@ -146,7 +146,8 @@ export const CreateTripDesktopClientStep = memo(
     if (showMobileSaleKeypad) {
       return (
         <View style={s.saleMobileKeypadRoot}>
-          {onSelectLane ? (
+          {onSelectLane &&
+          (contractLanesLoading || contractLanes.length > 0) ? (
             <ClientLaneSearchPicker
               compact
               lanes={contractLanes}
@@ -159,6 +160,7 @@ export const CreateTripDesktopClientStep = memo(
             />
           ) : null}
           <ClientSaleKeypadFlow
+            compact
             clientPrice={clientPrice}
             onClientPriceChange={onClientPriceChange}
             partyPreview={partyPreview}
@@ -179,38 +181,74 @@ export const CreateTripDesktopClientStep = memo(
     return (
       <View style={[s.stepBody, compact && s.compactStepBody]}>
         <View style={s.commodityClientSection}>
-          <View
-            style={[s.commodityClientHeaderRow, compact && s.compactHeaderRow]}
-          >
-            <Text style={[s.sectionHeading, s.commodityClientHeaderTitle]}>
-              Billing client *
-            </Text>
-            <DesktopPartySearchField
-              value={partySearch}
-              onChangeText={handlePartySearch}
-              placeholder="Search client"
-              accessibilityLabel="Search billing client"
-            />
-            <View style={s.desktopPickerHeaderActions}>
-              <DesktopPickerHeaderActions
-                showChange={showClientChange}
-                changeExpanded={clientListOpen}
-                onToggleChange={onToggleClientList}
+          {compact ? (
+            <View style={s.compactPartyToolbar}>
+              <View style={s.compactPartyToolbarTop}>
+                <Text style={[s.sectionHeading, s.compactSectionHeading]}>
+                  Billing client *
+                </Text>
+                <View style={s.desktopPickerHeaderActions}>
+                  <DesktopPickerHeaderActions
+                    showChange={showClientChange}
+                    changeExpanded={clientListOpen}
+                    onToggleChange={onToggleClientList}
+                  />
+                  <Pressable
+                    onPress={onAddClient}
+                    style={s.compactAddClientBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add new client"
+                    hitSlop={8}
+                  >
+                    <Plus
+                      size={14}
+                      color={Theme.textPrimaryDark}
+                      strokeWidth={2.5}
+                    />
+                    <Text style={s.compactAddClientBtnText}>Add client</Text>
+                  </Pressable>
+                </View>
+              </View>
+              <DesktopPartySearchField
+                compact
+                value={partySearch}
+                onChangeText={handlePartySearch}
+                placeholder="Search client"
+                accessibilityLabel="Search billing client"
               />
-              <Pressable
-                onPress={onAddClient}
-                style={s.commodityAddClientBtn}
-                accessibilityRole="button"
-              >
-                <Plus
-                  size={14}
-                  color={Theme.textPrimaryDark}
-                  strokeWidth={2.5}
-                />
-                <Text style={s.commodityAddClientBtnText}>Add new client</Text>
-              </Pressable>
             </View>
-          </View>
+          ) : (
+            <View style={s.commodityClientHeaderRow}>
+              <Text style={[s.sectionHeading, s.commodityClientHeaderTitle]}>
+                Billing client *
+              </Text>
+              <DesktopPartySearchField
+                value={partySearch}
+                onChangeText={handlePartySearch}
+                placeholder="Search client"
+                accessibilityLabel="Search billing client"
+              />
+              <View style={s.desktopPickerHeaderActions}>
+                <DesktopPickerHeaderActions
+                  showChange={showClientChange}
+                  changeExpanded={clientListOpen}
+                  onToggleChange={onToggleClientList}
+                />
+                <Pressable
+                  onPress={onAddClient}
+                  style={s.commodityAddClientBtn}
+                  accessibilityRole="button"
+                >
+                  <Plus
+                    size={14}
+                    color={Theme.textPrimaryDark}
+                    strokeWidth={2.5}
+                  />
+                  <Text style={s.commodityAddClientBtnText}>Add new client</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
           <CreateTripDesktopClientGrid
             compact={compact}
             clients={filteredClients}

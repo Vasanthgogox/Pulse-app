@@ -46,6 +46,11 @@ export {
   type WizardPriorSelectionItem,
 } from "./WizardPriorSelections";
 export {
+  WizardActionBarHost,
+  WizardActionBarProvider,
+  useWizardActionBar,
+} from "./WizardActionBarContext";
+export {
   WizardNumericKeypadFlow,
   type WizardNumericKeypadField,
   type WizardNumericKeypadFlowProps,

@@ -19,6 +19,7 @@ import { useInputPlatform } from "@/components/mobile-input/useInputPlatform";
 import { usePhysicalKeypadInput } from "@/components/mobile-input/usePhysicalKeypadInput";
 import { IndiaFlagIcon } from "@/components/party/IndiaFlagIcon";
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
+import { WizardActionBarHost } from "@/components/full-page-wizard/WizardActionBarContext";
 import { KeypadDisplayValueWithCaret } from "@/components/party/keypad/KeypadDisplayValueWithCaret";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import Theme from "@/constants/Theme";
@@ -154,6 +155,8 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
 
         {footerExtras ? <View style={flow.extras}>{footerExtras}</View> : null}
       </View>
+
+      {wizardShell ? <WizardActionBarHost style={flow.actionBarHost} /> : null}
 
       {isDesktopWeb ? null : (
         <View

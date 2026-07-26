@@ -9,12 +9,10 @@ export type IndentWizardStep =
   | "weight";
 
 export const INDENT_WIZARD_STEPS: IndentWizardStep[] = [
-  "route",
   "client",
-  "prices",
+  "route",
   "vehicle",
-  "loadType",
-  "weight",
+  "prices",
 ];
 
 export function indentWizardStepLabel(step: IndentWizardStep): string {
@@ -24,9 +22,9 @@ export function indentWizardStepLabel(step: IndentWizardStep): string {
     case "client":
       return "Client";
     case "prices":
-      return "Commercials";
+      return "Target";
     case "vehicle":
-      return "Vehicle";
+      return "Load";
     case "loadType":
       return "Load type";
     case "weight":
@@ -47,23 +45,31 @@ export function indentStepCanAdvance(
         t(form.pickup_area) && t(form.drop_location) && t(form.pickup_date),
       );
     case "client":
-      return Boolean(form.client_id?.trim() && t(form.client_name));
+      return Boolean(
+        form.client_id?.trim() &&
+          t(form.client_name) &&
+          Number.isFinite(
+            parseFloat(String(form.client_price ?? "").replace(/,/g, "")),
+          ) &&
+          parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0,
+      );
     case "prices": {
-      const cp = parseFloat(String(form.client_price ?? "").replace(/,/g, ""));
+      if (!t(form.supplier_target)) return true;
       const st = parseFloat(
         String(form.supplier_target ?? "").replace(/,/g, ""),
       );
-      return Boolean(
-        t(form.client_price) &&
-          t(form.supplier_target) &&
-          Number.isFinite(cp) &&
-          cp > 0 &&
-          Number.isFinite(st) &&
-          st >= 0,
-      );
+      return Number.isFinite(st) && st >= 0;
     }
     case "vehicle":
-      return Boolean(t(form.vehicle_type));
+      return Boolean(
+        t(form.vehicle_type) &&
+          t(form.load_type) &&
+          t(form.weight) &&
+          Number.isFinite(
+            parseFloat(String(form.weight ?? "").replace(/,/g, "")),
+          ) &&
+          parseFloat(String(form.weight ?? "").replace(/,/g, "")) > 0,
+      );
     case "loadType":
       return Boolean(t(form.load_type));
     case "weight": {

@@ -4,13 +4,22 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import {
   checkOrgsConnected,
+  getStoryClosedInfo,
   getStoryPreview,
+  type StoryClosedReason,
   type StoryPreviewRow,
 } from '@/features/network/services/posts.service';
 import { ROUTES } from '@/lib/routes';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Clock3, MapPin, Truck } from 'lucide-react-native';
+import {
+  CheckCircle2,
+  Clock3,
+  MapPin,
+  SearchX,
+  Truck,
+  XCircle,
+} from 'lucide-react-native';
 import { lazy, Suspense, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +30,91 @@ function isPreviewExpired(preview: StoryPreviewRow): boolean {
   if (!preview.is_active) return true;
   if (!preview.expires_at) return false;
   return new Date(preview.expires_at).getTime() <= Date.now();
+}
+
+const CLOSED_COPY: Record<
+  StoryClosedReason,
+  { title: string; sub: string; tone: 'positive' | 'neutral' }
+> = {
+  assigned: {
+    title: 'This load has been assigned',
+    sub: 'The load giver has awarded this broadcast to a partner. Bidding is closed for this load.',
+    tone: 'positive',
+  },
+  withdrawn: {
+    title: 'This broadcast was withdrawn',
+    sub: 'The load giver cancelled this indent, so it is no longer open for bids.',
+    tone: 'neutral',
+  },
+  expired: {
+    title: 'This broadcast has expired',
+    sub: 'The bidding window for this load has ended.',
+    tone: 'neutral',
+  },
+  closed: {
+    title: 'This broadcast is closed',
+    sub: 'The load giver has stopped taking bids on this broadcast.',
+    tone: 'neutral',
+  },
+  removed: {
+    title: 'This broadcast is no longer available',
+    sub: 'The story may have been deleted, or the load has already been assigned.',
+    tone: 'neutral',
+  },
+};
+
+function closedIcon(reason: StoryClosedReason) {
+  switch (reason) {
+    case 'assigned':
+      return <CheckCircle2 size={26} color={Theme.positive} strokeWidth={1.8} />;
+    case 'withdrawn':
+      return <XCircle size={26} color={Theme.textSecondary} strokeWidth={1.8} />;
+    case 'removed':
+      return <SearchX size={26} color={Theme.textSecondary} strokeWidth={1.8} />;
+    default:
+      return <Clock3 size={26} color={Theme.textSecondary} strokeWidth={1.8} />;
+  }
+}
+
+/** Card-styled terminal state for a dead story link (assigned / expired / …). */
+function StoryClosedView({
+  reason,
+  onGoHome,
+}: {
+  reason: StoryClosedReason;
+  onGoHome: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const copy = CLOSED_COPY[reason];
+  return (
+    <View
+      style={[
+        styles.container,
+        styles.centered,
+        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+      ]}
+    >
+      <View style={[styles.card, styles.closedCard]}>
+        <View
+          style={[
+            styles.iconWrap,
+            copy.tone === 'positive' && styles.iconWrapPositive,
+          ]}
+        >
+          {closedIcon(reason)}
+        </View>
+        <Text style={styles.expiredTitle}>{copy.title}</Text>
+        <Text style={styles.expiredSub}>{copy.sub}</Text>
+        <Pressable
+          style={[styles.ctaBtn, styles.closedCta]}
+          onPress={onGoHome}
+          accessibilityRole="button"
+        >
+          <Text style={styles.ctaBtnText}>Find more loads on Pulse</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
 function PreviewShell({
@@ -83,6 +177,21 @@ export default function StoryDetailRoute() {
     staleTime: 30_000,
   });
 
+  const storyClosed =
+    !previewQ.isLoading &&
+    (previewQ.data == null || isPreviewExpired(previewQ.data));
+
+  /** Why the link is dead — awarded indent, cancelled, expired, deleted. */
+  const closedInfoQ = useQuery({
+    queryKey: ['q', 'posts', 'story-closed', params.postId],
+    queryFn: () => getStoryClosedInfo(params.postId!),
+    enabled:
+      Boolean(params.postId) &&
+      storyClosed &&
+      !(myOrgId && previewQ.data?.organization_id === myOrgId),
+    staleTime: 30_000,
+  });
+
   const connectionQ = useQuery({
     queryKey: ['q', 'posts', 'org-connected', myOrgId, previewQ.data?.organization_id],
     queryFn: async () => {
@@ -104,17 +213,28 @@ export default function StoryDetailRoute() {
   }
 
   const preview = previewQ.data;
+  /**
+   * Load givers keep access to their own broadcast after award/deactivation
+   * (mirrors getNetworkFeed, which keeps own-org awarded LOAD posts visible).
+   */
+  const isOwnStory = Boolean(
+    myOrgId && preview && preview.organization_id === myOrgId,
+  );
 
-  if (!preview || isPreviewExpired(preview)) {
+  if (storyClosed && !isOwnStory) {
+    if (closedInfoQ.isLoading) {
+      return <LazySuspenseInlineFallback />;
+    }
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.expiredTitle}>This broadcast has expired</Text>
-        <Text style={styles.expiredSub}>The load may have been awarded or the story has expired.</Text>
-        <Pressable style={styles.ctaBtn} onPress={() => router.replace(ROUTES.INDEX)}>
-          <Text style={styles.ctaBtnText}>Go to Pulse</Text>
-        </Pressable>
-      </View>
+      <StoryClosedView
+        reason={closedInfoQ.data?.reason ?? 'removed'}
+        onGoHome={() => router.replace(ROUTES.INDEX)}
+      />
     );
+  }
+
+  if (!preview) {
+    return <LazySuspenseInlineFallback />;
   }
 
   if (!user) {
@@ -168,6 +288,15 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 24,
   },
+  /** Terminal-state card — centered, no list below so no bottom margin. */
+  closedCard: {
+    width: '100%',
+    maxWidth: 380,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    gap: 6,
+    marginBottom: 0,
+  },
   iconWrap: {
     width: 52,
     height: 52,
@@ -177,21 +306,40 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceLight,
     marginBottom: 4,
   },
+  iconWrapPositive: {
+    backgroundColor: Theme.positiveMuted,
+  },
   orgName: { fontSize: 15, fontWeight: '800', color: Theme.textPrimaryDark },
   routeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   routeText: { fontSize: 14, fontWeight: '700', color: Theme.textPrimaryDark },
   metaText: { fontSize: 12, fontWeight: '600', color: Theme.textSecondary },
   expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
   expiryText: { fontSize: 11, fontWeight: '500', color: Theme.textMuted },
-  expiredTitle: { fontSize: 16, fontWeight: '800', color: Theme.textPrimaryDark },
-  expiredSub: { fontSize: 13, fontWeight: '500', color: Theme.textSecondary, textAlign: 'center' },
+  expiredTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    textAlign: 'center',
+  },
+  expiredSub: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Theme.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   ctaBtn: {
     backgroundColor: Theme.brandBlueInk,
     borderRadius: 12,
     paddingVertical: 14,
+    paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 48,
+  },
+  closedCta: {
+    marginTop: 14,
+    alignSelf: 'stretch',
   },
   ctaBtnText: { fontSize: 13, fontWeight: '700', color: Theme.textOnPrimary },
 });

@@ -34,7 +34,7 @@ function ratingColor(rating: HealthRating): string {
     case "good":
       return Theme.primary;
     case "fair":
-      return Theme.accentGoldPressed;
+      return Theme.accentBrown;
     case "poor":
       return Theme.negative;
     default:
@@ -49,10 +49,11 @@ function ratingBadgeBg(rating: HealthRating): string {
     case "good":
       return Theme.primary + "14";
     case "fair":
+      return Theme.accentBrownMuted;
     case "poor":
-      return Theme.accentGoldMuted;
+      return Theme.negativeMuted;
     default:
-      return Theme.surface;
+      return Theme.surfaceGray;
   }
 }
 
@@ -65,9 +66,9 @@ function verdictColors(verdict: string): { text: string; bg: string; border: str
     };
   }
   if (verdict === "Fair") {
-    return { text: Theme.accentGoldPressed, bg: Theme.accentGoldMuted, border: Theme.accentGoldBorder };
+    return { text: Theme.accentBrownDeep, bg: Theme.accentBrownMuted, border: Theme.accentBrownBorder };
   }
-  return { text: Theme.negative, bg: Theme.negativeMuted, border: Theme.borderLight };
+  return { text: Theme.negative, bg: Theme.negativeMuted, border: Theme.borderInput };
 }
 
 const FACTOR_ICONS = {
@@ -97,7 +98,7 @@ export function ReachCampaignHealthCard({
   );
   const verdict = verdictColors(health.verdict);
   const ringColor =
-    health.score >= 75 ? Theme.success : health.score >= 50 ? Theme.accentGold : Theme.negative;
+    health.score >= 75 ? Theme.success : health.score >= 50 ? Theme.accentBrown : Theme.negative;
   const ringOffset = RING_C - (RING_C * health.score) / 100;
   const ringHint =
     health.verdict === "Healthy"
@@ -112,7 +113,7 @@ export function ReachCampaignHealthCard({
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <View style={styles.headerIcon}>
-            <Activity size={14} color={Theme.accentGoldPressed} />
+            <Activity size={14} color={Theme.accentBrown} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.headerLabel}>Campaign Health &amp; Diagnostics</Text>
@@ -185,8 +186,8 @@ export function ReachCampaignHealthCard({
 
           {health.remainingRewardBudget != null ? (
             <View style={styles.factorRow}>
-              <View style={[styles.factorIcon, { backgroundColor: Theme.accentGoldMuted }]}>
-                <Wallet size={13} color={Theme.accentGoldPressed} />
+              <View style={[styles.factorIcon, { backgroundColor: Theme.accentBrownMuted }]}>
+                <Wallet size={13} color={Theme.accentBrown} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.factorLabel}>Remaining Reward Budget</Text>
@@ -204,7 +205,7 @@ export function ReachCampaignHealthCard({
       {health.suggestions.map((s) => (
         <View key={s.id} style={styles.suggestionBanner}>
           <View style={styles.suggestionIcon}>
-            <Lightbulb size={14} color={Theme.textPrimaryDark} />
+            <Lightbulb size={14} color={Theme.textOnPrimary} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.suggestionTitle}>Smart Suggestion: {s.title}</Text>
@@ -218,10 +219,10 @@ export function ReachCampaignHealthCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 20,
-    backgroundColor: Theme.networkCardBackground,
+    borderRadius: 10,
+    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.networkCardBorder,
+    borderColor: Theme.borderInput,
     padding: 16,
     gap: 14,
   },
@@ -231,54 +232,51 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
     paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderInput,
   },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 9, flex: 1, minWidth: 0 },
   headerIcon: {
     width: 28,
     height: 28,
-    borderRadius: 10,
-    backgroundColor: Theme.accentGoldMuted,
-    borderWidth: 1,
-    borderColor: Theme.accentGoldBorder,
+    borderRadius: 8,
+    backgroundColor: Theme.accentBrownMuted,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   headerLabel: {
-    fontSize: 11,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: -0.1,
   },
-  headerSub: { fontSize: 9, fontWeight: "500", color: Theme.textMuted, marginTop: 1 },
+  headerSub: { fontSize: 11, fontWeight: "500", color: Theme.textMuted, marginTop: 2 },
   verdictPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 999,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
     flexShrink: 0,
   },
   verdictDot: { width: 6, height: 6, borderRadius: 3 },
-  verdictText: { fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.4 },
+  verdictText: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
 
   bodyGrid: { gap: 12 },
   bodyGridWide: { flexDirection: "row", alignItems: "center", gap: 16 },
   ringBox: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 12,
+    gap: 8,
+    paddingVertical: 14,
     paddingHorizontal: 10,
-    borderRadius: 16,
-    backgroundColor: Theme.surface,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
   },
   ringBoxWide: { minWidth: 160, alignSelf: "stretch" },
   ringWrap: { width: RING_SIZE, height: RING_SIZE, alignItems: "center", justifyContent: "center" },
@@ -289,53 +287,54 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ringScore: {
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 20,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
+    letterSpacing: -0.5,
   },
   ringCaption: {
-    fontSize: 7,
-    fontWeight: "800",
+    fontSize: 8,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginTop: 1,
+    marginTop: 2,
   },
-  ringHint: { fontSize: 9, fontWeight: "600", color: Theme.textSecondary, textAlign: "center" },
+  ringHint: { fontSize: 10, fontWeight: "500", color: Theme.textSecondary, textAlign: "center" },
 
   factorList: { flex: 1, minWidth: 0, gap: 8 },
   factorRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 14,
+    borderColor: Theme.borderInput,
+    borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 9,
+    paddingVertical: 10,
   },
   factorIcon: {
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  factorLabel: { fontSize: 11, fontWeight: "800", color: Theme.textPrimaryDark },
-  factorDetail: { fontSize: 9, fontWeight: "500", color: Theme.textMuted, marginTop: 1 },
+  factorLabel: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
+  factorDetail: { fontSize: 10, fontWeight: "500", color: Theme.textMuted, marginTop: 2 },
   ratingBadge: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: 6,
     flexShrink: 0,
   },
-  ratingBadgeText: { fontSize: 8, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.3 },
+  ratingBadgeText: { fontSize: 9, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
   budgetValue: {
-    fontSize: 11,
-    fontWeight: "900",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
     flexShrink: 0,
@@ -345,33 +344,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
-    borderRadius: 14,
-    backgroundColor: Theme.accentGoldMuted,
+    borderRadius: 8,
+    backgroundColor: Theme.accentBrownWash,
     borderWidth: 1,
-    borderColor: Theme.accentGoldBorder,
+    borderColor: Theme.accentBrownBorder,
     padding: 12,
   },
   suggestionIcon: {
     width: 28,
     height: 28,
-    borderRadius: 10,
-    backgroundColor: Theme.accentGold,
+    borderRadius: 8,
+    backgroundColor: Theme.accentBrown,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   suggestionTitle: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.accentBrownDeep,
+    letterSpacing: -0.1,
   },
   suggestionBody: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
     color: Theme.textSecondary,
-    lineHeight: 14,
+    lineHeight: 15,
     marginTop: 2,
   },
 });

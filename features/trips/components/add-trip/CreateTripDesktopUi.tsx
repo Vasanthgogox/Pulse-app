@@ -8,6 +8,8 @@ import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
 
 /** Matches old partner/client picker avatar density inside the new entity card. */
 export const DESKTOP_ENTITY_AVATAR_SIZE = 40;
+/** Dense party tiles on mobile create-trip / create-load. */
+export const COMPACT_ENTITY_AVATAR_SIZE = 32;
 
 export function entityInitials(name: string, fallback = "?"): string {
   const t = name.trim();
@@ -85,6 +87,8 @@ export type DesktopEntityCardProps = {
   avatarSquare?: boolean;
   /** Green status dot when linked / integrated (network & finance parity). */
   isIntegrated?: boolean;
+  /** Smaller avatar / typography for mobile enterprise density. */
+  compact?: boolean;
 };
 
 export const DesktopEntityCard = memo(function DesktopEntityCard({
@@ -100,12 +104,15 @@ export const DesktopEntityCard = memo(function DesktopEntityCard({
   avatarSeed,
   organizationImageUrl,
   organizationAvatarSeed,
-  avatarSize = DESKTOP_ENTITY_AVATAR_SIZE,
+  avatarSize,
   avatarSquare = false,
   isIntegrated = false,
+  compact = false,
 }: DesktopEntityCardProps) {
   const fallbackInitials = initials ?? entityInitials(title);
   const usePartyAvatar = entityType != null;
+  const resolvedAvatarSize =
+    avatarSize ?? (compact ? COMPACT_ENTITY_AVATAR_SIZE : DESKTOP_ENTITY_AVATAR_SIZE);
 
   return (
     <Pressable
@@ -113,13 +120,14 @@ export const DesktopEntityCard = memo(function DesktopEntityCard({
       disabled={disabled}
       style={[
         s.desktopEntityCard,
+        compact && s.compactDesktopEntityCard,
         selected && s.desktopEntityCardSelected,
         disabled && s.desktopEntityCardDisabled,
       ]}
       accessibilityRole="button"
       accessibilityState={{ selected, disabled }}
     >
-      <View style={s.desktopEntityCardLeft}>
+      <View style={[s.desktopEntityCardLeft, compact && s.compactDesktopEntityCardLeft]}>
         {usePartyAvatar ? (
           <EntityAvatar
             name={title}
@@ -128,7 +136,7 @@ export const DesktopEntityCard = memo(function DesktopEntityCard({
             avatarSeed={avatarSeed}
             organizationImageUrl={organizationImageUrl}
             organizationAvatarSeed={organizationAvatarSeed}
-            size={avatarSize}
+            size={resolvedAvatarSize}
             isIntegrated={isIntegrated}
             showIntegrationBadge
             badgeOverlay
@@ -137,13 +145,15 @@ export const DesktopEntityCard = memo(function DesktopEntityCard({
           <View
             style={[
               avatarSquare ? s.desktopEntityAvatarSquare : s.desktopEntityAvatar,
-              { width: avatarSize, height: avatarSize },
+              { width: resolvedAvatarSize, height: resolvedAvatarSize },
+              compact && { borderRadius: avatarSquare ? 8 : 999 },
               selected && s.desktopEntityAvatarSelected,
             ]}
           >
             <Text
               style={[
                 s.desktopEntityAvatarText,
+                compact && { fontSize: 11 },
                 selected && s.desktopEntityAvatarTextSelected,
               ]}
             >
@@ -152,11 +162,20 @@ export const DesktopEntityCard = memo(function DesktopEntityCard({
           </View>
         )}
         <View style={s.desktopEntityCopy}>
-          <Text style={s.desktopEntityTitle} numberOfLines={1}>
+          <Text
+            style={[s.desktopEntityTitle, compact && s.compactDesktopEntityTitle]}
+            numberOfLines={1}
+          >
             {title}
           </Text>
           {subtitle ? (
-            <Text style={s.desktopEntitySubtitle} numberOfLines={1}>
+            <Text
+              style={[
+                s.desktopEntitySubtitle,
+                compact && s.compactDesktopEntitySubtitle,
+              ]}
+              numberOfLines={1}
+            >
               {subtitle}
             </Text>
           ) : null}

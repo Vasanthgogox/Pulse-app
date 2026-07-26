@@ -1,8 +1,9 @@
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import { alertRegistryActionStyles } from "@/components/AlertRegistryCardActions";
 import Theme from "@/constants/Theme";
+import Layout from "@/constants/Layout";
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
 
 export type FullPageWizardFooterActionVariant = "wizard" | "registry";
@@ -40,22 +41,107 @@ export function FullPageWizardFooter({
   actionVariant = "wizard",
   primaryTone = "brand",
 }: FullPageWizardFooterProps) {
+  const { width } = useWindowDimensions();
+  const isMobile = width < Layout.wizardDesktopGridMinWidth;
   const disabled = primaryDisabled || loading;
   const isRegistry = actionVariant === "registry";
   const isInk = !isRegistry && primaryTone === "ink";
   const actionStyles = alertRegistryActionStyles;
   const showHint = Boolean(hint && disabled && !loading);
+  const useMobileWizardBar = isMobile && !isRegistry && !summary;
 
   const footerBarStyle = isRegistry
     ? actionStyles.footerBar
     : summary
       ? styles.footerBarWithSummary
-      : styles.footerBar;
+      : useMobileWizardBar
+        ? styles.footerBarMobile
+        : styles.footerBar;
+
+  const primaryBtn = (
+    <Pressable
+      style={[
+        isRegistry
+          ? actionStyles.footerPrimaryBtn
+          : isInk
+            ? styles.submitBtnInk
+            : styles.submitBtn,
+        useMobileWizardBar && styles.submitBtnMobileGrow,
+        summary && !isRegistry && styles.submitBtnWithSummary,
+        disabled &&
+          (isRegistry
+            ? actionStyles.btnDisabled
+            : isInk
+              ? styles.submitBtnInkDisabled
+              : styles.submitBtnDisabled),
+      ]}
+      onPress={onPrimaryPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      accessibilityLabel={primaryLabel}
+    >
+      {loading ? (
+        <ActivityIndicator
+          color={
+            isRegistry
+              ? "#fff"
+              : isInk
+                ? disabled
+                  ? Theme.textMuted
+                  : Theme.textOnPrimary
+                : Theme.buttonPrimaryText
+          }
+          size="small"
+        />
+      ) : (
+        <>
+          <Text
+            style={
+              isRegistry
+                ? actionStyles.footerPrimaryBtnText
+                : isInk
+                  ? [
+                      styles.submitBtnInkText,
+                      disabled && styles.submitBtnInkTextDisabled,
+                    ]
+                  : [
+                      styles.submitBtnText,
+                      disabled && styles.submitBtnTextDisabled,
+                    ]
+            }
+            numberOfLines={1}
+          >
+            {primaryLabel}
+          </Text>
+          {!isRegistry ? (
+            <ChevronRight
+              size={18}
+              color={
+                disabled
+                  ? Theme.textMuted
+                  : isInk
+                    ? Theme.textOnPrimary
+                    : Theme.buttonPrimaryText
+              }
+              strokeWidth={2.5}
+            />
+          ) : null}
+        </>
+      )}
+    </Pressable>
+  );
 
   return (
-    <View style={styles.footerRoot}>
+    <View style={[styles.footerRoot, useMobileWizardBar && styles.footerRootMobile]}>
       {showHint && !isRegistry ? (
-        <Text style={styles.footerHintAbove} numberOfLines={2}>
+        <Text
+          style={[
+            styles.footerHintAbove,
+            useMobileWizardBar && styles.footerHintAboveMobile,
+          ]}
+          numberOfLines={2}
+        >
           {hint}
         </Text>
       ) : null}
@@ -71,116 +157,70 @@ export function FullPageWizardFooter({
           </Text>
         ) : null}
 
-        {onSecondaryPress && !isRegistry ? (
-          <Pressable
-            style={styles.cancelBtn}
-            onPress={onSecondaryPress}
-            accessibilityRole="button"
-            accessibilityLabel={secondaryLabel}
-            hitSlop={8}
-          >
-            <ChevronLeft size={18} color={Theme.textRouteCard} strokeWidth={2.5} />
-            <Text style={styles.cancelBtnText}>{secondaryLabel}</Text>
-          </Pressable>
-        ) : onSecondaryPress && isRegistry ? (
-          <Pressable style={actionStyles.footerGhostBtn} onPress={onSecondaryPress}>
-            <Text style={actionStyles.footerGhostBtnText}>{secondaryLabel}</Text>
-          </Pressable>
-        ) : !isRegistry ? (
-          <View style={styles.footerBackSpacer} />
-        ) : null}
-
-        <View style={styles.footerActions}>
-          {tertiaryLabel && onTertiaryPress ? (
-            <Pressable
-              style={[
-                isRegistry ? actionStyles.footerTertiaryBtn : styles.tertiaryBtn,
-                !isRegistry && tertiaryDisabled && styles.tertiaryBtnDisabled,
-                isRegistry && tertiaryDisabled && actionStyles.btnDisabled,
-              ]}
-              onPress={onTertiaryPress}
-              disabled={tertiaryDisabled}
-              accessibilityRole="button"
-            >
-              <Text
-                style={
-                  isRegistry
-                    ? actionStyles.footerTertiaryBtnText
-                    : styles.tertiaryBtnText
-                }
+        {useMobileWizardBar ? (
+          <>
+            {onSecondaryPress ? (
+              <Pressable
+                style={styles.cancelBtnMobile}
+                onPress={onSecondaryPress}
+                accessibilityRole="button"
+                accessibilityLabel={secondaryLabel}
+                hitSlop={8}
               >
-                {tertiaryLabel}
-              </Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            style={[
-              isRegistry
-                ? actionStyles.footerPrimaryBtn
-                : isInk
-                  ? styles.submitBtnInk
-                  : styles.submitBtn,
-              summary && !isRegistry && styles.submitBtnWithSummary,
-              disabled &&
-                (isRegistry
-                  ? actionStyles.btnDisabled
-                  : isInk
-                    ? styles.submitBtnInkDisabled
-                    : styles.submitBtnDisabled),
-            ]}
-            onPress={onPrimaryPress}
-            disabled={disabled}
-            accessibilityRole="button"
-            accessibilityState={{ disabled }}
-            accessibilityLabel={primaryLabel}
-          >
-            {loading ? (
-              <ActivityIndicator
-                color={
-                  isRegistry
-                    ? "#fff"
-                    : isInk
-                      ? Theme.textOnPrimary
-                      : Theme.buttonPrimaryText
-                }
-                size="small"
-              />
-            ) : (
-              <>
-                <Text
-                  style={
-                    isRegistry
-                      ? actionStyles.footerPrimaryBtnText
-                      : isInk
-                        ? [
-                            styles.submitBtnInkText,
-                            disabled && styles.submitBtnInkTextDisabled,
-                          ]
-                        : [
-                            styles.submitBtnText,
-                            disabled && styles.submitBtnTextDisabled,
-                          ]
-                  }
+                <ChevronLeft size={18} color={Theme.textRouteCard} strokeWidth={2.5} />
+                <Text style={styles.cancelBtnTextMobile}>{secondaryLabel}</Text>
+              </Pressable>
+            ) : null}
+            {primaryBtn}
+          </>
+        ) : (
+          <>
+            {onSecondaryPress && !isRegistry ? (
+              <Pressable
+                style={styles.cancelBtn}
+                onPress={onSecondaryPress}
+                accessibilityRole="button"
+                accessibilityLabel={secondaryLabel}
+                hitSlop={8}
+              >
+                <ChevronLeft size={18} color={Theme.textRouteCard} strokeWidth={2.5} />
+                <Text style={styles.cancelBtnText}>{secondaryLabel}</Text>
+              </Pressable>
+            ) : onSecondaryPress && isRegistry ? (
+              <Pressable style={actionStyles.footerGhostBtn} onPress={onSecondaryPress}>
+                <Text style={actionStyles.footerGhostBtnText}>{secondaryLabel}</Text>
+              </Pressable>
+            ) : !isRegistry ? (
+              <View style={styles.footerBackSpacer} />
+            ) : null}
+
+            <View style={styles.footerActions}>
+              {tertiaryLabel && onTertiaryPress ? (
+                <Pressable
+                  style={[
+                    isRegistry ? actionStyles.footerTertiaryBtn : styles.tertiaryBtn,
+                    !isRegistry && tertiaryDisabled && styles.tertiaryBtnDisabled,
+                    isRegistry && tertiaryDisabled && actionStyles.btnDisabled,
+                  ]}
+                  onPress={onTertiaryPress}
+                  disabled={tertiaryDisabled}
+                  accessibilityRole="button"
                 >
-                  {primaryLabel}
-                </Text>
-                {!isRegistry ? (
-                  <ChevronRight
-                    size={18}
-                    color={
-                      disabled
-                        ? Theme.textMuted
-                        : isInk
-                          ? Theme.textOnPrimary
-                          : Theme.buttonPrimaryText
+                  <Text
+                    style={
+                      isRegistry
+                        ? actionStyles.footerTertiaryBtnText
+                        : styles.tertiaryBtnText
                     }
-                    strokeWidth={2.5}
-                  />
-                ) : null}
-              </>
-            )}
-          </Pressable>
-        </View>
+                  >
+                    {tertiaryLabel}
+                  </Text>
+                </Pressable>
+              ) : null}
+              {primaryBtn}
+            </View>
+          </>
+        )}
       </View>
       {hint && !showHint ? (
         <Text style={isRegistry ? actionStyles.footerHint : styles.footerHint}>

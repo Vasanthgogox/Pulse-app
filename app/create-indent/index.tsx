@@ -51,11 +51,21 @@ import {
 } from "@/features/indents/components/create-indent/createIndentWizardSteps";
 import type { FormState } from "@/features/indents/components/create-indent/createIndentForm.types";
 import { IndentWizardMobileStep } from "@/features/indents/components/create-indent/IndentWizardMobileStep";
+import { CreateIndentNetworkTargetStep } from "@/features/indents/components/create-indent/CreateIndentNetworkTargetStep";
 import { SmartInput } from "@/components/mobile-input";
 import { ADD_TRIP_FORM } from "@/features/trips/components/add-trip/addTripFormTokens";
 import { AddTripModalLayout } from "@/features/trips/components/add-trip/AddTripModalLayout";
 import { AddTripWizardProgress } from "@/features/trips/components/add-trip/AddTripWizardProgress";
+import { CreateTripDesktopClientStep } from "@/features/trips/components/add-trip/CreateTripDesktopClientStep";
+import { CreateTripDesktopCommodityStep } from "@/features/trips/components/add-trip/CreateTripDesktopCommodityStep";
+import { CreateTripDesktopRouteStep } from "@/features/trips/components/add-trip/CreateTripDesktopRouteStep";
+import { CreateTripDesktopStepper } from "@/features/trips/components/add-trip/CreateTripDesktopStepper";
+import { createTripDesktopStyles as createTripStyles } from "@/features/trips/components/add-trip/createTripDesktop.styles";
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
+import {
+  buildPickupRecommendations,
+  preferredPickupRecommendation,
+} from "@/features/trips/components/add-trip/pickupRecommendations.util";
 import {
     BODY_LENGTH_SELECT_OPTIONS,
     normalizeBodyLengthKey,
@@ -138,8 +148,10 @@ function validateForm(state: FormState): Record<string, string> {
   r("drop_location", required(), maxLength(255));
   const clientPriceErr = positiveAmount()(state.client_price);
   if (clientPriceErr) errors.client_price = clientPriceErr;
-  const supplierTargetErr = nonNegativeAmount()(state.supplier_target);
-  if (supplierTargetErr) errors.supplier_target = supplierTargetErr;
+  if ((state.supplier_target ?? "").trim()) {
+    const supplierTargetErr = nonNegativeAmount()(state.supplier_target);
+    if (supplierTargetErr) errors.supplier_target = supplierTargetErr;
+  }
   r("vehicle_type", required("Vehicle is required"), maxLength(100));
   r("load_type", required("Load type is required"), maxLength(100));
   const weightStr = (state.weight ?? "").trim();
@@ -359,9 +371,9 @@ export default function CreateIndentScreen() {
     [cancelActionHintBlurTimer],
   );
 
-  /** Stepped wizard below desktop grid width; wide screens use enterprise multi-card form. */
+  /** Create Load now uses the same stepped enterprise flow as Create Trip at every width. */
   const isDesktopEnterprise = isDesktopWizardForm(windowWidth);
-  const isMobileWizard = !isDesktopEnterprise && WIZARD_FULL_PAGE_STEPPED;
+  const isMobileWizard = WIZARD_FULL_PAGE_STEPPED;
 
   const isWide = windowWidth >= 720;
   const isCompactMobile = windowWidth < 480;
@@ -416,14 +428,14 @@ export default function CreateIndentScreen() {
 
   const isDenseForm =
     isMobileWizard || windowWidth < Layout.wizardSteppedMaxWidth;
-  const [wizardStep, setWizardStep] = useState<IndentWizardStep>("route");
+  const [wizardStep, setWizardStep] = useState<IndentWizardStep>("client");
   const [wizardPriceField, setWizardPriceField] = useState<"client" | "supplier">(
     "client",
   );
 
   useEffect(() => {
     if (!isMobileWizard) return;
-    setWizardStep("route");
+    setWizardStep("client");
   }, [isMobileWizard, orgId, routeDraftId]);
 
   useEffect(() => {
@@ -738,6 +750,24 @@ export default function CreateIndentScreen() {
     orgId,
     form.client_id,
   );
+  const pickupRecommendations = useMemo(
+    () =>
+      buildPickupRecommendations(
+        selectedClientRow,
+        clientWarehouses,
+        [],
+      ),
+    [clientWarehouses, selectedClientRow],
+  );
+
+  useEffect(() => {
+    if (wizardStep !== "route" || form.pickup_area.trim()) return;
+    const preferred = preferredPickupRecommendation(pickupRecommendations);
+    if (!preferred) return;
+    update({ pickup_area: preferred.address });
+    setPickupLat(preferred.lat);
+    setPickupLon(preferred.lon);
+  }, [form.pickup_area, pickupRecommendations, update, wizardStep]);
 
   const handleSelectLane = useCallback(
     (lane: ClientLaneRate) => {
@@ -819,14 +849,14 @@ export default function CreateIndentScreen() {
     [focusField, form.client_id, showDialog, update],
   );
 
-  const handleBackPress = useCallback(() => {
-    if (isMobileWizard) {
-      const idx = INDENT_WIZARD_STEPS.indexOf(wizardStep);
-      if (idx > 0) {
-        setWizardStep(INDENT_WIZARD_STEPS[idx - 1]!);
-        return;
-      }
-    }
+  const handleClearClient = useCallback(() => {
+    update({ client_id: null, client_name: "", client_price: "" });
+    setSelectedLaneId(null);
+    setLaneSearch("");
+    setClientListExpanded(true);
+  }, [update]);
+
+  const handleClosePress = useCallback(() => {
     const hasUnsavedChanges =
       JSON.stringify(form) !== JSON.stringify(lastSavedForm);
     if (!hasUnsavedChanges) {
@@ -840,7 +870,18 @@ export default function CreateIndentScreen() {
     ).then((confirmed) => {
       if (confirmed) safeBack();
     });
-  }, [confirmDialog, form, isMobileWizard, lastSavedForm, safeBack, wizardStep]);
+  }, [confirmDialog, form, lastSavedForm, safeBack]);
+
+  const handleBackPress = useCallback(() => {
+    if (isMobileWizard) {
+      const idx = INDENT_WIZARD_STEPS.indexOf(wizardStep);
+      if (idx > 0) {
+        setWizardStep(INDENT_WIZARD_STEPS[idx - 1]!);
+        return;
+      }
+    }
+    handleClosePress();
+  }, [handleClosePress, isMobileWizard, wizardStep]);
 
   // Wizard-specific submit/labels are derived after `canSubmit` is computed.
 
@@ -1096,9 +1137,9 @@ export default function CreateIndentScreen() {
     (form.weight ?? "").trim().length > 0 &&
     parseFloat((form.weight ?? "").replace(/,/g, "")) > 0 &&
     (form.client_price ?? "").trim().length > 0 &&
-    (form.supplier_target ?? "").trim().length > 0 &&
     parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
-    parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0;
+    (!(form.supplier_target ?? "").trim() ||
+      parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0);
 
   const stepCanAdvance = useMemo(() => {
     if (!isMobileWizard) return canSubmit;
@@ -1126,14 +1167,14 @@ export default function CreateIndentScreen() {
   );
 
   const wizardSubtitle = isMobileWizard
-    ? wizardStep === "route"
-      ? "Pickup, drop and load date."
-      : wizardStep === "client"
-        ? "Select client, then search a contract lane to auto-fill."
+    ? wizardStep === "client"
+      ? "Select billing client, optional contract lane, and sale value."
+      : wizardStep === "route"
+        ? "Enter pickup, drop and trip date."
         : wizardStep === "prices"
-          ? "Client price and supplier target."
+          ? "Set an optional supplier target before sharing."
           : wizardStep === "vehicle"
-            ? "Vehicle type for this load."
+            ? "Vehicle type, load type and tonnage."
             : wizardStep === "loadType"
               ? "Commodity / load type."
               : "Weight in tons."
@@ -1171,6 +1212,245 @@ export default function CreateIndentScreen() {
   const webTextInputOutline = (
     Platform.OS === "web" ? { outlineStyle: "none" as const } : {}
   ) as TextStyle;
+
+  if (WIZARD_FULL_PAGE_STEPPED) {
+    const compactWizard = !isDesktopEnterprise;
+    const fillWizardBody =
+      compactWizard && wizardStep === "client" && Boolean(form.client_id);
+    const stepIndex = INDENT_WIZARD_STEPS.indexOf(wizardStep);
+    const progressSteps = INDENT_WIZARD_STEPS.map((id) => ({
+      id,
+      label: indentWizardStepLabel(id),
+    }));
+    const desktopSteps = INDENT_WIZARD_STEPS.map((id, index) => ({
+      id,
+      num: index + 1,
+      title: indentWizardStepLabel(id),
+    }));
+    const handleStepPress = (stepId: string, index: number) => {
+      if (index < 0 || index > stepIndex) return;
+      const target = INDENT_WIZARD_STEPS[index];
+      if (target) setWizardStep(target);
+    };
+    const routeState = {
+      pickupArea: form.pickup_area,
+      dropLocation: form.drop_location,
+      pickupLat,
+      pickupLon,
+      dropLat,
+      dropLon,
+      tripStartDate: form.pickup_date,
+    };
+    const routeSetters = {
+      setPickupArea: (value: string) => {
+        update({ pickup_area: value });
+        setPickupLat(null);
+        setPickupLon(null);
+      },
+      setDropLocation: (value: string) => {
+        update({ drop_location: value });
+        setDropLat(null);
+        setDropLon(null);
+      },
+      setPickupCoords: (lat: number, lon: number) => {
+        setPickupLat(lat);
+        setPickupLon(lon);
+      },
+      setDropCoords: (lat: number, lon: number) => {
+        setDropLat(lat);
+        setDropLon(lon);
+      },
+      setTripStartDate: (value: string) => update({ pickup_date: value }),
+    };
+
+    return (
+      <View style={{ flex: 1 }}>
+        <StatusBar style="dark" />
+        <AddTripModalLayout
+          title="Create Load"
+          insightPreset="load"
+          subtitle={wizardSubtitle}
+          stepIndex={stepIndex + 1}
+          stepTotal={INDENT_WIZARD_STEPS.length}
+          submitLabel={wizardSubmitLabel}
+          canSubmit={stepCanAdvance}
+          submitting={submitting}
+          lockPrimaryUntilValid
+          validationMessage="Fill the required details to continue"
+          onClose={handleClosePress}
+          onBack={stepIndex > 0 ? handleBackPress : undefined}
+          onSubmit={handleWizardPrimary}
+          fillBody={fillWizardBody || isDesktopEnterprise}
+          scrollBody={!isDesktopEnterprise && !fillWizardBody}
+          steppedLayout={isDesktopEnterprise}
+          tertiaryLabel={isDesktopEnterprise ? "Save draft" : undefined}
+          onTertiaryPress={isDesktopEnterprise ? persistDraft : undefined}
+          tertiaryDisabled={!canSaveDraft}
+          progress={
+            isDesktopEnterprise ? (
+              <CreateTripDesktopStepper
+                steps={desktopSteps}
+                currentStepId={wizardStep}
+                onStepPress={handleStepPress}
+              />
+            ) : (
+              <AddTripWizardProgress
+                steps={progressSteps}
+                currentStepId={wizardStep}
+                onStepPress={handleStepPress}
+              />
+            )
+          }
+        >
+          <View
+            style={
+              fillWizardBody
+                ? createTripStyles.saleMobileKeypadRoot
+                : isDesktopEnterprise
+                  ? { flex: 1, minHeight: 0 }
+                  : [
+                      createTripStyles.wizardWorkspaceMainMobile,
+                      createTripStyles.compactRouteBody,
+                    ]
+            }
+          >
+            {wizardStep === "client" ? (
+              <CreateTripDesktopClientStep
+                compact={compactWizard}
+                clients={clients}
+                clientsLoading={clientsLoading}
+                clientId={form.client_id}
+                clientListExpanded={clientListExpanded}
+                onExpandClientList={() => setClientListExpanded(true)}
+                onToggleClientList={() => setClientListExpanded((value) => !value)}
+                onSelectClient={handleSelectClient}
+                onAddClient={openAddClientFlow}
+                clientError={Boolean(errors.client_name)}
+                clientPrice={form.client_price}
+                onClientPriceChange={(value) => update({ client_price: value })}
+                clientPriceError={Boolean(errors.client_price)}
+                onClearClient={handleClearClient}
+                contractLanes={contractLanes}
+                contractLanesLoading={lanesLoading}
+                selectedLaneId={selectedLaneId}
+                onSelectLane={handleSelectLane}
+                onClearLane={handleClearLane}
+                laneSearch={laneSearch}
+                onLaneSearchChange={setLaneSearch}
+              />
+            ) : null}
+            {wizardStep === "route" ? (
+              <CreateTripDesktopRouteStep
+                compact={compactWizard}
+                state={routeState}
+                setters={routeSetters}
+                fieldInvalid={(field) =>
+                  (field === "pickup" && Boolean(errors.pickup_area)) ||
+                  (field === "drop" && Boolean(errors.drop_location)) ||
+                  (field === "tripDate" && Boolean(errors.pickup_date))
+                }
+                onPickupDropdownOpenChange={setPickupDropdownOpen}
+                onDropDropdownOpenChange={setDropDropdownOpen}
+                pickupRecommendations={pickupRecommendations}
+                onSelectPickupRecommendation={(recommendation) => {
+                  update({ pickup_area: recommendation.address });
+                  setPickupLat(recommendation.lat);
+                  setPickupLon(recommendation.lon);
+                }}
+              />
+            ) : null}
+            {wizardStep === "vehicle" ? (
+              <CreateTripDesktopCommodityStep
+                compact={compactWizard}
+                vehicleType={form.vehicle_type}
+                loadType={form.load_type}
+                tons={form.weight}
+                onVehicleTypeChange={(value) => update({ vehicle_type: value })}
+                onLoadTypeChange={(value) => update({ load_type: value })}
+                onTonsChange={(value) => update({ weight: value })}
+                vehicleTypeError={Boolean(errors.vehicle_type)}
+                loadTypeError={Boolean(errors.load_type)}
+                tonsError={Boolean(errors.weight)}
+              />
+            ) : null}
+            {wizardStep === "prices" ? (
+              <CreateIndentNetworkTargetStep
+                compact={compactWizard}
+                supplierTarget={form.supplier_target}
+                onSupplierTargetChange={(value) =>
+                  update({ supplier_target: value })
+                }
+                errorMessage={errors.supplier_target}
+              />
+            ) : null}
+          </View>
+        </AddTripModalLayout>
+
+        <ThemedAlertModal
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          onOk={() => setAlertState((prev) => ({ ...prev, visible: false }))}
+        />
+        <ThemedConfirmModal
+          visible={confirmState.visible}
+          title={confirmState.title}
+          message={confirmState.message}
+          confirmText={confirmState.confirmText}
+          onCancel={() => {
+            confirmState.resolve?.(false);
+            setConfirmState((prev) => ({
+              ...prev,
+              visible: false,
+              resolve: null,
+            }));
+          }}
+          onConfirm={() => {
+            confirmState.resolve?.(true);
+            setConfirmState((prev) => ({
+              ...prev,
+              visible: false,
+              resolve: null,
+            }));
+          }}
+        />
+        <IndentShareTicketModal
+          visible={ticketConfirmState.visible}
+          ticketRef={draftIndentId}
+          fields={indentTicketFieldsFromForm(form)}
+          title={INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].title}
+          headerKicker={
+            INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].headerKicker
+          }
+          headerCaption={
+            INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].headerCaption
+          }
+          stubFinePrint={
+            INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].stubFinePrint
+          }
+          confirmText={
+            INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].confirmText
+          }
+          onCancel={() => {
+            ticketConfirmState.resolve?.(false);
+            setTicketConfirmState({
+              visible: false,
+              kind: "share",
+              resolve: null,
+            });
+          }}
+          onConfirm={() => {
+            ticketConfirmState.resolve?.(true);
+            setTicketConfirmState({
+              visible: false,
+              kind: "share",
+              resolve: null,
+            });
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>

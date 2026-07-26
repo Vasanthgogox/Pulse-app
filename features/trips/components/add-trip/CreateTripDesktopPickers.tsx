@@ -41,6 +41,8 @@ export type DesktopPartySearchFieldProps = {
   onChangeText: (value: string) => void;
   placeholder?: string;
   accessibilityLabel?: string;
+  /** Full-width search under the label row (mobile). */
+  compact?: boolean;
 };
 
 /** Compact search in party picker header rows (client / partner). */
@@ -49,12 +51,16 @@ export const DesktopPartySearchField = memo(function DesktopPartySearchField({
   onChangeText,
   placeholder = "Search party",
   accessibilityLabel = "Search party",
+  compact = false,
 }: DesktopPartySearchFieldProps) {
   return (
-    <View style={s.desktopPartySearch}>
-      <Search size={13} color={Theme.textMuted} strokeWidth={2.25} />
+    <View style={[s.desktopPartySearch, compact && s.compactPartySearchFull]}>
+      <Search size={compact ? 12 : 13} color={Theme.textMuted} strokeWidth={2.25} />
       <TextInput
-        style={s.desktopPartySearchInput}
+        style={[
+          s.desktopPartySearchInput,
+          compact && { fontSize: 13, lineHeight: 18 },
+        ]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -76,7 +82,7 @@ export const DesktopPartySearchField = memo(function DesktopPartySearchField({
           accessibilityRole="button"
           accessibilityLabel="Clear search"
         >
-          <X size={13} color={Theme.textMuted} strokeWidth={2.25} />
+          <X size={compact ? 12 : 13} color={Theme.textMuted} strokeWidth={2.25} />
         </Pressable>
       ) : null}
     </View>
@@ -231,6 +237,7 @@ export const CreateTripDesktopClientGrid = memo(function CreateTripDesktopClient
       {showSummary && selectedClient ? (
         <View style={s.desktopSelectionSummaryWrap}>
           <DesktopEntityCard
+            compact={compact}
             title={selectedClient.name?.trim() || "Client"}
             subtitle={resolveWizardClientPhone(selectedClient.phone)}
             initials={entityInitials(selectedClient.name ?? "CL")}
@@ -253,7 +260,9 @@ export const CreateTripDesktopClientGrid = memo(function CreateTripDesktopClient
       ) : null}
 
       {showList ? (
-        <View style={s.desktopClientGrid}>
+        <View
+          style={[s.desktopClientGrid, compact && s.compactDesktopClientGrid]}
+        >
           {clients.length === 0 ? (
             <Text style={s.desktopPartySearchEmpty}>No parties match your search</Text>
           ) : (
@@ -269,6 +278,7 @@ export const CreateTripDesktopClientGrid = memo(function CreateTripDesktopClient
                 ]}
               >
                 <DesktopEntityCard
+                  compact={compact}
                   title={name}
                   subtitle={resolveWizardClientPhone(client.phone)}
                   initials={entityInitials(name)}
@@ -351,6 +361,7 @@ export const CreateTripDesktopPartnerGrid = memo(function CreateTripDesktopPartn
       {showSummary && selectedPartner ? (
         <View style={s.desktopSelectionSummaryWrap}>
           <DesktopEntityCard
+            compact={compact}
             title={partnerDisplayName(selectedPartner)}
             subtitle={resolveWizardContactPhone(selectedPartner.phone) ?? "Partner"}
             initials={entityInitials(partnerDisplayName(selectedPartner))}
@@ -377,7 +388,11 @@ export const CreateTripDesktopPartnerGrid = memo(function CreateTripDesktopPartn
       ) : null}
 
       {showList ? (
-        <DesktopCollapsibleScroll expanded scrollMaxHeight={scrollMaxHeight}>
+        <DesktopCollapsibleScroll
+          expanded
+          scrollMaxHeight={scrollMaxHeight}
+          contentStyle={compact ? { gap: 6 } : undefined}
+        >
           {sorted.length === 0 ? (
             <Text style={s.desktopPartySearchEmpty}>No parties match your search</Text>
           ) : (
@@ -393,6 +408,7 @@ export const CreateTripDesktopPartnerGrid = memo(function CreateTripDesktopPartn
                 ]}
               >
                 <DesktopEntityCard
+                  compact={compact}
                   title={name}
                   subtitle={resolveWizardContactPhone(supplier.phone) ?? "Partner"}
                   initials={entityInitials(name)}
@@ -467,6 +483,7 @@ export const CreateTripDesktopEntityList = memo(function CreateTripDesktopEntity
       {showSummary && selectedItem ? (
         <View style={s.desktopSelectionSummaryWrap}>
           <DesktopEntityCard
+            compact={compact}
             title={selectedItem.title}
             subtitle={selectedItem.subtitle}
             initials={selectedItem.initials}
@@ -497,13 +514,14 @@ export const CreateTripDesktopEntityList = memo(function CreateTripDesktopEntity
         <DesktopCollapsibleScroll
           expanded
           scrollMaxHeight={listMaxHeight}
-          contentStyle={{ gap: 8 }}
+          contentStyle={{ gap: compact ? 6 : 8 }}
         >
           {items.map((item) => {
             const selected = item.id === selectedId;
             return (
               <DesktopEntityCard
                 key={item.id}
+                compact={compact}
                 title={item.title}
                 subtitle={item.subtitle}
                 initials={item.initials}

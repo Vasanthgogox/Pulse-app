@@ -33,7 +33,8 @@ const LONG_PRESS_DELETE_DELAY_MS = 400;
 
 const KEY_H = 64;
 const KEY_H_PAY = 56;
-const KEY_H_PAY_COMPACT = 46;
+/** Dense wizard pad — leaves room for Continue above the keys. */
+const KEY_H_PAY_COMPACT = 34;
 
 interface DecimalKeypadProps {
   onKey: (key: KeypadKey) => void;

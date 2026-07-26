@@ -126,6 +126,7 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
       <View style={s.sourcePartnerRateKeypadPage}>
         <PartnerRatesKeypadFlow
           wizardShell
+          compact
           partnerRate={state.supplierRate}
           onPartnerRateChange={(v) => setters.setSupplierRate(v)}
           advancePaid={state.advancePaid}
@@ -170,20 +171,27 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
             <View
               style={[
                 s.sourceModeIcon,
+                compact && s.compactSourceModeIcon,
                 isAsset && s.sourceModeIconActive,
               ]}
             >
               <Truck
-                size={20}
+                size={compact ? 18 : 20}
                 color={isAsset ? Theme.textOnPrimary : Theme.textRouteCard}
                 strokeWidth={2.25}
               />
             </View>
             <View style={s.sourceModeCopy}>
-              <Text style={[s.sourceModeTitle, isAsset && s.sourceModeTitleActive]}>
+              <Text
+                style={[
+                  s.sourceModeTitle,
+                  compact && s.compactSourceModeTitle,
+                  isAsset && s.sourceModeTitleActive,
+                ]}
+              >
                 Asset
               </Text>
-              <Text style={s.sourceModeSub}>
+              <Text style={[s.sourceModeSub, compact && s.compactSourceModeSub]}>
                 Use your own drivers and vehicles
               </Text>
             </View>
@@ -202,22 +210,27 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
             <View
               style={[
                 s.sourceModeIcon,
+                compact && s.compactSourceModeIcon,
                 isAggregate && s.sourceModeIconActive,
               ]}
             >
               <Building2
-                size={20}
+                size={compact ? 18 : 20}
                 color={isAggregate ? Theme.textOnPrimary : Theme.textRouteCard}
                 strokeWidth={2.25}
               />
             </View>
             <View style={s.sourceModeCopy}>
               <Text
-                style={[s.sourceModeTitle, isAggregate && s.sourceModeTitleActive]}
+                style={[
+                  s.sourceModeTitle,
+                  compact && s.compactSourceModeTitle,
+                  isAggregate && s.sourceModeTitleActive,
+                ]}
               >
                 Aggregate
               </Text>
-              <Text style={s.sourceModeSub}>
+              <Text style={[s.sourceModeSub, compact && s.compactSourceModeSub]}>
                 Book a transport partner at a set rate
               </Text>
             </View>
@@ -226,9 +239,26 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
       </View>
 
       {isAsset ? (
-        <View style={s.sourceGuidanceBanner}>
-          <Text style={s.sourceGuidanceTitle}>Next: Allocation</Text>
-          <Text style={s.sourceGuidanceText}>
+        <View
+          style={[
+            s.sourceGuidanceBanner,
+            compact && s.compactSourceGuidanceBanner,
+          ]}
+        >
+          <Text
+            style={[
+              s.sourceGuidanceTitle,
+              compact && s.compactSourceGuidanceTitle,
+            ]}
+          >
+            Next: Allocation
+          </Text>
+          <Text
+            style={[
+              s.sourceGuidanceText,
+              compact && s.compactSourceGuidanceText,
+            ]}
+          >
             On the next step you can assign a driver and vehicle, or choose Assign
             later and link them on the trip screen.
           </Text>
@@ -236,32 +266,65 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
       ) : null}
 
       {isAggregate ? (
-        <View style={s.sourceAggregatePanel}>
-          <View style={[s.commodityClientHeaderRow, compact && s.compactHeaderRow]}>
-            <View style={s.commodityClientHeaderTitle}>
-              <DesktopSectionHeading>Transport partner *</DesktopSectionHeading>
-            </View>
-            <DesktopPartySearchField
-              value={partySearch}
-              onChangeText={handlePartySearch}
-              placeholder="Search partner"
-              accessibilityLabel="Search transport partner"
-            />
-            <View style={s.desktopPickerHeaderActions}>
-              <DesktopPickerHeaderActions
-                showChange={Boolean(state.supplierId)}
-                changeExpanded={partnerListOpen}
-                onToggleChange={onTogglePartnerList}
+        <View style={[s.sourceAggregatePanel, compact && { gap: 10 }]}>
+          {compact ? (
+            <View style={s.compactPartyToolbar}>
+              <View style={s.compactPartyToolbarTop}>
+                <Text style={[s.sectionHeading, s.compactSectionHeading]}>
+                  Transport partner *
+                </Text>
+                <View style={s.desktopPickerHeaderActions}>
+                  <DesktopPickerHeaderActions
+                    showChange={Boolean(state.supplierId)}
+                    changeExpanded={partnerListOpen}
+                    onToggleChange={onTogglePartnerList}
+                  />
+                  <Pressable
+                    onPress={onAddPartner}
+                    style={s.compactAddClientBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add transport partner"
+                    hitSlop={8}
+                  >
+                    <Text style={s.compactAddClientBtnText}>Add partner</Text>
+                  </Pressable>
+                </View>
+              </View>
+              <DesktopPartySearchField
+                compact
+                value={partySearch}
+                onChangeText={handlePartySearch}
+                placeholder="Search partner"
+                accessibilityLabel="Search transport partner"
               />
-              <Pressable
-                onPress={onAddPartner}
-                style={s.commodityAddClientBtn}
-                accessibilityRole="button"
-              >
-                <Text style={s.commodityAddClientBtnText}>Add partner</Text>
-              </Pressable>
             </View>
-          </View>
+          ) : (
+            <View style={s.commodityClientHeaderRow}>
+              <View style={s.commodityClientHeaderTitle}>
+                <DesktopSectionHeading>Transport partner *</DesktopSectionHeading>
+              </View>
+              <DesktopPartySearchField
+                value={partySearch}
+                onChangeText={handlePartySearch}
+                placeholder="Search partner"
+                accessibilityLabel="Search transport partner"
+              />
+              <View style={s.desktopPickerHeaderActions}>
+                <DesktopPickerHeaderActions
+                  showChange={Boolean(state.supplierId)}
+                  changeExpanded={partnerListOpen}
+                  onToggleChange={onTogglePartnerList}
+                />
+                <Pressable
+                  onPress={onAddPartner}
+                  style={s.commodityAddClientBtn}
+                  accessibilityRole="button"
+                >
+                  <Text style={s.commodityAddClientBtnText}>Add partner</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
 
           {suppliersLoading ? (
             <ActivityIndicator color={Theme.iconPrimary} style={{ marginVertical: 16 }} />

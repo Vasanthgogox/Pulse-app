@@ -135,6 +135,14 @@ export const Theme = {
   /** Spinners and pull-to-refresh on light/dark surfaces. */
   loaderAccent: "#FFCE44",
 
+  /** Warm brown — Pulse Reach / growth surfaces (aligned with brand ink). */
+  accentBrown: "#6B4F3A",
+  accentBrownDeep: "#4D3636",
+  accentBrownMuted: "rgba(107, 79, 58, 0.12)",
+  accentBrownWash: "#F6F0EA",
+  accentBrownBorder: "rgba(107, 79, 58, 0.28)",
+  accentBrownSoft: "#EFE4D8",
+
   // ---- Semantic (demo: Tesla red / dark green) ----
   /** Demo accent; positive/credit */
   teslaRed: "#E82127",

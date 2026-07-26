@@ -13,8 +13,7 @@ import {
 
 import Theme from "@/constants/Theme";
 import { TypewriterText } from "@/components/TypewriterText";
-import type { AddTripFormState } from "@/features/trips/components/add-trip/types";
-import type { AddTripIssueField, useAddTripForm } from "@/features/trips/components/add-trip/useAddTripForm";
+import type { AddTripIssueField } from "@/features/trips/components/add-trip/useAddTripForm";
 
 import { CreateTripPickupLocationPicker } from "./CreateTripPickupLocationPicker";
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
@@ -44,9 +43,27 @@ function getDayAfter(): string {
   return toISODate(d);
 }
 
+export type CreateTripRouteState = {
+  pickupArea: string;
+  dropLocation: string;
+  pickupLat: number | null;
+  pickupLon: number | null;
+  dropLat: number | null;
+  dropLon: number | null;
+  tripStartDate: string;
+};
+
+export type CreateTripRouteSetters = {
+  setPickupArea: (value: string) => void;
+  setDropLocation: (value: string) => void;
+  setPickupCoords: (lat: number, lon: number) => void;
+  setDropCoords: (lat: number, lon: number) => void;
+  setTripStartDate: (value: string) => void;
+};
+
 export type CreateTripDesktopRouteStepProps = {
-  state: AddTripFormState;
-  setters: ReturnType<typeof useAddTripForm>["setters"];
+  state: CreateTripRouteState;
+  setters: CreateTripRouteSetters;
   fieldInvalid: (field: AddTripIssueField) => boolean;
   onPickupDropdownOpenChange: (open: boolean) => void;
   onDropDropdownOpenChange: (open: boolean) => void;
@@ -104,8 +121,10 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
   );
 
   const dateSection = (
-    <View style={s.stepSection}>
-      <Text style={s.sectionHeading}>Trip date</Text>
+    <View style={[s.stepSection, compact && s.compactStepSection]}>
+      <Text style={[s.sectionHeading, compact && s.compactSectionHeading]}>
+        Trip date
+      </Text>
       <View style={s.routeDateSection}>
         <View style={[s.quickDateRow, compact && s.compactQuickDateRow]}>
           {quickDates.map(({ label, get }) => {
@@ -139,6 +158,7 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
           style={[
             s.inputBoxClean,
             s.routeDateInputShell,
+            compact && s.compactRouteDateInputShell,
             fieldInvalid("tripDate") && s.inputBoxCleanError,
           ]}
         >
@@ -229,8 +249,10 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
   );
 
   const pickupDropSection = (
-    <View style={s.stepSection}>
-      <Text style={s.sectionHeading}>Pickup & drop</Text>
+    <View style={[s.stepSection, compact && s.compactStepSection]}>
+      <Text style={[s.sectionHeading, compact && s.compactSectionHeading]}>
+        Pickup & drop
+      </Text>
       <View style={[s.routeFieldsStack, compact && s.compactRouteFieldsStack]}>
         <CreateTripPickupLocationPicker
           recommendations={pickupRecommendations}
@@ -292,22 +314,24 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
         />
       </View>
 
-      <View style={[s.infoBanner, s.routeInfoBannerBelowPickup]}>
-        <View style={s.infoBannerIcon}>
-          <ChevronRight size={16} color={Theme.iconPrimary} strokeWidth={2.5} />
+      {!compact ? (
+        <View style={[s.infoBanner, s.routeInfoBannerBelowPickup]}>
+          <View style={s.infoBannerIcon}>
+            <ChevronRight size={16} color={Theme.iconPrimary} strokeWidth={2.5} />
+          </View>
+          <View style={s.infoBannerCopy}>
+            <TypewriterText
+              text="Update your route details"
+              style={s.infoBannerTitle}
+              msPerChar={36}
+            />
+            <Text style={s.infoBannerBody}>
+              Add accurate pickup and drop points for better tracking and ETA
+              forecasting.
+            </Text>
+          </View>
         </View>
-        <View style={s.infoBannerCopy}>
-          <TypewriterText
-            text="Update your route details"
-            style={s.infoBannerTitle}
-            msPerChar={36}
-          />
-          <Text style={s.infoBannerBody}>
-            Add accurate pickup and drop points for better tracking and ETA
-            forecasting.
-          </Text>
-        </View>
-      </View>
+      ) : null}
     </View>
   );
 

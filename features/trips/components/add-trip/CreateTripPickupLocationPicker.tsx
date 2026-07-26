@@ -26,23 +26,35 @@ function LocationCard({
   rec,
   selected,
   onPress,
+  compact,
 }: {
   rec: PickupRecommendation;
   selected: boolean;
   onPress: () => void;
+  compact?: boolean;
 }) {
   const Icon = rec.kind === "office" ? Building2 : Warehouse;
   return (
     <Pressable
-      style={[s.pickupLocCard, selected && s.pickupLocCardSelected]}
+      style={[
+        s.pickupLocCard,
+        compact && s.pickupLocCardCompact,
+        selected && s.pickupLocCardSelected,
+      ]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={`Use ${rec.title} as pickup`}
     >
-      <View style={[s.pickupLocIconWrap, selected && s.pickupLocIconWrapSelected]}>
+      <View
+        style={[
+          s.pickupLocIconWrap,
+          compact && s.pickupLocIconWrapCompact,
+          selected && s.pickupLocIconWrapSelected,
+        ]}
+      >
         <Icon
-          size={16}
+          size={compact ? 14 : 16}
           color={selected ? Theme.textOnPrimary : Theme.textRouteCard}
           strokeWidth={2.25}
         />
@@ -62,14 +74,22 @@ function LocationCard({
           ) : null}
         </View>
         <Text
-          style={[s.pickupLocCardTitle, selected && s.pickupLocCardTitleSelected]}
+          style={[
+            s.pickupLocCardTitle,
+            compact && s.pickupLocCardTitleCompact,
+            selected && s.pickupLocCardTitleSelected,
+          ]}
           numberOfLines={1}
         >
           {rec.title}
         </Text>
         <Text
-          style={[s.pickupLocCardAddress, selected && s.pickupLocCardAddressSelected]}
-          numberOfLines={2}
+          style={[
+            s.pickupLocCardAddress,
+            compact && s.pickupLocCardAddressCompact,
+            selected && s.pickupLocCardAddressSelected,
+          ]}
+          numberOfLines={compact ? 1 : 2}
         >
           {rec.address}
         </Text>
@@ -122,6 +142,7 @@ function Section({
                   rec={rec}
                   selected={selected}
                   onPress={() => onSelect(rec)}
+                  compact={compact}
                 />
               </View>
             );
@@ -165,11 +186,13 @@ export const CreateTripPickupLocationPicker = memo(
     }
 
     return (
-      <View style={s.pickupRecommendBlock}>
+      <View style={[s.pickupRecommendBlock, compact && s.pickupRecommendBlockCompact]}>
         <Text style={s.pickupRecommendLabel}>Client locations</Text>
-        <Text style={s.pickupRecommendHint}>
-          Tap an office or warehouse to set pickup — or search manually below.
-        </Text>
+        {!compact ? (
+          <Text style={s.pickupRecommendHint}>
+            Tap an office or warehouse to set pickup — or search manually below.
+          </Text>
+        ) : null}
         <View style={[s.pickupLocSections, compact && s.pickupLocSectionsCompact]}>
           <Section
             title="Office"

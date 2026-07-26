@@ -215,14 +215,11 @@ export default function ReachCampaignDetailScreen() {
         {/* Center studio identity (desktop) */}
         {isDesktop ? (
           <View style={styles.headerCenter}>
-            <View style={styles.studioIcon}>
-              <Zap size={12} color={Theme.success} />
-            </View>
-            <Text style={styles.studioTitle}>Pulse Boost V2 Studio</Text>
+            <Text style={styles.studioTitle}>Campaign detail</Text>
             {isActive ? (
               <View style={styles.livePill}>
                 <View style={styles.liveDot} />
-                <Text style={styles.livePillText}>Live Campaign</Text>
+                <Text style={styles.livePillText}>Live</Text>
               </View>
             ) : null}
           </View>
@@ -232,14 +229,14 @@ export default function ReachCampaignDetailScreen() {
         <View style={styles.headerRight}>
           {hasSource ? (
             <Pressable style={styles.headerGhostBtn} onPress={handleShare}>
-              <Share2 size={13} color={Theme.textSecondary} />
+              <Share2 size={13} color={Theme.textRouteCard} />
               {isDesktop ? <Text style={styles.headerGhostText}>Share</Text> : null}
             </Pressable>
           ) : null}
           {isActive ? (
             <Pressable style={styles.headerDarkBtn} onPress={() => setUpgradeRequested(true)}>
-              <Sparkles size={13} color={Theme.accentGold} />
-              <Text style={styles.headerDarkText}>Upgrade Plan</Text>
+              <Sparkles size={13} color={Theme.textOnPrimary} />
+              <Text style={styles.headerDarkText}>Upgrade plan</Text>
             </Pressable>
           ) : null}
         </View>
@@ -342,11 +339,11 @@ export default function ReachCampaignDetailScreen() {
         </View>
 
         <View style={[styles.heroCell, styles.heroCellTier]}>
-          <View style={[styles.heroCellIcon, { backgroundColor: Theme.accentGoldMuted }]}>
-            <Zap size={15} color={Theme.accentGoldPressed} />
+          <View style={[styles.heroCellIcon, { backgroundColor: Theme.accentBrownMuted }]}>
+            <Zap size={15} color={Theme.accentBrown} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.heroCellLabel, { color: Theme.accentGoldPressed }]}>
+            <Text style={[styles.heroCellLabel, { color: Theme.accentBrownDeep }]}>
               Current Tier
             </Text>
             <View style={styles.tierValueRow}>
@@ -436,13 +433,13 @@ export default function ReachCampaignDetailScreen() {
 
             <View style={[styles.metricTile, styles.metricTileGold]}>
               <View style={styles.metricTileTop}>
-                <Text style={[styles.metricTileLabel, { color: Theme.accentGoldPressed }]}>
+                <Text style={[styles.metricTileLabel, { color: Theme.accentBrownDeep }]}>
                   Credits Spent
                 </Text>
-                <Wallet size={13} color={Theme.accentGoldPressed} />
+                <Wallet size={13} color={Theme.accentBrown} />
               </View>
               <Text style={styles.metricTileValue}>{boostFeePaid.toLocaleString()}</Text>
-              <Text style={[styles.metricTileSub, { color: Theme.accentGoldPressed }]}>
+              <Text style={[styles.metricTileSub, { color: Theme.accentBrownDeep }]}>
                 Escrow: {escrowLocked.toLocaleString()} credits
               </Text>
             </View>
@@ -503,7 +500,7 @@ export default function ReachCampaignDetailScreen() {
             <Text
               style={[
                 styles.funnelValue,
-                cell.tone === "gold" && { color: Theme.accentGoldPressed },
+                cell.tone === "gold" && { color: Theme.accentBrown },
                 cell.tone === "primary" && { color: Theme.primary },
                 cell.tone === "positive" && { color: Theme.success },
               ]}
@@ -521,8 +518,8 @@ export default function ReachCampaignDetailScreen() {
     <View style={styles.panelCard}>
       <View style={styles.panelHeader}>
         <View style={styles.panelHeaderLeft}>
-          <View style={[styles.panelIcon, { backgroundColor: Theme.accentGoldMuted }]}>
-            <ShieldCheck size={14} color={Theme.accentGoldPressed} />
+          <View style={[styles.panelIcon, { backgroundColor: Theme.accentBrownMuted }]}>
+            <ShieldCheck size={14} color={Theme.accentBrown} />
           </View>
           <Text style={styles.panelTitle}>Referral Escrow Guarantee</Text>
         </View>
@@ -536,10 +533,10 @@ export default function ReachCampaignDetailScreen() {
         {campaign.driver_reward_enabled ? (
           <>
             <View style={styles.escrowRow}>
-              <Text style={[styles.escrowLabel, { color: Theme.accentGoldPressed }]}>
+              <Text style={[styles.escrowLabel, { color: Theme.accentBrownDeep }]}>
                 Referral Escrow Locked
               </Text>
-              <Text style={[styles.escrowValue, { color: Theme.accentGoldPressed }]}>
+              <Text style={[styles.escrowValue, { color: Theme.accentBrownDeep }]}>
                 {campaign.reward_reserved.toLocaleString()} credits
               </Text>
             </View>
@@ -768,7 +765,7 @@ export default function ReachCampaignDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.networkPageBackground },
   scroll: { flex: 1 },
-  page: { gap: 14, width: "100%", paddingTop: 16 },
+  page: { gap: 16, width: "100%", paddingTop: 16 },
   pageDesktop: {
     maxWidth: PAGE_MAX_WIDTH,
     alignSelf: "center",
@@ -777,9 +774,9 @@ const styles = StyleSheet.create({
 
   // ── Header ──
   headerBleed: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.networkCardBorder,
-    backgroundColor: Theme.networkGlassSurface,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderInput,
+    backgroundColor: Theme.cardWhite,
   },
   headerInner: {
     flexDirection: "row",
@@ -798,39 +795,39 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   headerDivider: {
-    width: StyleSheet.hairlineWidth,
+    width: 1,
     height: 16,
-    backgroundColor: Theme.borderLight,
+    backgroundColor: Theme.borderInput,
   },
   backBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
     backgroundColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
   },
-  crumbMuted: { fontSize: 11, fontWeight: "700", color: Theme.textMuted },
-  crumbSep: { fontSize: 11, fontWeight: "600", color: Theme.borderMedium },
+  crumbMuted: { fontSize: 12, fontWeight: "600", color: Theme.textRouteCard },
+  crumbSep: { fontSize: 12, fontWeight: "500", color: Theme.borderMedium },
   crumbIdChip: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: Theme.surface,
+    borderRadius: 6,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
     flexShrink: 1,
     minWidth: 0,
   },
   crumbIdText: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
   },
-  headerCenter: { flexDirection: "row", alignItems: "center", gap: 7, flexShrink: 0 },
+  headerCenter: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   studioIcon: {
     width: 24,
     height: 24,
@@ -842,72 +839,69 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   studioTitle: {
-    fontSize: 11,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: -0.1,
   },
   livePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
+    paddingVertical: 3,
+    borderRadius: 6,
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.networkHubListCardConnectedBorder,
   },
   liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Theme.success },
   livePillText: {
-    fontSize: 8,
-    fontWeight: "900",
+    fontSize: 10,
+    fontWeight: "700",
     color: Theme.success,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   headerGhostBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
+    gap: 6,
+    paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 10,
+    borderRadius: 8,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
   },
-  headerGhostText: { fontSize: 11, fontWeight: "700", color: Theme.textSecondary },
+  headerGhostText: { fontSize: 12, fontWeight: "600", color: Theme.textRouteCard },
   headerDarkBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    backgroundColor: Theme.textPrimaryDark,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Theme.primary,
   },
-  headerDarkText: { fontSize: 11, fontWeight: "800", color: Theme.textOnDark },
+  headerDarkText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },
 
   emptyWrap: { alignItems: "center", paddingVertical: 60, gap: 8 },
   emptyTitle: { fontSize: 13, fontWeight: "700", color: Theme.textPrimaryDark },
 
-  mainSplit: { gap: 14 },
-  mainSplitDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 20 },
+  mainSplit: { gap: 16 },
+  mainSplitDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 16 },
   leftCol: { flex: 1, minWidth: 0, width: "100%" },
   leftColDesktop: { flex: 8, minWidth: 0 },
-  rightCol: { flex: 4, minWidth: 300, maxWidth: 420, width: "100%", gap: 14 },
+  rightCol: { flex: 4, minWidth: 300, maxWidth: 400, width: "100%", gap: 16 },
   rightColMobile: { maxWidth: "100%", minWidth: 0 },
-  detailCol: { gap: 12 },
+  detailCol: { gap: 16 },
 
   // ── Hero ──
   heroCard: {
-    backgroundColor: Theme.networkCardBackground,
-    borderRadius: 20,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: Theme.networkCardBorder,
+    borderColor: Theme.borderInput,
     padding: 16,
     gap: 14,
   },
@@ -916,14 +910,14 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderInput,
   },
   heroTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   heroTitle: {
-    fontSize: 19,
-    fontWeight: "900",
+    fontSize: 18,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.3,
     flexShrink: 1,
@@ -931,50 +925,50 @@ const styles = StyleSheet.create({
   statusPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 999,
+    borderRadius: 6,
     borderWidth: 1,
     flexShrink: 0,
   },
   statusDot: { width: 5, height: 5, borderRadius: 3 },
   statusPillText: {
-    fontSize: 9,
-    fontWeight: "900",
+    fontSize: 10,
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
-  heroMetaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
-  heroMetaText: { fontSize: 11, fontWeight: "600", color: Theme.textMuted },
-  heroMetaDot: { fontSize: 11, color: Theme.borderMedium },
-  heroMetaStrong: { fontSize: 11, fontWeight: "800", color: Theme.textSecondary },
+  heroMetaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 },
+  heroMetaText: { fontSize: 12, fontWeight: "500", color: Theme.textRouteCard },
+  heroMetaDot: { fontSize: 12, color: Theme.borderMedium },
+  heroMetaStrong: { fontSize: 12, fontWeight: "700", color: Theme.textSecondary },
   indentRefBox: {
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 14,
+    borderColor: Theme.borderInput,
+    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 8,
     alignItems: "flex-start",
     flexShrink: 0,
     maxWidth: 200,
   },
   indentRefLabel: {
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
   indentRefValue: {
-    fontSize: 12,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
-    marginTop: 1,
+    marginTop: 2,
   },
-  heroGrid: { gap: 8 },
+  heroGrid: { gap: 10 },
   heroGridDesktop: { flexDirection: "row" },
   heroCell: {
     flex: 1,
@@ -982,145 +976,143 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    padding: 11,
-    borderRadius: 14,
-    backgroundColor: Theme.surface,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
   },
   heroCellTier: {
-    backgroundColor: Theme.accentGoldMuted,
-    borderColor: Theme.accentGoldBorder,
+    backgroundColor: Theme.accentBrownWash,
+    borderColor: Theme.accentBrownBorder,
   },
   heroCellIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   heroCellLabel: {
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
   heroCellValue: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    marginTop: 1,
+    marginTop: 2,
   },
   tierValueRow: { flexDirection: "row", alignItems: "baseline", gap: 6 },
   tierPrice: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.accentGoldPressed,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.accentBrown,
     fontVariant: ["tabular-nums"],
   },
   tierUpgradeChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: Theme.accentGold + "33",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.accentGoldBorder,
+    borderColor: Theme.accentBrownBorder,
     flexShrink: 0,
   },
-  tierUpgradeText: { fontSize: 10, fontWeight: "800", color: Theme.accentGoldPressed },
+  tierUpgradeText: { fontSize: 11, fontWeight: "700", color: Theme.accentBrown },
 
   snapshotBanner: {
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.accentGoldBorder,
-    backgroundColor: Theme.accentGoldMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    borderColor: Theme.accentBrownBorder,
+    backgroundColor: Theme.accentBrownWash,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  snapshotBannerText: { fontSize: 10, fontWeight: "700", color: Theme.accentGoldPressed },
+  snapshotBannerText: { fontSize: 11, fontWeight: "600", color: Theme.accentBrownDeep },
 
   // ── Shared panel card ──
   panelCard: {
-    backgroundColor: Theme.networkCardBackground,
-    borderRadius: 20,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: Theme.networkCardBorder,
+    borderColor: Theme.borderInput,
     padding: 16,
-    gap: 12,
+    gap: 14,
   },
   panelHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderInput,
   },
-  panelHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+  panelHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 9, flex: 1, minWidth: 0 },
   panelIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 9,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   panelTitle: {
-    fontSize: 11,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: -0.1,
   },
-  panelAside: { fontSize: 9, fontWeight: "700", color: Theme.textMuted, flexShrink: 0 },
+  panelAside: { fontSize: 11, fontWeight: "600", color: Theme.textMuted, flexShrink: 0 },
   sectionLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 0.2,
   },
 
   // ── Performance ──
   reachChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: Theme.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
     flexShrink: 0,
   },
   reachChipText: {
-    fontSize: 10,
-    fontWeight: "900",
+    fontSize: 11,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
   },
   metricsLoading: { paddingVertical: 14, alignItems: "center" },
-  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   metricGridDesktop: { flexWrap: "nowrap" },
   metricTile: {
     flexBasis: 140,
     flexGrow: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 4,
     padding: 12,
-    borderRadius: 14,
-    backgroundColor: Theme.surface,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
   },
   metricTilePositive: {
     backgroundColor: Theme.positiveMuted,
     borderColor: Theme.networkHubListCardConnectedBorder,
   },
   metricTileGold: {
-    backgroundColor: Theme.accentGoldMuted,
-    borderColor: Theme.accentGoldBorder,
+    backgroundColor: Theme.accentBrownWash,
+    borderColor: Theme.accentBrownBorder,
   },
   metricTileTop: {
     flexDirection: "row",
@@ -1129,21 +1121,21 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metricTileLabel: {
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   metricTileValue: {
-    fontSize: 19,
-    fontWeight: "900",
+    fontSize: 22,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
-    letterSpacing: -0.3,
+    letterSpacing: -0.5,
   },
-  metricTileSub: { fontSize: 8, fontWeight: "600", color: Theme.textMuted },
-  progressBlock: { gap: 6, paddingTop: 2 },
+  metricTileSub: { fontSize: 9, fontWeight: "500", color: Theme.textMuted },
+  progressBlock: { gap: 6, paddingTop: 4 },
   progressLabels: {
     flexDirection: "row",
     alignItems: "center",
@@ -1151,55 +1143,54 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   progressLabel: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   progressTrack: {
-    height: 8,
-    borderRadius: 4,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: Theme.surfaceGray,
     overflow: "hidden",
   },
-  progressFill: { height: "100%", borderRadius: 4 },
+  progressFill: { height: "100%", borderRadius: 3 },
 
   // ── Funnel ──
-  funnelRow: { flexDirection: "row", gap: 6 },
+  funnelRow: { flexDirection: "row", gap: 8 },
   funnelCell: {
     flex: 1,
     minWidth: 0,
     alignItems: "center",
-    gap: 2,
-    paddingVertical: 10,
+    gap: 3,
+    paddingVertical: 12,
     paddingHorizontal: 2,
-    borderRadius: 14,
-    backgroundColor: Theme.surface,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
   },
   funnelCellGold: {
-    backgroundColor: Theme.accentGoldMuted,
-    borderColor: Theme.accentGoldBorder,
+    backgroundColor: Theme.accentBrownWash,
+    borderColor: Theme.accentBrownBorder,
   },
   funnelCellPrimary: {
-    backgroundColor: Theme.primary + "14",
-    borderColor: Theme.primary + "40",
+    backgroundColor: Theme.primary + "12",
+    borderColor: Theme.primary + "33",
   },
   funnelCellPositive: {
     backgroundColor: Theme.positiveMuted,
     borderColor: Theme.networkHubListCardConnectedBorder,
   },
   funnelValue: {
-    fontSize: 13,
-    fontWeight: "900",
+    fontSize: 15,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
   },
   funnelLabel: {
-    fontSize: 7,
-    fontWeight: "800",
+    fontSize: 8,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.3,
@@ -1207,52 +1198,52 @@ const styles = StyleSheet.create({
   },
 
   // ── Escrow summary ──
-  escrowRows: { gap: 7 },
+  escrowRows: { gap: 9 },
   escrowRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   escrowRowTotal: {
-    paddingTop: 7,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    paddingTop: 9,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderInput,
   },
-  escrowLabel: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary },
+  escrowLabel: { fontSize: 12, fontWeight: "500", color: Theme.textRouteCard },
   escrowValue: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
   },
-  escrowTotalLabel: { fontSize: 12, fontWeight: "800", color: Theme.success },
+  escrowTotalLabel: { fontSize: 12, fontWeight: "700", color: Theme.success },
   escrowTotalValue: {
-    fontSize: 12,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.success,
     fontVariant: ["tabular-nums"],
   },
-  escrowHint: { fontSize: 9, fontWeight: "500", color: Theme.textMuted, lineHeight: 13, marginTop: 2 },
+  escrowHint: { fontSize: 10, fontWeight: "500", color: Theme.textMuted, lineHeight: 15, marginTop: 2 },
 
   // ── Driver network ──
-  driverMetricsRow: { flexDirection: "row", gap: 6 },
+  driverMetricsRow: { flexDirection: "row", gap: 8 },
   driverMetricCell: {
     flex: 1,
     minWidth: 0,
     alignItems: "center",
-    gap: 1,
-    paddingVertical: 8,
+    gap: 2,
+    paddingVertical: 12,
     paddingHorizontal: 2,
-    borderRadius: 12,
-    backgroundColor: Theme.surface,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
   },
   driverMetricValue: {
-    fontSize: 14,
-    fontWeight: "900",
+    fontSize: 18,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
   },
   driverMetricLabel: {
-    fontSize: 8,
-    fontWeight: "700",
+    fontSize: 9,
+    fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.2,
@@ -1266,25 +1257,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 4,
     paddingHorizontal: 6,
-    borderRadius: 8,
-    backgroundColor: Theme.surface,
+    borderRadius: 6,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
   },
-  waveBadgeText: { fontSize: 9, fontWeight: "900", color: Theme.textSecondary },
-  waveTextWrap: { flex: 1, minWidth: 0, gap: 1 },
-  waveTitle: { fontSize: 12, fontWeight: "800", color: Theme.textPrimaryDark },
-  waveSub: { fontSize: 10, fontWeight: "600", color: Theme.textMuted },
-  waveTime: { fontSize: 9, fontWeight: "600", color: Theme.textMuted, flexShrink: 0 },
+  waveBadgeText: { fontSize: 10, fontWeight: "700", color: Theme.textSecondary },
+  waveTextWrap: { flex: 1, minWidth: 0, gap: 2 },
+  waveTitle: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
+  waveSub: { fontSize: 11, fontWeight: "500", color: Theme.textMuted },
+  waveTime: { fontSize: 10, fontWeight: "500", color: Theme.textMuted, flexShrink: 0 },
   waveHint: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "500",
     color: Theme.textMuted,
-    lineHeight: 13,
+    lineHeight: 15,
     marginTop: 2,
   },
 
-  timelineHint: { fontSize: 10, fontWeight: "500", color: Theme.textMuted, lineHeight: 14 },
+  timelineHint: { fontSize: 11, fontWeight: "500", color: Theme.textMuted, lineHeight: 15 },
 
   // ── Actions ──
   actionsCol: { gap: 8 },
@@ -1292,10 +1283,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
@@ -1305,11 +1296,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
     alignItems: "center",
     justifyContent: "center",
   },
-  actionText: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
+  actionText: { fontSize: 12, fontWeight: "600", color: Theme.textPrimaryDark },
   noSourceHint: {
     fontSize: 11,
     fontWeight: "500",

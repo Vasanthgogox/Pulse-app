@@ -1,10 +1,11 @@
 import { Check } from "lucide-react-native";
 import { MotiView } from "moti";
 import { memo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Easing } from "react-native-reanimated";
 
 import Theme from "@/constants/Theme";
+import Layout from "@/constants/Layout";
 
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
 
@@ -27,6 +28,8 @@ export const FullPageWizardProgress = memo(function FullPageWizardProgress({
   currentStepId,
   onStepPress,
 }: FullPageWizardProgressProps) {
+  const { width } = useWindowDimensions();
+  const compact = width < Layout.wizardDesktopGridMinWidth;
   const currentIndex = Math.max(
     0,
     steps.findIndex((s) => s.id === currentStepId),
@@ -35,8 +38,19 @@ export const FullPageWizardProgress = memo(function FullPageWizardProgress({
     steps.length <= 1 ? 0 : (currentIndex / (steps.length - 1)) * 100;
 
   return (
-    <View style={styles.wizardStepTrackWrap} accessibilityRole="progressbar">
-      <View style={styles.wizardStepTrack}>
+    <View
+      style={[
+        styles.wizardStepTrackWrap,
+        compact && styles.wizardStepTrackWrapMobile,
+      ]}
+      accessibilityRole="progressbar"
+    >
+      <View
+        style={[
+          styles.wizardStepTrack,
+          compact && styles.wizardStepTrackMobile,
+        ]}
+      >
         <View style={[styles.wizardStepTrackFill, { width: `${progressPct}%` }]} />
       </View>
       <View style={styles.wizardStepRow}>
@@ -53,11 +67,11 @@ export const FullPageWizardProgress = memo(function FullPageWizardProgress({
                     : done
                       ? Theme.positiveMuted
                       : "transparent",
-                  padding: active || done ? 2 : 0,
+                  padding: active || done ? (compact ? 1.5 : 2) : 0,
                 }}
                 transition={{ type: "timing", duration: 220, easing: STEP_EASE }}
                 style={{
-                  borderRadius: 9,
+                  borderRadius: compact ? 7 : 9,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
@@ -79,6 +93,7 @@ export const FullPageWizardProgress = memo(function FullPageWizardProgress({
                   transition={{ type: "timing", duration: 220, easing: STEP_EASE }}
                   style={[
                     styles.wizardStepCircle,
+                    compact && styles.wizardStepCircleMobile,
                     active && styles.wizardStepCircleActive,
                     done && styles.wizardStepCircleDone,
                   ]}
@@ -104,6 +119,7 @@ export const FullPageWizardProgress = memo(function FullPageWizardProgress({
                     <Text
                       style={[
                         styles.wizardStepCircleText,
+                        compact && styles.wizardStepCircleTextMobile,
                         active && styles.wizardStepCircleTextActive,
                       ]}
                     >
@@ -115,6 +131,7 @@ export const FullPageWizardProgress = memo(function FullPageWizardProgress({
               <Text
                 style={[
                   styles.wizardStepText,
+                  compact && styles.wizardStepTextMobile,
                   active && styles.wizardStepTextActive,
                   done && styles.wizardStepTextDone,
                 ]}
@@ -127,7 +144,10 @@ export const FullPageWizardProgress = memo(function FullPageWizardProgress({
           return canPress ? (
             <Pressable
               key={step.id}
-              style={styles.wizardStepItem}
+              style={[
+                styles.wizardStepItem,
+                compact && styles.wizardStepItemMobile,
+              ]}
               onPress={() => onStepPress?.(step.id, idx)}
               accessibilityRole="button"
               accessibilityLabel={`Go to ${step.label}`}
@@ -136,7 +156,13 @@ export const FullPageWizardProgress = memo(function FullPageWizardProgress({
               {circle}
             </Pressable>
           ) : (
-            <View key={step.id} style={styles.wizardStepItem}>
+            <View
+              key={step.id}
+              style={[
+                styles.wizardStepItem,
+                compact && styles.wizardStepItemMobile,
+              ]}
+            >
               {circle}
             </View>
           );

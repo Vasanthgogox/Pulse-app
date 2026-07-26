@@ -23,9 +23,15 @@ export const fullPageWizardStyles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: Theme.screenBackground,
   },
+  shellKeyboard: {
+    flex: 1,
+    width: "100%",
+    minHeight: 0,
+  },
   pageRoot: {
     flex: 1,
     minHeight: 0,
+    position: "relative",
     paddingHorizontal: 16,
     gap: 12,
     width: "100%",
@@ -49,8 +55,8 @@ export const fullPageWizardStyles = StyleSheet.create({
     maxWidth: "100%",
     width: "100%",
     alignSelf: "stretch",
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    gap: 10,
   },
   /**
    * Keypad steps: no side padding so the GPay dock can go edge-to-edge.
@@ -71,6 +77,51 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   footerDockKeypad: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
+  },
+  /** Action bar seated above the numeric pad (keypad steps). */
+  footerDockKeypadInline: {
+    flexShrink: 0,
+    width: "100%",
+    paddingTop: 0,
+    minHeight: 0,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    borderTopWidth: 0,
+    backgroundColor: "transparent",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  /** Sticky action dock — never clipped by page scroll / overflow. */
+  footerDock: {
+    flexShrink: 0,
+    width: "100%",
+    backgroundColor: Theme.cardWhite,
+    zIndex: 40,
+  },
+  footerDockMobile: {
+    paddingTop: 4,
+    minHeight: 52,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0f172a",
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: -2 },
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
+  },
+  /** Absolute dock — Route/Load/etc. cannot push CTAs below the fold on RN Web. */
+  footerDockMobilePinned: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    zIndex: 50,
   },
   /** Desktop stepped allocation / reassign — matches Create Trip rail width. */
   pageRootSteppedDesktop: {
@@ -96,9 +147,10 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 8,
     minHeight: 44,
     width: "100%",
+    flexShrink: 0,
   },
   headerBarMobile: {
-    minHeight: 48,
+    minHeight: 44,
   },
   headerBackBtn: {
     flexDirection: "row",
@@ -115,11 +167,18 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   headerBackBtnMobile: {
     paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 44,
+    borderRadius: 12,
+    gap: 6,
   },
   headerBackBtnText: {
     color: Theme.textPrimaryDark,
     fontSize: 13,
     fontWeight: "600",
+  },
+  headerBackBtnTextMobile: {
+    fontSize: 13,
   },
   headerStepBadge: {
     flexShrink: 0,
@@ -141,6 +200,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderColor: Theme.borderLight,
     overflow: "hidden",
   },
+  headerStepTextMobile: {
+    fontSize: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
   headerTitleCluster: {
     flex: 1,
     minWidth: 0,
@@ -153,6 +217,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 20,
     textAlign: "center",
+  },
+  titleInlineMobile: {
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.2,
   },
   titleInlineKeypad: {
     fontSize: 14,
@@ -174,6 +243,10 @@ export const fullPageWizardStyles = StyleSheet.create({
     fontWeight: "500",
     textAlign: "center",
   },
+  subtitleMobile: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
   subtitleKeypad: {
     fontSize: 12,
     lineHeight: 17,
@@ -186,6 +259,10 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingBottom: 0,
     flexShrink: 0,
   },
+  wizardStepTrackWrapMobile: {
+    paddingTop: 0,
+    paddingBottom: 2,
+  },
   wizardStepTrack: {
     position: "absolute",
     left: "10%",
@@ -196,6 +273,9 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderRadius: 999,
     zIndex: 0,
     overflow: "hidden",
+  },
+  wizardStepTrackMobile: {
+    top: 10,
   },
   wizardStepTrackFill: {
     height: "100%",
@@ -224,6 +304,9 @@ export const fullPageWizardStyles = StyleSheet.create({
     minWidth: 0,
     paddingHorizontal: 1,
   },
+  wizardStepItemMobile: {
+    gap: 4,
+  },
   wizardStepCircle: {
     width: 22,
     height: 22,
@@ -233,6 +316,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+  },
+  wizardStepCircleMobile: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
   },
   wizardStepCircleActive: {
     backgroundColor: Theme.textPrimaryDark,
@@ -255,6 +343,9 @@ export const fullPageWizardStyles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.textMuted,
   },
+  wizardStepCircleTextMobile: {
+    fontSize: 10,
+  },
   wizardStepCircleTextActive: {
     color: Theme.textOnPrimary,
   },
@@ -266,6 +357,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.2,
     lineHeight: 10,
+  },
+  wizardStepTextMobile: {
+    fontSize: 9,
+    letterSpacing: 0.2,
+    lineHeight: 11,
   },
   wizardStepTextActive: {
     color: Theme.textPrimaryDark,
@@ -286,6 +382,10 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 12,
     paddingBottom: 16,
     flexGrow: 0,
+  },
+  bodyScrollContentMobile: {
+    gap: 10,
+    paddingBottom: 20,
   },
   bodyFill: {
     flexGrow: 1,
@@ -481,6 +581,11 @@ export const fullPageWizardStyles = StyleSheet.create({
   footerRoot: {
     width: "100%",
   },
+  footerRootMobile: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    paddingTop: 4,
+  },
   footerHintAbove: {
     fontSize: 11,
     fontWeight: "500",
@@ -489,6 +594,14 @@ export const fullPageWizardStyles = StyleSheet.create({
     lineHeight: 15,
     paddingHorizontal: 8,
     paddingBottom: 8,
+  },
+  footerHintAboveMobile: {
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: "left",
+    paddingHorizontal: 2,
+    paddingBottom: 8,
+    color: Theme.textSecondary,
   },
   footerBar: {
     flexDirection: "row",
@@ -500,6 +613,16 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 2,
     flexWrap: "nowrap",
+  },
+  /** Mobile: Close + full-width Continue share one row — Continue never clips. */
+  footerBarMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    paddingTop: 8,
+    paddingBottom: 2,
+    borderTopWidth: 0,
   },
   footerBarWithSummary: {
     flexDirection: "row",
@@ -561,7 +684,27 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
+  cancelBtnMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minWidth: 84,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    flexShrink: 0,
+  },
   cancelBtnText: {
+    color: Theme.textRouteCard,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  cancelBtnTextMobile: {
     color: Theme.textRouteCard,
     fontSize: 13,
     fontWeight: "600",
@@ -601,17 +744,28 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.textPrimaryDark,
   },
+  /** Mobile primary CTA — fills remaining row width so it never clips off-screen. */
+  submitBtnMobileGrow: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    maxWidth: "100%",
+    minHeight: 44,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+  },
   submitBtnInkDisabled: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderInput,
+    borderColor: Theme.borderMedium,
   },
   submitBtnInkText: {
     color: Theme.textOnPrimary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
   submitBtnInkTextDisabled: {
-    color: Theme.textMuted,
+    color: Theme.textSecondary,
   },
   submitBtnWithSummary: {
     flexShrink: 0,
@@ -1077,19 +1231,24 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 12,
     paddingTop: 2,
   },
-  /** Mobile GPay — stack recipient + amount, leave room for docked keypad. */
+  /** Mobile GPay — stack recipient + amount, leave room for CTA + keypad. */
   wizardKeypadBodyMobilePay: {
     flexGrow: 1,
     flexShrink: 1,
+    minHeight: 0,
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingBottom: 4,
+    paddingTop: 4,
   },
   wizardKeypadBodyCompact: {
-    gap: 8,
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+    gap: 6,
     paddingTop: 0,
-    justifyContent: "flex-start",
+    justifyContent: "center",
   },
   wizardKeypadPartyWrap: {
     alignSelf: "stretch",
@@ -1107,9 +1266,14 @@ export const fullPageWizardStyles = StyleSheet.create({
     width: "100%",
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 2,
-    paddingBottom: 8,
+    paddingBottom: 4,
     flexShrink: 0,
     alignItems: "center",
+  },
+  wizardKeypadActionBar: {
+    flexShrink: 0,
+    width: "100%",
+    zIndex: 5,
   },
   wizardKeypadPartyCard: {
     borderRadius: 16,
@@ -1196,6 +1360,9 @@ export const fullPageWizardStyles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 18,
     letterSpacing: -0.15,
+    textAlign: "center",
+    color: Theme.textPrimaryDark,
+    width: "100%",
   },
   wizardKeypadHint: {
     color: Theme.textMuted,

@@ -21,8 +21,8 @@
  *
  * Theme palette: `Theme.primary` (Pulse purple) keys the brand
  * header and accents; `Theme.buttonMatteBlack` is the primary
- * action; `Theme.overlayBackdrop` colors the side notches so the
- * card visually appears to be torn out of the backdrop.
+ * action. Side notches use a solid stand-in for the dimmed overlay
+ * so the punch reads as a real cut-out (not a translucent blob).
  */
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
@@ -31,7 +31,6 @@ import { Ticket } from "lucide-react-native";
 import React, { useMemo } from "react";
 import {
   Modal,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -66,7 +65,13 @@ export interface IndentShareTicketModalProps {
   onConfirm: () => void;
 }
 
-const DASH_COUNT = 28;
+const NOTCH_SIZE = 14;
+/**
+ * Solid stand-in for `Theme.overlayBackdrop` (`rgba(0,0,0,0.4)`) over a
+ * light screen. Translucent notches double-darken on the overlay and wash
+ * out on the ticket — a solid fill + overflow clip reads as a real punch.
+ */
+const TICKET_NOTCH_FILL = "#949494";
 
 function formatCurrencyDisplay(raw: string): string {
   const trimmed = (raw ?? "").trim();
@@ -197,8 +202,6 @@ export function IndentShareTicketModal({
     return `#${d.getFullYear().toString().slice(-2)}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   }, [ticketRef]);
 
-  const dashes = useMemo(() => "—".repeat(DASH_COUNT), []);
-
   return (
     <Modal
       visible={visible}
@@ -307,13 +310,7 @@ export function IndentShareTicketModal({
           {/* ── Perforation (tear here) ────────────────────────────── */}
           <View style={styles.perforation} pointerEvents="none">
             <View style={[styles.notch, styles.notchLeft]} />
-            <Text
-              style={styles.perforationDashes}
-              numberOfLines={1}
-              ellipsizeMode="clip"
-            >
-              {dashes}
-            </Text>
+            <View style={styles.dashLine} />
             <View style={[styles.notch, styles.notchRight]} />
           </View>
 
@@ -346,8 +343,6 @@ export function IndentShareTicketModal({
   );
 }
 
-const NOTCH_SIZE = 18;
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -356,13 +351,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
   },
-  /** The ticket itself.
-   *
-   *  Note `overflow: visible` — the side notches at the perforation
-   *  line are positioned with negative `left`/`right` offsets and
-   *  must stay visible outside the card's clip box.  We re-create
-   *  the rounded-corner look with `borderRadius` on the inner
-   *  zones (`headerBand`, `body`, `stub`) instead. */
+  /**
+   * Ticket card. `overflow: hidden` clips the outer half of each notch so
+   * only a semicircle bite remains — the classic token punch. Rounded
+   * corners live on the inner zones (`headerBand`, `stub`).
+   */
   ticket: {
     width: "100%",
     maxWidth: 380,
@@ -373,7 +366,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 24,
     elevation: 12,
-    overflow: Platform.OS === "web" ? "visible" : "hidden",
+    overflow: "hidden",
     position: "relative",
   },
   /** Purple brand band — capped with the same `borderRadius` as the
@@ -563,37 +556,34 @@ const styles = StyleSheet.create({
   commercialAmountRight: {
     textAlign: "right",
   },
-  /** Perforation strip — two half-circle notches sunk into the
-   *  card edges with a dashed line in between.  The notches use
-   *  the backdrop color so they read as a punched cut-out. */
+  /** Perforation strip — semicircle punches at the edges + dashed tear line. */
   perforation: {
     flexDirection: "row",
     alignItems: "center",
     height: NOTCH_SIZE,
-    position: "relative",
+    marginVertical: 0,
   },
   notch: {
     width: NOTCH_SIZE,
     height: NOTCH_SIZE,
     borderRadius: NOTCH_SIZE / 2,
-    backgroundColor: Theme.overlayBackdrop,
-    position: "absolute",
-    top: 0,
+    backgroundColor: TICKET_NOTCH_FILL,
+    flexShrink: 0,
   },
+  /** Center of the circle sits on the card edge; outer half is clipped. */
   notchLeft: {
-    left: -(NOTCH_SIZE / 2),
+    marginLeft: -(NOTCH_SIZE / 2),
   },
   notchRight: {
-    right: -(NOTCH_SIZE / 2),
+    marginRight: -(NOTCH_SIZE / 2),
   },
-  perforationDashes: {
+  dashLine: {
     flex: 1,
-    color: Theme.borderInput,
-    fontSize: 12,
-    fontWeight: "400",
-    letterSpacing: 2,
-    textAlign: "center",
-    paddingHorizontal: 10,
+    height: 0,
+    marginHorizontal: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderStyle: "dashed",
+    borderColor: Theme.borderInput,
   },
   stub: {
     paddingHorizontal: 18,
@@ -603,8 +593,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FAFAFB",
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(0,0,0,0.04)",
   },
   /** Disclaimer styled like a "fine print" line — italic muted. */
   stubFinePrint: {
