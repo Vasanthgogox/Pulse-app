@@ -2,6 +2,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useQuery } from "@tanstack/react-query";
 import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
+import { shouldHideLoadStoryFromAuthor } from "@/features/network/utils/storyLoadVisibility.util";
 import {
   isDriverSwapPreviewMessage,
   resolveDriverSwapAvatars,
@@ -1642,12 +1643,42 @@ export function ChatScreen() {
       currentOrgId,
       ...sortedNetChats.map((row) => row.partnerId).filter(Boolean),
     ]);
-    return networkFeedPosts.filter(
-      (post) =>
-        (post.type === "LOAD" || post.type === "VEHICLE_AVAILABILITY") &&
-        integratedOrgIds.has(post.organization_id),
-    );
-  }, [currentOrgId, networkFeedPosts, shouldLoadStoryFeed, sortedNetChats]);
+    const supplierOrgIds = new Set<string>();
+    const clientOrgIds = new Set<string>();
+    for (const partner of netPartners) {
+      if (partner.party_type === "supplier") supplierOrgIds.add(partner.org_id);
+      if (partner.party_type === "client") clientOrgIds.add(partner.org_id);
+    }
+    return networkFeedPosts.filter((post) => {
+      if (post.type !== "LOAD" && post.type !== "VEHICLE_AVAILABILITY") return false;
+      if (!integratedOrgIds.has(post.organization_id)) return false;
+      if (
+        post.type === "LOAD" &&
+        shouldHideLoadStoryFromAuthor({
+          authorOrgId: post.organization_id,
+          supplierOrgIds,
+          clientOrgIds,
+        })
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [
+    currentOrgId,
+    networkFeedPosts,
+    shouldLoadStoryFeed,
+    sortedNetChats,
+    netPartners,
+  ]);
+  const chatNetworkPartnerOrgIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const partner of netPartners) {
+      // Twin Ad + organic only for shippers (clients) — supplier LOAD is filtered out.
+      if (partner.party_type === "client" && partner.org_id) ids.add(partner.org_id);
+    }
+    return ids;
+  }, [netPartners]);
 
   const tripHubTrackingByTripId = useMemo(() => {
     const m: Record<string, string | null> = {};
@@ -2982,6 +3013,7 @@ export function ChatScreen() {
                 orgId={currentOrgId || undefined}
                 orgName={currentOrganization?.name ?? undefined}
                 onCreatePost={() => router.push("/(modals)/create-post")}
+                networkPartnerOrgIds={chatNetworkPartnerOrgIds}
               />
               {storiesLoading && integratedNetworkStories.length === 0 ? (
                 <View style={s.chatStoryLoadingRow}>
@@ -4239,6 +4271,7 @@ export function ChatScreen() {
                 orgId={currentOrgId || undefined}
                 orgName={currentOrganization?.name ?? undefined}
                 onCreatePost={() => router.push("/(modals)/create-post")}
+                networkPartnerOrgIds={chatNetworkPartnerOrgIds}
               />
             )}
           </View>

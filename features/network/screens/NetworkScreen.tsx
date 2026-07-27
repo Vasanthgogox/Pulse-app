@@ -51,6 +51,7 @@ import {
   UnlinkedCounterpartiesSection,
 } from "@/features/network/components/UnlinkedCounterpartiesSection";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
+import { shouldHideLoadStoryFromAuthor } from "@/features/network/utils/storyLoadVisibility.util";
 import {
   cancelPendingConnectionRequestByOrgPair,
   type ConnectionRequestRow,
@@ -136,6 +137,7 @@ function NetworkStoryStrip({
   headerActions,
   embedded,
   canCreatePost,
+  networkPartnerOrgIds,
 }: {
   orgId: string;
   orgName: string;
@@ -145,6 +147,7 @@ function NetworkStoryStrip({
   headerActions?: React.ReactNode;
   embedded?: boolean;
   canCreatePost?: boolean;
+  networkPartnerOrgIds?: ReadonlySet<string>;
 }) {
   const storyPosts = useMemo(() => feedPosts.filter(isStoryPost), [feedPosts]);
   if (feedLoading && storyPosts.length === 0) {
@@ -164,6 +167,7 @@ function NetworkStoryStrip({
       headerActions={headerActions}
       embedded={embedded}
       canCreatePost={canCreatePost}
+      networkPartnerOrgIds={networkPartnerOrgIds}
     />
   );
 }
@@ -377,7 +381,7 @@ function NetworkScreenInner() {
     }
   }, [searchParams.view, showDesktopHub]);
   const allowLoadPosts = organization?.capabilities?.canBid ?? true;
-  const integratedPartnerOrgIds = useMemo(() => {
+  const integratedClientOrgIds = useMemo(() => {
     const ids = new Set<string>();
     for (const client of (clientsQ.data ?? []) as Array<{
       linked_organization_id?: string | null;
@@ -388,6 +392,10 @@ function NetworkScreenInner() {
       if (!isIntegratedClient || !linkedOrgId) continue;
       ids.add(linkedOrgId);
     }
+    return ids;
+  }, [clientsQ.data]);
+  const integratedSupplierOrgIds = useMemo(() => {
+    const ids = new Set<string>();
     for (const supplier of (suppliersQ.data ?? []) as Array<{
       linked_organization_id?: string | null;
       supplier_type?: string | null;
@@ -395,12 +403,18 @@ function NetworkScreenInner() {
     }>) {
       const linkedOrgId = supplier.linked_organization_id?.trim();
       const isIntegratedSupplier =
-        supplier.is_integrated ?? (supplier.supplier_type === "integrated" || Boolean(linkedOrgId));
+        supplier.is_integrated ??
+        (supplier.supplier_type === "integrated" || Boolean(linkedOrgId));
       if (!isIntegratedSupplier || !linkedOrgId) continue;
       ids.add(linkedOrgId);
     }
     return ids;
-  }, [clientsQ.data, suppliersQ.data]);
+  }, [suppliersQ.data]);
+  const integratedPartnerOrgIds = useMemo(() => {
+    const ids = new Set<string>(integratedClientOrgIds);
+    for (const id of integratedSupplierOrgIds) ids.add(id);
+    return ids;
+  }, [integratedClientOrgIds, integratedSupplierOrgIds]);
   const feedPosts = useMemo(
     () =>
       (feedQ.data ?? []).filter((post) => {
@@ -409,13 +423,32 @@ function NetworkScreenInner() {
         const authorOrgId = (post.organization_id ?? "").trim();
         if (!authorOrgId) return false;
         if (authorOrgId === orgId) return true;
+        // Find Work parity: supplier-only counterparties' LOAD stories/ads
+        // are not bid opportunities for me (I am their client).
+        if (
+          post.type === "LOAD" &&
+          shouldHideLoadStoryFromAuthor({
+            authorOrgId,
+            supplierOrgIds: integratedSupplierOrgIds,
+            clientOrgIds: integratedClientOrgIds,
+          })
+        ) {
+          return false;
+        }
         // Sponsored posts are already audience-gated by get_network_feed via
         // reach_campaign_targets (wave release). Re-applying the connection
         // check here would filter out the extended reach the customer paid for.
         if (post.is_sponsored) return true;
         return integratedPartnerOrgIds.has(authorOrgId);
       }),
-    [feedQ.data, allowLoadPosts, orgId, integratedPartnerOrgIds],
+    [
+      feedQ.data,
+      allowLoadPosts,
+      orgId,
+      integratedPartnerOrgIds,
+      integratedSupplierOrgIds,
+      integratedClientOrgIds,
+    ],
   );
 
   const onRefresh = useCallback(async () => {
@@ -984,6 +1017,7 @@ function NetworkScreenInner() {
                     feedLoading={feedQ.isLoading}
                     onCreatePost={onCreatePost}
                     canCreatePost={canPostLoads}
+                    networkPartnerOrgIds={integratedClientOrgIds}
                     embedded
                   />
                 </View>
@@ -1000,6 +1034,7 @@ function NetworkScreenInner() {
                 feedLoading={feedQ.isLoading}
                 onCreatePost={onCreatePost}
                 canCreatePost={canPostLoads}
+                networkPartnerOrgIds={integratedClientOrgIds}
               />
             )}
               </View>

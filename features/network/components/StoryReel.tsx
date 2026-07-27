@@ -29,6 +29,13 @@ interface StoryReelProps {
    * view stories but never create them (they cannot give load). Default true.
    */
   canCreatePost?: boolean;
+  /**
+   * Connected / integrated partner org ids. A sponsored Reach post from one
+   * of these shows twice in the strip: a normal network story (no Ad) and a
+   * sponsored Ad bubble — so in-network partners aren't reduced to only an ad.
+   * Prefer shipper (client) orgs; supplier-only LOAD posts are filtered upstream.
+   */
+  networkPartnerOrgIds?: ReadonlySet<string>;
 }
 
 type StoryMetrics = {
@@ -71,6 +78,9 @@ const RING_UNSEEN = ["#f43f5e", "#f59e0b", Theme.brandBluePressed, Theme.brandBl
 const RING_SEEN = ["#cbd5e1", "#94a3b8"] as const;
 const RING_MINE_ACTIVE = ["#4D3636", "#22d3ee", "#10b981"] as const;
 const RING_MINE_IDLE = ["#e2e8f0", "#cbd5e1"] as const;
+/** Sponsored Reach stories — warm brown ring so they read apart from connection stories. */
+const RING_SPONSORED = [Theme.accentBrown, Theme.accentBrownDeep] as const;
+const RING_SPONSORED_SEEN = ["#c4b5a5", "#a89080"] as const;
 
 const ACCENT_TOKENS = [Theme.accentGold, Theme.darkGreen, Theme.primary, Theme.brandBluePressed] as const;
 
@@ -80,8 +90,46 @@ function seedColor(id: string): string {
   return ACCENT_TOKENS[h];
 }
 
+function storyLane(post: PostRow): "ad" | "organic" {
+  return post.is_sponsored ? "ad" : "organic";
+}
+
 function storySeenKey(post: PostRow): string {
-  return `${post.organization_id}:${post.type}`;
+  return `${post.organization_id}:${post.type}:${storyLane(post)}`;
+}
+
+function storyDedupeKey(post: PostRow): string {
+  return `${post.organization_id}:${post.type}:${storyLane(post)}`;
+}
+
+function storyBubbleKey(post: PostRow): string {
+  return `${post.id}:${storyLane(post)}`;
+}
+
+/**
+ * In-network sponsored posts become two reel entries: an organic twin
+ * (no Ad chrome) plus the sponsored original. Reach-only orgs stay Ad-only.
+ */
+function expandNetworkSponsoredTwins(
+  posts: PostRow[],
+  partnerOrgIds: ReadonlySet<string> | undefined,
+): PostRow[] {
+  if (!partnerOrgIds || partnerOrgIds.size === 0) return posts;
+  const out: PostRow[] = [];
+  for (const post of posts) {
+    if (
+      post.is_sponsored &&
+      partnerOrgIds.has((post.organization_id ?? "").trim())
+    ) {
+      out.push({
+        ...post,
+        is_sponsored: false,
+        reach_campaign_id: null,
+      });
+    }
+    out.push(post);
+  }
+  return out;
 }
 
 function StoryAvatar({
@@ -157,6 +205,8 @@ function StoryBubble({
   scale,
   children,
   badge,
+  caption,
+  accessibilityLabel,
 }: {
   label: string;
   ringColors: readonly string[];
@@ -167,6 +217,9 @@ function StoryBubble({
   scale?: Animated.Value;
   children: React.ReactNode;
   badge?: React.ReactNode;
+  /** Tiny line under the name (e.g. sponsored “Ad”). */
+  caption?: string;
+  accessibilityLabel?: string;
 }) {
   const gapSize = metrics.avatar + 3;
   return (
@@ -180,9 +233,14 @@ function StoryBubble({
         pressed && styles.storyItemPressed,
       ]}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
     >
-      <Animated.View style={scale ? { transform: [{ scale }] } : undefined}>
+      <Animated.View
+        style={[
+          styles.bubbleScale,
+          scale ? { transform: [{ scale }] } : undefined,
+        ]}
+      >
         <View
           style={[
             styles.ringStack,
@@ -203,11 +261,17 @@ function StoryBubble({
         style={[
           styles.storyName,
           { fontSize: metrics.labelSize, lineHeight: metrics.labelLineHeight },
+          caption ? styles.storyNameWithCaption : null,
         ]}
         numberOfLines={1}
       >
         {label}
       </Text>
+      {caption ? (
+        <Text style={styles.storyCaption} numberOfLines={1}>
+          {caption}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -244,9 +308,14 @@ function BroadcastStory({
       mounted = false;
     };
   }, [rawLogo]);
-  const ringColors = seen
-    ? RING_SEEN
-    : ([accent, RING_UNSEEN[1], RING_UNSEEN[2]] as const);
+  const isSponsored = !!post.is_sponsored;
+  const ringColors = isSponsored
+    ? seen
+      ? RING_SPONSORED_SEEN
+      : RING_SPONSORED
+    : seen
+      ? RING_SEEN
+      : ([accent, RING_UNSEEN[1], RING_UNSEEN[2]] as const);
 
   const handlePressIn = () =>
     Animated.spring(scale, { toValue: 0.94, useNativeDriver: true }).start();
@@ -264,6 +333,17 @@ function BroadcastStory({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       scale={scale}
+      accessibilityLabel={isSponsored ? `${shortName}, sponsored ad` : shortName}
+      caption={isSponsored ? "Ad" : undefined}
+      badge={
+        isSponsored ? (
+          <View style={styles.adsBadge} pointerEvents="none">
+            <View style={styles.adsBadgeInner}>
+              <Text style={styles.adsBadgeText}>Ad</Text>
+            </View>
+          </View>
+        ) : undefined
+      }
     >
       <StoryAvatar
         name={post.org_name}
@@ -282,6 +362,7 @@ export function StoryReel({
   onCreatePost,
   embedded = false,
   canCreatePost = true,
+  networkPartnerOrgIds,
 }: StoryReelProps) {
   const router = useRouter();
   const { profile } = useAuth();
@@ -331,12 +412,21 @@ export function StoryReel({
     [seenStorageKey],
   );
 
-  const businessOnly = [...posts]
-    .filter((p) => p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY")
-    .sort(
-      (a, b) =>
-        new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
+  const businessOnly = expandNetworkSponsoredTwins(
+    [...posts].filter((p) => p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY"),
+    networkPartnerOrgIds,
+  ).sort((a, b) => {
+    // Same org + type: organic network bubble left of its Ad twin.
+    if (a.organization_id === b.organization_id && a.type === b.type) {
+      const aAd = a.is_sponsored ? 1 : 0;
+      const bAd = b.is_sponsored ? 1 : 0;
+      if (aAd !== bAd) return aAd - bAd;
+    }
+    return (
+      new Date(b.created_at ?? 0).getTime() -
+      new Date(a.created_at ?? 0).getTime()
     );
+  });
   const seenStoryKeys = new Set<string>();
   const stories: PostRow[] = [];
   const ownStories: PostRow[] = [];
@@ -347,21 +437,33 @@ export function StoryReel({
   }
   const ordered = [...otherStories];
   for (const p of ordered) {
-    const storyKey = `${p.organization_id}:${p.type}`;
+    const storyKey = storyDedupeKey(p);
     if (!seenStoryKeys.has(storyKey)) {
       seenStoryKeys.add(storyKey);
       stories.push(p);
     }
-    if (stories.length >= 20) break;
+    if (stories.length >= 24) break;
   }
-  const ownStoryQueue = [...ownStories].sort(
-    (a, b) =>
-      new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
-  );
-  const latestOwnStory = ownStoryQueue[0];
+  const ownStoryQueue = [...ownStories]
+    // Own strip is one "Mine" bubble — don't duplicate sponsored twins there.
+    .filter((p) => !p.is_sponsored)
+    .sort(
+      (a, b) =>
+        new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
+    );
+  // If the only own posts are sponsored, still surface them.
+  const ownStoryQueueResolved =
+    ownStoryQueue.length > 0
+      ? ownStoryQueue
+      : [...ownStories].sort(
+          (a, b) =>
+            new Date(b.created_at ?? 0).getTime() -
+            new Date(a.created_at ?? 0).getTime(),
+        );
+  const latestOwnStory = ownStoryQueueResolved[0];
   const storyQueueIds = stories.map((s) => s.id).join(",");
-  const ownStoryQueueIds = ownStoryQueue.map((s) => s.id).join(",");
-  const hasOwnStories = ownStoryQueue.length > 0;
+  const ownStoryQueueIds = ownStoryQueueResolved.map((s) => s.id).join(",");
+  const hasOwnStories = ownStoryQueueResolved.length > 0;
 
   useEffect(() => {
     if (!orgId) return;
@@ -467,7 +569,7 @@ export function StoryReel({
 
         {stories.map((post) => (
           <BroadcastStory
-            key={post.id}
+            key={storyBubbleKey(post)}
             post={post}
             metrics={metrics}
             seen={!!seenKeys[storySeenKey(post)]}
@@ -494,20 +596,25 @@ const styles = StyleSheet.create({
   wrap: {
     paddingTop: 12,
     paddingBottom: 12,
+    overflow: "visible",
   },
   wrapEmbedded: {
     paddingTop: 10,
-    paddingBottom: 10,
+    paddingBottom: 14,
     flex: 1,
     minWidth: 0,
     justifyContent: "center",
+    overflow: "visible",
   },
   scroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     gap: 10,
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingRight: 12,
-    paddingVertical: 2,
+    paddingTop: 2,
+    // Room for the floating Ad chip that hangs below the ring.
+    paddingBottom: 8,
+    overflow: "visible",
   },
   scrollEmbedded: {
     paddingHorizontal: 0,
@@ -515,7 +622,8 @@ const styles = StyleSheet.create({
   },
   scrollEmbeddedDesktop: {
     gap: 14,
-    paddingVertical: 4,
+    paddingTop: 4,
+    paddingBottom: 10,
   },
   mineCluster: {
     flexDirection: "row",
@@ -565,14 +673,19 @@ const styles = StyleSheet.create({
   storyItem: {
     alignItems: "center",
     justifyContent: "flex-start",
+    overflow: "visible",
   },
   storyItemPressed: {
     opacity: 0.92,
+  },
+  bubbleScale: {
+    overflow: "visible",
   },
   ringStack: {
     position: "relative",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "visible",
   },
   ringGradientBase: {
     padding: 2,
@@ -604,12 +717,58 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
+    zIndex: 3,
+  },
+  /** Floating Ad chip — centered under the ring, not clipped by ring height. */
+  adsBadge: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: -5,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 4,
+  },
+  adsBadgeInner: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: Theme.accentBrown,
+    borderWidth: 1.5,
+    borderColor: Theme.screenBackground,
+    shadowColor: Theme.accentBrownDeep,
+    shadowOpacity: 0.4,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 4,
+  },
+  adsBadgeText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    lineHeight: 10,
   },
   storyName: {
     marginTop: 6,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.1,
+    textAlign: "center",
+    width: "100%",
+  },
+  storyNameWithCaption: {
+    marginTop: 8,
+    marginBottom: 0,
+  },
+  storyCaption: {
+    marginTop: 1,
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.accentBrown,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
     textAlign: "center",
     width: "100%",
   },

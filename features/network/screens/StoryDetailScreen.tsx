@@ -499,7 +499,7 @@ export default function StoryDetailScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Why am I seeing this? This load has been promoted through Pulse Reach."
                 >
-                  <Rocket size={9} color={Theme.accentGold} strokeWidth={2.25} />
+                  <Rocket size={9} color={Theme.accentBrown} strokeWidth={2.25} />
                   <Text style={styles.sponsoredTagText}>Sponsored</Text>
                 </Pressable>
               ) : null}
@@ -842,9 +842,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(212, 175, 55, 0.14)",
+    backgroundColor: Theme.accentBrownMuted,
   },
-  sponsoredTagText: { fontSize: 8, fontWeight: "800", color: Theme.accentGold, letterSpacing: 0.4, textTransform: "uppercase" },
+  sponsoredTagText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.accentBrown,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
   tapZones: { position: "absolute", top: 100, left: 0, right: 0, bottom: 200, flexDirection: "row", zIndex: 30 },
   tapLeft: { flex: 1 },
   tapRight: { flex: 2.2 },

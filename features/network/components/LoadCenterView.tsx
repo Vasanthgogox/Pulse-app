@@ -68,6 +68,7 @@ import { LoadCenterIntegratedPartiesBanner } from "@/features/network/components
 import { LoadCenterIntegratedPartiesRow } from "@/features/network/components/LoadCenterIntegratedPartiesRow";
 import { LoadCenterUnderlineTabStrip } from "@/features/network/components/LoadCenterUnderlineTabStrip";
 import { LoadCenterPromoCard } from "@/features/network/components/LoadCenterPromoCard";
+import { LoadCenterOpportunityExchange } from "@/features/network/components/LoadCenterOpportunityExchange";
 import {
   selectIntegratedClientsForLoadCenter,
   selectIntegratedSuppliersForLoadCenter,
@@ -428,6 +429,10 @@ export function LoadCenterView({
   const connectedSupplierOrgIds = useMemo(
     () => new Set(suppliers.map((s) => s.linked_organization_id).filter(Boolean) as string[]),
     [suppliers],
+  );
+  const connectedClientOrgIds = useMemo(
+    () => new Set(clients.map((c) => c.linked_organization_id).filter(Boolean) as string[]),
+    [clients],
   );
   const awardModal = useAwardQuote({ orgId, queryClient, invalidateIndents, onSuccess: triggerSuccess, connectedSupplierOrgIds });
 
@@ -1282,6 +1287,15 @@ export function LoadCenterView({
           }
         >
           {!isMobileView ? renderDesktopFilterPanel() : null}
+          {loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD" ? (
+            <LoadCenterOpportunityExchange
+              orgId={orgId}
+              mode={loadSubTab === "GET_LOAD" ? "get" : "give"}
+              supplierOrgIds={connectedSupplierOrgIds}
+              clientOrgIds={connectedClientOrgIds}
+              embedded
+            />
+          ) : null}
           {loadSubTab === "GIVE_LOAD" && (
             <>
               {isLoading ? (
