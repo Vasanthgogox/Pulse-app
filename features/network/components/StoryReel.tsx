@@ -3,11 +3,11 @@
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { type PostRow } from "@/features/network/services/posts.service";
+import { splitLocationParts } from "@/features/network/utils/storyDisplay";
 import { recordReachEvent } from "@/features/reach/services/events.service";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
@@ -158,6 +158,68 @@ function StoryAvatar({
   );
 }
 
+/** Tiny vehicle + route preview inside the story ring (replaces org initials). */
+function StoryLoadPreview({
+  post,
+  size,
+}: {
+  post: PostRow;
+  size: number;
+}) {
+  const isLoad = post.type === "LOAD";
+  const vehicleRaw = post.vehicle_type?.trim() || (isLoad ? "Load" : "Vehicle");
+  const vehicle =
+    vehicleRaw.length > 14 ? `${vehicleRaw.slice(0, 13)}…` : vehicleRaw;
+  const origin = splitLocationParts(post.origin).city;
+  const drop = isLoad
+    ? splitLocationParts(post.destination).city
+    : splitLocationParts(post.destination).city || "Anywhere";
+  const originShort = origin.length > 8 ? `${origin.slice(0, 7)}…` : origin || "—";
+  const dropShort = drop.length > 8 ? `${drop.slice(0, 7)}…` : drop || "—";
+  const pad = Math.max(4, Math.round(size * 0.08));
+  const vehicleSize = size >= 68 ? 8 : 7;
+  const routeSize = size >= 68 ? 7 : 6;
+
+  return (
+    <View
+      style={[
+        styles.loadPreview,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          paddingHorizontal: pad,
+        },
+      ]}
+    >
+      <Text
+        style={[styles.loadPreviewVehicle, { fontSize: vehicleSize, lineHeight: vehicleSize + 1 }]}
+        numberOfLines={2}
+      >
+        {vehicle}
+      </Text>
+      <Text
+        style={[styles.loadPreviewRoute, { fontSize: routeSize, lineHeight: routeSize + 1 }]}
+        numberOfLines={1}
+      >
+        {originShort}
+      </Text>
+      <Text
+        style={[styles.loadPreviewArrow, { fontSize: routeSize, lineHeight: routeSize + 1 }]}
+        numberOfLines={1}
+      >
+        →
+      </Text>
+      <Text
+        style={[styles.loadPreviewRoute, { fontSize: routeSize, lineHeight: routeSize + 1 }]}
+        numberOfLines={1}
+      >
+        {dropShort}
+      </Text>
+    </View>
+  );
+}
+
 function StoryGradientRingSized({
   colors,
   ringSize,
@@ -289,25 +351,6 @@ function BroadcastStory({
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const accent = seedColor(post.organization_id);
-  // org_avatar_url is a storage PATH (org-logo-*.jpg), not a URL — sign it before
-  // rendering. Same pattern as NetworkDesktopProfilePanel: http passthrough, else sign.
-  const rawLogo = post.org_avatar_url?.trim() ?? "";
-  const [postAvatarUrl, setPostAvatarUrl] = useState<string | null>(
-    rawLogo.startsWith("http") ? rawLogo : null,
-  );
-  useEffect(() => {
-    let mounted = true;
-    if (!rawLogo || rawLogo.startsWith("http")) {
-      setPostAvatarUrl(rawLogo || null);
-      return;
-    }
-    getSignedAvatarUrl(rawLogo).then((signed) => {
-      if (mounted) setPostAvatarUrl(signed ?? null);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [rawLogo]);
   const isSponsored = !!post.is_sponsored;
   const ringColors = isSponsored
     ? seen
@@ -323,6 +366,17 @@ function BroadcastStory({
     Animated.spring(scale, { toValue: 1, tension: 80, friction: 6, useNativeDriver: true }).start();
 
   const shortName = post.org_name.trim().split(/\s+/)[0] ?? post.org_name;
+  const origin = splitLocationParts(post.origin).city;
+  const drop =
+    post.type === "LOAD"
+      ? splitLocationParts(post.destination).city
+      : splitLocationParts(post.destination).city || "Anywhere";
+  const a11yDetail = [
+    post.vehicle_type?.trim(),
+    origin && drop ? `${origin} to ${drop}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <StoryBubble
@@ -333,7 +387,11 @@ function BroadcastStory({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       scale={scale}
-      accessibilityLabel={isSponsored ? `${shortName}, sponsored ad` : shortName}
+      accessibilityLabel={
+        isSponsored
+          ? `${shortName}, sponsored ad${a11yDetail ? `, ${a11yDetail}` : ""}`
+          : `${shortName}${a11yDetail ? `, ${a11yDetail}` : ""}`
+      }
       caption={isSponsored ? "Ad" : undefined}
       badge={
         isSponsored ? (
@@ -345,13 +403,7 @@ function BroadcastStory({
         ) : undefined
       }
     >
-      <StoryAvatar
-        name={post.org_name}
-        avatarUrl={postAvatarUrl}
-        avatarSeed={post.org_avatar_seed}
-        entityType="supplier"
-        size={metrics.avatar}
-      />
+      <StoryLoadPreview post={post} size={metrics.avatar} />
     </StoryBubble>
   );
 }
@@ -702,6 +754,33 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 0,
     borderColor: "transparent",
+  },
+  loadPreview: {
+    overflow: "hidden",
+    backgroundColor: Theme.cardWhite,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 1,
+  },
+  loadPreviewVehicle: {
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+    letterSpacing: -0.2,
+    width: "100%",
+  },
+  loadPreviewRoute: {
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    letterSpacing: -0.1,
+    width: "100%",
+  },
+  loadPreviewArrow: {
+    fontWeight: "700",
+    color: Theme.accentBrown,
+    textAlign: "center",
+    marginVertical: -1,
   },
   addBadge: {
     position: "absolute",
