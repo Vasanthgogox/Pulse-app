@@ -14,7 +14,11 @@ ALTER TABLE public.direct_quotes
   ADD CONSTRAINT direct_quotes_counter_amount_check
   CHECK (counter_amount IS NULL OR counter_amount > 0);
 
-CREATE OR REPLACE FUNCTION public.get_direct_quotes_with_bidder_names(p_indent_id uuid)
+-- Return type gains counter_amount, so CREATE OR REPLACE fails on an existing
+-- function ("cannot change return type of existing function"). Drop first.
+DROP FUNCTION IF EXISTS public.get_direct_quotes_with_bidder_names(uuid);
+
+CREATE FUNCTION public.get_direct_quotes_with_bidder_names(p_indent_id uuid)
 RETURNS TABLE (
   id uuid,
   indent_id uuid,
