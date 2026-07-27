@@ -98,6 +98,26 @@ export function useAwardQuote({
     return Math.min(...pending.map((q) => Number(q.amount ?? 0)));
   }, [awardModalQuotes]);
 
+  /**
+   * Single pending offer — preselect it. There is nothing to choose between, so
+   * requiring a tap before "Award selected" becomes usable is a dead end the
+   * user has to guess their way out of. Multi-bid loads still require an
+   * explicit pick, which is the real point of the confirm step.
+   *
+   * Keyed on the load + quote identity (not selectedQuoteId) so deliberately
+   * deselecting the only bid is not immediately undone by this effect.
+   */
+  const soloPendingQuoteId = useMemo(() => {
+    const pending = awardModalQuotes.filter(
+      (q) => (q.status || "").toLowerCase() === "pending",
+    );
+    return pending.length === 1 ? pending[0]!.id : null;
+  }, [awardModalQuotes]);
+
+  useEffect(() => {
+    if (soloPendingQuoteId) setSelectedQuoteId(soloPendingQuoteId);
+  }, [currentLoad?.id, soloPendingQuoteId]);
+
   const open = useCallback((load: IndentRow) => {
     setCurrentLoad(load);
     setSelectedQuoteId(null);

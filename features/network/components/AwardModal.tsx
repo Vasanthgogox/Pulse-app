@@ -25,6 +25,17 @@ interface AwardModalProps {
 export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalProps) {
   const { currentLoad, selectedQuoteId, awarding, sortedQuotes, pendingCount, lowestPendingAmount, quotesLoading, connectedSupplierOrgIds } = award;
 
+  // Single source for the gate so the `disabled` prop and the dimmed style can
+  // never disagree — a button that looks enabled but ignores taps reads as a bug.
+  const awardDisabled =
+    awarding ||
+    !selectedQuoteId ||
+    !sortedQuotes.some(
+      (q) =>
+        q.id === selectedQuoteId &&
+        (q.status || "").toLowerCase() === "pending",
+    );
+
   return (
     <Modal
       visible={visible}
@@ -170,7 +181,9 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
               )}
               {pendingCount > 0 && (
                 <Text style={styles.bidEmptySubtext}>
-                  Tap an offer to select, then Award selected.
+                  {selectedQuoteId
+                    ? "Review the selected offer, then Award selected."
+                    : "Tap an offer to select, then Award selected."}
                 </Text>
               )}
             </>
@@ -178,18 +191,14 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
           {currentLoad && (
             <>
               <TouchableOpacity
-                style={[styles.modalSubmit, { marginTop: 16 }]}
+                style={[
+                  styles.modalSubmit,
+                  { marginTop: 16 },
+                  awardDisabled && styles.modalSubmitDisabled,
+                ]}
                 onPress={() => void award.award()}
                 activeOpacity={0.9}
-                disabled={
-                  awarding ||
-                  !selectedQuoteId ||
-                  !sortedQuotes.some(
-                    (q) =>
-                      q.id === selectedQuoteId &&
-                      (q.status || "").toLowerCase() === "pending",
-                  )
-                }
+                disabled={awardDisabled}
               >
                 <Text style={styles.modalSubmitText}>
                   {awarding ? "Awarding…" : "Award selected"}
@@ -341,6 +350,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: "stretch",
     minWidth: 0,
+  },
+  /** A fully-opaque primary button that silently ignores taps reads as broken;
+   * the sheet's only affordance was small grey hint text above it. */
+  modalSubmitDisabled: {
+    opacity: 0.4,
   },
   modalSubmitText: {
     fontSize: 12,
