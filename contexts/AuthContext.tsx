@@ -790,7 +790,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await withTimeout(authService.signOut(), AUTH_TIMEOUT_MS);
     } catch (e) {
-      logAuthError("sign_out_error", e);
+      // Local state is cleared below either way, so the user is signed out even
+      // when the remote revoke times out on a flaky network. Warn, don't error.
+      if (e instanceof TimeoutError) {
+        logAuth("sign_out_timeout_local_cleared", { message: e.message }, "warn");
+      } else {
+        logAuthError("sign_out_error", e);
+      }
     }
     setRestoreError(null);
     clearAuthState(false);

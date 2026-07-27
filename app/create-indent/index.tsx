@@ -1061,6 +1061,44 @@ export default function CreateIndentScreen() {
     requestIndentTicketConfirm,
   ]);
 
+  const canSubmit =
+    !submitting &&
+    Boolean(form.client_id?.trim()) &&
+    (form.client_name ?? "").trim().length > 0 &&
+    (form.pickup_area ?? "").trim().length > 0 &&
+    (form.drop_location ?? "").trim().length > 0 &&
+    (form.vehicle_type ?? "").trim().length > 0 &&
+    (form.load_type ?? "").trim().length > 0 &&
+    (form.weight ?? "").trim().length > 0 &&
+    parseFloat((form.weight ?? "").replace(/,/g, "")) > 0 &&
+    (form.client_price ?? "").trim().length > 0 &&
+    parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
+    (!(form.supplier_target ?? "").trim() ||
+      parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0);
+
+  /**
+   * Hooks below must stay above the `!canCreate` early return — `canCreate` flips
+   * once capabilities resolve, and a conditional hook call throws React #310.
+   */
+  const stepCanAdvance = useMemo(() => {
+    if (!isMobileWizard) return canSubmit;
+    return indentStepCanAdvance(wizardStep, form);
+  }, [canSubmit, form, isMobileWizard, wizardStep]);
+
+  const indentWizardSteps = useMemo(
+    () =>
+      INDENT_WIZARD_STEPS.map((id) => ({
+        id,
+        label: indentWizardStepLabel(id),
+      })),
+    [],
+  );
+
+  const showWizardStep = useCallback(
+    (step: IndentWizardStep) => !isMobileWizard || wizardStep === step,
+    [isMobileWizard, wizardStep],
+  );
+
   if (!canCreate) {
     return (
       <View style={{ flex: 1 }}>
@@ -1126,26 +1164,6 @@ export default function CreateIndentScreen() {
     ? fullPageWizardStyles.wizardDatePlaceholder
     : styles.dateTouchablePlaceholder;
 
-  const canSubmit =
-    !submitting &&
-    Boolean(form.client_id?.trim()) &&
-    (form.client_name ?? "").trim().length > 0 &&
-    (form.pickup_area ?? "").trim().length > 0 &&
-    (form.drop_location ?? "").trim().length > 0 &&
-    (form.vehicle_type ?? "").trim().length > 0 &&
-    (form.load_type ?? "").trim().length > 0 &&
-    (form.weight ?? "").trim().length > 0 &&
-    parseFloat((form.weight ?? "").replace(/,/g, "")) > 0 &&
-    (form.client_price ?? "").trim().length > 0 &&
-    parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
-    (!(form.supplier_target ?? "").trim() ||
-      parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0);
-
-  const stepCanAdvance = useMemo(() => {
-    if (!isMobileWizard) return canSubmit;
-    return indentStepCanAdvance(wizardStep, form);
-  }, [canSubmit, form, isMobileWizard, wizardStep]);
-
   const wizardStepIndex = INDENT_WIZARD_STEPS.indexOf(wizardStep);
   const isLastWizardStep =
     wizardStepIndex >= 0 &&
@@ -1156,15 +1174,6 @@ export default function CreateIndentScreen() {
       ? "Share to Network"
       : "Continue"
     : "Share to Network";
-
-  const indentWizardSteps = useMemo(
-    () =>
-      INDENT_WIZARD_STEPS.map((id) => ({
-        id,
-        label: indentWizardStepLabel(id),
-      })),
-    [],
-  );
 
   const wizardSubtitle = isMobileWizard
     ? wizardStep === "client"
@@ -1196,11 +1205,6 @@ export default function CreateIndentScreen() {
     }
     void handleSubmit();
   };
-
-  const showWizardStep = useCallback(
-    (step: IndentWizardStep) => !isMobileWizard || wizardStep === step,
-    [isMobileWizard, wizardStep],
-  );
 
   const canSaveDraft =
     Boolean(orgId) && !submitting && hasIndentDraftProgress(form);

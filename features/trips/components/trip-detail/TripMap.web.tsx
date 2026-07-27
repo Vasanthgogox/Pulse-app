@@ -267,7 +267,12 @@ export function TripMap({
       if (!mapRef.current || !isRunActive()) return;
 
       // ── Create map ───────────────────────────────────────────────────────
-      const map = L.map(mapRef.current, { zoomControl: false }).setView([avgLat, avgLng], 7);
+      // zoomAnimation off: the transition timer survives map.remove(), so an
+      // unmount mid-zoom crashes inside Leaflet's _onZoomTransitionEnd.
+      const map = L.map(mapRef.current, {
+        zoomControl: false,
+        zoomAnimation: false,
+      }).setView([avgLat, avgLng], 7);
       mapInstanceRef.current = map;
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -720,7 +725,11 @@ export function TripMap({
     const m = mapInstanceRef.current;
     if (!m) return;
     try {
-      m.setZoom(m.getZoom() + delta);
+      // `animate: false` — an animated zoom schedules Leaflet's internal
+      // _onZoomTransitionEnd timer, which `map.stop()`/`map.remove()` cannot
+      // cancel. Unmounting mid-transition then crashes on a detached pane
+      // (TypeError: reading '_leaflet_pos').
+      m.setZoom(m.getZoom() + delta, { animate: false });
     } catch {
       /* ignore */
     }
