@@ -317,9 +317,22 @@ export async function getStoryPreview(
 export async function checkOrgsConnected(
   orgA: string,
   orgB: string,
+  postId?: string | null,
 ): Promise<{ error: Error | null; connected: boolean }> {
   if (!orgA || !orgB) return { error: null, connected: false };
   if (orgA === orgB) return { error: null, connected: true };
+  // With a postId, also allow released Reach wave targets — Reach delivers
+  // beyond existing connections by design, so a paid recipient must be able to
+  // open the story it was delivered.
+  if (postId) {
+    const { data, error } = await supabase().rpc('are_orgs_connected_or_reach_target', {
+      p_viewer_org: orgA,
+      p_author_org: orgB,
+      p_post_id: postId,
+    });
+    if (error) return { error: new Error(error.message), connected: false };
+    return { error: null, connected: Boolean(data) };
+  }
   const { data, error } = await supabase().rpc('are_orgs_connected', {
     p_org_a: orgA,
     p_org_b: orgB,

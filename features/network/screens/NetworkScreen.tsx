@@ -409,6 +409,10 @@ function NetworkScreenInner() {
         const authorOrgId = (post.organization_id ?? "").trim();
         if (!authorOrgId) return false;
         if (authorOrgId === orgId) return true;
+        // Sponsored posts are already audience-gated by get_network_feed via
+        // reach_campaign_targets (wave release). Re-applying the connection
+        // check here would filter out the extended reach the customer paid for.
+        if (post.is_sponsored) return true;
         return integratedPartnerOrgIds.has(authorOrgId);
       }),
     [feedQ.data, allowLoadPosts, orgId, integratedPartnerOrgIds],

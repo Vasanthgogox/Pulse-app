@@ -193,9 +193,13 @@ export default function StoryDetailRoute() {
   });
 
   const connectionQ = useQuery({
-    queryKey: ['q', 'posts', 'org-connected', myOrgId, previewQ.data?.organization_id],
+    queryKey: ['q', 'posts', 'org-connected', myOrgId, previewQ.data?.organization_id, params.postId],
     queryFn: async () => {
-      const { connected } = await checkOrgsConnected(myOrgId, previewQ.data!.organization_id);
+      const { connected } = await checkOrgsConnected(
+        myOrgId,
+        previewQ.data!.organization_id,
+        params.postId,
+      );
       return connected;
     },
     enabled: Boolean(user) && status !== 'restoring' && Boolean(myOrgId) && Boolean(previewQ.data),
