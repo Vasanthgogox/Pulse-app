@@ -84,6 +84,7 @@ function PulseBottomTabBarInner({
   const showFinance = visibility?.finance ?? true;
   const showTrips = visibility?.trips ?? true;
   const showNetwork = visibility?.network ?? true;
+  const showLoadCenter = visibility?.loadCenter ?? true;
 
   const switchTab = useCallback(
     (tab: DemoTabId) => {
@@ -171,21 +172,23 @@ function PulseBottomTabBarInner({
             }
           />
         ) : null}
-        <PulseBottomTabSlot
-          label="Loads"
-          active={activeTab === 'loadCenter'}
-          badgeCount={activeLoadCount}
-          compact={isCompactMobile}
-          onPress={() => switchTab('loadCenter')}
-          onPressIn={() => warmTab('loadCenter')}
-          icon={
-            <TabOutlineIcon
-              Icon={Truck}
-              active={activeTab === 'loadCenter'}
-              size={iconSize}
-            />
-          }
-        />
+        {showLoadCenter ? (
+          <PulseBottomTabSlot
+            label="Loads"
+            active={activeTab === 'loadCenter'}
+            badgeCount={activeLoadCount}
+            compact={isCompactMobile}
+            onPress={() => switchTab('loadCenter')}
+            onPressIn={() => warmTab('loadCenter')}
+            icon={
+              <TabOutlineIcon
+                Icon={Truck}
+                active={activeTab === 'loadCenter'}
+                size={iconSize}
+              />
+            }
+          />
+        ) : null}
         <PulseBottomTabSlot
           label="Chat"
           active={isChatRoute}
@@ -211,6 +214,7 @@ function propsEqual(prev: PulseBottomTabBarProps, next: PulseBottomTabBarProps):
     prev.visibility?.finance === next.visibility?.finance &&
     prev.visibility?.trips === next.visibility?.trips &&
     prev.visibility?.network === next.visibility?.network &&
+    prev.visibility?.loadCenter === next.visibility?.loadCenter &&
     prev.isChatRoute === next.isChatRoute &&
     prev.isCompactMobile === next.isCompactMobile &&
     prev.footerPadBottom === next.footerPadBottom &&

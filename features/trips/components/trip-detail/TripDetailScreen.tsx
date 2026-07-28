@@ -591,6 +591,9 @@ export default function TripDetailScreen({
   const canTripDocsTab = canSurface("tripops.trips.docs");
   const canTripTrackingTab = canSurface("tripops.trips.tracking");
   const canTripReassign = canSurface("tripops.trips.reassign");
+  const canTripVerification = canSurface("tripops.trips.verification");
+  const canTripSimulate = canSurface("tripops.trips.simulate");
+  const canTripRatings = canSurface("tripops.trips.ratings");
 
   const manifestRefAssetInsights = useManifestRefAssetInsights({
     orgId:
@@ -793,10 +796,10 @@ export default function TripDetailScreen({
   const openOdometerVerification = useCallback(
     (side: "start" | "end") => {
       const id = detail.trip?.id;
-      if (!id) return;
+      if (!id || !canTripVerification) return;
       router.push(ROUTES.tripVerification(id, side) as never);
     },
-    [detail.trip?.id, router],
+    [detail.trip?.id, router, canTripVerification],
   );
 
   const handleOpenTripChat = useCallback(() => {
@@ -1698,6 +1701,7 @@ export default function TripDetailScreen({
 
   // Next step the business can simulate
   const nextSimulateStep = (() => {
+    if (!canTripSimulate) return null;
     const s = String(trip.status ?? "").toLowerCase();
     const loc = detail.driverLocation;
     const driverLat = loc?.latitude ?? null;
@@ -1781,13 +1785,14 @@ export default function TripDetailScreen({
 
   const currentTripStatusLower = String(trip.status ?? "").trim().toLowerCase();
   const canRevokeLastSimulation =
+    canTripSimulate &&
     !!lastSimulatedTransition?.toStatus &&
     currentTripStatusLower === lastSimulatedTransition.toStatus &&
     !!lastSimulatedTransition.fromStatus;
 
   // Execute simulation: advance status + append log marker to notes
   const handleConfirmSimulate = async () => {
-    if (!simConfirmStep) return;
+    if (!simConfirmStep || !canTripSimulate) return;
     setSimulating(true);
     setSimError(null);
     try {
@@ -3144,6 +3149,7 @@ export default function TripDetailScreen({
                   </View>
                 </View>
 
+                {canTripRatings ? (
                 <View style={styles.refFeedbackWrap}>
                   <TripRatingsBlock
                     trip={trip}
@@ -3160,6 +3166,7 @@ export default function TripDetailScreen({
                     layoutVariant="registry"
                   />
                 </View>
+                ) : null}
               </>
             </PersistentTabPanel>
             <PersistentTabPanel active={activeTab === "finance"}>
@@ -4600,6 +4607,7 @@ export default function TripDetailScreen({
                   </View>
                 </View>
 
+                {canTripRatings ? (
                 <View style={[neoStyles.sideCard, neoStyles.feedbackSideCard]}>
                   <TripRatingsBlock
                     trip={trip}
@@ -4621,6 +4629,7 @@ export default function TripDetailScreen({
                     embeddedSidebar
                   />
                 </View>
+                ) : null}
               </View>
             </View>
           </View>
@@ -5261,7 +5270,7 @@ export default function TripDetailScreen({
             )}
 
             {/* Feedback / Ratings section */}
-            {currentOrganization?.id && (
+            {currentOrganization?.id && canTripRatings && (
               <View style={styles.feedbackWrap}>
                 {detail.tripCompleted ? (
                   <TripRatingsBlock

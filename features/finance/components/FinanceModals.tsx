@@ -3,6 +3,7 @@
  * Entity Detail, Trip P&L, Ledger Report, Shared Ledger.
  */
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import type { AddTransactionData } from "@/components/AddTransactionModal";
 import type { PartyOption, TripOption } from "@/components/AddTransactionModal";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
@@ -239,6 +240,8 @@ export function FinanceModals(props: FinanceModalsProps) {
   } = props;
 
   const { t } = useLanguage();
+  const { can: canSurface } = useMemberAccess();
+  const canAssignDriverVehicle = canSurface("fleet.drivers.assign_vehicle");
 
   return (
     <>
@@ -381,7 +384,7 @@ export function FinanceModals(props: FinanceModalsProps) {
           onRefresh={onEntityOverlayRefresh}
           vehicles={selectedEntity?.entityType === "DRIVER" ? vehicleRows : undefined}
           onAssignVehicle={
-            selectedEntity?.entityType === "DRIVER" && orgId
+            selectedEntity?.entityType === "DRIVER" && orgId && canAssignDriverVehicle
               ? async (driverId, vehicleId) => {
                   await updateDriver(orgId, driverId, { assigned_vehicle_id: vehicleId });
                   onEntityOverlayRefresh?.();
@@ -395,7 +398,7 @@ export function FinanceModals(props: FinanceModalsProps) {
               : undefined
           }
           onAssignDriver={
-            selectedEntity?.entityType === "VEHICLE" && orgId
+            selectedEntity?.entityType === "VEHICLE" && orgId && canAssignDriverVehicle
               ? async (vehicleId, driverId) => {
                   if (driverId == null) {
                     const current = driverRows.find((d) => d.assigned_vehicle_id === vehicleId);

@@ -35,6 +35,7 @@ import {
   memberHomeRouteFromAccess,
   useMemberCapabilities,
 } from '@/lib/useMemberCapabilities';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 import { useQueryClient } from '@tanstack/react-query';
 
 function DemoCustomTabBar(
@@ -54,10 +55,13 @@ function DemoCustomTabBar(
   // (the per-tab MemberDomainGate holds the screen) so denied tabs don't flicker
   // in then out. Owner/admin see all three (org-model-gated only, as before).
   const memberAccess = useMemberCapabilities();
+  const { can: canSurface, isLoading: surfaceLoading } = useMemberAccess();
+  const canOpenLoadCenter = surfaceLoading || canSurface('tripops.pulse_loads');
   const tabVisibility = {
     finance: memberAccess.isLoading || memberAccess.finance,
     trips: memberAccess.isLoading || memberAccess.tripops,
     network: memberAccess.isLoading || memberAccess.sales,
+    loadCenter: canOpenLoadCenter,
   };
   // The member's own home tab — used to highlight the dock when the current
   // route isn't a primary tab (e.g. profile), so a hidden tab is never shown active.
@@ -80,7 +84,7 @@ function DemoCustomTabBar(
   const onTabChange = useCallback(
     (tab: DemoTabId) => {
       if (tab === 'loadCenter') {
-        router.push(ROUTES.PULSE_LOADS);
+        if (canOpenLoadCenter) router.push(ROUTES.PULSE_LOADS);
         return;
       }
       if (tab === 'network') {
@@ -91,7 +95,7 @@ function DemoCustomTabBar(
       }
       navigation.navigate(tab);
     },
-    [navigation, pathname, router],
+    [canOpenLoadCenter, navigation, pathname, router],
   );
 
   const onProfilePress = () => {

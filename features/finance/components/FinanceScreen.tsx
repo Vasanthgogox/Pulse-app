@@ -145,11 +145,15 @@ export function FinanceScreen() {
       garage: "finance.subtab.garage",
       drivers: "finance.subtab.drivers",
     };
-    return TABS.filter(
-      (tab) =>
-        canAccessFinanceSubTab(capabilities, tab.id) &&
-        canSurface(surfaceByTab[tab.id]),
-    );
+    return TABS.filter((tab) => {
+      if (!canAccessFinanceSubTab(capabilities, tab.id)) return false;
+      if (!canSurface(surfaceByTab[tab.id])) return false;
+      // Garage/drivers sub-tabs are vehicle/driver rosters: also require the
+      // matching fleet read surface so revoking it actually hides the list.
+      if (tab.id === "garage") return canSurface("fleet.vehicles.view");
+      if (tab.id === "drivers") return canSurface("fleet.drivers.view");
+      return true;
+    });
   }, [capabilities, canSurface]);
   const {
     currentOrganization,

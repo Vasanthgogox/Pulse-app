@@ -308,6 +308,9 @@ export default function DriverDetailScreen({
   const { can: canSurface } = useMemberAccess();
   const canAddTransaction =
     canAccessFinance(capabilities) && canSurface("finance.add_transaction");
+  const canInviteDriver = canSurface("fleet.drivers.invite");
+  const canEditDriver = canSurface("fleet.drivers.edit");
+  const canViewDriverAnalytics = canSurface("fleet.drivers.analytics");
   const [driver, setDriver] = useState<DriverRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1119,6 +1122,7 @@ export default function DriverDetailScreen({
   };
 
   const handleProfileEditPress = () => {
+    if (!canEditDriver) return;
     if (driverIsLocal) {
       setShowEditLocalDriverModal(true);
       return;
@@ -1349,7 +1353,8 @@ export default function DriverDetailScreen({
                 ? "Disconnected"
                 : "Integrated";
   const profileActionEnabled =
-    canSendMatchedInvite || canSendFleetReinvite || isNotInApp;
+    canInviteDriver &&
+    (canSendMatchedInvite || canSendFleetReinvite || isNotInApp);
   const heroDecorAnimatedStyle = isWebDesktop
     ? {
         opacity: heroDecorProgress.interpolate({
@@ -1786,40 +1791,44 @@ export default function DriverDetailScreen({
             {t("statement")}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tabItem,
-            driverDetailTab === "ranking" && styles.tabItemActive,
-          ]}
-          onPress={() => setDriverDetailTab("ranking")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabItemText,
-              driverDetailTab === "ranking" && styles.tabItemTextActive,
-            ]}
-          >
-            Fleet Ranking
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tabItem,
-            driverDetailTab === "earnings" && styles.tabItemActive,
-          ]}
-          onPress={() => setDriverDetailTab("earnings")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabItemText,
-              driverDetailTab === "earnings" && styles.tabItemTextActive,
-            ]}
-          >
-            Earnings
-          </Text>
-        </TouchableOpacity>
+        {canViewDriverAnalytics ? (
+          <>
+            <TouchableOpacity
+              style={[
+                styles.tabItem,
+                driverDetailTab === "ranking" && styles.tabItemActive,
+              ]}
+              onPress={() => setDriverDetailTab("ranking")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.tabItemText,
+                  driverDetailTab === "ranking" && styles.tabItemTextActive,
+                ]}
+              >
+                Fleet Ranking
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tabItem,
+                driverDetailTab === "earnings" && styles.tabItemActive,
+              ]}
+              onPress={() => setDriverDetailTab("earnings")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.tabItemText,
+                  driverDetailTab === "earnings" && styles.tabItemTextActive,
+                ]}
+              >
+                Earnings
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : null}
       </View>
 
       {driverDetailTab === "trips" ? (
@@ -1863,7 +1872,7 @@ export default function DriverDetailScreen({
       >
         <DriverPartnerProfileDashboard
           onClose={() => setShowProfileModal(false)}
-          onEditPress={handleProfileEditPress}
+          onEditPress={canEditDriver ? handleProfileEditPress : undefined}
           editProfileLabel={
             driverIsLocal
               ? "Edit Profile"
@@ -2467,13 +2476,13 @@ export default function DriverDetailScreen({
         </View>
       )}
 
-      {driverDetailTab === "ranking" && (
+      {driverDetailTab === "ranking" && canViewDriverAnalytics && (
         <View style={styles.tabScroll}>
           <DriverFleetRankingTab currentDriverId={driverId} />
         </View>
       )}
 
-      {driverDetailTab === "earnings" && (
+      {driverDetailTab === "earnings" && canViewDriverAnalytics && (
         <View style={styles.tabScroll}>
           <DriverEarningsAnalyticsTab
             trips={trips}

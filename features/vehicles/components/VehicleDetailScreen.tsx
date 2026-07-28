@@ -91,6 +91,9 @@ export default function VehicleDetailScreen({
   const { can: canSurface } = useMemberAccess();
   const canAddTransaction =
     canAccessFinance(capabilities) && canSurface("finance.add_transaction");
+  const canEditVehicle = canSurface("fleet.vehicles.edit");
+  const canViewVehicleAnalytics = canSurface("fleet.vehicles.analytics");
+  const canViewVehicleDocuments = canSurface("fleet.vehicles.documents");
   const [vehicle, setVehicle] = useState<VehicleRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
@@ -349,7 +352,7 @@ export default function VehicleDetailScreen({
 
   const handleChangeVehiclePhoto = async () => {
     const orgId = currentOrganization?.id;
-    if (!orgId || !vehicle) return;
+    if (!orgId || !vehicle || !canEditVehicle) return;
     setVehiclePhotoUploading(true);
     const { path, error: pickErr } = await pickAndUploadVehicleAvatar(vehicle.id);
     if (pickErr) {
@@ -552,15 +555,17 @@ export default function VehicleDetailScreen({
           <Text style={styles.headerSubtitle}>VEHICLE FINANCIAL VIEW</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => router.push(ROUTES.vehicleAnalytics(vehicleId) as never)}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Open vehicle analytics"
-          >
-            <FontAwesome name="line-chart" size={17} color={Theme.textPrimaryDark} />
-          </TouchableOpacity>
+          {canViewVehicleAnalytics ? (
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => router.push(ROUTES.vehicleAnalytics(vehicleId) as never)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Open vehicle analytics"
+            >
+              <FontAwesome name="line-chart" size={17} color={Theme.textPrimaryDark} />
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => setShowProfileModal(true)}
@@ -833,23 +838,25 @@ export default function VehicleDetailScreen({
               Cash Flow
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.tabItem,
-              detailSubTab === "ranking" && styles.tabItemActive,
-            ]}
-            onPress={() => setDetailSubTab("ranking")}
-            activeOpacity={0.8}
-          >
-            <Text
+          {canViewVehicleAnalytics ? (
+            <TouchableOpacity
               style={[
-                styles.tabItemText,
-                detailSubTab === "ranking" && styles.tabItemTextActive,
+                styles.tabItem,
+                detailSubTab === "ranking" && styles.tabItemActive,
               ]}
+              onPress={() => setDetailSubTab("ranking")}
+              activeOpacity={0.8}
             >
-              Ranking
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.tabItemText,
+                  detailSubTab === "ranking" && styles.tabItemTextActive,
+                ]}
+              >
+                Ranking
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {detailSubTab === "operations" && (
@@ -927,7 +934,7 @@ export default function VehicleDetailScreen({
           </View>
         )}
 
-        {detailSubTab === "ranking" && vehicleId && (
+        {detailSubTab === "ranking" && vehicleId && canViewVehicleAnalytics && (
           <VehicleFleetRankingTab currentVehicleId={vehicleId} />
         )}
 
@@ -1083,7 +1090,7 @@ export default function VehicleDetailScreen({
                 </View>
               )}
             </View>
-            {currentOrganization?.id && (
+            {currentOrganization?.id && canViewVehicleDocuments && (
               <VehicleDocumentsSection
                 organizationId={currentOrganization.id}
                 vehicleId={vehicleId}

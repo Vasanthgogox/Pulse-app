@@ -141,12 +141,14 @@ export type DemoTabVisibility = {
   finance: boolean;
   trips: boolean;
   network: boolean;
+  loadCenter: boolean;
 };
 
 const ALL_TABS_VISIBLE: DemoTabVisibility = {
   finance: true,
   trips: true,
   network: true,
+  loadCenter: true,
 };
 
 interface DemoTabBarProps {
@@ -656,6 +658,7 @@ export function DemoTabBar({
       if (item.id === "finance") return visibility.finance;
       if (item.id === "trips") return visibility.trips;
       if (item.id === "network") return visibility.network;
+      if (item.id === "loadCenter") return visibility.loadCenter;
       return true;
     });
 

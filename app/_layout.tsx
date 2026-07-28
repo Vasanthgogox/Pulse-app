@@ -13,6 +13,7 @@ import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
 import { DemoTabBar } from '@/components/demo/DemoTabBar';
 import type { DemoTabId } from '@/components/demo/DemoTabBar';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { routeStackScreenOptions } from '@/lib/routeStackOptions';
@@ -541,6 +542,9 @@ function RootOverlayTabBar() {
   const orgId = org?.currentOrganization?.id ?? null;
   const scrollControls = useDemoTabBarScrollOptional();
   const layoutWidth = useWebLayoutWidth();
+  const { can: canSurface, isLoading: surfaceLoading } = useMemberAccess();
+  // Fail open while surfaces hydrate so the nav item doesn't flicker in and out.
+  const canViewLoadsHub = surfaceLoading || canSurface('tripops.pulse_loads');
 
   const showOnRootScreens = pathnameHasRootTopNav(pathname);
 
@@ -581,7 +585,14 @@ function RootOverlayTabBar() {
   const tabBar = (
     <DemoTabBar
       activeTab={activeTab}
+      visibility={{
+        finance: true,
+        trips: true,
+        network: true,
+        loadCenter: canViewLoadsHub,
+      }}
       onTabChange={(tab) => {
+        if (tab === 'loadCenter' && !canViewLoadsHub) return;
         if (tab === 'loadCenter') preloadPulseLoadsRoute();
         else if (tab === 'finance' || tab === 'trips' || tab === 'network') {
           preloadTabScreen(tab as PreloadableTab);
