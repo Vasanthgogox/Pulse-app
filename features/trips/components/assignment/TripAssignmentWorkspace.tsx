@@ -76,8 +76,14 @@ export type TripAssignmentWorkspaceProps = {
 function cityFromLocation(value: string | null | undefined): string {
   const raw = (value ?? "").trim();
   if (!raw) return "—";
-  const first = raw.split(",")[0]?.trim() || raw;
-  return first.toUpperCase();
+  // Prefer first segment when locations use commas, middots, or pipes.
+  const first =
+    raw.split(/\s*[·|,/]\s*/)[0]?.trim() ||
+    raw.split(",")[0]?.trim() ||
+    raw;
+  const upper = first.toUpperCase();
+  // Keep hero labels readable — long warehouse names were overlapping DEST.
+  return upper.length > 22 ? `${upper.slice(0, 20)}…` : upper;
 }
 
 function formatDistance(trip: TripRow): string {
@@ -232,7 +238,7 @@ export function TripAssignmentWorkspace({
         {/* Dark route hero */}
         <View style={[aws.hero, compact && aws.heroMobile]}>
           <View style={aws.heroRow}>
-            <View style={{ flex: 1, minWidth: compact ? 0 : 240 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <View style={aws.heroMetaRow}>
                 <View style={aws.heroMetaItem}>
                   <View style={aws.heroMetaIcon}>
@@ -256,8 +262,8 @@ export function TripAssignmentWorkspace({
                 </View>
               </View>
 
-              <View style={[aws.routeRow, compact && { gap: 10, flexWrap: "wrap" }]}>
-                <View style={{ minWidth: 0, flexShrink: 1 }}>
+              <View style={[aws.routeRow, compact && aws.routeRowMobile]}>
+                <View style={[aws.routeEndpoint, compact && aws.routeEndpointMobile]}>
                   <Text
                     style={[aws.routeCity, compact && aws.routeCityMobile]}
                     numberOfLines={1}
@@ -268,10 +274,6 @@ export function TripAssignmentWorkspace({
                 </View>
                 {!compact ? (
                   <View style={aws.routeCenter}>
-                    <View style={aws.routeCenterLabels}>
-                      <Text style={aws.routeCenterLabel}>ORIGIN</Text>
-                      <Text style={aws.routeCenterLabel}>DESTINATION</Text>
-                    </View>
                     <View style={aws.routeLine}>
                       <View style={aws.routeLineFill} />
                       <View style={aws.routeDot}>
@@ -280,22 +282,28 @@ export function TripAssignmentWorkspace({
                     </View>
                   </View>
                 ) : (
-                  <FontAwesome name="arrow-right" size={12} color={Theme.primaryLight} />
+                  <View style={aws.routeArrowMobile}>
+                    <FontAwesome name="arrow-right" size={12} color={Theme.primaryLight} />
+                  </View>
                 )}
-                <View style={{ minWidth: 0, flexShrink: 1 }}>
+                <View
+                  style={[
+                    aws.routeEndpoint,
+                    aws.routeEndpointEnd,
+                    compact && aws.routeEndpointMobile,
+                  ]}
+                >
                   <Text
                     style={[
                       aws.routeCity,
                       compact && aws.routeCityMobile,
-                      !compact && { textAlign: "right" },
+                      aws.routeCityEnd,
                     ]}
                     numberOfLines={1}
                   >
                     {destination}
                   </Text>
-                  <Text style={[aws.routeSub, !compact && { textAlign: "right" }]}>
-                    DESTINATION
-                  </Text>
+                  <Text style={[aws.routeSub, aws.routeSubEnd]}>DESTINATION</Text>
                 </View>
               </View>
             </View>

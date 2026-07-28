@@ -142,8 +142,9 @@ export const aws = StyleSheet.create({
     flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 20,
+    gap: 16,
     zIndex: 1,
+    minWidth: 0,
   },
   heroMetaRow: {
     flexDirection: "row",
@@ -178,25 +179,53 @@ export const aws = StyleSheet.create({
   routeRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
+    width: "100%",
+    minWidth: 0,
+  },
+  routeRowMobile: {
+    gap: 10,
+  },
+  routeEndpoint: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: "40%",
+  },
+  routeEndpointEnd: {
+    alignItems: "flex-end",
+  },
+  routeEndpointMobile: {
+    maxWidth: "46%",
+    flexBasis: "auto",
   },
   routeCity: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "900",
     color: Theme.cardWhite,
-    letterSpacing: 1,
+    letterSpacing: 0.4,
     fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
+  },
+  routeCityEnd: {
+    textAlign: "right",
   },
   routeSub: {
     fontSize: 11,
     color: Theme.textMuted,
     marginTop: 2,
   },
+  routeSubEnd: {
+    textAlign: "right",
+  },
   routeCenter: {
-    flex: 1,
-    maxWidth: 280,
+    width: 96,
+    flexShrink: 0,
     alignItems: "center",
-    paddingHorizontal: 8,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  routeArrowMobile: {
+    flexShrink: 0,
+    paddingHorizontal: 4,
   },
   routeCenterLabels: {
     width: "100%",
@@ -211,15 +240,15 @@ export const aws = StyleSheet.create({
   },
   routeLine: {
     width: "100%",
-    height: 2,
-    backgroundColor: "rgba(148,163,184,0.25)",
-    borderRadius: 1,
-    position: "relative",
-    alignItems: "center",
+    height: 28,
     justifyContent: "center",
+    alignItems: "center",
   },
   routeLineFill: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 2,
     backgroundColor: Theme.primaryLight,
     opacity: 0.85,
     borderRadius: 1,
@@ -242,6 +271,7 @@ export const aws = StyleSheet.create({
   },
   metricsBox: {
     flexDirection: "row",
+    flexShrink: 0,
     backgroundColor: "rgba(15,23,42,0.9)",
     borderRadius: 16,
     borderWidth: 1,
@@ -437,7 +467,8 @@ export const aws = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.networkCardBorder,
-    overflow: "hidden",
+    // Clip only rounded corners on the header; body lists need to scroll.
+    overflow: "visible",
     alignSelf: "stretch",
     flexDirection: "column",
     ...Platform.select({
@@ -445,9 +476,12 @@ export const aws = StyleSheet.create({
         minWidth: 0,
         width: "100%",
         height: "100%",
+        // Keep card chrome rounded without clipping the list scrollport.
+        overflow: "hidden",
         boxShadow: `0 8px 24px -6px ${Theme.assignmentCardShadow}`,
       },
       default: {
+        overflow: "hidden",
         shadowColor: Theme.networkHubListCardShadow,
         shadowOpacity: 0.06,
         shadowRadius: 16,
@@ -567,6 +601,8 @@ export const aws = StyleSheet.create({
     flexGrow: 1,
     gap: 12,
     minHeight: 148,
+    // Allow nested roster lists to own their scroll (do not clip children).
+    overflow: "visible",
   },
   snapshot: {
     flexDirection: "row",
@@ -598,7 +634,7 @@ export const aws = StyleSheet.create({
   snapshotAvatarVehicle: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: 24,
     backgroundColor: Theme.assignmentVehicleAccent,
     alignItems: "center",
     justifyContent: "center",
