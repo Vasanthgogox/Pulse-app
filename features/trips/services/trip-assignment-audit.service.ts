@@ -24,6 +24,31 @@ function isTripAssignmentAuditTableMissing(
   return false;
 }
 
+/**
+ * Errors that mean "this row is already recorded, or this deployment cannot record
+ * it yet" — neither is a failure the caller should surface or retry.
+ *
+ *  - 23505 unique violation: the driver already accepted (double tap / offline replay).
+ *  - 23514 check violation / 42501 RLS denial: the DB predates
+ *    20270116000000_driver_accepted_assignment_audit, which widens the event_type
+ *    CHECK and adds the driver INSERT policy. Native ships without OTA, so an older
+ *    app may also hit a newer DB and vice versa; acceptance must degrade quietly
+ *    rather than block the driver's trip.
+ */
+function isBenignAuditWriteError(
+  err: { message?: string; code?: string } | null | undefined,
+): boolean {
+  if (!err) return false;
+  const code = String(err.code ?? '');
+  if (code === '23505' || code === '23514' || code === '42501') return true;
+  const m = String(err.message ?? '').toLowerCase();
+  return (
+    m.includes('duplicate key value') ||
+    m.includes('violates check constraint') ||
+    m.includes('violates row-level security')
+  );
+}
+
 function isLatestAssignmentAuditRpcMissing(
   err: { message?: string; code?: string } | null | undefined,
 ): boolean {
@@ -37,7 +62,12 @@ function isLatestAssignmentAuditRpcMissing(
   );
 }
 
-export type AssignmentEventType = 'assignment' | 'reassignment' | 'completed';
+export type AssignmentEventType =
+  | 'assignment'
+  | 'reassignment'
+  /** Driver acted on the assignment themselves — see 20270116000000_driver_accepted_assignment_audit. */
+  | 'driver_accepted'
+  | 'completed';
 
 export interface InsertTripAssignmentAuditParams {
   trip_id: string;
@@ -80,6 +110,9 @@ export async function insertTripAssignmentAudit(
         tripAssignmentAuditTableUnavailable = true;
         return { error: null, row: null };
       }
+      // Already recorded, or this DB cannot record it yet — not a caller-visible
+      // failure, and deliberately does NOT latch the table-unavailable flag.
+      if (isBenignAuditWriteError(error)) return { error: null, row: null };
       return { error: new Error(error.message), row: null };
     }
     return { error: null, row: (data ?? null) as TripAssignmentAuditRow | null };

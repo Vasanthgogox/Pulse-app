@@ -38,7 +38,10 @@ import { claimTripByOtp } from "@/features/trips/services/tripOtp.service";
 import { useDriverHomeDriversQuery } from "@/lib/queries/useDriverHomeDriversQuery";
 import { useInvalidateDriverHomeDashboard } from "@/lib/queries/useInvalidateDriverHomeDashboard";
 import { usePendingOtpTripsQuery } from "@/lib/queries/usePendingOtpTripsQuery";
-import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
+import {
+  getLatestAssignmentAuditByTripIds,
+  insertTripAssignmentAudit,
+} from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
     buildAssignerDisplayForTrip,
@@ -1307,6 +1310,21 @@ export default function DriverRadarScreen() {
       setAcceptLoading(false);
       return;
     }
+    // Durable, server-side record of the driver's tap. The status write above keeps
+    // the trip on 'assigned', so without this row nothing outside this device can
+    // tell acceptance apart from the dispatcher's assignment — which is why the web
+    // manifest used to guess. Best-effort by design: a failure here must not block a
+    // driver who has already accepted, and the audit helper swallows duplicate-tap
+    // and pre-migration errors.
+    void insertTripAssignmentAudit({
+      trip_id: trip.id,
+      event_type: "driver_accepted",
+      driver_id_prev: null,
+      driver_id_new: trip.driver_id ?? null,
+      vehicle_id_prev: null,
+      vehicle_id_new: trip.vehicle_id ?? null,
+      changed_by: uid,
+    });
     triggerSuccess("Trip accepted. Proceed to pickup.");
     setSelectedIncomingTripId(trip.id);
     setAcceptedTripId(trip.id);
@@ -2615,6 +2633,18 @@ export default function DriverRadarScreen() {
           void AsyncStorage.setItem(DRIVER_ACCEPTED_TRIP_ID_KEY, tripIdToSet);
           setAcceptedTripId(tripIdToSet);
           setSelectedIncomingTripId(tripIdToSet);
+          // Claiming by OTP is an acceptance too — record it so the web manifest
+          // reflects it. driver_id comes from the RPC, which resolves/creates the
+          // driver row for auth.uid(); a local trip object would be stale here.
+          void insertTripAssignmentAudit({
+            trip_id: tripIdToSet,
+            event_type: "driver_accepted",
+            driver_id_prev: null,
+            driver_id_new: result.driver_id ?? null,
+            vehicle_id_prev: null,
+            vehicle_id_new: null,
+            changed_by: uid,
+          });
         }
 
         // Delay background refresh slightly more

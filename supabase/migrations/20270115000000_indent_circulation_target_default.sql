@@ -27,8 +27,15 @@ ALTER TABLE public.indents
 
 -- 3. Fail-open RPC. Only the via_link circulation predicate changes; the
 --    link-window, draft, guard and via_award logic are preserved verbatim.
+--
+--    The signature below includes the trailing `weight numeric` column added by
+--    20260728090000_market_indents_return_weight. That file carries an EARLIER
+--    timestamp but was authored later, so it applies first; omitting `weight`
+--    here made CREATE OR REPLACE fail with a return-type mismatch (Postgres
+--    cannot change a function's return type via OR REPLACE). Keep this list in
+--    sync with the live signature whenever either migration is edited.
 CREATE OR REPLACE FUNCTION public.market_indents_for_org(org_id uuid)
- RETURNS TABLE(id uuid, organization_id uuid, indent_number text, pickup_area text, drop_location text, client_name text, client_price numeric, supplier_target numeric, status text, vehicle_type text, load_type text, pickup_date date, circulation_target text, created_at timestamp with time zone, updated_at timestamp with time zone, creator_organization_name text, assigned_supplier_id uuid, assigned_supplier_rate numeric)
+ RETURNS TABLE(id uuid, organization_id uuid, indent_number text, pickup_area text, drop_location text, client_name text, client_price numeric, supplier_target numeric, status text, vehicle_type text, load_type text, pickup_date date, circulation_target text, created_at timestamp with time zone, updated_at timestamp with time zone, creator_organization_name text, assigned_supplier_id uuid, assigned_supplier_rate numeric, weight numeric)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
@@ -115,7 +122,8 @@ AS $function$
       i.updated_at,
       o.name::text AS creator_organization_name,
       i.assigned_supplier_id,
-      i.assigned_supplier_rate
+      i.assigned_supplier_rate,
+      i.weight
     FROM public.indents i
     JOIN public.organizations o ON o.id = i.organization_id
     JOIN effective_links e ON e.shipper_org_id = i.organization_id
@@ -148,7 +156,8 @@ AS $function$
       i.updated_at,
       o.name::text AS creator_organization_name,
       i.assigned_supplier_id,
-      i.assigned_supplier_rate
+      i.assigned_supplier_rate,
+      i.weight
     FROM public.indents i
     JOIN public.organizations o ON o.id = i.organization_id
     WHERE i.deleted_at IS NULL
