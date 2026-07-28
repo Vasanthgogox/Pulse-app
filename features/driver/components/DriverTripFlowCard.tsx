@@ -298,6 +298,8 @@ export function DriverTripFlowCard({
   const [step, setStep] = useState<StepId>(() => deriveDriverFlowStepFromTrip(trip));
   const [stepLoading, setStepLoading] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
+  /** Completion write in flight — keeps the hold button disabled so it cannot double-submit. */
+  const [completing, setCompleting] = useState(false);
 
   const [podDocuments, setPodDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
   const [podLoading, setPodLoading] = useState(false);
@@ -1000,31 +1002,32 @@ export function DriverTripFlowCard({
     const now = new Date().toISOString();
     setHoldProgress(0);
     setIsHolding(false);
+    // Deliberately NOT optimistic. updateTripStatus() runs server-side guards that
+    // routinely reject completion (e.g. a direct_quote trip with no supplier_id), and
+    // flipping to step 'completed' first unmounted the stepError banner — which lives
+    // inside the `step !== 'completed'` branch — so the driver saw the panel snap back
+    // to POD with no reason given, indistinguishable from a reload. Stay on this step
+    // until the write is confirmed.
+    setCompleting(true);
+    setStepError(null);
+    const { error, trip: updated } = await tripsService.updateTripStatus(id, {
+      status: 'completed',
+      completed_at: now,
+    });
+    setCompleting(false);
+    if (error) {
+      setStepError(error.message);
+      return;
+    }
     setStep('completed');
-    const optimistic = {
+    const next = updated ?? {
       ...localTrip,
       status: 'completed',
       completed_at: now,
       updated_at: now,
     };
-    setLocalTrip(optimistic);
-    onTripUpdated?.(optimistic);
-    const { error, trip: updated } = await tripsService.updateTripStatus(id, {
-      status: 'completed',
-      completed_at: now,
-    });
-    if (error) {
-      setStepError(error.message);
-      setStep('reached');
-      const reverted = { ...localTrip, status: 'at_drop' };
-      setLocalTrip(reverted);
-      onTripUpdated?.(reverted);
-      return;
-    }
-    if (updated) {
-      setLocalTrip(updated);
-      onTripUpdated?.(updated);
-    }
+    setLocalTrip(next);
+    onTripUpdated?.(next);
     await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
     onTripCompleted?.();
   };
@@ -1041,7 +1044,11 @@ export function DriverTripFlowCard({
       if (pct >= 100) {
         if (holdTimerRef.current) clearInterval(holdTimerRef.current);
         holdTimerRef.current = null;
-        completeTrip();
+        // Await-less call would leave a rejected promise unhandled; surface it instead.
+        void completeTrip().catch((e: unknown) => {
+          setCompleting(false);
+          setStepError(e instanceof Error ? e.message : 'Could not complete delivery.');
+        });
       }
     }, 20);
   };
@@ -1435,13 +1442,15 @@ export function DriverTripFlowCard({
 
           {(podDocuments.length >= 1 || podSkipped) ? (
             <HoldPressable
-              onPressIn={startHold}
+              onPressIn={completing ? undefined : startHold}
               onPressOut={cancelHold}
+              disabled={completing}
               pressRetentionOffset={HOLD_PRESS_RETENTION}
               android_ripple={{ color: 'transparent' }}
               style={[
                 styles.holdBtnWrap,
                 { backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight },
+                completing && styles.btnDisabled,
                 Platform.OS === 'web' && holdCompleteWebStyle,
               ]}
             >
@@ -1455,7 +1464,7 @@ export function DriverTripFlowCard({
                   ]}
                   numberOfLines={1}
                 >
-                  Hold to complete delivery
+                  {completing ? 'Completing…' : 'Hold to complete delivery'}
                 </Text>
               </View>
             </HoldPressable>

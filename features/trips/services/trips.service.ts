@@ -2503,18 +2503,38 @@ async function validateSupplierLinkForCompletion(
 ): Promise<{ error: Error | null }> {
   const { data: trip, error: tripError } = await supabase()
     .from("trips")
-    .select("id, source, supplier_id")
+    .select("id, source, supplier_id, trip_payout_mode, driver_id, vehicle_id")
     .eq("id", tripId)
     .maybeSingle();
   if (tripError) return { error: new Error(tripError.message) };
   if (!trip) return { error: new Error("Trip not found.") };
 
+  const supplierId = String(trip.supplier_id ?? "").trim();
+  const payoutMode = String(trip.trip_payout_mode ?? "")
+    .trim()
+    .toLowerCase();
+  const hasOwnDriver = String(trip.driver_id ?? "").trim().length > 0;
+  const hasOwnVehicle = String(trip.vehicle_id ?? "").trim().length > 0;
+
+  // Asset execution needs no supplier linkage — the executing org drives the load
+  // itself, so there is no counterparty to reconcile against. Winning the load via a
+  // direct quote says nothing about WHO drives it: an org can quote on someone's
+  // indent (or its own) and then deploy its own driver + vehicle. Keying the guard on
+  // source === 'direct_quote' therefore trapped legitimate asset trips in a supplier
+  // check they can never satisfy, and the driver could not complete the delivery.
+  // Mirrors getTripExecutionModel() (features/trips/domain/tripExecutionModel.ts):
+  // source 'mover_asset' is always asset, then explicit mode wins, then own driver
+  // AND vehicle means asset. Deliberately inlined rather than imported: that module
+  // imports TripRow from this file, so calling it here would create a circular
+  // import. Keep the two in sync if the execution rule changes.
   const source = String(trip.source ?? "")
     .trim()
     .toLowerCase();
-  const supplierId = String(trip.supplier_id ?? "").trim();
-  const requiresSupplierLink =
-    source === "direct_quote" || supplierId.length > 0;
+  if (source === "mover_asset") return { error: null };
+  if (payoutMode === "asset") return { error: null };
+  if (!payoutMode && hasOwnDriver && hasOwnVehicle) return { error: null };
+
+  const requiresSupplierLink = payoutMode === "market" || supplierId.length > 0;
   if (!requiresSupplierLink) return { error: null };
 
   if (!supplierId) {
