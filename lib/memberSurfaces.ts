@@ -120,6 +120,13 @@ export type MemberSurfaceDef = {
   /** Org must have ANY of these capabilities (operating-model gate). */
   anyOfCaps: readonly Capability[];
   /**
+   * Capabilities this surface actually confers when granted. Defaults to
+   * `anyOfCaps`. Set explicitly when `anyOfCaps` is a broad union used only as
+   * an availability gate — otherwise enabling the surface would leak every cap
+   * in that union (e.g. a finance sub-tab handing out `dispatch`).
+   */
+  grantsCaps?: readonly Capability[];
+  /**
    * Parent surface that must also be on (e.g. finance.manage → finance.view).
    * Checked after org ∩ member map.
    */
@@ -169,6 +176,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Finance → Customers",
     domain: "finance",
     anyOfCaps: DISP,
+    grantsCaps: [],
     requires: "finance.view",
   },
   {
@@ -177,6 +185,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Finance → Suppliers (aggregate / hybrid)",
     domain: "finance",
     anyOfCaps: ["dispatch"],
+    grantsCaps: [],
     requires: "finance.view",
   },
   {
@@ -185,6 +194,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Finance → Garage (asset / hybrid)",
     domain: "finance",
     anyOfCaps: FLEET,
+    grantsCaps: [],
     requires: "finance.view",
   },
   {
@@ -193,6 +203,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Finance → Drivers (asset / hybrid)",
     domain: "finance",
     anyOfCaps: FLEET,
+    grantsCaps: [],
     requires: "finance.view",
   },
   {
@@ -201,6 +212,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Cash-tab party filter: customers",
     domain: "finance",
     anyOfCaps: DISP,
+    grantsCaps: [],
     requires: "finance.subtab.cash",
   },
   {
@@ -209,6 +221,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Cash-tab party filter: suppliers",
     domain: "finance",
     anyOfCaps: ["dispatch"],
+    grantsCaps: [],
     requires: "finance.subtab.cash",
   },
   {
@@ -217,6 +230,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Cash-tab party filter: vehicles",
     domain: "finance",
     anyOfCaps: FLEET,
+    grantsCaps: [],
     requires: "finance.subtab.cash",
   },
   {
@@ -225,6 +239,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Cash-tab party filter: drivers",
     domain: "finance",
     anyOfCaps: FLEET,
+    grantsCaps: [],
     requires: "finance.subtab.cash",
   },
   {
@@ -265,6 +280,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "POD reconcile & log incoming PODs",
     domain: "finance",
     anyOfCaps: [...FIN, ...DISP],
+    grantsCaps: FIN,
     requires: "finance.view",
   },
   {
@@ -313,6 +329,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Org documents vault / documents-center",
     domain: "finance",
     anyOfCaps: [...FIN, ...DISP],
+    grantsCaps: FIN,
     requires: "finance.view",
   },
   {
@@ -321,6 +338,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Fuel / toll / other expense hub (read)",
     domain: "finance",
     anyOfCaps: [...FIN, ...DISP],
+    grantsCaps: FIN,
     requires: "finance.view",
   },
   {
@@ -563,6 +581,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Expense hub on trip detail",
     domain: "tripops",
     anyOfCaps: [...DISP, ...FIN],
+    grantsCaps: FIN,
     requires: "tripops.trips.detail",
   },
   {
@@ -571,6 +590,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Trip-level finance / settlement tab",
     domain: "tripops",
     anyOfCaps: [...DISP, ...FIN],
+    grantsCaps: FIN,
     requires: "tripops.trips.detail",
   },
   {
@@ -767,6 +787,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Access control & member roles",
     domain: "team",
     anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+    grantsCaps: [],
   },
   {
     id: "team.invite",
@@ -774,6 +795,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Send team invites",
     domain: "team",
     anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+    grantsCaps: [],
     requires: "team.manage",
   },
   {
@@ -782,6 +804,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Workspace audit log",
     domain: "team",
     anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+    grantsCaps: [],
     requires: "team.manage",
   },
   {
@@ -790,6 +813,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Org settings / operating model (non-owner fields)",
     domain: "team",
     anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+    grantsCaps: [],
   },
   {
     id: "workspace.kyc",
@@ -797,6 +821,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "View or update org KYC documents",
     domain: "team",
     anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+    grantsCaps: [],
   },
   {
     id: "workspace.products",
@@ -804,6 +829,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Product catalog / modules panel",
     domain: "team",
     anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+    grantsCaps: [],
   },
   {
     id: "workspace.notifications",
@@ -811,6 +837,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Org notification center",
     domain: "team",
     anyOfCaps: [...DISP, ...FIN, "fleet_management"],
+    grantsCaps: [],
   },
 ] as const;
 
@@ -986,7 +1013,7 @@ export function capabilitiesFromMemberSurfaces(
   const set = new Set<Capability>();
   for (const def of MEMBER_SURFACE_CATALOG) {
     if (!memberHasSurface(orgCaps, surfaces, def.id, false)) continue;
-    for (const c of def.anyOfCaps) {
+    for (const c of def.grantsCaps ?? def.anyOfCaps) {
       if (orgCaps.includes(c)) set.add(c);
     }
   }

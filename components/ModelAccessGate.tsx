@@ -10,7 +10,8 @@ import {
   canAccessVehicles,
 } from "@/lib/capabilities";
 import { ROUTES } from "@/lib/routes";
-import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
+import type { useCapabilities } from "@/lib/useCapabilities";
 import { useRouter } from "expo-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -43,19 +44,21 @@ function canAccessKind(
 
 export function ModelAccessGate({ kind, children }: Props) {
   const router = useRouter();
-  const capabilities = useCapabilities();
+  const { capabilities, isLoading } = useMemberAccess();
   const allowed = canAccessKind(kind, capabilities);
 
   useEffect(() => {
-    if (allowed) return;
+    // Member surfaces hydrate async — redirecting before they land bounces
+    // legitimately-permitted members off the route.
+    if (isLoading || allowed) return;
     if (router.canGoBack()) {
       router.back();
       return;
     }
     router.replace(ROUTES.TABS.FINANCE as "/");
-  }, [allowed, router]);
+  }, [allowed, isLoading, router]);
 
-  if (!allowed) {
+  if (isLoading || !allowed) {
     return <CenteredLoadingView />;
   }
 
