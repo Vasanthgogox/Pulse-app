@@ -65,7 +65,14 @@ export function ledgerReceiptFromRow(tx: LedgerRow) {
   const amount = inAmt > 0 ? inAmt : outAmt;
   const isIn = inAmt > 0;
   return {
-    statusLabel: isIn ? "Payment received" : "Payment sent",
+    // Direction alone does not mean the money moved: pending salary requests are
+    // surfaced as synthetic amount_out rows, and labelling those "Payment sent"
+    // told the payer they had already paid a claim still awaiting approval.
+    statusLabel: tx.is_pending_request
+      ? "Payment pending"
+      : isIn
+        ? "Payment received"
+        : "Payment sent",
     title: ledgerReceiptTitle(tx),
     amount,
     isIn,

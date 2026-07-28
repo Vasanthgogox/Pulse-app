@@ -393,7 +393,8 @@ export function LedgerTransactionListView({
       const rows = keyToRows.get(key) ?? [];
       for (const r of rows) {
         runReceived += Number(r.amount_in ?? 0);
-        runPaid += Number(r.amount_out ?? 0);
+        // Pending requests are claims, not disbursements — keep them out of "to date Paid".
+        if (!r.is_pending_request) runPaid += Number(r.amount_out ?? 0);
       }
       cumulativeByKey[key] = { paid: runPaid, received: runReceived };
     }
@@ -655,8 +656,10 @@ export function LedgerTransactionListView({
                 (s, r) => s + Number(r.amount_in ?? 0),
                 0,
               );
+              // Pending requests are surfaced as synthetic amount_out rows but no cash
+              // has left yet, so they must not inflate the day's PAID total.
               const dayOut = sectionRows.reduce(
-                (s, r) => s + Number(r.amount_out ?? 0),
+                (s, r) => (r.is_pending_request ? s : s + Number(r.amount_out ?? 0)),
                 0,
               );
               const flowFilter = getSectionFlowFilter(key);
@@ -885,7 +888,7 @@ export function LedgerTransactionListView({
                                       style={styles.tableViewCellAmountLabelOut}
                                       numberOfLines={1}
                                     >
-                                      Paid
+                                      {row.is_pending_request ? "Pending" : "Paid"}
                                     </Text>
                                   </View>
                                 ) : (
@@ -935,8 +938,9 @@ export function LedgerTransactionListView({
                   const cum = cumulativeByKey[key];
                   const sectionLabel =
                     key === "—" ? "Other" : sectionTitleForKey(key);
+                  // See the sibling total above: pending requests are not cash out.
                   const dayOut = sectionRows.reduce(
-                    (s, r) => s + Number(r.amount_out ?? 0),
+                    (s, r) => (r.is_pending_request ? s : s + Number(r.amount_out ?? 0)),
                     0,
                   );
                   const dayIn = sectionRows.reduce(

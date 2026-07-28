@@ -759,6 +759,10 @@ export default function DriverDetailScreen({
       primary_category: "Driver payment",
       payment_mode: null,
       payment_reference: null,
+      // No cash has moved — this is a claim awaiting approval. Without this flag the
+      // receipt modal reads amount_out > 0 and labels it "Payment sent", which made an
+      // unpaid request look settled.
+      is_pending_request: true,
     }));
     return [...pendingRows, ...sortedDriverLedger].sort((a, b) => {
       const da = a.transaction_date ?? a.created_at ?? "";

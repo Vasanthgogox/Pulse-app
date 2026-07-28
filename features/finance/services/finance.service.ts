@@ -192,6 +192,14 @@ export interface LedgerRow {
   chat_mirror_of_transaction_id?: string | null;
   /** User who recorded the entry (profiles.id). */
   created_by?: string | null;
+  /**
+   * Synthetic row for money that is REQUESTED but not yet paid (e.g. a pending
+   * driver_salary_requests row surfaced in Cash Flow so the header total matches the
+   * list). No cash has moved, so receipt UI must not label it "Payment sent" — see
+   * ledgerReceiptFromRow in features/finance/utils/ledgerTransactionReceipt.util.ts.
+   * Absent/false on real transactions.
+   */
+  is_pending_request?: boolean;
 }
 
 export interface CreateLedgerEntryData {

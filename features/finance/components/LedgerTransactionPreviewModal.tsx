@@ -50,6 +50,9 @@ export function LedgerTransactionPreviewModal({
         <Pressable style={styles.cardShell} onPress={(e) => e.stopPropagation()}>
           <LedgerEntryReceiptCard
             desktop={isDesktop}
+            // The hero checkmark reads as "done". Suppress it for requests still
+            // awaiting payment so the glyph never contradicts the status pill.
+            {...(transaction.is_pending_request ? { heroAnimation: false as const } : {})}
             statusLabel={receipt.statusLabel}
             title={receipt.title}
             amount={receipt.amount}
