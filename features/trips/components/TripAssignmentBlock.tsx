@@ -34,10 +34,12 @@ import {
 } from "@/features/vehicles/services/vehicles.service";
 import { TripPhoneAssignmentWizard } from "@/features/trips/components/allocation/TripPhoneAssignmentWizard";
 import { AssignmentFlowFooter } from "@/features/trips/components/assignment/assignmentFlowFooter";
+import { FleetAssignWorkspace } from "@/features/trips/components/assignment/FleetAssignWorkspace";
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import { PULSE_TRIP } from "@/features/trips/components/add-trip/addTripPulseTheme";
 import {
     formatIndianVehicleNumber,
+    formatMobileNumber,
 } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -83,6 +85,8 @@ export interface TripAssignmentBlockProps {
   assignmentSource?: AssignmentSource;
   /** Current user id (auth.uid()). Pass to record who assigned when user saves — makes trip "Private" for this user. */
   currentUserId?: string | null;
+  /** Resolved phone for the currently assigned driver (from trip detail / profile). */
+  assignedDriverPhone?: string | null;
   /** When false, hide "By phone" / "Assign by phone" (e.g. asset trips). When true or undefined, show (e.g. aggregated trips). */
   showAssignByPhone?: boolean;
   /** When set (e.g. aggregated trip), called with the current vehicle input so parent can show it in Tracking block. */
@@ -131,6 +135,7 @@ export function TripAssignmentBlock({
   partnerName,
   assignmentSource = "unassigned",
   currentUserId,
+  assignedDriverPhone = null,
   showAssignByPhone = true,
   onVehicleDisplayChange,
   previousDriverName,
@@ -712,7 +717,6 @@ export function TripAssignmentBlock({
       setPhoneModalIsReassign(isReassign ?? false);
       setPhoneAssignOtpReveal(null);
       setPhoneAssignSuccess(null);
-      setPhoneInput("");
       setPhoneError(null);
       setPhoneName(null);
       const existingName = (
@@ -721,6 +725,17 @@ export function TripAssignmentBlock({
         ""
       ).trim();
       setPhoneDriverNameInput(existingName);
+      const existingPhone = (
+        assignedDriverPhone ??
+        drivers.find((d) => d.id === trip.driver_id)?.phone ??
+        ""
+      ).trim();
+      // Prefill current mobile for reassign Edit details; blank for first-time assign.
+      setPhoneInput(
+        isReassign && existingPhone
+          ? formatMobileNumber(existingPhone)
+          : "",
+      );
       const vehiclePrefill =
         initialVehicle != null && initialVehicle.trim() !== ""
           ? formatIndianVehicleNumber(
@@ -743,13 +758,18 @@ export function TripAssignmentBlock({
       showAssignByPhone,
       propsDriverName,
       trip.driver_display_name,
+      trip.driver_id,
+      assignedDriverPhone,
+      drivers,
     ],
   );
 
   const currentAssignedDriverPhone = useMemo(() => {
+    const fromProp = (assignedDriverPhone ?? "").trim();
+    if (fromProp) return fromProp;
     const row = drivers.find((d) => d.id === trip.driver_id);
     return row?.phone?.trim() ?? null;
-  }, [drivers, trip.driver_id]);
+  }, [assignedDriverPhone, drivers, trip.driver_id]);
 
   const pilotText =
     propsDriverName ??
@@ -814,28 +834,41 @@ export function TripAssignmentBlock({
     setAssignMode("driver");
     setAssignSearch("");
     setPickDriverId(trip.driver_id);
+    setPreviewDriverId(trip.driver_id);
+    setPreviewVehicleId(trip.vehicle_id);
     Promise.all([
       getDriversByOrganization(organizationId),
       getActiveDriverIds(organizationId),
       getTripsByOrganization(organizationId),
-    ]).then(([r, busyIds, tripsRes]) => {
+      getVehiclesByOrganization(organizationId),
+    ]).then(([r, busyIds, tripsRes, vehiclesRes]) => {
       const list = r.error ? [] : (r.drivers ?? []);
       setDrivers(list.filter((d) => !d.left_at));
       setActiveDriverIds(busyIds);
+      setVehicles(vehiclesRes.error ? [] : (vehiclesRes.vehicles ?? []));
       const activeTrips = (tripsRes.error ? [] : (tripsRes.trips ?? [])).filter((t) => {
         const s = String(t.status ?? "").toLowerCase();
         return !isTripCompleted(t) && s !== "cancelled";
       });
       const labels: Record<string, string> = {};
+      const vehicleIds = new Set<string>();
+      const vehicleLabels: Record<string, string> = {};
       for (const t of activeTrips) {
         if (t.id === trip.id) continue;
         if (t.driver_id) labels[t.driver_id] = getTripDisplayNumber(t);
+        if (t.vehicle_id) {
+          vehicleIds.add(t.vehicle_id);
+          vehicleLabels[t.vehicle_id] = getTripDisplayNumber(t);
+        }
       }
       setActiveDriverTripLabelById(labels);
+      setActiveVehicleIds(vehicleIds);
+      setActiveVehicleTripLabelById(vehicleLabels);
     });
   }, [
     organizationId,
     trip.driver_id,
+    trip.vehicle_id,
     trip.id,
     showAssignByPhone,
     openPhoneModal,
@@ -867,6 +900,8 @@ export function TripAssignmentBlock({
     setAssignMode("vehicle");
     setAssignSearch("");
     setPickVehicleId(trip.vehicle_id);
+    setPreviewVehicleId(trip.vehicle_id);
+    setPreviewDriverId(trip.driver_id);
     if ((propsVehicleLabel ?? "").trim() !== "") {
       const raw = (propsVehicleLabel ?? "").split("·")[0]?.trim() ?? "";
       setPickerVehicleInput(raw ? formatIndianVehicleNumber(raw) : "");
@@ -880,27 +915,36 @@ export function TripAssignmentBlock({
     Promise.all([
       getVehiclesByOrganization(organizationId),
       getTripsByOrganization(organizationId),
-    ]).then(([vehiclesRes, tripsRes]) => {
+      getDriversByOrganization(organizationId),
+      getActiveDriverIds(organizationId),
+    ]).then(([vehiclesRes, tripsRes, driversRes, busyDriverIds]) => {
       setVehicles(vehiclesRes.error ? [] : (vehiclesRes.vehicles ?? []));
+      const list = driversRes.error ? [] : (driversRes.drivers ?? []);
+      setDrivers(list.filter((d) => !d.left_at));
+      setActiveDriverIds(busyDriverIds);
       const activeTrips = (tripsRes.error ? [] : (tripsRes.trips ?? [])).filter((t) => {
         const s = String(t.status ?? "").toLowerCase();
         return !isTripCompleted(t) && s !== "cancelled";
       });
       const ids = new Set<string>();
       const labels: Record<string, string> = {};
+      const driverLabels: Record<string, string> = {};
       for (const t of activeTrips) {
         if (t.id === trip.id) continue;
         if (t.vehicle_id) {
           ids.add(t.vehicle_id);
           labels[t.vehicle_id] = getTripDisplayNumber(t);
         }
+        if (t.driver_id) driverLabels[t.driver_id] = getTripDisplayNumber(t);
       }
       setActiveVehicleIds(ids);
       setActiveVehicleTripLabelById(labels);
+      setActiveDriverTripLabelById(driverLabels);
     });
   }, [
     organizationId,
     trip.vehicle_id,
+    trip.driver_id,
     trip.vehicle_display_number,
     propsVehicleLabel,
     trip.id,
@@ -1130,7 +1174,10 @@ export function TripAssignmentBlock({
     };
   }, []);
 
+  // Auto-preview for legacy list+sidebar picker only (phone / aggregate).
+  // Fleet workspace owns its own selection — skip so effects cannot clobber taps.
   useEffect(() => {
+    if (!showAssignByPhone) return;
     if (assignMode !== "driver") return;
     const list = filteredDrivers;
     if (!list.length) {
@@ -1153,9 +1200,10 @@ export function TripAssignmentBlock({
       }
       return firstFree?.id ?? list[0]?.id ?? null;
     });
-  }, [assignMode, filteredDrivers, activeDriverIds, trip.driver_id]);
+  }, [showAssignByPhone, assignMode, filteredDrivers, activeDriverIds, trip.driver_id]);
 
   useEffect(() => {
+    if (!showAssignByPhone) return;
     if (assignMode !== "vehicle") return;
     const list = filteredVehicles;
     if (!list.length) {
@@ -1171,7 +1219,7 @@ export function TripAssignmentBlock({
       }
       return firstFree?.id ?? list[0]?.id ?? null;
     });
-  }, [assignMode, filteredVehicles, activeVehicleIds, trip.vehicle_id]);
+  }, [showAssignByPhone, assignMode, filteredVehicles, activeVehicleIds, trip.vehicle_id]);
 
   const executePreviewAssignment = useCallback(async () => {
     if (assignMode === "driver") {
@@ -1190,6 +1238,65 @@ export function TripAssignmentBlock({
     saveDriverOnly,
     saveVehicleOnly,
   ]);
+
+  const executeFleetWorkspaceAssignWithIds = useCallback(
+    async (driverId: string, vehicleId: string) => {
+      if (driverId !== trip.driver_id && activeDriverIds.has(driverId)) {
+        const label =
+          activeDriverTripLabelById[driverId] ?? "another ongoing trip";
+        Alert.alert("Driver already in trip", `Driver is already assigned to ${label}.`);
+        return;
+      }
+      if (vehicleId !== trip.vehicle_id && activeVehicleIds.has(vehicleId)) {
+        const label =
+          activeVehicleTripLabelById[vehicleId] ?? "another ongoing trip";
+        Alert.alert("Vehicle already in trip", `Vehicle is already assigned to ${label}.`);
+        return;
+      }
+      setSaving(true);
+      try {
+        const { error } = await updateTripAssignment(
+          trip.id,
+          { driver_id: driverId, vehicle_id: vehicleId },
+          currentUserId != null
+            ? {
+                changedBy: currentUserId,
+                driverIdPrev: trip.driver_id ?? null,
+                vehicleIdPrev: trip.vehicle_id ?? null,
+              }
+            : undefined,
+        );
+        if (error) {
+          Alert.alert("Save failed", error.message, [{ text: "OK" }]);
+          return;
+        }
+        closeAssignModal();
+        onUpdated();
+        if (fullPageFlow) onFlowComplete?.();
+      } finally {
+        setSaving(false);
+      }
+    },
+    [
+      trip.id,
+      trip.driver_id,
+      trip.vehicle_id,
+      activeDriverIds,
+      activeVehicleIds,
+      activeDriverTripLabelById,
+      activeVehicleTripLabelById,
+      currentUserId,
+      closeAssignModal,
+      onUpdated,
+      fullPageFlow,
+      onFlowComplete,
+    ],
+  );
+
+  const executeFleetWorkspaceAssign = useCallback(async () => {
+    if (!previewDriverId || !previewVehicleId) return;
+    await executeFleetWorkspaceAssignWithIds(previewDriverId, previewVehicleId);
+  }, [previewDriverId, previewVehicleId, executeFleetWorkspaceAssignWithIds]);
 
   const pilotCodeFromName = (name: string) => {
     const p = name.trim().split(/\s+/).filter(Boolean);
@@ -1616,8 +1723,51 @@ export function TripAssignmentBlock({
           style={[
             assignmentShellStyles.webModalBackdrop,
             fullPageFlow && styles.fullPageBackdrop,
+            !showAssignByPhone && {
+              padding: 0,
+              backgroundColor: Theme.assignmentPageBg,
+            },
           ]}
         >
+          {!showAssignByPhone ? (
+            <View
+              style={[
+                assignmentShellStyles.assignModalWrapSlate,
+                {
+                  flex: 1,
+                  width: "100%",
+                  maxWidth: "100%",
+                  borderRadius: 0,
+                  maxHeight: "100%",
+                  padding: 0,
+                  overflow: "hidden",
+                  backgroundColor: Theme.assignmentPageBg,
+                },
+              ]}
+            >
+              <FleetAssignWorkspace
+                trip={trip}
+                organizationId={organizationId}
+                drivers={drivers}
+                vehicles={vehicles}
+                activeDriverIds={activeDriverIds}
+                activeVehicleIds={activeVehicleIds}
+                activeDriverTripLabelById={activeDriverTripLabelById}
+                activeVehicleTripLabelById={activeVehicleTripLabelById}
+                initialDriverId={previewDriverId ?? trip.driver_id}
+                initialVehicleId={previewVehicleId ?? trip.vehicle_id}
+                saving={saving}
+                onConfirm={async (driverId, vehicleId) => {
+                  setPreviewDriverId(driverId);
+                  setPreviewVehicleId(vehicleId);
+                  await executeFleetWorkspaceAssignWithIds(driverId, vehicleId);
+                }}
+                onClose={dismissAssignmentFlow}
+                onBeforeRegisterNavigate={onBeforeRegisterNavigate}
+                focus={assignMode === "vehicle" ? "vehicle" : "driver"}
+              />
+            </View>
+          ) : (
           <View
             style={[
               assignmentShellStyles.assignModalWrapSlate,
@@ -2112,6 +2262,7 @@ export function TripAssignmentBlock({
               </View>
             )}
           </View>
+          )}
         </View>
       </Modal>
 

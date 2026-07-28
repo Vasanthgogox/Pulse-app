@@ -3967,6 +3967,9 @@ export default function TripDetailScreen({
                           onDistanceCalculated={setMapRouteDistanceKm}
                           tripId={trip.id}
                           trackingEnabled={trackingState?.broadcastActive ?? false}
+                          driverAvatarUri={detail.driverAvatarUri}
+                          driverAvatarSeed={trip.driver_id}
+                          driverOnline={trackingState?.broadcastActive ?? false}
                         />
                         {showDriverTrackingOfflineOverlay ? (
                           <DriverTrackingOfflineOverlay
@@ -4853,6 +4856,9 @@ export default function TripDetailScreen({
                     onDistanceCalculated={setMapRouteDistanceKm}
                     tripId={trip.id}
                     trackingEnabled={trackingState?.broadcastActive ?? false}
+                    driverAvatarUri={detail.driverAvatarUri}
+                    driverAvatarSeed={trip.driver_id}
+                    driverOnline={trackingState?.broadcastActive ?? false}
                   />
                   {showDriverTrackingOfflineOverlay ? (
                     <DriverTrackingOfflineOverlay
@@ -5103,6 +5109,7 @@ export default function TripDetailScreen({
                       onUpdated={detail.handleAssignmentUpdated}
                       partnerName={detail.partnerName}
                       driverName={detail.driverName}
+                      assignedDriverPhone={detail.driverPhone}
                       vehicleLabel={
                         isAggregate
                           ? detail.displayVehicleFromInput.trim() ||
@@ -5210,6 +5217,9 @@ export default function TripDetailScreen({
                           onDistanceCalculated={setMapRouteDistanceKm}
                           tripId={trip.id}
                           trackingEnabled={trackingState?.broadcastActive ?? false}
+                          driverAvatarUri={detail.driverAvatarUri}
+                          driverAvatarSeed={trip.driver_id}
+                          driverOnline={trackingState?.broadcastActive ?? false}
                         />
                         {showDriverTrackingOfflineOverlay ? (
                           <DriverTrackingOfflineOverlay
@@ -5580,6 +5590,7 @@ export default function TripDetailScreen({
           currentUserId={detail.currentUserId}
           driverAssignOrgId={isAggregate ? (currentOrganization?.id ?? null) : null}
           currentDriverName={detail.driverName}
+          currentDriverPhone={detail.driverPhone}
           currentVehicleLabel={
             isAggregate
               ? detail.displayVehicleFromInput.trim() ||
@@ -5910,6 +5921,8 @@ export default function TripDetailScreen({
           mapTruckStatus={mapTruckStatus}
           trackingBroadcastActive={trackingState?.broadcastActive ?? false}
           lastPingRecordedAt={driverLastPingRecordedAt}
+          driverAvatarUri={detail.driverAvatarUri}
+          driverAvatarSeed={trip.driver_id}
           locationAddress={detail.driverLocationAddress}
           driverActivityTimelineRows={detail.driverActivityTimelineRows}
           expandedTimelineEntryIds={detail.expandedTimelineEntryIds}

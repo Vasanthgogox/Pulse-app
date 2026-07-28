@@ -535,6 +535,18 @@ export const Theme = {
   rankSilverFg: "#475569",
   rankBronzeBg: "#FEF2F2",
   rankBronzeFg: "#B45309",
+
+  // ---- Driver / vehicle assignment workspace (manifest management) ----
+  /** Page canvas behind assignment workspace */
+  assignmentPageBg: "#f3f4f8",
+  /** Dark route hero / primary CTAs */
+  assignmentHeroBg: "#0c101d",
+  /** Soft card elevation shadow tint */
+  assignmentCardShadow: "rgba(15, 23, 42, 0.06)",
+  /** Mode banner wash */
+  assignmentInfoBannerBg: "rgba(37, 99, 235, 0.08)",
+  assignmentInfoBannerBorder: "rgba(37, 99, 235, 0.25)",
+  assignmentInfoBannerText: "#1e3a8a",
 } as const;
 
 export type ThemeColors = typeof Theme;

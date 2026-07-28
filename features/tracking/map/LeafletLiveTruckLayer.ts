@@ -18,9 +18,10 @@ import {
   type TripMapPoint,
 } from '@/features/tracking/map/TripTrackingMapStore';
 import {
-  MAP_TRUCK_MARKER_HTML,
-  MAP_TRUCK_MARKER_ICON_ANCHOR,
-  MAP_TRUCK_MARKER_ICON_SIZE,
+  buildDriverAvatarMarkerHtml,
+  MAP_DRIVER_AVATAR_MARKER_ICON_ANCHOR,
+  MAP_DRIVER_AVATAR_MARKER_ICON_SIZE,
+  type DriverMapMarkerOptions,
 } from '@/lib/mapMarkerIcons.util';
 
 export class LeafletLiveTruckLayer {
@@ -32,6 +33,7 @@ export class LeafletLiveTruckLayer {
     private readonly tripId: string,
     private readonly map: LeafletNS.Map,
     private readonly L: typeof LeafletNS,
+    private readonly driverMarker?: DriverMapMarkerOptions,
   ) {
     this.interp = new MarkerInterpolationEngine((pos) => {
       // A queued interpolation frame can fire after the map/marker was torn
@@ -51,10 +53,14 @@ export class LeafletLiveTruckLayer {
    */
   attach(initialLatLng?: LeafletNS.LatLngTuple): void {
     const icon = this.L.divIcon({
-      html: MAP_TRUCK_MARKER_HTML,
+      html: buildDriverAvatarMarkerHtml(
+        this.driverMarker?.avatarUri,
+        this.driverMarker?.avatarSeed,
+        this.driverMarker?.isOnline ?? true,
+      ),
       className: '',
-      iconSize: MAP_TRUCK_MARKER_ICON_SIZE as LeafletNS.PointTuple,
-      iconAnchor: MAP_TRUCK_MARKER_ICON_ANCHOR as LeafletNS.PointTuple,
+      iconSize: MAP_DRIVER_AVATAR_MARKER_ICON_SIZE as LeafletNS.PointTuple,
+      iconAnchor: MAP_DRIVER_AVATAR_MARKER_ICON_ANCHOR as LeafletNS.PointTuple,
     });
     this.marker = this.L.marker(initialLatLng ?? [0, 0], {
       icon,

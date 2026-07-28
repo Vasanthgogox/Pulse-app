@@ -23,6 +23,10 @@ export interface TrackingMapBlockProps {
   isLocating?: boolean;
   tripLocationPoints?: { latitude: number; longitude: number }[];
   locationAddress?: string | null;
+  /** Live pin: driver profile image (matches driver-app map avatar). */
+  driverAvatarUri?: string | null;
+  driverAvatarSeed?: string | null;
+  driverOnline?: boolean;
 }
 
 type MapCoordinate = {
@@ -197,6 +201,9 @@ export function TrackingMapBlock({
   destinationCoordinate,
   latestLocation,
   tripLocationPoints = [],
+  driverAvatarUri,
+  driverAvatarSeed,
+  driverOnline,
 }: TrackingMapBlockProps) {
   const mapRef = useRef<LeafletMapRef | null>(null);
   const [optimalRoute, setOptimalRoute] = useState<RouteResult | null>(null);
@@ -292,6 +299,9 @@ export function TrackingMapBlock({
         coordinate: latestCoordinate,
         label: "Driver live",
         color: Theme.primary,
+        avatarUri: driverAvatarUri,
+        avatarSeed: driverAvatarSeed,
+        isOnline: driverOnline ?? true,
       });
     }
     // Show sampled history checkpoints so crossed movement is visible.
@@ -308,7 +318,7 @@ export function TrackingMapBlock({
       });
     });
     return next;
-  }, [normalizedOrigin, normalizedDestination, latestCoordinate, historyCoordinates]);
+  }, [normalizedOrigin, normalizedDestination, latestCoordinate, historyCoordinates, driverAvatarUri, driverAvatarSeed, driverOnline]);
 
   const polyline = useMemo<LeafletLatLng[]>(() => {
     // Priority:

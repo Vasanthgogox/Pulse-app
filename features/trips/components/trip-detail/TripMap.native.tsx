@@ -14,6 +14,9 @@ export function TripMap({
   truckStatus,
   height,
   fitPaddingBottom,
+  driverAvatarUri,
+  driverAvatarSeed,
+  driverOnline,
 }: TripMapProps) {
   const fillParent = height === "100%";
   const windowH = Dimensions.get("window").height;
@@ -40,6 +43,9 @@ export function TripMap({
         tripLocationPoints={trail}
         locationAddress={truckStatus?.location ?? null}
         fitPaddingBottom={fitPaddingBottom}
+        driverAvatarUri={driverAvatarUri}
+        driverAvatarSeed={driverAvatarSeed}
+        driverOnline={driverOnline}
       />
     </View>
   );
