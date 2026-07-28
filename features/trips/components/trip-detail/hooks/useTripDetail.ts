@@ -1891,9 +1891,25 @@ export function useTripDetail({
       reason: string;
     }) => {
       if (!trip?.id) return;
-      // Row must pass trip org check + RLS; prefer trip owner over UI org context.
-      const orgId =
-        trip.organization_id?.trim() || currentOrganization?.id || null;
+      /**
+       * The row is stamped with the org that OWNS the adjustment, and RLS on
+       * trip_finance_adjustments is `is_org_member(organization_id)`. Preferring
+       * the trip owner broke the partner case: a carrier adding a CN/DN on the
+       * shipper's trip stamped the shipper's org, failed the membership check,
+       * and addTripAdjustment silently fell back to AsyncStorage — so the line
+       * appeared in the UI and vanished on reload.
+       *
+       * Use the viewer's own org whenever they are not a member of the trip
+       * owner's org. Each side then owns its own adjustment lines, which is also
+       * what the Shared Ledger's You-vs-They split expects.
+       */
+      const tripOwnerOrgId = trip.organization_id?.trim() || null;
+      const viewerOrgId = currentOrganization?.id?.trim() || null;
+      const viewerOwnsTrip =
+        !!tripOwnerOrgId && !!viewerOrgId && tripOwnerOrgId === viewerOrgId;
+      const orgId = viewerOwnsTrip
+        ? tripOwnerOrgId
+        : (viewerOrgId ?? tripOwnerOrgId);
       const missionRaw = getTripOperationalDisplay({
         trip_operational_code: trip.trip_operational_code ?? null,
         trip_code: trip.trip_code ?? null,

@@ -171,6 +171,14 @@ async function loadRemoteForTrip(tripId: string): Promise<TripAdjustment[]> {
   return (data as unknown as TripFinanceAdjustmentRowDb[]).map(rowFromRemote);
 }
 
+/**
+ * Locally-created rows use an `adj_<ts>_<rand>` id; rows that reached Postgres
+ * always have a uuid. A local-only id therefore means the write never persisted.
+ */
+function isLocalOnlyAdjustmentId(id: string | null | undefined): boolean {
+  return String(id ?? "").startsWith("adj_");
+}
+
 export async function getTripAdjustments(tripId: string): Promise<TripAdjustment[]> {
   const remote = await loadRemoteForTrip(tripId);
   try {
@@ -180,7 +188,25 @@ export async function getTripAdjustments(tripId: string): Promise<TripAdjustment
     const remoteIds = new Set(remote.map((r) => r.id));
     const merged = [...remote];
     for (const a of local) {
+      /**
+       * Drop local-only leftovers. These are rows from the era when a rejected
+       * insert silently fell back to AsyncStorage: they were never persisted, so
+       * merging them showed phantom CN/DN lines that survived reloads and, worse,
+       * fed adjustedRevenue/adjustedCost — corrupting the margin with amounts no
+       * counterparty could ever see. The fallback is still written for genuine
+       * offline use, but it must never masquerade as saved data on read.
+       */
+      if (isLocalOnlyAdjustmentId(a.id)) continue;
       if (!remoteIds.has(a.id)) merged.push(a);
+    }
+    // Evict the phantom rows so they cannot reappear if this filter is ever
+    // relaxed, and so the key stops growing. Fire-and-forget: a failed cleanup
+    // must not break the read.
+    if (local.some((a) => isLocalOnlyAdjustmentId(a.id))) {
+      void setTripAdjustments(
+        tripId,
+        local.filter((a) => !isLocalOnlyAdjustmentId(a.id)),
+      ).catch(() => {});
     }
     merged.sort((x, y) =>
       String(x.created_at ?? "").localeCompare(String(y.created_at ?? "")),
@@ -236,8 +262,38 @@ export async function addTripAdjustment(
       if (!error && data) {
         return rowFromRemote(data as TripFinanceAdjustmentRowDb);
       }
-    } catch {
-      /* local fallback */
+      /**
+       * A rejected write must not look like a success. Falling through to the
+       * AsyncStorage path here made RLS failures invisible: the line rendered
+       * from local state and then vanished on reload, with nothing logged.
+       * Permission errors are a real bug (wrong organization_id stamped), so
+       * surface them instead of hiding them behind the offline fallback, which
+       * exists for lost connectivity — not for rejected writes.
+       */
+      if (error) {
+        const code = String(error.code ?? "");
+        const msg = String(error.message ?? "").toLowerCase();
+        const isPermission =
+          code === "42501" ||
+          msg.includes("row-level security") ||
+          msg.includes("permission denied");
+        if (isPermission) {
+          throw new Error(
+            "You do not have permission to add this adjustment on this trip.",
+          );
+        }
+        if (__DEV__) {
+          console.warn(
+            "[tripAdjustments] remote insert failed, keeping locally:",
+            error.message,
+          );
+        }
+      }
+    } catch (e) {
+      // Rethrow our own permission error; genuine transport faults fall back.
+      if (e instanceof Error && e.message.startsWith("You do not have permission")) {
+        throw e;
+      }
     }
   }
 

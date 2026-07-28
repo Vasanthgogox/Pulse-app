@@ -1529,8 +1529,25 @@ export default function TripDetailScreen({
             null,
           )
         : 0);
+  /**
+   * A carrier viewing the shipper's trip is in the partner-settlement view, but
+   * it may still have hauled the load on its OWN driver + truck (asset deploy).
+   * That is a real cost it must settle, so the driver's stamped pay becomes the
+   * freight cost — otherwise margin ignores the payout and the driver-payable
+   * lane has nothing to render.
+   *
+   * There is deliberately no second trip row for this: the carrier settles
+   * against the same trip the shipper owns.
+   */
+  const partnerOwnAssetDriverPay =
+    isPartnerSettlementView && isAssetTripFinance
+      ? Number(trip.driver_commission ?? 0) || 0
+      : 0;
   const cost = isPartnerSettlementView
-    ? computePartnerIndentFreightCost(detail.subcontractRate)
+    ? computePartnerIndentFreightCost(
+        detail.subcontractRate,
+        partnerOwnAssetDriverPay,
+      )
     : isAssetTripFinance
       ? assetCostEstimate
       : supplierCost;
@@ -2022,14 +2039,25 @@ export default function TripDetailScreen({
   // Asset trips: the mover can pay its driver at any time, even before a cost
   // is recorded (previously gated on adjCost/cost > 0, which hid the button on
   // a fresh asset trip — chicken-and-egg). Still owner-only and not a partner view.
+  /**
+   * Record-driver-payout is for whoever actually employs the driver:
+   *   - the trip owner running its own asset, or
+   *   - a carrier settling the shipper's trip that it hauled on its own driver
+   *     (partner view, own-asset deploy) — there is no separate trip row for it.
+   */
   const showRecordDriverPayoutCta =
     isAssetTripFinance &&
-    !isPartnerSettlementView &&
-    isTripOwner;
-  /** Partner settlement tile is receivable-only; expenses live on the mover_asset trip. */
-  const showPayableSettlementLane =
-    !isPartnerSettlementView &&
-    (hasMarketSupplierPayable || isAssetTripFinance);
+    (isPartnerSettlementView ? partnerOwnAssetDriverPay > 0 : isTripOwner);
+  /**
+   * The partner-settlement view normally hides the payable lane: the carrier is
+   * collecting from the shipper, and the shipper's own supplier payable is not
+   * the carrier's business. But when the carrier hauled the load on its own
+   * driver, it genuinely owes that driver, so the lane must appear — it is the
+   * only place to record the payout.
+   */
+  const showPayableSettlementLane = isPartnerSettlementView
+    ? partnerOwnAssetDriverPay > 0
+    : hasMarketSupplierPayable || isAssetTripFinance;
   const tripLedgerNavContext = {
     trip,
     router,

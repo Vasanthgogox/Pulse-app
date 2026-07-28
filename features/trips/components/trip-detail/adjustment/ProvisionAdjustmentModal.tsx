@@ -33,6 +33,7 @@ import {
 import Feather from "@expo/vector-icons/Feather";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -276,6 +277,13 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
       }
       setSuccessPayload(payload);
       setPhase("success");
+    } catch (e) {
+      // Without this the modal showed the success screen for a write that was
+      // rejected, and the line vanished on the next reload.
+      Alert.alert(
+        "Could not save adjustment",
+        e instanceof Error ? e.message : "Please try again.",
+      );
     } finally {
       setSubmitting(false);
     }
