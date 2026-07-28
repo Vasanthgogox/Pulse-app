@@ -2019,6 +2019,86 @@ export async function updateTripDriverCommission(
 }
 
 /**
+ * Freeze the driver's pay onto a trip at assignment time.
+ *
+ * Without this, `driver_commission` stays 0 and the earnings resolver falls
+ * through to the driver's live commission_percent on every render — so editing
+ * a driver's terms retroactively re-prices trips they already ran (set 12% ->
+ * 15% and a finished trip silently changes from ₹588 to ₹735). Stamping the
+ * figure at assignment makes later term changes apply to new trips only.
+ *
+ * The amount is computed with the SAME resolver the UI reads
+ * (tripEarningsDetailForDriver), so the frozen number always equals what was
+ * displayed — no second pricing implementation to drift.
+ *
+ * Only stamps when the amount is backed by agreed terms. An `estimated` basis
+ * is the 10% legacy guess that nobody agreed to; writing that to the trip would
+ * turn a guess into a payable, so it is deliberately left unstamped.
+ * Best-effort: a failure here must not fail the trip, which already exists and
+ * is assigned. Callers get the error and can surface it without rolling back.
+ */
+export async function stampTripDriverPayFromTerms(
+  tripId: string,
+  driverId: string,
+  orgId: string,
+): Promise<{ error: Error | null; amount: number | null }> {
+  const { tripEarningsDetailForDriver } = await import(
+    "@/features/drivers/utils/driverUtils.util"
+  );
+
+  const { data: trip, error: tripErr } = await supabase()
+    .from("trips")
+    .select(
+      "id, driver_commission, supplier_rate, client_price, distance, odometer_distance_km, gps_distance_km, supplier_id",
+    )
+    .eq("id", tripId)
+    .maybeSingle();
+  if (tripErr) return { error: new Error(tripErr.message), amount: null };
+  if (!trip) return { error: new Error("Trip not found"), amount: null };
+
+  // Never overwrite a figure that is already frozen.
+  if (Number(trip.driver_commission ?? 0) > 0) {
+    return { error: null, amount: Number(trip.driver_commission) };
+  }
+
+  const { data: driver, error: driverErr } = await supabase()
+    .from("drivers")
+    .select("commission_percent, commission_per_km")
+    .eq("id", driverId)
+    .maybeSingle();
+  if (driverErr) return { error: new Error(driverErr.message), amount: null };
+
+  // Accepted invite terms win over the driver row (same precedence the wallet
+  // uses); fall back to the driver record when no invite is present.
+  const { data: invite } = await supabase()
+    .from("driver_invites")
+    .select("commission_percent, commission_per_km")
+    .eq("driver_id", driverId)
+    .eq("from_organization_id", orgId)
+    .eq("status", "accepted")
+    .maybeSingle();
+
+  const terms = {
+    commissionPercent:
+      invite?.commission_percent ?? driver?.commission_percent ?? null,
+    commissionPerKm:
+      invite?.commission_per_km ?? driver?.commission_per_km ?? null,
+  };
+
+  const detail = tripEarningsDetailForDriver(trip as never, terms);
+  if (detail.isEstimated || detail.amount <= 0) {
+    return { error: null, amount: null };
+  }
+
+  const { error: updErr } = await updateTripDriverCommission(
+    tripId,
+    detail.amount,
+  );
+  if (updErr) return { error: updErr, amount: null };
+  return { error: null, amount: detail.amount };
+}
+
+/**
  * Assign a trip to a driver by phone (ensure driver row in org, then set trip.driver_id).
  * Used for aggregate trips or post-create assign-by-phone. O(1).
  */

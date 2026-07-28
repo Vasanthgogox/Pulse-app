@@ -11,8 +11,9 @@ import {
 } from "@/features/indents";
 import { useIndentDirectQuotesQuery, useInvalidateIndents } from "@/lib/queries";
 import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
+import { showAppAlert } from "@/lib/appAlert";
+import { confirmDialog } from "@/lib/confirmDialog";
 import { type QueryClient } from "@tanstack/react-query";
-import { Alert } from "react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface UseAwardQuoteParams {
@@ -137,7 +138,7 @@ export function useAwardQuote({
     const load = currentLoad;
     const currentStatus = (load.status || "").toLowerCase();
     if (currentStatus === "awarded" || currentStatus === "completed") {
-      Alert.alert(
+      showAppAlert(
         "Already awarded",
         "This load has already been awarded. Closing.",
       );
@@ -147,7 +148,7 @@ export function useAwardQuote({
       return;
     }
     if (currentStatus === "cancelled" || currentStatus === "closed") {
-      Alert.alert(
+      showAppAlert(
         "Load unavailable",
         "This load has been cancelled or closed.",
       );
@@ -161,21 +162,16 @@ export function useAwardQuote({
     );
     const winner = pendingQuotes.find((q) => q.id === selectedQuoteId);
     if (!winner) {
-      Alert.alert(
+      showAppAlert(
         "Invalid selection",
         "Please select a pending offer to award.",
       );
       return;
     }
-    const confirmed = await new Promise<boolean>((resolve) =>
-      Alert.alert(
-        "Confirm Award",
-        `Award this load to ${winner.bidder_organization_name ?? "this supplier"} for ₹${Number(winner.amount ?? 0).toLocaleString("en-IN")}?`,
-        [
-          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-          { text: "Award", style: "destructive", onPress: () => resolve(true) },
-        ],
-      )
+    const confirmed = await confirmDialog(
+      "Confirm Award",
+      `Award this load to ${winner.bidder_organization_name ?? "this supplier"} for ₹${Number(winner.amount ?? 0).toLocaleString("en-IN")}?`,
+      { confirmText: "Award", destructive: true },
     );
     if (!confirmed) return;
 
@@ -186,7 +182,7 @@ export function useAwardQuote({
         "accepted",
       );
       if (acceptErr) {
-        Alert.alert("Could not award", acceptErr.message);
+        showAppAlert("Could not award", acceptErr.message);
         return;
       }
       for (const q of pendingQuotes) {
@@ -196,7 +192,7 @@ export function useAwardQuote({
             "rejected",
           );
           if (rejectErr) {
-            Alert.alert(
+            showAppAlert(
               "Award partially failed",
               "One or more quotes could not be updated. Winner was set.",
             );
@@ -218,7 +214,7 @@ export function useAwardQuote({
             indentErr.message.includes("indents_status_check"))
             ? "Indent status could not be updated. Please refresh the app and try again."
             : indentErr.message;
-        Alert.alert(
+        showAppAlert(
           "Award saved but indent status could not be updated",
           friendlyMessage,
         );
@@ -233,7 +229,7 @@ export function useAwardQuote({
       onSuccess("Load awarded — supplier can assign and deploy from Claimed.");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error.";
-      Alert.alert("Could not award", msg);
+      showAppAlert("Could not award", msg);
       if (currentLoad?.id) {
         queryClient.invalidateQueries({
           queryKey: ["indents", currentLoad.id, "direct-quotes"],

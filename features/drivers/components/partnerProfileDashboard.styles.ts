@@ -436,6 +436,12 @@ export const partnerProfileDashboardStyles = StyleSheet.create({
     borderColor: Theme.surfaceBorder,
     backgroundColor: Theme.cardWhite,
   },
+  compMissingNote: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: "rgb(217,119,6)",
+    marginBottom: 10,
+  },
   compCellLabel: {
     fontSize: 9,
     fontWeight: "900",

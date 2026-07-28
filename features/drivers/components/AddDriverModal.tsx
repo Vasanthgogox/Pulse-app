@@ -35,6 +35,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ExistingDriverMatch } from '../services/drivers.service';
 import { getDriverProfileAvatar, searchExistingDriversByPhone } from '../services/drivers.service';
+import { hasDriverInviteCompensation } from '../utils/driverInviteCompensation.util';
 import { DriverRegistrationPortalFlow } from './DriverRegistrationPortalFlow';
 
 export type DriverSource = 'organization' | 'partner';
@@ -59,7 +60,7 @@ const STEPS_FULL_KEYS = [
   { id: 'driver', titleKey: 'driverInfo', descriptionKey: 'basicDetails' },
   { id: 'contact', titleKey: 'contactStep', descriptionKey: 'phoneAndEmail' },
   { id: 'documents', titleKey: 'documents', descriptionKey: 'licenseInfo' },
-  { id: 'salary', titleKey: 'salaryStep', descriptionKey: 'compensationOptional' },
+  { id: 'salary', titleKey: 'salaryStep', descriptionKey: 'compensationRequired' },
   { id: 'review', titleKey: 'review', descriptionKey: 'sendInvite' },
 ];
 
@@ -293,7 +294,22 @@ function AddDriverWizardModal({ onClose, onComplete, onAddDriver, visible }: Add
   }, [formData.licenseNumber]);
   const isReview = step.id === 'review';
   const canProceedDriver = !!formData.phone.trim() && !phoneValidationError;
-  const canProceed = step.id === 'driver' ? canProceedDriver : true;
+  /**
+   * Pay terms are mandatory. Without them every trip this driver runs falls back
+   * to a silent 10%-of-trip-value guess that nobody agreed to, so the terms have
+   * to be settled here rather than invented later.
+   */
+  const canProceedSalary = hasDriverInviteCompensation({
+    payableAmount: formData.payableAmount,
+    commissionPercent: formData.commissionPercent,
+    commissionPerKm: formData.commissionPerKm,
+  });
+  const canProceed =
+    step.id === 'driver'
+      ? canProceedDriver
+      : step.id === 'salary'
+        ? canProceedSalary
+        : true;
 
   /**
    * On review: show Send Invitation only when phone maps to an existing driver account.
@@ -612,7 +628,11 @@ function AddDriverWizardModal({ onClose, onComplete, onAddDriver, visible }: Add
       case 'salary':
         return (
           <View style={styles.stepContent}>
-            <Text style={labelStyle}>Fixed salary (₹, optional)</Text>
+            <Text style={[styles.errorText, { color: Theme.textMuted, marginBottom: 8 }]}>
+              Set at least one pay term. Trips are priced from these, so leaving them
+              blank means the driver&apos;s earnings get estimated instead of agreed.
+            </Text>
+            <Text style={labelStyle}>Fixed salary (₹)</Text>
             <TextInput
               style={inputStyle}
               placeholder="e.g. 25000"

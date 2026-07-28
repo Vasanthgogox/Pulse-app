@@ -164,7 +164,12 @@ export function useVisibleIndentQuery(
         queryKeys.indents.market(orgId),
       );
       if (!hint?.length) return undefined;
-      return findIndentInMarketList(hint, indentId) ?? undefined;
+      const row = findIndentInMarketList(hint, indentId);
+      // Skip placeholders that predate `weight` in the market RPCs: consumers
+      // seed their form once from the first row they see, so a weight-less
+      // placeholder would stick even after the real fetch resolves.
+      if (!row || row.weight == null) return undefined;
+      return row;
     },
   });
 }

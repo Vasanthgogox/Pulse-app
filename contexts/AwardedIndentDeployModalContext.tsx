@@ -58,7 +58,8 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
 
-  const { data: myQuotes = [] } = useMyDirectQuotesQuery(orgId);
+  const { data: myQuotes = [], isPending: myQuotesLoading } =
+    useMyDirectQuotesQuery(orgId);
   const { data: marketIndents = [] } = useMarketIndentsQuery(orgId);
   const { data: trips = [] } = useTripsQuery(orgId);
 
@@ -78,8 +79,9 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
         myQuotes,
         marketIndents,
         indentIdsWithTrip,
+        myQuotesLoading,
       ),
-    [orgId, myQuotes, marketIndents, indentIdsWithTrip],
+    [orgId, myQuotes, myQuotesLoading, marketIndents, indentIdsWithTrip],
   );
 
   /** Later-snooze timestamps (ms) persisted across restarts, keyed by indent id. */

@@ -25,9 +25,22 @@ export function getTripExecutionModel(trip: TripRow): TripExecutionModel {
   if (payoutMode === "asset") return "asset";
   if (payoutMode === "market") return "aggregate";
   /**
-   * Unset mode: supplier-linked trips stay aggregate even after subcontractor driver assign.
-   * Integrated asset loads with bookkeeping supplier_id must set trip_payout_mode = asset.
+   * Unset mode. `supplier_id` alone cannot decide this: on the direct-quote
+   * deploy path it is bookkeeping only (the shipper's supplier row for the
+   * winning bidder) and is therefore present on BOTH models.
+   *
+   * The real discriminator is how the load is executed:
+   *   own driver + own vehicle  -> the supplier hauls it himself         -> asset
+   *   anything else             -> handed to a sub-supplier (phone/plate
+   *                                typed in, no roster ids)              -> aggregate
+   *
+   * create_trip_from_direct_quote does not stamp trip_payout_mode, so without
+   * this check every first-supplier asset deploy rendered the aggregate
+   * trip-detail UI (no Expense Hub, no driver payout).
    */
+  const hasOwnDriver = String(trip.driver_id ?? "").trim().length > 0;
+  const hasOwnVehicle = String(trip.vehicle_id ?? "").trim().length > 0;
+  if (hasOwnDriver && hasOwnVehicle) return "asset";
   if (String(trip.supplier_id ?? "").trim()) return "aggregate";
   return "asset";
 }

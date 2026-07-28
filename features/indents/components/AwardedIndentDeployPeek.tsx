@@ -90,7 +90,9 @@ export const AwardedIndentDeployPeek = memo(function AwardedIndentDeployPeek({
               {origin} → {dest}
             </Text>
             <Text style={styles.meta} numberOfLines={1}>
-              {shipperName} · {formatINR(awardAmountInr)}
+              {awardAmountInr != null
+                ? `${shipperName} · ${formatINR(awardAmountInr)}`
+                : shipperName}
             </Text>
           </View>
           <View style={styles.expandCol}>

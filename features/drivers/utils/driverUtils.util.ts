@@ -122,6 +122,101 @@ export function shouldShowIntegratedSubtypePillForHub(
   return String(trip.source ?? "").trim() === "direct_quote";
 }
 
+/** Legacy guess applied when a driver has no agreed pay terms on record. */
+const UNAGREED_EARNINGS_RATIO = 0.1;
+
+/**
+ * How a trip's driver earnings figure was arrived at.
+ * - `trip_commission` — explicit `driver_commission` set on the trip
+ * - `per_km` / `commission_percent` — agreed invite terms
+ * - `estimated` — NO agreed terms exist; the 10% legacy guess. Callers must
+ *   label this as an estimate and prompt for real terms rather than presenting
+ *   it as money the driver is owed.
+ * - `none` — nothing to compute from
+ */
+export type DriverEarningsBasis =
+  | "trip_commission"
+  | "per_km"
+  | "commission_percent"
+  | "estimated"
+  | "none";
+
+export interface DriverTripEarnings {
+  amount: number;
+  basis: DriverEarningsBasis;
+  /** True when no agreed pay terms back this number — it is a guess, not a rate. */
+  isEstimated: boolean;
+}
+
+/**
+ * Trip earnings plus the provenance of the figure. Prefer this over
+ * `tripEarningsForDriver` anywhere the number is shown to a user or used to
+ * settle money — the `estimated` basis means nobody agreed to the amount.
+ */
+export function tripEarningsDetailForDriver(
+  trip: TripWithSupplier | null | undefined,
+  payoutTerms?: DriverTripPayoutTerms | null,
+): DriverTripEarnings {
+  const none = { amount: 0, basis: "none" as const, isEstimated: false };
+  if (!trip) return none;
+
+  const commission = Number(trip.driver_commission ?? 0) || 0;
+  if (commission > 0) {
+    return {
+      amount: Math.round(commission),
+      basis: "trip_commission",
+      isEstimated: false,
+    };
+  }
+
+  const perKm = Number(payoutTerms?.commissionPerKm ?? 0) || 0;
+  if (perKm > 0) {
+    const km = pickTripDistanceKm(trip);
+    if (km > 0) {
+      return { amount: Math.round(km * perKm), basis: "per_km", isEstimated: false };
+    }
+  }
+
+  const commissionPercent = Number(payoutTerms?.commissionPercent ?? 0) || 0;
+  if (commissionPercent > 0) {
+    const ratio = Math.min(100, commissionPercent) / 100;
+    const supplierRate = Number(trip.supplier_rate ?? 0) || 0;
+    if (supplierRate > 0) {
+      return {
+        amount: Math.round(supplierRate * ratio),
+        basis: "commission_percent",
+        isEstimated: false,
+      };
+    }
+    const clientPrice = Number(trip.client_price ?? 0) || 0;
+    if (clientPrice > 0) {
+      return {
+        amount: Math.round(clientPrice * ratio),
+        basis: "commission_percent",
+        isEstimated: false,
+      };
+    }
+  }
+
+  const supplierRate = Number(trip.supplier_rate ?? 0) || 0;
+  if (supplierRate > 0) {
+    return {
+      amount: Math.round(supplierRate * UNAGREED_EARNINGS_RATIO),
+      basis: "estimated",
+      isEstimated: true,
+    };
+  }
+  const clientPrice = Number(trip.client_price ?? 0) || 0;
+  if (clientPrice > 0) {
+    return {
+      amount: Math.round(clientPrice * UNAGREED_EARNINGS_RATIO),
+      basis: "estimated",
+      isEstimated: true,
+    };
+  }
+  return none;
+}
+
 /**
  * Trip earnings shown to driver.
  * Priority:
@@ -129,35 +224,15 @@ export function shouldShowIntegratedSubtypePillForHub(
  * 2) accepted invite per-km payout (odometer distance first, then GPS, then trip distance)
  * 3) accepted invite trip-level commission %
  * 4) legacy fallback (10% supplier_rate, else 10% client_price)
+ *
+ * Returns the bare number. Use `tripEarningsDetailForDriver` when the caller
+ * needs to know whether case 4 fired.
  */
 export function tripEarningsForDriver(
   trip: TripWithSupplier | null | undefined,
   payoutTerms?: DriverTripPayoutTerms | null,
 ): number {
-  if (!trip) return 0;
-  const commission = Number(trip.driver_commission ?? 0) || 0;
-  if (commission > 0) return Math.round(commission);
-
-  const perKm = Number(payoutTerms?.commissionPerKm ?? 0) || 0;
-  if (perKm > 0) {
-    const km = pickTripDistanceKm(trip);
-    if (km > 0) return Math.round(km * perKm);
-  }
-
-  const commissionPercent = Number(payoutTerms?.commissionPercent ?? 0) || 0;
-  if (commissionPercent > 0) {
-    const ratio = Math.min(100, commissionPercent) / 100;
-    const supplierRate = Number(trip.supplier_rate ?? 0) || 0;
-    if (supplierRate > 0) return Math.round(supplierRate * ratio);
-    const clientPrice = Number(trip.client_price ?? 0) || 0;
-    if (clientPrice > 0) return Math.round(clientPrice * ratio);
-  }
-
-  const supplierRate = Number(trip.supplier_rate ?? 0) || 0;
-  if (supplierRate > 0) return Math.round(supplierRate * 0.1);
-  const clientPrice = Number(trip.client_price ?? 0) || 0;
-  if (clientPrice > 0) return Math.round(clientPrice * 0.1);
-  return 0;
+  return tripEarningsDetailForDriver(trip, payoutTerms).amount;
 }
 
 export function isAssignedNotStarted(status: string) {

@@ -735,6 +735,15 @@ function PartyRegistrationPortalInner(
     return normalizeIndianPhoneForMetadata(driverPhone) ?? driverPhone.trim();
   }, [driverPhone]);
 
+  /**
+   * At least one pay term is mandatory. Without it, every trip this driver runs
+   * is priced by a silent 10%-of-trip-value fallback nobody agreed to.
+   */
+  const driverHasPayTerm =
+    Number(driverPayableAmount ?? 0) > 0 ||
+    Number(driverCommissionPercent ?? 0) > 0 ||
+    Number(driverCommissionPerKm ?? 0) > 0;
+
   const validateFormForKind = useCallback(() => {
     setFormError(null);
     if (!organizationId) {
@@ -805,6 +814,12 @@ function PartyRegistrationPortalInner(
           return false;
         }
       }
+      if (!driverHasPayTerm) {
+        setFormError(
+          "Set at least one pay term — fixed salary, commission %, or per km rate.",
+        );
+        return false;
+      }
       return true;
     }
     const regErr = validateIndianVehicleNumber(vehicleReg);
@@ -839,6 +854,7 @@ function PartyRegistrationPortalInner(
     driverRegisteredAtPhone,
     driverExistingMatches,
     driverEmail,
+    driverHasPayTerm,
     onInviteDriver,
     t,
   ]);
@@ -1527,7 +1543,7 @@ function PartyRegistrationPortalInner(
     (driverWizardStep === "license" &&
       driverDl.trim().length > 0 &&
       !dlError(driverDl)) ||
-    driverWizardStep === "extras";
+    (driverWizardStep === "extras" && driverHasPayTerm);
 
   const handleDriverWizardAdvance = () => {
     setFormError(null);
@@ -1573,6 +1589,12 @@ function PartyRegistrationPortalInner(
       return;
     }
     if (driverWizardStep === "extras") {
+      if (!driverHasPayTerm) {
+        setFormError(
+          "Set at least one pay term — fixed salary, commission %, or per km rate.",
+        );
+        return;
+      }
       goReview();
     }
   };
@@ -2348,7 +2370,12 @@ function PartyRegistrationPortalInner(
                         />
                       </View>
                     </Field>
-                    <Field label="Fixed salary (₹)" optionalHint="optional">
+                    <Text style={styles.driverPayTermsHint}>
+                      Set at least one pay term. Trips are priced from these — leaving
+                      them blank means the driver&apos;s earnings get estimated instead
+                      of agreed.
+                    </Text>
+                    <Field label="Fixed salary (₹)">
                       <TextInput
                         style={styles.input}
                         placeholder="e.g. 25000"
@@ -2373,7 +2400,7 @@ function PartyRegistrationPortalInner(
                     </Field>
                     <View style={[styles.row2, layoutWide && styles.row2Web]}>
                       <View style={layoutWide ? styles.row2Grow : undefined}>
-                        <Field label="Commission (%)" optionalHint="optional">
+                        <Field label="Commission (%)">
                           <TextInput
                             style={styles.input}
                             placeholder="e.g. 10"
@@ -2400,7 +2427,7 @@ function PartyRegistrationPortalInner(
                         </Field>
                       </View>
                       <View style={layoutWide ? styles.row2Grow : undefined}>
-                        <Field label="Per km (₹/km)" optionalHint="optional">
+                        <Field label="Per km (₹/km)">
                           <TextInput
                             style={styles.input}
                             placeholder="e.g. 8"
@@ -3571,6 +3598,12 @@ const styles = StyleSheet.create({
     color: "#0f766e",
     textTransform: "uppercase",
     letterSpacing: 0.9,
+  },
+  driverPayTermsHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: Theme.textSecondary,
+    marginBottom: 10,
   },
   driverPreviewNextCard: {
     borderRadius: 12,

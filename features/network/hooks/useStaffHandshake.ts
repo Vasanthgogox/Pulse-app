@@ -26,6 +26,7 @@ import {
   assignAggregateTripDriverByPhone,
   getDriverAvailabilityByPhoneGlobal,
   humanizeTripIdInRpcError,
+  stampTripDriverPayFromTerms,
   updateTripSupplier,
 } from "@/features/trips/services/trips.service";
 import { generateTripOtp } from "@/features/trips/services/tripOtp.service";
@@ -496,6 +497,24 @@ export function useStaffHandshake({
           tripErr?.message ?? "Unknown error.",
         );
         return;
+      }
+      /**
+       * Freeze the driver's pay now, from their agreed terms. Otherwise the
+       * figure is recomputed live on every read and editing the driver's
+       * percentage later silently re-prices this already-assigned trip.
+       * Non-fatal: the trip exists and is assigned, so a failure here is
+       * surfaced and the assigner can set pay from the trip screen.
+       */
+      const { error: payErr } = await stampTripDriverPayFromTerms(
+        trip.id,
+        assignDriverId,
+        orgId,
+      );
+      if (payErr) {
+        Alert.alert(
+          "Trip created — driver pay not saved",
+          "Set the driver's pay from the trip screen so it is not estimated.",
+        );
       }
       await updateIndent(load.id, { status: "completed" });
       setCurrentLoad(null);

@@ -599,7 +599,12 @@ export async function getVisibleIndentById(
   const cached = options?.marketIndentsHint
     ? findIndentInMarketList(options.marketIndentsHint, raw)
     : null;
-  if (cached) {
+  // Only trust the hint when it carries `weight`. The market RPCs gained that
+  // column after release, so a persisted pre-upgrade Find Work list (6h maxAge,
+  // no cache buster) yields rows with weight === undefined. Accepting one would
+  // skip the RPC and leave the deploy Tons field blank for the whole cache
+  // lifetime. Falling through costs one RPC call on a cold-shape cache.
+  if (cached && cached.weight != null) {
     return { error: null, indent: cached };
   }
 

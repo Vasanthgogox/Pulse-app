@@ -41,7 +41,11 @@ import {
   validateDriverInviteCompensation,
 } from '../utils/driverInviteCompensation.util';
 
-export type DriverFleetInviteSalaryModalMode = 'fleet_reinvite' | 'signup_match';
+export type DriverFleetInviteSalaryModalMode =
+  | 'fleet_reinvite'
+  | 'signup_match'
+  /** Edit pay terms on an already-connected driver — saves, sends no invite. */
+  | 'edit_terms';
 
 type Props = {
   visible: boolean;
@@ -149,6 +153,20 @@ export function DriverFleetInviteSalaryModal({
 
   const copy = useMemo(() => {
     const firstName = driverName.split(/\s+/).filter(Boolean)[0] ?? driverName;
+    if (mode === 'edit_terms') {
+      return {
+        eyebrow: 'COMPENSATION TERMS',
+        title: `${firstName}'s pay terms`,
+        pill: 'Fleet driver',
+        subtitle: 'Used to price every trip they run',
+        note: 'At least one pay term is required.',
+        nextSteps: [
+          'Applies to trips assigned from now on',
+          'Trips already priced keep their amount',
+          'Driver sees these terms in the app',
+        ],
+      };
+    }
     if (mode === 'fleet_reinvite') {
       return {
         eyebrow: 'RECONNECT DRIVER',
@@ -448,8 +466,14 @@ export function DriverFleetInviteSalaryModal({
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
                       <>
-                        <FontAwesome name="send" size={12} color="#fff" />
-                        <Text style={styles.submitBtnText}>Send invitation</Text>
+                        <FontAwesome
+                          name={mode === 'edit_terms' ? 'check' : 'send'}
+                          size={12}
+                          color="#fff"
+                        />
+                        <Text style={styles.submitBtnText}>
+                          {mode === 'edit_terms' ? 'Save pay terms' : 'Send invitation'}
+                        </Text>
                       </>
                     )}
                   </LinearGradient>

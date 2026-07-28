@@ -234,7 +234,9 @@ export const AwardedIndentDeployModalPage = memo(function AwardedIndentDeployMod
             <View style={[styles.payTileIconWrap, styles.payTileIconOnAccent]}>
               <Wallet size={15} color={VEHICLE_ACCENT} strokeWidth={2.2} />
             </View>
-            <Text style={styles.payTileAmount}>{formatINR(awardAmountInr)}</Text>
+            <Text style={styles.payTileAmount}>
+              {awardAmountInr != null ? formatINR(awardAmountInr) : "—"}
+            </Text>
             <Text style={styles.payTileLabel}>AGREED RATE</Text>
             <Text style={styles.payTileHint} numberOfLines={1}>
               {shipperName}

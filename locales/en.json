@@ -479,6 +479,7 @@
   "licenseInfo": "License info",
   "salaryStep": "Salary",
   "compensationOptional": "Compensation (optional)",
+  "compensationRequired": "Compensation (required)",
   "review": "Review",
   "sendInvite": "Send invite",
   "driverStep": "Driver",
@@ -790,18 +791,15 @@
   "thisMonthTrips": "This month",
   "customRangeTrips": "Custom range",
   "dateRangeLabel": "Date range",
-
   "complianceDocumentsCenter": "Documents Center",
   "complianceDocumentsCenterTagline": "Central document and compliance intelligence",
   "complianceHeaderSubtitle": "Track expiry, verify documents, and keep your fleet operationally compliant.",
-
   "complianceSectionAll": "All Documents",
   "complianceSectionExpiring": "Expiring Soon",
   "complianceSectionExpired": "Expired",
   "complianceSectionPending": "Pending Verification",
   "complianceSectionMissing": "Missing Documents",
   "complianceSectionRenewal": "Renewal Queue",
-
   "complianceCardExpiring7d": "Expiring in 7 days",
   "complianceCardExpiring30d": "Expiring in 30 days",
   "complianceCardExpired": "Expired",
@@ -811,17 +809,14 @@
   "complianceCardHelperFleet": "Across fleet",
   "complianceCardHelperBlocked": "Cannot be allocated to trips",
   "complianceCardHelperRisk": "At least one expired blocking doc",
-
   "complianceTabDocuments": "Compliance & Documents",
   "complianceTabOverview": "Overview",
   "complianceTabAnalytics": "Analytics",
-
   "complianceScoreLabel": "Compliance score",
   "complianceLevelExcellent": "Excellent",
   "complianceLevelGood": "Good",
   "complianceLevelWarning": "Attention needed",
   "complianceLevelCritical": "Critical",
-
   "complianceDocStatusActive": "Active",
   "complianceDocStatusPending": "Pending",
   "complianceDocStatusVerified": "Verified",
@@ -829,7 +824,6 @@
   "complianceDocStatusRejected": "Rejected",
   "complianceDocStatusReplaced": "Replaced",
   "complianceDocStatusMissing": "Missing",
-
   "complianceActionUpload": "Upload",
   "complianceActionReplace": "Replace",
   "complianceActionVerify": "Verify",
@@ -838,32 +832,26 @@
   "complianceActionView": "View",
   "complianceActionDelete": "Delete",
   "complianceActionHistory": "Audit history",
-
-  "complianceUploadHint": "JPG, PNG, WEBP, HEIC or PDF \u2014 up to 10 MB.",
+  "complianceUploadHint": "JPG, PNG, WEBP, HEIC or PDF — up to 10 MB.",
   "complianceUploadDocNumber": "Document number",
   "complianceUploadIssuedDate": "Issued date",
   "complianceUploadExpiryDate": "Expiry date",
   "complianceUploadIssuedBy": "Issued by",
   "complianceUploadNotes": "Notes",
-
   "complianceTimelineToday": "Today",
   "complianceTimeline7Days": "7 days",
   "complianceTimeline30Days": "30 days",
   "complianceTimelineExpired": "Expired",
-
   "complianceExpiryNoExpiry": "No expiry",
   "complianceExpiryToday": "Expires today",
   "complianceExpiryTomorrow": "Expires tomorrow",
   "complianceExpiryInDays": "Expires in {days} days",
   "complianceExpiredAgo": "Expired {days} days ago",
-
-  "complianceBlockTitle": "Cannot assign \u2014 compliance issue",
+  "complianceBlockTitle": "Cannot assign — compliance issue",
   "complianceBlockBody": "One or more required documents are expired or missing. Resolve them in the Compliance & Documents tab and try again.",
-
   "complianceEmptyTitle": "No documents yet",
   "complianceEmptyBody": "Upload your first document to start tracking expiry and verification.",
   "complianceErrorLoad": "Could not load documents.",
-
   "analyticsTabPerformance": "Performance Analytics",
   "analyticsTabFleetRanking": "Fleet Ranking",
   "analyticsTabEarnings": "Earnings Analytics",
@@ -878,12 +866,10 @@
   "analyticsSectionInsights": "Auto Insights",
   "analyticsSectionLeaderboard": "Leaderboard",
   "analyticsSectionFinancial": "Financial Intelligence",
-
   "analyticsPeriodMonthly": "Monthly",
   "analyticsPeriodQuarterly": "Quarterly",
   "analyticsPeriodYearly": "Yearly",
   "analyticsPeriodLifetime": "Lifetime",
-
   "analyticsKpiTotalRevenue": "Total Revenue",
   "analyticsKpiNetMargin": "Net Margin",
   "analyticsKpiMarginPct": "Margin %",
@@ -915,7 +901,6 @@
   "analyticsKpiActiveDays": "Active Days",
   "analyticsKpiRevenuePerKm": "Revenue / KM",
   "analyticsKpiScore": "Score",
-
   "analyticsBadgePremium": "Premium",
   "analyticsBadgeHighRisk": "High Risk",
   "analyticsBadgeFastPaying": "Fast Paying",
@@ -928,7 +913,6 @@
   "analyticsBadgeLowQuality": "Low Quality",
   "analyticsBadgeBestValue": "Best Value",
   "analyticsBadgeFrequentCanceller": "Frequent Canceller",
-
   "analyticsScoreCustomerHealth": "Customer Health Score",
   "analyticsScoreSupplierReliability": "Supplier Reliability Score",
   "analyticsScoreDriverPerformance": "Driver Performance Score",
@@ -938,7 +922,6 @@
   "analyticsScoreLevelWarning": "Watch",
   "analyticsScoreLevelCritical": "Critical",
   "analyticsScoreLevelUnknown": "Insufficient data",
-
   "analyticsSubScoreProfitability": "Profitability",
   "analyticsSubScorePayment": "Payment discipline",
   "analyticsSubScoreOperations": "Operations",
@@ -952,7 +935,6 @@
   "analyticsSubScoreSettlement": "Settlement health",
   "analyticsSubScoreProductivity": "Productivity",
   "analyticsSubScoreRatings": "Ratings",
-
   "analyticsChartRevenueTrend": "Revenue trend",
   "analyticsChartProfitTrend": "Profit trend",
   "analyticsChartEarningsTrend": "Earnings trend",
@@ -965,7 +947,6 @@
   "analyticsChartAgingHeatmap": "Aging heatmap",
   "analyticsChartDelayHeatmap": "Delay heatmap",
   "analyticsChartCompletionRate": "Completion rate",
-
   "analyticsLeaderboardTitle": "Driver Leaderboard",
   "analyticsLeaderboardColRevenue": "Revenue",
   "analyticsLeaderboardColTrips": "Trips",
@@ -974,19 +955,17 @@
   "analyticsLeaderboardColScore": "Score",
   "analyticsLeaderboardColEarnings": "Earnings",
   "analyticsLeaderboardColRisk": "Risk",
-
   "analyticsRankTopRevenue": "Top revenue",
   "analyticsRankMostReliable": "Most reliable",
   "analyticsRankMostEfficient": "Most efficient",
   "analyticsRankBestLongHaul": "Best long-haul",
   "analyticsRankHighRisk": "High risk",
   "analyticsRankMostImproved": "Most improved",
-
   "analyticsEmptyTitle": "Not enough data yet",
   "analyticsEmptyBody": "Run more trips and log payments to unlock analytics insights.",
   "analyticsErrorLoad": "Could not load analytics.",
   "analyticsRiskMeterPaymentLabel": "Payment risk",
   "analyticsRiskMeterPaymentCaption": "Avg {days} days delay over last 6 months",
   "analyticsInsightsTitle": "Auto insights",
-  "analyticsInsightsEmpty": "No insights yet \u2014 add more trips to unlock callouts."
+  "analyticsInsightsEmpty": "No insights yet — add more trips to unlock callouts."
 }

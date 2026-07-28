@@ -1165,12 +1165,37 @@ export default function DriverDetailScreen({
   const handleSubmitInviteWithCompensation = async (
     compensation: DriverInviteCompensation,
   ) => {
-    if (!currentOrganization?.id || !driver?.phone?.trim()) return;
+    if (!currentOrganization?.id) return;
+    // Editing terms only writes to the driver row; a phone is needed to invite.
+    if (inviteSalaryModalMode !== "edit_terms" && !driver?.phone?.trim()) return;
     const normalized = normalizeDriverInviteCompensation(compensation);
 
     setInviting(true);
     try {
       await persistDriverCompensation(normalized);
+
+      // Editing terms on a connected driver — persist only, no invite.
+      if (inviteSalaryModalMode === "edit_terms") {
+        // Reflect the saved terms immediately; both the row and the offer feed
+        // the Compensation Terms block.
+        setDriver((prev) =>
+          prev
+            ? {
+                ...prev,
+                payable_amount: normalized.payableAmount,
+                commission_percent: normalized.commissionPercent,
+                commission_per_km: normalized.commissionPerKm,
+              }
+            : prev,
+        );
+        setDriverOffer({
+          payableAmount: normalized.payableAmount,
+          commissionPercent: normalized.commissionPercent,
+          commissionPerKm: normalized.commissionPerKm,
+        });
+        setInviteSalaryModalVisible(false);
+        return;
+      }
 
       if (inviteSalaryModalMode === "fleet_reinvite") {
         const { error, inviteSent, inviteAlreadyExists, inviteStatus } =
@@ -1891,7 +1916,20 @@ export default function DriverDetailScreen({
           tripRouteLabelByTripId={tripRouteLabelByTripId}
           assignedVehicleLabel={assignedVehicleLabelForProfile}
           driverOffer={driverOffer}
-          showCompensationBlock={Boolean(driverOffer || driver.tracking_only)}
+          /**
+           * Always shown. Hiding it when terms are absent is exactly the case
+           * that needs surfacing — that driver's trips are being priced by a
+           * silent 10% guess.
+           */
+          showCompensationBlock
+          onEditCompensationPress={
+            canEditDriver && !driverHasLeft
+              ? () => {
+                  setInviteSalaryModalMode("edit_terms");
+                  setInviteSalaryModalVisible(true);
+                }
+              : undefined
+          }
           leftAtFormatted={leftAtFormatted}
         >
           {driverRequests.length > 0 ? (

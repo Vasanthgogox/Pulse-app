@@ -686,8 +686,12 @@ export default function TripDetailScreen({
     detail.trip,
   ]);
 
+  // Bounce off the expenses tab only on true aggregate trips. Keyed on the
+  // execution model, not isAggregateTrip(): a bookkeeping supplier_id is present
+  // on asset deploys too, and using it here bounced the user straight back to
+  // the trip tab even once the Expense Hub was visible.
   useEffect(() => {
-    if (!detail.trip || !isAggregateTrip(detail.trip)) return;
+    if (!detail.trip || isAssetExecutionTrip(detail.trip)) return;
     if (activeTab === "expenses") {
       setActiveTab("trip");
     }
@@ -1343,6 +1347,17 @@ export default function TripDetailScreen({
   const expenseTabLabel = "Expense";
   const expenseHubLabel = "Expense Hub";
   const isAggregate = isAggregateTrip(trip);
+  /**
+   * Expense Hub gate. Deliberately NOT `!isAggregate`: isAggregateTrip() is a
+   * bare supplier_id check, and on the direct-quote deploy path supplier_id is
+   * bookkeeping (the shipper's supplier row for the winning bidder) and is set
+   * on asset trips too. Using it here hid the Expense Hub from a supplier who
+   * deployed his own truck and driver — exactly the person who needs to book
+   * fuel and tolls. getTripExecutionModel() is the canonical asset/aggregate
+   * source, so gate on that instead. isAggregate is left untouched for OTP,
+   * earnings, and ledger logic, which depend on its current meaning.
+   */
+  const showExpenseHub = isAssetExecutionTrip(trip);
 
   const driverSummaryText = (() => {
     const name = detail.driverName?.trim();
@@ -2960,7 +2975,7 @@ export default function TripDetailScreen({
                   </Text>
                 </TouchableOpacity>
               ) : null}
-              {!isAggregate && canTripExpensesTab ? (
+              {showExpenseHub && canTripExpensesTab ? (
                 <TouchableOpacity
                   style={[
                     styles.refTabBtn,
@@ -3507,7 +3522,7 @@ export default function TripDetailScreen({
                             },
                           ]
                         : []),
-                      ...(!isAggregate && canTripExpensesTab
+                      ...(showExpenseHub && canTripExpensesTab
                         ? [
                             {
                               id: "expenses" as const,

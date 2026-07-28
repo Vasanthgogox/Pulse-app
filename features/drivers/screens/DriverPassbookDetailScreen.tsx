@@ -16,7 +16,11 @@ import {
   buildSettlementShareMessage,
 } from '@/features/driver/utils/driverCommunication.util';
 import { phonePeMetaDate } from '@/features/driver/utils/driverGpayTransactions.util';
-import { isAggregateTrip, tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
+import {
+  isAggregateTrip,
+  tripEarningsDetailForDriver,
+  tripEarningsForDriver,
+} from '@/features/drivers/utils/driverUtils.util';
 import { buildCompensationSalaryLines, buildDriverInviteSalaryLines } from '@/features/drivers/utils/driverInviteOffer.util';
 import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
 import {
@@ -547,6 +551,28 @@ export default function DriverPassbookDetailScreen() {
     [tripPayoutTerms],
   );
 
+  /**
+   * No agreed pay terms on record, yet trips are being valued anyway via the
+   * legacy 10% guess. Surfacing this is the point: an unlabelled estimate reads
+   * as money owed, and nobody agreed to it.
+   */
+  const hasAgreedPayTerms =
+    (tripPayoutTerms.commissionPercent != null &&
+      Number(tripPayoutTerms.commissionPercent) > 0) ||
+    (tripPayoutTerms.commissionPerKm != null &&
+      Number(tripPayoutTerms.commissionPerKm) > 0);
+
+  const estimatedTripCount = useMemo(
+    () =>
+      completedTrips.filter(
+        (trip) =>
+          tripEarningsDetailForDriver(trip, tripPayoutTerms).isEstimated,
+      ).length,
+    [completedTrips, tripPayoutTerms],
+  );
+
+  const showPayTermsPrompt = !hasAgreedPayTerms && estimatedTripCount > 0;
+
   const totalEarned = useMemo(() => {
     return Math.round(completedTrips.reduce((sum, trip) => sum + earningsForTrip(trip), 0));
   }, [completedTrips, earningsForTrip]);
@@ -1010,6 +1036,20 @@ export default function DriverPassbookDetailScreen() {
             <Text style={[styles.fleetHeroStatValue, { color: colors.emerald }]}>₹{totalReceived.toLocaleString('en-IN')}</Text>
           </View>
         </View>
+
+        {showPayTermsPrompt ? (
+          <View style={styles.payTermsPrompt}>
+            <FontAwesome name="exclamation-triangle" size={13} color={'rgb(251,146,60)'} />
+            <View style={styles.payTermsPromptText}>
+              <Text style={styles.payTermsPromptTitle}>Estimated — no pay terms agreed</Text>
+              <Text style={styles.payTermsPromptBody}>
+                {estimatedTripCount === 1 ? '1 trip is' : `${estimatedTripCount} trips are`} valued at a
+                default 10% of trip value because no salary, commission % or per-km rate is set for this
+                driver. Set pay terms to record what they are actually owed.
+              </Text>
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <View
@@ -1962,6 +2002,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
+  },
+  payTermsPrompt: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(251,146,60,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(251,146,60,0.3)',
+  },
+  payTermsPromptText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  payTermsPromptTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgb(251,146,60)',
+  },
+  payTermsPromptBody: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: 'rgba(255,255,255,0.7)',
   },
   fleetHeroStat: {
     flex: 1,

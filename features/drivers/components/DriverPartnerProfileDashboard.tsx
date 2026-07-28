@@ -109,6 +109,8 @@ export type DriverPartnerProfileDashboardProps = {
     commissionPerKm: number | null;
   } | null;
   showCompensationBlock: boolean;
+  /** Opens the pay-terms editor. Omitted when the viewer cannot edit this driver. */
+  onEditCompensationPress?: () => void;
   leftAtFormatted: string | null;
   children?: ReactNode;
 };
@@ -129,12 +131,17 @@ export function DriverPartnerProfileDashboard({
   assignedVehicleLabel,
   driverOffer,
   showCompensationBlock,
+  onEditCompensationPress,
   leftAtFormatted,
   children,
 }: DriverPartnerProfileDashboardProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isWide = windowWidth >= 900;
+  const hasAnyCompensationTerm =
+    Number(driverOffer?.payableAmount ?? 0) > 0 ||
+    Number(driverOffer?.commissionPercent ?? 0) > 0 ||
+    Number(driverOffer?.commissionPerKm ?? 0) > 0;
 
   const completion = useMemo(
     () => driverCompletionPercent(driver, driverRatings),
@@ -387,7 +394,25 @@ export function DriverPartnerProfileDashboard({
             <View style={styles.sectionHeadingRow}>
               <View style={styles.accentIndigo} />
               <Text style={styles.sectionHeading}>Compensation Terms</Text>
+              {onEditCompensationPress ? (
+                <TouchableOpacity
+                  onPress={onEditCompensationPress}
+                  hitSlop={12}
+                  style={{ marginLeft: "auto" }}
+                  accessibilityLabel="Edit compensation terms"
+                >
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: Theme.primary }}>
+                    Edit
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
+            {!hasAnyCompensationTerm ? (
+              <Text style={styles.compMissingNote}>
+                No pay terms set. Trip earnings for this driver are estimated at 10% of
+                trip value until you set them.
+              </Text>
+            ) : null}
             <View style={styles.compThreeCol}>
               <View style={styles.compCell}>
                 <Text style={styles.compCellLabel}>Base Salary (Payable)</Text>
