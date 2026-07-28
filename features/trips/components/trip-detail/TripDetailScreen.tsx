@@ -1216,23 +1216,25 @@ export default function TripDetailScreen({
     readFileAsArrayBuffer,
   ]);
 
+  const manifestJourneyPings = useMemo(() => {
+    const trail = detail.locationTrailWithNames ?? [];
+    return trail.length > 0
+      ? trail
+      : detail.tripLocationPoints.map((p) => ({
+          ...p,
+          locationName: null as string | null,
+        }));
+  }, [detail.locationTrailWithNames, detail.tripLocationPoints]);
+
   const journeyLogs = useMemo((): ManifestJourneyLogEntry[] => {
     const tr = detail.trip;
     if (!tr) return [];
-    const trail = detail.locationTrailWithNames ?? [];
-    const locationPings =
-      trail.length > 0
-        ? trail
-        : detail.tripLocationPoints.map((p) => ({
-            ...p,
-            locationName: null as string | null,
-          }));
     return buildManifestJourneyLogs({
       trip: tr,
       assignmentAuditRows: detail.assignmentAuditRows,
       driverLocationAddress: detail.driverLocationAddress,
       driverLocation: detail.driverLocation,
-      locationPings,
+      locationPings: manifestJourneyPings,
       simLogs: simLogEntries,
       simLocationByKey,
       locationLoadingLabel: MAP_LOCATION_LABEL_LOADING,
@@ -1242,8 +1244,7 @@ export default function TripDetailScreen({
     detail.assignmentAuditRows,
     detail.driverLocation,
     detail.driverLocationAddress,
-    detail.locationTrailWithNames,
-    detail.tripLocationPoints,
+    manifestJourneyPings,
     simLogEntries,
     simLocationByKey,
   ]);
@@ -1268,7 +1269,10 @@ export default function TripDetailScreen({
 
   const manifestPulseLastIndex = 4;
   const currentStepIndex = detail.trip
-    ? getManifestCurrentStepIndex(detail.trip)
+    ? getManifestCurrentStepIndex(detail.trip, {
+        assignmentAuditRows: detail.assignmentAuditRows,
+        locationPings: manifestJourneyPings,
+      })
     : 0;
   const visibleJourneyLogs = useMemo(
     () => getVisibleManifestJourneyLogs(journeyLogs, currentStepIndex),

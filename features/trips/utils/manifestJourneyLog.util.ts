@@ -218,9 +218,77 @@ function resolveStepLocation(
   return fallback;
 }
 
+/**
+ * Real evidence that the driver acted on the assignment, rather than the
+ * dispatcher merely setting `assigned`. Returns the acceptance instant, or
+ * null when no driver-side signal exists yet.
+ *
+ * Evidence, strongest first:
+ *  1. an explicit driver-acceptance audit row — forward-compatible only;
+ *     `AssignmentEventType` has no acceptance member yet, so this never
+ *     matches until the driver accept path starts writing one
+ *  2. the trip having moved past `assigned` under its own steam
+ *     (started_at set, or a post-assignment stage reached)
+ *  3. a driver GPS ping — the app can only ping once the driver is on the trip
+ *
+ * Deliberately NOT evidence: `status = assigned`, which is a dispatcher
+ * action, and `updated_at`, which any server-side edit bumps.
+ */
+export function resolveDriverAcceptanceAt(input: {
+  trip: Pick<TripRow, "status" | "started_at" | "completed_at" | "updated_at">;
+  assignmentAuditRows?: TripAssignmentAuditRow[];
+  locationPings?: ManifestLocationPing[];
+}): string | null {
+  const tr = input.trip;
+  const statusLc = String(tr.status ?? "").toLowerCase();
+  if (statusLc === "pending_acceptance" || statusLc === "draft") return null;
+
+  const acceptAudit = [...(input.assignmentAuditRows ?? [])]
+    .filter((r) => {
+      const ev = String(r.event_type ?? "").toLowerCase();
+      return ev === "driver_accepted" || ev === "accepted";
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime(),
+    )[0];
+  if (acceptAudit?.changed_at) return acceptAudit.changed_at;
+
+  const movedPastAssigned = [
+    "in_progress",
+    "picked_up",
+    "pickup",
+    "loading",
+    "unloading",
+    "in_transit",
+    "at_drop",
+    "completed",
+    "delivered",
+    "done",
+  ].includes(statusLc);
+  if (movedPastAssigned || tr.started_at || tr.completed_at) {
+    return tr.started_at ?? tr.updated_at ?? tr.completed_at ?? null;
+  }
+
+  const pings = input.locationPings ?? [];
+  if (pings.length > 0) {
+    const earliest = [...pings].sort(
+      (a, b) =>
+        new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime(),
+    )[0];
+    if (earliest?.recorded_at) return earliest.recorded_at;
+  }
+
+  return null;
+}
+
 /** Last fully completed manifest step (0–4). Matches driver control / Manifest Pulse. */
 export function getManifestCurrentStepIndex(
-  trip: Pick<TripRow, "status" | "completed_at" | "started_at">,
+  trip: Pick<TripRow, "status" | "completed_at" | "started_at" | "updated_at">,
+  evidence?: {
+    assignmentAuditRows?: TripAssignmentAuditRow[];
+    locationPings?: ManifestLocationPing[];
+  },
 ): number {
   const s = String(trip.status ?? "").toLowerCase();
   if (
@@ -231,7 +299,17 @@ export function getManifestCurrentStepIndex(
   }
   if (s === "in_transit") return 3;
   if (["in_progress", "picked_up", "pickup"].includes(s)) return 2;
-  if (s === "assigned") return 1;
+  if (s === "assigned") {
+    // `assigned` alone is a dispatcher action; only advance to the acceptance
+    // step once the driver has actually acted.
+    return resolveDriverAcceptanceAt({
+      trip,
+      assignmentAuditRows: evidence?.assignmentAuditRows,
+      locationPings: evidence?.locationPings,
+    })
+      ? 1
+      : 0;
+  }
   if (s === "pending_acceptance" || s === "draft") return 0;
   return 0;
 }
@@ -290,31 +368,11 @@ export function buildManifestJourneyLogs(input: {
     return null;
   })();
 
-  const driverAcceptedAtIso: string | null = (() => {
-    if (statusLc === "pending_acceptance" || statusLc === "draft") return null;
-    if (
-      tr.status_updated_role === "driver" ||
-      Number(tr.status_revision ?? 0) > 0
-    ) {
-      return tr.updated_at ?? tr.started_at ?? assignedAtIso ?? null;
-    }
-    if (
-      [
-        "assigned",
-        "in_progress",
-        "picked_up",
-        "pickup",
-        "in_transit",
-        "at_drop",
-        "completed",
-        "delivered",
-        "done",
-      ].includes(statusLc)
-    ) {
-      return tr.updated_at ?? assignedAtIso ?? tr.created_at ?? null;
-    }
-    return null;
-  })();
+  const driverAcceptedAtIso: string | null = resolveDriverAcceptanceAt({
+    trip: tr,
+    assignmentAuditRows: audits,
+    locationPings: pings,
+  });
 
   const latestDriverLabel =
     input.driverLocationAddress?.trim() ||
@@ -372,19 +430,20 @@ export function buildManifestJourneyLogs(input: {
       details: "Trip assigned and prepared for dispatch.",
     },
     (() => {
-      const pending =
-        statusLc === "pending_acceptance" || statusLc === "draft";
+      // No acceptance instant means no driver-side signal yet — never present
+      // this step as if the driver had accepted.
+      const pending = !driverAcceptedAtIso;
       const acceptLoc = pending
         ? {
             location:
-              statusLc === "pending_acceptance"
-                ? "Awaiting driver on device"
-                : "Assignment is still being prepared",
+              statusLc === "draft"
+                ? "Assignment is still being prepared"
+                : "Awaiting driver on device",
             locationCoords: null as string | null,
             details:
-              statusLc === "pending_acceptance"
-                ? "Driver has been invited; acceptance pending on device."
-                : "Assignment is still being prepared.",
+              statusLc === "draft"
+                ? "Assignment is still being prepared."
+                : "Driver has been notified; acceptance pending on device.",
           }
         : formatDriverAcceptanceLocation({
             ping: acceptPing,
@@ -395,7 +454,7 @@ export function buildManifestJourneyLogs(input: {
           });
       return {
         stepKey: "driver_accepted" as const,
-        status: "Driver Accepted",
+        status: pending ? "Awaiting Driver Acceptance" : "Driver Accepted",
         atIso: driverAcceptedAtIso,
         time: driverAcceptedAtIso ? formatTime(driverAcceptedAtIso) : "—",
         location: acceptLoc.location,
