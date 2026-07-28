@@ -8,13 +8,18 @@ import {
 } from '@/features/trips/components/allocation/tripPhoneAssignmentWizardSteps';
 import { AssignmentFlowShell } from '@/features/trips/components/assignment/AssignmentFlowShell';
 import { AssignmentFlowFooter } from '@/features/trips/components/assignment/assignmentFlowFooter';
+import {
+  TripAssignmentWorkspace,
+  type AssignmentFulfillmentMode,
+  type AssignmentPanelAction,
+  type ChangeReasonCode,
+} from '@/features/trips/components/assignment/TripAssignmentWorkspace';
 import { assignmentShellStyles } from '@/features/trips/styles/assignmentShellShared';
 import { useAggregateDriverPhoneLookup } from '@/features/trips/hooks/useAggregateDriverPhoneLookup';
 import { useDriverMaster } from '@/features/trips/hooks/useDriverMaster';
 import { useVehicleMaster } from '@/features/trips/hooks/useVehicleMaster';
 import { useReassignTrip } from '@/features/trips/hooks/useReassignTrip';
 import { useReassignMigrationGate } from '@/features/trips/hooks/useReassignMigrationGate';
-import Layout from "@/constants/Layout";
 import { getTripOtpForDisplay } from '@/features/trips/services/tripOtp.service';
 import type { TripRow } from '@/features/trips/services/trips.service';
 import type { ReassignCompletedMeta } from '@/features/trips/components/reassign/reassign.types';
@@ -34,7 +39,6 @@ import {
   Platform,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -60,6 +64,8 @@ type Props = {
   currentUserId: string | null;
   driverAssignOrgId: string | null;
   currentDriverName: string | null;
+  /** Assigned driver mobile — used to prefill Edit details. */
+  currentDriverPhone?: string | null;
   currentVehicleLabel: string | null;
   onCompleted: (meta?: ReassignCompletedMeta) => void | Promise<void>;
   onReloadTrip: () => void | Promise<void>;
@@ -91,14 +97,14 @@ export function ReassignSheet({
   currentUserId,
   driverAssignOrgId,
   currentDriverName,
+  currentDriverPhone: currentDriverPhoneProp = null,
   currentVehicleLabel,
   onCompleted,
   onReloadTrip,
   onVehicleDisplayChange,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
-  const useMobileWizard = Platform.OS !== 'web' || windowWidth < Layout.wizardSteppedMaxWidth;
+  const useMobileWizard = false;
   const { drivers, isLoading: driversLoading, refetch: refetchDrivers } =
     useDriverMaster(organizationId);
   const { vehicles, isLoading: vehiclesLoading, refetch: refetchVehicles } =
@@ -160,6 +166,9 @@ export function ReassignSheet({
   );
   const [_driverNameManual, setDriverNameManual] = useState(false);
   const otpDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [changeReason, setChangeReason] = useState<ChangeReasonCode>('AD_HOC_SUBSTITUTION');
+  const [changeRemarks, setChangeRemarks] = useState('');
+  const [workspaceToast, setWorkspaceToast] = useState<string | null>(null);
 
   const aggregatePhoneLookup = useAggregateDriverPhoneLookup({
     phone,
@@ -170,9 +179,11 @@ export function ReassignSheet({
   });
 
   const currentDriverPhone = useMemo(() => {
+    const fromProp = (currentDriverPhoneProp ?? "").trim();
+    if (fromProp) return fromProp;
     const d = drivers.find((x) => x.id === trip.driver_id);
     return d?.phone ?? null;
-  }, [drivers, trip.driver_id]);
+  }, [currentDriverPhoneProp, drivers, trip.driver_id]);
 
   const sheetOpenGenRef = useRef(0);
 
@@ -184,8 +195,9 @@ export function ReassignSheet({
     setVehicleMode('existing');
     setSelectedDriverId(trip.driver_id ?? null);
     setSelectedVehicleId(trip.vehicle_id ?? null);
-    setPhone('');
-    setDriverNameInput('');
+    const prefillPhone = (currentDriverPhoneProp ?? "").trim();
+    setPhone(prefillPhone ? formatMobileNumber(prefillPhone) : '');
+    setDriverNameInput((currentDriverName ?? '').trim());
     setPhoneBusy(false);
     setAdHocPlate(formatIndianVehicleNumber(trip.vehicle_display_number ?? '').trim());
     setError(null);
@@ -209,6 +221,16 @@ export function ReassignSheet({
     void refetchVehicles();
     if (isAggregate) void refreshMigrationCheck(false);
   }, [visible, trip.id]);
+
+  /** Once fleet roster loads, backfill phone if Edit details is still empty. */
+  useEffect(() => {
+    if (!visible) return;
+    if (phone.trim()) return;
+    const fromMaster = drivers.find((x) => x.id === trip.driver_id)?.phone?.trim();
+    const fallback = (currentDriverPhoneProp ?? fromMaster ?? "").trim();
+    if (!fallback) return;
+    setPhone(formatMobileNumber(fallback));
+  }, [visible, drivers, trip.driver_id, currentDriverPhoneProp, phone]);
 
   /** Sync snapshot/selection when parent reloads trip after partial save — no fleet refetch storm. */
   useEffect(() => {
@@ -886,6 +908,84 @@ export function ReassignSheet({
     </View>
   );
 
+  const fulfillmentMode: AssignmentFulfillmentMode = isAggregate ? 'MARKET' : 'ASSET';
+  const driverAction: AssignmentPanelAction =
+    !isAggregate && driverMode === 'existing' ? 'SWAP' : 'EDIT';
+  const vehicleAction: AssignmentPanelAction =
+    !isAggregate && vehicleMode === 'existing' ? 'SWAP' : 'EDIT';
+
+  const handleWorkspaceDriverAction = useCallback(
+    (action: AssignmentPanelAction) => {
+      if (action === 'SWAP') {
+        setDriverMode(isAggregate ? 'phone' : 'existing');
+      } else {
+        setDriverMode('phone');
+        const fallback = (currentDriverPhone ?? '').trim();
+        if (fallback) setPhone(formatMobileNumber(fallback));
+        const name = (currentDriverName ?? '').trim();
+        if (name) setDriverNameInput(name);
+      }
+    },
+    [isAggregate, currentDriverPhone, currentDriverName],
+  );
+
+  const handleWorkspaceVehicleAction = useCallback(
+    (action: AssignmentPanelAction) => {
+      if (action === 'SWAP') {
+        setVehicleMode(isAggregate ? 'add' : 'existing');
+      } else {
+        setVehicleMode(isAggregate ? 'add' : 'add');
+      }
+    },
+    [isAggregate],
+  );
+
+  const workspaceDriverBody = (
+    <DriverReassignSection
+      organizationId={organizationId}
+      driverAssignOrgId={driverAssignOrgId}
+      tripId={trip.id}
+      isAggregate={isAggregate}
+      currentDriverId={trip.driver_id ?? null}
+      currentDriverName={currentDriverName}
+      drivers={drivers}
+      driversLoading={driversLoading}
+      busyDriverIds={busyDriverIds}
+      tripLabelByDriverId={busyDriverTripLabels}
+      mode={driverMode}
+      onModeChange={setDriverMode}
+      selectedDriverId={selectedDriverId}
+      onSelectDriverId={setSelectedDriverId}
+      phone={phone}
+      onPhoneChange={setPhone}
+      driverName={driverNameInput}
+      onDriverNameChange={setDriverNameInput}
+      phoneBusy={phoneBusy}
+      onPhoneBusyChange={setPhoneBusy}
+      embedded
+    />
+  );
+
+  const workspaceVehicleBody = (
+    <VehicleReassignSection
+      organizationId={organizationId}
+      isAggregate={isAggregate}
+      driverModeIsPhone={driverModeIsPhone}
+      currentVehicleId={trip.vehicle_id ?? null}
+      currentVehicleLabel={currentVehicleLabel}
+      vehicles={vehicles}
+      vehiclesLoading={vehiclesLoading}
+      busyVehicleIds={busyVehicleIds}
+      mode={vehicleMode}
+      onModeChange={setVehicleMode}
+      selectedVehicleId={selectedVehicleId}
+      onSelectVehicleId={handleSelectVehicleId}
+      adHocPlate={adHocPlate}
+      onAdHocPlateChange={setAdHocPlate}
+      embedded
+    />
+  );
+
   const reviewSection = (
     <View style={assignmentShellStyles.tripAssignSurfaceCard}>
       <Text style={assignmentShellStyles.stepLabel}>Review reassignment</Text>
@@ -986,6 +1086,67 @@ export function ReassignSheet({
                 </TouchableOpacity>
               </View>
             </View>
+          </View>
+        ) : !useMobileWizard ? (
+          <View
+            style={[
+              assignmentShellStyles.assignModalWrapSlate,
+              {
+                flex: 1,
+                maxWidth: Platform.OS === 'web' ? 1280 : '100%',
+                width: Platform.OS === 'web' ? '96%' : '100%',
+                maxHeight: Platform.OS === 'web' ? '94%' : '100%',
+                padding: 0,
+                overflow: 'hidden',
+              },
+            ]}
+          >
+            <TripAssignmentWorkspace
+              trip={trip}
+              organizationId={organizationId}
+              driverDisplayName={summaryDriver}
+              driverPhoneDisplay={
+                phone.trim() || (currentDriverPhone ?? "").trim() || null
+              }
+              vehicleDisplayLabel={summaryVehicle}
+              fulfillmentMode={fulfillmentMode}
+              fulfillmentModeEditable={false}
+              driverAction={driverAction}
+              onDriverActionChange={handleWorkspaceDriverAction}
+              vehicleAction={vehicleAction}
+              onVehicleActionChange={handleWorkspaceVehicleAction}
+              driverPanelBody={workspaceDriverBody}
+              vehiclePanelBody={
+                <>
+                  {workspaceVehicleBody}
+                  {error ? <Text style={s.inlineError}>{error}</Text> : null}
+                  {!hasChanges && meetsValidation ? (
+                    <Text style={[s.rowSub, { marginTop: 8 }]}>
+                      Change driver, vehicle, or phone to confirm reassignment.
+                    </Text>
+                  ) : null}
+                  {bannerBlock}
+                </>
+              }
+              changeReason={changeReason}
+              onChangeReasonChange={setChangeReason}
+              changeRemarks={changeRemarks}
+              onChangeRemarksChange={setChangeRemarks}
+              onConfirm={() => {
+                void (async () => {
+                  await handleConfirm();
+                  setWorkspaceToast(
+                    'Manifest updated — changes logged to dispatch audit trail.',
+                  );
+                  setTimeout(() => setWorkspaceToast(null), 3500);
+                })();
+              }}
+              confirmDisabled={!canConfirm}
+              confirmLoading={saving}
+              confirmHint={reassignFooterHint}
+              onClose={onClose}
+              toastMessage={workspaceToast}
+            />
           </View>
         ) : (
           <View

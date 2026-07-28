@@ -88,6 +88,7 @@ export function TripAssignmentFlowScreen({
         onUpdated={detail.handleAssignmentUpdated}
         partnerName={detail.partnerName}
         driverName={detail.driverName}
+        assignedDriverPhone={detail.driverPhone}
         vehicleLabel={
           isAggregate
             ? detail.displayVehicleFromInput.trim() ||

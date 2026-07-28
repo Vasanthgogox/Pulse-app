@@ -38,6 +38,8 @@ type Props = {
   onSelectVehicleId: (id: string | null) => void;
   adHocPlate: string;
   onAdHocPlateChange: (value: string) => void;
+  /** Hide title / current card / segment — parent workspace owns chrome. */
+  embedded?: boolean;
 };
 
 export function VehicleReassignSection({
@@ -55,6 +57,7 @@ export function VehicleReassignSection({
   onSelectVehicleId,
   adHocPlate,
   onAdHocPlateChange,
+  embedded = false,
 }: Props) {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -68,16 +71,16 @@ export function VehicleReassignSection({
     isAggregate && (driverModeIsPhone || !selectedVehicleId);
 
   return (
-    <View style={s.section}>
-      <Text style={s.sectionTitle}>Vehicle</Text>
-      {currentVehicleLabel ? (
+    <View style={[s.section, embedded && { marginBottom: 0 }]}>
+      {embedded ? null : <Text style={s.sectionTitle}>Vehicle</Text>}
+      {!embedded && currentVehicleLabel ? (
         <View style={s.currentCard}>
           <Text style={s.currentName}>{currentVehicleLabel}</Text>
           <Text style={s.currentMeta}>Currently assigned</Text>
         </View>
       ) : null}
 
-      {!isAggregate ? (
+      {!embedded && !isAggregate ? (
         <ReassignSegmentedControl
           options={[
             { id: 'existing' as const, label: 'From fleet' },

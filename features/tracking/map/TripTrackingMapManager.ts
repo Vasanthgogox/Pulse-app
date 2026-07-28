@@ -1,4 +1,7 @@
-import { MAP_TRUCK_MARKER_HTML } from '@/lib/mapMarkerIcons.util';
+import {
+  buildDriverAvatarMarkerHtml,
+  type DriverMapMarkerOptions,
+} from '@/lib/mapMarkerIcons.util';
 import { MarkerInterpolationEngine, type LngLat } from '@/features/tracking/map/MarkerInterpolationEngine';
 import {
   getTripTrackingMapStore,
@@ -15,7 +18,8 @@ type MapLibreModule = {
 };
 
 /**
- * Imperative truck marker on a MapLibre map — no React state per GPS event.
+ * Imperative live driver avatar on a MapLibre map — no React state per GPS event.
+ * Matches driver-app map marker (circular avatar + tip anchor).
  */
 export class TripTrackingMapManager {
   private marker: MapLibreMarkerLike | null = null;
@@ -26,6 +30,7 @@ export class TripTrackingMapManager {
   constructor(
     private readonly tripId: string,
     private readonly getMap: () => { map: unknown; maplibregl: MapLibreModule } | null,
+    private readonly driverMarker?: DriverMapMarkerOptions,
   ) {
     this.interp = new MarkerInterpolationEngine((pos, _done) => {
       this.marker?.setLngLat([pos.longitude, pos.latitude]);
@@ -69,10 +74,15 @@ export class TripTrackingMapManager {
     const ctx = this.getMap();
     if (!ctx) return;
     const el = document.createElement('div');
-    el.innerHTML = MAP_TRUCK_MARKER_HTML;
+    el.innerHTML = buildDriverAvatarMarkerHtml(
+      this.driverMarker?.avatarUri,
+      this.driverMarker?.avatarSeed,
+      this.driverMarker?.isOnline ?? true,
+    );
     el.style.transition = 'opacity 0.3s ease';
     this.markerEl = el;
-    this.marker = new ctx.maplibregl.Marker({ element: el, anchor: 'center' })
+    // Tip of pointer = ground contact (same as driver-app "you" marker).
+    this.marker = new ctx.maplibregl.Marker({ element: el, anchor: 'bottom' })
       .setLngLat([0, 0]);
     const map = ctx.map as { addLayer?: unknown } & {
       _loaded?: boolean;

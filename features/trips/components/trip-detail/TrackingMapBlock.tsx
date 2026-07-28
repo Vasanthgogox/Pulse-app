@@ -283,6 +283,10 @@ export interface TrackingMapBlockProps {
   locationAddress?: string | null;
   /** Extra bottom padding when fitting the full route (e.g. overlapping sheet). */
   fitPaddingBottom?: number;
+  /** Live pin: driver profile image (matches driver-app map avatar). */
+  driverAvatarUri?: string | null;
+  driverAvatarSeed?: string | null;
+  driverOnline?: boolean;
 }
 
 const DEFAULT_LOCATION_LABELS: TrackingMapLocationLabels = [
@@ -304,6 +308,9 @@ export function TrackingMapBlock({
   tripLocationPoints = [],
   locationAddress,
   fitPaddingBottom = 56,
+  driverAvatarUri,
+  driverAvatarSeed,
+  driverOnline,
 }: TrackingMapBlockProps) {
   const [origin, past1, past2, currentLabel, destination] = locationLabels;
   const mapRef = useRef<LeafletMapRef | null>(null);
@@ -461,7 +468,6 @@ export function TrackingMapBlock({
         : null
     );
 
-    // Always show a distinct live pointer when available.
     pushMarker(
       latestCoordinate
         ? {
@@ -562,6 +568,13 @@ export function TrackingMapBlock({
           : m.id === "live"
             ? Theme.primary
           : Theme.primaryLight,
+    ...(m.id === "live"
+      ? {
+          avatarUri: driverAvatarUri,
+          avatarSeed: driverAvatarSeed,
+          isOnline: driverOnline ?? true,
+        }
+      : {}),
   }));
 
   const mapCenter =

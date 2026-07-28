@@ -63,6 +63,9 @@ interface LiveTrackingModalProps {
   mapTruckStatus: TripMapProps["truckStatus"];
   trackingBroadcastActive?: boolean;
   lastPingRecordedAt?: string | null;
+  /** Live map pin avatar (matches driver-app map). */
+  driverAvatarUri?: string | null;
+  driverAvatarSeed?: string | null;
 
   // Timeline props
   driverActivityTimelineRows: DriverActivityTimelineRow[];
@@ -122,6 +125,8 @@ export function LiveTrackingModal({
   mapTruckStatus,
   trackingBroadcastActive = false,
   lastPingRecordedAt,
+  driverAvatarUri,
+  driverAvatarSeed,
   driverActivityTimelineRows,
   expandedTimelineEntryIds,
   onToggleTimelineItem,
@@ -483,6 +488,9 @@ export function LiveTrackingModal({
               tripId={trip.id}
               trackingEnabled={trackingBroadcastActive}
               fitPaddingBottom={96}
+              driverAvatarUri={driverAvatarUri}
+              driverAvatarSeed={driverAvatarSeed ?? trip.driver_id}
+              driverOnline={trackingBroadcastActive}
             />
             <View style={styles.mapChip} pointerEvents="none">
               <Text style={styles.mapChipText}>MAP</Text>

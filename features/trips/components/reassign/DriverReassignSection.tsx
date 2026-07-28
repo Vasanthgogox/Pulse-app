@@ -50,6 +50,8 @@ type Props = {
   onDriverNameChange: (value: string) => void;
   phoneBusy: boolean;
   onPhoneBusyChange: (busy: boolean) => void;
+  /** Hide title / current card / segment — parent workspace owns chrome. */
+  embedded?: boolean;
 };
 
 export function DriverReassignSection({
@@ -73,6 +75,7 @@ export function DriverReassignSection({
   onDriverNameChange,
   phoneBusy,
   onPhoneBusyChange,
+  embedded = false,
 }: Props) {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -172,16 +175,16 @@ export function DriverReassignSection({
       : null;
 
   return (
-    <View style={s.section}>
-      <Text style={s.sectionTitle}>Driver</Text>
-      {currentDriverName ? (
+    <View style={[s.section, embedded && { marginBottom: 0 }]}>
+      {embedded ? null : <Text style={s.sectionTitle}>Driver</Text>}
+      {!embedded && currentDriverName ? (
         <View style={s.currentCard}>
           <Text style={s.currentName}>{currentDriverName}</Text>
           <Text style={s.currentMeta}>Currently assigned</Text>
         </View>
       ) : null}
 
-      {!isAggregate ? (
+      {!embedded && !isAggregate ? (
         <ReassignSegmentedControl
           options={segmentOptions}
           value={mode}

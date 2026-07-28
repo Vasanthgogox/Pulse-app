@@ -8,6 +8,8 @@ import {
   Platform,
   ScrollView,
   Text,
+  TextInput,
+  TouchableOpacity,
   useWindowDimensions,
   View,
   type ViewStyle,
@@ -25,6 +27,12 @@ import { AggregateTrackingMobileStep } from "@/features/trips/components/add-tri
 import type { AddTripIssueField } from "@/features/trips/components/add-trip/useAddTripForm";
 import { AssignmentFlowFooter } from "@/features/trips/components/assignment/assignmentFlowFooter";
 import { AssignmentFlowShell } from "@/features/trips/components/assignment/AssignmentFlowShell";
+import {
+  TripAssignmentWorkspace,
+  type AssignmentPanelAction,
+  type ChangeReasonCode,
+} from "@/features/trips/components/assignment/TripAssignmentWorkspace";
+import { aws } from "@/features/trips/components/assignment/tripAssignmentWorkspace.styles";
 import {
   getTripPhoneWizardSteps,
   isTripPhoneWizardStepComplete,
@@ -122,6 +130,18 @@ export function TripPhoneAssignmentWizard({
     windowWidth < Layout.wizardSteppedMaxWidth;
   const showReassignRail = isReassign && useSteppedWizard;
   const reassignRailDesktop = showReassignRail && windowWidth >= 768;
+  /**
+   * Manifest workspace for assign + reassign (phone flows).
+   * Mobile uses stacked panels via compact styles in TripAssignmentWorkspace.
+   */
+  const useAssignmentWorkspace = true;
+
+  const [driverAction, setDriverAction] = useState<AssignmentPanelAction>("EDIT");
+  const [vehicleAction, setVehicleAction] = useState<AssignmentPanelAction>("EDIT");
+  const [changeReason, setChangeReason] =
+    useState<ChangeReasonCode>("AD_HOC_SUBSTITUTION");
+  const [changeRemarks, setChangeRemarks] = useState("");
+  const [workspaceToast, setWorkspaceToast] = useState<string | null>(null);
 
   const resolvedActiveDriverName = useMemo(
     () => (activeDriverName ?? initialDriverName ?? trip.driver_display_name ?? "").trim(),
@@ -274,10 +294,29 @@ export function TripPhoneAssignmentWizard({
     if (isReassign) {
       // Pre-load current assignment so Edit works immediately.
       editCurrentDriver();
+      setDriverAction("EDIT");
+      setVehicleAction("EDIT");
+    } else {
+      setDriverAction("EDIT");
+      setVehicleAction("EDIT");
     }
     // Only when opening; editCurrentDriver identity changes often.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, isReassign]);
+
+  /** If assigned phone arrives after open (async profile), backfill empty Edit field. */
+  useEffect(() => {
+    if (!visible || !isReassign) return;
+    if (driverPhone.trim()) return;
+    if (!resolvedActiveDriverPhone.trim()) return;
+    onDriverPhoneChange(formatMobileNumber(resolvedActiveDriverPhone));
+  }, [
+    visible,
+    isReassign,
+    resolvedActiveDriverPhone,
+    driverPhone,
+    onDriverPhoneChange,
+  ]);
 
   useEffect(() => {
     if (!visible || driverNameManual || wizardStep !== "driverName") return;
@@ -550,17 +589,36 @@ export function TripPhoneAssignmentWizard({
       <View
         style={[
           assignmentShellStyles.webModalBackdrop,
-          fullPageFlow && { flex: 1, padding: 0, backgroundColor: Theme.screenBackground },
+          (fullPageFlow || useAssignmentWorkspace) && {
+            flex: 1,
+            padding: 0,
+            backgroundColor: Theme.assignmentPageBg,
+          },
         ]}
       >
         <View
           style={[
             assignmentShellStyles.assignModalWrapSlate,
-            fullPageFlow && { flex: 1, width: "100%", maxWidth: "100%", borderRadius: 0 },
+            (fullPageFlow || useAssignmentWorkspace) && {
+              flex: 1,
+              width: "100%",
+              maxWidth: "100%",
+              borderRadius: 0,
+              maxHeight: "100%",
+              padding: 0,
+              overflow: "hidden",
+              backgroundColor: Theme.assignmentPageBg,
+            },
             reassignRailDesktop &&
               !fullPageFlow &&
+              !useAssignmentWorkspace &&
               Platform.OS === "web" && { maxWidth: 1320, width: "92%", maxHeight: "92%" },
-            { flex: Platform.OS === "web" && !fullPageFlow ? 0 : 1 },
+            {
+              flex:
+                Platform.OS === "web" && !fullPageFlow && !useAssignmentWorkspace
+                  ? 0
+                  : 1,
+            },
           ]}
         >
           {assignSuccess ? (
@@ -629,6 +687,148 @@ export function TripPhoneAssignmentWizard({
                 </View>
               </AssignmentFlowShell>
             </View>
+          ) : useAssignmentWorkspace ? (
+              <TripAssignmentWorkspace
+                trip={trip}
+                organizationId={organizationId}
+                driverDisplayName={
+                  driverName.trim() || resolvedActiveDriverName || "Driver"
+                }
+                driverPhoneDisplay={
+                  formatMobileNumber(driverPhone).trim() ||
+                  resolvedActiveDriverPhone ||
+                  null
+                }
+                vehicleDisplayLabel={
+                  formatIndianVehicleNumber(vehiclePlate).trim() ||
+                  resolvedActiveVehiclePlate ||
+                  "Vehicle"
+                }
+                fulfillmentMode="MARKET"
+                fulfillmentModeEditable={false}
+                driverAction={driverAction}
+                onDriverActionChange={(action) => {
+                  setDriverAction(action);
+                  setReassignFocus("driver");
+                  if (action === "EDIT") editCurrentDriver();
+                }}
+                vehicleAction={vehicleAction}
+                onVehicleActionChange={(action) => {
+                  setVehicleAction(action);
+                  setReassignFocus("vehicle");
+                  if (action === "EDIT") editCurrentVehicle();
+                }}
+                driverPanelBody={
+                  <View style={{ gap: 12 }}>
+                    <View style={aws.sectionHintRow}>
+                      <Text style={aws.sectionHint}>Active driver record fields</Text>
+                      <Text style={aws.kycHint}>KYC verified</Text>
+                    </View>
+                    <View style={aws.fieldsGrid}>
+                      <View style={aws.fieldFull}>
+                        <Text style={aws.fieldLabel}>Driver full name *</Text>
+                        <TextInput
+                          style={aws.input}
+                          value={driverName}
+                          onChangeText={handleDriverNameChange}
+                          placeholder="Enter full name"
+                          placeholderTextColor={Theme.textMuted}
+                          autoCapitalize="words"
+                        />
+                      </View>
+                      <View style={aws.fieldFull}>
+                        <Text style={aws.fieldLabel}>Mobile contact no. *</Text>
+                        <TextInput
+                          style={aws.input}
+                          value={driverPhone}
+                          onChangeText={handlePhoneChange}
+                          placeholder="10-digit mobile number"
+                          placeholderTextColor={Theme.textMuted}
+                          keyboardType="phone-pad"
+                          autoComplete="tel"
+                          textContentType="telephoneNumber"
+                        />
+                      </View>
+                    </View>
+                    {lookup.matches.length > 1 ? (
+                      <View style={{ gap: 8 }}>
+                        <Text style={aws.fieldLabel}>Select matching profile</Text>
+                        {lookup.matches.map((m: ExistingDriverMatch) => (
+                          <TouchableOpacity
+                            key={m.user_id}
+                            style={[
+                              aws.selectLike,
+                              lookup.selectedUserId === m.user_id && {
+                                borderColor: Theme.networkHubListCardConnectedText,
+                              },
+                            ]}
+                            onPress={() => handleSelectMatch(m)}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={aws.selectLikeText}>
+                              {m.full_name ?? "Driver"} · {m.phone ?? ""}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
+                    {lookup.inTrip ? (
+                      <Text style={styles.errorText}>
+                        This driver is on {lookup.busyTripLabel ?? "another trip"}.
+                      </Text>
+                    ) : null}
+                  </View>
+                }
+                vehiclePanelBody={
+                  <View style={{ gap: 12 }}>
+                    <View style={aws.sectionHintRow}>
+                      <Text style={aws.sectionHint}>Active vehicle record fields</Text>
+                      <Text style={[aws.kycHint, { color: "#2563eb" }]}>
+                        Telemetry linked
+                      </Text>
+                    </View>
+                    <View style={aws.fieldsGrid}>
+                      <View style={aws.fieldFull}>
+                        <Text style={aws.fieldLabel}>Registration no *</Text>
+                        <TextInput
+                          style={[aws.input, { fontWeight: "800" }]}
+                          value={vehiclePlate}
+                          onChangeText={handleVehicleChange}
+                          placeholder="XX NN LL NNNN"
+                          placeholderTextColor={Theme.textMuted}
+                          autoCapitalize="characters"
+                        />
+                      </View>
+                    </View>
+                    {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                  </View>
+                }
+                changeReason={changeReason}
+                onChangeReasonChange={setChangeReason}
+                changeRemarks={changeRemarks}
+                onChangeRemarksChange={setChangeRemarks}
+                onConfirm={() => {
+                  onSubmit();
+                  setWorkspaceToast(
+                    isReassign
+                      ? "Manifest update requested — share OTP with the driver if shown."
+                      : "Assignment requested — share OTP with the driver if shown.",
+                  );
+                  setTimeout(() => setWorkspaceToast(null), 3500);
+                }}
+                confirmDisabled={
+                  !canSubmitAll || saving || lookup.inTrip || lookup.loading
+                }
+                confirmLoading={saving}
+                confirmHint={submitBlockedHint}
+                confirmLabel={
+                  isReassign
+                    ? "Confirm & update manifest"
+                    : "Confirm & assign driver"
+                }
+                onClose={onClose}
+                toastMessage={workspaceToast}
+              />
           ) : (
             <AssignmentFlowShell
               title={title}

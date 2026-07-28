@@ -29,6 +29,12 @@ export interface TripMapProps {
   trackingEnabled?: boolean;
   /** Bottom inset when auto-fitting the full route in compact previews. */
   fitPaddingBottom?: number;
+  /** Live pin: driver profile image (matches driver-app map avatar). */
+  driverAvatarUri?: string | null;
+  /** Seed for generated avatar when URI is missing (usually driver id). */
+  driverAvatarSeed?: string | null;
+  /** Green online ring when driver is broadcasting. */
+  driverOnline?: boolean;
 }
 
 export function TripMap({ height }: TripMapProps) {

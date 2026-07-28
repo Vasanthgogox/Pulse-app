@@ -60,12 +60,12 @@ function MarkerContent({
   onPress?: () => void;
 }) {
   const role = tripMapMarkerRoleFromId(markerId);
-  if (role === 'driver') {
+  if (role === 'driver' || role === 'truck' || role === 'live') {
     return (
       <DriverMapAvatarMarker
         avatarUri={avatarUri}
         avatarSeed={avatarSeed}
-        isOnline={isOnline}
+        isOnline={isOnline ?? (role === 'truck' || role === 'live')}
         size={48}
         onPressStatus={onPress}
       />
@@ -228,7 +228,11 @@ export const LeafletMapMapLibre = React.forwardRef<
               id={`leaflet-marker-${m.id}`}
               lngLat={toLngLat(m.coordinate)}
               anchor={
-                tripMapMarkerRoleFromId(m.id) === 'driver' ? 'bottom' : 'center'
+                ['driver', 'truck', 'live', 'origin', 'destination'].includes(
+                  tripMapMarkerRoleFromId(m.id),
+                )
+                  ? 'bottom'
+                  : 'center'
               }
             >
               <MarkerContent

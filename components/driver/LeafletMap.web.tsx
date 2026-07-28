@@ -578,7 +578,11 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
               });
             }
             const anchor =
-              role === "origin" || role === "destination" || role === "driver"
+              role === "origin" ||
+              role === "destination" ||
+              role === "driver" ||
+              role === "truck" ||
+              role === "live"
                 ? "bottom"
                 : "center";
 

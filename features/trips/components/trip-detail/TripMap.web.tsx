@@ -7,11 +7,11 @@ import {
 } from '@/lib/indianCityCoordinates.util';
 import { getOptimalRoute, type RouteResult } from '@/lib/routingService';
 import {
+  buildDriverAvatarMarkerHtml,
   MAP_DESTINATION_PIN_HTML,
+  MAP_DRIVER_AVATAR_MARKER_ICON_ANCHOR,
+  MAP_DRIVER_AVATAR_MARKER_ICON_SIZE,
   MAP_SOURCE_PIN_HTML,
-  MAP_TRUCK_MARKER_HTML,
-  MAP_TRUCK_MARKER_ICON_ANCHOR,
-  MAP_TRUCK_MARKER_ICON_SIZE,
 } from '@/lib/mapMarkerIcons.util';
 import { LeafletLiveTruckLayer } from '@/features/tracking/map/LeafletLiveTruckLayer';
 import type { Map as LeafletMap, LatLngTuple } from 'leaflet';
@@ -167,6 +167,12 @@ export interface TripMapProps {
   trackingEnabled?: boolean;
   /** Bottom inset when auto-fitting the full route in compact previews. */
   fitPaddingBottom?: number;
+  /** Live pin: driver profile image (matches driver-app map avatar). */
+  driverAvatarUri?: string | null;
+  /** Seed for generated avatar when URI is missing (usually driver id). */
+  driverAvatarSeed?: string | null;
+  /** Green online ring when driver is broadcasting. */
+  driverOnline?: boolean;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -180,6 +186,9 @@ export function TripMap({
   tripId,
   trackingEnabled,
   fitPaddingBottom = 48,
+  driverAvatarUri,
+  driverAvatarSeed,
+  driverOnline,
 }: TripMapProps) {
   const resolvedHeight = height ?? 520;
   const compactMapPreview =
@@ -302,11 +311,15 @@ export function TripMap({
         className: '', iconSize: [24, 32], iconAnchor: [12, 32], popupAnchor: [0, -32],
       });
 
-      const truckIcon = L.divIcon({
-        html: MAP_TRUCK_MARKER_HTML,
+      const liveDriverIcon = L.divIcon({
+        html: buildDriverAvatarMarkerHtml(
+          driverAvatarUri,
+          driverAvatarSeed,
+          driverOnline ?? Boolean(trackingEnabled),
+        ),
         className: '',
-        iconSize: MAP_TRUCK_MARKER_ICON_SIZE,
-        iconAnchor: MAP_TRUCK_MARKER_ICON_ANCHOR,
+        iconSize: MAP_DRIVER_AVATAR_MARKER_ICON_SIZE,
+        iconAnchor: MAP_DRIVER_AVATAR_MARKER_ICON_ANCHOR,
       });
 
       L.marker(srcCoords, { icon: sourceIcon })
@@ -330,12 +343,16 @@ export function TripMap({
         const seedLatLng: [number, number] | undefined = isLatLngObject(truckLocation)
           ? toLatLngTuple(truckLocation)
           : undefined;
-        const layer = new LeafletLiveTruckLayer(tripId, map, L);
+        const layer = new LeafletLiveTruckLayer(tripId, map, L, {
+          avatarUri: driverAvatarUri,
+          avatarSeed: driverAvatarSeed,
+          isOnline: driverOnline ?? true,
+        });
         layer.attach(seedLatLng);
         liveLayerRef.current = layer;
       } else if (isLatLngObject(truckLocation)) {
         const truckMarker = L.marker(toLatLngTuple(truckLocation), {
-          icon: truckIcon,
+          icon: liveDriverIcon,
           zIndexOffset: 1000,
         });
         if (truckStatus) {
@@ -713,6 +730,9 @@ export function TripMap({
     tripId, trackingEnabled,
     truckLocation?.latitude,
     truckLocation?.longitude,
+    driverAvatarUri,
+    driverAvatarSeed,
+    driverOnline,
     dbLocationTrail.map((p) => p.recorded_at ?? '').join(','),
   ]);
 
