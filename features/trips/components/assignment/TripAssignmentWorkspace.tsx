@@ -270,13 +270,12 @@ export function TripAssignmentWorkspace({
                   <View style={aws.routeCenter}>
                     <View style={aws.routeCenterLabels}>
                       <Text style={aws.routeCenterLabel}>ORIGIN</Text>
-                      <FontAwesome name="truck" size={10} color={Theme.primaryLight} />
                       <Text style={aws.routeCenterLabel}>DESTINATION</Text>
                     </View>
                     <View style={aws.routeLine}>
                       <View style={aws.routeLineFill} />
                       <View style={aws.routeDot}>
-                        <FontAwesome name="location-arrow" size={9} color={Theme.primaryLight} />
+                        <Text style={aws.routeDotText}>{driverInitial}</Text>
                       </View>
                     </View>
                   </View>
@@ -419,7 +418,7 @@ export function TripAssignmentWorkspace({
                       </View>
                     </View>
                   </View>
-                  {driverPanelBody}
+                  <View style={aws.fieldsArea}>{driverPanelBody}</View>
                 </View>
               </View>
 
@@ -428,7 +427,11 @@ export function TripAssignmentWorkspace({
                 <View style={[aws.panelHeader, compact && aws.panelHeaderMobile]}>
                   <View style={aws.panelHeaderLeft}>
                     <View style={aws.panelIconVehicle}>
-                      <FontAwesome name="truck" size={16} color="#1d4ed8" />
+                      <FontAwesome
+                        name="truck"
+                        size={16}
+                        color={Theme.assignmentVehicleAccent}
+                      />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={aws.panelTitle}>Vehicle assignment</Text>
@@ -519,7 +522,7 @@ export function TripAssignmentWorkspace({
                       </View>
                     </View>
                   </View>
-                  {vehiclePanelBody}
+                  <View style={aws.fieldsArea}>{vehiclePanelBody}</View>
                 </View>
               </View>
             </View>
@@ -528,7 +531,11 @@ export function TripAssignmentWorkspace({
             <View style={aws.auditCard}>
               <View style={aws.auditHeader}>
                 <View style={aws.auditTitleRow}>
-                  <FontAwesome name="check-square-o" size={14} color="#2563eb" />
+                  <FontAwesome
+                    name="check-square-o"
+                    size={14}
+                    color={Theme.assignmentVehicleAccent}
+                  />
                   <Text style={aws.auditTitle}>
                     Dispatch audit log & change governance
                   </Text>
@@ -669,7 +676,7 @@ export function TripAssignmentWorkspace({
                           backgroundColor:
                             item.tone === "ok"
                               ? Theme.networkHubListCardOnlineDot
-                              : "#2563eb",
+                              : Theme.assignmentVehicleAccent,
                         },
                       ]}
                     />

@@ -403,7 +403,11 @@ export function FleetAssignWorkspace({
                     </Text>
                   </View>
                   {selected ? (
-                    <FontAwesome name="check-circle" size={18} color="#2563eb" />
+                    <FontAwesome
+                      name="check-circle"
+                      size={18}
+                      color={Theme.assignmentVehicleAccent}
+                    />
                   ) : null}
                 </Pressable>
               );
@@ -418,7 +422,7 @@ export function FleetAssignWorkspace({
       <View style={styles.panelStack}>
         <View style={aws.sectionHintRow}>
           <Text style={aws.sectionHint}>Selected vehicle details</Text>
-          <Text style={[aws.kycHint, { color: "#2563eb" }]}>RC verified</Text>
+          <Text style={[aws.kycHint, { color: Theme.assignmentVehicleAccent }]}>RC verified</Text>
         </View>
         <View style={styles.fieldStack}>
           <View>

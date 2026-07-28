@@ -719,13 +719,13 @@ export function TripPhoneAssignmentWizard({
                   if (action === "EDIT") editCurrentVehicle();
                 }}
                 driverPanelBody={
-                  <View style={{ gap: 12 }}>
+                  <View style={{ gap: 12, flex: 1 }}>
                     <View style={aws.sectionHintRow}>
                       <Text style={aws.sectionHint}>Active driver record fields</Text>
                       <Text style={aws.kycHint}>KYC verified</Text>
                     </View>
                     <View style={aws.fieldsGrid}>
-                      <View style={aws.fieldFull}>
+                      <View style={aws.fieldHalf}>
                         <Text style={aws.fieldLabel}>Driver full name *</Text>
                         <TextInput
                           style={aws.input}
@@ -736,7 +736,7 @@ export function TripPhoneAssignmentWizard({
                           autoCapitalize="words"
                         />
                       </View>
-                      <View style={aws.fieldFull}>
+                      <View style={aws.fieldHalf}>
                         <Text style={aws.fieldLabel}>Mobile contact no. *</Text>
                         <TextInput
                           style={aws.input}
@@ -780,23 +780,31 @@ export function TripPhoneAssignmentWizard({
                   </View>
                 }
                 vehiclePanelBody={
-                  <View style={{ gap: 12 }}>
+                  <View style={{ gap: 12, flex: 1 }}>
                     <View style={aws.sectionHintRow}>
                       <Text style={aws.sectionHint}>Active vehicle record fields</Text>
-                      <Text style={[aws.kycHint, { color: "#2563eb" }]}>
-                        Telemetry linked
-                      </Text>
+                      <Text style={aws.kycHintVehicle}>Telemetry linked</Text>
                     </View>
                     <View style={aws.fieldsGrid}>
                       <View style={aws.fieldFull}>
                         <Text style={aws.fieldLabel}>Registration no *</Text>
                         <TextInput
-                          style={[aws.input, { fontWeight: "800" }]}
+                          style={[aws.input, { fontWeight: "800", letterSpacing: 0.6 }]}
                           value={vehiclePlate}
                           onChangeText={handleVehicleChange}
                           placeholder="XX NN LL NNNN"
                           placeholderTextColor={Theme.textMuted}
                           autoCapitalize="characters"
+                        />
+                      </View>
+                      <View style={aws.fieldFull}>
+                        <Text style={aws.fieldLabel}>Vehicle category</Text>
+                        <TextInput
+                          style={[aws.input, { opacity: 0.85 }]}
+                          value=""
+                          editable={false}
+                          placeholder="From fleet / RC record"
+                          placeholderTextColor={Theme.textMuted}
                         />
                       </View>
                     </View>
