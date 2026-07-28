@@ -40,7 +40,10 @@ export function useTabBarActiveLoadCount(
     for (const indent of dockMarketIndentsQ.data ?? []) {
       const status = String(indent.status ?? "").toLowerCase();
       if (TERMINAL.has(status)) continue;
-      const target = String(indent.circulation_target ?? "").toLowerCase();
+      // Unset target defaults to integrated_supplier (matches createIndent).
+      const target = String(
+        indent.circulation_target ?? "integrated_supplier",
+      ).toLowerCase();
       const isMarketVisible =
         target === "integrated_supplier" || target === "both";
       if (!isMarketVisible) continue;

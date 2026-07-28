@@ -355,7 +355,11 @@ async function mergeLinkedShipperActiveIndents(
     .from("indents")
     .select("*, organizations(name)")
     .in("organization_id", shipperIds)
-    .in("circulation_target", ["integrated_supplier", "both"])
+    // NULL fails an IN check — treat it as the createIndent default so a
+    // missing circulation_target fails open instead of hiding the load.
+    .or(
+      "circulation_target.is.null,circulation_target.in.(integrated_supplier,both)",
+    )
     .not("status", "in", '("completed","cancelled","closed","expired")')
     .neq("status", "draft")
     .order("created_at", { ascending: false });
@@ -419,7 +423,10 @@ export async function getMarketIndentsForOrganization(
     .from("indents")
     .select("*, organizations(name)")
     .in("organization_id", shipperIds)
-    .in("circulation_target", ["integrated_supplier", "both"])
+    // NULL fails an IN check — see fail-open note above.
+    .or(
+      "circulation_target.is.null,circulation_target.in.(integrated_supplier,both)",
+    )
     .neq("status", "draft")
     .order("created_at", { ascending: false });
 

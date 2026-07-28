@@ -144,7 +144,8 @@ export function useLoadCenterFilters({
     return marketIndents.filter((i) => {
       const status = (i.status || "").toLowerCase();
       if (!statusMatchesFilter(status, "DONE")) return false;
-      const target = (i.circulation_target || "").toLowerCase();
+      // Unset target defaults to integrated_supplier (matches createIndent).
+      const target = (i.circulation_target || "integrated_supplier").toLowerCase();
       const isTargeted = target === "integrated_supplier" || target === "both";
       if (!isTargeted) return false;
       if (awardedToMeIndentIds.has(i.id)) return false;
@@ -185,7 +186,8 @@ export function useLoadCenterFilters({
           status === "cancelled"
         )
           return false;
-        const target = (i.circulation_target || "").toLowerCase();
+        // Unset target defaults to integrated_supplier (matches createIndent).
+        const target = (i.circulation_target || "integrated_supplier").toLowerCase();
         return target === "integrated_supplier" || target === "both";
       }),
     [marketIndents],
