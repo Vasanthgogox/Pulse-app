@@ -1,5 +1,8 @@
 [build]
-  command = "npm run build:web && npm run build:admin && npm run build:oms"
+  # scripts/build-ci.js runs expo export + both subproject builds concurrently,
+  # then copies their output into dist/ (expo export wipes dist/, so the copy
+  # must come after it). See the script header for the ordering constraint.
+  command = "npm run build:ci"
   publish = "dist"
 
 [build.environment]
@@ -9,6 +12,13 @@
   # Expo export is memory-hungry; give it headroom
   NODE_OPTIONS  = "--max-old-space-size=4096"
   CI            = "true"
+  # Enable Metro's persistent FileStore (metro.config.js gates on this).
+  # Without it every deploy pays the full ~58s cold-transform cost; warm is ~18s.
+  # Preferred over NODE_ENV=production, which would also make npm skip
+  # devDependencies and break the Expo build.
+  METRO_PERSISTENT_CACHE = "1"
+  # Brotli q9: 0.9s vs 20.3s at q11, for +10.7% size on immutable chunks.
+  BROTLI_QUALITY = "9"
   # Public site origin is intentionally baked into HTML/share links — not a secret.
   SECRETS_SCAN_OMIT_KEYS = "EXPO_PUBLIC_WEB_BASE_URL"
   VITE_SUPABASE_URL      = "https://nafxpivddesgsrthmosv.supabase.co"
