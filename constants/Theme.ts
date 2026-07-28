@@ -547,6 +547,11 @@ export const Theme = {
   assignmentInfoBannerBg: "rgba(37, 99, 235, 0.08)",
   assignmentInfoBannerBorder: "rgba(37, 99, 235, 0.25)",
   assignmentInfoBannerText: "#1e3a8a",
+  /** Vehicle panel accents (paired with driverPrimary greens) */
+  assignmentVehicleAccent: "#2563eb",
+  assignmentVehicleAccentSoft: "#eff6ff",
+  assignmentVehicleAccentText: "#1e40af",
+  assignmentVehicleAccentBorder: "#bfdbfe",
 } as const;
 
 export type ThemeColors = typeof Theme;

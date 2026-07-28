@@ -4,11 +4,12 @@
  *
  * Selection is owned locally so parent auto-preview effects cannot clobber taps.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -60,6 +61,51 @@ function pilotCode(name: string) {
 function vehicleCode(v: VehicleRow) {
   const plate = formatIndianVehicleNumber(v.vehicle_number).replace(/\s/g, "");
   return plate.slice(-3).toUpperCase() || "V";
+}
+
+/** Nested fleet roster list — must use a bounded scrollport (RN Web ignores overflowY on View). */
+function AssetPickList({ children }: { children: ReactNode }) {
+  if (Platform.OS === "web") {
+    return (
+      <div
+        data-fleet-pick-list="1"
+        style={{
+          width: "100%",
+          height: 260,
+          maxHeight: 260,
+          overflowY: "auto",
+          overflowX: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          paddingBottom: 4,
+          boxSizing: "border-box",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
+        }}
+        onWheel={(e) => {
+          const el = e.currentTarget;
+          // Only trap wheel when the list can actually scroll.
+          if (el.scrollHeight > el.clientHeight + 1) {
+            e.stopPropagation();
+          }
+        }}
+      >
+        {children}
+      </div>
+    );
+  }
+  return (
+    <ScrollView
+      style={styles.listScroll}
+      contentContainerStyle={styles.listStack}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator
+    >
+      {children}
+    </ScrollView>
+  );
 }
 
 export function FleetAssignWorkspace({
@@ -243,7 +289,7 @@ export function FleetAssignWorkspace({
         {driversLoading ? (
           <ActivityIndicator color={Theme.primary} style={{ marginVertical: 16 }} />
         ) : (
-          <View style={styles.listStack}>
+          <AssetPickList>
             {filteredDrivers.map((d) => {
               const busy = isDriverBusy(d.id);
               const selected = selectedDriverId === d.id;
@@ -289,7 +335,7 @@ export function FleetAssignWorkspace({
             {filteredDrivers.length === 0 ? (
               <Text style={styles.emptyText}>No drivers match your search.</Text>
             ) : null}
-          </View>
+          </AssetPickList>
         )}
       </View>
     ) : (
@@ -370,7 +416,7 @@ export function FleetAssignWorkspace({
         {vehiclesLoading ? (
           <ActivityIndicator color={Theme.primary} style={{ marginVertical: 16 }} />
         ) : (
-          <View style={styles.listStack}>
+          <AssetPickList>
             {filteredVehicles.map((v) => {
               const busy = isVehicleBusy(v.id);
               const selected = selectedVehicleId === v.id;
@@ -403,7 +449,11 @@ export function FleetAssignWorkspace({
                     </Text>
                   </View>
                   {selected ? (
-                    <FontAwesome name="check-circle" size={18} color="#2563eb" />
+                    <FontAwesome
+                      name="check-circle"
+                      size={18}
+                      color={Theme.assignmentVehicleAccent}
+                    />
                   ) : null}
                 </Pressable>
               );
@@ -411,14 +461,14 @@ export function FleetAssignWorkspace({
             {filteredVehicles.length === 0 ? (
               <Text style={styles.emptyText}>No vehicles match your search.</Text>
             ) : null}
-          </View>
+          </AssetPickList>
         )}
       </View>
     ) : (
       <View style={styles.panelStack}>
         <View style={aws.sectionHintRow}>
           <Text style={aws.sectionHint}>Selected vehicle details</Text>
-          <Text style={[aws.kycHint, { color: "#2563eb" }]}>RC verified</Text>
+          <Text style={[aws.kycHint, { color: Theme.assignmentVehicleAccent }]}>RC verified</Text>
         </View>
         <View style={styles.fieldStack}>
           <View>
@@ -450,8 +500,17 @@ export function FleetAssignWorkspace({
           onPress={() => setVehicleAction("SWAP")}
           style={({ pressed }) => [styles.switchLink, pressed && { opacity: 0.7 }]}
         >
-          <FontAwesome name="refresh" size={12} color="#2563eb" />
-          <Text style={[styles.switchLinkText, { color: "#2563eb" }]}>
+          <FontAwesome
+            name="refresh"
+            size={12}
+            color={Theme.assignmentVehicleAccent}
+          />
+          <Text
+            style={[
+              styles.switchLinkText,
+              { color: Theme.assignmentVehicleAccent },
+            ]}
+          >
             Swap to another truck
           </Text>
         </Pressable>
@@ -509,6 +568,8 @@ const styles = {
   panelStack: {
     gap: 10,
     width: "100%" as const,
+    flexGrow: 1,
+    minHeight: 0,
   },
   searchWrap: {
     width: "100%" as const,
@@ -525,9 +586,16 @@ const styles = {
     width: "100%" as const,
     paddingLeft: 34,
   },
+  listScroll: {
+    width: "100%" as const,
+    height: 260,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   listStack: {
     gap: 8,
     width: "100%" as const,
+    paddingBottom: 4,
   },
   row: {
     width: "100%" as const,
@@ -550,8 +618,8 @@ const styles = {
     backgroundColor: Theme.networkHubListCardConnectedBg,
   },
   rowSelectedVehicle: {
-    borderColor: "#2563eb",
-    backgroundColor: Theme.brandBlueSoft,
+    borderColor: Theme.assignmentVehicleAccent,
+    backgroundColor: Theme.assignmentVehicleAccentSoft,
   },
   rowBusy: {
     opacity: 0.5,
@@ -562,7 +630,7 @@ const styles = {
   addIcon: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 18,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center" as const,
     justifyContent: "center" as const,
@@ -570,7 +638,7 @@ const styles = {
   avatarSm: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 18,
   },
   rowText: {
     flex: 1,
