@@ -37,6 +37,13 @@ type LaneDraft = {
   origin_label: string;
   destination_label: string;
   vehicle_type: string;
+  /** Prefills Commodity step "Product type" on the trip wizard. */
+  default_load_type: string;
+  /** Prefills Commodity step "Tons" on the trip wizard. */
+  default_load_tons: string;
+  distance_km: string;
+  valid_from: string;
+  valid_to: string;
   rate: string;
   rate_type: LaneRateType;
   notes: string;
@@ -49,6 +56,11 @@ const emptyDraft = (warehouses: ClientWarehouseExtended[]): LaneDraft => ({
     warehouses.length === 1 ? formatWarehouseLaneLabel(warehouses[0]!) : "",
   destination_label: "",
   vehicle_type: "",
+  default_load_type: "",
+  default_load_tons: "",
+  distance_km: "",
+  valid_from: "",
+  valid_to: "",
   rate: "",
   rate_type: "per_trip",
   notes: "",
@@ -72,6 +84,12 @@ function laneToDraft(lane: ClientLaneRate): LaneDraft {
     origin_label: lane.origin_label,
     destination_label: lane.destination_label,
     vehicle_type: lane.vehicle_type ?? "",
+    default_load_type: lane.default_load_type ?? "",
+    default_load_tons:
+      lane.default_load_tons != null ? String(lane.default_load_tons) : "",
+    distance_km: lane.distance_km != null ? String(lane.distance_km) : "",
+    valid_from: lane.valid_from ?? "",
+    valid_to: lane.valid_to ?? "",
     rate: price > 0 ? String(price) : "",
     rate_type: lane.rate_type,
     notes: lane.notes ?? "",
@@ -194,6 +212,20 @@ export function ClientProfileLanesEditSection({
       Alert.alert("Validation", "Rate must be a valid number.");
       return;
     }
+    const tonsNum = draft.default_load_tons.trim()
+      ? Number(draft.default_load_tons)
+      : null;
+    if (draft.default_load_tons.trim() && !Number.isFinite(tonsNum)) {
+      Alert.alert("Validation", "Default tons must be a valid number.");
+      return;
+    }
+    const distanceNum = draft.distance_km.trim()
+      ? Number(draft.distance_km)
+      : null;
+    if (draft.distance_km.trim() && !Number.isFinite(distanceNum)) {
+      Alert.alert("Validation", "Distance must be a valid number.");
+      return;
+    }
 
     setSaving(true);
     const payload = {
@@ -201,6 +233,12 @@ export function ClientProfileLanesEditSection({
       origin_label: originLabel,
       destination_label: destination,
       vehicle_type: draft.vehicle_type.trim() || null,
+      /** Both feed the trip wizard's Commodity step via buildClientLanePrefill. */
+      default_load_type: draft.default_load_type.trim() || null,
+      default_load_tons: tonsNum,
+      distance_km: distanceNum,
+      valid_from: draft.valid_from.trim() || null,
+      valid_to: draft.valid_to.trim() || null,
       rate: rateNum,
       rate_type: draft.rate_type,
       notes: draft.notes.trim() || null,
@@ -486,6 +524,26 @@ export function ClientProfileLanesEditSection({
             onChangeText={(v) => setDraft((d) => ({ ...d, vehicle_type: v }))}
             placeholder="e.g. 32ft, 10T, Open Body"
           />
+          <Field
+            label="Product Type"
+            value={draft.default_load_type}
+            onChangeText={(v) => setDraft((d) => ({ ...d, default_load_type: v }))}
+            placeholder="e.g. Cement, Steel Coils"
+          />
+          <Field
+            label="Default Tons"
+            value={draft.default_load_tons}
+            onChangeText={(v) => setDraft((d) => ({ ...d, default_load_tons: v }))}
+            placeholder="e.g. 20"
+            keyboardType="decimal-pad"
+          />
+          <Field
+            label="Distance (km)"
+            value={draft.distance_km}
+            onChangeText={(v) => setDraft((d) => ({ ...d, distance_km: v }))}
+            placeholder="e.g. 350"
+            keyboardType="decimal-pad"
+          />
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Rate Type</Text>
@@ -512,6 +570,19 @@ export function ClientProfileLanesEditSection({
             onChangeText={(v) => setDraft((d) => ({ ...d, rate: v }))}
             placeholder="0"
             keyboardType="decimal-pad"
+          />
+          {/** Blank = open-ended; isLaneCurrentlyValid() hides expired lanes from pickers. */}
+          <Field
+            label="Valid From"
+            value={draft.valid_from}
+            onChangeText={(v) => setDraft((d) => ({ ...d, valid_from: v }))}
+            placeholder="YYYY-MM-DD"
+          />
+          <Field
+            label="Valid To"
+            value={draft.valid_to}
+            onChangeText={(v) => setDraft((d) => ({ ...d, valid_to: v }))}
+            placeholder="YYYY-MM-DD"
           />
           <Field
             label="Notes"

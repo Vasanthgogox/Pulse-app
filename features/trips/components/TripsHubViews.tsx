@@ -1226,6 +1226,23 @@ export function TripsHubTableView({
     </TouchableOpacity>
   );
 
+  /** Shared across the desktop row and the phone/tablet toolbar — the tablet
+   *  branch (< 1024px) previously dropped Add Trip entirely. */
+  const addTripBtn = onAddTrip ? (
+    <TouchableOpacity
+      style={styles.auditAddTripBtn}
+      onPress={onAddTrip}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={addTripLabel ?? "Add trip"}
+    >
+      <Plus size={13} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
+      <Text style={styles.auditAddTripBtnText} numberOfLines={1}>
+        {addTripLabel ?? "Add Trip"}
+      </Text>
+    </TouchableOpacity>
+  ) : null;
+
   const tableSearchField = (
     <View
       style={[
@@ -1331,20 +1348,7 @@ export function TripsHubTableView({
             ) : null}
             {sortToolbarBtn}
             {tableSearchField}
-            {onAddTrip ? (
-              <TouchableOpacity
-                style={styles.auditAddTripBtn}
-                onPress={onAddTrip}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={addTripLabel ?? "Add trip"}
-              >
-                <Plus size={13} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
-                <Text style={styles.auditAddTripBtnText} numberOfLines={1}>
-                  {addTripLabel ?? "Add Trip"}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
+            {addTripBtn}
           </View>
         ) : (
           <>
@@ -1540,9 +1544,13 @@ export function TripsHubTableView({
                       </Pressable>
                     ) : null}
                   </View>
+                  {addTripBtn}
                 </View>
               ) : (
-                tableSearchField
+                <>
+                  {tableSearchField}
+                  {addTripBtn}
+                </>
               )}
             </View>
           </>
@@ -3513,6 +3521,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    /** Search field yields width first — the CTA must never collapse. */
+    flexShrink: 0,
     minHeight: 32,
     paddingVertical: 6,
     paddingHorizontal: 12,
