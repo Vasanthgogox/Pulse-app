@@ -253,14 +253,11 @@ export default function DriverWalletScreen() {
     }
     if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     try {
-      console.log('[Wallet] load() start — uid:', profile.uid);
       const driversRes = await driversService.getLinkedDriversForCurrentUser(profile.uid);
       const drivers = driversRes.drivers ?? [];
-      console.log('[Wallet] linkedDrivers:', drivers.length, drivers.map(d => ({ id: d.id, name: d.name, org: d.organization_id, commission: d.commission_percent, payable: d.payable_amount })));
       setLinkedDrivers(drivers);
 
       if (drivers.length === 0) {
-        console.log('[Wallet] no linked drivers — showing empty state');
         setSalaryRequests([]);
         setLoading(false);
         initialLoadDoneRef.current = true;
@@ -271,7 +268,6 @@ export default function DriverWalletScreen() {
 
       setDriver(drivers.find((d) => !d.left_at) ?? drivers[0]);
       const driverIds = drivers.map((d) => d.id);
-      console.log('[Wallet] driverIds:', driverIds);
 
       // Fire all remaining fetches in parallel — no waterfall
       const [invRes, tRes, ledgerRes, salaryReqRes] = await Promise.all([
@@ -280,11 +276,6 @@ export default function DriverWalletScreen() {
         driversService.getDriverLedgerByDriverIds(driverIds),
         salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
       ]);
-
-      console.log('[Wallet] invites:', invRes.invites?.length ?? 0, invRes.invites?.map(i => ({ org: i.from_organization_id, status: i.status, commission: i.commission_percent })));
-      console.log('[Wallet] trips:', tRes.trips?.length ?? 0, tRes.trips?.map(t => ({ id: t.id, trip: t.trip_number, status: t.status, org: t.organization_id, driver: t.driver_id, commission: t.driver_commission })));
-      console.log('[Wallet] ledger entries:', ledgerRes.entries?.length ?? 0);
-      console.log('[Wallet] salary requests:', salaryReqRes.requests?.length ?? 0);
 
       setInvites(invRes.invites ?? []);
       setTrips(tRes.trips ?? []);
@@ -369,7 +360,6 @@ export default function DriverWalletScreen() {
         commissionPerKm: inv?.commission_per_km ?? d.commission_per_km ?? null,
       });
     }
-    console.log('[Wallet] payoutTermsMap:', Object.fromEntries(map));
     return map;
   }, [linkedDrivers, invites]);
 
@@ -986,8 +976,6 @@ export default function DriverWalletScreen() {
     const received = visibleTrips.filter((t) => (receivedByTripId[t.id] ?? 0) > 0);
     const pendingSum = pending.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t)), 0);
     const receivedSum = received.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t)), 0);
-    console.log('[Wallet] completedTrips:', visibleTrips.length, '| pending:', pending.length, '| received:', received.length, '| pendingTotal:', pendingSum, '| receivedTotal:', receivedSum);
-    console.log('[Wallet] per-trip earnings:', visibleTrips.map(t => ({ trip: t.trip_number, commission: t.driver_commission, earned: tripEarnings(t, payoutTermsForTrip(t)), receivedAmt: receivedByTripId[t.id] ?? 0 })));
     const list =
       transactionFilter === 'pending'
         ? pending
@@ -1111,6 +1099,23 @@ export default function DriverWalletScreen() {
   }));
 
   /** Salary request: all connected fleets. Org name resolved from invite → DB org name → fallback. */
+  /**
+   * org_id → name, sourced from the driver's own trips. `organizations` RLS is
+   * is_org_member(id) and a driver is never a member of the org that hires them,
+   * so the embedded `d.organizations` join comes back null and every name fell
+   * through to the literal 'Fleet'. trips_driver_view resolves the name
+   * server-side, so the trips list is the only client-visible source of truth.
+   */
+  const orgNameFromTrips = useMemo(() => {
+    const map: Record<string, string> = {};
+    trips.forEach((t) => {
+      const orgId = String(t.organization_id ?? '');
+      const name = t.organization_name?.trim();
+      if (orgId && name && !map[orgId]) map[orgId] = name;
+    });
+    return map;
+  }, [trips]);
+
   const salaryRequestOrgOptions = useMemo(() => {
     const accepted = invites.filter((i) => (i.status || '').toLowerCase() === 'accepted');
     const activeEmployers = linkedDrivers.filter((d) => isActiveFleetMembership(d, accepted));
@@ -1121,13 +1126,15 @@ export default function DriverWalletScreen() {
       const inviteName =
         (inv as { from_org_name?: string | null } | undefined)?.from_org_name?.trim() || null;
       const dbOrgName = (d.organizations as { name?: string } | null | undefined)?.name?.trim() || null;
+      const tripOrgName = orgNameFromTrips[String(d.organization_id ?? '')] ?? null;
+      const resolved = inviteName ?? dbOrgName ?? tripOrgName ?? 'Fleet';
       return {
         driverId: d.id,
         orgId: d.organization_id,
-        orgName: inviteName ?? dbOrgName ?? 'Fleet',
+        orgName: resolved,
       };
     });
-  }, [linkedDrivers, invites]);
+  }, [linkedDrivers, invites, orgNameFromTrips]);
 
   /** org_id → org display name, covering ALL linked orgs (including left) + all invites. */
   const orgNameById = useMemo(() => {
@@ -1144,8 +1151,13 @@ export default function DriverWalletScreen() {
       const name = i.from_org_name?.trim();
       if (name && !map[orgId]) map[orgId] = name;
     });
+    // Last resort: names resolved by trips_driver_view. Covers dispatching orgs the
+    // driver has no invite/membership row for (RLS blocks reading them directly).
+    Object.entries(orgNameFromTrips).forEach(([orgId, name]) => {
+      if (!map[orgId]) map[orgId] = name;
+    });
     return map;
-  }, [linkedDrivers, invites]);
+  }, [linkedDrivers, invites, orgNameFromTrips]);
 
   /** org_id → { logoUrl, avatarUrl, avatarSeed } sourced from invite rows (org owner profile via RPC). */
   const orgAvatarById = useMemo(() => {
@@ -1348,7 +1360,13 @@ export default function DriverWalletScreen() {
         null;
 
       // For direct trips always resolve the assigning org's name so it matches the avatar.
-      const assigningOrgName = orgNameById[String(trip.organization_id ?? '')] ?? null;
+      // orgNameById only covers orgs the driver is linked to (invite/membership rows),
+      // so it misses orgs that merely dispatched a trip — those fell through to the
+      // generic 'Fleet' label. trip.organization_name comes from trips_driver_view,
+      // which resolves it server-side because `organizations` RLS blocks drivers.
+      const assigningOrgName =
+        orgNameById[String(trip.organization_id ?? '')] ??
+        (trip.organization_name?.trim() || null);
       const provider = isFleetOwnerTrip
         ? (fleetOrgName ?? assigningOrgName ?? 'Fleet')
         : (fleetOrgName ?? assigningOrgName ?? 'Direct trip');

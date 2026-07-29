@@ -58,6 +58,12 @@ export type DriverTripRow = {
    * Must stay projected by trips_driver_view.
    */
   organization_id?: string | null;
+  /**
+   * Dispatching org's display name, resolved by the view. The driver cannot read
+   * `organizations` directly (RLS is is_org_member and drivers aren't members),
+   * so without this the wallet can only print a generic "Fleet" label.
+   */
+  organization_name?: string | null;
   /** Trip origin ('direct_quote' | 'mover_asset' | 'manual' | …). Drives mover-asset UI. */
   source?: string | null;
   completed_at?: string | null;
@@ -133,6 +139,7 @@ export function tripRowToDriverTripRow(
     | 'distance'
     | 'supplier_id'
     | 'organization_id'
+    | 'organization_name'
     | 'source'
     | 'completed_at'
     | 'indent_id'
@@ -170,6 +177,7 @@ export function tripRowToDriverTripRow(
     supplier_id: row.supplier_id ?? null,
     // Carried through so the fallback path classifies identically to the view.
     organization_id: row.organization_id ?? null,
+    organization_name: row.organization_name ?? null,
     source: row.source ?? null,
     completed_at: row.completed_at ?? null,
     trip_number: row.trip_number ?? null,
@@ -185,6 +193,7 @@ export function driverRowToTripRow(row: DriverTripRow): TripRow {
     // every trip, so the driver Fleet Trips tab was always empty. See
     // supabase/migrations/20270118000000_driver_view_expose_org_and_source.sql.
     organization_id: row.organization_id ?? '',
+    organization_name: row.organization_name ?? null,
     trip_number: row.driver_display_trip_id ?? row.id,
     driver_display_trip_id: row.driver_display_trip_id,
     status: row.status,

@@ -36,6 +36,7 @@ const TRIP_VIEWS = join(ROOT, 'types', 'trip-views.ts');
  */
 const REQUIRED_VIEW_COLUMNS = [
   'organization_id',
+  'organization_name',
   'source',
   'supplier_id',
   'completed_at',
@@ -82,6 +83,22 @@ if (!viewDef) {
           `  and classification fails silently — no error, just an empty Fleet tab.`,
       );
     }
+  }
+
+  // organization_name must be resolved via the SECURITY DEFINER helper. A plain
+  // JOIN silently yields NULL for every driver (security_invoker + is_org_member),
+  // which is exactly how this bug shipped — it looks correct and returns nothing.
+  if (
+    /organization_name/i.test(sqlNoComments) &&
+    !/org_display_name\s*\(/i.test(sqlNoComments)
+  ) {
+    errors.push(
+      `trips_driver_view (${viewDef.file}) selects organization_name without\n` +
+        `  public.org_display_name(). A direct JOIN to organizations returns NULL for\n` +
+        `  every driver: the view is security_invoker, so the join runs under the\n` +
+        `  caller's RLS and the organizations policy is is_org_member(id) — drivers\n` +
+        `  are never members of the org that hires them. Use the helper function.`,
+    );
   }
 
   if (!/security_invoker/i.test(sqlNoComments)) {

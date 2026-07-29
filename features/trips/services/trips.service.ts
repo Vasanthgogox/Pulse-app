@@ -31,6 +31,11 @@ export { driverRowToTripRow, supplierRowToTripRow } from "@/types/trip-views";
 export interface TripRow {
   id: string;
   organization_id: string;
+  /**
+   * Dispatching org's display name. Only populated on driver-side reads
+   * (trips_driver_view resolves it because `organizations` RLS blocks drivers).
+   */
+  organization_name?: string | null;
   /** Operational identity code, e.g. GGV234-TRP-001 */
   trip_code?: string | null;
   /** Enterprise operational identity code, e.g. GGV234ABCTRIP000001 */
@@ -632,6 +637,11 @@ const DRIVER_TRIP_FALLBACK_COLUMNS = [
   "organization_id",
   "completed_at",
   "indent_id",
+  // NOTE: organization_name is deliberately NOT fetched here. `trips` has no such
+  // column and embedding `organizations(name)` fails outright for drivers
+  // ("permission denied for function is_org_member"), which would break the whole
+  // query. Only trips_driver_view can supply the name — this fallback leaves it
+  // null and the wallet falls back to a generic label.
 ].join(",");
 
 async function getTripsByDriverIdsFromTripsTable(

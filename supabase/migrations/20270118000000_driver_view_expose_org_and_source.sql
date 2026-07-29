@@ -38,42 +38,74 @@
 
 BEGIN;
 
+-- ── Org name resolver ─────────────────────────────────────────────────────────
+-- SECURITY DEFINER so a security_invoker view can label a row with its owning
+-- org for a user who is NOT a member of that org (a driver seeing which fleet
+-- dispatched their trip). Exposes only `name`, never any other org column.
+CREATE OR REPLACE FUNCTION public.org_display_name(p_org_id uuid)
+RETURNS text
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path TO 'public'
+AS $fn$
+  SELECT o.name FROM public.organizations o WHERE o.id = p_org_id;
+$fn$;
+
+COMMENT ON FUNCTION public.org_display_name(uuid) IS
+  'Returns an organization display name, bypassing the is_org_member RLS policy. '
+  'Exists so security_invoker views (trips_driver_view) can label a row with its '
+  'owning org for users who are not members of that org — e.g. a driver seeing '
+  'which fleet dispatched their trip. Exposes only the name.';
+
+REVOKE ALL ON FUNCTION public.org_display_name(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.org_display_name(uuid) TO authenticated;
+
 CREATE OR REPLACE VIEW public.trips_driver_view
 WITH (security_invoker = true) AS
 SELECT
-  id,
-  driver_id,
-  driver_display_trip_id,
-  status,
-  pickup_area AS pickup_location,
-  pickup_area AS pickup_address,
-  pickup_date AS pickup_scheduled_at,
-  drop_location AS dropoff_location,
-  drop_location AS dropoff_address,
+  t.id,
+  t.driver_id,
+  t.driver_display_trip_id,
+  t.status,
+  t.pickup_area AS pickup_location,
+  t.pickup_area AS pickup_address,
+  t.pickup_date AS pickup_scheduled_at,
+  t.drop_location AS dropoff_location,
+  t.drop_location AS dropoff_address,
   NULL::timestamp with time zone AS dropoff_scheduled_at,
-  notes AS instructions,
-  vehicle_id,
-  pickup_lat,
-  pickup_lon,
-  drop_lat,
-  drop_lon,
-  started_at,
-  created_at,
-  updated_at,
-  client_price,
-  supplier_rate,
-  driver_commission,
-  distance,
+  t.notes AS instructions,
+  t.vehicle_id,
+  t.pickup_lat,
+  t.pickup_lon,
+  t.drop_lat,
+  t.drop_lon,
+  t.started_at,
+  t.created_at,
+  t.updated_at,
+  t.client_price,
+  t.supplier_rate,
+  t.driver_commission,
+  t.distance,
   -- ── Added: required for driver-side fleet/open classification ──────────────
-  organization_id,
-  source,
-  supplier_id,
-  completed_at,
-  trip_number,
-  indent_id,
-  source_indent_id
+  t.organization_id,
+  t.source,
+  t.supplier_id,
+  t.completed_at,
+  t.trip_number,
+  t.indent_id,
+  t.source_indent_id,
+  -- Dispatching org's display name.
+  --
+  -- MUST go through org_display_name(). A plain `LEFT JOIN organizations` here
+  -- returns NULL for every driver: the view is security_invoker, so the join runs
+  -- under the CALLER's RLS, and the organizations policy is is_org_member(id) —
+  -- a driver is never a member of the org that hires them. Verified by
+  -- impersonating a driver (set role authenticated + their jwt sub): the join
+  -- yielded NULL, the function yields the real name.
+  public.org_display_name(t.organization_id) AS organization_name
 FROM trips t
-WHERE driver_id IN (
+WHERE t.driver_id IN (
   SELECT d.id FROM drivers d WHERE d.user_id = auth.uid()
 );
 
@@ -81,7 +113,9 @@ COMMENT ON VIEW public.trips_driver_view IS
   'Driver-scoped trip projection (security_invoker; self-scopes via auth.uid()). '
   'organization_id + source are REQUIRED by the driver wallet to classify a trip '
   'as fleet vs open — removing either silently empties the Fleet Trips tab for '
-  'every driver. Columns here must stay in sync with DriverTripRow in '
+  'every driver. organization_name is required to label WHICH fleet a trip '
+  'belongs to: organizations RLS (is_org_member) blocks drivers from resolving '
+  'it client-side. Columns here must stay in sync with DriverTripRow in '
   'types/trip-views.ts; a field present in the type but absent here becomes a '
   'hardcoded default in the app with no runtime error. '
   'Guarded by scripts/check-driver-view-contract.ts.';

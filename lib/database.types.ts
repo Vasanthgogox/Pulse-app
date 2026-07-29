@@ -11008,6 +11008,7 @@ export type Database = {
       trips_driver_view: {
         Row: {
           client_price: number | null
+          completed_at: string | null
           created_at: string | null
           distance: number | null
           driver_commission: number | null
@@ -11019,15 +11020,22 @@ export type Database = {
           dropoff_location: string | null
           dropoff_scheduled_at: string | null
           id: string | null
+          indent_id: string | null
           instructions: string | null
+          organization_id: string | null
+          organization_name: string | null
           pickup_address: string | null
           pickup_lat: number | null
           pickup_location: string | null
           pickup_lon: number | null
           pickup_scheduled_at: string | null
+          source: string | null
+          source_indent_id: string | null
           started_at: string | null
           status: string | null
+          supplier_id: string | null
           supplier_rate: number | null
+          trip_number: string | null
           updated_at: string | null
           vehicle_id: string | null
         }
