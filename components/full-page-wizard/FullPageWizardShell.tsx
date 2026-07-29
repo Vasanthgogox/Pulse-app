@@ -14,6 +14,7 @@ import { ArrowLeft } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { dockPaddingBottom, useKeyboardVisible } from "@/lib/hooks/useKeyboardVisible";
+import { useViewportHeight, viewportCapStyle } from "@/lib/hooks/useViewportHeight";
 import { isDesktopWizardForm } from "@/lib/wizardLayout.util";
 
 import { WizardActionBarProvider } from "./WizardActionBarContext";
@@ -65,7 +66,9 @@ export function FullPageWizardShell({
   steppedLayout = false,
 }: FullPageWizardShellProps) {
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
+  /** Visible height — tracks URL bar / keyboard on web, unlike window height. */
+  const height = useViewportHeight();
   const { keyboardVisible } = useKeyboardVisible();
   const isDesktopRails = width >= Layout.wizardDesktopGridMinWidth;
   const isDesktopForm = steppedLayout ? false : isDesktopWizardForm(width);
@@ -76,11 +79,16 @@ export function FullPageWizardShell({
   /** Phone keypad steps host Continue above the pad via context. */
   const hoistFooterIntoKeypad = Boolean(footer && isKeypadStep);
   /**
-   * Mobile scroll/fill steps: pin the action bar to the viewport bottom so long
-   * forms (Route, Load, …) cannot push Continue off-screen on RN Web.
+   * Phone + tablet scroll/fill steps: pin the action bar to the viewport bottom
+   * so long forms (Route, Load, …) cannot push Continue off-screen on RN Web.
+   * Desktop rails (>= wizardDesktopGridMinWidth) keep the footer in normal flow
+   * so it stays attached to the card instead of floating over the page.
    */
   const pinFooterToViewport = Boolean(
-    footer && isMobileWizardLayout && !hoistFooterIntoKeypad,
+    footer &&
+      width < Layout.wizardDesktopGridMinWidth &&
+      !isSteppedDesktop &&
+      !hoistFooterIntoKeypad,
   );
   const mobileFooterReserve = pinFooterToViewport
     ? 88 + dockPaddingBottom(insets.bottom, keyboardVisible, 8)
@@ -167,13 +175,16 @@ export function FullPageWizardShell({
         isKeypadStep && styles.pageRootKeypad,
         isSteppedDesktop && styles.pageRootSteppedDesktop,
         {
-          /** Keep header + body + footer inside the visible viewport. */
-          ...(pinFooterToViewport && {
-            height,
-            maxHeight: height,
-          }),
+          /**
+           * Keep header + body + footer inside the visible viewport.
+           * `pageRoot` is already `flex: 1`, so on web we only need a cap in
+           * dynamic-viewport units — `100dvh` follows the mobile URL bar
+           * collapsing, which a measured pixel height cannot. Native has no
+           * URL bar, so the measured height is exact there.
+           */
+          ...(pinFooterToViewport && viewportCapStyle(height)),
           ...(hoistFooterIntoKeypad && !pinFooterToViewport
-            ? { maxHeight: height }
+            ? viewportCapStyle(height)
             : null),
           paddingTop: insets.top + (isKeypadStep || isSteppedDesktop ? 4 : 6),
           paddingBottom: hoistFooterIntoKeypad

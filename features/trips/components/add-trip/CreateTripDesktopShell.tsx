@@ -13,6 +13,7 @@ import { MotiView } from "moti";
 import { Easing } from "react-native-reanimated";
 
 import Theme from "@/constants/Theme";
+import { useViewportHeight, viewportCapStyle } from "@/lib/hooks/useViewportHeight";
 
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
 
@@ -52,6 +53,7 @@ export function CreateTripDesktopShell({
   fillBody = false,
 }: CreateTripDesktopShellProps) {
   const insets = useSafeAreaInsets();
+  const viewportHeight = useViewportHeight();
   const stepLabel =
     stepIndex != null && stepTotal != null && stepTotal > 0
       ? `Step ${stepIndex} of ${stepTotal}`
@@ -98,7 +100,15 @@ export function CreateTripDesktopShell({
   );
 
   return (
-    <View style={[s.root, { paddingTop: insets.top }]}>
+    <View
+      style={[
+        s.root,
+        /** Header + body + footer stay inside the visible viewport, so the
+         *  Continue dock is reachable on iPad landscape / short windows. */
+        viewportCapStyle(viewportHeight),
+        { paddingTop: insets.top },
+      ]}
+    >
       <View style={s.header}>
         <View style={[s.rail, s.headerInner]}>
           <View style={s.headerLeft}>

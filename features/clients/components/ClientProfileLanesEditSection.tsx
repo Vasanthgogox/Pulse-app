@@ -10,6 +10,7 @@ import {
   updateClientLaneRate,
 } from "@/features/clients/services/clientLaneRates.service";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { formatWarehouseLaneLabel } from "@/features/clients/utils/clientManagement.util";
 import { formatINRChip } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useMemo, useState } from "react";
@@ -43,7 +44,9 @@ type LaneDraft = {
 
 const emptyDraft = (warehouses: ClientWarehouseExtended[]): LaneDraft => ({
   origin_warehouse_id: warehouses.length === 1 ? warehouses[0]!.id : null,
-  origin_label: warehouses.length === 1 ? warehouses[0]!.name : "",
+  /** "Name · City, State" — the origin is a place, not just the hub's name. */
+  origin_label:
+    warehouses.length === 1 ? formatWarehouseLaneLabel(warehouses[0]!) : "",
   destination_label: "",
   vehicle_type: "",
   rate: "",
@@ -134,11 +137,18 @@ export function ClientProfileLanesEditSection({
     setAddingLane(false);
   };
 
-  const selectHub = (warehouseId: string | null, name?: string) => {
+  /** Origin label for a hub — "Name · City, State", matching the desktop form. */
+  const hubOriginLabel = (warehouseId: string | null): string => {
+    if (!warehouseId) return "";
+    const wh = warehouses.find((w) => w.id === warehouseId);
+    return wh ? formatWarehouseLaneLabel(wh) : "";
+  };
+
+  const selectHub = (warehouseId: string | null) => {
     setDraft({
       ...emptyDraft(warehouses),
       origin_warehouse_id: warehouseId,
-      origin_label: name ?? "",
+      origin_label: hubOriginLabel(warehouseId),
     });
     setEditingId(null);
     setAddingLane(true);
@@ -153,14 +163,12 @@ export function ClientProfileLanesEditSection({
 
   const startBlankLaneForHub = () => {
     const hubId = draft.origin_warehouse_id;
-    const hubName =
-      (hubId ? warehouses.find((w) => w.id === hubId)?.name : null) ?? draft.origin_label;
     setEditingId(null);
     setAddingLane(true);
     setDraft({
       ...emptyDraft(warehouses),
       origin_warehouse_id: hubId,
-      origin_label: hubName || "",
+      origin_label: hubOriginLabel(hubId) || draft.origin_label,
     });
   };
 
@@ -369,7 +377,7 @@ export function ClientProfileLanesEditSection({
                   <TouchableOpacity
                     key={wh.id}
                     style={[styles.chip, draft.origin_warehouse_id === wh.id && styles.chipSelected]}
-                    onPress={() => selectHub(wh.id, wh.name)}
+                    onPress={() => selectHub(wh.id)}
                   >
                     <Text
                       style={[
