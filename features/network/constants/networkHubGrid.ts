@@ -107,11 +107,16 @@ export const NETWORK_HUB_SPLIT_NATIVE_ROWS = 6;
 export const NETWORK_HUB_SPLIT_NATIVE_SLOT_LIMIT =
   NETWORK_HUB_SPLIT_NATIVE_COLUMNS * NETWORK_HUB_SPLIT_NATIVE_ROWS;
 
-/** Grow / recommendations — desktop split panes: 1 per row × 5 rows. */
+/** Grow / recommendations — desktop split panes: 1 per row × 8 rows. */
 export const NETWORK_HUB_SPLIT_DESKTOP_COLUMNS = 1;
-export const NETWORK_HUB_SPLIT_DESKTOP_ROWS = 5;
+export const NETWORK_HUB_SPLIT_DESKTOP_ROWS = 8;
 export const NETWORK_HUB_SPLIT_DESKTOP_SLOT_LIMIT =
   NETWORK_HUB_SPLIT_DESKTOP_COLUMNS * NETWORK_HUB_SPLIT_DESKTOP_ROWS;
+
+/** Desktop Network → Grow: cards per category (Recommended + People you may know). */
+export const NETWORK_HUB_DESKTOP_CATEGORY_LIMIT = 8;
+/** Mobile / stacked Network → Grow: cards per category. */
+export const NETWORK_HUB_MOBILE_CATEGORY_LIMIT = 6;
 
 export type NetworkHubSplitPaneLayout = {
   columns: number;

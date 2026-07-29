@@ -4,6 +4,7 @@
  * No CTR/CPM; no invented conversion rates.
  */
 import Theme from "@/constants/Theme";
+import { REACH_M } from "@/features/reach/styles/reachMetronic";
 import type { ReachCampaignRow } from "@/features/reach/services/campaigns.service";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -137,9 +138,9 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     backgroundColor: Theme.cardWhite,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     padding: 14,
     gap: 14,
   },
@@ -200,7 +201,7 @@ const styles = StyleSheet.create({
   },
   barCol: { flex: 1, alignItems: "center", justifyContent: "flex-end" },
   bar: { width: "100%", borderTopLeftRadius: 2, borderTopRightRadius: 2 },
-  barPeak: { backgroundColor: Theme.primary },
+  barPeak: { backgroundColor: REACH_M.primary },
   barIdle: { backgroundColor: Theme.borderMedium },
   dayRow: { flexDirection: "row", justifyContent: "space-between" },
   dayLabel: {
@@ -226,5 +227,5 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     overflow: "hidden",
   },
-  fleetFill: { height: "100%", borderRadius: 2, backgroundColor: Theme.primary },
+  fleetFill: { height: "100%", borderRadius: 2, backgroundColor: REACH_M.primary },
 });

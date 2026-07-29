@@ -235,7 +235,7 @@ export function LoadCenterView({
     [],
   );
 
-  /** Desktop web: 5 indent cards per row (mobile <820 uses hub list cards). */
+  /** Desktop web: 3 indent cards per row (mobile <820 uses hub list cards). */
   const useGridLayout = Platform.OS === "web" && width >= 1024;
   const isMobileView = width < 820;
   /** Desktop: Suggested partners sit in a Network-style left sidebar. */
@@ -1009,10 +1009,20 @@ export function LoadCenterView({
         ? "awarded"
         : isRejected
           ? "declined"
-          : isPending
-            ? "quoted"
-            : "open";
+          : isPending &&
+              existingQuote?.counter_amount != null &&
+              Number(existingQuote.counter_amount) > 0
+            ? "countered"
+            : isPending
+              ? "quoted"
+              : "open";
       const quoteAmount = Number(existingQuote?.amount ?? 0);
+      const counterInr =
+        existingQuote?.counter_amount != null &&
+        Number(existingQuote.counter_amount) > 0
+          ? Number(existingQuote.counter_amount)
+          : null;
+      const isCountered = isPending && counterInr != null;
       const quoteVariant = isDoneOutcome
         ? "done"
         : isAccepted
@@ -1036,11 +1046,13 @@ export function LoadCenterView({
         ? isDoneOutcome
           ? "View details"
           : "View claimed"
-        : isPending
-          ? "Update quote"
-          : isRejected
-            ? "New quote"
-            : "Bid now";
+        : isCountered
+          ? "Respond to counter"
+          : isPending
+            ? "Update quote"
+            : isRejected
+              ? "New quote"
+              : "Bid now";
 
       const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
       const sourceTag = resolveGetLoadSourceTag(
@@ -2193,11 +2205,11 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
     alignItems: "stretch",
   },
-  /** Desktop load grid only — 4 cards per row (25% each). */
+  /** Desktop load grid — 3 cards per row. */
   gridCardWrap: {
-    width: "25%",
-    maxWidth: "25%",
-    flexBasis: "25%",
+    width: "33.333%",
+    maxWidth: "33.333%",
+    flexBasis: "33.333%",
     paddingHorizontal: 4,
     marginBottom: 12,
     alignSelf: "stretch",

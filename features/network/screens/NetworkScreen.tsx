@@ -239,8 +239,6 @@ function NetworkScreenInner() {
   const isMobileLayout = width < 820;
   /** Org welcome bar — mobile + tablet only; hidden on desktop web. */
   const showHomePageHeader = Platform.OS !== "web" || width < 1180;
-  /** Desktop: stories 80% + load marketplace 20% in one row. */
-  const showStoryLoadsSplit = Platform.OS === "web" && width >= 1180;
   const isCompactPhone = width < 420;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -1007,40 +1005,19 @@ function NetworkScreenInner() {
             </View>
           </View>
             </View>
-            {showStoryLoadsSplit ? (
-              <View style={styles.storyLoadsRow}>
-                <View style={styles.storyLoadsRowStories}>
-                  <NetworkStoryStrip
-                    orgId={orgId}
-                    orgName={organization?.name ?? ""}
-                    feedPosts={feedPosts}
-                    feedLoading={feedQ.isLoading}
-                    onCreatePost={onCreatePost}
-                    canCreatePost={canPostLoads}
-                    networkPartnerOrgIds={integratedClientOrgIds}
-                    embedded
-                  />
-                </View>
-                <View style={styles.storyLoadsRowMarketplace}>
-                  <NetworkLoadsQuickCards layout="sidebar" />
-                </View>
-              </View>
-            ) : (
-              <NetworkStoryStrip
-                orgId={orgId}
-                orgName={organization?.name ?? ""}
-                feedPosts={feedPosts}
-                feedLoading={feedQ.isLoading}
-                onCreatePost={onCreatePost}
-                canCreatePost={canPostLoads}
-                networkPartnerOrgIds={integratedClientOrgIds}
-              />
-            )}
+            <NetworkStoryStrip
+              orgId={orgId}
+              orgName={organization?.name ?? ""}
+              feedPosts={feedPosts}
+              feedLoading={feedQ.isLoading}
+              onCreatePost={onCreatePost}
+              canCreatePost={canPostLoads}
+              networkPartnerOrgIds={integratedClientOrgIds}
+              embedded={isWideNetwork}
+            />
               </View>
         </View>
-        {!showStoryLoadsSplit ? (
-          <NetworkLoadsQuickCards compact={isCompactPhone} />
-        ) : null}
+        <NetworkLoadsQuickCards compact={isCompactPhone} />
         {ENABLE_UNLINKED_COUNTERPARTIES && orgId ? (
           <UnlinkedCounterpartiesSection orgId={orgId} />
         ) : null}
@@ -1710,39 +1687,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 16,
-  },
-  storyLoadsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    gap: 0,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    minHeight: 108,
-  },
-  storyLoadsRowStories: {
-    flexGrow: 0,
-    flexShrink: 1,
-    flexBasis: "80%",
-    width: "80%",
-    maxWidth: "80%",
-    minWidth: 0,
-    overflow: "hidden",
-  },
-  storyLoadsRowMarketplace: {
-    flexGrow: 0,
-    flexShrink: 0,
-    flexBasis: "20%",
-    width: "20%",
-    maxWidth: "20%",
-    minWidth: 0,
-    paddingLeft: 16,
-    marginLeft: 12,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: Theme.borderLight,
-    justifyContent: "center",
-    alignSelf: "stretch",
-    paddingVertical: 8,
-    backgroundColor: "transparent",
   },
   commandMainCard: {
     flex: 1,

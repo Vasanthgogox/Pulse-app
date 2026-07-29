@@ -5,6 +5,10 @@
  * Modeled on StoryOwnerBidsSheet.tsx's Modal/sheet pattern.
  */
 import Theme from "@/constants/Theme";
+import {
+  StoryFlowSheetPortal,
+  useStoryPhoneFrameMetrics,
+} from "@/features/network/components/StoryMobilePopupShell";
 import type { ReachPlanRow } from "@/features/reach/services/campaigns.service";
 import { formatINR } from "@/lib/format";
 import { usePublishReachCampaignMutation, useReachPlansQuery } from "@/lib/queries/useReachCampaignsQuery";
@@ -15,7 +19,6 @@ import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -52,9 +55,11 @@ function formatDuration(hours: number): string {
 
 export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewCampaign }: BoostSheetProps) {
   const insets = useSafeAreaInsets();
+  const { phonePopup, sheetBottomPad } = useStoryPhoneFrameMetrics();
   const plansQ = useReachPlansQuery();
   const walletQ = useReachWalletQuery(visible ? orgId : null);
   const publishMutation = usePublishReachCampaignMutation();
+  const bottomPad = sheetBottomPad ?? insets.bottom + 14;
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"credits" | "money">("credits");
@@ -115,10 +120,12 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close boost picker" />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
+    <StoryFlowSheetPortal
+      visible={visible}
+      onClose={onClose}
+      accessibilityLabel="Close boost picker"
+    >
+      <View style={[styles.sheet, phonePopup && styles.sheetPhone, { paddingBottom: bottomPad }]}>
           <View style={styles.handle} />
 
           {justBoosted ? (
@@ -403,13 +410,11 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
             </>
           )}
         </View>
-      </View>
-    </Modal>
+    </StoryFlowSheetPortal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: Theme.overlayBackdrop },
   sheet: {
     backgroundColor: Theme.cardWhite,
     borderTopLeftRadius: 20,
@@ -418,6 +423,10 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     maxHeight: "82%",
     gap: 12,
+  },
+  sheetPhone: {
+    width: "100%",
+    maxHeight: "88%",
   },
   handle: {
     width: 36,

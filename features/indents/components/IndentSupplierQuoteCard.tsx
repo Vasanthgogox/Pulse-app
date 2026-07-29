@@ -212,13 +212,16 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
 }: IndentSupplierQuoteCardProps) {
   const hasQuote = quote != null;
   const amount = Number(quote?.amount ?? 0);
-  const amountDisplay = hasQuote ? stripCurrencyPrefix(formatINR(amount)) : "—";
   const status = (quote?.status ?? "").trim().toLowerCase();
   const counterAmount =
     quote?.counter_amount != null && Number(quote.counter_amount) > 0
       ? Number(quote.counter_amount)
       : null;
   const isCountered = hasQuote && status === "pending" && counterAmount != null;
+  const heroAmount = isCountered ? counterAmount! : amount;
+  const amountDisplay = hasQuote
+    ? stripCurrencyPrefix(formatINR(heroAmount))
+    : "—";
   const isAccepted = status === "accepted";
   const isRejected = status === "rejected";
   const isPending = !hasQuote || status === "pending";
@@ -238,7 +241,7 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
         : isRejected
           ? "Rejected"
           : isCountered
-            ? "Countered"
+            ? "Review"
             : "Pending";
 
   const alertPanel = alertInfo ? alertPanelStyles(alertInfo.tone) : null;
@@ -279,7 +282,11 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
         />
         <View style={styles.metaBody}>
           <Text style={styles.kicker}>
-            {hasQuote ? "YOUR QUOTE" : "NO QUOTE YET"}
+            {isCountered
+              ? "COUNTER OFFER RECEIVED"
+              : hasQuote
+                ? "YOUR QUOTE"
+                : "NO QUOTE YET"}
           </Text>
           <Text style={styles.shipperName} numberOfLines={2}>
             {shipperName}
@@ -340,7 +347,7 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
         )}
         {isCountered ? (
           <Text style={styles.counterHint}>
-            Shipper counter · ₹ {stripCurrencyPrefix(formatINR(counterAmount!))}
+            Your bid · ₹ {stripCurrencyPrefix(formatINR(amount))}
           </Text>
         ) : null}
       </View>

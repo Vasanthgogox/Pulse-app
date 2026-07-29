@@ -3,6 +3,7 @@
  * Ads Manager style: white surface, sponsored label, structured specs, primary CTA.
  */
 import Theme from "@/constants/Theme";
+import { REACH_M } from "@/features/reach/styles/reachMetronic";
 import type { ReachCampaignRow, ReachPlanRow } from "@/features/reach/services/campaigns.service";
 import { getCampaignIdentity } from "@/features/reach/utils/campaignIdentity";
 import { formatINR } from "@/lib/format";
@@ -240,9 +241,9 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     backgroundColor: Theme.cardWhite,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     overflow: "hidden",
   },
   header: {
@@ -283,7 +284,7 @@ const styles = StyleSheet.create({
   },
   statusBadgeIdle: {
     backgroundColor: Theme.cardWhite,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
   },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusBadgeText: {
@@ -409,7 +410,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: Theme.primary,
+    backgroundColor: REACH_M.primary,
     borderRadius: 6,
     paddingVertical: 11,
   },
@@ -422,7 +423,7 @@ const styles = StyleSheet.create({
   ctaSecondary: {
     backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
   },
   ctaSecondaryText: {
     fontSize: 12,
@@ -453,7 +454,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     padding: 2,
     flexShrink: 0,
   },

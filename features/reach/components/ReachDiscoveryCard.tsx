@@ -1,6 +1,6 @@
 /**
- * @deprecated Pulse Reach is the third tile inside `NetworkLoadsQuickCards`
- * (same size/chrome as Give loads / Get loads). Kept as a no-op export so
+ * @deprecated Pulse Reach is a tile inside `NetworkLoadsQuickCards`
+ * (same size/chrome as Give / Get / Assist). Kept as a no-op export so
  * older imports do not break.
  */
 export interface ReachDiscoveryCardProps {

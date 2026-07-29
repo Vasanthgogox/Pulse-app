@@ -83,17 +83,17 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
     (onComplete: () => void) => {
       if (dismissingRef.current) return;
       dismissingRef.current = true;
+      // Parent first — prevents visible=true + shellVisible=false reopen race.
+      onComplete();
       Animated.timing(dragY, {
         toValue: 420,
         duration: 220,
         useNativeDriver: true,
       }).start(({ finished }) => {
-        dismissingRef.current = false;
         if (!finished) return;
         dragY.setValue(0);
         setIsDragging(false);
         setShellVisible(false);
-        onComplete();
       });
     },
     [dragY],
@@ -154,11 +154,10 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
       setIsDragging(false);
       return;
     }
-    if (!dismissingRef.current) {
-      setShellVisible(false);
-      dragY.setValue(0);
-      setIsDragging(false);
-    }
+    dismissingRef.current = false;
+    setShellVisible(false);
+    dragY.setValue(0);
+    setIsDragging(false);
   }, [visible, dragY]);
 
   const handlePagerLayout = useCallback((width: number) => {
@@ -353,7 +352,7 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
                 activeOpacity={0.82}
                 accessibilityRole="button"
                 accessibilityLabel="Later"
-                accessibilityHint="Hides this award for now and shows the next one in queue"
+                accessibilityHint="Hides all pending award alerts for now"
               >
                 <Text style={styles.laterBtnOutlineText}>Later</Text>
               </TouchableOpacity>

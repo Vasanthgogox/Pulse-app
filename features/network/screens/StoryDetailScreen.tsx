@@ -14,6 +14,10 @@ import {
 } from "@/features/indents/services/indents.service";
 import { StoryBroadcastPreview } from "@/features/network/components/StoryBroadcastPreview";
 import { StoryOwnerFooterActions } from "@/features/network/components/StoryDetailFooterActions";
+import {
+  StoryMobilePopupShell,
+  useStoryPhonePopup,
+} from "@/features/network/components/StoryMobilePopupShell";
 import { StoryViewersSheet } from "@/features/network/components/StoryViewersSheet";
 import { BidSheet } from "@/features/network/components/bidding/BidSheet";
 import { StoryOwnerBidsSheet } from "@/features/network/components/bidding/StoryOwnerBidsSheet";
@@ -44,7 +48,7 @@ import { BoostProgressSheet } from "@/features/reach/components/BoostProgressShe
 import { BoostSheet } from "@/features/reach/components/BoostSheet";
 import { recordReachEvent } from "@/features/reach/services/events.service";
 import { confirmDialog } from "@/lib/confirmDialog";
-import { useIndentDirectQuotesQuery } from "@/lib/queries";
+import { useIndentDirectQuotesQuery, useMyDirectQuotesQuery } from "@/lib/queries";
 import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
 import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { useAfterPostDeleted, useInvalidatePosts, useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
@@ -56,6 +60,7 @@ import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import {
+    ArrowLeftRight,
     CheckCircle2,
     Clock3,
     Edit3,
@@ -169,7 +174,9 @@ export default function StoryDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: viewportWidth } = useWindowDimensions();
-  const isDesktopPreview = viewportWidth >= 1024;
+  const phonePopup = useStoryPhonePopup();
+  /** Inside the phone-frame popup (or on real phones) always use mobile story metrics. */
+  const isDesktopPreview = !phonePopup && viewportWidth >= 1024;
   const params = useLocalSearchParams<{
     orgId?: string;
     postId?: string;
@@ -325,6 +332,22 @@ export default function StoryDetailScreen() {
   // Fetch my existing bid on current post (for non-own load posts)
   const myBidQ = useMyBidQuery(canBidOnLoad ? (post?.id ?? null) : null, myOrgId || null);
   const myBid = myBidQ.data ?? null;
+  const myQuotesQ = useMyDirectQuotesQuery(canBidOnLoad ? myOrgId : null);
+  const myDirectQuote = useMemo(() => {
+    const indentId = post?.source_indent_id;
+    if (!indentId || !myQuotesQ.data?.length) return null;
+    return myQuotesQ.data.find((q) => q.indent_id === indentId) ?? null;
+  }, [myQuotesQ.data, post?.source_indent_id]);
+  const counterOfferInr = useMemo(() => {
+    const n = Number(myDirectQuote?.counter_amount ?? 0);
+    const quotePending =
+      (myBid?.status ?? myDirectQuote?.status ?? "").toLowerCase() === "pending";
+    return quotePending && n > 0 ? n : null;
+  }, [myBid?.status, myDirectQuote?.counter_amount, myDirectQuote?.status]);
+  const submittedBidAmount = Number(myBid?.amount ?? myDirectQuote?.amount ?? 0);
+  const hasSubmittedBid = Boolean(myBid || myDirectQuote);
+  const bidStatus = (myBid?.status ?? myDirectQuote?.status ?? "pending").toLowerCase();
+  const bidNote = myBid?.note ?? myDirectQuote?.notes ?? null;
 
   // Record view (fire-and-forget, once per post per session)
   const recordView = useRecordStoryViewMutation();
@@ -453,25 +476,28 @@ export default function StoryDetailScreen() {
 
   if (!post) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top, paddingHorizontal: Layout.screenPaddingHorizontal }]}>
-        <Pressable
-          style={[styles.topBarIconBtn, { marginTop: 8, alignSelf: "flex-start" }]}
-          onPress={() => router.back()}
-        >
-          <X size={16} color={INK} strokeWidth={2.25} />
-        </Pressable>
-        {isLoadingPost
-          ? <ActivityIndicator size="large" color={Theme.primary} />
-          : <Text style={{ color: Theme.textMuted, fontSize: 14, fontWeight: '500' }}>Story not found</Text>
-        }
-      </View>
+      <StoryMobilePopupShell onBackdropPress={() => router.back()}>
+        <View style={[styles.container, { paddingTop: insets.top, paddingHorizontal: Layout.screenPaddingHorizontal }]}>
+          <Pressable
+            style={[styles.topBarIconBtn, { marginTop: 8, alignSelf: "flex-start" }]}
+            onPress={() => router.back()}
+          >
+            <X size={16} color={INK} strokeWidth={2.25} />
+          </Pressable>
+          {isLoadingPost
+            ? <ActivityIndicator size="large" color={Theme.primary} />
+            : <Text style={{ color: Theme.textMuted, fontSize: 14, fontWeight: '500' }}>Story not found</Text>
+          }
+        </View>
+      </StoryMobilePopupShell>
     );
   }
 
   return (
+    <StoryMobilePopupShell onBackdropPress={() => router.back()}>
     <View style={styles.container}>
       {isLoad ? <View style={styles.ambientGlow} pointerEvents="none" /> : null}
-      <View style={[styles.progressRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.progressRow, { paddingTop: (phonePopup ? 12 : insets.top) + 8 }]}>
         {resolvedStoryList.map((_, i) => (
           <ProgressSegment key={i} index={i} current={current} progress={progress} />
         ))}
@@ -620,7 +646,7 @@ export default function StoryDetailScreen() {
       </View>
 
       {/* Footer */}
-      <Animated.View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) + 8, opacity: footerFade }]}>
+      <Animated.View style={[styles.footer, { paddingBottom: Math.max(phonePopup ? 16 : insets.bottom, 20) + 8, opacity: footerFade }]}>
         {isOwnPost && isLoad && (
           <StoryOwnerFooterActions
             viewsLabel={storyOwnerViewsLabel(ownerViewRows.length, ownerViewsLoading)}
@@ -652,26 +678,75 @@ export default function StoryDetailScreen() {
         )}
 
         {canBidOnLoad && post && (
-          myBid ? (
-            /* Already bid — show status + edit */
+          hasSubmittedBid ? (
+            /* Already bid — show status + edit; surface shipper counter when present */
             <>
-              <View style={styles.bidStatusBanner}>
-                <CheckCircle2 size={16} color="#10b981" strokeWidth={2.5} />
+              <View
+                style={[
+                  styles.bidStatusBanner,
+                  counterOfferInr != null && styles.bidStatusBannerCounter,
+                ]}
+              >
+                {counterOfferInr != null ? (
+                  <ArrowLeftRight size={16} color={Theme.warning} strokeWidth={2.5} />
+                ) : (
+                  <CheckCircle2 size={16} color="#10b981" strokeWidth={2.5} />
+                )}
                 <View style={styles.bidStatusText}>
-                  <Text style={styles.bidStatusLabel}>Bid submitted</Text>
-                  <Text style={styles.bidStatusAmount}>₹{myBid.amount.toLocaleString("en-IN")}{myBid.note ? ` · ${myBid.note}` : ""}</Text>
+                  <Text
+                    style={[
+                      styles.bidStatusLabel,
+                      counterOfferInr != null && styles.bidStatusLabelCounter,
+                    ]}
+                  >
+                    {counterOfferInr != null
+                      ? "Counter offer received"
+                      : "Bid submitted"}
+                  </Text>
+                  <Text style={styles.bidStatusAmount}>
+                    ₹
+                    {(counterOfferInr ?? submittedBidAmount).toLocaleString("en-IN")}
+                    {counterOfferInr == null && bidNote ? ` · ${bidNote}` : ""}
+                  </Text>
+                  {counterOfferInr != null && submittedBidAmount > 0 ? (
+                    <Text style={styles.bidStatusSub}>
+                      Your bid · ₹{submittedBidAmount.toLocaleString("en-IN")}
+                    </Text>
+                  ) : null}
                 </View>
-                <View style={[styles.bidStatusBadge, myBid.status === "accepted" ? styles.bidBadgeAccepted : myBid.status === "rejected" ? styles.bidBadgeRejected : styles.bidBadgePending]}>
-                  <Text style={styles.bidStatusBadgeText}>{myBid.status.toUpperCase()}</Text>
+                <View
+                  style={[
+                    styles.bidStatusBadge,
+                    counterOfferInr != null
+                      ? styles.bidBadgeCounter
+                      : bidStatus === "accepted"
+                        ? styles.bidBadgeAccepted
+                        : bidStatus === "rejected"
+                          ? styles.bidBadgeRejected
+                          : styles.bidBadgePending,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.bidStatusBadgeText,
+                      counterOfferInr != null && styles.bidStatusBadgeTextCounter,
+                    ]}
+                  >
+                    {counterOfferInr != null
+                      ? "REVIEW"
+                      : bidStatus.toUpperCase()}
+                  </Text>
                 </View>
               </View>
-              {myBid.status === "pending" && (
+              {bidStatus === "pending" && (
                 <Pressable
                   style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
                   onPress={() => guardVerified(() => { setEditBidMode(true); setBidPost(post); })}
                 >
                   <Edit3 size={16} color={INK} />
-                  <Text style={styles.authorizeBtnText}>Edit bid</Text>
+                  <Text style={styles.authorizeBtnText}>
+                    {counterOfferInr != null ? "Respond to counter" : "Edit bid"}
+                  </Text>
                 </Pressable>
               )}
             </>
@@ -714,7 +789,13 @@ export default function StoryDetailScreen() {
         post={bidPost}
         orgId={myOrgId}
         existingBid={editBidMode ? myBid : null}
-        initialAmount={params.suggestedRate ? Number(params.suggestedRate) : null}
+        initialAmount={
+          editBidMode && counterOfferInr != null
+            ? counterOfferInr
+            : params.suggestedRate
+              ? Number(params.suggestedRate)
+              : null
+        }
         initialNote={params.refNote ?? null}
         onClose={() => { setBidPost(null); setEditBidMode(false); }}
         onSuccess={() => {
@@ -770,6 +851,7 @@ export default function StoryDetailScreen() {
         />
       ) : null}
     </View>
+    </StoryMobilePopupShell>
   );
 }
 
@@ -1059,12 +1141,25 @@ const styles = StyleSheet.create({
   messageGhostText: { fontSize: 12, fontWeight: "800", color: INK, letterSpacing: 0.6 },
   // Bid status
   bidStatusBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#10b98110", borderRadius: 14, borderWidth: 1, borderColor: "#10b98130", paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10 },
+  bidStatusBannerCounter: {
+    backgroundColor: Theme.warningMuted,
+    borderColor: "rgba(180, 83, 9, 0.28)",
+  },
   bidStatusText: { flex: 1, minWidth: 0 },
   bidStatusLabel: { fontSize: 10, fontWeight: "900", color: "#10b981", letterSpacing: 0.8, textTransform: "uppercase" },
+  bidStatusLabelCounter: { color: Theme.warning },
   bidStatusAmount: { fontSize: 14, fontWeight: "800", color: INK, marginTop: 1 },
+  bidStatusSub: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: MUTED,
+    marginTop: 2,
+  },
   bidStatusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
   bidBadgePending: { backgroundColor: "#f59e0b18" },
   bidBadgeAccepted: { backgroundColor: "#10b98118" },
   bidBadgeRejected: { backgroundColor: "#ef444418" },
+  bidBadgeCounter: { backgroundColor: "rgba(180, 83, 9, 0.14)" },
   bidStatusBadgeText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.8, color: MUTED },
+  bidStatusBadgeTextCounter: { color: Theme.warning },
 });

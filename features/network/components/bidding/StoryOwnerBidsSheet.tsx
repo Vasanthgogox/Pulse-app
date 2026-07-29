@@ -4,6 +4,10 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import {
+  StoryFlowSheetPortal,
+  useStoryPhoneFrameMetrics,
+} from "@/features/network/components/StoryMobilePopupShell";
 import type { StoryOwnerBidRow } from "@/features/network/utils/bidding/storyOwnerBids.util";
 import { storyOwnerBidsLabel } from "@/features/network/utils/bidding/storyOwnerBids.util";
 import { formatINR } from "@/lib/format";
@@ -12,7 +16,6 @@ import { Gavel, Truck, X, Zap } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -127,6 +130,7 @@ export function StoryOwnerBidsSheet({
 }: StoryOwnerBidsSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
+  const { phonePopup, sheetBottomPad } = useStoryPhoneFrameMetrics();
   const [filter, setFilter] = useState<Filter>("all");
 
   const filtered = useMemo(() => {
@@ -137,12 +141,15 @@ export function StoryOwnerBidsSheet({
   const storyCount = bids.filter((b) => b.channel === "pulse_story").length;
   const loadCount = bids.filter((b) => b.channel === "load_center").length;
   const listMaxHeight = Math.min(Math.max(filtered.length, 1) * 92 + 12, windowHeight * 0.42);
+  const bottomPad = sheetBottomPad ?? insets.bottom + 14;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close bids" />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
+    <StoryFlowSheetPortal
+      visible={visible}
+      onClose={onClose}
+      accessibilityLabel="Close bids"
+    >
+      <View style={[styles.sheet, phonePopup && styles.sheetPhone, { paddingBottom: bottomPad }]}>
           <View style={styles.handle} />
 
           <View style={styles.header}>
@@ -232,18 +239,12 @@ export function StoryOwnerBidsSheet({
               <Feather name="arrow-up-right" size={14} color={Theme.buttonPrimaryText} />
             </Pressable>
           ) : null}
-        </View>
       </View>
-    </Modal>
+    </StoryFlowSheetPortal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: Theme.overlayBackdrop,
-  },
   sheet: {
     backgroundColor: Theme.cardWhite,
     borderTopLeftRadius: 20,
@@ -255,6 +256,9 @@ const styles = StyleSheet.create({
       web: { boxShadow: "0 -8px 32px rgba(15,23,42,0.12)" } as object,
       default: {},
     }),
+  },
+  sheetPhone: {
+    width: "100%",
   },
   handle: {
     alignSelf: "center",

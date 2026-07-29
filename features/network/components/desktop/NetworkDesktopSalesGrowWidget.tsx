@@ -109,8 +109,17 @@ function GrowRecommendationRow({
             <Text style={styles.salesGrowRowName} numberOfLines={1}>
               {org.name}
             </Text>
-            <View style={styles.salesGrowRoleBadge}>
-              <Text style={styles.salesGrowRoleBadgeText}>Client</Text>
+            <View
+              style={[styles.salesGrowRoleBadge, styles.salesGrowRoleBadgeClient]}
+            >
+              <Text
+                style={[
+                  styles.salesGrowRoleBadgeText,
+                  styles.salesGrowRoleBadgeTextClient,
+                ]}
+              >
+                Client
+              </Text>
             </View>
           </View>
 
@@ -170,11 +179,14 @@ function GrowRecommendationRow({
             disabled={connecting}
             style={({ pressed }) => [
               styles.salesGrowActionSend,
-              { backgroundColor: accentColor },
               pressed && styles.salesGrowActionPressed,
             ]}
           >
-            <UserPlus size={11} color={Theme.cardWhite} strokeWidth={2.4} />
+            <UserPlus
+              size={12}
+              color={Theme.loadAddButtonText}
+              strokeWidth={2.4}
+            />
             <Text style={styles.salesGrowActionSendText}>
               {connecting ? "…" : "Send"}
             </Text>

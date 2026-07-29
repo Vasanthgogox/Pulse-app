@@ -32,6 +32,7 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { NETWORK_HUB_DESKTOP_CATEGORY_LIMIT } from "@/features/network/constants/networkHubGrid";
 import { useNetworkDiscovery } from "@/features/network/hooks/useNetworkDiscovery";
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
@@ -92,7 +93,7 @@ type Props = {
 type GrowSortMode = "recommended" | "latest" | "active";
 type GrowSignalFilter = "mutual" | "location" | "lane";
 
-const RECOMMENDATION_LIMIT = 8;
+const RECOMMENDATION_LIMIT = NETWORK_HUB_DESKTOP_CATEGORY_LIMIT;
 
 function matchesOrgNameSearch(org: DiscoverOrg, term: string): boolean {
   const q = term.trim().toLowerCase();
@@ -294,6 +295,12 @@ export function NetworkDesktopGrowPanel({
       ),
     [recommendationCandidates],
   );
+
+  const peopleYouMayKnow = useMemo(() => {
+    const growIds = new Set(growRecommendations.map((o) => o.id));
+    const rest = recommendationCandidates.filter((o) => !growIds.has(o.id));
+    return pickLimitedRecommendations(rest, RECOMMENDATION_LIMIT);
+  }, [recommendationCandidates, growRecommendations]);
 
   const renderGrowOrgCard = (org: ScoredDiscoverOrg) => {
     const pendingRole =
@@ -623,7 +630,7 @@ export function NetworkDesktopGrowPanel({
           {embedded ? null : (
             <View style={styles.growTeamsHeader}>
               <Text style={styles.growTeamsCount}>
-                {growRecommendations.length} Partners
+                {growRecommendations.length + peopleYouMayKnow.length} Partners
               </Text>
             </View>
           )}
@@ -729,6 +736,20 @@ export function NetworkDesktopGrowPanel({
               {growRecommendations.map((org) => renderGrowOrgCard(org))}
             </View>
           )}
+
+          {peopleYouMayKnow.length > 0 ? (
+            <>
+              <View style={[styles.growSectionHeader, { marginTop: 20 }]}>
+                <Text style={styles.growSectionTitle}>People you may know</Text>
+                <Text style={styles.growSectionSub}>
+                  Up to {RECOMMENDATION_LIMIT} more suggestions
+                </Text>
+              </View>
+              <View style={styles.growCardGrid}>
+                {peopleYouMayKnow.map((org) => renderGrowOrgCard(org))}
+              </View>
+            </>
+          ) : null}
         </View>
       </View>
 

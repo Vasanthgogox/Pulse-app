@@ -90,17 +90,34 @@ export function resolveGetLoadSourceTag(
   return "market_ad";
 }
 
+function quoteCounterAmountInr(
+  existingQuote:
+    | { counter_amount?: number | null }
+    | null
+    | undefined,
+): number | null {
+  const n = Number(existingQuote?.counter_amount ?? 0);
+  return n > 0 ? n : null;
+}
+
 /** Mobile GET LOAD card labels — Done tab uses outcome status, not live quote state. */
 export function resolveGetLoadMobileCardLabels(
   statusFilterTab: StatusFilterTab,
   doneSubTab: DoneSubTab,
   load: { id: string; status?: string | null; load_type?: string | null },
-  existingQuote: { status?: string | null; amount?: number | null } | undefined,
+  existingQuote:
+    | {
+        status?: string | null;
+        amount?: number | null;
+        counter_amount?: number | null;
+      }
+    | undefined,
   indentIdsWithTrip: ReadonlySet<string>,
 ): { statusLabel: string; rightFooter: string } {
   const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
   const loadTypeDetail = (load.load_type || "—").toUpperCase();
   const hasTrip = indentIdsWithTrip.has(load.id);
+  const counterInr = quoteCounterAmountInr(existingQuote);
 
   if (statusFilterTab === "DONE") {
     if (doneSubTab === "REJECTED" || quoteStatus === "rejected") {
@@ -118,18 +135,23 @@ export function resolveGetLoadMobileCardLabels(
   const isPending = quoteStatus === "pending";
   const isRejected = quoteStatus === "rejected";
   const isAccepted = quoteStatus === "accepted";
+  const isCountered = isPending && counterInr != null;
   const statusLabel = isAccepted
     ? "awarded"
     : isRejected
       ? "declined"
-      : isPending
-        ? "quoted"
-        : "open";
-  const rightFooter = isPending
-    ? `Quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
-    : isAccepted
-      ? "Awarded"
-      : loadTypeDetail;
+      : isCountered
+        ? "countered"
+        : isPending
+          ? "quoted"
+          : "open";
+  const rightFooter = isCountered
+    ? `Counter ${formatINR(counterInr)}`
+    : isPending
+      ? `Quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
+      : isAccepted
+        ? "Awarded"
+        : loadTypeDetail;
 
   return { statusLabel, rightFooter };
 }
@@ -139,6 +161,8 @@ export type LoadCenterTicketCommerce = {
   kicker: string;
   amountInr: number | null;
   targetRateInr?: number | null;
+  /** Label above the secondary amount (default Target). */
+  referenceLabel?: string | null;
   quoteStatus?: string | null;
   /** Shown when there is no numeric hero (bids, load type, done outcome). */
   rightCaption?: string | null;
@@ -148,13 +172,20 @@ export function resolveGetLoadTicketCommerce(
   statusFilterTab: StatusFilterTab,
   doneSubTab: DoneSubTab,
   load: { id: string; status?: string | null; supplier_target?: number | null },
-  existingQuote: { status?: string | null; amount?: number | null } | undefined,
+  existingQuote:
+    | {
+        status?: string | null;
+        amount?: number | null;
+        counter_amount?: number | null;
+      }
+    | undefined,
   indentIdsWithTrip: ReadonlySet<string>,
 ): LoadCenterTicketCommerce {
   const targetRateInr = Number(load.supplier_target ?? 0);
   const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
   const quoteAmount = Number(existingQuote?.amount ?? 0);
   const hasQuote = quoteAmount > 0;
+  const counterInr = quoteCounterAmountInr(existingQuote);
   const hasTrip = indentIdsWithTrip.has(load.id);
 
   if (statusFilterTab === "DONE") {
@@ -172,11 +203,22 @@ export function resolveGetLoadTicketCommerce(
     };
   }
 
+  if (quoteStatus === "pending" && counterInr != null) {
+    return {
+      kicker: "COUNTER OFFER",
+      amountInr: counterInr,
+      targetRateInr: hasQuote ? quoteAmount : targetRateInr > 0 ? targetRateInr : null,
+      referenceLabel: hasQuote ? "Your bid" : "Target",
+      quoteStatus: "countered",
+    };
+  }
+
   if (quoteStatus === "pending" && hasQuote) {
     return {
       kicker: "YOUR QUOTE",
       amountInr: quoteAmount,
       targetRateInr: targetRateInr > 0 ? targetRateInr : null,
+      referenceLabel: "Target",
       quoteStatus,
     };
   }

@@ -60,7 +60,7 @@ const STORY_METRICS_DEFAULT: StoryMetrics = {
   plusSize: 14,
 };
 
-/** Desktop story column (embedded 80% row) — larger avatars and labels. */
+/** Desktop story strip — slightly larger avatars and labels. */
 const STORY_METRICS_EMBEDDED: StoryMetrics = {
   avatar: 72,
   ring: 84,
@@ -666,7 +666,11 @@ export function StoryReel({
           />
           </StoryBubble>
           <View
-            style={[styles.pulseStoryWatermark, embedded && styles.pulseStoryWatermarkEmbedded]}
+            style={[
+              styles.pulseStoryWatermark,
+              embedded && styles.pulseStoryWatermarkEmbedded,
+              { marginTop: Math.max(0, (metrics.ring - (embedded ? 48 : 38)) / 2) },
+            ]}
             pointerEvents="none"
           >
             <PulseBrandMark
@@ -712,10 +716,8 @@ const styles = StyleSheet.create({
   },
   wrapEmbedded: {
     paddingTop: 10,
-    paddingBottom: 14,
-    flex: 1,
+    paddingBottom: 12,
     minWidth: 0,
-    justifyContent: "center",
     overflow: "visible",
   },
   scroll: {
@@ -729,35 +731,35 @@ const styles = StyleSheet.create({
     overflow: "visible",
   },
   scrollEmbedded: {
+    // Parent (Network top cluster) already applies screen horizontal inset.
     paddingHorizontal: 0,
-    paddingRight: 8,
+    paddingRight: 4,
   },
   scrollEmbeddedDesktop: {
-    gap: 14,
-    paddingTop: 4,
-    paddingBottom: 10,
+    gap: 12,
+    paddingTop: 2,
+    paddingBottom: 8,
   },
   mineCluster: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
     marginRight: 4,
     flexShrink: 0,
     paddingVertical: 2,
   },
   mineClusterEmbedded: {
-    gap: 14,
+    gap: 12,
     marginRight: 8,
     paddingVertical: 4,
   },
   pulseStoryWatermark: {
-    alignSelf: "center",
     justifyContent: "center",
-    opacity: 0.11,
+    opacity: 0.14,
     minWidth: 52,
   },
   pulseStoryWatermarkEmbedded: {
-    opacity: 0.12,
+    opacity: 0.14,
     minWidth: 64,
   },
   watermarkPulse: {
@@ -831,7 +833,7 @@ const styles = StyleSheet.create({
   },
   loadPreviewRoute: {
     fontWeight: "600",
-    color: Theme.textSecondary,
+    color: Theme.textPrimary,
     textAlign: "center",
     letterSpacing: -0.1,
     width: "100%",

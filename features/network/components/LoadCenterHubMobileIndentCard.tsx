@@ -73,6 +73,9 @@ function quoteStatusPillStyles(status: string) {
   if (s === "rejected") {
     return { pill: styles.statusRejected, text: styles.statusRejectedText };
   }
+  if (s === "countered") {
+    return { pill: styles.statusCountered, text: styles.statusCounteredText };
+  }
   return { pill: styles.statusPending, text: styles.statusPendingText };
 }
 
@@ -170,9 +173,11 @@ export function LoadCenterHubMobileIndentCard({
       : null;
   const quoteStatusNorm = (commerce?.quoteStatus ?? "").trim().toLowerCase();
   const statusStyles =
-    quoteStatusNorm && commerce?.kicker === "YOUR QUOTE"
+    quoteStatusNorm &&
+    (commerce?.kicker === "YOUR QUOTE" || commerce?.kicker === "COUNTER OFFER")
       ? quoteStatusPillStyles(quoteStatusNorm)
       : null;
+  const referenceLabel = commerce?.referenceLabel?.trim() || "Target";
   const rightCaption =
     commerce?.rightCaption?.trim() ||
     (!heroAmount ? rightFooterLabel : null);
@@ -219,7 +224,9 @@ export function LoadCenterHubMobileIndentCard({
                       ? "Awarded"
                       : quoteStatusNorm === "rejected"
                         ? "Rejected"
-                        : "Pending"}
+                        : quoteStatusNorm === "countered"
+                          ? "Countered"
+                          : "Pending"}
                   </Text>
                 </View>
               ) : null}
@@ -239,7 +246,7 @@ export function LoadCenterHubMobileIndentCard({
             </View>
             {referenceTarget ? (
               <Text style={styles.stubReference} numberOfLines={1}>
-                {`Target · ₹ ${referenceTarget}`}
+                {`${referenceLabel} · ₹ ${referenceTarget}`}
               </Text>
             ) : null}
           </View>
@@ -974,4 +981,6 @@ const styles = StyleSheet.create({
   statusAwardedText: { color: "#B45309" },
   statusRejected: { backgroundColor: "#FEE2E2" },
   statusRejectedText: { color: "#B91C1C" },
+  statusCountered: { backgroundColor: Theme.warningMuted },
+  statusCounteredText: { color: Theme.warning },
 });

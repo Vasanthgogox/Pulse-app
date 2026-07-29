@@ -4,6 +4,10 @@
  * "View all Reach campaigns" is the one link out to the full list.
  */
 import Theme from "@/constants/Theme";
+import {
+  StoryFlowSheetPortal,
+  useStoryPhoneFrameMetrics,
+} from "@/features/network/components/StoryMobilePopupShell";
 import { CampaignUpgradePanel } from "@/features/reach/components/CampaignUpgradePanel";
 import { ReachMetricsGrid } from "@/features/reach/components/ReachMetricsGrid";
 import { formatRemaining } from "@/features/reach/utils/campaignFormat";
@@ -13,7 +17,7 @@ import { getReachPlanDisplay } from "@/lib/reachPlanRegistry";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import { ChevronRight, Rocket, X } from "lucide-react-native";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const INK = Theme.loadAddButtonText;
@@ -39,6 +43,7 @@ interface BoostProgressSheetProps {
 export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoostAgain }: BoostProgressSheetProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { phonePopup, sheetBottomPad } = useStoryPhoneFrameMetrics();
   const campaignsQ = useReachCampaignsQuery(visible ? orgId : null);
   const plansQ = useReachPlansQuery();
   const metricsQ = useReachCampaignMetricsQuery(visible ? campaignId : null);
@@ -53,12 +58,15 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
   const isCompleted = campaign?.status === "completed" || campaign?.status === "cancelled";
   const isDraft = campaign?.status === "draft";
   const isFresh = metrics && metrics.impressions === 0 && metrics.views === 0;
+  const bottomPad = sheetBottomPad ?? insets.bottom + 14;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close boost progress" />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
+    <StoryFlowSheetPortal
+      visible={visible}
+      onClose={onClose}
+      accessibilityLabel="Close boost progress"
+    >
+      <View style={[styles.sheet, phonePopup && styles.sheetPhone, { paddingBottom: bottomPad }]}>
           <View style={styles.handle} />
 
           <View style={styles.header}>
@@ -183,14 +191,12 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
             <Text style={styles.viewAllText}>View all Reach campaigns</Text>
             <ChevronRight size={14} color={Theme.textMuted} />
           </Pressable>
-        </View>
       </View>
-    </Modal>
+    </StoryFlowSheetPortal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: Theme.overlayBackdrop },
   sheet: {
     backgroundColor: Theme.cardWhite,
     borderTopLeftRadius: 20,
@@ -198,6 +204,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 10,
     gap: 12,
+  },
+  sheetPhone: {
+    width: "100%",
+    maxHeight: "88%",
   },
   handle: {
     width: 36,

@@ -1,3 +1,4 @@
+import Theme from "@/constants/Theme";
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
 
 export type RecommendationSignal = {
@@ -149,11 +150,12 @@ export function growRowMatchLine(signals: readonly RecommendationSignal[]): {
   };
 }
 
+/** Accent for the highlighted match phrase — Theme ink / success, not Metronic purple. */
 export function growRowAccentColor(tone: RecommendationPillTone): string {
-  if (tone === "lane") return "#7239EA";
-  if (tone === "location") return "#3E97FF";
-  if (tone === "mutual") return "#50CD89";
-  return "#A1A5B7";
+  if (tone === "lane") return Theme.primary;
+  if (tone === "location") return Theme.primary;
+  if (tone === "mutual") return Theme.success;
+  return Theme.textSecondary;
 }
 
 export type LoadCenterRecommendMode = "give" | "get";
@@ -214,11 +216,16 @@ export function pickLoadCenterRecommendations(
       : filtered.filter(
           (org) => normalizeOperatingModel(org) === "NON_ASSET",
         );
-  const pool = preferred.length > 0 ? preferred : filtered;
-
-  const ranked = [...pool].sort(
-    (a, b) => loadCenterMarketActivityScore(b) - loadCenterMarketActivityScore(a),
-  );
+  const byActivity = (a: ScoredDiscoverOrg, b: ScoredDiscoverOrg) =>
+    loadCenterMarketActivityScore(b) - loadCenterMarketActivityScore(a);
+  const rankedPreferred = [...preferred].sort(byActivity);
+  const preferredIds = new Set(rankedPreferred.map((org) => org.id));
+  // Prefer pure asset / aggregator first, then fill remaining slots with HYBRID
+  // so the card can show up to `limit` (typically 3) recommendations.
+  const rankedRest = filtered
+    .filter((org) => !preferredIds.has(org.id))
+    .sort(byActivity);
+  const ranked = [...rankedPreferred, ...rankedRest];
 
   const slots: ScoredDiscoverOrg[] = [];
   for (const org of ranked) {

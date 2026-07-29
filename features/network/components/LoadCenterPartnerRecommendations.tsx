@@ -130,8 +130,21 @@ function RecommendationRow({
             <Text style={styles.salesGrowRowName} numberOfLines={1}>
               {org.name}
             </Text>
-            <View style={styles.salesGrowRoleBadge}>
-              <Text style={styles.salesGrowRoleBadgeText}>{roleLabel}</Text>
+            <View
+              style={[
+                styles.salesGrowRoleBadge,
+                roleLabel !== "Supplier" && styles.salesGrowRoleBadgeClient,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.salesGrowRoleBadgeText,
+                  roleLabel !== "Supplier" &&
+                    styles.salesGrowRoleBadgeTextClient,
+                ]}
+              >
+                {roleLabel}
+              </Text>
             </View>
           </View>
 
@@ -201,11 +214,14 @@ function RecommendationRow({
             style={({ pressed }) => [
               styles.salesGrowActionSend,
               compact && local.sendCompact,
-              { backgroundColor: accentColor },
               pressed && styles.salesGrowActionPressed,
             ]}
           >
-            <UserPlus size={11} color={Theme.cardWhite} strokeWidth={2.4} />
+            <UserPlus
+              size={12}
+              color={Theme.loadAddButtonText}
+              strokeWidth={2.4}
+            />
             <Text style={styles.salesGrowActionSendText}>
               {connecting ? "…" : "Send"}
             </Text>
@@ -514,7 +530,7 @@ const local = {
     gap: 10,
   } satisfies ViewStyle,
   actionRowSidebar: {
-    justifyContent: "flex-end" as const,
+    justifyContent: "flex-start" as const,
   } satisfies ViewStyle,
   actionRowCompact: {
     paddingLeft: 42,
@@ -524,7 +540,7 @@ const local = {
     gap: 8,
   } satisfies ViewStyle,
   ghostCompact: {
-    flexShrink: 0,
+    flex: 1,
     minHeight: 32,
     justifyContent: "center" as const,
   } satisfies ViewStyle,

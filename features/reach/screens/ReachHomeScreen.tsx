@@ -1,7 +1,6 @@
 /**
- * Pulse Reach — Story Campaign Studio (desktop HTML-mock layout).
- * Live ticker, 4 KPIs, horizontal campaign reel + synced driver-feed preview,
- * marketing insights. Boost opens Network / campaign detail (real flows).
+ * Pulse Reach — Story Campaign Studio (Metronic Campaign Manager).
+ * Live ticker, KPI strip, Ads Manager table + ad preview + insights.
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -10,6 +9,12 @@ import { ReachCampaignReelCard } from "@/features/reach/components/ReachCampaign
 import { ReachLiveTicker } from "@/features/reach/components/ReachLiveTicker";
 import { ReachMarketingInsights } from "@/features/reach/components/ReachMarketingInsights";
 import { ReachStoryPostPreview } from "@/features/reach/components/ReachStoryPostPreview";
+import {
+    REACH_DESKTOP_BP,
+    REACH_M,
+    REACH_PAGE_MAX,
+    reachMetronicShared as m,
+} from "@/features/reach/styles/reachMetronic";
 import { groupReachCampaignsByPost } from "@/features/reach/utils/campaignFormat";
 import {
     useReachCampaignPurchasesQuery,
@@ -18,13 +23,15 @@ import {
     useReachPlansQuery,
     useReachReferralInboxQuery,
 } from "@/lib/queries/useReachCampaignsQuery";
+import {
+    REACH_METRONIC_KPI_ICONS,
+    type ReachMetronicKpiId,
+} from "@/lib/reachMetronicAssets";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import {
     ArrowLeft,
     Coins,
-    Eye,
-    Gavel,
     Inbox as InboxIcon,
     Plus,
     Rocket,
@@ -47,10 +54,20 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const DESKTOP_BREAKPOINT = 1024;
-const PAGE_MAX_WIDTH = 1280;
+const DESKTOP_BREAKPOINT = REACH_DESKTOP_BP;
+const PAGE_MAX_WIDTH = REACH_PAGE_MAX;
 const CARD_WIDTH = 300;
 const CARD_GAP = 10;
+const KPI_ICON_SIZE = 40;
+
+function MetronicKpiIcon({ id }: { id: ReachMetronicKpiId }) {
+  const { Icon } = REACH_METRONIC_KPI_ICONS[id];
+  return (
+    <View style={m.kpiIconOrb}>
+      <Icon width={KPI_ICON_SIZE} height={KPI_ICON_SIZE} />
+    </View>
+  );
+}
 
 type ReelFilter = "active" | "history";
 type StudioTab = "campaigns" | "insights" | "credits";
@@ -192,18 +209,18 @@ export default function ReachHomeScreen({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[m.pageCanvas, { paddingTop: insets.top }]}>
       <ReachLiveTicker />
 
-      <View style={[styles.headerBleed, { paddingHorizontal: pagePadH }]}>
-        <View style={[styles.headerInner, isDesktop && styles.headerMax]}>
+      <View style={[m.headerBleed, { paddingHorizontal: pagePadH }]}>
+        <View style={[m.headerInner, isDesktop && m.headerMax]}>
           <View style={styles.headerLeft}>
-            <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
-              <ArrowLeft size={15} color={Theme.textRouteCard} />
+            <Pressable onPress={() => router.back()} style={m.backBtn} hitSlop={8}>
+              <ArrowLeft size={15} color={REACH_M.subtle} />
             </Pressable>
             <View style={styles.brandText}>
-              <Text style={styles.brandTitle}>Pulse Reach</Text>
-              <Text style={styles.brandSub}>Campaign Manager</Text>
+              <Text style={m.brandTitle}>Pulse Reach</Text>
+              <Text style={m.brandSub}>Campaign Manager</Text>
             </View>
           </View>
 
@@ -219,12 +236,12 @@ export default function ReachHomeScreen({
                 <Pressable
                   key={t.key}
                   onPress={() => onTab(t.key)}
-                  style={[styles.centerTab, studioTab === t.key && styles.centerTabActive]}
+                  style={[m.centerTab, studioTab === t.key && m.centerTabActive]}
                 >
                   <Text
                     style={[
-                      styles.centerTabText,
-                      studioTab === t.key && styles.centerTabTextActive,
+                      m.centerTabText,
+                      studioTab === t.key && m.centerTabTextActive,
                     ]}
                   >
                     {t.label}
@@ -240,7 +257,7 @@ export default function ReachHomeScreen({
               onPress={() => router.push(ROUTES.REACH.INBOX as never)}
               accessibilityLabel="Opportunities — recommended by drivers"
             >
-              <InboxIcon size={14} color={Theme.textRouteCard} />
+              <InboxIcon size={14} color={REACH_M.subtle} />
               {pendingRecommendations > 0 ? (
                 <View style={styles.inboxBadge}>
                   <Text style={styles.inboxBadgeText}>
@@ -250,16 +267,16 @@ export default function ReachHomeScreen({
               ) : null}
             </Pressable>
             <Pressable style={styles.creditsPill} onPress={goCredits}>
-              <Coins size={12} color={Theme.accentBrown} />
+              <Coins size={12} color={REACH_M.primary} />
               <Text style={styles.creditsValue}>
                 {(summary?.walletBalance ?? 0).toLocaleString()}
               </Text>
               <Text style={styles.creditsLabel}>credits</Text>
             </Pressable>
             {isDesktop ? (
-              <Pressable style={styles.boostHeaderBtn} onPress={goBoost}>
+              <Pressable style={m.primaryBtn} onPress={goBoost}>
                 <Plus size={13} color={Theme.textOnPrimary} />
-                <Text style={styles.boostHeaderText}>Create campaign</Text>
+                <Text style={m.primaryBtnText}>Create campaign</Text>
               </Pressable>
             ) : null}
           </View>
@@ -281,10 +298,13 @@ export default function ReachHomeScreen({
           </View>
         ) : (
           <View style={[styles.kpiRow, isDesktop && styles.kpiRowDesktop]}>
-            <View style={[styles.kpiCard, isDesktop && styles.kpiCardDesktop]}>
-              <Text style={styles.kpiLabel}>Account balance</Text>
+            <View style={[m.kpiCard, isDesktop && styles.kpiCardDesktop]}>
+              <View style={styles.kpiCardTop}>
+                <Text style={m.kpiLabel}>Account balance</Text>
+                <MetronicKpiIcon id="balance" />
+              </View>
               <View style={styles.kpiValueRow}>
-                <Text style={styles.kpiValue}>
+                <Text style={m.kpiValue}>
                   {(summary?.walletBalance ?? 0).toLocaleString()}
                 </Text>
                 <Text style={styles.kpiUnit}>credits</Text>
@@ -294,13 +314,16 @@ export default function ReachHomeScreen({
               </Pressable>
             </View>
 
-            <View style={[styles.kpiCard, isDesktop && styles.kpiCardDesktop]}>
-              <Text style={styles.kpiLabel}>Active campaigns</Text>
+            <View style={[m.kpiCard, isDesktop && styles.kpiCardDesktop]}>
+              <View style={styles.kpiCardTop}>
+                <Text style={m.kpiLabel}>Active campaigns</Text>
+                <MetronicKpiIcon id="active" />
+              </View>
               <View style={styles.kpiValueRow}>
-                <Text style={styles.kpiValue}>{activeCount}</Text>
+                <Text style={m.kpiValue}>{activeCount}</Text>
                 {summary && summary.campaigns.total > 0 ? (
                   <View style={styles.kpiAside}>
-                    <TrendingUp size={11} color={Theme.success} />
+                    <TrendingUp size={11} color={REACH_M.successText} />
                     <Text style={styles.kpiAsideText}>
                       {Math.round((activeCount / summary.campaigns.total) * 100)}% live
                     </Text>
@@ -309,21 +332,25 @@ export default function ReachHomeScreen({
               </View>
             </View>
 
-            <View style={[styles.kpiCard, isDesktop && styles.kpiCardDesktop]}>
-              <Text style={styles.kpiLabel}>Impressions</Text>
+            <View style={[m.kpiCard, isDesktop && styles.kpiCardDesktop]}>
+              <View style={styles.kpiCardTop}>
+                <Text style={m.kpiLabel}>Impressions</Text>
+                <MetronicKpiIcon id="impressions" />
+              </View>
               <View style={styles.kpiValueRow}>
-                <Eye size={14} color={Theme.textMuted} />
-                <Text style={styles.kpiValue}>
+                <Text style={m.kpiValue}>
                   {(summary?.metrics.impressions ?? 0).toLocaleString()}
                 </Text>
               </View>
             </View>
 
-            <View style={[styles.kpiCard, isDesktop && styles.kpiCardDesktop]}>
-              <Text style={styles.kpiLabel}>Results (bids)</Text>
+            <View style={[m.kpiCard, isDesktop && styles.kpiCardDesktop]}>
+              <View style={styles.kpiCardTop}>
+                <Text style={m.kpiLabel}>Results (bids)</Text>
+                <MetronicKpiIcon id="results" />
+              </View>
               <View style={styles.kpiValueRow}>
-                <Gavel size={14} color={Theme.textMuted} />
-                <Text style={styles.kpiValue}>
+                <Text style={m.kpiValue}>
                   {(summary?.metrics.bids ?? 0).toLocaleString()}
                 </Text>
               </View>
@@ -388,9 +415,9 @@ export default function ReachHomeScreen({
                   <Text style={styles.emptyBody}>
                     Create a campaign from Network to start reaching drivers.
                   </Text>
-                  <Pressable style={styles.emptyCta} onPress={goBoost}>
+                  <Pressable style={m.primaryBtn} onPress={goBoost}>
                     <Plus size={13} color={Theme.textOnPrimary} />
-                    <Text style={styles.emptyCtaText}>Create campaign</Text>
+                    <Text style={m.primaryBtnText}>Create campaign</Text>
                   </Pressable>
                 </View>
               ) : useManagerList ? (
@@ -463,9 +490,9 @@ export default function ReachHomeScreen({
                   Boost an available load to driver feeds and start collecting bids.
                 </Text>
               </View>
-              <Pressable style={styles.launchBtn} onPress={goBoost}>
+              <Pressable style={m.primaryBtn} onPress={goBoost}>
                 <Plus size={13} color={Theme.textOnPrimary} />
-                <Text style={styles.launchBtnText}>Create campaign</Text>
+                <Text style={m.primaryBtnText}>Create campaign</Text>
               </Pressable>
             </View>
           </View>
@@ -488,90 +515,48 @@ export default function ReachHomeScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.networkPageBackground },
   scroll: { flex: 1 },
-  page: { gap: 12, width: "100%", paddingTop: 16 },
-  pageDesktop: { maxWidth: PAGE_MAX_WIDTH, alignSelf: "center", width: "100%", gap: 14 },
+  page: { gap: 14, width: "100%", paddingTop: 18 },
+  pageDesktop: { maxWidth: PAGE_MAX_WIDTH, alignSelf: "center", width: "100%", gap: 16 },
 
-  headerBleed: {
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderInput,
-    backgroundColor: Theme.cardWhite,
-  },
-  headerInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    gap: 12,
-    width: "100%",
-  },
-  headerMax: { maxWidth: PAGE_MAX_WIDTH, alignSelf: "center", width: "100%" },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 1 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
-  backBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.cardWhite,
-  },
   brandText: { gap: 0 },
-  brandTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
-  },
-  brandSub: { fontSize: 11, fontWeight: "500", color: Theme.textMuted, marginTop: 0 },
   centerTabs: {
     flexDirection: "row",
     alignItems: "stretch",
     gap: 2,
     alignSelf: "stretch",
   },
-  centerTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-    justifyContent: "center",
-  },
-  centerTabActive: { borderBottomColor: Theme.primary },
-  centerTabText: { fontSize: 13, fontWeight: "600", color: Theme.textMuted },
-  centerTabTextActive: { fontWeight: "700", color: Theme.textPrimaryDark },
   creditsPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: Theme.surface,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: REACH_M.quote,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
   },
   creditsValue: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     fontVariant: ["tabular-nums"],
   },
   creditsLabel: {
     fontSize: 11,
     fontWeight: "500",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
   },
   inboxHeaderBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: Theme.cardWhite,
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: REACH_M.card,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.borderStrong,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -588,75 +573,51 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inboxBadgeText: { fontSize: 8, fontWeight: "800", color: Theme.textOnPrimary },
-  boostHeaderBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    backgroundColor: Theme.primary,
-  },
-  boostHeaderText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },
 
   loadingWrap: { alignItems: "center", paddingVertical: 28 },
 
-  kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   kpiRowDesktop: { flexWrap: "nowrap" },
-  kpiCard: {
-    flexBasis: 160,
-    flexGrow: 1,
-    minWidth: 140,
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 4,
-  },
   kpiCardDesktop: { flex: 1, minWidth: 0, flexBasis: 0 },
-  kpiLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textMuted,
+  kpiCardTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  kpiValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    fontVariant: ["tabular-nums"],
-    letterSpacing: -0.5,
-  },
-  kpiUnit: { fontSize: 12, fontWeight: "500", color: Theme.textMuted },
+  kpiUnit: { fontSize: 12, fontWeight: "500", color: REACH_M.muted },
   kpiValueRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
   kpiAside: { flexDirection: "row", alignItems: "center", gap: 3 },
-  kpiAsideText: { fontSize: 11, fontWeight: "600", color: Theme.success },
+  kpiAsideText: { fontSize: 11, fontWeight: "600", color: REACH_M.successText },
   topUpBtn: {
     alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    backgroundColor: Theme.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: REACH_M.card,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.borderStrong,
   },
-  topUpText: { fontSize: 11, fontWeight: "700", color: Theme.primary },
+  topUpText: { fontSize: 11, fontWeight: "700", color: REACH_M.primary },
 
   mainSplit: { gap: 12 },
   mainSplitDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 16 },
-  leftCol: { gap: 10, flex: 1, minWidth: 0 },
+  leftCol: { gap: 12, flex: 1, minWidth: 0 },
   leftColDesktop: { flex: 7, minWidth: 0 },
   rightCol: { gap: 12, flex: 1, minWidth: 0, width: "100%" },
   rightColDesktop: { flex: 4, maxWidth: 380, minWidth: 300 },
   previewStack: { gap: 12, width: "100%" },
 
   campaignPanel: {
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 8,
+    backgroundColor: REACH_M.card,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     overflow: "hidden",
+    ...Platform.select({
+      web: { boxShadow: REACH_M.shadow } as object,
+      default: {},
+    }),
   },
   reelToolbar: {
     flexDirection: "row",
@@ -664,11 +625,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
     flexWrap: "wrap",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
+    borderBottomColor: REACH_M.border,
+    backgroundColor: REACH_M.card,
   },
   filterPills: {
     flexDirection: "row",
@@ -681,19 +642,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
   },
-  filterPillActive: { borderBottomColor: Theme.primary },
-  filterPillText: { fontSize: 13, fontWeight: "600", color: Theme.textMuted },
-  filterPillTextActive: { color: Theme.textPrimaryDark, fontWeight: "700" },
+  filterPillActive: { borderBottomColor: REACH_M.primary },
+  filterPillText: { fontSize: 13, fontWeight: "600", color: REACH_M.muted },
+  filterPillTextActive: { color: REACH_M.text, fontWeight: "700" },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: Theme.surface,
-    borderRadius: 6,
+    backgroundColor: REACH_M.quote,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     paddingHorizontal: 10,
-    paddingVertical: Platform.OS === "web" ? 6 : 2,
+    paddingVertical: Platform.OS === "web" ? 7 : 2,
     minWidth: 180,
     flexGrow: 1,
     maxWidth: 320,
@@ -702,7 +663,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: "500",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     paddingVertical: 4,
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
   },
@@ -713,17 +674,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: Theme.surface,
+    paddingVertical: 10,
+    backgroundColor: REACH_M.quote,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: REACH_M.border,
   },
   th: {
     fontSize: 10,
     fontWeight: "700",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.45,
   },
   thName: { flex: 1.4, minWidth: 160 },
   thCol: { width: 72 },
@@ -738,48 +699,31 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 24,
   },
-  emptyTitle: { fontSize: 14, fontWeight: "700", color: Theme.textPrimaryDark },
+  emptyTitle: { fontSize: 14, fontWeight: "700", color: REACH_M.text },
   emptyBody: {
     fontSize: 12,
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     textAlign: "center",
     lineHeight: 18,
     maxWidth: 320,
   },
-  emptyCta: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: Theme.primary,
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  emptyCtaText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },
 
   launchBar: {
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 8,
+    backgroundColor: REACH_M.card,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderColor: REACH_M.border,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     gap: 10,
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
+    ...Platform.select({
+      web: { boxShadow: REACH_M.shadow } as object,
+      default: {},
+    }),
   },
-  launchTitle: { fontSize: 13, fontWeight: "700", color: Theme.textPrimaryDark },
-  launchSub: { fontSize: 12, fontWeight: "500", color: Theme.textMuted, marginTop: 2 },
-  launchBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: Theme.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  launchBtnText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },
+  launchTitle: { fontSize: 14, fontWeight: "700", color: REACH_M.text },
+  launchSub: { fontSize: 12, fontWeight: "500", color: REACH_M.muted, marginTop: 2 },
 });

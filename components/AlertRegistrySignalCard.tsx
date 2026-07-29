@@ -59,6 +59,11 @@ export type AlertRegistrySignalCardProps = {
   isUnread?: boolean;
   onPress?: () => void;
   footer?: React.ReactNode;
+  /**
+   * Top-right of the card body (e.g. Verified / Recommended) —
+   * keeps status tags out of the action footer.
+   */
+  headerEnd?: React.ReactNode;
   /** Contained card for horizontal grids (no feed divider). */
   variant?: "feed" | "tile";
   /** Tighter padding and typography for hub tile grids. */
@@ -170,6 +175,7 @@ export function AlertRegistrySignalCard({
   isUnread = false,
   onPress,
   footer,
+  headerEnd,
   variant = "feed",
   compact = false,
 }: AlertRegistrySignalCardProps) {
@@ -194,19 +200,31 @@ export function AlertRegistrySignalCard({
       />
 
       <View style={[styles.body, compact && variant === "tile" && styles.bodyCompact]}>
-        <Text
-          style={[styles.headline, compact && variant === "tile" && styles.headlineCompact]}
-          numberOfLines={compact ? 2 : 4}
-        >
-          <Text style={styles.actorName}>{actorName}</Text>
-          <Text style={styles.actionText}> {actionText}</Text>
-          {highlightText ? (
-            <Text style={styles.highlightText}> {highlightText}</Text>
+        <View style={styles.headlineRow}>
+          <View style={[styles.headlineCol, !headerEnd && styles.headlineColFull]}>
+            <Text
+              style={[
+                styles.headline,
+                compact && variant === "tile" && styles.headlineCompact,
+              ]}
+              numberOfLines={compact ? 2 : 4}
+            >
+              <Text style={styles.actorName}>{actorName}</Text>
+              <Text style={styles.actionText}> {actionText}</Text>
+              {highlightText ? (
+                <Text style={styles.highlightText}> {highlightText}</Text>
+              ) : null}
+              {trailingText ? (
+                <Text style={styles.actionText}> {trailingText}</Text>
+              ) : null}
+            </Text>
+          </View>
+          {headerEnd ? (
+            <View style={styles.headerEnd} pointerEvents="box-none">
+              {headerEnd}
+            </View>
           ) : null}
-          {trailingText ? (
-            <Text style={styles.actionText}> {trailingText}</Text>
-          ) : null}
-        </Text>
+        </View>
 
         <Text
           style={[styles.metaLine, compact && variant === "tile" && styles.metaLineCompact]}
@@ -365,6 +383,19 @@ const stylesDef = {
   bodyCompact: view({
     gap: 3,
   }),
+  headlineRow: view({
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    width: "100%",
+  }),
+  headlineCol: view({
+    flex: 1,
+    minWidth: 0,
+  }),
+  headlineColFull: view({
+    flex: 1,
+  }),
   headline: text({
     fontSize: 13,
     lineHeight: 19,
@@ -373,6 +404,13 @@ const stylesDef = {
   headlineCompact: text({
     fontSize: 12,
     lineHeight: 16,
+  }),
+  headerEnd: view({
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    paddingTop: 1,
+    maxWidth: "48%",
   }),
   actorName: text({
     fontWeight: "600",

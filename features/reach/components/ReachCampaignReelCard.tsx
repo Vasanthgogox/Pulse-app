@@ -4,6 +4,7 @@
  * `deck` = compact card for mobile horizontal browse.
  */
 import Theme from "@/constants/Theme";
+import { REACH_M } from "@/features/reach/styles/reachMetronic";
 import type { ReachCampaignRow, ReachPlanRow } from "@/features/reach/services/campaigns.service";
 import { getCampaignIdentity } from "@/features/reach/utils/campaignIdentity";
 import { formatINR } from "@/lib/format";
@@ -361,8 +362,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   rowBtnPrimary: {
-    backgroundColor: Theme.primary,
-    borderColor: Theme.primary,
+    backgroundColor: REACH_M.primary,
+    borderColor: REACH_M.primary,
   },
   rowBtnText: { fontSize: 11, fontWeight: "700", color: Theme.textPrimaryDark },
   rowBtnPrimaryText: { fontSize: 11, fontWeight: "700", color: Theme.textOnPrimary },
@@ -455,7 +456,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.primary,
+    backgroundColor: REACH_M.primary,
     borderRadius: 6,
     paddingVertical: 8,
   },

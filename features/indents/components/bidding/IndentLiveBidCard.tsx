@@ -200,9 +200,9 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
                 <Text style={styles.partnerPillText}>VERIFIED VENDOR</Text>
               </View>
             ) : (
-              <View style={[styles.partnerPill, styles.partnerPillNew]}>
-                <Text style={[styles.partnerPillText, styles.partnerPillTextNew]}>
-                  NEW PARTNER
+              <View style={[styles.partnerPill, styles.partnerPillMarket]}>
+                <Text style={[styles.partnerPillText, styles.partnerPillTextMarket]}>
+                  MARKET YET TO CONNECT
                 </Text>
               </View>
             )}
@@ -497,12 +497,12 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.positive,
   },
-  partnerPillNew: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#FDE68A",
+  partnerPillMarket: {
+    backgroundColor: Theme.accentBrownMuted,
+    borderColor: Theme.accentBrownBorder,
   },
-  partnerPillTextNew: {
-    color: "#B45309",
+  partnerPillTextMarket: {
+    color: Theme.accentBrown,
   },
   badgeRow: {
     flexDirection: "row",

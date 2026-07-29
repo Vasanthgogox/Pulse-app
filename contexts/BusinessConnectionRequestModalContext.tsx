@@ -15,6 +15,7 @@ import {
 import type { InboundProtocolInviteItem } from '@/lib/globalSync/inboundProtocol.types';
 import { useInboundProtocolInvites } from '@/lib/globalSync/useInboundProtocolInvites';
 import { useInboundProtocolInviteActions } from '@/lib/hooks/useInboundProtocolInviteActions';
+import { subscribeSignificantAppResume } from '@/lib/significantAppResume';
 import {
   useCallback,
   useEffect,
@@ -23,12 +24,18 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { AppState, Platform, type AppStateStatus } from 'react-native';
+import { Platform } from 'react-native';
 
 import {
   BusinessConnectionRequestModalContext,
   type BusinessConnectionRequestModalContextValue,
 } from '@/contexts/BusinessConnectionRequestModalContext.shared';
+
+function inviteIdsToSnooze(invite: InboundProtocolInviteItem): string[] {
+  const linked = invite.linkedRequestIds?.filter(Boolean) ?? [];
+  if (linked.length > 0) return [...new Set(linked)];
+  return [invite.id];
+}
 
 // Hook-only consumers must import from the .shared file instead — importing this
 // module pulls the modal UI (network + indents features) into their graph.
@@ -66,7 +73,6 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
   /** Keeps the auto-prompt modal open until the user dismisses or acts. */
   const [autoPresentedInviteId, setAutoPresentedInviteId] = useState<string | null>(null);
   const recordedAutoPromptRef = useRef<Set<string>>(new Set());
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const pendingPartnerKeys = useMemo(() => {
     const keys = new Set(pendingConnectionInvites.map(inviteAutoPromptKey));
@@ -138,26 +144,21 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
     [orgId],
   );
 
+  // Refresh on a real resume only. Do NOT clear session snooze on brief
+  // inactive→active (Modal close / control center) — that was re-popping invites
+  // immediately after the user tapped Later.
   useEffect(() => {
     if (!orgId) return;
-
-    const onAppStateChange = (nextState: AppStateStatus) => {
-      const prev = appStateRef.current;
-      appStateRef.current = nextState;
-      const becameActive =
-        nextState === 'active' && (prev === 'background' || prev === 'inactive');
-      if (becameActive) {
-        clearSessionSnooze();
-        void refreshInboundProtocol();
-      }
-    };
-
-    const sub = AppState.addEventListener('change', onAppStateChange);
-    return () => sub.remove();
-  }, [orgId, clearSessionSnooze, refreshInboundProtocol]);
+    return subscribeSignificantAppResume(() => {
+      void refreshInboundProtocol();
+    });
+  }, [orgId, refreshInboundProtocol]);
 
   const sessionEligibleInvites = useMemo(
-    () => pendingConnectionInvites.filter((i) => !sessionSnoozedIds.has(i.id)),
+    () =>
+      pendingConnectionInvites.filter(
+        (i) => !inviteIdsToSnooze(i).some((id) => sessionSnoozedIds.has(id)),
+      ),
     [pendingConnectionInvites, sessionSnoozedIds],
   );
 
@@ -186,9 +187,10 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
       );
     }
     if (autoPresentedInviteId) {
-      return (
-        pendingConnectionInvites.find((invite) => invite.id === autoPresentedInviteId) ?? null
-      );
+      const held =
+        sessionEligibleInvites.find((invite) => invite.id === autoPresentedInviteId) ??
+        null;
+      if (held) return held;
     }
     if (!promptScheduleLoaded || autoPromptEligibleInvites.length === 0) return null;
     return autoPromptEligibleInvites[queueViewIndex % autoPromptEligibleInvites.length];
@@ -196,6 +198,7 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
     focusedInviteId,
     autoPresentedInviteId,
     pendingConnectionInvites,
+    sessionEligibleInvites,
     autoPromptEligibleInvites,
     promptScheduleLoaded,
     queueViewIndex,
@@ -223,7 +226,7 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
       setAutoPresentedInviteId(null);
       setSessionSnoozedIds((prev) => {
         const next = new Set(prev);
-        next.delete(item.id);
+        for (const id of inviteIdsToSnooze(item)) next.delete(id);
         return next;
       });
       setFocusedInviteId(item.id);
@@ -240,17 +243,38 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
 
   const handleLater = useCallback(() => {
     if (!activeInvite) return;
-    if (!userOpenedInvite) {
-      const partnerKey = inviteAutoPromptKey(activeInvite);
+
+    // Manual open: snooze this contact only. Auto-prompt: snooze the whole
+    // pending queue so Later is one tap, not one popup per invite.
+    const invitesToDismiss = userOpenedInvite
+      ? [activeInvite]
+      : sessionEligibleInvites.length > 0
+        ? sessionEligibleInvites
+        : [activeInvite];
+
+    for (const invite of invitesToDismiss) {
+      const partnerKey = inviteAutoPromptKey(invite);
       if (!recordedAutoPromptRef.current.has(partnerKey)) {
         recordedAutoPromptRef.current.add(partnerKey);
-        persistAutoPromptDay(activeInvite);
+        persistAutoPromptDay(invite);
       }
     }
+
     setAutoPresentedInviteId(null);
     setFocusedInviteId(null);
-    setSessionSnoozedIds((prev) => new Set(prev).add(activeInvite.id));
-  }, [activeInvite, persistAutoPromptDay, userOpenedInvite]);
+    setSessionSnoozedIds((prev) => {
+      const next = new Set(prev);
+      for (const invite of invitesToDismiss) {
+        for (const id of inviteIdsToSnooze(invite)) next.add(id);
+      }
+      return next;
+    });
+  }, [
+    activeInvite,
+    persistAutoPromptDay,
+    sessionEligibleInvites,
+    userOpenedInvite,
+  ]);
 
   const handleNext = useCallback(() => {
     if (autoPromptEligibleInvites.length <= 1) return;
