@@ -725,7 +725,7 @@ export function TripPhoneAssignmentWizard({
                       <Text style={aws.kycHint}>KYC verified</Text>
                     </View>
                     <View style={aws.fieldsGrid}>
-                      <View style={aws.fieldHalf}>
+                      <View style={windowWidth < 720 ? aws.fieldFull : aws.fieldHalf}>
                         <Text style={aws.fieldLabel}>Driver full name *</Text>
                         <TextInput
                           style={aws.input}
@@ -736,7 +736,7 @@ export function TripPhoneAssignmentWizard({
                           autoCapitalize="words"
                         />
                       </View>
-                      <View style={aws.fieldHalf}>
+                      <View style={windowWidth < 720 ? aws.fieldFull : aws.fieldHalf}>
                         <Text style={aws.fieldLabel}>Mobile contact no. *</Text>
                         <TextInput
                           style={aws.input}

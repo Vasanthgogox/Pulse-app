@@ -357,7 +357,7 @@ export const LedgerFocusedTripSettlementSummary = memo(function LedgerFocusedTri
                 style={[styles.eyebrow, compact && styles.eyebrowCompact]}
                 numberOfLines={1}
               >
-                CN / DN · {laneLabel}
+                Adjustment · {laneLabel}
               </Text>
             </View>
             {showRevised ? (
@@ -455,44 +455,46 @@ export const LedgerFocusedTripSettlementSummary = memo(function LedgerFocusedTri
             <Text style={[styles.eyebrow, compact && styles.eyebrowCompact]}>
               {laneSummary.eyebrow}
             </Text>
-            {laneSummary.targetInr > 0 ? (
-              <SettlementRow
-                label={laneSummary.targetLabel}
-                value={formatINR(laneSummary.targetInr)}
-                tone="default"
-                compact={compact}
-              />
-            ) : null}
-            {laneSummary.recordedInr > 0 ? (
-              <View style={styles.recordedGroup}>
+            <View style={[styles.ledgerPanel, compact && styles.ledgerPanelCompact]}>
+              {laneSummary.targetInr > 0 ? (
                 <SettlementRow
-                  label={laneSummary.recordedLabel}
-                  value={formatINR(laneSummary.recordedInr)}
-                  tone="recorded"
+                  label={laneSummary.targetLabel}
+                  value={formatINR(laneSummary.targetInr)}
+                  tone="default"
                   compact={compact}
                 />
-                <TransactionSplitLines
-                  lines={splitLines}
+              ) : null}
+              {laneSummary.recordedInr > 0 ? (
+                <View style={styles.recordedGroup}>
+                  <SettlementRow
+                    label={laneSummary.recordedLabel}
+                    value={formatINR(laneSummary.recordedInr)}
+                    tone="recorded"
+                    compact={compact}
+                  />
+                  <TransactionSplitLines
+                    lines={splitLines}
+                    compact={compact}
+                    isInflow={laneSummary.isInflow}
+                  />
+                </View>
+              ) : null}
+              {laneSummary.dueInr > 0 ? (
+                <SettlementRow
+                  label="Due"
+                  value={formatINR(laneSummary.dueInr)}
+                  tone={laneSummary.isInflow ? "dueIn" : "dueOut"}
                   compact={compact}
-                  isInflow={laneSummary.isInflow}
                 />
-              </View>
-            ) : null}
-            {laneSummary.dueInr > 0 ? (
-              <SettlementRow
-                label="Due"
-                value={formatINR(laneSummary.dueInr)}
-                tone={laneSummary.isInflow ? "dueIn" : "dueOut"}
-                compact={compact}
-              />
-            ) : laneSummary.recordedInr > 0 && laneSummary.dueInr <= 0 ? (
-              <SettlementRow
-                label="Due"
-                value="Nothing due"
-                tone="settled"
-                compact={compact}
-              />
-            ) : null}
+              ) : laneSummary.recordedInr > 0 && laneSummary.dueInr <= 0 ? (
+                <SettlementRow
+                  label="Due"
+                  value="Nothing due"
+                  tone="settled"
+                  compact={compact}
+                />
+              ) : null}
+            </View>
           </View>
         );
       })}
@@ -509,7 +511,9 @@ export const LedgerFocusedTripSettlementSummary = memo(function LedgerFocusedTri
           <Text style={[styles.eyebrow, compact && styles.eyebrowCompact]}>
             {flowType === "in" ? "Ledger · Receivable" : "Ledger · Payable"}
           </Text>
-          <SettlementRow label="Due" value={noDueTagLabel} tone="settled" compact={compact} />
+          <View style={[styles.ledgerPanel, compact && styles.ledgerPanelCompact]}>
+            <SettlementRow label="Due" value={noDueTagLabel} tone="settled" compact={compact} />
+          </View>
         </View>
       ) : null}
     </View>
@@ -527,38 +531,55 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   rootCompact: {
-    marginTop: 2,
+    marginTop: 0,
   },
   block: {
-    gap: 6,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: LedgerSyncPalette.border,
+    gap: 8,
+    paddingTop: 12,
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderInput,
     width: "100%",
     minWidth: 0,
   },
   blockCompact: {
-    paddingTop: 6,
-    gap: 5,
+    paddingTop: 10,
+    marginTop: 8,
+    gap: 6,
   },
   blockFirst: {
     borderTopWidth: 0,
     paddingTop: 0,
+    marginTop: 0,
   },
   ledgerBlock: {
-    gap: 4,
+    gap: 6,
+  },
+  ledgerPanel: {
+    gap: 6,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    width: "100%",
+    minWidth: 0,
+  },
+  ledgerPanelCompact: {
+    padding: 8,
+    gap: 5,
   },
   eyebrow: {
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 1.2,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.3,
     textTransform: "uppercase",
-    color: LedgerSyncPalette.muted,
+    color: Theme.textMuted,
   },
   eyebrowCompact: {
-    fontSize: 7,
-    letterSpacing: 0.9,
-    lineHeight: 10,
+    fontSize: 9,
+    letterSpacing: 0.2,
+    lineHeight: 12,
   },
   provisionHeadRow: {
     flexDirection: "row",
@@ -572,7 +593,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   provisionHeadLabelCol: {
-    paddingTop: 1,
+    paddingTop: 2,
     justifyContent: "flex-start",
   },
   provisionHeadValueCol: {
@@ -581,7 +602,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     minWidth: VALUE_COL_WIDTH,
     maxWidth: "58%",
-    gap: 1,
+    gap: 2,
   },
   provisionHeadValueColCompact: {
     minWidth: VALUE_COL_WIDTH_COMPACT,
@@ -606,20 +627,20 @@ const styles = StyleSheet.create({
   labelColNested: {
     paddingLeft: 10,
     borderLeftWidth: 1,
-    borderLeftColor: "#e2e8f0",
+    borderLeftColor: Theme.borderInput,
   },
   labelColNestedCompact: {
     paddingLeft: 8,
   },
   labelText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-    lineHeight: 13,
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textRouteCard,
+    lineHeight: 14,
   },
   labelTextCompact: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 10,
+    lineHeight: 13,
   },
   valueCol: {
     width: VALUE_COL_WIDTH,
@@ -633,22 +654,22 @@ const styles = StyleSheet.create({
   },
   valueText: {
     fontSize: 12,
-    fontWeight: "800",
-    color: LedgerSyncPalette.ink,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
     textAlign: "right",
     width: "100%",
   },
   valueTextCompact: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
   },
   revisedRow: {
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "flex-end",
     flexWrap: "nowrap",
-    gap: 4,
+    gap: 5,
     flexShrink: 0,
     minWidth: 0,
     maxWidth: "100%",
@@ -657,61 +678,61 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   revisedBase: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    fontVariant: ["tabular-nums"],
-    lineHeight: 13,
-  },
-  revisedBaseCompact: {
-    fontSize: 9,
-    lineHeight: 12,
-  },
-  revisedArrow: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
     color: Theme.textMuted,
+    fontVariant: ["tabular-nums"],
+    lineHeight: 14,
+  },
+  revisedBaseCompact: {
+    fontSize: 10,
     lineHeight: 13,
+  },
+  revisedArrow: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 14,
   },
   revisedArrowCompact: {
-    fontSize: 9,
-    lineHeight: 12,
-  },
-  revisedValue: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: LedgerSyncPalette.ink,
-    fontVariant: ["tabular-nums"],
+    fontSize: 10,
     lineHeight: 13,
   },
+  revisedValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    fontVariant: ["tabular-nums"],
+    lineHeight: 16,
+  },
   revisedValueCompact: {
-    fontSize: 10,
-    lineHeight: 12,
+    fontSize: 12,
+    lineHeight: 15,
   },
   revisedDelta: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
     textAlign: "right",
-    lineHeight: 12,
+    lineHeight: 14,
     alignSelf: "flex-end",
   },
   revisedDeltaCompact: {
-    fontSize: 9,
+    fontSize: 10,
   },
   revisedDeltaCn: {
-    color: Theme.positive,
+    color: Theme.success,
   },
   revisedDeltaDn: {
-    color: LedgerSyncPalette.rose,
+    color: Theme.negative,
   },
   lines: {
-    gap: 5,
+    gap: 6,
     width: "100%",
     minWidth: 0,
   },
   linesCompact: {
-    gap: 4,
+    gap: 5,
   },
   lineRow: {
     flexDirection: "row",
@@ -719,106 +740,114 @@ const styles = StyleSheet.create({
     gap: 8,
     width: "100%",
     minWidth: 0,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
   },
   lineRowCompact: {
     gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 7,
     alignItems: "center",
   },
   cnDnPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
     borderWidth: 1,
     flexShrink: 0,
   },
   cnDnPillCompact: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   cnDnPillCn: {
-    backgroundColor: "rgba(99,102,241,0.08)",
-    borderColor: "rgba(99,102,241,0.25)",
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.networkHubListCardConnectedBorder,
   },
   cnDnPillDn: {
-    backgroundColor: "rgba(251,191,36,0.12)",
-    borderColor: "rgba(251,191,36,0.32)",
+    backgroundColor: Theme.warningMuted,
+    borderColor: "rgba(180, 83, 9, 0.28)",
   },
   cnDnPillText: {
-    fontSize: 8,
-    fontWeight: "900",
+    fontSize: 9,
+    fontWeight: "800",
     letterSpacing: 0.4,
   },
   cnDnPillTextCompact: {
-    fontSize: 7,
+    fontSize: 8,
   },
   cnDnPillTextCn: {
-    color: "#6366f1",
+    color: Theme.success,
   },
   cnDnPillTextDn: {
-    color: "#d97706",
+    color: Theme.warning,
   },
   reason: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
-    color: "#334155",
-    lineHeight: 13,
+    color: Theme.textPrimaryDark,
+    lineHeight: 14,
   },
   reasonCompact: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 10,
+    lineHeight: 13,
   },
   amount: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
     textAlign: "right",
     width: "100%",
   },
   amountCompact: {
-    fontSize: 9,
+    fontSize: 10,
   },
   amountCn: {
-    color: Theme.positive,
+    color: Theme.success,
   },
   amountDn: {
-    color: LedgerSyncPalette.rose,
+    color: Theme.negative,
   },
   settlementLabelRecorded: {
-    color: Theme.textSecondary,
+    color: Theme.textRouteCard,
   },
   settlementLabelDue: {
     fontWeight: "700",
-    color: LedgerSyncPalette.ink,
+    color: Theme.textPrimaryDark,
   },
   settlementRecorded: {
-    color: LedgerSyncPalette.ink,
+    color: Theme.textPrimaryDark,
     fontWeight: "700",
   },
   settlementDueIn: {
-    color: Theme.positive,
-    fontSize: 12,
-    fontWeight: "900",
+    color: Theme.success,
+    fontSize: 13,
+    fontWeight: "700",
   },
   settlementDueInCompact: {
-    fontSize: 10,
-    fontWeight: "900",
+    fontSize: 12,
+    fontWeight: "700",
   },
   settlementDueOut: {
-    color: LedgerSyncPalette.rose,
-    fontSize: 12,
-    fontWeight: "900",
+    color: Theme.negative,
+    fontSize: 13,
+    fontWeight: "700",
   },
   settlementDueOutCompact: {
-    fontSize: 10,
-    fontWeight: "900",
+    fontSize: 12,
+    fontWeight: "700",
   },
   settlementSettled: {
     color: Theme.textMuted,
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
   },
   recordedGroup: {
-    gap: 3,
+    gap: 4,
     width: "100%",
     minWidth: 0,
   },
@@ -826,7 +855,7 @@ const styles = StyleSheet.create({
     gap: 4,
     width: "100%",
     minWidth: 0,
-    marginTop: 1,
+    marginTop: 2,
   },
   txSplitBlockCompact: {
     gap: 3,
@@ -841,29 +870,29 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   splitLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#64748b",
-    lineHeight: 12,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textRouteCard,
+    lineHeight: 13,
   },
   splitLabelCompact: {
-    fontSize: 8,
-    lineHeight: 11,
+    fontSize: 9,
+    lineHeight: 12,
   },
   splitDate: {
-    fontSize: 8,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "500",
     color: Theme.textMuted,
-    lineHeight: 11,
+    lineHeight: 12,
     marginTop: 1,
   },
   splitDateCompact: {
-    fontSize: 7,
-    lineHeight: 10,
+    fontSize: 8,
+    lineHeight: 11,
   },
   splitValue: {
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
     textAlign: "right",
     width: "100%",

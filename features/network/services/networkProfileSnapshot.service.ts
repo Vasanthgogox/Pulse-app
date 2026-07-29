@@ -87,6 +87,9 @@ type PartnerDisplaySingleRow = {
   orgCreatedAt?: string | null;
   ownerSignedUpAt?: string | null;
   verificationStatus?: string | null;
+  tripCount?: number | null;
+  averageRating?: number | null;
+  ratingCount?: number | null;
   vehicleCount?: number | null;
   networkIndentCount?: number | null;
 };
@@ -297,9 +300,17 @@ export async function getOrgProfileSnapshot(
   let ownerAvatarUrl =
     nonEmptyString(partnerBatch?.avatarUrl) ?? nonEmptyString(partnerProfile?.avatarUrl);
   const partnerTripCount =
-    typeof partnerBatch?.tripCount === "number" ? partnerBatch.tripCount : null;
+    typeof partnerBatch?.tripCount === "number"
+      ? partnerBatch.tripCount
+      : typeof partnerProfile?.tripCount === "number"
+        ? partnerProfile.tripCount
+        : null;
   const partnerRating =
-    typeof partnerBatch?.averageRating === "number" ? partnerBatch.averageRating : null;
+    typeof partnerBatch?.averageRating === "number"
+      ? partnerBatch.averageRating
+      : typeof partnerProfile?.averageRating === "number"
+        ? partnerProfile.averageRating
+        : null;
   const connRes = await supabase()
     .from("connection_requests")
     .select(
@@ -329,6 +340,8 @@ export async function getOrgProfileSnapshot(
 
   // 2) Connection request between viewer and target (either direction).
   let role: NetworkProfileSnapshotRole = "SUPPLIER";
+  let linkedClientId: string | null = null;
+  let linkedSupplierId: string | null = null;
 
   const clientLink = await supabase()
     .from("clients")
@@ -340,6 +353,7 @@ export async function getOrgProfileSnapshot(
     .maybeSingle();
   if (clientLink.data?.id) {
     role = "CLIENT";
+    linkedClientId = clientLink.data.id;
   } else {
     const supplierLink = await supabase()
       .from("suppliers")
@@ -351,6 +365,7 @@ export async function getOrgProfileSnapshot(
       .maybeSingle();
     if (supplierLink.data?.id) {
       role = "SUPPLIER";
+      linkedSupplierId = supplierLink.data.id;
     }
   }
 
@@ -451,13 +466,16 @@ export async function getOrgProfileSnapshot(
         ? partnerProfile.networkIndentCount
         : 0;
 
-  // 7) Rating — prefer viewer-given scores; fall back to partner aggregate.
+  // 7) Rating — viewer trip feedback on linked CRM rows / org id; else partner aggregate.
   let rating: number | null = null;
+  const ratedIds = [targetOrgId, linkedClientId, linkedSupplierId].filter(
+    (id): id is string => Boolean(id),
+  );
   const ratingRes = await supabase()
     .from("ratings")
     .select("score")
     .eq("organization_id", viewerOrgId)
-    .eq("rated_id", targetOrgId);
+    .in("rated_id", ratedIds);
   if (!ratingRes.error && Array.isArray(ratingRes.data) && ratingRes.data.length > 0) {
     const rows = ratingRes.data as Array<{ score: number | null }>;
     const total = rows.reduce((acc, r) => acc + Number(r.score ?? 0), 0);

@@ -59,25 +59,15 @@ export const LedgerFocusedTripCard = memo(function LedgerFocusedTripCard({
 }: LedgerFocusedTripCardProps) {
   return (
     <View style={[styles.card, compact && styles.cardCompact]}>
-      {hideTripIdentity ? (
-        <View style={styles.checkWatermark} pointerEvents="none">
-          <View style={[styles.checkWatermarkRing, compact && styles.checkWatermarkRingCompact]}>
-            <Check
-              size={compact ? 32 : 48}
-              color="rgba(16,185,129,0.14)"
-              strokeWidth={2.5}
-            />
-          </View>
-        </View>
-      ) : (
+      {!hideTripIdentity ? (
         <View style={styles.watermark} pointerEvents="none">
           <Route
             size={compact ? 56 : 72}
-            color="rgba(15,23,42,0.04)"
+            color={Theme.borderInput}
             strokeWidth={1.5}
           />
         </View>
-      )}
+      ) : null}
       <View style={[styles.inner, compact && styles.innerCompact]}>
         {!hideTripIdentity ? (
           <>
@@ -86,7 +76,7 @@ export const LedgerFocusedTripCard = memo(function LedgerFocusedTripCard({
                 {tripNumber}
               </Text>
               <View style={[styles.check, compact && styles.checkCompact]}>
-                <Check size={compact ? 14 : 16} color={Theme.textOnDark} strokeWidth={3} />
+                <Check size={compact ? 12 : 14} color={Theme.textOnPrimary} strokeWidth={2.8} />
               </View>
             </View>
             <Text style={[styles.route, compact && styles.routeCompact]} numberOfLines={2}>
@@ -157,60 +147,33 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     alignSelf: "stretch",
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e6edf5",
+    borderColor: Theme.borderInput,
     backgroundColor: Theme.cardWhite,
     padding: 14,
     overflow: "hidden",
     position: "relative",
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 1,
   },
   cardCompact: {
-    padding: 10,
-    borderRadius: 12,
+    padding: 12,
+    borderRadius: 10,
   },
   watermark: {
     position: "absolute",
     top: -16,
     right: -16,
-    opacity: 0.5,
-  },
-  checkWatermark: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 0,
-  },
-  checkWatermarkRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(16,185,129,0.06)",
-    borderWidth: 2,
-    borderColor: "rgba(16,185,129,0.1)",
-  },
-  checkWatermarkRingCompact: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    opacity: 0.35,
   },
   inner: {
     position: "relative",
     zIndex: 1,
-    gap: 8,
+    gap: 10,
     width: "100%",
     minWidth: 0,
-    paddingTop: 2,
   },
   innerCompact: {
-    gap: 6,
+    gap: 8,
   },
   head: {
     flexDirection: "row",
@@ -230,22 +193,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   check: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: LedgerSyncPalette.emerald,
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: Theme.success,
     alignItems: "center",
     justifyContent: "center",
   },
   checkCompact: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 22,
+    height: 22,
+    borderRadius: 7,
   },
   route: {
     ...FinanceTxnTypography.routeWhy,
-    color: LedgerSyncPalette.muted,
-    marginTop: 2,
+    color: Theme.textRouteCard,
+    marginTop: -2,
     width: "100%",
     minWidth: 0,
   },
@@ -257,24 +220,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
-    marginTop: 6,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#eef2f7",
+    marginTop: 2,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderInput,
     width: "100%",
     minWidth: 0,
   },
   chipsCompact: {
-    marginTop: 2,
-    gap: 4,
+    marginTop: 0,
+    paddingTop: 8,
+    gap: 5,
   },
   chip: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#e2e8f0",
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderInput,
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: 8,
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
   },
   chipCompact: {
     paddingVertical: 4,
@@ -284,21 +248,21 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   chipText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: LedgerSyncPalette.ink,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
   },
   chipTextCompact: {
-    fontSize: 9,
+    fontSize: 10,
   },
   chipTextDisabled: {
     opacity: 0.7,
   },
   noDuePill: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#e2e8f0",
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderInput,
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: 8,
     paddingVertical: 5,
     paddingHorizontal: 10,
   },

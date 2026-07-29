@@ -728,8 +728,9 @@ export const aws = StyleSheet.create({
   },
   fieldHalf: {
     flexGrow: 1,
-    flexBasis: "45%",
-    minWidth: 140,
+    flexBasis: 220,
+    minWidth: 0,
+    maxWidth: "100%",
   },
   fieldFull: {
     flexGrow: 1,
@@ -737,9 +738,87 @@ export const aws = StyleSheet.create({
     minWidth: 0,
     width: "100%",
   },
+  snapshotBadgeWrap: {
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  headerMobile: {
+    ...Platform.select({
+      web: { position: "sticky" as unknown as undefined, top: 0 },
+      default: {},
+    }),
+  },
+  headerInnerMobile: {
+    minHeight: 56,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  headerLeftMobile: {
+    gap: 10,
+    flex: 1,
+  },
+  headerRightMobile: {
+    gap: 6,
+  },
+  heroRouteBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  heroRouteBlockMobile: {
+    width: "100%",
+  },
+  heroRowMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 14,
+  },
+  heroMetaRowMobile: {
+    marginBottom: 10,
+    gap: 8,
+  },
+  heroMetaItemMobile: {
+    flexGrow: 1,
+    flexBasis: "46%",
+    minWidth: 0,
+  },
+  routeStackMobile: {
+    width: "100%",
+    gap: 10,
+  },
+  routeEndpointMobileStack: {
+    width: "100%",
+    minWidth: 0,
+  },
+  routeCenterMobile: {
+    width: "100%",
+    alignItems: "center",
+    paddingVertical: 2,
+  },
+  routeLineMobile: {
+    width: "100%",
+    maxWidth: 160,
+    height: 28,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  routeLineFillMobile: {
+    position: "absolute",
+    top: 13,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: Theme.primaryLight,
+    opacity: 0.85,
+    borderRadius: 1,
+  },
   panelHeaderMobile: {
     flexDirection: "column",
     alignItems: "stretch",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 0,
   },
   actionToggleMobile: {
     alignSelf: "stretch",
@@ -748,22 +827,27 @@ export const aws = StyleSheet.create({
   actionBtnMobile: {
     flex: 1,
     justifyContent: "center",
+    minHeight: 40,
   },
   snapshotMobile: {
-    flexDirection: "column",
-    alignItems: "flex-start",
+    // Keep avatar + badge on one row for enterprise density
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
+    padding: 12,
+    minHeight: 68,
   },
   panelBodyMobile: {
     padding: 14,
     gap: 12,
   },
   dualGridMobile: {
-    gap: 14,
+    gap: 12,
     ...Platform.select({
       web: {
         display: "flex" as unknown as undefined,
         flexDirection: "column",
+        gridTemplateColumns: undefined,
       },
       default: {
         flexDirection: "column",
@@ -773,7 +857,7 @@ export const aws = StyleSheet.create({
   panelMobile: {
     minWidth: 0,
     width: "100%",
-    borderRadius: 18,
+    borderRadius: 16,
     ...Platform.select({
       web: { height: "auto" },
       default: {},
@@ -782,19 +866,68 @@ export const aws = StyleSheet.create({
   mainMobile: {
     paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 14,
+    gap: 12,
   },
   heroMobile: {
-    padding: 16,
-    borderRadius: 18,
+    padding: 14,
+    borderRadius: 16,
   },
   routeCityMobile: {
-    fontSize: 18,
+    fontSize: 17,
+    letterSpacing: 0.2,
   },
   metricsBoxMobile: {
-    flexWrap: "wrap",
+    width: "100%",
     alignSelf: "stretch",
     justifyContent: "space-between",
+    flexWrap: "nowrap",
+    paddingVertical: 4,
+  },
+  metricCellMobile: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  auditCardMobile: {
+    borderRadius: 16,
+    padding: 14,
+    gap: 12,
+  },
+  auditHeaderMobile: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  auditTitleMobile: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  auditGridMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 12,
+  },
+  auditFieldMobile: {
+    flexGrow: 0,
+    flexBasis: "auto",
+    minWidth: 0,
+    width: "100%",
+  },
+  auditSubmitWrapMobile: {
+    flexGrow: 0,
+    flexBasis: "auto",
+    minWidth: 0,
+    width: "100%",
+  },
+  confirmBtnMobile: {
+    width: "100%",
+    minHeight: 48,
+  },
+  inputMobile: {
+    minHeight: 72,
+    textAlignVertical: "top" as const,
+    paddingTop: 12,
   },
   sectionHintRow: {
     flexDirection: "row",
@@ -809,6 +942,7 @@ export const aws = StyleSheet.create({
     color: Theme.textMuted,
     letterSpacing: 0.5,
     textTransform: "uppercase",
+    flexShrink: 1,
   },
   kycHint: {
     fontSize: 10,
@@ -850,6 +984,8 @@ export const aws = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
   },
   auditTitle: {
     fontSize: 11,
@@ -857,6 +993,7 @@ export const aws = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: 0.6,
     textTransform: "uppercase",
+    flexShrink: 1,
   },
   auditId: {
     fontSize: 11,
@@ -921,19 +1058,21 @@ export const aws = StyleSheet.create({
   },
   toast: {
     position: "absolute",
-    right: 24,
-    bottom: 24,
+    right: 16,
+    bottom: 16,
+    left: 16,
     zIndex: 50,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
     backgroundColor: Theme.textPrimaryDark,
     borderWidth: 1,
     borderColor: "rgba(16, 185, 129, 0.5)",
     maxWidth: 420,
+    alignSelf: "center",
   },
   toastText: {
     flex: 1,

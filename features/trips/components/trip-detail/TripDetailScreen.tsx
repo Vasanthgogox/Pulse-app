@@ -2193,13 +2193,6 @@ export default function TripDetailScreen({
             </Text>
           </TouchableOpacity>
         }
-        receivableActionHint={
-          !hasLinkedClient ? (
-            <Text style={neoStyles.laneActionHint}>
-              Link a client to pre-fill receipt
-            </Text>
-          ) : null
-        }
         payableAction={
           showRecordSupplierPayoutCta ? (
             <TouchableOpacity

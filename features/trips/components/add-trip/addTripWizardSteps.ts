@@ -58,12 +58,17 @@ export function addTripWizardStepShortLabel(step: AddTripWizardStep): string {
   }
 }
 
-export function addTripWizardStepSubtitle(step: AddTripWizardStep): string {
+export function addTripWizardStepSubtitle(
+  step: AddTripWizardStep,
+  opts?: { contractRouteLocked?: boolean },
+): string {
   switch (step) {
     case "client":
-      return "Select billing client, optional contract lane, and sale value.";
+      return "Select billing client, then contract lane or adhoc, and sale value.";
     case "route":
-      return "Enter pickup, drop and trip date.";
+      return opts?.contractRouteLocked
+        ? "Confirm the contract corridor and set the trip date."
+        : "Enter pickup, drop and trip date.";
     case "commodity":
       return "Vehicle type, load type and tonnage.";
     case "source":

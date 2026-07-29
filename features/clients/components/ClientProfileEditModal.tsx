@@ -5,7 +5,7 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -54,6 +54,7 @@ export interface ClientProfileEditModalProps {
   warehouses: ClientWarehouse[];
   contracts: ClientContract[];
   organizationId: string;
+  initialTab?: Tab;
   onClose: () => void;
   onWarehousesChange: (warehouses: ClientWarehouse[]) => void;
   onContractsChange: (contracts: ClientContract[]) => void;
@@ -65,6 +66,7 @@ export function ClientProfileEditModal({
   warehouses,
   contracts,
   organizationId,
+  initialTab = 'BASIC',
   onClose,
   onWarehousesChange,
   onContractsChange,
@@ -72,7 +74,11 @@ export function ClientProfileEditModal({
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isWide = Platform.OS === 'web' && windowWidth >= 700;
-  const [activeTab, setActiveTab] = useState<Tab>('BASIC');
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+
+  useEffect(() => {
+    if (visible) setActiveTab(initialTab);
+  }, [visible, initialTab]);
 
   const tabs: Array<{ id: Tab; label: string; icon: React.ComponentProps<typeof FontAwesome>['name'] }> = [
     { id: 'BASIC', label: 'BASIC INFORMATION', icon: 'id-card-o' },

@@ -45,17 +45,29 @@ const ASIDE_COPY: Record<
   },
 };
 
+const ROUTE_CONTRACT_COPY = {
+  eyebrow: "Schedule",
+  title: "Lock the trip date",
+  body: "Pickup and drop come from the contract lane — set when the move should start.",
+} as const;
+
 export type CreateTripDesktopAsideArtProps = {
   wizardStep: AddTripWizardStep;
   /** `inline` — compact visual under a step tip (route page). */
   variant?: "aside" | "inline";
+  /** When a contract lane is selected, route aside focuses on date. */
+  contractRouteLocked?: boolean;
 };
 
 export const CreateTripDesktopAsideArt = memo(function CreateTripDesktopAsideArt({
   wizardStep,
   variant = "aside",
+  contractRouteLocked = false,
 }: CreateTripDesktopAsideArtProps) {
-  const copy = ASIDE_COPY[wizardStep] ?? ASIDE_COPY.client;
+  const copy =
+    wizardStep === "route" && contractRouteLocked
+      ? ROUTE_CONTRACT_COPY
+      : (ASIDE_COPY[wizardStep] ?? ASIDE_COPY.client);
   const source = useMemo(
     () => ASIDE_ANIMATIONS[wizardStep] ?? ASIDE_ANIMATIONS.client,
     [wizardStep],

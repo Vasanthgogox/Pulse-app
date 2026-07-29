@@ -1179,7 +1179,9 @@ export default function CreateIndentScreen() {
     ? wizardStep === "client"
       ? "Select billing client, optional contract lane, and sale value."
       : wizardStep === "route"
-        ? "Enter pickup, drop and trip date."
+        ? selectedLaneId
+          ? "Confirm the contract corridor and set the trip date."
+          : "Enter pickup, drop and trip date."
         : wizardStep === "prices"
           ? "Set an optional supplier target before sharing."
           : wizardStep === "vehicle"
@@ -1361,6 +1363,15 @@ export default function CreateIndentScreen() {
                   setPickupLat(recommendation.lat);
                   setPickupLon(recommendation.lon);
                 }}
+                contractRouteLocked={Boolean(selectedLaneId)}
+                onChangeLane={
+                  selectedLaneId
+                    ? () => {
+                        handleClearLane();
+                        setWizardStep("client");
+                      }
+                    : undefined
+                }
               />
             ) : null}
             {wizardStep === "vehicle" ? (
