@@ -51,6 +51,19 @@ export type DriverTripRow = {
   driver_commission?: number | null;
   distance?: number | null;
   supplier_id?: string | null;
+  /**
+   * Owning (dispatching) org. REQUIRED by the driver wallet to classify a trip as
+   * fleet vs open — DriverWalletScreen's isEmployerOrgAtDate returns false
+   * immediately when this is empty, which sends every trip to Open Trips.
+   * Must stay projected by trips_driver_view.
+   */
+  organization_id?: string | null;
+  /** Trip origin ('direct_quote' | 'mover_asset' | 'manual' | …). Drives mover-asset UI. */
+  source?: string | null;
+  completed_at?: string | null;
+  trip_number?: string | null;
+  indent_id?: string | null;
+  source_indent_id?: string | null;
 };
 
 /** Map supplier view row → legacy TripRow for screens not yet migrated off TripRow. */
@@ -119,6 +132,10 @@ export function tripRowToDriverTripRow(
     | 'driver_commission'
     | 'distance'
     | 'supplier_id'
+    | 'organization_id'
+    | 'source'
+    | 'completed_at'
+    | 'indent_id'
   >,
 ): DriverTripRow {
   return {
@@ -151,6 +168,12 @@ export function tripRowToDriverTripRow(
       return Number.isFinite(n) ? n : null;
     })(),
     supplier_id: row.supplier_id ?? null,
+    // Carried through so the fallback path classifies identically to the view.
+    organization_id: row.organization_id ?? null,
+    source: row.source ?? null,
+    completed_at: row.completed_at ?? null,
+    trip_number: row.trip_number ?? null,
+    indent_id: row.indent_id ?? null,
   };
 }
 
@@ -158,7 +181,10 @@ export function tripRowToDriverTripRow(
 export function driverRowToTripRow(row: DriverTripRow): TripRow {
   return {
     id: row.id,
-    organization_id: '',
+    // Must come from the row. Hardcoding '' here made isEmployerOrgAtDate fail for
+    // every trip, so the driver Fleet Trips tab was always empty. See
+    // supabase/migrations/20270118000000_driver_view_expose_org_and_source.sql.
+    organization_id: row.organization_id ?? '',
     trip_number: row.driver_display_trip_id ?? row.id,
     driver_display_trip_id: row.driver_display_trip_id,
     status: row.status,
@@ -174,8 +200,11 @@ export function driverRowToTripRow(row: DriverTripRow): TripRow {
     started_at: row.started_at ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at ?? row.created_at,
-    indent_id: null,
-    source: 'assigned',
+    indent_id: row.indent_id ?? null,
+    source_indent_id: row.source_indent_id ?? null,
+    // Real source, not a hardcoded 'assigned' — mover_asset rows must stay
+    // identifiable so the wallet can tell supplier-side trips from dispatches.
+    source: row.source ?? 'assigned',
     client_name: '',
     client_price: row.client_price ?? 0,
     supplier_rate: row.supplier_rate ?? 0,
@@ -191,6 +220,6 @@ export function driverRowToTripRow(row: DriverTripRow): TripRow {
     supplier_id: row.supplier_id ?? null,
     driver_id: row.driver_id ?? null,
     load_type: null,
-    completed_at: null,
+    completed_at: row.completed_at ?? null,
   };
 }

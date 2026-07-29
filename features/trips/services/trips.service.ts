@@ -627,6 +627,11 @@ const DRIVER_TRIP_FALLBACK_COLUMNS = [
   "driver_commission",
   "distance",
   "supplier_id",
+  // Required by the driver wallet's fleet-vs-open classification. Keep in sync
+  // with trips_driver_view — see 20270118000000_driver_view_expose_org_and_source.
+  "organization_id",
+  "completed_at",
+  "indent_id",
 ].join(",");
 
 async function getTripsByDriverIdsFromTripsTable(

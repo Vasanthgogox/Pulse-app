@@ -102,5 +102,57 @@ Do not continue searching for alternative explanations.
 - Performance & bottlenecks → `docs/performance.md`
 - Anti-patterns → `docs/anti-patterns.md`
 
+## How to explain findings (STRICT — THIS IS THE DEFAULT REPLY FORMAT)
+
+**This is the default way to answer me. Not an opt-in mode.**
+Use it for every substantive reply: root-cause answers, "why" questions,
+bug explanations, finished-work reports, refusals, blocked work, risk
+call-outs, and any time I say a reply was unclear.
+This rule OVERRIDES the global "concise / under 8 lines / no explanations /
+max 5 items" preferences. When in doubt, USE THIS FORMAT.
+
+Only skip it for: one-line factual answers ("yes", a file path, a command),
+and pure conversational back-and-forth with no finding in it.
+
+**If I ask you to explain, justify, or flag something — including when you are
+declining or stopping work — that reply MUST use these headings.** Writing a
+wall of prose instead is a rule violation, even when the content is correct.
+
+Write for a reader who has not seen the code. Plain English, short sentences,
+one idea per line. Never chain technical facts into a dense paragraph.
+
+Adapt the headings to fit the reply — drop the ones that don't apply
+(e.g. no bug → no "real bug" section), but keep the shape, the ✅/❌ lists,
+the tables, and ALWAYS keep "In one sentence" last.
+
+Required structure — use these headings:
+
+1. **What's the issue?** — if I had a wrong assumption, state it as
+   "You thought: …" then "Checking the data shows: …" with ❌ / ✅ lines.
+   Say plainly whether anything is actually broken or lost *yet*.
+2. **What is the real bug?** — walk it as numbered steps in the order it
+   happens in real life (Step 1: someone clicks X → Step 2: system stores Y →
+   Step 3: other code checks Z). Show the record/state as a ✅/❌ field list.
+   End by naming the contradiction outright:
+   "Earlier code: ✅ … / Later code: ❌ … These two disagree. That's the bug."
+3. **Why is this bad?** — separate "right now" from "when X happens".
+   Show the wrong output vs the correct output side by side.
+4. **Why does <confusing detail> matter?** — pre-empt anything I'd stumble on
+   (a field being 0, a null, an odd name) as its own mini-heading.
+5. **Proposed fixes** — number them, label each as immediate-code vs
+   product/UI, and say what each one covers. Include rough size ("~6 lines").
+6. **In one sentence** — a single plain-English wrap-up I could forward to
+   someone else unchanged.
+
+Rules:
+- Explain every technical term the first time, or avoid it
+- Show data as labelled ✅/❌ lists or tiny tables, never as raw SQL rows
+- Repetition for clarity is REQUIRED, not a flaw — length is fine
+- State clearly what is NOT broken, so I know the blast radius
+- Applies to bad news too: if you stop, refuse, or hit a risk, explain it
+  in this format — never as a prose paragraph
+- Say plainly if something is untested or unverified, as its own line
+- If I was right, say so; if I was partly wrong, correct that specific part first
+
 ## RBAC sessions
 When the user asks about roles, asset vs aggregate, give-load, suppliers, garage, or page/modal access: load `docs/RBAC_OPERATING_MODEL.md` first, implement via `useCapabilities` / `ModelAccessGate`, then append rows to `docs/RBAC_OPERATING_MODEL_CHANGELOG.md`.
