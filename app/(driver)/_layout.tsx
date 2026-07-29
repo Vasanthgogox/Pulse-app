@@ -28,7 +28,8 @@ import {
   useFonts as usePlusJakartaFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { useQueryClient } from '@tanstack/react-query';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
+import { DEFAULT_DISPATCHER_ROUTE } from '@/lib/routes';
 import { useEffect, useRef } from 'react';
 import { Platform, StyleSheet } from 'react-native';
 
@@ -111,13 +112,20 @@ export default function DriverAppLayout() {
     }
   }, [fontError]);
 
-  // ✅ Gate includes fonts + auth checks
+  // A resolved non-driver has no business in this group — never gate on it.
+  // Gating would render the splash with no exit (this layout has no redirect of
+  // its own), which is how a driver -> logout -> login-as-user hung on
+  // "Loading..." forever. Send them to their own shell instead.
+  const wrongRole = !loading && Boolean(user) && Boolean(profile) && profile?.role !== 'driver';
+
+  // ✅ Gate includes fonts + auth checks — waiting states only, never wrongRole.
   const gate =
-    !fontsReady ||
-    loading ||
-    !user ||
-    !profile ||
-    profile.role !== 'driver';
+    !wrongRole &&
+    (!fontsReady ||
+      loading ||
+      !user ||
+      !profile ||
+      profile.role !== 'driver');
 
   // Phase 0 perf: session origin when driver shell becomes interactive.
   useEffect(() => {
@@ -135,6 +143,13 @@ export default function DriverAppLayout() {
     linkedDriversSyncedRef.current = true;
     void syncAndInvalidateLinkedDrivers(queryClient, profile.uid);
   }, [gate, profile?.uid, queryClient]);
+
+  // Non-driver landed in the driver group (e.g. logged out as driver, back in as
+  // a user while on /profile — both groups define that route). Hand off to the
+  // business shell rather than showing a splash this layout can never dismiss.
+  if (wrongRole) {
+    return <Redirect href={DEFAULT_DISPATCHER_ROUTE} />;
+  }
 
   if (gate) {
     return (

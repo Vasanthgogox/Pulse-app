@@ -3,7 +3,7 @@
  * Dock hides on scroll (native + mobile web); fixed to viewport on mobile web.
  */
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Tabs, usePathname, useRouter } from 'expo-router';
+import { Redirect, Tabs, usePathname, useRouter } from 'expo-router';
 import { markStartupPhase, isStartupComplete } from '@/lib/startupMetrics';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
@@ -22,7 +22,7 @@ import {
   scheduleDispatcherTabPreloads,
 } from '@/lib/preloadRoutes';
 import { preloadChatRoute } from '@/lib/preloadChatWarmup';
-import { ROUTES } from '@/lib/routes';
+import { DEFAULT_DRIVER_ROUTE, ROUTES } from '@/lib/routes';
 import { hydrateSignupFlowFlags } from '@/lib/onboarding/businessSignupBranding.util';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
@@ -243,9 +243,21 @@ export default function TabLayout() {
     tabsUnlockedRef.current = true;
   }
 
+  // A resolved driver has no business shell to show — never gate on it. Gating
+  // renders a splash this layout cannot dismiss (it has no redirect for the
+  // role case), which is how logging out and back in as a driver on a
+  // business-only route like /finance hung on "Loading..." forever.
+  // Mirror of the wrongRole handoff in app/(driver)/_layout.tsx.
+  const wrongRole =
+    !tabsUnlockedRef.current && !loading && Boolean(user) && profile?.role === 'driver';
+
+  if (wrongRole) {
+    return <Redirect href={DEFAULT_DRIVER_ROUTE} />;
+  }
+
   if (
     !tabsUnlockedRef.current &&
-    (loading || !user || !profile || profile.role === 'driver')
+    (loading || !user || !profile)
   ) {
     return (
       <AppLoadingSplash
