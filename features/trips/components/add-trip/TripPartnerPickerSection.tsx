@@ -41,6 +41,13 @@ export type TripPartnerPickerSectionProps = {
   isDenseForm?: boolean;
   suppressCollapsedSummary?: boolean;
   listMaxHeight?: number;
+  /**
+   * Suppliers that cannot take this load, keyed by supplier id, with the reason
+   * to show. Used by the load-chain loop guard to stop a load going back to the
+   * cargo owner or an upstream broker. Shown greyed with the reason rather than
+   * hidden — a silently missing partner reads as "deleted".
+   */
+  blockedReasonBySupplierId?: Record<string, string>;
 };
 
 function partnerDisplayName(supplier: SupplierRow): string {
@@ -67,6 +74,7 @@ export function TripPartnerPickerSection({
   isDenseForm = false,
   listMaxHeight = 260,
   suppressCollapsedSummary = false,
+  blockedReasonBySupplierId,
 }: TripPartnerPickerSectionProps) {
   const selectedSupplier =
     suppliers.find((s) => s.id === supplierId) ?? null;
@@ -257,15 +265,21 @@ export function TripPartnerPickerSection({
           {suppliers.map((supplier) => {
             const selected = supplierId === supplier.id;
             const name = partnerDisplayName(supplier);
+            const blockedReason = blockedReasonBySupplierId?.[supplier.id];
+            const isBlocked = Boolean(blockedReason);
             return (
               <TouchableOpacity
                 key={supplier.id}
                 style={[
                   styles.partnerCard,
                   selected && styles.partnerCardRowSelected,
-                  webPointer,
+                  isBlocked && styles.partnerCardBlocked,
+                  !isBlocked && webPointer,
                 ]}
+                disabled={isBlocked}
+                accessibilityState={{ disabled: isBlocked }}
                 onPress={() => {
+                  if (isBlocked) return;
                   if (selected) {
                     onClearPartner?.();
                     return;
@@ -299,25 +313,32 @@ export function TripPartnerPickerSection({
                       style={[
                         styles.partnerName,
                         selected && styles.partnerNameOn,
+                        isBlocked && styles.partnerNameBlocked,
                       ]}
                       numberOfLines={1}
                     >
                       {name}
                     </Text>
-                    {resolveWizardContactPhone(supplier.phone) ? (
+                    {isBlocked ? (
+                      <Text style={styles.partnerBlockedReason}>
+                        {blockedReason}
+                      </Text>
+                    ) : resolveWizardContactPhone(supplier.phone) ? (
                       <Text style={styles.partnerSub} numberOfLines={1}>
                         {resolveWizardContactPhone(supplier.phone)}
                       </Text>
                     ) : null}
                   </View>
                 </View>
-                <View
-                  style={[styles.radioOuter, selected && styles.radioOuterOn]}
-                >
-                  {selected ? (
-                    <CheckCircle2 size={16} color={Theme.primary} />
-                  ) : null}
-                </View>
+                {isBlocked ? null : (
+                  <View
+                    style={[styles.radioOuter, selected && styles.radioOuterOn]}
+                  >
+                    {selected ? (
+                      <CheckCircle2 size={16} color={Theme.primary} />
+                    ) : null}
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -455,6 +476,18 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     color: Theme.textMuted,
+  },
+  /** Load-chain loop guard: partner shown but not selectable. */
+  partnerCardBlocked: {
+    opacity: 0.55,
+  },
+  partnerNameBlocked: {
+    color: Theme.textMuted,
+  },
+  partnerBlockedReason: {
+    marginTop: 2,
+    fontSize: 11,
+    color: Theme.warning,
   },
   selectionSummaryTitle: {
     fontSize: 14,

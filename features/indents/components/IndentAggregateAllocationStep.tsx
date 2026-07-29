@@ -22,6 +22,8 @@ import type { IndentAggregateStep } from "@/features/indents/components/indentAl
 export type IndentAggregateAllocationStepProps = {
   step: IndentAggregateStep;
   suppliers: SupplierRow[];
+  /** Load-chain loop guard: suppliers that cannot take this load, with reasons. */
+  blockedReasonBySupplierId?: Record<string, string>;
   state: StaffHandshakeResult["state"];
   set: StaffHandshakeResult["set"];
   onAddPartner: () => void;
@@ -30,6 +32,7 @@ export type IndentAggregateAllocationStepProps = {
 export const IndentAggregateAllocationStep = memo(function IndentAggregateAllocationStep({
   step,
   suppliers,
+  blockedReasonBySupplierId,
   state,
   set,
   onAddPartner,
@@ -114,6 +117,7 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
       <TripPartnerPickerSection
         suppliers={suppliers}
         suppliersLoading={false}
+        blockedReasonBySupplierId={blockedReasonBySupplierId}
         supplierId={subcontractSupplierId}
         partnerListExpanded={partnerListExpanded}
         setPartnerListExpanded={setPartnerListExpanded}

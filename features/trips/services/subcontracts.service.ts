@@ -3,6 +3,7 @@
  * Reads/writes public.trip_subcontracts; RLS scopes to sourcing (viewer) org.
  */
 import { supabase } from '@/lib/supabase';
+import { assertNoChainLoopForOrg } from '@/features/trips/services/loadChainGuard.service';
 import {
   mapSubcontractDbRow,
   validateCreateSubcontractPayload,
@@ -21,6 +22,23 @@ export async function createSubcontract(
 ): Promise<{ error: Error | null; row: TripSubcontractRow | null }> {
   const validationError = validateCreateSubcontractPayload(payload);
   if (validationError) return { error: new Error(validationError), row: null };
+
+  // Block handing the load back to an org already upstream in its chain
+  // (cargo owner / broker). Fails open when the chain can't be resolved.
+  if (payload.sub_supplier_on_platform) {
+    try {
+      await assertNoChainLoopForOrg({
+        parentTripId: payload.parent_trip_id,
+        subSupplierOrgId: payload.sub_supplier_org_id ?? null,
+        selfOrgId: payload.sourcing_org_id,
+      });
+    } catch (e) {
+      return {
+        error: e instanceof Error ? e : new Error(String(e)),
+        row: null,
+      };
+    }
+  }
 
   const { data: userData } = await supabase().auth.getUser();
   const createdBy = userData.user?.id ?? null;

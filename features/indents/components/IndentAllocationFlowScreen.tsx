@@ -39,6 +39,8 @@ import {
   useVisibleIndentQuery,
   useVehiclesQuery,
 } from "@/lib/queries";
+import { useLoadChainAncestorsQuery } from "@/lib/queries/useLoadChainAncestorsQuery";
+import { getChainBlockReason } from "@/features/trips/services/loadChainGuard.service";
 
 export type IndentAllocationFlowFocus = "driver" | "vehicle";
 
@@ -78,6 +80,20 @@ export function IndentAllocationFlowScreen({
     () => drivers.filter((d) => !d.left_at),
     [drivers],
   );
+
+  // Load-chain loop guard: a load must not be sub-contracted back to an org
+  // already upstream in its chain (the cargo owner, or a broker that handled
+  // it). Those partners stay visible but greyed, with the reason.
+  const { data: chainAncestors = [] } = useLoadChainAncestorsQuery(indentId);
+  const blockedPartnerReasons = useMemo(() => {
+    if (chainAncestors.length === 0) return undefined;
+    const map: Record<string, string> = {};
+    for (const supplier of suppliers) {
+      const reason = getChainBlockReason(supplier, chainAncestors, orgId);
+      if (reason) map[supplier.id] = reason.message;
+    }
+    return Object.keys(map).length > 0 ? map : undefined;
+  }, [suppliers, chainAncestors, orgId]);
 
   const handshake = useStaffHandshake({
     orgId,
@@ -685,6 +701,7 @@ export function IndentAllocationFlowScreen({
               state={state}
               set={set}
               onAddPartner={onAddPartner}
+              blockedReasonBySupplierId={blockedPartnerReasons}
             />
           ) : null}
 

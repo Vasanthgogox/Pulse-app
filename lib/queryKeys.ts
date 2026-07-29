@@ -146,6 +146,9 @@ export const queryKeys = {
     market: (orgId: string) => ["q", "indents", orgId, "market"] as const,
     visible: (orgId: string, indentId: string) =>
       ["q", "indents", orgId, "visible", indentId] as const,
+    /** Orgs already upstream in a load's custody chain (loop guard). */
+    chainAncestors: (indentId: string) =>
+      ["q", "indents", "chain-ancestors", indentId] as const,
     /** Finance aggregation: pending/quoted/awarded indents (pre-trip amount visibility). */
     forFinance: (orgId: string) => ["q", "indents", orgId, "finance"] as const,
     /** Finance aggregation: accepted direct quotes for indents owned by this org. */
