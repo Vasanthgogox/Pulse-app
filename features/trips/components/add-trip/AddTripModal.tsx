@@ -122,6 +122,8 @@ export function AddTripModal({
   const [wizardStep, setWizardStep] = useState<WizardStep>("client");
   const [allocationSubStep, setAllocationSubStep] =
     useState<AllocationSubStep>("supply");
+  const [laneGateActive, setLaneGateActive] = useState(false);
+  const [contractLaneLocked, setContractLaneLocked] = useState(false);
   const allocationFlowActive =
     (wizardEnabled && wizardStep === "allocation") || webAllocSubSteps;
   /** Hide field errors until the user tries to continue / create (avoids red UI on empty open). */
@@ -141,6 +143,7 @@ export function AddTripModal({
     if (!wizardEnabled) return;
     setWizardStep("client");
     setAllocationSubStep("supply");
+    setLaneGateActive(false);
   }, [wizardEnabled, organizationId]);
 
   useEffect(() => {
@@ -264,7 +267,9 @@ export function AddTripModal({
             ? form.state.supplySource === "aggregate"
               ? "Select transport partner and partner cost."
               : addTripWizardStepSubtitle(wizardStep)
-            : addTripWizardStepSubtitle(wizardStep),
+            : addTripWizardStepSubtitle(wizardStep, {
+                contractRouteLocked: contractLaneLocked,
+              }),
       };
     }
     return {
@@ -290,6 +295,7 @@ export function AddTripModal({
     useEnterpriseSteps,
     form.state.supplySource,
     form.state.assignLater,
+    contractLaneLocked,
   ]);
 
   const saleFillBody =
@@ -413,6 +419,13 @@ export function AddTripModal({
       return;
     }
     if (wizardStep === "client") {
+      if (laneGateActive) {
+        Alert.alert(
+          "Choose a lane",
+          "Select a contract lane, or tap Adhoc / Continue as adhoc to enter sale manually.",
+        );
+        return;
+      }
       if (stepIssues.length > 0) {
         Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
         return;
@@ -654,6 +667,9 @@ export function AddTripModal({
           allocationSubStep={
             mobileAggregateFleetKeypads ? allocationSubStep : undefined
           }
+          onLaneGateActiveChange={setLaneGateActive}
+          onContractLaneLockedChange={setContractLaneLocked}
+          onRequestChangeLane={() => setWizardStep("client")}
         />
       ) : (
       <AddTripFormFields

@@ -823,15 +823,24 @@ export default function ClientDetailScreen({
 
   const profileContractsForCard = useMemo<ProfileContract[]>(
     () =>
-      profileContracts.map((c) => ({
-        id: c.id,
-        pickup: c.pickup_area,
-        destination: c.drop_location,
-        price: Number(c.rate ?? 0),
-        pricingType: c.rate_type === "per_ton" ? "per_ton" : "per_trip",
-        notes: c.notes,
-      })),
-    [profileContracts],
+      profileContracts.map((c) => {
+        const whId = c.warehouse_id ?? null;
+        const whName =
+          whId
+            ? profileWarehouses.find((w) => w.id === whId)?.name ?? null
+            : null;
+        return {
+          id: c.id,
+          pickup: c.pickup_area,
+          destination: c.drop_location,
+          price: Number(c.rate ?? 0),
+          pricingType: c.rate_type === "per_ton" ? "per_ton" : "per_trip",
+          warehouseId: whId,
+          warehouseName: whName,
+          notes: c.notes,
+        };
+      }),
+    [profileContracts, profileWarehouses],
   );
 
   useEffect(() => {

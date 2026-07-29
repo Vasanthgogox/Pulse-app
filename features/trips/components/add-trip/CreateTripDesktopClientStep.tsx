@@ -1,8 +1,8 @@
 /**
- * Create Trip — step 1: billing client + sale value.
+ * Create Trip — step 1: billing client → optional contract lane gate → sale value.
  */
 import { Plus } from "lucide-react-native";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import Theme from "@/constants/Theme";
@@ -17,9 +17,9 @@ import {
   DesktopPickerHeaderActions,
   filterClientsByPartyQuery,
 } from "./CreateTripDesktopPickers";
+import { CreateTripLaneGatePanel } from "./CreateTripLaneGatePanel";
 import { DesktopSectionHeading } from "./CreateTripDesktopUi";
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
-import { ClientLaneSearchPicker } from "@/features/clients/components/ClientLaneSearchPicker";
 import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
 
 function formatInr(raw: string): string | null {
@@ -50,6 +50,8 @@ export type CreateTripDesktopClientStepProps = {
   onClearLane?: () => void;
   laneSearch?: string;
   onLaneSearchChange?: (value: string) => void;
+  /** Parent can block wizard Continue while the lane gate is showing. */
+  onLaneGateActiveChange?: (active: boolean) => void;
 };
 
 export const CreateTripDesktopClientStep = memo(
@@ -75,11 +77,29 @@ export const CreateTripDesktopClientStep = memo(
     onClearLane,
     laneSearch,
     onLaneSearchChange,
+    onLaneGateActiveChange,
   }: CreateTripDesktopClientStepProps) {
     const showClientChange = Boolean(clientId);
     const [saleModalOpen, setSaleModalOpen] = useState(false);
     const [saleDoneAttempted, setSaleDoneAttempted] = useState(false);
     const [partySearch, setPartySearch] = useState("");
+    /** After client pick: stay on lane gate until a lane is chosen or adhoc is confirmed. */
+    const [adhocTrip, setAdhocTrip] = useState(false);
+    /** Sticky: client has contracts (survives search filtering to zero rows). */
+    const [clientHasContracts, setClientHasContracts] = useState(false);
+
+    useEffect(() => {
+      setAdhocTrip(false);
+      setClientHasContracts(false);
+      setSaleModalOpen(false);
+      setSaleDoneAttempted(false);
+    }, [clientId]);
+
+    useEffect(() => {
+      if (!contractLanesLoading && contractLanes.length > 0) {
+        setClientHasContracts(true);
+      }
+    }, [contractLanesLoading, contractLanes.length]);
 
     const filteredClients = useMemo(
       () => filterClientsByPartyQuery(clients, partySearch),
@@ -118,7 +138,23 @@ export const CreateTripDesktopClientStep = memo(
       [selectedClient],
     );
 
-    const showMobileSaleKeypad = compact && Boolean(clientId);
+    const laneGateEnabled = Boolean(clientId && onSelectLane);
+    const showLaneGate =
+      laneGateEnabled &&
+      (contractLanesLoading ||
+        (clientHasContracts && !selectedLaneId && !adhocTrip));
+    const showPricing =
+      Boolean(clientId) &&
+      !showLaneGate &&
+      (!laneGateEnabled ||
+        !clientHasContracts ||
+        Boolean(selectedLaneId) ||
+        adhocTrip);
+
+    useEffect(() => {
+      onLaneGateActiveChange?.(showLaneGate);
+      return () => onLaneGateActiveChange?.(false);
+    }, [showLaneGate, onLaneGateActiveChange]);
 
     const handleSelectClient = useCallback(
       (client: ClientRow) => {
@@ -127,12 +163,32 @@ export const CreateTripDesktopClientStep = memo(
       [onSelectClient],
     );
 
-    const handleChangeClientFromModal = useCallback(() => {
+    const handleChangeClient = useCallback(() => {
+      setAdhocTrip(false);
       setSaleModalOpen(false);
       setSaleDoneAttempted(false);
+      onClearLane?.();
       onClearClient();
       onExpandClientList();
-    }, [onClearClient, onExpandClientList]);
+    }, [onClearClient, onClearLane, onExpandClientList]);
+
+    const handleChooseAdhoc = useCallback(() => {
+      onClearLane?.();
+      setAdhocTrip(true);
+    }, [onClearLane]);
+
+    const handleSelectLane = useCallback(
+      (lane: ClientLaneRate) => {
+        setAdhocTrip(false);
+        onSelectLane?.(lane);
+      },
+      [onSelectLane],
+    );
+
+    const handleClearLane = useCallback(() => {
+      onClearLane?.();
+      setAdhocTrip(false);
+    }, [onClearLane]);
 
     const handleSaleDone = useCallback(() => {
       if (!formatInr(clientPrice)) {
@@ -143,31 +199,49 @@ export const CreateTripDesktopClientStep = memo(
       setSaleModalOpen(false);
     }, [clientPrice]);
 
-    if (showMobileSaleKeypad) {
+    // ── Phase: contract lane gate (full page) ─────────────────────────────
+    if (showLaneGate && onSelectLane) {
+      return (
+        <CreateTripLaneGatePanel
+          compact={compact}
+          clientName={selectedClient?.name}
+          lanes={contractLanes}
+          loading={contractLanesLoading}
+          selectedLaneId={selectedLaneId}
+          onSelectLane={handleSelectLane}
+          onClearLane={handleClearLane}
+          onChooseAdhoc={handleChooseAdhoc}
+          onChangeClient={handleChangeClient}
+          laneSearch={laneSearch}
+          onLaneSearchChange={onLaneSearchChange}
+        />
+      );
+    }
+
+    // ── Phase: mobile pricing keypad ──────────────────────────────────────
+    if (compact && showPricing) {
       return (
         <View style={s.saleMobileKeypadRoot}>
-          {onSelectLane &&
-          (contractLanesLoading || contractLanes.length > 0) ? (
-            <ClientLaneSearchPicker
-              compact
-              lanes={contractLanes}
-              loading={contractLanesLoading}
-              selectedLaneId={selectedLaneId}
-              onSelect={onSelectLane}
-              onClear={onClearLane}
-              search={laneSearch}
-              onSearchChange={onLaneSearchChange}
-            />
+          {laneGateEnabled && (selectedLaneId || adhocTrip) ? (
+            <View style={s.lanePathBanner}>
+              <Text style={s.lanePathBannerText} numberOfLines={1}>
+                {selectedLaneId
+                  ? "Contract lane selected · sale can be adjusted"
+                  : "Adhoc trip · enter sale manually"}
+              </Text>
+              <Pressable onPress={handleClearLane} hitSlop={8}>
+                <Text style={s.lanePathBannerAction}>
+                  {selectedLaneId ? "Change lane" : "Use contract"}
+                </Text>
+              </Pressable>
+            </View>
           ) : null}
           <ClientSaleKeypadFlow
             compact
             clientPrice={clientPrice}
             onClientPriceChange={onClientPriceChange}
             partyPreview={partyPreview}
-            onPartyPress={() => {
-              onClearClient();
-              onExpandClientList();
-            }}
+            onPartyPress={handleChangeClient}
             errorMessage={
               clientPriceError
                 ? "Enter a sale price greater than 0"
@@ -178,6 +252,7 @@ export const CreateTripDesktopClientStep = memo(
       );
     }
 
+    // ── Phase: client pick (+ desktop sale after gate) ────────────────────
     return (
       <View style={[s.stepBody, compact && s.compactStepBody]}>
         <View style={s.commodityClientSection}>
@@ -260,21 +335,22 @@ export const CreateTripDesktopClientStep = memo(
             hasError={clientError}
           />
 
-          {clientId && onSelectLane ? (
-            <ClientLaneSearchPicker
-              compact={compact}
-              lanes={contractLanes}
-              loading={contractLanesLoading}
-              selectedLaneId={selectedLaneId}
-              onSelect={onSelectLane}
-              onClear={onClearLane}
-              search={laneSearch}
-              onSearchChange={onLaneSearchChange}
-            />
-          ) : null}
-
-          {clientId && !compact ? (
+          {showPricing && !compact ? (
             <View style={s.sourceRatesBlock}>
+              {laneGateEnabled && (selectedLaneId || adhocTrip) ? (
+                <View style={s.lanePathBanner}>
+                  <Text style={s.lanePathBannerText} numberOfLines={1}>
+                    {selectedLaneId
+                      ? "Contract lane applied"
+                      : "Adhoc trip — no contract lane"}
+                  </Text>
+                  <Pressable onPress={handleClearLane} hitSlop={8}>
+                    <Text style={s.lanePathBannerAction}>
+                      {selectedLaneId ? "Change lane" : "Use contract"}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
               <DesktopSectionHeading>Sale value</DesktopSectionHeading>
               <Pressable
                 style={[
@@ -315,7 +391,7 @@ export const CreateTripDesktopClientStep = memo(
 
         {!compact ? (
           <ClientSaleDesktopModal
-            visible={saleModalOpen && Boolean(clientId)}
+            visible={saleModalOpen && Boolean(clientId) && showPricing}
             onClose={() => {
               setSaleDoneAttempted(false);
               setSaleModalOpen(false);
@@ -327,7 +403,7 @@ export const CreateTripDesktopClientStep = memo(
               onClientPriceChange(v);
             }}
             partyPreview={partyPreview}
-            onChangeClient={handleChangeClientFromModal}
+            onChangeClient={handleChangeClient}
             priceError={saleDoneAttempted && !formatInr(clientPrice)}
           />
         ) : null}

@@ -303,6 +303,7 @@ export function LedgerReportModal({
   );
   const totalIn = sortedTransactions.reduce((s, r) => s + (r.amount_in ?? 0), 0);
   const totalOut = sortedTransactions.reduce((s, r) => s + (r.amount_out ?? 0), 0);
+  const netAmount = totalIn - totalOut;
   const plainText = ledgerToPlainText(sortedTransactions, totalIn, totalOut);
   const csv = ledgerToCsv(sortedTransactions);
   const html = ledgerToHtml(sortedTransactions, totalIn, totalOut, displayTitle);
@@ -610,9 +611,12 @@ export function LedgerReportModal({
                   {reportTitleParts.secondary}
                 </Text>
               ) : null}
-              <Text style={styles.previewSubtitle}>
-                Report preview · {recordCountLabel}
-              </Text>
+              <View style={styles.previewMetaRow}>
+                <Text style={styles.previewSubtitle}>Report preview</Text>
+                <View style={styles.recordCountPill}>
+                  <Text style={styles.recordCountPillText}>{recordCountLabel}</Text>
+                </View>
+              </View>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12}>
               <FontAwesome name="times" size={16} color={PULSE_METRONIC.text} />
@@ -627,6 +631,12 @@ export function LedgerReportModal({
               <View style={styles.summaryCell}>
                 <Text style={styles.summaryLabel}>{t("cashOut")}</Text>
                 <Text style={[styles.summaryValue, styles.negative]}>{formatAmount(totalOut)}</Text>
+              </View>
+              <View style={styles.summaryCell}>
+                <Text style={styles.summaryLabel}>Net balance</Text>
+                <Text style={[styles.summaryValue, netAmount >= 0 ? styles.positive : styles.negative]}>
+                  {formatAmount(Math.abs(netAmount))}
+                </Text>
               </View>
             </View>
           ) : null}
@@ -645,7 +655,7 @@ export function LedgerReportModal({
               {showScrollHint ? (
                 <View style={styles.scrollHintRow}>
                   <Text style={styles.scrollHintText}>
-                    Swipe horizontally for all columns
+                    Scroll horizontally to view all columns
                   </Text>
                   <FontAwesome name="long-arrow-right" size={11} color={PULSE_METRONIC.muted} />
                 </View>
@@ -697,7 +707,7 @@ export function LedgerReportModal({
                       customReport!.rows.map((row, idx) => (
                         <View
                           key={`custom-row-${idx}`}
-                          style={[styles.row, styles.customDataRow]}
+                          style={[styles.row, styles.customDataRow, idx % 2 === 1 && styles.altRow]}
                         >
                           {customReport!.columns.map((col) => {
                             const raw =
@@ -748,8 +758,8 @@ export function LedgerReportModal({
               {sortedTransactions.length === 0 ? (
                 <Text style={styles.empty}>{t("noLedgerEntries")}</Text>
               ) : (
-                sortedTransactions.map((row) => (
-                  <View key={row.id} style={[styles.row, styles.ledgerDataRow]}>
+                sortedTransactions.map((row, idx) => (
+                  <View key={row.id} style={[styles.row, styles.ledgerDataRow, idx % 2 === 1 && styles.altRow]}>
                     <View style={styles.cellEntity}>
                       <Text style={styles.entityName} numberOfLines={1}>{row.party_name}</Text>
                       <Text style={styles.entityDesc} numberOfLines={2}>
@@ -919,7 +929,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: PULSE_METRONIC.muted,
-    marginTop: 6,
+  },
+  previewMetaRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  recordCountPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: '#EEF3FA',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: PULSE_METRONIC.border,
+  },
+  recordCountPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: PULSE_METRONIC.text,
+    letterSpacing: 0.2,
   },
   closeBtn: {
     width: 36,
@@ -985,14 +1015,20 @@ const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: 'row',
     paddingHorizontal: TABLE_HPAD,
-    paddingVertical: 16,
-    gap: 20,
+    paddingVertical: 12,
+    gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: PULSE_METRONIC.border,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
   },
   summaryCell: {
     flex: 1,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: PULSE_METRONIC.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   summaryLabel: {
     fontSize: 11,
@@ -1003,7 +1039,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   summaryValue: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
@@ -1016,17 +1052,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: PULSE_METRONIC.border,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
     gap: COLUMN_GAP,
   },
   customTableHeader: {
     minHeight: 40,
   },
   th: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
     color: PULSE_METRONIC.muted,
-    letterSpacing: 0.15,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   thEntity: { flex: 1, minWidth: 0 },
   thFixed: { flexShrink: 0 },
@@ -1086,10 +1123,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: TABLE_HPAD,
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: PULSE_METRONIC.border,
     gap: COLUMN_GAP,
+  },
+  altRow: {
+    backgroundColor: '#FCFDFE',
   },
   customDataRow: {
     alignItems: 'flex-start',
@@ -1102,27 +1142,27 @@ const styles = StyleSheet.create({
   },
   cellEntity: { flex: 1, minWidth: 0 },
   entityName: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: PULSE_METRONIC.text,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   entityDesc: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     color: PULSE_METRONIC.muted,
     marginTop: 3,
-    lineHeight: 16,
+    lineHeight: 15,
   },
   cellDate: {
     width: 80,
     flexShrink: 0,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     color: PULSE_METRONIC.muted,
   },
   cellNum: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     textAlign: 'right',
     flexShrink: 0,
@@ -1132,7 +1172,7 @@ const styles = StyleSheet.create({
     width: 72,
   },
   cellFixed: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     color: PULSE_METRONIC.text,
     flexShrink: 0,

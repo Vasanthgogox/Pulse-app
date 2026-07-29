@@ -126,6 +126,7 @@ export function TripAssignmentWorkspace({
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const compact = width < 720;
+  const phone = width < 480;
   const [showAuditDrawer, setShowAuditDrawer] = useState(false);
 
   const tripLabel = getTripDisplayNumber(trip, organizationId ?? undefined);
@@ -173,9 +174,15 @@ export function TripAssignmentWorkspace({
   return (
     <View style={[aws.root, { paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={aws.header}>
-        <View style={[aws.headerInner, { paddingBottom: 8 }]}>
-          <View style={aws.headerLeft}>
+      <View style={[aws.header, compact && aws.headerMobile]}>
+        <View
+          style={[
+            aws.headerInner,
+            compact && aws.headerInnerMobile,
+            { paddingBottom: compact ? 10 : 8 },
+          ]}
+        >
+          <View style={[aws.headerLeft, compact && aws.headerLeftMobile]}>
             <TouchableOpacity
               style={aws.iconBtn}
               onPress={onClose}
@@ -184,8 +191,16 @@ export function TripAssignmentWorkspace({
             >
               <FontAwesome name="chevron-left" size={12} color={Theme.textSecondary} />
             </TouchableOpacity>
-            <View style={{ minWidth: 0 }}>
-              <Text style={aws.eyebrow}>Manifest management · driver & vehicle</Text>
+            <View style={{ minWidth: 0, flex: 1 }}>
+              {!phone ? (
+                <Text style={aws.eyebrow} numberOfLines={1}>
+                  Manifest management · driver & vehicle
+                </Text>
+              ) : (
+                <Text style={aws.eyebrow} numberOfLines={1}>
+                  Driver & vehicle
+                </Text>
+              )}
               <View style={aws.tripTitleRow}>
                 <Text style={aws.tripCode} numberOfLines={1}>
                   {tripLabel}
@@ -197,9 +212,9 @@ export function TripAssignmentWorkspace({
             </View>
           </View>
 
-          <View style={aws.headerRight}>
-            {driverPhoneDisplay ? (
-              <View style={[aws.phoneChip, compact && { maxWidth: 140 }]}>
+          <View style={[aws.headerRight, compact && aws.headerRightMobile]}>
+            {driverPhoneDisplay && !phone ? (
+              <View style={[aws.phoneChip, compact && { maxWidth: 132 }]}>
                 <FontAwesome name="phone" size={12} color={Theme.networkHubListCardOnlineDot} />
                 <Text style={aws.phoneChipText} numberOfLines={1}>
                   {driverPhoneDisplay}
@@ -207,19 +222,24 @@ export function TripAssignmentWorkspace({
               </View>
             ) : null}
             <TouchableOpacity
-              style={aws.activityBtn}
+              style={[aws.activityBtn, phone && aws.iconBtn]}
               onPress={() => setShowAuditDrawer(true)}
               activeOpacity={0.85}
+              accessibilityLabel="Activity"
             >
               <FontAwesome name="history" size={12} color={Theme.textMuted} />
               {wide ? <Text style={aws.activityBtnText}>Activity</Text> : null}
             </TouchableOpacity>
-            <TouchableOpacity style={aws.iconBtn} activeOpacity={0.85}>
-              <FontAwesome name="comment-o" size={14} color={Theme.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={aws.iconBtn} activeOpacity={0.85}>
-              <FontAwesome name="share-alt" size={14} color={Theme.textSecondary} />
-            </TouchableOpacity>
+            {!compact ? (
+              <>
+                <TouchableOpacity style={aws.iconBtn} activeOpacity={0.85}>
+                  <FontAwesome name="comment-o" size={14} color={Theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={aws.iconBtn} activeOpacity={0.85}>
+                  <FontAwesome name="share-alt" size={14} color={Theme.textSecondary} />
+                </TouchableOpacity>
+              </>
+            ) : null}
           </View>
         </View>
       </View>
@@ -237,42 +257,62 @@ export function TripAssignmentWorkspace({
       >
         {/* Dark route hero */}
         <View style={[aws.hero, compact && aws.heroMobile]}>
-          <View style={aws.heroRow}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <View style={aws.heroMetaRow}>
-                <View style={aws.heroMetaItem}>
+          <View style={[aws.heroRow, compact && aws.heroRowMobile]}>
+            <View style={[aws.heroRouteBlock, compact && aws.heroRouteBlockMobile]}>
+              <View style={[aws.heroMetaRow, compact && aws.heroMetaRowMobile]}>
+                <View style={[aws.heroMetaItem, compact && aws.heroMetaItemMobile]}>
                   <View style={aws.heroMetaIcon}>
                     <FontAwesome name="briefcase" size={10} color={Theme.primaryLight} />
                   </View>
-                  <Text style={aws.heroMetaLabel}>
+                  <Text style={aws.heroMetaLabel} numberOfLines={1}>
                     CLIENT: <Text style={aws.heroMetaValue}>{clientName}</Text>
                   </Text>
                 </View>
-                <View style={aws.heroMetaItem}>
+                <View style={[aws.heroMetaItem, compact && aws.heroMetaItemMobile]}>
                   <View style={aws.heroMetaIcon}>
                     <FontAwesome
-                      name="truck"
+                      name="user"
                       size={10}
                       color={Theme.networkHubListCardOnlineDot}
                     />
                   </View>
-                  <Text style={aws.heroMetaLabel}>
+                  <Text style={aws.heroMetaLabel} numberOfLines={1}>
                     SUPPLIER: <Text style={aws.heroMetaValue}>{supplierName}</Text>
                   </Text>
                 </View>
               </View>
 
-              <View style={[aws.routeRow, compact && aws.routeRowMobile]}>
-                <View style={[aws.routeEndpoint, compact && aws.routeEndpointMobile]}>
-                  <Text
-                    style={[aws.routeCity, compact && aws.routeCityMobile]}
-                    numberOfLines={1}
-                  >
-                    {origin}
-                  </Text>
-                  <Text style={aws.routeSub}>ORIGIN</Text>
+              {compact ? (
+                <View style={aws.routeStackMobile}>
+                  <View style={aws.routeEndpointMobileStack}>
+                    <Text style={[aws.routeCity, aws.routeCityMobile]} numberOfLines={1}>
+                      {origin}
+                    </Text>
+                    <Text style={aws.routeSub}>ORIGIN</Text>
+                  </View>
+                  <View style={aws.routeCenterMobile}>
+                    <View style={aws.routeLineMobile}>
+                      <View style={aws.routeLineFillMobile} />
+                      <View style={aws.routeDot}>
+                        <Text style={aws.routeDotText}>{driverInitial}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={aws.routeEndpointMobileStack}>
+                    <Text style={[aws.routeCity, aws.routeCityMobile]} numberOfLines={1}>
+                      {destination}
+                    </Text>
+                    <Text style={aws.routeSub}>DESTINATION</Text>
+                  </View>
                 </View>
-                {!compact ? (
+              ) : (
+                <View style={aws.routeRow}>
+                  <View style={aws.routeEndpoint}>
+                    <Text style={aws.routeCity} numberOfLines={1}>
+                      {origin}
+                    </Text>
+                    <Text style={aws.routeSub}>ORIGIN</Text>
+                  </View>
                   <View style={aws.routeCenter}>
                     <View style={aws.routeLine}>
                       <View style={aws.routeLineFill} />
@@ -281,45 +321,40 @@ export function TripAssignmentWorkspace({
                       </View>
                     </View>
                   </View>
-                ) : (
-                  <View style={aws.routeArrowMobile}>
-                    <FontAwesome name="arrow-right" size={12} color={Theme.primaryLight} />
+                  <View style={[aws.routeEndpoint, aws.routeEndpointEnd]}>
+                    <Text style={[aws.routeCity, aws.routeCityEnd]} numberOfLines={1}>
+                      {destination}
+                    </Text>
+                    <Text style={[aws.routeSub, aws.routeSubEnd]}>DESTINATION</Text>
                   </View>
-                )}
-                <View
-                  style={[
-                    aws.routeEndpoint,
-                    aws.routeEndpointEnd,
-                    compact && aws.routeEndpointMobile,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      aws.routeCity,
-                      compact && aws.routeCityMobile,
-                      aws.routeCityEnd,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {destination}
-                  </Text>
-                  <Text style={[aws.routeSub, aws.routeSubEnd]}>DESTINATION</Text>
                 </View>
-              </View>
+              )}
             </View>
 
             <View style={[aws.metricsBox, compact && aws.metricsBoxMobile]}>
-              <View style={aws.metricCell}>
-                <Text style={aws.metricLabel}>Manifest range</Text>
-                <Text style={aws.metricValue}>{range}</Text>
+              <View style={[aws.metricCell, compact && aws.metricCellMobile]}>
+                <Text style={aws.metricLabel}>Range</Text>
+                <Text style={aws.metricValue} numberOfLines={1}>
+                  {range}
+                </Text>
               </View>
-              <View style={aws.metricCell}>
-                <Text style={aws.metricLabel}>ETA manifest</Text>
-                <Text style={aws.metricValue}>{eta}</Text>
+              <View style={[aws.metricCell, compact && aws.metricCellMobile]}>
+                <Text style={aws.metricLabel}>ETA</Text>
+                <Text style={aws.metricValue} numberOfLines={1}>
+                  {eta}
+                </Text>
               </View>
-              <View style={[aws.metricCell, aws.metricCellLast]}>
+              <View
+                style={[
+                  aws.metricCell,
+                  aws.metricCellLast,
+                  compact && aws.metricCellMobile,
+                ]}
+              >
                 <Text style={aws.metricLabel}>Status</Text>
-                <Text style={aws.metricValueWarn}>{statusLabel}</Text>
+                <Text style={aws.metricValueWarn} numberOfLines={1}>
+                  {statusLabel}
+                </Text>
               </View>
             </View>
           </View>
@@ -420,7 +455,7 @@ export function TripAssignmentWorkspace({
                         ) : null}
                       </View>
                     </View>
-                    <View style={{ alignItems: compact ? "flex-start" : "flex-end" }}>
+                    <View style={aws.snapshotBadgeWrap}>
                       <View style={aws.badgeOk}>
                         <Text style={aws.badgeOkText}>DL validated</Text>
                       </View>
@@ -524,7 +559,7 @@ export function TripAssignmentWorkspace({
                         ) : null}
                       </View>
                     </View>
-                    <View style={{ alignItems: compact ? "flex-start" : "flex-end" }}>
+                    <View style={aws.snapshotBadgeWrap}>
                       <View style={aws.badgeBlue}>
                         <Text style={aws.badgeBlueText}>GPS connected</Text>
                       </View>
@@ -536,23 +571,25 @@ export function TripAssignmentWorkspace({
             </View>
 
             {/* Audit footer */}
-            <View style={aws.auditCard}>
-              <View style={aws.auditHeader}>
+            <View style={[aws.auditCard, compact && aws.auditCardMobile]}>
+              <View style={[aws.auditHeader, compact && aws.auditHeaderMobile]}>
                 <View style={aws.auditTitleRow}>
                   <FontAwesome
                     name="check-square-o"
                     size={14}
                     color={Theme.assignmentVehicleAccent}
                   />
-                  <Text style={aws.auditTitle}>
-                    Dispatch audit log & change governance
+                  <Text style={[aws.auditTitle, compact && aws.auditTitleMobile]}>
+                    {compact
+                      ? "Dispatch audit & governance"
+                      : "Dispatch audit log & change governance"}
                   </Text>
                 </View>
                 <Text style={aws.auditId}>Manifest ID: {tripLabel}</Text>
               </View>
 
-              <View style={aws.auditGrid}>
-                <View style={aws.auditReason}>
+              <View style={[aws.auditGrid, compact && aws.auditGridMobile]}>
+                <View style={[aws.auditReason, compact && aws.auditFieldMobile]}>
                   <Text style={aws.fieldLabel}>Reason for resource substitution *</Text>
                   <View style={aws.selectLike}>
                     <Text style={aws.selectLikeText}>
@@ -584,21 +621,24 @@ export function TripAssignmentWorkspace({
                   </View>
                 </View>
 
-                <View style={aws.auditRemarks}>
+                <View style={[aws.auditRemarks, compact && aws.auditFieldMobile]}>
                   <Text style={aws.fieldLabel}>Dispatcher audit remarks</Text>
                   <TextInput
-                    style={aws.input}
+                    style={[aws.input, compact && aws.inputMobile]}
                     value={changeRemarks}
                     onChangeText={onChangeRemarksChange}
                     placeholder="Add operational notes for compliance record…"
                     placeholderTextColor={Theme.textMuted}
+                    multiline={compact}
+                    numberOfLines={compact ? 3 : 1}
                   />
                 </View>
 
-                <View style={aws.auditSubmitWrap}>
+                <View style={[aws.auditSubmitWrap, compact && aws.auditSubmitWrapMobile]}>
                   <TouchableOpacity
                     style={[
                       aws.confirmBtn,
+                      compact && aws.confirmBtnMobile,
                       (confirmDisabled || confirmLoading) && aws.confirmBtnDisabled,
                     ]}
                     onPress={onConfirm}

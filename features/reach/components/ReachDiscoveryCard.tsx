@@ -10,7 +10,8 @@ import Theme from "@/constants/Theme";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import { ArrowUpRight, Rocket } from "lucide-react-native";
-import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { SPLIT_STACK_BREAKPOINT } from "@/features/network/constants/networkHubGrid";
+import { useWindowDimensions, Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 const cardShadow = Platform.select({
   ios: {
@@ -34,12 +35,17 @@ export interface ReachDiscoveryCardProps {
 export function ReachDiscoveryCard({ layout = "default" }: ReachDiscoveryCardProps) {
   const router = useRouter();
   const sidebar = layout === "sidebar";
+  const { width } = useWindowDimensions();
+  const NATIVE_APP = Platform.OS !== "web";
+  const isMobileLayout = !sidebar && (NATIVE_APP || width < SPLIT_STACK_BREAKPOINT);
 
   return (
     <Pressable
       style={({ pressed }) => [
         styles.card,
         sidebar && styles.cardSidebar,
+        !sidebar && isMobileLayout && styles.cardMobile,
+        !sidebar && !isMobileLayout && styles.cardDesktop,
         pressed && styles.cardPressed,
       ]}
       onPress={() => router.push(ROUTES.REACH.HOME as never)}
@@ -47,20 +53,22 @@ export function ReachDiscoveryCard({ layout = "default" }: ReachDiscoveryCardPro
       accessibilityLabel="Open Pulse Reach"
     >
       <View style={styles.glowBlob} pointerEvents="none" />
-      <View style={styles.iconWrap}>
-        <Rocket size={17} color={Theme.textOnPrimary} strokeWidth={2.25} />
-      </View>
-      <View style={styles.textCol}>
-        <View style={styles.chipRow}>
-          <Text style={styles.chip}>GROWTH</Text>
-          <View style={styles.chipDot} />
-          <Text style={styles.chipMeta}>BOOST</Text>
+      <View style={[styles.body, sidebar && styles.bodySidebar]}>
+        <View style={styles.iconWrap}>
+          <Rocket size={17} color={Theme.textOnPrimary} strokeWidth={2.25} />
         </View>
-        <Text style={styles.title}>Pulse Reach</Text>
-        <Text style={styles.sub}>Boost loads, earn credits</Text>
-      </View>
-      <View style={styles.arrowOrb}>
-        <ArrowUpRight size={13} color={Theme.accentBrown} strokeWidth={2.4} />
+        <View style={styles.textCol}>
+          <View style={styles.chipRow}>
+            <Text style={styles.chip}>GROWTH</Text>
+            <View style={styles.chipDot} />
+            <Text style={styles.chipMeta}>BOOST</Text>
+          </View>
+          <Text style={styles.title}>Pulse Reach</Text>
+          <Text style={styles.sub}>Boost loads, earn credits</Text>
+        </View>
+        <View style={[styles.arrowOrb, sidebar && styles.arrowOrbSidebar]}>
+          <ArrowUpRight size={13} color={Theme.accentBrown} strokeWidth={2.4} />
+        </View>
       </View>
     </Pressable>
   );
@@ -68,27 +76,51 @@ export function ReachDiscoveryCard({ layout = "default" }: ReachDiscoveryCardPro
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
     backgroundColor: Theme.accentBrownWash,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.accentBrownBorder,
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 14,
+    minHeight: 108,
     marginHorizontal: 16,
     marginTop: 10,
     overflow: "hidden",
     position: "relative",
+    justifyContent: "center",
     ...cardShadow,
+  },
+  cardDesktop: {
+    // Desktop matches NetworkLoadsQuickCards tile height.
+    borderRadius: 14,
+    paddingVertical: 14,
+    minHeight: 108,
+  },
+  cardMobile: {
+    // Mobile matches NetworkLoadsQuickCards mobile tile height.
+    borderRadius: 16,
+    paddingVertical: 12,
+    minHeight: 96,
   },
   cardSidebar: {
     marginHorizontal: 0,
-    marginTop: 12,
+    marginTop: 10,
     width: "100%",
+    minHeight: 92,
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    justifyContent: "center",
   },
   cardPressed: { opacity: 0.94, transform: [{ scale: 0.99 }] },
+  body: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  bodySidebar: {
+    gap: 10,
+  },
   glowBlob: {
     position: "absolute",
     right: -18,
@@ -100,9 +132,9 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   iconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.accentBrownDeep,
@@ -136,24 +168,30 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   title: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "700",
     letterSpacing: -0.2,
     color: Theme.accentBrownDeep,
   },
   sub: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
     color: Theme.textRouteCard,
   },
   arrowOrb: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.accentBrownBorder,
+    flexShrink: 0,
+  },
+  arrowOrbSidebar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
   },
 });

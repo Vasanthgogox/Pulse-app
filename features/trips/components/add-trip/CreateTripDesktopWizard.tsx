@@ -58,6 +58,12 @@ export type CreateTripDesktopWizardProps = {
   layout?: "desktop" | "mobile";
   /** Mobile aggregate fleet entry — party-style keypad sub-step. */
   allocationSubStep?: AllocationSubStep;
+  /** True while client step is on the contract/adhoc lane gate. */
+  onLaneGateActiveChange?: (active: boolean) => void;
+  /** True when a contract lane is selected (route step becomes date-first). */
+  onContractLaneLockedChange?: (locked: boolean) => void;
+  /** Navigate back to the client / lane-gate step (Change lane on route). */
+  onRequestChangeLane?: () => void;
 };
 
 export function CreateTripDesktopWizard({
@@ -71,6 +77,9 @@ export function CreateTripDesktopWizard({
   sourceIndent = null,
   layout = "desktop",
   allocationSubStep,
+  onLaneGateActiveChange,
+  onContractLaneLockedChange,
+  onRequestChangeLane,
 }: CreateTripDesktopWizardProps) {
   const isMobileLayout = layout === "mobile";
   const router = useRouter();
@@ -217,6 +226,15 @@ export function CreateTripDesktopWizard({
     setSelectedLaneId(null);
   }, []);
 
+  const handleChangeLaneFromRoute = useCallback(() => {
+    setSelectedLaneId(null);
+    onRequestChangeLane?.();
+  }, [onRequestChangeLane]);
+
+  useEffect(() => {
+    onContractLaneLockedChange?.(Boolean(selectedLaneId));
+  }, [selectedLaneId, onContractLaneLockedChange]);
+
   const handleAddClient = useCallback(() => {
     router.push({
       pathname: "/(modals)/add-client",
@@ -281,6 +299,7 @@ export function CreateTripDesktopWizard({
           onClearLane={handleClearLane}
           laneSearch={laneSearch}
           onLaneSearchChange={setLaneSearch}
+          onLaneGateActiveChange={onLaneGateActiveChange}
         />
       );
       break;
@@ -296,6 +315,8 @@ export function CreateTripDesktopWizard({
           pickupRecommendations={pickupRecommendations}
           onSelectPickupRecommendation={handleSelectPickupRecommendation}
           pickupLocationsLoading={pickupLocationsLoading}
+          contractRouteLocked={Boolean(selectedLaneId)}
+          onChangeLane={selectedLaneId ? handleChangeLaneFromRoute : undefined}
         />
       );
       break;
@@ -500,12 +521,15 @@ export function CreateTripDesktopWizard({
       {!isMobileLayout ? (
         <View style={s.wizardWorkspaceAside}>
           <MotiView
-            key={`aside-${wizardStep}`}
+            key={`aside-${wizardStep}-${selectedLaneId ? "lane" : "adhoc"}`}
             from={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ type: "timing", duration: 260, easing: STEP_FADE_EASE }}
           >
-            <CreateTripDesktopAsideArt wizardStep={wizardStep} />
+            <CreateTripDesktopAsideArt
+              wizardStep={wizardStep}
+              contractRouteLocked={Boolean(selectedLaneId)}
+            />
           </MotiView>
         </View>
       ) : null}

@@ -1,5 +1,5 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { ArrowUpDown, ChevronRight, MapPin } from "lucide-react-native";
+import { ArrowUpDown, ChevronRight, MapPin, Replace } from "lucide-react-native";
 import { memo, useCallback, useState } from "react";
 import {
   Modal,
@@ -73,6 +73,13 @@ export type CreateTripDesktopRouteStepProps = {
   pickupRecommendations?: readonly PickupRecommendation[];
   onSelectPickupRecommendation?: (rec: PickupRecommendation) => void;
   pickupLocationsLoading?: boolean;
+  /**
+   * When a contract lane is selected, pickup/drop are locked from the lane —
+   * show a compact corridor summary and make trip date the primary focus.
+   */
+  contractRouteLocked?: boolean;
+  /** Jump back to client / lane gate to pick a different contract lane. */
+  onChangeLane?: () => void;
 };
 
 export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteStep({
@@ -85,6 +92,8 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
   pickupRecommendations = [],
   onSelectPickupRecommendation,
   pickupLocationsLoading = false,
+  contractRouteLocked = false,
+  onChangeLane,
 }: CreateTripDesktopRouteStepProps) {
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
 
@@ -120,13 +129,33 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
     [onSelectPickupRecommendation],
   );
 
+  const pickupLabel = state.pickupArea.trim() || "—";
+  const dropLabel = state.dropLocation.trim() || "—";
+
   const dateSection = (
-    <View style={[s.stepSection, compact && s.compactStepSection]}>
+    <View
+      style={[
+        s.stepSection,
+        compact && s.compactStepSection,
+        contractRouteLocked && s.routeDateSectionHero,
+      ]}
+    >
       <Text style={[s.sectionHeading, compact && s.compactSectionHeading]}>
         Trip date
       </Text>
+      {contractRouteLocked ? (
+        <Text style={s.routeDateHeroHint}>
+          Contract corridor is locked — choose when this move should start.
+        </Text>
+      ) : null}
       <View style={s.routeDateSection}>
-        <View style={[s.quickDateRow, compact && s.compactQuickDateRow]}>
+        <View
+          style={[
+            s.quickDateRow,
+            compact && s.compactQuickDateRow,
+            contractRouteLocked && s.quickDateRowHero,
+          ]}
+        >
           {quickDates.map(({ label, get }) => {
             const iso = get();
             const isActive = state.tripStartDate === iso;
@@ -136,6 +165,7 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
                 style={[
                   s.quickDateChip,
                   compact && s.compactQuickDateChip,
+                  contractRouteLocked && s.quickDateChipHero,
                   isActive && s.quickDateChipActive,
                 ]}
                 onPress={() => setters.setTripStartDate(iso)}
@@ -145,6 +175,7 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
                 <Text
                   style={[
                     s.quickDateChipText,
+                    contractRouteLocked && s.quickDateChipTextHero,
                     isActive && s.quickDateChipTextActive,
                   ]}
                 >
@@ -159,12 +190,13 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
             s.inputBoxClean,
             s.routeDateInputShell,
             compact && s.compactRouteDateInputShell,
+            contractRouteLocked && s.routeDateInputShellHero,
             fieldInvalid("tripDate") && s.inputBoxCleanError,
           ]}
         >
           {Platform.OS === "web" ? (
             <TextInput
-              style={s.dateInput}
+              style={[s.dateInput, contractRouteLocked && s.dateInputHero]}
               placeholder="YYYY-MM-DD"
               placeholderTextColor={Theme.placeholder}
               value={state.tripStartDate}
@@ -177,7 +209,12 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
                 onPress={() => setShowStartDatePicker(true)}
                 activeOpacity={0.85}
               >
-                <Text style={s.routeDateNativeValue}>
+                <Text
+                  style={[
+                    s.routeDateNativeValue,
+                    contractRouteLocked && s.routeDateNativeValueHero,
+                  ]}
+                >
                   {state.tripStartDate
                     ? new Date(`${state.tripStartDate}T12:00:00`).toLocaleDateString(
                         "en-IN",
@@ -245,6 +282,66 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
           )}
         </View>
       </View>
+    </View>
+  );
+
+  const contractCorridorSummary = (
+    <View style={[s.stepSection, compact && s.compactStepSection, s.routeContractSummary]}>
+      <View style={s.routeContractHeaderRow}>
+        <Text style={[s.sectionHeading, compact && s.compactSectionHeading, s.routeContractHeaderTitle]}>
+          Contract corridor
+        </Text>
+        {onChangeLane ? (
+          <Pressable
+            onPress={onChangeLane}
+            style={({ pressed }) => [
+              s.routeChangeLaneBtn,
+              compact && s.routeChangeLaneBtnCompact,
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Change contract lane"
+            hitSlop={8}
+          >
+            <Replace size={compact ? 12 : 13} color={Theme.primary} strokeWidth={2.4} />
+            <Text style={[s.routeChangeLaneBtnText, compact && s.routeChangeLaneBtnTextCompact]}>
+              Change lane
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={s.routeContractCard}>
+        <View style={s.routeContractNode}>
+          <View style={s.routeContractPin}>
+            <MapPin size={14} color={Theme.primary} strokeWidth={2.5} />
+          </View>
+          <View style={s.routeContractNodeCopy}>
+            <Text style={s.routeContractNodeLabel}>Pickup</Text>
+            <Text style={s.routeContractNodeValue} numberOfLines={2}>
+              {pickupLabel}
+            </Text>
+          </View>
+        </View>
+        <View style={s.routeContractDivider}>
+          <View style={s.routeContractRule} />
+          <ChevronRight size={14} color={Theme.textMuted} strokeWidth={2.5} />
+          <View style={s.routeContractRule} />
+        </View>
+        <View style={s.routeContractNode}>
+          <View style={[s.routeContractPin, s.routeContractPinDrop]}>
+            <ChevronRight size={14} color={Theme.iconPrimary} strokeWidth={2.5} />
+          </View>
+          <View style={s.routeContractNodeCopy}>
+            <Text style={s.routeContractNodeLabel}>Drop</Text>
+            <Text style={s.routeContractNodeValue} numberOfLines={2}>
+              {dropLabel}
+            </Text>
+          </View>
+        </View>
+      </View>
+      <Text style={s.routeContractLockedHint}>
+        From your selected contract lane. Use Change lane to pick a different corridor.
+      </Text>
     </View>
   );
 
@@ -334,6 +431,25 @@ export const CreateTripDesktopRouteStep = memo(function CreateTripDesktopRouteSt
       ) : null}
     </View>
   );
+
+  if (contractRouteLocked) {
+    if (compact) {
+      return (
+        <View style={[s.stepBody, s.compactStepBody, s.compactRouteBody]}>
+          {dateSection}
+          {contractCorridorSummary}
+        </View>
+      );
+    }
+    return (
+      <View style={s.stepBody}>
+        <View style={s.routeStepGridContract}>
+          <View style={s.routeStepColPrimary}>{dateSection}</View>
+          <View style={s.routeStepColSecondary}>{contractCorridorSummary}</View>
+        </View>
+      </View>
+    );
+  }
 
   /** Mobile: dedicated vertical stack — never reuse desktop row grid (avoids RN Web overlap). */
   if (compact) {
