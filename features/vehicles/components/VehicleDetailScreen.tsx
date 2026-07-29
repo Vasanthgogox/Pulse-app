@@ -37,9 +37,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { canAccessFinance } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
 import { useMemberAccess } from "@/lib/useMemberAccess";
-import { pickAndUploadVehicleAvatar } from "@/lib/avatarUpload";
-import { formatINR, formatLedgerDate, formatRelative, normalizeVehicleNumberForMatch } from "@/lib/format";
-import { useInvalidateVehicles } from "@/lib/queries";
+import { formatINR, formatLedgerDate, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
@@ -51,21 +49,19 @@ import {
   supplierRowToTripRow,
   type TripRow,
 } from "@/features/trips/services/trips.service";
-import { VehicleHealthBadge } from "@/features/ai";
 import { buildTripPnL, getExpenseLinesForTripPnL } from "@/features/vehicles/pnl";
-import { getVehicleById, updateVehicle, type VehicleRow } from "../services/vehicles.service";
+import { getVehicleById, type VehicleRow } from "../services/vehicles.service";
 import {
   AddVehicleEntryModal,
   type TripOption,
   type DriverOption,
 } from "./AddVehicleEntryModal";
-import { VehicleDocumentsSection } from "./VehicleDocumentsSection";
 import { VehicleFleetRankingTab } from "./analytics/VehicleFleetRankingTab";
 import { backfillVehicleOperationalCashLedger } from "@/features/ledger/vehicle";
 import { ROUTES } from "@/lib/routes";
 import { VehicleOperationsHub } from "./VehicleOperationsHub";
 import { VehicleAvatar } from "./VehicleAvatar";
-import { VehiclePhotoPicker } from "./VehiclePhotoPicker";
+import { VehicleProfileHub } from "./desktop/VehicleProfileHub";
 
 export interface VehicleDetailScreenProps {
   vehicleId: string;
@@ -91,7 +87,6 @@ export default function VehicleDetailScreen({
   const { can: canSurface } = useMemberAccess();
   const canAddTransaction =
     canAccessFinance(capabilities) && canSurface("finance.add_transaction");
-  const canEditVehicle = canSurface("fleet.vehicles.edit");
   const canViewVehicleAnalytics = canSurface("fleet.vehicles.analytics");
   const canViewVehicleDocuments = canSurface("fleet.vehicles.documents");
   const [vehicle, setVehicle] = useState<VehicleRow | null>(null);
@@ -111,8 +106,6 @@ export default function VehicleDetailScreen({
   const initialLoadDoneRef = useRef(false);
   const lastFocusRefreshRef = useRef(0);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
-  const [vehiclePhotoUploading, setVehiclePhotoUploading] = useState(false);
-  const invalidateVehicles = useInvalidateVehicles();
   const queryClient = useQueryClient();
   const openAddEntryHandledRef = useRef(false);
   const cashLedgerBackfillAttemptRef = useRef(0);
@@ -350,37 +343,6 @@ export default function VehicleDetailScreen({
     );
   }, [driverRowsForLedger, vehicle]);
 
-  const handleChangeVehiclePhoto = async () => {
-    const orgId = currentOrganization?.id;
-    if (!orgId || !vehicle || !canEditVehicle) return;
-    setVehiclePhotoUploading(true);
-    const { path, error: pickErr } = await pickAndUploadVehicleAvatar(vehicle.id);
-    if (pickErr) {
-      setVehiclePhotoUploading(false);
-      Alert.alert("Photo upload failed", pickErr.message);
-      return;
-    }
-    if (!path) {
-      setVehiclePhotoUploading(false);
-      return;
-    }
-    const { error: updateErr, vehicle: updated } = await updateVehicle(orgId, vehicle.id, {
-      avatar_url: path,
-      avatar_seed: null,
-    });
-    setVehiclePhotoUploading(false);
-    if (updateErr) {
-      Alert.alert("Could not save photo", updateErr.message);
-      return;
-    }
-    if (updated) {
-      setVehicle(updated);
-    } else {
-      setVehicle((v) => (v ? { ...v, avatar_url: path, avatar_seed: null } : v));
-    }
-    invalidateVehicles(orgId);
-  };
-
   const contractValue = useMemo(
     () => missionRows.reduce((s, r) => s + r.sales, 0),
     [missionRows],
@@ -494,23 +456,6 @@ export default function VehicleDetailScreen({
   const profileIdentitySubtitle = [linkedDriver?.name?.trim(), vehicleTypeLabel?.trim()]
     .filter((value): value is string => Boolean(value && value !== "—"))
     .join(" • ") || "—";
-  const bodyTypeDisplay = vehicle.vehicle_body_type?.trim() || "—";
-  const profileSpecRows = [
-    { label: "Vehicle type", value: vehicleTypeDisplay },
-    {
-      label: "Body",
-      value:
-        bodyTypeDisplay !== "—" &&
-        bodyTypeDisplay.toUpperCase() !== vehicleTypeDisplay.toUpperCase()
-          ? bodyTypeDisplay
-          : "—",
-    },
-    { label: "Brand / model", value: vehicleBrandModelLabel || "—" },
-    { label: "Capacity", value: vehicle.capacity?.trim() || "—" },
-    { label: "Axle", value: vehicle.vehicle_axle?.trim() || "—" },
-    { label: "Size", value: vehicle.vehicle_size?.trim() || "—" },
-  ].filter((row, index) => index === 0 || row.value !== "—");
-
   const heroDecorAnimatedStyle = isWebDesktop
     ? {
         opacity: heroDecorProgress.interpolate({
@@ -1002,105 +947,18 @@ export default function VehicleDetailScreen({
             { paddingTop: insets.top, paddingBottom: insets.bottom },
           ]}
         >
-          <View style={styles.profileModalHeader}>
-            <Text style={styles.profileModalTitle}>Vehicle Profile</Text>
-            <TouchableOpacity
-              onPress={() => setShowProfileModal(false)}
-              style={styles.profileModalCloseBtn}
-              hitSlop={12}
-            >
-              <FontAwesome
-                name="times"
-                size={18}
-                color={Theme.textPrimaryDark}
-              />
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            style={styles.profileModalScroll}
-            contentContainerStyle={styles.profileModalContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.profileCard}>
-              <View style={styles.profileCardTop}>
-                <VehiclePhotoPicker
-                  vehicleNumber={vehicle.vehicle_number}
-                  avatarUrl={vehicle.avatar_url}
-                  size={88}
-                  uploading={vehiclePhotoUploading}
-                  onPress={handleChangeVehiclePhoto}
-                  style={styles.profilePhotoPicker}
-                />
-                <View style={styles.profileCardTopText}>
-                  <Text style={styles.profileEntityName} numberOfLines={2}>
-                    {vehicle.vehicle_number}
-                  </Text>
-                  <View style={styles.profileBadges}>
-                    <View
-                      style={[styles.profileBadge, styles.profileBadgeCore]}
-                    >
-                      <Text style={styles.profileBadgeCoreText}>
-                        {vehicleTypeDisplay}
-                      </Text>
-                    </View>
-                    {vehicleBrandModelLabel &&
-                    vehicleBrandModelLabel.toUpperCase() !==
-                      vehicleTypeDisplay.toUpperCase() ? (
-                      <View style={styles.profileBadge}>
-                        <Text style={styles.profileBadgeText}>
-                          {vehicleBrandModelLabel}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-              </View>
-              <View style={styles.profileSpecList}>
-                {profileSpecRows.map((row, index) => (
-                  <View
-                    key={row.label}
-                    style={[
-                      styles.profileSpecRow,
-                      index === profileSpecRows.length - 1 &&
-                        styles.profileSpecRowLast,
-                    ]}
-                  >
-                    <Text style={styles.profileSpecLabel}>{row.label}</Text>
-                    <Text style={styles.profileSpecValue} numberOfLines={2}>
-                      {row.value === "—" ? "Not set" : row.value}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-              {currentOrganization?.id && (
-                <View style={styles.profileGrid}>
-                  <View style={styles.profileGridItem}>
-                    <Text style={styles.profileGridLabel}>Health</Text>
-                    <VehicleHealthBadge
-                      organizationId={currentOrganization.id}
-                      vehicleId={vehicleId}
-                    />
-                  </View>
-                  <View style={styles.profileGridItem}>
-                    <Text style={styles.profileGridLabel}>Added</Text>
-                    <Text style={styles.profileGridValue}>
-                      {formatRelative(vehicle.created_at)}
-                    </Text>
-                  </View>
-                </View>
-              )}
-            </View>
-            {currentOrganization?.id && canViewVehicleDocuments && (
-              <VehicleDocumentsSection
-                organizationId={currentOrganization.id}
-                vehicleId={vehicleId}
-                documents={vehicle.documents}
-                onDocumentsUpdated={(docs) =>
-                  setVehicle((v) => (v ? { ...v, documents: docs } : null))
-                }
-              />
-            )}
-          </ScrollView>
+          {vehicle ? (
+            <VehicleProfileHub
+              vehicle={vehicle}
+              tripCount={vehicleTrips.length}
+              onBack={() => setShowProfileModal(false)}
+              organizationId={currentOrganization?.id}
+              canEditDocuments={canViewVehicleDocuments}
+              onDocumentsUpdated={(docs) =>
+                setVehicle((v) => (v ? { ...v, documents: docs } : null))
+              }
+            />
+          ) : null}
         </View>
       </Modal>
     </View>

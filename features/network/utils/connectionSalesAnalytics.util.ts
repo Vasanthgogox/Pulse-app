@@ -1,6 +1,7 @@
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
 import { getTripOperationalDisplayCode } from "@/features/operations/display";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { formatCityStateLabel } from "@/lib/placeCityState.util";
 
 export type SalesDateRange = "3m" | "6m" | "12m" | "all";
 export type SalesRoleFilter = "CLIENT" | "SUPPLIER";
@@ -32,6 +33,8 @@ export type SalesSlice = {
   label: string;
   value: number;
   color: string;
+  /** Optional amount shown beside % in donut legends (e.g. margin ₹). */
+  valueLabel?: string;
 };
 
 export type SalesBarItem = {
@@ -136,13 +139,12 @@ export function ratingFilledCount(rating: number | null | undefined): number {
   return Math.max(0, Math.min(5, Math.round(rating)));
 }
 
-/** Primary city/area label from a trip location string. */
+/** Primary city/state label from a trip location string. */
 export function normalizeLaneLocation(value: string | null | undefined): string {
-  const raw = (value ?? "").trim();
-  if (!raw) return "Unknown";
-  const primary = raw.split(",")[0]?.trim() || raw;
-  if (primary.length > 24) return `${primary.slice(0, 22)}…`;
-  return primary;
+  const label = formatCityStateLabel(value);
+  if (!label) return "Unknown";
+  if (label.length > 28) return `${label.slice(0, 26)}…`;
+  return label;
 }
 
 export function getTripOrigin(trip: TripRow): string {

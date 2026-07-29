@@ -155,3 +155,118 @@ export function growRowAccentColor(tone: RecommendationPillTone): string {
   if (tone === "mutual") return "#50CD89";
   return "#A1A5B7";
 }
+
+export type LoadCenterRecommendMode = "give" | "get";
+
+function normalizeOperatingModel(org: DiscoverOrg): string {
+  return String(org.operating_model ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+/** Asset / hybrid orgs — own fleet capacity to quote on give-load. */
+export function isAssetOwnerDiscoverOrg(org: DiscoverOrg): boolean {
+  const model = normalizeOperatingModel(org);
+  return model === "ASSET_BASED" || model === "HYBRID";
+}
+
+/** Aggregate / hybrid orgs — post indents to market (get-load counterparties). */
+export function isAggregatorDiscoverOrg(org: DiscoverOrg): boolean {
+  const model = normalizeOperatingModel(org);
+  return model === "NON_ASSET" || model === "HYBRID";
+}
+
+function loadCenterMarketActivityScore(org: ScoredDiscoverOrg): number {
+  const rec =
+    typeof org.recommendation_score === "number" ? org.recommendation_score : 0;
+  const trips = typeof org.trip_count === "number" ? org.trip_count : 0;
+  const mutuals = org.mutual_count ?? org.mutual_connections_count ?? 0;
+  const lanes = org.lane_overlap_count ?? 0;
+  return rec * 1000 + trips * 10 + mutuals * 5 + lanes * 3 + org.score;
+}
+
+/**
+ * Load Center partner suggestions:
+ * - give → asset-owning suppliers (ASSET_BASED / HYBRID)
+ * - get → aggregators sharing market indents (NON_ASSET / HYBRID), ranked by activity
+ */
+export function pickLoadCenterRecommendations(
+  orgs: readonly DiscoverOrg[],
+  opts: {
+    mode: LoadCenterRecommendMode;
+    limit: number;
+    dismissed?: ReadonlySet<string>;
+  },
+): ScoredDiscoverOrg[] {
+  const scored = orgs.map(scoreDiscoverOrg).filter(isConnectableDiscoverOrg);
+  const filtered = scored.filter((org) =>
+    opts.mode === "give"
+      ? isAssetOwnerDiscoverOrg(org)
+      : isAggregatorDiscoverOrg(org),
+  );
+
+  const preferred =
+    opts.mode === "give"
+      ? filtered.filter(
+          (org) => normalizeOperatingModel(org) === "ASSET_BASED",
+        )
+      : filtered.filter(
+          (org) => normalizeOperatingModel(org) === "NON_ASSET",
+        );
+  const pool = preferred.length > 0 ? preferred : filtered;
+
+  const ranked = [...pool].sort(
+    (a, b) => loadCenterMarketActivityScore(b) - loadCenterMarketActivityScore(a),
+  );
+
+  const slots: ScoredDiscoverOrg[] = [];
+  for (const org of ranked) {
+    if (opts.dismissed?.has(org.id)) continue;
+    slots.push(org);
+    if (slots.length >= opts.limit) break;
+  }
+  return slots;
+}
+
+export function loadCenterRecommendMatchLine(
+  mode: LoadCenterRecommendMode,
+  org: ScoredDiscoverOrg,
+): { prefix: string; highlight: string; tone: RecommendationPillTone } {
+  if (mode === "give") {
+    const model = normalizeOperatingModel(org);
+    if (model === "ASSET_BASED") {
+      return {
+        prefix: "Fleet · ",
+        highlight: "Owns assets",
+        tone: "lane",
+      };
+    }
+    if (model === "HYBRID") {
+      return {
+        prefix: "Hybrid · ",
+        highlight: "Fleet + network",
+        tone: "location",
+      };
+    }
+  } else {
+    const model = normalizeOperatingModel(org);
+    const trips = typeof org.trip_count === "number" ? org.trip_count : 0;
+    if (model === "NON_ASSET") {
+      return {
+        prefix: "Aggregator · ",
+        highlight: trips > 0 ? `${trips} market trips` : "Shares indents",
+        tone: "mutual",
+      };
+    }
+    if (model === "HYBRID") {
+      return {
+        prefix: "Hybrid · ",
+        highlight: "Active on market",
+        tone: "location",
+      };
+    }
+  }
+  return growRowMatchLine(org.signals);
+}
+

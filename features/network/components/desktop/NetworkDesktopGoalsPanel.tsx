@@ -5,6 +5,7 @@
 import Theme from "@/constants/Theme";
 import { NetworkDesktopEntityGoalWizard } from "@/features/network/components/desktop/NetworkDesktopEntityGoalWizard";
 import { NetworkDesktopGoalsBalanceChart } from "@/features/network/components/desktop/NetworkDesktopGoalsBalanceChart";
+import { NetworkDesktopSidebarFeatureAd } from "@/features/network/components/desktop/NetworkDesktopSidebarFeatureAd";
 import {
   METRONIC,
   networkDesktopHubStyles as styles,
@@ -1319,6 +1320,8 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
               Payable {formatINRChip(balanceSnapshot.totalPayable)}
             </Text>
           </View>
+
+          <NetworkDesktopSidebarFeatureAd layout="square" />
         </View>
 
         <View style={[styles.mainCol, layout.mainCol]}>

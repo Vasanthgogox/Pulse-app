@@ -46,6 +46,7 @@ import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/inden
 import {
     DONE_SUB_TABS,
     getLoadCenterStatusTabLabel,
+    resolveGetLoadSourceTag,
     resolveGetLoadTicketCommerce,
     resolveGiveLoadMobileDisplayStatus,
     STATUS_TABS,
@@ -69,6 +70,8 @@ import { LoadCenterIntegratedPartiesRow } from "@/features/network/components/Lo
 import { LoadCenterUnderlineTabStrip } from "@/features/network/components/LoadCenterUnderlineTabStrip";
 import { LoadCenterPromoCard } from "@/features/network/components/LoadCenterPromoCard";
 import { LoadCenterOpportunityExchange } from "@/features/network/components/LoadCenterOpportunityExchange";
+import { LoadCenterPartnerRecommendations } from "@/features/network/components/LoadCenterPartnerRecommendations";
+import { LoadCenterSidebarBanners } from "@/features/network/components/LoadCenterSidebarBanners";
 import {
   selectIntegratedClientsForLoadCenter,
   selectIntegratedSuppliersForLoadCenter,
@@ -224,6 +227,8 @@ export function LoadCenterView({
   );
 
   const isClaimedTab = loadSubTab === "AWARDED";
+  const isGiveGetTab =
+    loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD";
 
   const formatLoadTabLabel = useCallback(
     (label: string, count: number) => `${label} (${count})`,
@@ -233,6 +238,8 @@ export function LoadCenterView({
   /** Desktop web: 5 indent cards per row (mobile <820 uses hub list cards). */
   const useGridLayout = Platform.OS === "web" && width >= 1024;
   const isMobileView = width < 820;
+  /** Desktop: Suggested partners sit in a Network-style left sidebar. */
+  const usePartnerSidebar = Boolean(orgId) && isGiveGetTab && !isMobileView;
   /** Narrow / grid cards: stack bid meta + actions so CTAs stay aligned and tappable. */
   const compactIndentFooter = width < 520;
 
@@ -294,6 +301,22 @@ export function LoadCenterView({
     doneSubTabCounts,
     statusTabCounts,
   } = filters;
+
+  const shareablePulseIndent = useMemo(
+    () =>
+      filteredHirePartnerLoads.find((load) =>
+        indentCanBroadcastToPulseNetwork(load),
+      ) ?? null,
+    [filteredHirePartnerLoads],
+  );
+
+  const handleSidebarPulseStory = useCallback(() => {
+    if (shareablePulseIndent && onShareToNetwork) {
+      onShareToNetwork(shareablePulseIndent);
+      return;
+    }
+    setShowPostModal(true);
+  }, [onShareToNetwork, shareablePulseIndent]);
 
   const mainLoadTabs = useMemo(
     () =>
@@ -755,6 +778,10 @@ export function LoadCenterView({
           : Number(load.client_price || 0);
       const clientLabel = resolveMarketIndentShipperLabel(load);
       const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
+      const sourceTag = resolveGetLoadSourceTag(
+        load.organization_id,
+        connectedClientOrgIds,
+      );
       return (
         <LoadCenterHubMobileIndentCard
           key={load.id}
@@ -773,6 +800,7 @@ export function LoadCenterView({
             amountInr: isDone ? null : supplierRate,
             rightCaption: isDone ? "On books" : null,
           }}
+          sourceTag={sourceTag}
           avatarUrl={avatar.avatarUrl}
           avatarSeed={avatar.avatarSeed}
           organizationImageUrl={avatar.organizationImageUrl}
@@ -796,6 +824,7 @@ export function LoadCenterView({
       );
     },
     [
+      connectedClientOrgIds,
       creatorOrgProfileMap,
       handleShareIndent,
       openIndentAllocation,
@@ -1014,6 +1043,10 @@ export function LoadCenterView({
             : "Bid now";
 
       const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
+      const sourceTag = resolveGetLoadSourceTag(
+        load.organization_id,
+        connectedClientOrgIds,
+      );
 
       return (
         <LoadCenterHubMobileIndentCard
@@ -1026,6 +1059,7 @@ export function LoadCenterView({
           leftFooterLabel={vehicleDetail}
           rightFooterLabel={rightFooter}
           ticketCommerce={ticketCommerce}
+          sourceTag={sourceTag}
           avatarUrl={avatar.avatarUrl}
           avatarSeed={avatar.avatarSeed}
           organizationImageUrl={avatar.organizationImageUrl}
@@ -1058,6 +1092,7 @@ export function LoadCenterView({
       );
     },
     [
+      connectedClientOrgIds,
       creatorOrgProfileMap,
       doneSubTab,
       handleShareIndent,
@@ -1108,6 +1143,10 @@ export function LoadCenterView({
       const clientLabel = resolveMarketIndentShipperLabel(load);
 
       const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
+      const sourceTag = resolveGetLoadSourceTag(
+        load.organization_id,
+        connectedClientOrgIds,
+      );
 
       return (
         <LoadCenterHubMobileIndentCard
@@ -1119,6 +1158,7 @@ export function LoadCenterView({
           pickupIso={load.pickup_date}
           leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
           rightFooterLabel={isDone ? "On books" : formatINR(supplierRate)}
+          sourceTag={sourceTag}
           avatarUrl={avatar.avatarUrl}
           avatarSeed={avatar.avatarSeed}
           organizationImageUrl={avatar.organizationImageUrl}
@@ -1145,6 +1185,7 @@ export function LoadCenterView({
       );
     },
     [
+      connectedClientOrgIds,
       creatorOrgProfileMap,
       handleShareIndent,
       openIndentAllocation,
@@ -1287,15 +1328,47 @@ export function LoadCenterView({
           }
         >
           {!isMobileView ? renderDesktopFilterPanel() : null}
-          {loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD" ? (
-            <LoadCenterOpportunityExchange
-              orgId={orgId}
-              mode={loadSubTab === "GET_LOAD" ? "get" : "give"}
-              supplierOrgIds={connectedSupplierOrgIds}
-              clientOrgIds={connectedClientOrgIds}
-              embedded
-            />
-          ) : null}
+          {isGiveGetTab ? (
+            <View
+              style={
+                usePartnerSidebar ? styles.loadDesktopSplit : undefined
+              }
+            >
+              {usePartnerSidebar && orgId ? (
+                <View style={styles.loadDesktopSidebar}>
+                  <LoadCenterPartnerRecommendations
+                    orgId={orgId}
+                    mode={loadSubTab === "GET_LOAD" ? "get" : "give"}
+                    onViewAll={openNetworkForParties}
+                  />
+                  <LoadCenterSidebarBanners
+                    onPulseStory={handleSidebarPulseStory}
+                    hasShareableIndent={Boolean(shareablePulseIndent)}
+                  />
+                </View>
+              ) : null}
+              <View
+                style={
+                  usePartnerSidebar ? styles.loadDesktopMain : undefined
+                }
+              >
+                <LoadCenterOpportunityExchange
+                  orgId={orgId}
+                  mode={loadSubTab === "GET_LOAD" ? "get" : "give"}
+                  supplierOrgIds={connectedSupplierOrgIds}
+                  clientOrgIds={connectedClientOrgIds}
+                  embedded
+                />
+                {!usePartnerSidebar && orgId ? (
+                  <View style={styles.loadPartnerRecsMobile}>
+                    <LoadCenterPartnerRecommendations
+                      orgId={orgId}
+                      mode={loadSubTab === "GET_LOAD" ? "get" : "give"}
+                      onViewAll={openNetworkForParties}
+                      compact
+                    />
+                  </View>
+                ) : null}
           {loadSubTab === "GIVE_LOAD" && (
             <>
               {isLoading ? (
@@ -1445,6 +1518,9 @@ export function LoadCenterView({
                 ))}
               </LoadCenterHubMobileListCanvas>
             ))}
+              </View>
+            </View>
+          ) : null}
 
           {loadSubTab === "AWARDED" &&
             (displayedClaimedLoads.length === 0 ? (
@@ -1672,9 +1748,9 @@ const styles = StyleSheet.create({
   },
   mobileNetworkToolbarRow: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: Theme.cardWhite,
+    paddingTop: 6,
+    paddingBottom: 6,
+    backgroundColor: Theme.screenBackground,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     justifyContent: "center",
@@ -1803,6 +1879,39 @@ const styles = StyleSheet.create({
     marginTop: 0,
     overflow: "hidden",
   },
+  /** Network-style Give/Get desktop: suggested partners rail + loads main. */
+  loadDesktopSplit: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    flexWrap: "nowrap",
+    gap: 12,
+    width: "100%",
+    marginTop: 8,
+    marginBottom: 4,
+    ...Platform.select({
+      web: { display: "flex" as const },
+    }),
+  },
+  loadDesktopSidebar: {
+    width: 280,
+    maxWidth: 300,
+    flexShrink: 0,
+    gap: 10,
+    ...Platform.select({
+      web: { position: "sticky" as const, top: 8, alignSelf: "flex-start" },
+    }),
+  },
+  loadDesktopMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 8,
+  },
+  loadPartnerRecsMobile: {
+    marginTop: 4,
+    marginBottom: 12,
+    width: "100%",
+    alignSelf: "stretch",
+  },
   loadContentWrapClaimed: {
     marginTop: 0,
   },
@@ -1826,8 +1935,8 @@ const styles = StyleSheet.create({
     }),
   },
   scrollContentMobileHub: {
-    paddingHorizontal: 0,
-    paddingTop: 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 4,
   },
   scrollContentIntegratedEmpty: {
     backgroundColor: Theme.cardWhite,
@@ -2696,7 +2805,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textSecondary,
     textAlign: "center",
-    paddingHorizontal: Layout.screenPaddingHorizontal + 12,
+    paddingHorizontal: 12,
     lineHeight: 18,
     maxWidth: 340,
   },
@@ -2704,7 +2813,7 @@ const styles = StyleSheet.create({
     paddingVertical: 64,
     alignItems: "center",
     backgroundColor: Theme.screenBackground,
-    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginHorizontal: 0,
     marginBottom: 32,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },

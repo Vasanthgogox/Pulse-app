@@ -20,6 +20,7 @@ import {
 } from "@/features/network/components/desktop/NetworkDesktopAssetSalesTableCells";
 import { NetworkDesktopSalesDonut } from "@/features/network/components/desktop/NetworkDesktopSalesDonut";
 import { NetworkDesktopSalesLineChart } from "@/features/network/components/desktop/NetworkDesktopSalesLineChart";
+import { NetworkDesktopSidebarFeatureAd } from "@/features/network/components/desktop/NetworkDesktopSidebarFeatureAd";
 import {
   METRONIC,
   networkDesktopHubStyles as styles,
@@ -761,6 +762,8 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
               </>
             )}
           </View>
+
+          <NetworkDesktopSidebarFeatureAd layout="square" />
         </View>
 
         <View style={[styles.mainCol, layout.mainCol]}>

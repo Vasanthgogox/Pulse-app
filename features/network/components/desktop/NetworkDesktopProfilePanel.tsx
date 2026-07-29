@@ -493,7 +493,7 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                 disabled={!profileDirty || profileSaving}
               >
                 {profileSaving ? (
-                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+                  <LoadingIndicator size="small" color={Theme.textPrimaryDark} />
                 ) : (
                   <Text style={styles.profileSaveBtnText}>Save profile</Text>
                 )}
@@ -591,7 +591,7 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
                   disabled={!orgDirty || orgSaving}
                 >
                   {orgSaving ? (
-                    <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+                    <LoadingIndicator size="small" color={Theme.textPrimaryDark} />
                   ) : (
                     <Text style={styles.profileSaveBtnText}>Save workspace</Text>
                   )}

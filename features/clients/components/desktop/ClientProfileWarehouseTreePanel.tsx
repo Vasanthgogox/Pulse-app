@@ -16,6 +16,8 @@ import {
   INVOICE_FREQUENCY_OPTIONS,
   PAYMENT_TERMS_OPTIONS,
 } from "@/features/clients/constants/clientReference.constants";
+import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
+import { formatCityStateLabel } from "@/lib/placeCityState.util";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import {
@@ -25,6 +27,7 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  MapPin,
   Plus,
   Save,
   X,
@@ -89,6 +92,7 @@ export function ClientProfileWarehouseTreePanel({ bundle, orgId, clientId, onRef
     warehouse_code: "", name: "", warehouse_zone: "", address: "", city: "", state: "",
     pincode: "", local_gstin: "", dock_count: "", capacity_tons: "",
     manager_name: "", manager_phone: "", contact_name: "", contact_phone: "",
+    mapPlaceLabel: "",
   });
   const [contractForm, setContractForm] = useState({
     contract_number: "", commercial_model: "per_trip", effective_date: "", expiry_date: "",
@@ -144,6 +148,7 @@ export function ClientProfileWarehouseTreePanel({ bundle, orgId, clientId, onRef
       warehouse_code: "", name: "", warehouse_zone: "", address: "", city: "", state: "",
       pincode: "", local_gstin: "", dock_count: "", capacity_tons: "",
       manager_name: "", manager_phone: "", contact_name: "", contact_phone: "",
+      mapPlaceLabel: "",
     });
     setWhError(null);
     setShowWhMore(false);
@@ -288,8 +293,36 @@ export function ClientProfileWarehouseTreePanel({ bundle, orgId, clientId, onRef
           <View style={[t.grid, compact && mobile.formGridCompact]}>
             <Field label="Warehouse name" value={whForm.name} onChange={(v) => setWhForm({ ...whForm, name: v })} required compact={compact} />
             <Field label="Code" value={whForm.warehouse_code} onChange={(v) => setWhForm({ ...whForm, warehouse_code: v })} placeholder="WH-001" compact={compact} />
+          </View>
+          <View style={{ width: "100%", marginBottom: 8 }}>
+            <LocationSearchField
+              label="Pick from map *"
+              placeholder="Search area, landmark, or address"
+              value={whForm.mapPlaceLabel}
+              onChangeText={(text) => setWhForm({ ...whForm, mapPlaceLabel: text })}
+              onSelectPlace={(displayName, coords) => {
+                const label = formatCityStateLabel({
+                  city: coords.city,
+                  state: coords.state,
+                  displayName,
+                });
+                setWhForm({
+                  ...whForm,
+                  mapPlaceLabel: label,
+                  address: whForm.address.trim() || label,
+                  city: coords.city?.trim() || "",
+                  state: coords.state?.trim() || "",
+                  pincode: coords.pincode?.trim() || "",
+                });
+              }}
+              leadingIcon={<MapPin size={14} color={METRONIC.link} strokeWidth={2} />}
+              compact
+            />
+          </View>
+          <View style={[t.grid, compact && mobile.formGridCompact]}>
             <Field label="City" value={whForm.city} onChange={(v) => setWhForm({ ...whForm, city: v })} compact={compact} />
             <Field label="State" value={whForm.state} onChange={(v) => setWhForm({ ...whForm, state: v })} compact={compact} />
+            <Field label="Pincode" value={whForm.pincode} onChange={(v) => setWhForm({ ...whForm, pincode: v })} keyboardType="numeric" compact={compact} />
           </View>
           <Pressable onPress={() => setShowWhMore((v) => !v)} style={t.linkRow}>
             <Text style={t.linkText}>{showWhMore ? "Hide extra fields" : "More fields"}</Text>
@@ -298,7 +331,6 @@ export function ClientProfileWarehouseTreePanel({ bundle, orgId, clientId, onRef
             <View style={[t.grid, compact && mobile.formGridCompact]}>
               <Field label="Zone" value={whForm.warehouse_zone} onChange={(v) => setWhForm({ ...whForm, warehouse_zone: v })} compact={compact} />
               <Field label="Address" value={whForm.address} onChange={(v) => setWhForm({ ...whForm, address: v })} multiline compact={compact} />
-              <Field label="Pincode" value={whForm.pincode} onChange={(v) => setWhForm({ ...whForm, pincode: v })} keyboardType="numeric" compact={compact} />
               <Field label="Local GSTIN" value={whForm.local_gstin} onChange={(v) => setWhForm({ ...whForm, local_gstin: v })} compact={compact} />
               <Field label="Docks" value={whForm.dock_count} onChange={(v) => setWhForm({ ...whForm, dock_count: v })} keyboardType="numeric" compact={compact} />
               <Field label="Capacity (t)" value={whForm.capacity_tons} onChange={(v) => setWhForm({ ...whForm, capacity_tons: v })} keyboardType="numeric" compact={compact} />

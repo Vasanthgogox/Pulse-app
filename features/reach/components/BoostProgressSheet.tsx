@@ -4,13 +4,12 @@
  * "View all Reach campaigns" is the one link out to the full list.
  */
 import Theme from "@/constants/Theme";
-import { formatINR, formatLedgerDateTime } from "@/lib/format";
-import { useReachCampaignsQuery, useReachPlansQuery } from "@/lib/queries/useReachCampaignsQuery";
-import { ReachMetricsGrid } from "@/features/reach/components/ReachMetricsGrid";
 import { CampaignUpgradePanel } from "@/features/reach/components/CampaignUpgradePanel";
-import { useReachCampaignMetricsQuery } from "@/lib/queries/useReachCampaignsQuery";
-import { getReachPlanDisplay } from "@/lib/reachPlanRegistry";
+import { ReachMetricsGrid } from "@/features/reach/components/ReachMetricsGrid";
 import { formatRemaining } from "@/features/reach/utils/campaignFormat";
+import { formatINR, formatLedgerDateTime } from "@/lib/format";
+import { useReachCampaignMetricsQuery, useReachCampaignsQuery, useReachPlansQuery } from "@/lib/queries/useReachCampaignsQuery";
+import { getReachPlanDisplay } from "@/lib/reachPlanRegistry";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import { ChevronRight, Rocket, X } from "lucide-react-native";

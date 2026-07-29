@@ -1,15 +1,15 @@
 /**
  * Network profile modal body — hub hex hero layout (aligned with org network page).
  */
-import { NetworkProfileHubHero } from "@/features/network/components/NetworkProfileHubHero";
 import Theme from "@/constants/Theme";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { NetworkProfileHubHero } from "@/features/network/components/NetworkProfileHubHero";
 import { isOrgKycVerified, resolveOrgVerificationState } from "@/features/network/utils/orgVerification.util";
 import {
-  Building2,
-  Globe,
-  MapPin,
-  ShieldCheck,
+    Building2,
+    Globe,
+    MapPin,
+    ShieldCheck,
 } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 

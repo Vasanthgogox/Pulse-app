@@ -4,6 +4,10 @@ import type {
   ClientWarehouseExtended,
 } from '@/features/clients/types/clientManagement.types';
 import { KYC_DOC_LABELS, MANDATORY_KYC_DOC_TYPES } from '@/features/clients/types/clientManagement.types';
+import {
+  formatCityStateFromParts,
+  formatCityStateLabel,
+} from '@/lib/placeCityState.util';
 
 export function computeKycScore(documents: ClientKycDocumentRow[]): {
   score: number;
@@ -39,13 +43,14 @@ export function kycMissingLabels(missing: ClientKycDocType[]): string[] {
   return missing.map((t) => KYC_DOC_LABELS[t]);
 }
 
-/** Display label for lane-rate origin/destination tied to a warehouse. */
+/** Display label for lane-rate origin/destination tied to a warehouse (city + state only). */
 export function formatWarehouseLaneLabel(
-  warehouse: Pick<ClientWarehouseExtended, 'name' | 'city' | 'state'>,
+  warehouse: Pick<ClientWarehouseExtended, 'name' | 'city' | 'state' | 'address'>,
 ): string {
-  const name = warehouse.name?.trim() || 'Warehouse';
-  const cityState = [warehouse.city, warehouse.state].filter(Boolean).join(', ');
-  return cityState ? `${name} · ${cityState}` : name;
+  const fromParts = formatCityStateFromParts(warehouse.city, warehouse.state);
+  if (fromParts) return fromParts;
+  const fromAddress = formatCityStateLabel(warehouse.address ?? warehouse.name);
+  return fromAddress || (warehouse.name?.trim() || 'Warehouse');
 }
 
 export function formatClientPhoneDisplay(phone: string | null | undefined): string {

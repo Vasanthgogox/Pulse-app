@@ -3,6 +3,7 @@
  */
 import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
 import { formatINR } from "@/lib/format";
+import { formatCityStateLabel } from "@/lib/placeCityState.util";
 
 export type ClientLanePrefill = {
   pickup: string;
@@ -63,22 +64,19 @@ export function resolveLaneSaleAmount(lane: ClientLaneRate): number | null {
 
 export function buildClientLanePrefill(lane: ClientLaneRate): ClientLanePrefill {
   const amount = resolveLaneSaleAmount(lane);
-  // Drop must come from destination_label (the lane's named destination,
-  // e.g. "Bangalore") — this is what the UI shows as `origin → destination`.
-  // destination_address is a free-text secondary field (often a state or
-  // street) and must never override the label, or the indent captures the
-  // wrong drop (e.g. "MAHARASHTRA" instead of "Bangalore").
-  const drop =
-    lane.destination_label?.trim() ||
-    lane.destination_address?.trim() ||
-    "";
+  // Destination label is the named destination (e.g. "Bangalore") — never let
+  // destination_address (often a state/street) override it.
   const tons =
     lane.default_load_tons != null && Number.isFinite(lane.default_load_tons)
       ? String(lane.default_load_tons)
       : null;
   return {
-    pickup: lane.origin_label?.trim() || "",
-    drop,
+    pickup: formatCityStateLabel(lane.origin_label) || lane.origin_label?.trim() || "",
+    drop:
+      formatCityStateLabel(lane.destination_label) ||
+      lane.destination_label?.trim() ||
+      lane.destination_address?.trim() ||
+      "",
     vehicleType: lane.vehicle_type?.trim() || null,
     loadType: lane.default_load_type?.trim() || null,
     tons,

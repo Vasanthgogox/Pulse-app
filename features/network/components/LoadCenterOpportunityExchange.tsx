@@ -4,7 +4,6 @@
  * Give load: idle VEHICLE_AVAILABILITY stories + sponsored capacity ads.
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
-import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { PostRow } from "@/features/network/services/posts.service";
 import {
@@ -386,7 +385,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingVertical: 12,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: 0,
   },
   loadingText: {
     fontSize: 12,

@@ -18,11 +18,15 @@ import {
 import { formatWarehouseLaneLabel } from "@/features/clients/utils/clientManagement.util";
 import { LANE_PRICING_MODEL_OPTIONS } from "@/features/clients/constants/clientReference.constants";
 import { METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
+import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
+import { TripCommodityFields } from "@/features/trips/components/add-trip/TripCommodityFields";
+import { formatCityStateLabel } from "@/lib/placeCityState.util";
 import { AlertCircle, CheckCircle2, ChevronDown, Plus, Save } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -203,7 +207,7 @@ export function ClientProfileEmbeddedLanes({
       agreement_id: agreement.id,
       origin_warehouse_id: warehouse.id,
       origin_label: formatWarehouseLaneLabel(warehouse),
-      destination_label: form.destination_label.trim(),
+      destination_label: formatCityStateLabel(form.destination_label.trim()) || form.destination_label.trim(),
       destination_gstin: form.destination_gstin.trim() || null,
       destination_address: form.destination_address.trim() || null,
       warehouse_zone: form.warehouse_zone.trim() || warehouse.warehouse_zone || null,
@@ -287,32 +291,36 @@ export function ClientProfileEmbeddedLanes({
             From locked: {formatWarehouseLaneLabel(warehouse)} · {agreement.contract_number}
           </Text>
           <View style={s.grid}>
-            <Field
-              label="To (destination)"
-              value={form.destination_label}
-              onChange={(v) => setForm({ ...form, destination_label: v })}
-              required
-              placeholder="e.g. Bangalore"
-            />
-            <Field
-              label="Vehicle"
-              value={form.vehicle_type}
-              onChange={(v) => setForm({ ...form, vehicle_type: v })}
-              placeholder="e.g. 32 Ft MXL"
-            />
-            <Field
-              label="Load type"
-              value={form.default_load_type}
-              onChange={(v) => setForm({ ...form, default_load_type: v })}
-              placeholder="e.g. Electronics"
-            />
-            <Field
-              label="Tons"
-              value={form.default_load_tons}
-              onChange={(v) => setForm({ ...form, default_load_tons: v })}
-              keyboardType="numeric"
-              placeholder="e.g. 35"
-            />
+            <View style={s.gridFull}>
+              <LocationSearchField
+                label="To (destination) *"
+                placeholder="Search city or area"
+                value={form.destination_label}
+                onChangeText={(v) => setForm({ ...form, destination_label: v })}
+                onSelectPlace={(label) =>
+                  setForm({
+                    ...form,
+                    destination_label: formatCityStateLabel(label) || label,
+                  })
+                }
+                compact
+              />
+            </View>
+            <View style={s.gridFull}>
+              <TripCommodityFields
+                vehicleType={form.vehicle_type}
+                loadType={form.default_load_type}
+                tons={form.default_load_tons}
+                onVehicleTypeChange={(v) => setForm({ ...form, vehicle_type: v })}
+                onLoadTypeChange={(v) => setForm({ ...form, default_load_type: v })}
+                onTonsChange={(v) => setForm({ ...form, default_load_tons: v })}
+                showTons
+                showProductType
+                useFormChrome
+                preferWebSelect={Platform.OS === "web"}
+                isWide
+              />
+            </View>
             <Field
               label="Rate (₹)"
               value={form.rate}
@@ -523,6 +531,7 @@ const s = StyleSheet.create({
   formTitle: { fontSize: 13, fontWeight: "800", color: METRONIC.text },
   hint: { fontSize: 11, fontWeight: "500", color: METRONIC.subtle, lineHeight: 16 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  gridFull: { width: "100%", minWidth: 0 },
   field: { width: "31%", minWidth: 140, flexGrow: 1, gap: 4, position: "relative" },
   fieldLabel: {
     fontSize: 9,

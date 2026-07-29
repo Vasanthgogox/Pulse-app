@@ -3,6 +3,7 @@
  */
 import type { LedgerRow } from "@/features/finance";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { formatLaneRouteLabel } from "@/lib/placeCityState.util";
 import type { MissionRow } from "./analyticsUtils";
 import { computeKpiSummary, computeExpenseCategories } from "./analyticsUtils";
 
@@ -73,10 +74,7 @@ function monthLabelShort(key: string): string {
 }
 
 function laneLabel(t: TripRow): string {
-  const pickup = (t.pickup_area ?? "").trim();
-  const drop = (t.drop_location ?? "").trim();
-  if (pickup && drop) return `${pickup} → ${drop}`;
-  return pickup || drop || "Unspecified lane";
+  return formatLaneRouteLabel(t.pickup_area, t.drop_location) || "Unspecified lane";
 }
 
 export function filterVehicleRowsByDateRange<T extends { trip: TripRow }>(

@@ -9,8 +9,8 @@ export const NETWORK_HUB_GRID_ROW_PADDING_H = 22;
 /** Horizontal space between Grow your network and People you may know (desktop split). */
 export const NETWORK_HUB_SPLIT_COLUMN_GAP_PX = 24;
 
-/** Your connections — phone / narrow web (<820): 3 tiles per row × 2 rows. */
-export const NETWORK_HUB_CONNECTION_MOBILE_COLUMNS = 3;
+/** Your connections — phone / narrow web (<820): 2 tiles per row × 2 rows. */
+export const NETWORK_HUB_CONNECTION_MOBILE_COLUMNS = 2;
 export const NETWORK_HUB_CONNECTION_MOBILE_ROWS = 2;
 export const NETWORK_HUB_CONNECTION_MOBILE_PAGE_SIZE =
   NETWORK_HUB_CONNECTION_MOBILE_COLUMNS * NETWORK_HUB_CONNECTION_MOBILE_ROWS;
@@ -36,6 +36,17 @@ export const NETWORK_HUB_CONNECTION_DESKTOP_ROWS = 2;
 export const NETWORK_HUB_CONNECTION_DESKTOP_PAGE_SIZE =
   NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS * NETWORK_HUB_CONNECTION_DESKTOP_ROWS;
 
+/** Your connections — Metronic directory cards: 4×2 desktop, 2×2 mobile. */
+export const NETWORK_HUB_METRONIC_CONNECTION_COLUMNS = 4;
+export const NETWORK_HUB_METRONIC_CONNECTION_ROWS = 2;
+export const NETWORK_HUB_METRONIC_CONNECTION_PAGE_SIZE =
+  NETWORK_HUB_METRONIC_CONNECTION_COLUMNS * NETWORK_HUB_METRONIC_CONNECTION_ROWS;
+export const NETWORK_HUB_METRONIC_CONNECTION_MOBILE_COLUMNS = 2;
+export const NETWORK_HUB_METRONIC_CONNECTION_MOBILE_ROWS = 2;
+export const NETWORK_HUB_METRONIC_CONNECTION_MOBILE_PAGE_SIZE =
+  NETWORK_HUB_METRONIC_CONNECTION_MOBILE_COLUMNS *
+  NETWORK_HUB_METRONIC_CONNECTION_MOBILE_ROWS;
+
 export type NetworkHubConnectionsLayout = {
   columns: number;
   rows: number;
@@ -47,7 +58,7 @@ export type NetworkHubLayoutOptions = {
   nativeApp?: boolean;
 };
 
-/** Your connections grid: 5×2 on desktop (≥820), 3×2 on mobile. */
+/** Your connections grid: 5×2 on desktop (≥820), 2×2 on mobile. */
 export function getNetworkHubConnectionsLayout(
   windowWidth: number,
   _options?: NetworkHubLayoutOptions,
@@ -63,6 +74,24 @@ export function getNetworkHubConnectionsLayout(
     columns: NETWORK_HUB_CONNECTION_MOBILE_COLUMNS,
     rows: NETWORK_HUB_CONNECTION_MOBILE_ROWS,
     pageSize: NETWORK_HUB_CONNECTION_MOBILE_PAGE_SIZE,
+  };
+}
+
+/** Metronic directory cards: 4×2 desktop, 2×2 mobile. */
+export function getNetworkHubMetronicConnectionsLayout(
+  windowWidth: number,
+): NetworkHubConnectionsLayout {
+  if (windowWidth >= SPLIT_STACK_BREAKPOINT) {
+    return {
+      columns: NETWORK_HUB_METRONIC_CONNECTION_COLUMNS,
+      rows: NETWORK_HUB_METRONIC_CONNECTION_ROWS,
+      pageSize: NETWORK_HUB_METRONIC_CONNECTION_PAGE_SIZE,
+    };
+  }
+  return {
+    columns: NETWORK_HUB_METRONIC_CONNECTION_MOBILE_COLUMNS,
+    rows: NETWORK_HUB_METRONIC_CONNECTION_MOBILE_ROWS,
+    pageSize: NETWORK_HUB_METRONIC_CONNECTION_MOBILE_PAGE_SIZE,
   };
 }
 

@@ -124,12 +124,10 @@ function GrowActionButton({
           )}
         </View>
         <Pressable
-          onPress={(e) => {
-            e.stopPropagation?.();
-            onCancel?.();
-          }}
+          onPress={() => onCancel?.()}
           disabled={connecting}
           hitSlop={8}
+          accessibilityRole="button"
           accessibilityLabel="Cancel request"
           style={({ pressed }) => [
             styles.growOrgStatusBtnClose,
@@ -145,11 +143,10 @@ function GrowActionButton({
 
   return (
     <Pressable
-      onPress={(e) => {
-        e.stopPropagation?.();
-        onConnect?.();
-      }}
+      onPress={() => onConnect?.()}
       disabled={connecting}
+      accessibilityRole="button"
+      accessibilityLabel="Join"
       style={({ pressed }) => [
         styles.growOrgBtnJoin,
         compact && styles.growOrgBtnJoinCompact,
@@ -302,44 +299,46 @@ function GrowOrgGridCard(props: Props) {
   const subtitle = buildSubtitle(org, location);
 
   return (
-    <Pressable
-      onPress={onOpenProfile}
-      disabled={!onOpenProfile}
-      style={({ pressed }) => [
-        styles.growOrgCard,
-        pressed && onOpenProfile && styles.growOrgCardPressed,
-      ]}
-    >
+    <View style={styles.growOrgCard}>
       {onDismiss ? (
         <Pressable
-          onPress={(e) => {
-            e.stopPropagation?.();
-            onDismiss();
-          }}
+          onPress={onDismiss}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="More options"
           style={styles.growOrgCardMenuFloat}
         >
           <MoreVertical size={15} color={METRONIC.muted} />
         </Pressable>
       ) : null}
 
-      <View style={styles.growOrgCardHero}>
-        <GrowOrgAvatarBadge
-          org={org}
-          size={44}
-          showStatus
-          isConnected={isConnected}
-          isPending={isPending}
-        />
-      </View>
+      <Pressable
+        onPress={onOpenProfile}
+        disabled={!onOpenProfile}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${org.name}`}
+        style={({ pressed }) => [
+          pressed && onOpenProfile && styles.growOrgCardPressed,
+        ]}
+      >
+        <View style={styles.growOrgCardHero}>
+          <GrowOrgAvatarBadge
+            org={org}
+            size={44}
+            showStatus
+            isConnected={isConnected}
+            isPending={isPending}
+          />
+        </View>
 
-      <Text style={styles.growOrgName} numberOfLines={2}>
-        {org.name}
-      </Text>
+        <Text style={styles.growOrgName} numberOfLines={2}>
+          {org.name}
+        </Text>
 
-      <Text style={styles.growOrgTagline} numberOfLines={2}>
-        {subtitle}
-      </Text>
+        <Text style={styles.growOrgTagline} numberOfLines={2}>
+          {subtitle}
+        </Text>
+      </Pressable>
 
       <View style={styles.growOrgSectionsWrap}>
         <GrowOrgSections
@@ -361,7 +360,7 @@ function GrowOrgGridCard(props: Props) {
           onCancel={onCancel}
         />
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -388,16 +387,18 @@ function GrowOrgListCard(props: Props) {
   const tagline = buildTagline(org, location);
 
   return (
-    <Pressable
-      onPress={onOpenProfile}
-      disabled={!onOpenProfile}
-      style={({ pressed }) => [
-        styles.growOrgListCard,
-        pressed && onOpenProfile && styles.growOrgCardPressed,
-      ]}
-    >
+    <View style={styles.growOrgListCard}>
       <View style={styles.growOrgListGrid}>
-        <View style={styles.growOrgListIdentity}>
+        <Pressable
+          onPress={onOpenProfile}
+          disabled={!onOpenProfile}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${org.name}`}
+          style={({ pressed }) => [
+            styles.growOrgListIdentity,
+            pressed && onOpenProfile && styles.growOrgCardPressed,
+          ]}
+        >
           <GrowOrgAvatarBadge
             org={org}
             size={40}
@@ -412,11 +413,20 @@ function GrowOrgListCard(props: Props) {
               {tagline}
             </Text>
           </View>
-        </View>
+        </Pressable>
 
-        <View style={styles.growOrgListStarsCol}>
+        <Pressable
+          onPress={onOpenProfile}
+          disabled={!onOpenProfile}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${org.name} rating`}
+          style={({ pressed }) => [
+            styles.growOrgListStarsCol,
+            pressed && onOpenProfile && styles.growOrgCardPressed,
+          ]}
+        >
           <NetworkDesktopSalesStars filledStars={stars} size={12} />
-        </View>
+        </Pressable>
 
         <View style={styles.growOrgListMutualsCol}>
           {(org.mutual_count ?? org.mutual_connections_count ?? 0) > 0 ? (
@@ -454,11 +464,10 @@ function GrowOrgListCard(props: Props) {
           />
           {onDismiss ? (
             <Pressable
-              onPress={(e) => {
-                e.stopPropagation?.();
-                onDismiss();
-              }}
+              onPress={onDismiss}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="More options"
               style={styles.growOrgListMenu}
             >
               <MoreVertical size={15} color={METRONIC.muted} />
@@ -466,7 +475,7 @@ function GrowOrgListCard(props: Props) {
           ) : null}
         </View>
       </View>
-    </Pressable>
+    </View>
   );
 }
 

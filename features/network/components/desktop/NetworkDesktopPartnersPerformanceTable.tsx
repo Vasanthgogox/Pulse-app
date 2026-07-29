@@ -34,16 +34,21 @@ import {
 import { useMemo, useState } from "react";
 import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
-const PAGE_SIZES = [10, 20, 30] as const;
+const PAGE_SIZES = [8, 10, 20, 30] as const;
 
 type Props = {
   connections: ConnectedOrg[];
   trips: TripRow[];
   baseFilters: SalesCrossFilters;
   onOpenProfile: (item: ConnectedOrg) => void;
+  /** Off-app / not-integrated partners — send Pulse invite. */
+  onInvite?: (item: ConnectedOrg) => void;
+  invitingId?: string | null;
   title?: string;
   companyName?: string;
   dateRangeLabel?: string;
+  /** Compact typography aligned to the 2-row connections grid. */
+  dense?: boolean;
 };
 
 export function NetworkDesktopPartnersPerformanceTable({
@@ -51,23 +56,28 @@ export function NetworkDesktopPartnersPerformanceTable({
   trips,
   baseFilters,
   onOpenProfile,
+  onInvite,
+  invitingId = null,
   title = "Partners",
   companyName = "Your workspace",
   dateRangeLabel = "All time",
+  dense = false,
 }: Props) {
   const [tablePage, setTablePage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] =
-    useState<(typeof PAGE_SIZES)[number]>(10);
+  const [rowsPerPage, setRowsPerPage] = useState<(typeof PAGE_SIZES)[number]>(
+    dense ? 8 : 10,
+  );
   const [tableSearch, setTableSearch] = useState("");
   const [onlyWithTrips, setOnlyWithTrips] = useState(baseFilters.onlyWithTrips);
 
   const mergedFilters = useMemo(
     (): SalesCrossFilters => ({
       ...baseFilters,
-      search: tableSearch,
+      // Connections grid already applies hub search — avoid double-filtering the page.
+      search: dense ? tableSearch : tableSearch || baseFilters.search,
       onlyWithTrips,
     }),
-    [baseFilters, tableSearch, onlyWithTrips],
+    [baseFilters, tableSearch, onlyWithTrips, dense],
   );
 
   const tableRows = useMemo(
@@ -82,6 +92,14 @@ export function NetworkDesktopPartnersPerformanceTable({
     () => paginateRows(tableRows, tablePage, rowsPerPage),
     [tableRows, tablePage, rowsPerPage],
   );
+
+  const gridStyle = dense
+    ? styles.salesPartnersTableGridDense
+    : styles.salesPartnersTableGrid;
+  const headStyle = dense ? styles.salesTableHeadDense : styles.salesTableHead;
+  const headCellStyle = dense
+    ? styles.salesTableHeadCellDense
+    : styles.salesTableHeadCell;
 
   return (
     <View style={[styles.salesCard, styles.salesTableCard, styles.connectionsPartnersTable]}>
@@ -157,18 +175,18 @@ export function NetworkDesktopPartnersPerformanceTable({
       </View>
 
       <View style={styles.salesTableScroll}>
-        <View style={styles.salesTableHead}>
-          <View style={styles.salesTableGrid}>
+        <View style={headStyle}>
+          <View style={gridStyle}>
             <View style={styles.salesColCheck} />
-            <Text style={[styles.salesTableHeadCell, styles.salesColPartner]}>
+            <Text style={[headCellStyle, styles.salesColPartner]}>
               Partner
             </Text>
-            <Text style={[styles.salesTableHeadCell, styles.salesColRating]}>
+            <Text style={[headCellStyle, styles.salesColRating]}>
               Rating
             </Text>
             <Text
               style={[
-                styles.salesTableHeadCell,
+                headCellStyle,
                 styles.salesColTrips,
                 styles.salesGridNumHead,
               ]}
@@ -177,7 +195,7 @@ export function NetworkDesktopPartnersPerformanceTable({
             </Text>
             <Text
               style={[
-                styles.salesTableHeadCell,
+                headCellStyle,
                 styles.salesColRevenue,
                 styles.salesGridNumHead,
               ]}
@@ -186,20 +204,17 @@ export function NetworkDesktopPartnersPerformanceTable({
             </Text>
             <Text
               style={[
-                styles.salesTableHeadCell,
+                headCellStyle,
                 styles.salesColMargin,
                 styles.salesGridNumHead,
               ]}
             >
               Margin
             </Text>
-            <Text style={[styles.salesTableHeadCell, styles.salesColRegion]}>
-              Top lane
-            </Text>
-            <Text style={[styles.salesTableHeadCell, styles.salesColLast]}>
+            <Text style={[headCellStyle, styles.salesColLast]}>
               Last active
             </Text>
-            <Text style={[styles.salesTableHeadCell, styles.salesColStatus]}>
+            <Text style={[headCellStyle, styles.salesColStatus]}>
               Status
             </Text>
             <View style={styles.salesColMenu} />
@@ -217,60 +232,95 @@ export function NetworkDesktopPartnersPerformanceTable({
             <Pressable
               key={row.id}
               style={[
-                styles.salesTableRow,
+                dense ? styles.salesTableRowDense : styles.salesTableRow,
                 idx === pagination.rows.length - 1 && styles.salesTableRowLast,
               ]}
               onPress={() => onOpenProfile(row.connection)}
             >
-              <View style={styles.salesTableGrid}>
+              <View style={gridStyle}>
                 <View style={styles.salesColCheck}>
                   <View style={styles.salesCheckBox} />
                 </View>
                 <View style={styles.salesColPartner}>
-                  <SalesTablePartnerCell row={row} />
+                  <SalesTablePartnerCell row={row} dense={dense} />
                 </View>
                 <View style={styles.salesColRating}>
-                  <SalesTableRatingCell row={row} />
+                  <SalesTableRatingCell row={row} dense={dense} />
                 </View>
                 <View style={styles.salesColTrips}>
-                  <SalesTableTripsCell row={row} />
+                  <SalesTableTripsCell row={row} dense={dense} />
                 </View>
                 <View style={styles.salesColRevenue}>
-                  <SalesTableRevenueCell row={row} />
+                  <SalesTableRevenueCell row={row} dense={dense} />
                 </View>
                 <View style={styles.salesColMargin}>
-                  <SalesTableMarginCell row={row} />
-                </View>
-                <View style={styles.salesColRegion}>
-                  <Text style={styles.salesLaneText} numberOfLines={1}>
-                    {row.topLane}
-                  </Text>
+                  <SalesTableMarginCell row={row} dense={dense} />
                 </View>
                 <View style={styles.salesColLast}>
-                  <Text style={styles.salesLastActiveText} numberOfLines={1}>
+                  <Text
+                    style={
+                      dense
+                        ? styles.salesLastActiveTextDense
+                        : styles.salesLastActiveText
+                    }
+                    numberOfLines={1}
+                  >
                     {row.lastTripLabel ?? "—"}
                   </Text>
                 </View>
                 <View style={styles.salesColStatus}>
-                  <View
-                    style={[
-                      styles.statusPill,
-                      row.isIntegrated
-                        ? styles.salesStatusLive
-                        : styles.salesStatusInvite,
-                    ]}
-                  >
-                    <Text
+                  {row.isIntegrated ? (
+                    <View
                       style={[
-                        styles.statusPillText,
-                        row.isIntegrated
-                          ? styles.salesStatusLiveText
-                          : styles.salesStatusInviteText,
+                        dense ? styles.statusPillDense : styles.statusPill,
+                        styles.salesStatusLive,
                       ]}
                     >
-                      {row.isIntegrated ? "Live" : "Invite"}
-                    </Text>
-                  </View>
+                      <Text
+                        style={[
+                          dense
+                            ? styles.statusPillTextDense
+                            : styles.statusPillText,
+                          styles.salesStatusLiveText,
+                        ]}
+                      >
+                        Live
+                      </Text>
+                    </View>
+                  ) : (
+                    <Pressable
+                      onPress={(e) => {
+                        e?.stopPropagation?.();
+                        onInvite?.(row.connection);
+                      }}
+                      disabled={
+                        !onInvite || invitingId === row.connection.id
+                      }
+                      style={({ pressed }) => [
+                        dense ? styles.statusPillDense : styles.statusPill,
+                        styles.salesStatusInvite,
+                        styles.salesInviteBtn,
+                        pressed && styles.salesInviteBtnPressed,
+                        (!onInvite || invitingId === row.connection.id) &&
+                          styles.salesInviteBtnDisabled,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Send invite to ${row.connection.name}`}
+                    >
+                      <Text
+                        style={[
+                          dense
+                            ? styles.statusPillTextDense
+                            : styles.statusPillText,
+                          styles.salesStatusInviteText,
+                        ]}
+                      >
+                        {invitingId === row.connection.id
+                          ? "Sending…"
+                          : "Send invite"}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
                 <View style={styles.salesColMenu} />
               </View>
@@ -282,7 +332,7 @@ export function NetworkDesktopPartnersPerformanceTable({
       <View style={styles.salesPagination}>
         <View style={styles.salesPageSizeRow}>
           <Text style={styles.salesPageSizeLabel}>Rows per page</Text>
-          {PAGE_SIZES.map((size) => (
+          {(dense ? ([8, 10, 20] as const) : PAGE_SIZES).map((size) => (
             <Pressable
               key={size}
               onPress={() => {
@@ -305,62 +355,41 @@ export function NetworkDesktopPartnersPerformanceTable({
             </Pressable>
           ))}
         </View>
-
         <View style={styles.salesPageNav}>
-          <Text style={styles.salesPageRange}>
-            {pagination.from} – {pagination.to} of {tableRows.length}
+          <Text style={styles.salesPageRange} numberOfLines={1}>
+            {pagination.from}–{pagination.to} of {tableRows.length}
           </Text>
           <Pressable
-            disabled={tablePage <= 1}
             onPress={() => setTablePage((p) => Math.max(1, p - 1))}
+            disabled={tablePage <= 1}
             style={[
               styles.salesPageBtn,
               tablePage <= 1 && styles.salesPageBtnDisabled,
             ]}
           >
-            <ChevronLeft size={16} color={METRONIC.subtle} />
+            <ChevronLeft
+              size={14}
+              color={tablePage <= 1 ? METRONIC.muted : METRONIC.text}
+            />
           </Pressable>
-          {Array.from({ length: pagination.totalPages }).map((_, i) => {
-            const page = i + 1;
-            if (
-              pagination.totalPages > 5 &&
-              page !== 1 &&
-              page !== pagination.totalPages &&
-              Math.abs(page - tablePage) > 1
-            ) {
-              return null;
-            }
-            return (
-              <Pressable
-                key={page}
-                onPress={() => setTablePage(page)}
-                style={[
-                  styles.salesPageNum,
-                  tablePage === page && styles.salesPageNumOn,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.salesPageNumText,
-                    tablePage === page && styles.salesPageNumTextOn,
-                  ]}
-                >
-                  {page}
-                </Text>
-              </Pressable>
-            );
-          })}
           <Pressable
-            disabled={tablePage >= pagination.totalPages}
             onPress={() =>
               setTablePage((p) => Math.min(pagination.totalPages, p + 1))
             }
+            disabled={tablePage >= pagination.totalPages}
             style={[
               styles.salesPageBtn,
               tablePage >= pagination.totalPages && styles.salesPageBtnDisabled,
             ]}
           >
-            <ChevronRight size={16} color={METRONIC.subtle} />
+            <ChevronRight
+              size={14}
+              color={
+                tablePage >= pagination.totalPages
+                  ? METRONIC.muted
+                  : METRONIC.text
+              }
+            />
           </Pressable>
         </View>
       </View>

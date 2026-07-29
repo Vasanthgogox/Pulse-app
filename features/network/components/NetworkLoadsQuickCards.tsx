@@ -1,5 +1,6 @@
 /**
- * Give / Get loads — Network home quick actions with Metronic illustrations + Lottie.
+ * Give / Get loads + Pulse Reach — Network home quick actions with Metronic
+ * illustrations + Lottie. All three share one card chrome / size / rail.
  */
 import Theme from "@/constants/Theme";
 import {
@@ -240,13 +241,17 @@ export function NetworkLoadsQuickCards({
   const sidebar = layout === "sidebar";
   const isMobile = !sidebar && (NATIVE_APP || width < SPLIT_STACK_BREAKPOINT);
 
-  const openLoadCenter = () => {
+  const openAction = (action: NetworkLoadsQuickAction) => {
+    if (Platform.OS !== "web") {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    if (action.id === "reach") {
+      router.push(ROUTES.REACH.HOME as never);
+      return;
+    }
     // Give / get load are verified-org only. Unverified taps route to the KYC
     // panel instead of the Load Center.
     guardVerified(() => {
-      if (Platform.OS !== "web") {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
       router.push(ROUTES.PULSE_LOADS);
     });
   };
@@ -262,13 +267,17 @@ export function NetworkLoadsQuickCards({
         style={tile ? (isMobile ? styles.cardSlotMobile : styles.cardSlot) : styles.sidebarCardPress}
       >
         <Pressable
-          onPress={openLoadCenter}
+          onPress={() => openAction(action)}
           style={({ pressed }) => [
             tile ? styles.cardPress : styles.sidebarCardPressInner,
             pressed && styles.pressableScale,
           ]}
           accessibilityRole="button"
-          accessibilityLabel={`${action.label} — open Load Center`}
+          accessibilityLabel={
+            action.id === "reach"
+              ? "Open Pulse Reach"
+              : `${action.label} — open Load Center`
+          }
         >
           {({ pressed }) => (
             <MarketplaceCard

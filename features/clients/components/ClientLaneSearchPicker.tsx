@@ -10,6 +10,7 @@ import {
   lanePrimaryRateLabel,
   laneValidityLabel,
 } from "@/features/clients/utils/clientLanePrefill.util";
+import { formatCityStateLabel, formatLaneRouteLabel } from "@/lib/placeCityState.util";
 import { METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { CheckCircle2, MapPinned, Search, X } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
@@ -32,7 +33,7 @@ type WarehouseTag = {
 };
 
 function warehouseKeyForLane(lane: ClientLaneRate): string | null {
-  const label = lane.origin_label?.trim();
+  const label = formatCityStateLabel(lane.origin_label) || lane.origin_label?.trim();
   if (!label && !lane.origin_warehouse_id) return null;
   return lane.origin_warehouse_id?.trim() || label!.toLowerCase();
 }
@@ -42,7 +43,8 @@ function buildWarehouseTags(lanes: readonly ClientLaneRate[]): WarehouseTag[] {
   for (const lane of lanes) {
     const key = warehouseKeyForLane(lane);
     if (!key) continue;
-    const label = lane.origin_label?.trim() || "Warehouse";
+    const label =
+      formatCityStateLabel(lane.origin_label) || lane.origin_label?.trim() || "Warehouse";
     const prev = map.get(key);
     if (prev) {
       prev.count += 1;
@@ -192,7 +194,8 @@ export function ClientLaneSearchPicker({
               style={[s.selectedRoute, compact && s.selectedRouteCompact]}
               numberOfLines={1}
             >
-              {selected.origin_label} → {selected.destination_label}
+              {formatLaneRouteLabel(selected.origin_label, selected.destination_label) ||
+                `${selected.origin_label} → ${selected.destination_label}`}
             </Text>
             <Text
               style={[s.selectedMeta, compact && s.selectedMetaCompact]}
@@ -276,7 +279,8 @@ export function ClientLaneSearchPicker({
                     ]}
                     numberOfLines={1}
                   >
-                    {lane.origin_label} → {lane.destination_label}
+                    {formatLaneRouteLabel(lane.origin_label, lane.destination_label) ||
+                      `${lane.origin_label} → ${lane.destination_label}`}
                   </Text>
                   <Text style={[s.rowMeta, compact && s.rowMetaCompact]} numberOfLines={1}>
                     {[

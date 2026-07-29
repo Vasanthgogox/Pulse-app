@@ -16,6 +16,7 @@ import { KYC_DOC_LABELS } from "@/features/clients/types/clientManagement.types"
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import { getClientDetailBundle } from "@/features/clients/services/clients.service";
 import { computeKycScore } from "@/features/clients/utils/clientManagement.util";
+import { formatCityStateLabel } from "@/lib/placeCityState.util";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { formatINR } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -59,8 +60,9 @@ function mapContracts(bundle: ClientManagementBundle): ProfileContract[] {
       : null;
     return {
       id: lane.id,
-      pickup: lane.origin_label,
-      destination: lane.destination_label,
+      pickup: formatCityStateLabel(lane.origin_label) || lane.origin_label,
+      destination:
+        formatCityStateLabel(lane.destination_label) || lane.destination_label,
       price: Number(price) || 0,
       pricingType: perTon ? "per_ton" : "per_trip",
       vehicleType: lane.vehicle_type,

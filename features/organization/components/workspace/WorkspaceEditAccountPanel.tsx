@@ -722,7 +722,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: 13,
     fontWeight: "800",
-    color: Theme.buttonPrimaryText ?? "#ffffff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.2,
   },
 });

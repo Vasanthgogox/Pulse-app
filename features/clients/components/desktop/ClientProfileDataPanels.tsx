@@ -24,6 +24,9 @@ import {
 } from "@/features/clients/constants/clientReference.constants";
 import { formatWarehouseLaneLabel } from "@/features/clients/utils/clientManagement.util";
 import { formatINR } from "@/lib/format";
+import { formatCityStateLabel } from "@/lib/placeCityState.util";
+import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
+import { TripCommodityFields } from "@/features/trips/components/add-trip/TripCommodityFields";
 import {
   AlertCircle,
   CheckCircle2,
@@ -37,6 +40,7 @@ import { profileHubLayoutStyles as mobile } from "@/features/party/components/pr
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -625,7 +629,8 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
     const { error: err } = await createClientLaneRate(orgId, clientId, {
       origin_warehouse_id: origin.origin_warehouse_id,
       origin_label: origin.origin_label,
-      destination_label: form.destination_label.trim(),
+      destination_label:
+        formatCityStateLabel(form.destination_label.trim()) || form.destination_label.trim(),
       destination_gstin: form.destination_gstin.trim() || null,
       destination_address: form.destination_address.trim() || null,
       warehouse_zone: form.warehouse_zone.trim() || warehouse?.warehouse_zone || null,
@@ -692,7 +697,21 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
               />
             )}
             <FormField compact={compact} label="Warehouse zone" value={form.warehouse_zone} onChangeText={(v) => setForm({ ...form, warehouse_zone: v })} placeholder="e.g. Zone A" />
-            <FormField compact={compact} label="Destination" value={form.destination_label} onChangeText={(v) => setForm({ ...form, destination_label: v })} placeholder="e.g. Bangalore" required />
+            <View style={{ width: "100%", marginBottom: compact ? 8 : 12 }}>
+              <LocationSearchField
+                label="Destination *"
+                placeholder="Search city or area"
+                value={form.destination_label}
+                onChangeText={(v) => setForm({ ...form, destination_label: v })}
+                onSelectPlace={(label) =>
+                  setForm({
+                    ...form,
+                    destination_label: formatCityStateLabel(label) || label,
+                  })
+                }
+                compact
+              />
+            </View>
             <FormField compact={compact} label="Destination GSTIN" value={form.destination_gstin} onChangeText={(v) => setForm({ ...form, destination_gstin: v })} placeholder="29AAAAA0000A1Z5" />
             <FormField compact={compact} label="Destination address" value={form.destination_address} onChangeText={(v) => setForm({ ...form, destination_address: v })} multiline />
             <FormField compact={compact} label="Distance (km)" value={form.distance_km} onChangeText={(v) => setForm({ ...form, distance_km: v })} keyboardType="numeric" />
@@ -703,9 +722,21 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
               options={LANE_PRICING_MODEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
               onChange={(v) => setForm({ ...form, pricing_model: v })}
             />
-            <FormField compact={compact} label="Vehicle type" value={form.vehicle_type} onChangeText={(v) => setForm({ ...form, vehicle_type: v })} placeholder="e.g. 24ft, 10T" />
-            <FormField compact={compact} label="Load type" value={form.default_load_type} onChangeText={(v) => setForm({ ...form, default_load_type: v })} placeholder="e.g. Electronics" />
-            <FormField compact={compact} label="Tons" value={form.default_load_tons} onChangeText={(v) => setForm({ ...form, default_load_tons: v })} keyboardType="numeric" placeholder="e.g. 35" />
+            <View style={{ width: "100%", marginBottom: compact ? 8 : 12 }}>
+              <TripCommodityFields
+                vehicleType={form.vehicle_type}
+                loadType={form.default_load_type}
+                tons={form.default_load_tons}
+                onVehicleTypeChange={(v) => setForm({ ...form, vehicle_type: v })}
+                onLoadTypeChange={(v) => setForm({ ...form, default_load_type: v })}
+                onTonsChange={(v) => setForm({ ...form, default_load_tons: v })}
+                showTons
+                showProductType
+                useFormChrome
+                preferWebSelect={Platform.OS === "web"}
+                isWide={!compact}
+              />
+            </View>
             <FormField compact={compact} label="Base rate (₹)" value={form.base_rate} onChangeText={(v) => setForm({ ...form, base_rate: v })} keyboardType="numeric" placeholder="0" />
             <FormField compact={compact} label="Per MT rate (₹)" value={form.per_mt_rate} onChangeText={(v) => setForm({ ...form, per_mt_rate: v })} keyboardType="numeric" />
             <FormField compact={compact} label="Per KM rate (₹)" value={form.per_km_rate} onChangeText={(v) => setForm({ ...form, per_km_rate: v })} keyboardType="numeric" />

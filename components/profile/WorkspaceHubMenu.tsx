@@ -2,7 +2,7 @@
  * Workspace hub — left pane of the master/detail workspace shell.
  *
  * Metronic reference density: purple header, quick actions, Pulse banner,
- * Preferences (Language / Region), Party directory links, product grid, footer.
+ * Preferences (Language / Region), Party directory links, footer.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
@@ -23,7 +23,6 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { WorkspaceHubProductGrid } from "@/features/organization/components/workspace/WorkspaceHubProductGrid";
 import { WorkspaceLanguagePanel } from "@/features/organization/components/workspace/WorkspaceLanguagePanel";
 import { WorkspaceRegionPanel } from "@/features/organization/components/workspace/WorkspaceRegionPanel";
 import type {
@@ -36,8 +35,6 @@ import {
   getWorkspaceRegion,
 } from "@/lib/workspaceRegion";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { withBundledActiveProducts, type ProductId } from "@/lib/productRegistry";
-import { useWorkspaceProductsQuery } from "@/lib/queries/useWorkspaceProductsQuery";
 import { ROUTES } from "@/lib/routes";
 import { canAccessPartyKind } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
@@ -125,17 +122,6 @@ export function WorkspaceHubMenu({
   const [workspaceRegion, setWorkspaceRegion] = useState<
     keyof typeof WORKSPACE_REGION_LABELS
   >("india");
-  const { data: activations = [] } = useWorkspaceProductsQuery();
-
-  const activeProductIds = useMemo(() => {
-    const ids = new Set<ProductId>();
-    for (const row of activations) {
-      if (row.status === "active" || row.status === "trial") {
-        ids.add(row.product_id);
-      }
-    }
-    return withBundledActiveProducts(ids);
-  }, [activations]);
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
@@ -575,11 +561,6 @@ export function WorkspaceHubMenu({
           {renderHubSection("Workspace", workspaceRows, "#0f766e")}
           {renderHubSection("Preferences", preferenceRows, "#2563eb")}
           {renderPartyGridSection("Party", partyRows, Theme.driverEmerald)}
-
-          <WorkspaceHubProductGrid
-            activeProductIds={activeProductIds}
-            onOpenCatalogue={() => onSelectPanel("products")}
-          />
         </ScrollView>
 
         <View style={[hubStyles.footerWrap, { paddingBottom: insets.bottom + 10 }]}>

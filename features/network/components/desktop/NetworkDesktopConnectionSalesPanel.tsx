@@ -1,6 +1,5 @@
 /**
- * Connection sales tab — Metronic BI-style layout with left filters, KPI widgets,
- * cross-filtered charts, and paginated partner table with review metrics.
+ * Connection sales tab — KPI widgets, cross-filtered charts, and partner table.
  */
 import Theme from "@/constants/Theme";
 import {
@@ -11,6 +10,8 @@ import { NetworkDesktopSalesBarChart } from "@/features/network/components/deskt
 import { SalesSidebarPartnerAvatar } from "@/features/network/components/desktop/NetworkDesktopSalesTableCells";
 import { NetworkDesktopConnectionSalesTripsTable } from "@/features/network/components/desktop/NetworkDesktopConnectionSalesTripsTable";
 import { NetworkDesktopSalesGrowWidget } from "@/features/network/components/desktop/NetworkDesktopSalesGrowWidget";
+import { NetworkDesktopSidebarFeatureAd } from "@/features/network/components/desktop/NetworkDesktopSidebarFeatureAd";
+import { NetworkDesktopSidebarPromoBanners } from "@/features/network/components/desktop/NetworkDesktopSidebarPromoBanners";
 import { NetworkDesktopSalesDonut } from "@/features/network/components/desktop/NetworkDesktopSalesDonut";
 import { NetworkDesktopSalesLineChart } from "@/features/network/components/desktop/NetworkDesktopSalesLineChart";
 import { NetworkDesktopSalesStars } from "@/features/network/components/desktop/NetworkDesktopSalesStars";
@@ -30,10 +31,7 @@ import {
   buildSalesTableRows,
   computeSalesKpis,
   defaultSalesFilters,
-  hasActiveCrossFilters,
   type SalesCrossFilters,
-  type SalesDateRange,
-  type SalesRoleFilter,
   uniqueLanes,
 } from "@/features/network/utils/connectionSalesAnalytics.util";
 import { formatINRChip } from "@/lib/format";
@@ -50,12 +48,7 @@ import {
   Users,
 } from "lucide-react-native";
 import { useMemo, useState, type ReactNode } from "react";
-import {
-  Pressable,
-  Switch,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 type Props = {
   orgId: string;
@@ -64,62 +57,6 @@ type Props = {
   onGoToGrowTab?: () => void;
   inviteDailyCapReached?: boolean;
 };
-
-const DATE_RANGES: { id: SalesDateRange; label: string }[] = [
-  { id: "3m", label: "3 months" },
-  { id: "6m", label: "6 months" },
-  { id: "12m", label: "12 months" },
-  { id: "all", label: "All time" },
-];
-
-const ROLE_OPTIONS: { id: SalesRoleFilter; label: string }[] = [
-  { id: "CLIENT", label: "Clients" },
-  { id: "SUPPLIER", label: "Suppliers" },
-];
-
-const RATING_OPTIONS = [
-  { min: 3, label: "3+ stars" },
-  { min: 4, label: "4+ stars" },
-  { min: 5, label: "5 stars" },
-];
-
-function laneChipLabel(lane: string): string {
-  if (lane.length <= 24) return lane;
-  return `${lane.slice(0, 22)}…`;
-}
-
-function toggleSet<T>(set: Set<T>, value: T): Set<T> {
-  const next = new Set(set);
-  if (next.has(value)) next.delete(value);
-  else next.add(value);
-  return next;
-}
-
-function FilterChip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.salesFilterChip, active && styles.salesFilterChipOn]}
-    >
-      <Text
-        style={[
-          styles.salesFilterChipText,
-          active && styles.salesFilterChipTextOn,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 function KpiCard({
   label,
@@ -203,16 +140,8 @@ export function NetworkDesktopConnectionSalesPanel({
     [connections, trips, mergedFilters],
   );
 
-  const filtersActive = hasActiveCrossFilters(mergedFilters);
-
   const patchFilters = (patch: Partial<SalesCrossFilters>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
-  };
-
-  const clearFilters = () => {
-    setFilters(defaultSalesFilters());
-    setTableSearch("");
-    setPartnerBarFilter(null);
   };
 
   const handlePartnerBarSelect = (key: string | null) => {
@@ -230,125 +159,6 @@ export function NetworkDesktopConnectionSalesPanel({
     <View style={[styles.salesBody, layout.salesBody]}>
       <View style={[styles.splitRow, layout.splitRow]}>
         <View style={[styles.sidebar, layout.sidebar]}>
-          <View style={[styles.salesCard, styles.salesCardPad]}>
-            <Text style={styles.cardTitle}>Intelligent filters</Text>
-            <Text style={styles.salesFilterHint}>
-              Cross-filter charts and table like Power BI
-            </Text>
-
-            <Text style={styles.salesFilterGroup}>Period</Text>
-            <View style={styles.tagWrap}>
-              {DATE_RANGES.map((range) => (
-                <FilterChip
-                  key={range.id}
-                  label={range.label}
-                  active={filters.dateRange === range.id}
-                  onPress={() => patchFilters({ dateRange: range.id })}
-                />
-              ))}
-            </View>
-
-            <Text style={styles.salesFilterGroup}>Role</Text>
-            <View style={styles.tagWrap}>
-              {ROLE_OPTIONS.map((role) => (
-                <FilterChip
-                  key={role.id}
-                  label={role.label}
-                  active={filters.roles.has(role.id)}
-                  onPress={() =>
-                    patchFilters({
-                      roles: toggleSet(filters.roles, role.id),
-                      roleSlice: null,
-                    })
-                  }
-                />
-              ))}
-            </View>
-
-            <Text style={styles.salesFilterGroup}>Status</Text>
-            <View style={styles.tagWrap}>
-              <FilterChip
-                label="Integrated"
-                active={filters.statuses.has("integrated")}
-                onPress={() =>
-                  patchFilters({
-                    statuses: toggleSet(filters.statuses, "integrated"),
-                  })
-                }
-              />
-              <FilterChip
-                label="Invite"
-                active={filters.statuses.has("invite")}
-                onPress={() =>
-                  patchFilters({
-                    statuses: toggleSet(filters.statuses, "invite"),
-                  })
-                }
-              />
-            </View>
-
-            <Text style={styles.salesFilterGroup}>Review</Text>
-            <View style={styles.tagWrap}>
-              {RATING_OPTIONS.map((opt) => (
-                <FilterChip
-                  key={opt.min}
-                  label={opt.label}
-                  active={filters.minRating === opt.min}
-                  onPress={() =>
-                    patchFilters({
-                      minRating:
-                        filters.minRating === opt.min ? null : opt.min,
-                    })
-                  }
-                />
-              ))}
-            </View>
-
-            {lanes.length > 0 ? (
-              <>
-                <Text style={styles.salesFilterGroup}>Lanes</Text>
-                <View style={styles.tagWrap}>
-                  {lanes.slice(0, 12).map((lane) => (
-                    <FilterChip
-                      key={lane}
-                      label={laneChipLabel(lane)}
-                      active={filters.lanes.has(lane)}
-                      onPress={() =>
-                        patchFilters({
-                          lanes: toggleSet(filters.lanes, lane),
-                          laneSlice: null,
-                        })
-                      }
-                    />
-                  ))}
-                </View>
-              </>
-            ) : null}
-
-            <View style={styles.salesSidebarToggleRow}>
-              <Text style={styles.salesSidebarToggleLabel}>
-                Only partners with trips
-              </Text>
-              <Switch
-                value={filters.onlyWithTrips}
-                onValueChange={(v) => patchFilters({ onlyWithTrips: v })}
-                trackColor={{
-                  false: METRONIC.border,
-                  true: "rgba(62, 151, 255, 0.35)",
-                }}
-                thumbColor={
-                  filters.onlyWithTrips ? METRONIC.link : Theme.cardWhite
-                }
-              />
-            </View>
-
-            {filtersActive ? (
-              <Pressable onPress={clearFilters} style={styles.salesClearBtn}>
-                <Text style={styles.salesClearBtnText}>Clear all filters</Text>
-              </Pressable>
-            ) : null}
-          </View>
-
           <View style={[styles.salesCard, styles.salesCardPad]}>
             <Text style={styles.cardTitle}>Top contributors</Text>
             {tableRows.slice(0, 4).map((row, idx) => (
@@ -394,6 +204,10 @@ export function NetworkDesktopConnectionSalesPanel({
             onViewAllGrow={onGoToGrowTab}
             inviteDailyCapReached={inviteDailyCapReached}
           />
+
+          <NetworkDesktopSidebarPromoBanners />
+
+          <NetworkDesktopSidebarFeatureAd layout="stack" />
         </View>
 
         <View style={[styles.mainCol, layout.mainCol]}>

@@ -73,6 +73,23 @@ export function statusMatchesFilter(
   return tab?.statuses.includes(s) ?? false;
 }
 
+/** How a Get Load opportunity reached the viewer. */
+export type GetLoadSourceTag = "network" | "market_ad";
+
+/**
+ * Network = shipper is an integrated client (partner link).
+ * Market (through ad) = otherwise — typically Reach/story bid without a client link
+ * (see mergeQuotedIndentsForSupplier).
+ */
+export function resolveGetLoadSourceTag(
+  shipperOrganizationId: string | null | undefined,
+  connectedClientOrgIds: ReadonlySet<string>,
+): GetLoadSourceTag {
+  const id = (shipperOrganizationId ?? "").trim();
+  if (id && connectedClientOrgIds.has(id)) return "network";
+  return "market_ad";
+}
+
 /** Mobile GET LOAD card labels — Done tab uses outcome status, not live quote state. */
 export function resolveGetLoadMobileCardLabels(
   statusFilterTab: StatusFilterTab,

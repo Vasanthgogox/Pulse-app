@@ -1,6 +1,6 @@
 /**
  * Desktop Network hub — Metronic profile header, tabbed panels (details / sales /
- * your connections / grow network).
+ * network / chat).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
@@ -19,13 +19,12 @@ import {
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { NetworkDesktopAssetSalesPanel } from "@/features/network/components/desktop/NetworkDesktopAssetSalesPanel";
-import { NetworkDesktopConnectionsPanel } from "@/features/network/components/desktop/NetworkDesktopConnectionsPanel";
 import { NetworkDesktopInvitationsPanel } from "@/features/network/components/desktop/NetworkDesktopInvitationsPanel";
 import { NetworkDesktopConnectionSalesPanel } from "@/features/network/components/desktop/NetworkDesktopConnectionSalesPanel";
 import { NetworkDesktopDetailsPanel } from "@/features/network/components/desktop/NetworkDesktopDetailsPanel";
 import { NetworkDesktopGoalsPanel } from "@/features/network/components/desktop/NetworkDesktopGoalsPanel";
-import { NetworkDesktopGrowPanel } from "@/features/network/components/desktop/NetworkDesktopGrowPanel";
 import { NetworkDesktopHubHero } from "@/features/network/components/desktop/NetworkDesktopHubHero";
+import { NetworkDesktopNetworkPanel } from "@/features/network/components/desktop/NetworkDesktopNetworkPanel";
 import { NetworkDesktopProfilePanel } from "@/features/network/components/desktop/NetworkDesktopProfilePanel";
 import { NetworkDesktopTeamPanel } from "@/features/network/components/desktop/NetworkDesktopTeamPanel";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
@@ -35,7 +34,6 @@ import { exportConnectionsExcel } from "@/features/network/lib/networkExport.uti
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import type { NetworkChatPartner } from "@/features/network/components/desktop/NetworkDesktopChatFlexPanel";
 import { NetworkDesktopChatIntroPanel } from "@/features/network/components/desktop/NetworkDesktopChatIntroPanel";
-import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useOrgMembersData } from "@/lib/queries/useOrgMembersQuery";
@@ -43,7 +41,7 @@ import { platformRoleFromMember } from "@/features/organization/utils/teamInvite
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useCapabilities } from "@/lib/useCapabilities";
 import { canAccessDrivers, canAccessSuppliers } from "@/lib/capabilities";
-import { ChevronLeft, MessageSquare, MoreHorizontal, UserPlus } from "lucide-react-native";
+import { UserPlus, X } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
@@ -60,7 +58,10 @@ export type NetworkDesktopTab =
   | "sales"
   | "goals"
   | "asset"
+  | "network"
+  /** @deprecated Prefer `network` — kept for deep links / bookmarks. */
   | "connections"
+  /** @deprecated Prefer `network` — kept for deep links / bookmarks. */
   | "grow"
   | "chat";
 
@@ -71,10 +72,14 @@ const TABS: { id: NetworkDesktopTab; label: string }[] = [
   { id: "sales", label: "Connection sales" },
   { id: "goals", label: "Goals" },
   { id: "asset", label: "Asset sales" },
-  { id: "connections", label: "Your connections" },
-  { id: "grow", label: "Grow your network" },
+  { id: "network", label: "Network" },
   { id: "chat", label: "Chat" },
 ];
+
+function normalizeHubTab(raw: NetworkDesktopTab): NetworkDesktopTab {
+  if (raw === "connections" || raw === "grow") return "network";
+  return raw;
+}
 
 function parseHubTab(raw: string | undefined): NetworkDesktopTab | null {
   if (
@@ -84,11 +89,12 @@ function parseHubTab(raw: string | undefined): NetworkDesktopTab | null {
     raw === "sales" ||
     raw === "goals" ||
     raw === "asset" ||
+    raw === "network" ||
     raw === "connections" ||
     raw === "grow" ||
     raw === "chat"
   ) {
-    return raw;
+    return normalizeHubTab(raw);
   }
   return null;
 }
@@ -185,7 +191,13 @@ export function NetworkDesktopHub({
   const gatedSupplierCount = canUseSuppliers ? supplierCount : 0;
   const gatedDriverCount = canUseFleet ? driverCount : 0;
   const router = useRouter();
-  const canGoBack = router.canGoBack();
+  const closePage = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/(tabs)/network" as Parameters<typeof router.replace>[0]);
+  };
   const layout = useProfileHubCompactLayout();
   const compact = layout.compact;
   const layoutInsets = useLayoutInsets();
@@ -283,7 +295,7 @@ export function NetworkDesktopHub({
       return;
     }
     setChatOpen(false);
-    setTab(next);
+    setTab(normalizeHubTab(next));
   };
 
   const pendingJoinInvite = useMemo(() => {
@@ -364,7 +376,7 @@ export function NetworkDesktopHub({
           orgId={orgId}
           onOpenProfile={onOpenProfileFromConnection}
           onOpenDiscoverProfile={onOpenProfileFromDiscover}
-          onGoToGrowTab={() => setTab("grow")}
+          onGoToGrowTab={() => setTab("network")}
           inviteDailyCapReached={
             discoverInviteCount >= discoverInviteLimit
           }
@@ -380,16 +392,27 @@ export function NetworkDesktopHub({
       return <NetworkDesktopAssetSalesPanel orgId={orgId} />;
     }
 
-    if (tab === "connections") {
+    if (tab === "network") {
       return (
-        <NetworkDesktopConnectionsPanel
+        <NetworkDesktopNetworkPanel
           orgId={orgId}
           totalConnections={totalConnections}
+          clientCount={clientCount}
+          supplierCount={gatedSupplierCount}
           connSearch={connSearch}
           onConnSearchChange={onConnSearchChange}
           connFilter={connFilter}
           onConnFilterChange={onConnFilterChange}
-          onOpenProfile={onOpenProfileFromConnection}
+          discoverSearch={discoverSearch}
+          discoverOrgSearch={discoverOrgSearch}
+          onDiscoverSearchChange={onDiscoverSearchChange}
+          discoverInviteCount={discoverInviteCount}
+          discoverInviteLimit={discoverInviteLimit}
+          onDiscoverInviteCountChange={onDiscoverInviteCountChange}
+          onOpenProfileFromConnection={onOpenProfileFromConnection}
+          onOpenProfileFromDiscover={onOpenProfileFromDiscover}
+          onPressMutuals={onPressMutuals}
+          onOpenMutualProfile={onOpenMutualProfile}
           onConnectionsComputed={setAllConnections}
           onChatIntegrated={(item) => {
             if (item.linked_organization_id) {
@@ -411,20 +434,31 @@ export function NetworkDesktopHub({
     }
 
     return (
-      <NetworkDesktopGrowPanel
+      <NetworkDesktopNetworkPanel
         orgId={orgId}
-        search={discoverSearch}
-        orgSearch={discoverOrgSearch}
-        onSearchChange={onDiscoverSearchChange}
         totalConnections={totalConnections}
         clientCount={clientCount}
         supplierCount={gatedSupplierCount}
+        connSearch={connSearch}
+        onConnSearchChange={onConnSearchChange}
+        connFilter={connFilter}
+        onConnFilterChange={onConnFilterChange}
+        discoverSearch={discoverSearch}
+        discoverOrgSearch={discoverOrgSearch}
+        onDiscoverSearchChange={onDiscoverSearchChange}
         discoverInviteCount={discoverInviteCount}
         discoverInviteLimit={discoverInviteLimit}
-        onInviteCountChange={onDiscoverInviteCountChange}
-        onOpenProfile={onOpenProfileFromDiscover}
+        onDiscoverInviteCountChange={onDiscoverInviteCountChange}
+        onOpenProfileFromConnection={onOpenProfileFromConnection}
+        onOpenProfileFromDiscover={onOpenProfileFromDiscover}
         onPressMutuals={onPressMutuals}
         onOpenMutualProfile={onOpenMutualProfile}
+        onConnectionsComputed={setAllConnections}
+        onChatIntegrated={(item) => {
+          if (item.linked_organization_id) {
+            openChatWithPartner(item.linked_organization_id);
+          }
+        }}
       />
     );
   })();
@@ -456,17 +490,15 @@ export function NetworkDesktopHub({
       {compact ? (
         <View style={mobile.pageChrome}>
           <View style={mobile.chromeTopRow}>
-            {canGoBack ? (
-              <Pressable
-                style={mobile.chromeInlineAction}
-                onPress={() => router.back()}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Go back"
-              >
-                <ChevronLeft size={18} color={METRONIC.text} strokeWidth={2.4} />
-              </Pressable>
-            ) : null}
+            <Pressable
+              style={mobile.chromeInlineAction}
+              onPress={closePage}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Close company profile"
+            >
+              <X size={18} color={METRONIC.text} strokeWidth={2.4} />
+            </Pressable>
             <View style={mobile.chromeTitleBlock}>
               <Text style={mobile.chromeTitle} numberOfLines={2}>
                 {orgName}
@@ -475,31 +507,6 @@ export function NetworkDesktopHub({
                 {[modelLabel, email !== "—" ? email : null].filter(Boolean).join(" · ")}
               </Text>
             </View>
-            <Pressable
-              style={[
-                mobile.chromeInlineAction,
-                (chatOpen || tab === "chat") && mobile.chromeInlineActionActive,
-              ]}
-              onPress={() => {
-                if (chatOpen || tab === "chat") {
-                  setChatOpen(false);
-                  if (tab === "chat") setTab("connections");
-                  return;
-                }
-                openChatWithPartner(null);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
-            >
-              <MessageSquare
-                size={16}
-                color={chatOpen || tab === "chat" ? Theme.primary : METRONIC.text}
-                strokeWidth={2}
-              />
-            </Pressable>
-            <Pressable style={mobile.chromeInlineAction} hitSlop={8}>
-              <MoreHorizontal size={16} color={METRONIC.text} strokeWidth={2} />
-            </Pressable>
             <Pressable
               onPress={() => selectTab("profile")}
               hitSlop={8}
@@ -627,27 +634,6 @@ export function NetworkDesktopHub({
                 {pendingInviteCount > 0 ? `Invites (${pendingInviteCount})` : "Invites"}
               </Text>
             </Pressable>
-            <Pressable
-              style={[
-                styles.tabActionIconBtn,
-                (chatOpen || tab === "chat") && chatStyles.tabActionIconBtnActive,
-              ]}
-              onPress={() => {
-                if (chatOpen || tab === "chat") {
-                  setChatOpen(false);
-                  if (tab === "chat") setTab("connections");
-                  return;
-                }
-                openChatWithPartner(null);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
-            >
-              <MessageSquare
-                size={16}
-                color={chatOpen || tab === "chat" ? Theme.primary : METRONIC.text}
-              />
-            </Pressable>
             <NetworkExportMenu
               actions={[
                 {
@@ -663,9 +649,6 @@ export function NetworkDesktopHub({
               ]}
               triggerStyle={styles.tabActionIconBtn}
             />
-            <Pressable style={styles.tabActionIconBtn} hitSlop={8}>
-              <MoreHorizontal size={16} color={METRONIC.text} />
-            </Pressable>
           </View>
         )}
       </View>
@@ -706,7 +689,7 @@ export function NetworkDesktopHub({
             orgName={orgName}
             onClose={() => {
               setChatOpen(false);
-              if (tab === "chat") setTab("connections");
+              if (tab === "chat") setTab("network");
             }}
             joinRequest={pendingJoinInvite}
             integratedPartners={integratedChatPartners}

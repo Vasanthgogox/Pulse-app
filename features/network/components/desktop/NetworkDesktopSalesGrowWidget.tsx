@@ -86,7 +86,6 @@ function GrowRecommendationRow({
         styles.salesGrowRow,
         striped && styles.salesGrowRowStripe,
         isLast && styles.salesGrowRowLast,
-        { borderLeftColor: accentColor },
       ]}
     >
       <Pressable
@@ -210,6 +209,13 @@ export function NetworkDesktopSalesGrowWidget({
       inviteDailyCapReached === true
     );
   }, [sentQ.data, inviteDailyCapReached]);
+
+  const todayInviteCount = useMemo(
+    () => todayPendingInviteCountFromSent(sentQ.data ?? []),
+    [sentQ.data],
+  );
+
+  const inviteSummary = `${todayInviteCount}/${DAILY_CONNECTION_INVITE_LIMIT} invites sent today`;
 
   const pendingByOrgId = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -359,6 +365,10 @@ export function NetworkDesktopSalesGrowWidget({
           })}
         </View>
       )}
+
+      <View style={styles.salesGrowInviteMeta}>
+        <Text style={styles.salesGrowInviteMetaText}>{inviteSummary}</Text>
+      </View>
 
       {onViewAllGrow ? (
         <Pressable

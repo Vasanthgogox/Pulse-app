@@ -37,6 +37,8 @@ export type TripCommodityFieldsProps = {
   indentVehicleType?: string | null;
   indentLoadType?: string | null;
   showTons?: boolean;
+  /** When false, only the vehicle picker is shown (e.g. contract lane forms). */
+  showProductType?: boolean;
   /** Side-by-side vehicle + product (desktop / wide). */
   isWide?: boolean;
   /** Use Add Trip form label/input styles instead of mobile wizard chrome. */
@@ -111,6 +113,7 @@ export const TripCommodityFields = memo(function TripCommodityFields({
   indentVehicleType,
   indentLoadType,
   showTons = true,
+  showProductType = true,
   isWide = false,
   useFormChrome = false,
   preferWebSelect = false,
@@ -369,7 +372,7 @@ export const TripCommodityFields = memo(function TripCommodityFields({
 
   return (
     <View style={styles.root}>
-      {isWide ? (
+      {isWide && showProductType ? (
         <>
           <View style={styles.gridRowWide}>
             <View style={styles.gridCol}>{renderVehicle()}</View>
@@ -380,7 +383,7 @@ export const TripCommodityFields = memo(function TripCommodityFields({
       ) : (
         <>
           {renderVehicle()}
-          {renderProduct()}
+          {showProductType ? renderProduct() : null}
           {renderTons()}
         </>
       )}

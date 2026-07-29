@@ -5,23 +5,23 @@
  * Modeled on StoryOwnerBidsSheet.tsx's Modal/sheet pattern.
  */
 import Theme from "@/constants/Theme";
+import type { ReachPlanRow } from "@/features/reach/services/campaigns.service";
 import { formatINR } from "@/lib/format";
-import { useReachPlansQuery, usePublishReachCampaignMutation } from "@/lib/queries/useReachCampaignsQuery";
+import { usePublishReachCampaignMutation, useReachPlansQuery } from "@/lib/queries/useReachCampaignsQuery";
 import { useReachWalletQuery } from "@/lib/queries/useReachWalletQuery";
 import { describeReachPlan, getReachPlanDisplay } from "@/lib/reachPlanRegistry";
-import type { ReachPlanRow } from "@/features/reach/services/campaigns.service";
 import { Check, CheckCircle2, Coins, CreditCard, Rocket, Users, X, Zap } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

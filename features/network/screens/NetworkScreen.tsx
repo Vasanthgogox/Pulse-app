@@ -39,7 +39,6 @@ import {
   NETWORK_HUB_SPLIT_COLUMN_GAP_PX,
 } from "@/features/network/constants/networkHubGrid";
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
-import { ReachDiscoveryCard } from "@/features/reach/components/ReachDiscoveryCard";
 import { NetworkProfileDirectMessageButton } from "@/features/network/components/NetworkProfileDirectMessageButton";
 import { NetworkProfileModalBody } from "@/features/network/components/NetworkProfileModalBody";
 import { getOrgProfileSnapshot } from "@/features/network/services/networkProfileSnapshot.service";
@@ -361,6 +360,7 @@ function NetworkScreenInner() {
       tab === "sales" ||
       tab === "goals" ||
       tab === "asset" ||
+      tab === "network" ||
       tab === "connections" ||
       tab === "grow" ||
       tab === "chat"
@@ -1023,7 +1023,6 @@ function NetworkScreenInner() {
                 </View>
                 <View style={styles.storyLoadsRowMarketplace}>
                   <NetworkLoadsQuickCards layout="sidebar" />
-                  <ReachDiscoveryCard layout="sidebar" />
                 </View>
               </View>
             ) : (
@@ -1040,10 +1039,7 @@ function NetworkScreenInner() {
               </View>
         </View>
         {!showStoryLoadsSplit ? (
-          <>
-            <NetworkLoadsQuickCards compact={isCompactPhone} />
-            <ReachDiscoveryCard />
-          </>
+          <NetworkLoadsQuickCards compact={isCompactPhone} />
         ) : null}
         {ENABLE_UNLINKED_COUNTERPARTIES && orgId ? (
           <UnlinkedCounterpartiesSection orgId={orgId} />
@@ -1085,7 +1081,7 @@ function NetworkScreenInner() {
                 >
                   <Activity size={11} color={NETWORK_GROWTH_PURPLE} strokeWidth={2.2} />
                   <View style={styles.sectionTitleBlock}>
-                    <Text style={styles.connectionsHubKicker}>Operations pulse</Text>
+                    <Text style={styles.connectionsHubKicker}>Network</Text>
                     <Text style={styles.sectionHeading}>Your connections</Text>
                   </View>
                 </View>
@@ -1195,8 +1191,8 @@ function NetworkScreenInner() {
                     <View style={[styles.sectionHeadingRowCompact, styles.discoverHeaderTitleFlexMobile]}>
                       <Compass size={11} color={Theme.textSecondary} strokeWidth={2.2} />
                       <View style={styles.sectionTitleBlock}>
-                        <Text style={styles.sectionKicker}>Discover potential allies</Text>
-                        <Text style={styles.sectionHeading}>Grow your network</Text>
+                        <Text style={styles.sectionKicker}>Network</Text>
+                        <Text style={styles.sectionHeading}>Discover partners</Text>
                       </View>
                     </View>
                     {discoverInviteCount > 0 ? (
@@ -1380,10 +1376,13 @@ function NetworkScreenInner() {
     hubTabParam === "sales" ||
     hubTabParam === "goals" ||
     hubTabParam === "asset" ||
+    hubTabParam === "network" ||
     hubTabParam === "connections" ||
     hubTabParam === "grow" ||
     hubTabParam === "chat"
-      ? hubTabParam
+      ? hubTabParam === "connections" || hubTabParam === "grow"
+        ? "network"
+        : hubTabParam
       : undefined;
 
   const desktopHub = showDesktopHub ? (

@@ -2145,6 +2145,7 @@ export default function SupplierDetailScreen({
             email={normalizeContactDisplay(supplier?.email)}
             phone={normalizePhoneDisplay(supplier?.phone)}
             gstNumber={normalizeContactDisplay(supplier?.gstin)}
+            panNumber={normalizeContactDisplay(supplier?.pan_number)}
             billingAddress={normalizeContactDisplay(supplier?.address)}
             gridVolumeLabel={formatINR(contractValue)}
             networkTrustLabel="94.2%"
@@ -2154,6 +2155,8 @@ export default function SupplierDetailScreen({
               isInApp,
             )}
             entityDisplayId={supplier?.id?.slice(0, 8) ?? null}
+            organizationId={currentOrganization?.id}
+            supplierId={supplierId}
             kycDocs={[
               {
                 id: "gst",

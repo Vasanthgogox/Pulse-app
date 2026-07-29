@@ -1,0 +1,536 @@
+/**
+ * Load Center — suggested partners widget (Give / Get).
+ * Give: asset-owning suppliers. Get: aggregators sharing market indents.
+ * Mobile (`compact`): collapsible chip header to keep the load list uncluttered.
+ */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { PartyAvatar } from "@/components/PartyAvatar";
+import Theme from "@/constants/Theme";
+import {
+  CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
+  CONNECTION_REQUEST_DAILY_LIMIT_TITLE,
+  cancelPendingConnectionRequestByOrgPair,
+  createConnectionRequest,
+  DAILY_CONNECTION_INVITE_LIMIT,
+  looksLikeConnectionRateLimitError,
+} from "@/features/connections/services/connectionRequests.service";
+import {
+  METRONIC,
+  networkDesktopHubStyles as styles,
+} from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { useNetworkDiscovery } from "@/features/network/hooks/useNetworkDiscovery";
+import type { DiscoverOrg } from "@/features/network/services/discover.service";
+import {
+  getDiscoverOrgLocation,
+  growRowAccentColor,
+  loadCenterRecommendMatchLine,
+  pickLoadCenterRecommendations,
+  type LoadCenterRecommendMode,
+  type ScoredDiscoverOrg,
+} from "@/features/network/utils/discoverRecommendations.util";
+import { useEnsureVerified } from "@/features/network/utils/verifiedActionGuard";
+import { showAppAlert } from "@/lib/appAlert";
+import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
+import {
+  useConnectionRequestsSentQuery,
+  useInvalidateNetwork,
+} from "@/lib/queries/useNetworkQueries";
+import { ROUTES } from "@/lib/routes";
+import { useRouter } from "expo-router";
+import { ChevronDown, ChevronUp, Sparkles, UserPlus, X } from "lucide-react-native";
+import { useCallback, useMemo, useState } from "react";
+import {
+  Alert,
+  Pressable,
+  Text,
+  View,
+  type ViewStyle,
+} from "react-native";
+
+const RECOMMENDATION_LIMIT = 3;
+
+type Props = {
+  orgId: string;
+  mode: LoadCenterRecommendMode;
+  onOpenProfile?: (org: DiscoverOrg) => void;
+  onViewAll?: () => void;
+  /**
+   * Mobile / full-width strip: tighter rows + collapsible header
+   * (starts minimized so loads stay primary).
+   */
+  compact?: boolean;
+};
+
+function RecommendationRow({
+  org,
+  roleLabel,
+  locationLabel,
+  matchPrefix,
+  matchHighlight,
+  accentColor,
+  pending,
+  connecting,
+  isLast,
+  striped,
+  compact,
+  onOpenProfile,
+  onDismiss,
+  onConnect,
+  onCancel,
+}: {
+  org: ScoredDiscoverOrg;
+  roleLabel: string;
+  locationLabel: string;
+  matchPrefix: string;
+  matchHighlight: string;
+  accentColor: string;
+  pending: boolean;
+  connecting: boolean;
+  isLast: boolean;
+  striped: boolean;
+  compact?: boolean;
+  onOpenProfile?: () => void;
+  onDismiss: () => void;
+  onConnect: () => void;
+  onCancel: () => void;
+}) {
+  const trips =
+    typeof org.trip_count === "number" && org.trip_count >= 0
+      ? org.trip_count
+      : 0;
+
+  return (
+    <View
+      style={[
+        styles.salesGrowRow,
+        compact && local.rowCompact,
+        striped && styles.salesGrowRowStripe,
+        isLast && styles.salesGrowRowLast,
+      ]}
+    >
+      <Pressable
+        onPress={onOpenProfile}
+        disabled={!onOpenProfile}
+        style={({ pressed }) => [
+          styles.salesGrowRowMain,
+          pressed && onOpenProfile && styles.salesGrowRowHeadPressed,
+        ]}
+      >
+        <PartyAvatar
+          name={org.name}
+          initialsColorSeed={org.id}
+          avatarUrl={org.avatar_url}
+          avatarSeed={org.avatar_seed}
+          entityType="supplier"
+          size={compact ? 34 : 30}
+        />
+
+        <View style={styles.salesGrowRowBody}>
+          <View style={styles.salesGrowNameRow}>
+            <Text style={styles.salesGrowRowName} numberOfLines={1}>
+              {org.name}
+            </Text>
+            <View style={styles.salesGrowRoleBadge}>
+              <Text style={styles.salesGrowRoleBadgeText}>{roleLabel}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.salesGrowMatchLine} numberOfLines={1}>
+            {matchPrefix ? (
+              <Text style={styles.salesGrowMatchMuted}>{matchPrefix}</Text>
+            ) : null}
+            <Text
+              style={[styles.salesGrowMatchHighlight, { color: accentColor }]}
+            >
+              {matchHighlight}
+            </Text>
+          </Text>
+
+          <Text style={styles.salesGrowRowMeta} numberOfLines={1}>
+            {locationLabel} · {trips} trips
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={(e) => {
+            e?.stopPropagation?.();
+            onDismiss();
+          }}
+          hitSlop={8}
+          style={styles.salesGrowDismissIcon}
+          accessibilityLabel="Dismiss suggestion"
+        >
+          <X size={11} color={METRONIC.muted} strokeWidth={2.4} />
+        </Pressable>
+      </Pressable>
+
+      {pending ? (
+        <View
+          style={[
+            styles.salesGrowPendingRow,
+            compact && local.actionRowCompact,
+          ]}
+        >
+          <Text style={styles.salesGrowPendingLabel}>Request sent</Text>
+          <Pressable onPress={onCancel} disabled={connecting} hitSlop={6}>
+            <Text style={styles.salesGrowPendingCancel}>
+              {connecting ? "…" : "Cancel"}
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.salesGrowActionRow,
+            compact ? local.actionRowCompact : local.actionRowSidebar,
+          ]}
+        >
+          <Pressable
+            onPress={onDismiss}
+            style={({ pressed }) => [
+              styles.salesGrowActionGhost,
+              compact && local.ghostCompact,
+              pressed && styles.salesGrowActionPressed,
+            ]}
+          >
+            <Text style={styles.salesGrowActionGhostText}>Dismiss</Text>
+          </Pressable>
+          <Pressable
+            onPress={onConnect}
+            disabled={connecting}
+            style={({ pressed }) => [
+              styles.salesGrowActionSend,
+              compact && local.sendCompact,
+              { backgroundColor: accentColor },
+              pressed && styles.salesGrowActionPressed,
+            ]}
+          >
+            <UserPlus size={11} color={Theme.cardWhite} strokeWidth={2.4} />
+            <Text style={styles.salesGrowActionSendText}>
+              {connecting ? "…" : "Send"}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+export function LoadCenterPartnerRecommendations({
+  orgId,
+  mode,
+  onOpenProfile,
+  onViewAll,
+  compact = false,
+}: Props) {
+  const router = useRouter();
+  const { orgs, loading, error, refetch, invalidateCache } = useNetworkDiscovery({
+    orgId,
+    search: "",
+  });
+  const sentQ = useConnectionRequestsSentQuery(orgId);
+  const invalidateNetwork = useInvalidateNetwork(orgId);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
+  /** Mobile starts collapsed so the load list stays primary. */
+  const [expanded, setExpanded] = useState(!compact);
+  const ensureVerified = useEnsureVerified();
+
+  const atDailyInviteLimit = useMemo(() => {
+    const todayInviteCount = todayPendingInviteCountFromSent(sentQ.data ?? []);
+    return todayInviteCount >= DAILY_CONNECTION_INVITE_LIMIT;
+  }, [sentQ.data]);
+
+  const todayInviteCount = useMemo(
+    () => todayPendingInviteCountFromSent(sentQ.data ?? []),
+    [sentQ.data],
+  );
+
+  const inviteSummary = `${todayInviteCount}/${DAILY_CONNECTION_INVITE_LIMIT} invites sent today`;
+
+  const pendingByOrgId = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const row of sentQ.data ?? []) {
+      if (row.status === "pending" && row.to_organization_id) {
+        map.set(row.to_organization_id, true);
+      }
+    }
+    return map;
+  }, [sentQ.data]);
+
+  const recommendations = useMemo(
+    () =>
+      pickLoadCenterRecommendations(orgs, {
+        mode,
+        limit: RECOMMENDATION_LIMIT,
+        dismissed: dismissedIds,
+      }),
+    [orgs, mode, dismissedIds],
+  );
+
+  const roleLabel = mode === "give" ? "Supplier" : "Aggregator";
+  const subtitle =
+    mode === "give"
+      ? "Asset owners who can quote your loads"
+      : "Aggregators sharing more indents to market";
+
+  const showInviteLimitExceededAlert = useCallback(() => {
+    showAppAlert(
+      CONNECTION_REQUEST_DAILY_LIMIT_TITLE,
+      CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
+    );
+  }, []);
+
+  const handleDismiss = useCallback((id: string) => {
+    setDismissedIds((prev) => new Set(prev).add(id));
+  }, []);
+
+  const handleConnect = useCallback(
+    async (org: ScoredDiscoverOrg) => {
+      if (atDailyInviteLimit) {
+        showInviteLimitExceededAlert();
+        return;
+      }
+      if (!(await ensureVerified())) return;
+      setConnectingId(org.id);
+      const { error: reqErr } = await createConnectionRequest(orgId, org.id, {
+        requestShipperClient: mode === "get",
+        requestCarrierSupplier: mode === "give",
+      });
+      setConnectingId(null);
+      if (reqErr) {
+        if (looksLikeConnectionRateLimitError(reqErr.message)) {
+          showInviteLimitExceededAlert();
+        } else {
+          showAppAlert("Could not send request", reqErr.message);
+        }
+        return;
+      }
+      invalidateCache();
+      invalidateNetwork();
+      void refetch();
+    },
+    [
+      atDailyInviteLimit,
+      ensureVerified,
+      invalidateCache,
+      invalidateNetwork,
+      mode,
+      orgId,
+      refetch,
+      showInviteLimitExceededAlert,
+    ],
+  );
+
+  const handleCancel = useCallback(
+    async (org: ScoredDiscoverOrg) => {
+      setConnectingId(org.id);
+      const { error: cancelErr } = await cancelPendingConnectionRequestByOrgPair(
+        orgId,
+        org.id,
+      );
+      setConnectingId(null);
+      if (cancelErr) {
+        Alert.alert("Could not cancel request", cancelErr.message);
+        return;
+      }
+      invalidateCache();
+      invalidateNetwork();
+      void refetch();
+    },
+    [invalidateCache, invalidateNetwork, orgId, refetch],
+  );
+
+  const handleViewAll = () => {
+    if (onViewAll) {
+      onViewAll();
+      return;
+    }
+    router.push(ROUTES.TABS.NETWORK as never);
+  };
+
+  const titleText =
+    recommendations.length > 0
+      ? `${recommendations.length} suggested`
+      : "Suggested partners";
+
+  const showBody = !compact || expanded;
+  const Chevron = expanded ? ChevronUp : ChevronDown;
+
+  return (
+    <View
+      style={[
+        styles.salesCard,
+        styles.salesGrowPanel,
+        local.wrap,
+        compact && local.wrapCompact,
+        compact && !expanded && local.wrapCollapsed,
+      ]}
+    >
+      <Pressable
+        onPress={compact ? () => setExpanded((v) => !v) : undefined}
+        disabled={!compact}
+        style={({ pressed }) => [
+          styles.salesGrowHeader,
+          compact && local.headerCompact,
+          compact && pressed && local.headerPressed,
+        ]}
+        accessibilityRole={compact ? "button" : undefined}
+        accessibilityState={compact ? { expanded } : undefined}
+        accessibilityLabel={
+          compact
+            ? `${titleText}. ${expanded ? "Minimize" : "Expand"} suggestions`
+            : undefined
+        }
+      >
+        <View style={styles.salesGrowTitleIcon}>
+          <Sparkles size={11} color={METRONIC.link} />
+        </View>
+        <View style={styles.salesGrowHeaderText}>
+          <Text style={styles.salesGrowTitle}>{titleText}</Text>
+          <Text style={styles.salesGrowSub} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </View>
+        {compact ? (
+          <View style={local.chevronOrb}>
+            <Chevron size={14} color={METRONIC.subtle} strokeWidth={2.4} />
+          </View>
+        ) : null}
+      </Pressable>
+
+      {showBody ? (
+        <>
+          {loading && recommendations.length === 0 ? (
+            <View style={styles.salesGrowLoading}>
+              <LoadingIndicator size="small" color={METRONIC.link} />
+            </View>
+          ) : error ? (
+            <Text style={styles.salesEmptySide}>{error}</Text>
+          ) : recommendations.length === 0 ? (
+            <Text style={styles.salesEmptySide}>
+              {mode === "give"
+                ? "No asset-owner suppliers to suggest right now — open Network to search."
+                : "No active aggregators to suggest right now — open Network to search."}
+            </Text>
+          ) : (
+            <View style={styles.salesGrowFeed}>
+              {recommendations.map((org, idx) => {
+                const location = getDiscoverOrgLocation(org);
+                const { prefix, highlight, tone } = loadCenterRecommendMatchLine(
+                  mode,
+                  org,
+                );
+                const pending =
+                  pendingByOrgId.get(org.id) ||
+                  String(org.connection_status ?? "").toLowerCase() ===
+                    "pending";
+                return (
+                  <RecommendationRow
+                    key={org.id}
+                    org={org}
+                    roleLabel={roleLabel}
+                    locationLabel={location ?? "Location not set"}
+                    matchPrefix={prefix}
+                    matchHighlight={highlight}
+                    accentColor={growRowAccentColor(tone)}
+                    pending={pending}
+                    connecting={connectingId === org.id}
+                    isLast={idx === recommendations.length - 1}
+                    striped={idx % 2 === 1}
+                    compact={compact}
+                    onOpenProfile={
+                      onOpenProfile ? () => onOpenProfile(org) : undefined
+                    }
+                    onDismiss={() => handleDismiss(org.id)}
+                    onConnect={() => void handleConnect(org)}
+                    onCancel={() => void handleCancel(org)}
+                  />
+                );
+              })}
+            </View>
+          )}
+
+          <View style={styles.salesGrowInviteMeta}>
+            <Text style={styles.salesGrowInviteMetaText}>{inviteSummary}</Text>
+          </View>
+
+          <Pressable
+            onPress={handleViewAll}
+            style={({ pressed }) => [
+              styles.salesGrowFooterBtn,
+              pressed && styles.salesGrowActionPressed,
+            ]}
+          >
+            <Text style={styles.salesGrowFooterBtnText}>View all</Text>
+          </Pressable>
+        </>
+      ) : (
+        <View style={[styles.salesGrowInviteMeta, local.inviteCollapsed]}>
+          <Text style={styles.salesGrowInviteMetaText}>{inviteSummary}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const local = {
+  wrap: {
+    marginTop: 0,
+    marginBottom: 0,
+    alignSelf: "stretch" as const,
+    width: "100%" as const,
+  } satisfies ViewStyle,
+  wrapCompact: {
+    marginHorizontal: 0,
+    borderRadius: 12,
+  } satisfies ViewStyle,
+  wrapCollapsed: {
+    paddingBottom: 8,
+  } satisfies ViewStyle,
+  inviteCollapsed: {
+    marginTop: 0,
+    marginBottom: 4,
+  } satisfies ViewStyle,
+  headerCompact: {
+    paddingVertical: 10,
+    alignItems: "center" as const,
+  } satisfies ViewStyle,
+  headerPressed: {
+    opacity: 0.88,
+  } satisfies ViewStyle,
+  chevronOrb: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    backgroundColor: "#F1F1F4",
+    flexShrink: 0,
+  } satisfies ViewStyle,
+  rowCompact: {
+    paddingTop: 10,
+    paddingBottom: 10,
+    gap: 10,
+  } satisfies ViewStyle,
+  actionRowSidebar: {
+    justifyContent: "flex-end" as const,
+  } satisfies ViewStyle,
+  actionRowCompact: {
+    paddingLeft: 42,
+    paddingRight: 0,
+    justifyContent: "flex-start" as const,
+    width: "100%" as const,
+    gap: 8,
+  } satisfies ViewStyle,
+  ghostCompact: {
+    flexShrink: 0,
+    minHeight: 32,
+    justifyContent: "center" as const,
+  } satisfies ViewStyle,
+  sendCompact: {
+    flex: 1,
+    minHeight: 32,
+    minWidth: 0,
+  } satisfies ViewStyle,
+};

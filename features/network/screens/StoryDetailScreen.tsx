@@ -3,82 +3,82 @@
  * Own posts: show WhatsApp-style viewer list.
  * Other posts: show existing bid + edit bid flow.
  */
-import Theme from "@/constants/Theme";
-import Layout from "@/constants/Layout";
 import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
+import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { BidSheet } from "@/features/network/components/bidding/BidSheet";
-import { useVerifiedActionGuard } from "@/features/network/utils/verifiedActionGuard";
+import {
+    getIndentDisplayNumber,
+    getVisibleIndentById,
+    resolveSupplierTargetDisplayRate,
+} from "@/features/indents/services/indents.service";
 import { StoryBroadcastPreview } from "@/features/network/components/StoryBroadcastPreview";
 import { StoryOwnerFooterActions } from "@/features/network/components/StoryDetailFooterActions";
-import { StoryOwnerBidsSheet } from "@/features/network/components/bidding/StoryOwnerBidsSheet";
-import { BoostSheet } from "@/features/reach/components/BoostSheet";
-import { BoostProgressSheet } from "@/features/reach/components/BoostProgressSheet";
 import { StoryViewersSheet } from "@/features/network/components/StoryViewersSheet";
+import { BidSheet } from "@/features/network/components/bidding/BidSheet";
+import { StoryOwnerBidsSheet } from "@/features/network/components/bidding/StoryOwnerBidsSheet";
 import {
-  deactivatePost,
-  getPostById,
-  isPostVisibleForOrg,
-  type PostRow,
+    deactivatePost,
+    getPostById,
+    isPostVisibleForOrg,
+    type PostRow,
 } from "@/features/network/services/posts.service";
 import {
-  getIndentDisplayNumber,
-  getVisibleIndentById,
-  resolveSupplierTargetDisplayRate,
-} from "@/features/indents/services/indents.service";
-import {
-  buildStoryOwnerBidRows,
-  storyOwnerBidsLabel,
+    buildStoryOwnerBidRows,
+    storyOwnerBidsLabel,
 } from "@/features/network/utils/bidding/storyOwnerBids.util";
 import {
-  buildStoryOwnerViewRows,
-  storyOwnerViewsLabel,
-  toStoryViewRows,
-} from "@/features/network/utils/storyOwnerViews.util";
-import {
-  formatStoryDate,
-  storyHeadline,
-  storyTypeLabel,
-  splitLocationParts,
-  loadMaterialLabel,
+    formatStoryDate,
+    loadMaterialLabel,
+    splitLocationParts,
+    storyHeadline,
+    storyTypeLabel,
 } from "@/features/network/utils/storyDisplay";
-import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts } from "@/lib/queries/usePostsQuery";
-import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
-import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
-import { useIndentDirectQuotesQuery } from "@/lib/queries";
-import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
+import {
+    buildStoryOwnerViewRows,
+    storyOwnerViewsLabel,
+    toStoryViewRows,
+} from "@/features/network/utils/storyOwnerViews.util";
+import { useVerifiedActionGuard } from "@/features/network/utils/verifiedActionGuard";
+import { BoostProgressSheet } from "@/features/reach/components/BoostProgressSheet";
+import { BoostSheet } from "@/features/reach/components/BoostSheet";
 import { recordReachEvent } from "@/features/reach/services/events.service";
-import { useReachCampaignsQuery, useMarkReachCampaignSourceDeletedMutation } from "@/lib/queries/useReachCampaignsQuery";
 import { confirmDialog } from "@/lib/confirmDialog";
+import { useIndentDirectQuotesQuery } from "@/lib/queries";
+import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
+import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
+import { useAfterPostDeleted, useInvalidatePosts, useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
+import { useMarkReachCampaignSourceDeletedMutation, useReachCampaignsQuery } from "@/lib/queries/useReachCampaignsQuery";
+import { useRecordStoryViewMutation, useStoryViewsQuery } from "@/lib/queries/useStoryViewsQuery";
 import { ROUTES, buildPulseStoryPublicUrl } from "@/lib/routes";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import {
-  CheckCircle2,
-  Clock3,
-  Edit3,
-  MapPin,
-  MessageSquare,
-  Rocket,
-  Send,
-  Sparkles,
-  Trash2,
-  X,
-  Truck,
+    CheckCircle2,
+    Clock3,
+    Edit3,
+    MapPin,
+    MessageSquare,
+    Rocket,
+    Send,
+    Sparkles,
+    Trash2,
+    Truck,
+    X,
 } from "lucide-react-native";
-import { useQuery } from "@tanstack/react-query";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  Alert,
-  Easing,
-  useWindowDimensions,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Easing,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

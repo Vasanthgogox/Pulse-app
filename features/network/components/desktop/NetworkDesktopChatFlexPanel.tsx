@@ -504,8 +504,7 @@ function NetworkDesktopChatFlexPanelBody({
         <View style={styles.messagesArea}>
           <Text style={styles.emptyTitle}>No integrated partners yet</Text>
           <Text style={styles.emptySub}>
-            Connect with organisations on Pulse from Your connections or Grow your
-            network. Only integrated parties can use workspace chat.
+            Connect with organisations on Pulse from the Network tab. Only integrated parties can use workspace chat.
           </Text>
         </View>
       );

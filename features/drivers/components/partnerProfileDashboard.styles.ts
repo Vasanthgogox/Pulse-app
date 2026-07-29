@@ -474,4 +474,45 @@ export const partnerProfileDashboardStyles = StyleSheet.create({
     color: Theme.textMuted,
     fontWeight: "600",
   },
+  /** CounterpartyProfileSystemCard view-tab chip bar (shared party chrome). */
+  viewTabBar: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 6,
+    backgroundColor: Theme.cardWhite,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderInput,
+  },
+  viewTabChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    backgroundColor: Theme.surfaceGray,
+    minHeight: 30,
+    justifyContent: "center",
+  },
+  viewTabChipActive: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
+  },
+  viewTabChipText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textRouteCard,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  viewTabChipTextActive: {
+    color: Theme.textOnPrimary,
+  },
+  hubBody: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
 });

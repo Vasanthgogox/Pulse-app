@@ -23,6 +23,7 @@
 
 import type { LedgerRow } from "@/features/finance";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { formatCityStateLabel, formatLaneRouteLabel } from "@/lib/placeCityState.util";
 
 import type {
   AnalyticsInsight,
@@ -71,13 +72,45 @@ function asNumber(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Asset-operated (own fleet) vs supplier/market-operated. */
+export type ClientOpModelKind = "asset" | "supplier";
+
 function laneLabel(t: TripRow): string {
-  const pickup = (t.pickup_area ?? "").trim();
-  const drop = (t.drop_location ?? "").trim();
-  if (pickup && drop) return `${pickup} → ${drop}`;
-  if (pickup) return pickup;
-  if (drop) return `→ ${drop}`;
-  return "Unspecified lane";
+  const pickup = formatCityStateLabel(t.pickup_area);
+  const drop = formatCityStateLabel(t.drop_location);
+  return formatLaneRouteLabel(pickup, drop) || "Unspecified lane";
+}
+
+function tripRevenueAmount(t: TripRow): number {
+  return Math.max(0, asNumber(t.client_price));
+}
+
+function tripCostAmount(t: TripRow): number {
+  return Math.max(0, asNumber(t.supplier_rate));
+}
+
+/** Prefer stored margin; fall back to revenue − supplier rate. */
+function tripMarginAmount(t: TripRow): number {
+  const stored = Number(t.margin);
+  if (Number.isFinite(stored)) return stored;
+  return tripRevenueAmount(t) - tripCostAmount(t);
+}
+
+/**
+ * Asset = own fleet execution; supplier = market / aggregate operated.
+ * Uses the same canonical model as trip detail / accounting.
+ */
+export function tripOpModelKind(t: TripRow): ClientOpModelKind {
+  const source = String(t.source ?? "").trim().toLowerCase();
+  if (source === "mover_asset") return "asset";
+  const mode = String(t.trip_payout_mode ?? "").trim().toLowerCase();
+  if (mode === "asset") return "asset";
+  if (mode === "market") return "supplier";
+  const hasOwnDriver = String(t.driver_id ?? "").trim().length > 0;
+  const hasOwnVehicle = String(t.vehicle_id ?? "").trim().length > 0;
+  if (hasOwnDriver && hasOwnVehicle) return "asset";
+  if (String(t.supplier_id ?? "").trim()) return "supplier";
+  return "asset";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +145,34 @@ export interface ClientLoadTypeBreakdown {
   label: string;
   revenue: number;
   trips: number;
+}
+
+export interface ClientOpModelMargin {
+  id: ClientOpModelKind;
+  label: string;
+  trips: number;
+  revenue: number;
+  cost: number;
+  margin: number;
+  marginPct: number;
+  /** Share of total margin (can be >100 or negative when mix has losses). */
+  contributionPct: number;
+}
+
+export interface ClientLaneMarginContribution {
+  id: string;
+  label: string;
+  trips: number;
+  revenue: number;
+  cost: number;
+  margin: number;
+  marginPct: number;
+  assetMargin: number;
+  supplierMargin: number;
+  assetTrips: number;
+  supplierTrips: number;
+  /** Share of total period margin. */
+  contributionPct: number;
 }
 
 export interface ClientProfitabilityMetrics {
@@ -348,12 +409,19 @@ export function computeClientMonthlyTrend(
 
 export function computeLaneBreakdown(
   trips: readonly TripRow[],
-  options: { topN?: number; now?: Date; windowMonths?: number } = {},
+  options: {
+    topN?: number;
+    now?: Date;
+    windowMonths?: number;
+    /** Use supplier_rate instead of client_price (partner spend view). */
+    valueMode?: "revenue" | "spend";
+  } = {},
 ): ClientLaneBreakdown[] {
   const now = options.now ?? new Date();
   const windowMonths = options.windowMonths ?? 12;
   const cutoff = new Date(now);
   cutoff.setMonth(cutoff.getMonth() - windowMonths);
+  const asSpend = options.valueMode === "spend";
 
   const map = new Map<
     string,
@@ -364,8 +432,8 @@ export function computeLaneBreakdown(
     if (!d || d < cutoff) continue;
     const lane = laneLabel(t);
     const entry = map.get(lane) ?? { revenue: 0, trips: 0, margin: 0 };
-    entry.revenue += asNumber(t.client_price);
-    entry.margin += asNumber(t.margin);
+    entry.revenue += asSpend ? asNumber(t.supplier_rate) : asNumber(t.client_price);
+    entry.margin += tripMarginAmount(t);
     entry.trips += 1;
     map.set(lane, entry);
   }
@@ -387,14 +455,149 @@ export function computeLaneBreakdown(
   return rows.slice(0, options.topN ?? 5);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Margin analysis — lane contribution + asset vs supplier operation
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function computeOpModelMarginContribution(
+  trips: readonly TripRow[],
+): ClientOpModelMargin[] {
+  const buckets: Record<
+    ClientOpModelKind,
+    { trips: number; revenue: number; cost: number; margin: number }
+  > = {
+    asset: { trips: 0, revenue: 0, cost: 0, margin: 0 },
+    supplier: { trips: 0, revenue: 0, cost: 0, margin: 0 },
+  };
+
+  for (const t of trips) {
+    const kind = tripOpModelKind(t);
+    const b = buckets[kind];
+    b.trips += 1;
+    b.revenue += tripRevenueAmount(t);
+    b.cost += tripCostAmount(t);
+    b.margin += tripMarginAmount(t);
+  }
+
+  const totalMargin = buckets.asset.margin + buckets.supplier.margin;
+  const absTotal = Math.abs(totalMargin);
+
+  const labelFor = (id: ClientOpModelKind) =>
+    id === "asset" ? "Asset operated" : "Supplier operated";
+
+  return (["asset", "supplier"] as const).map((id) => {
+    const b = buckets[id];
+    return {
+      id,
+      label: labelFor(id),
+      trips: b.trips,
+      revenue: b.revenue,
+      cost: b.cost,
+      margin: b.margin,
+      marginPct:
+        b.revenue > 0 ? Math.round((b.margin / b.revenue) * 1000) / 10 : 0,
+      contributionPct:
+        absTotal > 0
+          ? Math.round((b.margin / totalMargin) * 1000) / 10
+          : b.trips > 0
+            ? 50
+            : 0,
+    };
+  });
+}
+
+export function computeLaneMarginContribution(
+  trips: readonly TripRow[],
+  options: { topN?: number } = {},
+): ClientLaneMarginContribution[] {
+  const map = new Map<
+    string,
+    {
+      trips: number;
+      revenue: number;
+      cost: number;
+      margin: number;
+      assetMargin: number;
+      supplierMargin: number;
+      assetTrips: number;
+      supplierTrips: number;
+    }
+  >();
+
+  for (const t of trips) {
+    const lane = laneLabel(t);
+    const entry = map.get(lane) ?? {
+      trips: 0,
+      revenue: 0,
+      cost: 0,
+      margin: 0,
+      assetMargin: 0,
+      supplierMargin: 0,
+      assetTrips: 0,
+      supplierTrips: 0,
+    };
+    const rev = tripRevenueAmount(t);
+    const cost = tripCostAmount(t);
+    const margin = tripMarginAmount(t);
+    const kind = tripOpModelKind(t);
+    entry.trips += 1;
+    entry.revenue += rev;
+    entry.cost += cost;
+    entry.margin += margin;
+    if (kind === "asset") {
+      entry.assetMargin += margin;
+      entry.assetTrips += 1;
+    } else {
+      entry.supplierMargin += margin;
+      entry.supplierTrips += 1;
+    }
+    map.set(lane, entry);
+  }
+
+  const totalMargin = Array.from(map.values()).reduce((s, e) => s + e.margin, 0);
+  const absTotal = Math.abs(totalMargin);
+
+  const rows: ClientLaneMarginContribution[] = Array.from(map.entries()).map(
+    ([label, agg]) => ({
+      id: label,
+      label,
+      trips: agg.trips,
+      revenue: agg.revenue,
+      cost: agg.cost,
+      margin: agg.margin,
+      marginPct:
+        agg.revenue > 0
+          ? Math.round((agg.margin / agg.revenue) * 1000) / 10
+          : 0,
+      assetMargin: agg.assetMargin,
+      supplierMargin: agg.supplierMargin,
+      assetTrips: agg.assetTrips,
+      supplierTrips: agg.supplierTrips,
+      contributionPct:
+        absTotal > 0
+          ? Math.round((agg.margin / totalMargin) * 1000) / 10
+          : 0,
+    }),
+  );
+
+  rows.sort((a, b) => Math.abs(b.margin) - Math.abs(a.margin));
+  return rows.slice(0, options.topN ?? 12);
+}
+
 export function computeLoadTypeBreakdown(
   trips: readonly TripRow[],
-  options: { topN?: number; now?: Date; windowMonths?: number } = {},
+  options: {
+    topN?: number;
+    now?: Date;
+    windowMonths?: number;
+    valueMode?: "revenue" | "spend";
+  } = {},
 ): ClientLoadTypeBreakdown[] {
   const now = options.now ?? new Date();
   const windowMonths = options.windowMonths ?? 12;
   const cutoff = new Date(now);
   cutoff.setMonth(cutoff.getMonth() - windowMonths);
+  const asSpend = options.valueMode === "spend";
 
   const map = new Map<string, { revenue: number; trips: number }>();
   for (const t of trips) {
@@ -402,7 +605,7 @@ export function computeLoadTypeBreakdown(
     if (!d || d < cutoff) continue;
     const loadType = (t.load_type ?? "").trim() || "Unspecified";
     const entry = map.get(loadType) ?? { revenue: 0, trips: 0 };
-    entry.revenue += asNumber(t.client_price);
+    entry.revenue += asSpend ? asNumber(t.supplier_rate) : asNumber(t.client_price);
     entry.trips += 1;
     map.set(loadType, entry);
   }
@@ -502,6 +705,167 @@ export function computePaymentAging(
     bucket90Plus,
     totalOverdueTrips: overdueTrips,
   };
+}
+
+export type AgingBucketKey =
+  | "bucket0_30"
+  | "bucket31_60"
+  | "bucket61_90"
+  | "bucket90Plus";
+
+export type AgingTripRow = {
+  trip: TripRow;
+  outstanding: number;
+  daysOld: number;
+  bucket: AgingBucketKey;
+};
+
+function agingBucketForDays(daysOld: number): AgingBucketKey {
+  if (daysOld <= 30) return "bucket0_30";
+  if (daysOld <= 60) return "bucket31_60";
+  if (daysOld <= 90) return "bucket61_90";
+  return "bucket90Plus";
+}
+
+/** Open AR trips, optionally scoped to one aging bucket. */
+export function listOpenReceivableTrips(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+  options: { now?: Date; bucket?: AgingBucketKey | null } = {},
+): AgingTripRow[] {
+  const now = options.now ?? new Date();
+  const paymentByTrip = buildPaymentByTripMap(trips, txns);
+  const rows: AgingTripRow[] = [];
+
+  for (const t of trips) {
+    const price = asNumber(t.client_price);
+    if (price <= 0) continue;
+    const paid = paymentByTrip.get(t.id)?.paid ?? 0;
+    const outstanding = price - paid;
+    if (outstanding <= 0) continue;
+    const dateAnchor = t.pickup_date ? new Date(t.pickup_date) : tripDate(t);
+    if (!dateAnchor || !Number.isFinite(dateAnchor.getTime())) continue;
+    const daysOld = Math.max(
+      0,
+      Math.round((now.getTime() - dateAnchor.getTime()) / MS_PER_DAY),
+    );
+    const bucket = agingBucketForDays(daysOld);
+    if (options.bucket && bucket !== options.bucket) continue;
+    rows.push({ trip: t, outstanding, daysOld, bucket });
+  }
+
+  rows.sort((a, b) => b.daysOld - a.daysOld || b.outstanding - a.outstanding);
+  return rows;
+}
+
+/** Ledger rows linked to open-AR trips in a bucket (or all open-AR trips). */
+export function filterLedgerByAgingBucket(
+  txs: readonly LedgerRow[],
+  openRows: readonly AgingTripRow[],
+): LedgerRow[] {
+  if (openRows.length === 0) return [];
+  const ids = new Set(openRows.map((r) => r.trip.id));
+  return txs.filter((tx) => {
+    const id = tx.trip_id?.trim();
+    return Boolean(id && ids.has(id));
+  });
+}
+
+/** Map trip id → supplier payouts (`amount_out`) for payable aging. */
+function buildPayableByTripMap(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+): Map<string, { paid: number; lastTxDate: Date | null }> {
+  const map = new Map<string, { paid: number; lastTxDate: Date | null }>();
+  const tripIds = new Set(trips.map((t) => t.id));
+  for (const tx of txns) {
+    if (!tx.trip_id || !tripIds.has(tx.trip_id)) continue;
+    const amt = asNumber(tx.amount_out);
+    if (amt <= 0) continue;
+    const txDate = txnDate(tx);
+    const entry = map.get(tx.trip_id) ?? { paid: 0, lastTxDate: null };
+    entry.paid += amt;
+    if (txDate && (!entry.lastTxDate || txDate > entry.lastTxDate)) {
+      entry.lastTxDate = txDate;
+    }
+    map.set(tx.trip_id, entry);
+  }
+  return map;
+}
+
+/** Payable aging buckets for supplier / partner trips (mirrors receivable shape). */
+export function computePayableAging(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+  options: { now?: Date } = {},
+): ClientPaymentAging {
+  const now = options.now ?? new Date();
+  const payableByTrip = buildPayableByTripMap(trips, txns);
+
+  let bucket0_30 = 0;
+  let bucket31_60 = 0;
+  let bucket61_90 = 0;
+  let bucket90Plus = 0;
+  let overdueTrips = 0;
+
+  for (const t of trips) {
+    const rate = asNumber(t.supplier_rate);
+    if (rate <= 0) continue;
+    const paid = payableByTrip.get(t.id)?.paid ?? 0;
+    const outstanding = rate - paid;
+    if (outstanding <= 0) continue;
+    const dateAnchor = t.pickup_date ? new Date(t.pickup_date) : tripDate(t);
+    if (!dateAnchor || !Number.isFinite(dateAnchor.getTime())) continue;
+    const daysOld = Math.max(
+      0,
+      Math.round((now.getTime() - dateAnchor.getTime()) / MS_PER_DAY),
+    );
+    overdueTrips += 1;
+    if (daysOld <= 30) bucket0_30 += outstanding;
+    else if (daysOld <= 60) bucket31_60 += outstanding;
+    else if (daysOld <= 90) bucket61_90 += outstanding;
+    else bucket90Plus += outstanding;
+  }
+
+  return {
+    outstanding: bucket0_30 + bucket31_60 + bucket61_90 + bucket90Plus,
+    bucket0_30,
+    bucket31_60,
+    bucket61_90,
+    bucket90Plus,
+    totalOverdueTrips: overdueTrips,
+  };
+}
+
+/** Open AP trips, optionally scoped to one aging bucket. */
+export function listOpenPayableTrips(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+  options: { now?: Date; bucket?: AgingBucketKey | null } = {},
+): AgingTripRow[] {
+  const now = options.now ?? new Date();
+  const payableByTrip = buildPayableByTripMap(trips, txns);
+  const rows: AgingTripRow[] = [];
+
+  for (const t of trips) {
+    const rate = asNumber(t.supplier_rate);
+    if (rate <= 0) continue;
+    const paid = payableByTrip.get(t.id)?.paid ?? 0;
+    const outstanding = rate - paid;
+    if (outstanding <= 0) continue;
+    const dateAnchor = t.pickup_date ? new Date(t.pickup_date) : tripDate(t);
+    if (!dateAnchor || !Number.isFinite(dateAnchor.getTime())) continue;
+    const daysOld = Math.max(
+      0,
+      Math.round((now.getTime() - dateAnchor.getTime()) / MS_PER_DAY),
+    );
+    const bucket = agingBucketForDays(daysOld);
+    if (options.bucket && bucket !== options.bucket) continue;
+    rows.push({ trip: t, outstanding, daysOld, bucket });
+  }
+
+  rows.sort((a, b) => b.daysOld - a.daysOld || b.outstanding - a.outstanding);
+  return rows;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -11,25 +11,25 @@ import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocatio
 import { formatINR } from "@/lib/format";
 import { buildPulseStoryPublicUrl } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import * as Sharing from "expo-sharing";
 import { ArrowRight, CheckCircle2, Clock, Copy, X, Zap } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  Easing,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Animated,
+    Easing,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Clipboard from "expo-clipboard";
 
 const IS_WEB = Platform.OS === "web";
 const SHEET_MAX_WIDTH = 440;
