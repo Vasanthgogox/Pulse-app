@@ -13,6 +13,14 @@ export interface PlaceResult {
   pincode?: string | null;
   city?: string | null;
   state?: string | null;
+  /**
+   * The place's own name (neighborhood / locality / suburb), when the provider
+   * reports it separately from the parent city. Kept so labels can show
+   * "Pallavaram, Tamil Nadu" instead of collapsing to the parent district.
+   */
+  locality?: string | null;
+  /** Revenue/administrative district. Never used as `city` — in India these differ. */
+  district?: string | null;
 }
 
 export type ReverseGeocodeIndiaResult = {
@@ -74,11 +82,20 @@ function placeResultFromMapboxFeature(feature: MapboxFeature): PlaceResult | nul
   const pincode =
     normalizeIndianPincode(readMapboxContextText(context, 'postcode')) ||
     extractPincodeFromPlaceText(displayName);
-  const city =
-    readMapboxContextText(context, 'place') ||
-    readMapboxContextText(context, 'locality') ||
-    readMapboxContextText(context, 'district');
+  // `district` is the revenue district (e.g. Chengalpattu) — never the city.
+  const city = readMapboxContextText(context, 'place');
+  const district = readMapboxContextText(context, 'district');
   const state = readMapboxContextText(context, 'region');
+  // Neighborhood/locality hits carry their own name in `text`; keep it so the
+  // label doesn't fall back to the parent city or district.
+  const featureName = feature.text?.trim() || null;
+  const isSubCity = feature.place_type?.some(
+    (t) => t === 'neighborhood' || t === 'locality' || t === 'address' || t === 'poi',
+  );
+  const locality =
+    readMapboxContextText(context, 'neighborhood') ||
+    readMapboxContextText(context, 'locality') ||
+    (isSubCity ? featureName : null);
 
   return {
     placeId: feature.id ?? displayName,
@@ -88,6 +105,8 @@ function placeResultFromMapboxFeature(feature: MapboxFeature): PlaceResult | nul
     pincode,
     city,
     state,
+    locality,
+    district,
   };
 }
 
@@ -279,17 +298,21 @@ async function searchNominatim(query: string, opts?: SearchOpts): Promise<PlaceR
       village?: string;
       state?: string;
       state_district?: string;
+      suburb?: string;
+      neighbourhood?: string;
+      city_district?: string;
     };
   }>;
   if (!Array.isArray(data)) return [];
 
   return data.map((item) => {
     const address = item.address;
-    const city =
-      address?.city ||
-      address?.town ||
-      address?.village ||
-      address?.state_district ||
+    // state_district is the revenue district — excluded from `city` on purpose.
+    const city = address?.city || address?.town || address?.village || null;
+    const locality =
+      address?.neighbourhood?.trim() ||
+      address?.suburb?.trim() ||
+      address?.city_district?.trim() ||
       null;
     const pincode =
       normalizeIndianPincode(address?.postcode) ||
@@ -303,6 +326,8 @@ async function searchNominatim(query: string, opts?: SearchOpts): Promise<PlaceR
       pincode,
       city,
       state: address?.state?.trim() || null,
+      locality,
+      district: address?.state_district?.trim() || null,
     };
   });
 }
@@ -342,8 +367,15 @@ async function searchGooglePlaces(query: string, opts?: SearchOpts): Promise<Pla
     const postal = detData.result?.address_components?.find((c) =>
       c.types.includes('postal_code'),
     );
+    // `locality` is the city; admin_area_2 is the district and is kept separate.
     const cityComponent = detData.result?.address_components?.find((c) =>
-      c.types.some((t) => t === 'locality' || t === 'administrative_area_level_2'),
+      c.types.includes('locality'),
+    );
+    const districtComponent = detData.result?.address_components?.find((c) =>
+      c.types.includes('administrative_area_level_2'),
+    );
+    const localityComponent = detData.result?.address_components?.find((c) =>
+      c.types.some((t) => t === 'sublocality_level_1' || t === 'sublocality' || t === 'neighborhood'),
     );
     const stateComponent = detData.result?.address_components?.find((c) =>
       c.types.includes('administrative_area_level_1'),
@@ -358,6 +390,8 @@ async function searchGooglePlaces(query: string, opts?: SearchOpts): Promise<Pla
         extractPincodeFromPlaceText(formatted),
       city: cityComponent?.long_name ?? null,
       state: stateComponent?.long_name ?? null,
+      locality: localityComponent?.long_name ?? null,
+      district: districtComponent?.long_name ?? null,
     });
   }
   return results;

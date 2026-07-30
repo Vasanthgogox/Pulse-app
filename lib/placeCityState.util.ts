@@ -76,6 +76,14 @@ function stripNoiseWords(value: string): string {
   return collapseWs(value.replace(NOISE_RE, " "));
 }
 
+/** Loose equality for place names: ignores case and accents. */
+function isSamePlacePart(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  return (
+    stripDiacritics(a).trim().toLowerCase() === stripDiacritics(b).trim().toLowerCase()
+  );
+}
+
 /**
  * Build "City, State" from structured fields when available.
  */
@@ -86,9 +94,7 @@ export function formatCityStateFromParts(
   const c = titleCasePlacePart(city ?? "");
   const s = titleCasePlacePart(state ?? "");
   if (c && s) {
-    if (stripDiacritics(c).toLowerCase() === stripDiacritics(s).toLowerCase()) {
-      return c;
-    }
+    if (isSamePlacePart(c, s)) return c;
     return `${c}, ${s}`;
   }
   return c || s || "";
@@ -164,6 +170,33 @@ export function parseCityStateFromPlaceText(
   return {};
 }
 
+/**
+ * The leading segment of a provider display name, when it names a place rather
+ * than a street address or noise — e.g. "Pallavaram, Chengalpattu, Tamil Nadu,
+ * India" → "Pallavaram". Used only when the provider gave no structured
+ * locality, so a neighborhood pick isn't reduced to its parent district.
+ * Returns "" when the lead is a house/street line, a pincode, or already the
+ * city/state.
+ */
+function leadingPlaceName(
+  raw: string | null | undefined,
+  city?: string | null,
+  state?: string | null,
+): string {
+  const first = collapseWs((raw ?? "").split(",")[0] ?? "");
+  if (!first) return "";
+  // Street lines ("12/4 Anna Salai", "Plot 7") aren't locality names.
+  if (/\d/.test(first)) return "";
+  if (isNoiseSegment(first)) return "";
+  // "Chennai Warehouse" survives isNoiseSegment (it strips to a real city), but
+  // a hub name is not a locality — reject any segment carrying a noise word.
+  if (NOISE_RE.test(first)) return "";
+  const titled = titleCasePlacePart(first);
+  if (!titled) return "";
+  if (isSamePlacePart(titled, city) || isSamePlacePart(titled, state)) return "";
+  return titled;
+}
+
 export type PlaceCityStateInput = {
   city?: string | null;
   state?: string | null;
@@ -231,16 +264,40 @@ export function enrichPlaceSelectionSync(place: {
   city?: string | null;
   state?: string | null;
   pincode?: string | null;
+  /** Neighborhood/locality name, when the provider reports it apart from the city. */
+  locality?: string | null;
+  /** Revenue district — never substituted for the city. */
+  district?: string | null;
 }): EnrichedPlaceSelection {
   const parsed = parseCityStateFromPlaceText(place.displayName);
   const cityRaw = place.city?.trim() || parsed.city || "";
   const stateRaw = place.state?.trim() || parsed.state || "";
   const city = titleCasePlacePart(cityRaw) || null;
   const state = titleCasePlacePart(stateRaw) || null;
+  const locality =
+    titleCasePlacePart(place.locality?.trim() ?? "") ||
+    leadingPlaceName(place.displayName, city, state) ||
+    null;
   const pincode =
     normalizePlacePincode(place.pincode) ||
     normalizePlacePincode(place.displayName.match(/\b([1-9]\d{5})\b/)?.[1] ?? null);
+  // Show the place actually picked. A locality (e.g. Pallavaram) is more specific
+  // than its parent city, so it leads the label; the city/state anchors it.
+  // Anchor with the city when there is a real one. When `city` is only the
+  // parsed district (Chengalpattu for a Pallavaram pick), anchor with the state
+  // instead — the district would read as the wrong place.
+  const district = titleCasePlacePart(place.district?.trim() ?? "");
+  // A city parsed out of the display name is unreliable: for "Pallavaram,
+  // Chengalpattu, Tamil Nadu" the parse yields the district. Only a
+  // provider-supplied city is trusted as an anchor.
+  const cityIsTrusted = Boolean(place.city?.trim()) && !isSamePlacePart(city, district);
+  const anchor = cityIsTrusted ? city : state || city;
+  const localityLabel =
+    locality && !isSamePlacePart(locality, city)
+      ? formatCityStateFromParts(locality, anchor)
+      : "";
   const label =
+    localityLabel ||
     formatCityStateFromParts(city, state) ||
     formatCityStateLabel(place.displayName) ||
     titleCasePlacePart(place.displayName);
@@ -248,7 +305,9 @@ export function enrichPlaceSelectionSync(place: {
     label,
     lat: place.lat,
     lon: place.lon,
-    city,
+    // Prefer a trusted city; otherwise the locality is the most accurate thing
+    // we have. Never store the district as the city.
+    city: cityIsTrusted ? city : locality || city,
     state,
     pincode,
   };

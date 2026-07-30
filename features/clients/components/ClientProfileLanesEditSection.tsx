@@ -92,10 +92,10 @@ function laneToDraft(
     : null;
   return {
     origin_warehouse_id: lane.origin_warehouse_id,
-    origin_label: hub
-      ? formatWarehouseLaneLabel(hub)
-      : formatCityStateLabel(lane.origin_label),
-    destination_label: formatCityStateLabel(lane.destination_label),
+    // Stored labels are already canonical from the picker — re-normalizing here
+    // would strip the locality off saved lanes on reopen.
+    origin_label: hub ? formatWarehouseLaneLabel(hub) : lane.origin_label,
+    destination_label: lane.destination_label,
     vehicle_type: lane.vehicle_type ?? "",
     default_load_type: lane.default_load_type ?? "",
     default_load_tons:
@@ -260,8 +260,13 @@ export function ClientProfileLanesEditSection({
     setSaving(true);
     const payload = {
       origin_warehouse_id: draft.origin_warehouse_id,
-      origin_label: hub ? originLabel : formatCityStateLabel(originLabel) || originLabel,
-      destination_label: formatCityStateLabel(destination) || destination,
+      /**
+       * Save the label the picker produced. Re-normalizing here would keep only
+       * the last two comma parts and drop the locality — e.g. "Pallavaram,
+       * Chennai" collapsing to the parent district.
+       */
+      origin_label: originLabel,
+      destination_label: destination,
       vehicle_type: draft.vehicle_type.trim() || null,
       /** Both feed the trip wizard's Commodity step via buildClientLanePrefill. */
       default_load_type: draft.default_load_type.trim() || null,
