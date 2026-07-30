@@ -4,134 +4,159 @@
 -- performance advisor. Unindexed FKs force sequential scans on FK lookups and
 -- on parent-row updates/deletes, contributing to CPU/connection pressure.
 -- All idempotent (IF NOT EXISTS) and additive (no behavior/data change).
-CREATE INDEX IF NOT EXISTS idx_invitations_role_id ON platform.invitations (role_id);
-CREATE INDEX IF NOT EXISTS idx_invitations_business_unit_id ON platform.invitations (business_unit_id);
-CREATE INDEX IF NOT EXISTS idx_memberships_business_unit_id ON platform.memberships (business_unit_id);
-CREATE INDEX IF NOT EXISTS idx_accounting_books_organization_id ON public.accounting_books (organization_id);
-CREATE INDEX IF NOT EXISTS idx_bids_bidder_user_id ON public.bids (bidder_user_id);
-CREATE INDEX IF NOT EXISTS idx_booking_ref_backfill_log_trip_id ON public.booking_ref_backfill_log (trip_id);
-CREATE INDEX IF NOT EXISTS idx_chat_conversations_created_by ON public.chat_conversations (created_by);
-CREATE INDEX IF NOT EXISTS idx_chat_conversations_client_id ON public.chat_conversations (client_id);
-CREATE INDEX IF NOT EXISTS idx_chat_conversations_supplier_id ON public.chat_conversations (supplier_id);
-CREATE INDEX IF NOT EXISTS idx_chat_conversations_driver_id ON public.chat_conversations (driver_id);
-CREATE INDEX IF NOT EXISTS idx_chat_pins_message_id ON public.chat_pins (message_id);
-CREATE INDEX IF NOT EXISTS idx_chat_pins_pinned_by ON public.chat_pins (pinned_by);
-CREATE INDEX IF NOT EXISTS idx_chat_push_outbox_user_id ON public.chat_push_outbox (user_id);
-CREATE INDEX IF NOT EXISTS idx_chat_push_outbox_conversation_id ON public.chat_push_outbox (conversation_id);
-CREATE INDEX IF NOT EXISTS idx_chat_push_outbox_message_id ON public.chat_push_outbox (message_id);
-CREATE INDEX IF NOT EXISTS idx_chat_reactions_user_id ON public.chat_reactions (user_id);
-CREATE INDEX IF NOT EXISTS idx_chat_read_receipts_user_id ON public.chat_read_receipts (user_id);
-CREATE INDEX IF NOT EXISTS idx_client_audit_log_organization_id ON public.client_audit_log (organization_id);
-CREATE INDEX IF NOT EXISTS idx_client_audit_log_actor_id ON public.client_audit_log (actor_id);
-CREATE INDEX IF NOT EXISTS idx_client_contacts_updated_by ON public.client_contacts (updated_by);
-CREATE INDEX IF NOT EXISTS idx_client_contacts_created_by ON public.client_contacts (created_by);
-CREATE INDEX IF NOT EXISTS idx_client_contract_agreements_created_by ON public.client_contract_agreements (created_by);
-CREATE INDEX IF NOT EXISTS idx_client_contract_agreements_updated_by ON public.client_contract_agreements (updated_by);
-CREATE INDEX IF NOT EXISTS idx_client_contract_versions_uploaded_by ON public.client_contract_versions (uploaded_by);
-CREATE INDEX IF NOT EXISTS idx_client_contract_versions_organization_id ON public.client_contract_versions (organization_id);
-CREATE INDEX IF NOT EXISTS idx_client_documents_created_by ON public.client_documents (created_by);
-CREATE INDEX IF NOT EXISTS idx_client_documents_organization_id ON public.client_documents (organization_id);
-CREATE INDEX IF NOT EXISTS idx_client_documents_updated_by ON public.client_documents (updated_by);
-CREATE INDEX IF NOT EXISTS idx_client_finance_profiles_organization_id ON public.client_finance_profiles (organization_id);
-CREATE INDEX IF NOT EXISTS idx_client_finance_profiles_updated_by ON public.client_finance_profiles (updated_by);
-CREATE INDEX IF NOT EXISTS idx_client_finance_profiles_created_by ON public.client_finance_profiles (created_by);
-CREATE INDEX IF NOT EXISTS idx_client_kyc_documents_verified_by ON public.client_kyc_documents (verified_by);
-CREATE INDEX IF NOT EXISTS idx_client_kyc_documents_updated_by ON public.client_kyc_documents (updated_by);
-CREATE INDEX IF NOT EXISTS idx_client_kyc_documents_created_by ON public.client_kyc_documents (created_by);
-CREATE INDEX IF NOT EXISTS idx_client_lane_rates_created_by ON public.client_lane_rates (created_by);
-CREATE INDEX IF NOT EXISTS idx_client_lane_rates_updated_by ON public.client_lane_rates (updated_by);
-CREATE INDEX IF NOT EXISTS idx_client_lane_rates_origin_warehouse_id ON public.client_lane_rates (origin_warehouse_id);
-CREATE INDEX IF NOT EXISTS idx_client_lane_rates_organization_id ON public.client_lane_rates (organization_id);
-CREATE INDEX IF NOT EXISTS idx_client_lane_rates_destination_warehouse_id ON public.client_lane_rates (destination_warehouse_id);
-CREATE INDEX IF NOT EXISTS idx_client_warehouses_created_by ON public.client_warehouses (created_by);
-CREATE INDEX IF NOT EXISTS idx_client_warehouses_updated_by ON public.client_warehouses (updated_by);
-CREATE INDEX IF NOT EXISTS idx_clients_created_by ON public.clients (created_by);
-CREATE INDEX IF NOT EXISTS idx_clients_updated_by ON public.clients (updated_by);
-CREATE INDEX IF NOT EXISTS idx_connection_requests_responded_by ON public.connection_requests (responded_by);
-CREATE INDEX IF NOT EXISTS idx_counterparty_resolutions_matched_org_id ON public.counterparty_resolutions (matched_org_id);
-CREATE INDEX IF NOT EXISTS idx_counterparty_resolutions_resolved_by_user_id ON public.counterparty_resolutions (resolved_by_user_id);
-CREATE INDEX IF NOT EXISTS idx_dispute_resolved_by ON public.dispute (resolved_by);
-CREATE INDEX IF NOT EXISTS idx_document_audit_log_actor_id ON public.document_audit_log (actor_id);
-CREATE INDEX IF NOT EXISTS idx_document_audit_log_document_id ON public.document_audit_log (document_id);
-CREATE INDEX IF NOT EXISTS idx_driver_invites_responded_by ON public.driver_invites (responded_by);
-CREATE INDEX IF NOT EXISTS idx_driver_invites_invited_by ON public.driver_invites (invited_by);
-CREATE INDEX IF NOT EXISTS idx_driver_presence_trip_id ON public.driver_presence (trip_id);
-CREATE INDEX IF NOT EXISTS idx_driver_salary_requests_created_by ON public.driver_salary_requests (created_by);
-CREATE INDEX IF NOT EXISTS idx_driver_signup_matches_acted_by ON public.driver_signup_matches (acted_by);
-CREATE INDEX IF NOT EXISTS idx_entity_bank_accounts_verified_by ON public.entity_bank_accounts (verified_by);
-CREATE INDEX IF NOT EXISTS idx_entity_bank_accounts_created_by ON public.entity_bank_accounts (created_by);
-CREATE INDEX IF NOT EXISTS idx_entity_documents_verified_by ON public.entity_documents (verified_by);
-CREATE INDEX IF NOT EXISTS idx_entity_documents_replaced_by_id ON public.entity_documents (replaced_by_id);
-CREATE INDEX IF NOT EXISTS idx_entity_documents_created_by ON public.entity_documents (created_by);
-CREATE INDEX IF NOT EXISTS idx_execution_plan_stops_warehouse_id ON public.execution_plan_stops (warehouse_id);
-CREATE INDEX IF NOT EXISTS idx_execution_plans_created_by ON public.execution_plans (created_by);
-CREATE INDEX IF NOT EXISTS idx_geofence_events_driver_id ON public.geofence_events (driver_id);
-CREATE INDEX IF NOT EXISTS idx_geofence_events_organization_id ON public.geofence_events (organization_id);
-CREATE INDEX IF NOT EXISTS idx_invoices_created_by ON public.invoices (created_by);
-CREATE INDEX IF NOT EXISTS idx_loads_created_by_user_id ON public.loads (created_by_user_id);
-CREATE INDEX IF NOT EXISTS idx_ocr_jobs_created_by ON public.ocr_jobs (created_by);
-CREATE INDEX IF NOT EXISTS idx_ocr_jobs_duplicate_of_job_id ON public.ocr_jobs (duplicate_of_job_id);
-CREATE INDEX IF NOT EXISTS idx_organization_kyc_documents_verified_by ON public.organization_kyc_documents (verified_by);
-CREATE INDEX IF NOT EXISTS idx_organization_kyc_documents_uploaded_by ON public.organization_kyc_documents (uploaded_by);
-CREATE INDEX IF NOT EXISTS idx_organization_team_invites_invited_by ON public.organization_team_invites (invited_by);
-CREATE INDEX IF NOT EXISTS idx_organization_team_invites_accepted_user_id ON public.organization_team_invites (accepted_user_id);
-CREATE INDEX IF NOT EXISTS idx_organizations_verified_by ON public.organizations (verified_by);
-CREATE INDEX IF NOT EXISTS idx_posts_author_user_id ON public.posts (author_user_id);
-CREATE INDEX IF NOT EXISTS idx_product_waitlist_user_id ON public.product_waitlist (user_id);
-CREATE INDEX IF NOT EXISTS idx_products_created_by ON public.products (created_by);
-CREATE INDEX IF NOT EXISTS idx_rpc_rate_limits_user_id ON public.rpc_rate_limits (user_id);
-CREATE INDEX IF NOT EXISTS idx_sales_orders_created_by ON public.sales_orders (created_by);
-CREATE INDEX IF NOT EXISTS idx_sales_orders_drop_warehouse_id ON public.sales_orders (drop_warehouse_id);
-CREATE INDEX IF NOT EXISTS idx_sales_orders_pickup_warehouse_id ON public.sales_orders (pickup_warehouse_id);
-CREATE INDEX IF NOT EXISTS idx_shipment_allocations_pickup_stop_id ON public.shipment_allocations (pickup_stop_id);
-CREATE INDEX IF NOT EXISTS idx_shipment_allocations_drop_stop_id ON public.shipment_allocations (drop_stop_id);
-CREATE INDEX IF NOT EXISTS idx_supplier_bills_created_by ON public.supplier_bills (created_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_bills_approved_by ON public.supplier_bills (approved_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_compliance_documents_created_by ON public.supplier_compliance_documents (created_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_compliance_documents_updated_by ON public.supplier_compliance_documents (updated_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_contacts_updated_by ON public.supplier_contacts (updated_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_contacts_created_by ON public.supplier_contacts (created_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_contract_agreements_created_by ON public.supplier_contract_agreements (created_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_contract_agreements_updated_by ON public.supplier_contract_agreements (updated_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_fleet_driver_id ON public.supplier_fleet (driver_id);
-CREATE INDEX IF NOT EXISTS idx_supplier_fleet_created_by ON public.supplier_fleet (created_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_kyc_documents_verified_by ON public.supplier_kyc_documents (verified_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_kyc_documents_updated_by ON public.supplier_kyc_documents (updated_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_kyc_documents_created_by ON public.supplier_kyc_documents (created_by);
-CREATE INDEX IF NOT EXISTS idx_supplier_warehouses_created_by ON public.supplier_warehouses (created_by);
-CREATE INDEX IF NOT EXISTS idx_transactions_chat_mirror_of_transaction_id ON public.transactions (chat_mirror_of_transaction_id);
-CREATE INDEX IF NOT EXISTS idx_trip_finance_adjustments_created_by ON public.trip_finance_adjustments (created_by);
-CREATE INDEX IF NOT EXISTS idx_trip_fuel_entries_approved_by ON public.trip_fuel_entries (approved_by);
-CREATE INDEX IF NOT EXISTS idx_trip_fuel_entries_reimbursed_by ON public.trip_fuel_entries (reimbursed_by);
-CREATE INDEX IF NOT EXISTS idx_trip_fuel_entries_entered_by ON public.trip_fuel_entries (entered_by);
-CREATE INDEX IF NOT EXISTS idx_trip_location_checkpoints_driver_id ON public.trip_location_checkpoints (driver_id);
-CREATE INDEX IF NOT EXISTS idx_trip_location_checkpoints_organization_id ON public.trip_location_checkpoints (organization_id);
-CREATE INDEX IF NOT EXISTS idx_trip_location_checkpoints_session_id ON public.trip_location_checkpoints (session_id);
-CREATE INDEX IF NOT EXISTS idx_trip_location_checkpoints_default_driver_id ON public.trip_location_checkpoints_default (driver_id);
-CREATE INDEX IF NOT EXISTS idx_trip_location_checkpoints_default_organization_id ON public.trip_location_checkpoints_default (organization_id);
-CREATE INDEX IF NOT EXISTS idx_trip_location_checkpoints_default_session_id ON public.trip_location_checkpoints_default (session_id);
-CREATE INDEX IF NOT EXISTS idx_trip_messages_sender_user_id ON public.trip_messages (sender_user_id);
-CREATE INDEX IF NOT EXISTS idx_trip_messages_context_trip_id ON public.trip_messages (context_trip_id);
-CREATE INDEX IF NOT EXISTS idx_trip_operational_timeline_events_actor_user_id ON public.trip_operational_timeline_events (actor_user_id);
-CREATE INDEX IF NOT EXISTS idx_trip_other_expenses_entered_by ON public.trip_other_expenses (entered_by);
-CREATE INDEX IF NOT EXISTS idx_trip_other_expenses_reimbursed_by ON public.trip_other_expenses (reimbursed_by);
-CREATE INDEX IF NOT EXISTS idx_trip_other_expenses_approved_by ON public.trip_other_expenses (approved_by);
-CREATE INDEX IF NOT EXISTS idx_trip_predictions_organization_id ON public.trip_predictions (organization_id);
-CREATE INDEX IF NOT EXISTS idx_trip_status_audit_changed_by ON public.trip_status_audit (changed_by);
-CREATE INDEX IF NOT EXISTS idx_trip_subcontracts_sub_driver_id ON public.trip_subcontracts (sub_driver_id);
-CREATE INDEX IF NOT EXISTS idx_trip_subcontracts_supplier_id ON public.trip_subcontracts (supplier_id);
-CREATE INDEX IF NOT EXISTS idx_trip_toll_entries_reimbursed_by ON public.trip_toll_entries (reimbursed_by);
-CREATE INDEX IF NOT EXISTS idx_trip_toll_entries_entered_by ON public.trip_toll_entries (entered_by);
-CREATE INDEX IF NOT EXISTS idx_trip_toll_entries_approved_by ON public.trip_toll_entries (approved_by);
-CREATE INDEX IF NOT EXISTS idx_trip_tracking_sessions_organization_id ON public.trip_tracking_sessions (organization_id);
-CREATE INDEX IF NOT EXISTS idx_trip_workflow_events_actor_id ON public.trip_workflow_events (actor_id);
-CREATE INDEX IF NOT EXISTS idx_trips_converted_by ON public.trips (converted_by);
-CREATE INDEX IF NOT EXISTS idx_vehicle_ledger_entries_trip_id ON public.vehicle_ledger_entries (trip_id);
-CREATE INDEX IF NOT EXISTS idx_vehicle_ledger_entries_vehicle_id ON public.vehicle_ledger_entries (vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_vehicle_ledger_entries_approved_by ON public.vehicle_ledger_entries (approved_by);
-CREATE INDEX IF NOT EXISTS idx_vehicle_maintenance_entries_vehicle_id ON public.vehicle_maintenance_entries (vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_vehicle_maintenance_entries_entered_by ON public.vehicle_maintenance_entries (entered_by);
-CREATE INDEX IF NOT EXISTS idx_vehicle_odometer_events_organization_id ON public.vehicle_odometer_events (organization_id);
-CREATE INDEX IF NOT EXISTS idx_vehicle_odometer_events_driver_id ON public.vehicle_odometer_events (driver_id);
-CREATE INDEX IF NOT EXISTS idx_vehicle_operation_ledger_entries_approved_by ON public.vehicle_operation_ledger_entries (approved_by);
-CREATE INDEX IF NOT EXISTS idx_vehicle_operation_ledger_entries_vehicle_id ON public.vehicle_operation_ledger_entries (vehicle_id);
+--
+-- Guarded per-table/per-column: this migration was restored from a remote
+-- history where every one of these tables and columns already existed. On a
+-- from-scratch replay (a clean local `supabase db reset`), roughly half of
+-- these tables (and at least one column, added to an existing table by a
+-- later migration) don't exist yet at this point in history. Each index is
+-- only created once its target table AND column are present -- a no-op here,
+-- applied for real once the owning migration runs later.
+DO $$
+DECLARE
+  idx record;
+  rel_oid oid;
+BEGIN
+  FOR idx IN SELECT * FROM (VALUES
+    ('idx_invitations_role_id', 'platform.invitations', 'role_id'),
+    ('idx_invitations_business_unit_id', 'platform.invitations', 'business_unit_id'),
+    ('idx_memberships_business_unit_id', 'platform.memberships', 'business_unit_id'),
+    ('idx_accounting_books_organization_id', 'public.accounting_books', 'organization_id'),
+    ('idx_bids_bidder_user_id', 'public.bids', 'bidder_user_id'),
+    ('idx_booking_ref_backfill_log_trip_id', 'public.booking_ref_backfill_log', 'trip_id'),
+    ('idx_chat_conversations_created_by', 'public.chat_conversations', 'created_by'),
+    ('idx_chat_conversations_client_id', 'public.chat_conversations', 'client_id'),
+    ('idx_chat_conversations_supplier_id', 'public.chat_conversations', 'supplier_id'),
+    ('idx_chat_conversations_driver_id', 'public.chat_conversations', 'driver_id'),
+    ('idx_chat_pins_message_id', 'public.chat_pins', 'message_id'),
+    ('idx_chat_pins_pinned_by', 'public.chat_pins', 'pinned_by'),
+    ('idx_chat_push_outbox_user_id', 'public.chat_push_outbox', 'user_id'),
+    ('idx_chat_push_outbox_conversation_id', 'public.chat_push_outbox', 'conversation_id'),
+    ('idx_chat_push_outbox_message_id', 'public.chat_push_outbox', 'message_id'),
+    ('idx_chat_reactions_user_id', 'public.chat_reactions', 'user_id'),
+    ('idx_chat_read_receipts_user_id', 'public.chat_read_receipts', 'user_id'),
+    ('idx_client_audit_log_organization_id', 'public.client_audit_log', 'organization_id'),
+    ('idx_client_audit_log_actor_id', 'public.client_audit_log', 'actor_id'),
+    ('idx_client_contacts_updated_by', 'public.client_contacts', 'updated_by'),
+    ('idx_client_contacts_created_by', 'public.client_contacts', 'created_by'),
+    ('idx_client_contract_agreements_created_by', 'public.client_contract_agreements', 'created_by'),
+    ('idx_client_contract_agreements_updated_by', 'public.client_contract_agreements', 'updated_by'),
+    ('idx_client_contract_versions_uploaded_by', 'public.client_contract_versions', 'uploaded_by'),
+    ('idx_client_contract_versions_organization_id', 'public.client_contract_versions', 'organization_id'),
+    ('idx_client_documents_created_by', 'public.client_documents', 'created_by'),
+    ('idx_client_documents_organization_id', 'public.client_documents', 'organization_id'),
+    ('idx_client_documents_updated_by', 'public.client_documents', 'updated_by'),
+    ('idx_client_finance_profiles_organization_id', 'public.client_finance_profiles', 'organization_id'),
+    ('idx_client_finance_profiles_updated_by', 'public.client_finance_profiles', 'updated_by'),
+    ('idx_client_finance_profiles_created_by', 'public.client_finance_profiles', 'created_by'),
+    ('idx_client_kyc_documents_verified_by', 'public.client_kyc_documents', 'verified_by'),
+    ('idx_client_kyc_documents_updated_by', 'public.client_kyc_documents', 'updated_by'),
+    ('idx_client_kyc_documents_created_by', 'public.client_kyc_documents', 'created_by'),
+    ('idx_client_lane_rates_created_by', 'public.client_lane_rates', 'created_by'),
+    ('idx_client_lane_rates_updated_by', 'public.client_lane_rates', 'updated_by'),
+    ('idx_client_lane_rates_origin_warehouse_id', 'public.client_lane_rates', 'origin_warehouse_id'),
+    ('idx_client_lane_rates_organization_id', 'public.client_lane_rates', 'organization_id'),
+    ('idx_client_lane_rates_destination_warehouse_id', 'public.client_lane_rates', 'destination_warehouse_id'),
+    ('idx_client_warehouses_created_by', 'public.client_warehouses', 'created_by'),
+    ('idx_client_warehouses_updated_by', 'public.client_warehouses', 'updated_by'),
+    ('idx_clients_created_by', 'public.clients', 'created_by'),
+    ('idx_clients_updated_by', 'public.clients', 'updated_by'),
+    ('idx_connection_requests_responded_by', 'public.connection_requests', 'responded_by'),
+    ('idx_counterparty_resolutions_matched_org_id', 'public.counterparty_resolutions', 'matched_org_id'),
+    ('idx_counterparty_resolutions_resolved_by_user_id', 'public.counterparty_resolutions', 'resolved_by_user_id'),
+    ('idx_dispute_resolved_by', 'public.dispute', 'resolved_by'),
+    ('idx_document_audit_log_actor_id', 'public.document_audit_log', 'actor_id'),
+    ('idx_document_audit_log_document_id', 'public.document_audit_log', 'document_id'),
+    ('idx_driver_invites_responded_by', 'public.driver_invites', 'responded_by'),
+    ('idx_driver_invites_invited_by', 'public.driver_invites', 'invited_by'),
+    ('idx_driver_presence_trip_id', 'public.driver_presence', 'trip_id'),
+    ('idx_driver_salary_requests_created_by', 'public.driver_salary_requests', 'created_by'),
+    ('idx_driver_signup_matches_acted_by', 'public.driver_signup_matches', 'acted_by'),
+    ('idx_entity_bank_accounts_verified_by', 'public.entity_bank_accounts', 'verified_by'),
+    ('idx_entity_bank_accounts_created_by', 'public.entity_bank_accounts', 'created_by'),
+    ('idx_entity_documents_verified_by', 'public.entity_documents', 'verified_by'),
+    ('idx_entity_documents_replaced_by_id', 'public.entity_documents', 'replaced_by_id'),
+    ('idx_entity_documents_created_by', 'public.entity_documents', 'created_by'),
+    ('idx_execution_plan_stops_warehouse_id', 'public.execution_plan_stops', 'warehouse_id'),
+    ('idx_execution_plans_created_by', 'public.execution_plans', 'created_by'),
+    ('idx_geofence_events_driver_id', 'public.geofence_events', 'driver_id'),
+    ('idx_geofence_events_organization_id', 'public.geofence_events', 'organization_id'),
+    ('idx_invoices_created_by', 'public.invoices', 'created_by'),
+    ('idx_loads_created_by_user_id', 'public.loads', 'created_by_user_id'),
+    ('idx_ocr_jobs_created_by', 'public.ocr_jobs', 'created_by'),
+    ('idx_ocr_jobs_duplicate_of_job_id', 'public.ocr_jobs', 'duplicate_of_job_id'),
+    ('idx_organization_kyc_documents_verified_by', 'public.organization_kyc_documents', 'verified_by'),
+    ('idx_organization_kyc_documents_uploaded_by', 'public.organization_kyc_documents', 'uploaded_by'),
+    ('idx_organization_team_invites_invited_by', 'public.organization_team_invites', 'invited_by'),
+    ('idx_organization_team_invites_accepted_user_id', 'public.organization_team_invites', 'accepted_user_id'),
+    ('idx_organizations_verified_by', 'public.organizations', 'verified_by'),
+    ('idx_posts_author_user_id', 'public.posts', 'author_user_id'),
+    ('idx_product_waitlist_user_id', 'public.product_waitlist', 'user_id'),
+    ('idx_products_created_by', 'public.products', 'created_by'),
+    ('idx_rpc_rate_limits_user_id', 'public.rpc_rate_limits', 'user_id'),
+    ('idx_sales_orders_created_by', 'public.sales_orders', 'created_by'),
+    ('idx_sales_orders_drop_warehouse_id', 'public.sales_orders', 'drop_warehouse_id'),
+    ('idx_sales_orders_pickup_warehouse_id', 'public.sales_orders', 'pickup_warehouse_id'),
+    ('idx_shipment_allocations_pickup_stop_id', 'public.shipment_allocations', 'pickup_stop_id'),
+    ('idx_shipment_allocations_drop_stop_id', 'public.shipment_allocations', 'drop_stop_id'),
+    ('idx_supplier_bills_created_by', 'public.supplier_bills', 'created_by'),
+    ('idx_supplier_bills_approved_by', 'public.supplier_bills', 'approved_by'),
+    ('idx_supplier_compliance_documents_created_by', 'public.supplier_compliance_documents', 'created_by'),
+    ('idx_supplier_compliance_documents_updated_by', 'public.supplier_compliance_documents', 'updated_by'),
+    ('idx_supplier_contacts_updated_by', 'public.supplier_contacts', 'updated_by'),
+    ('idx_supplier_contacts_created_by', 'public.supplier_contacts', 'created_by'),
+    ('idx_supplier_contract_agreements_created_by', 'public.supplier_contract_agreements', 'created_by'),
+    ('idx_supplier_contract_agreements_updated_by', 'public.supplier_contract_agreements', 'updated_by'),
+    ('idx_supplier_fleet_driver_id', 'public.supplier_fleet', 'driver_id'),
+    ('idx_supplier_fleet_created_by', 'public.supplier_fleet', 'created_by'),
+    ('idx_supplier_kyc_documents_verified_by', 'public.supplier_kyc_documents', 'verified_by'),
+    ('idx_supplier_kyc_documents_updated_by', 'public.supplier_kyc_documents', 'updated_by'),
+    ('idx_supplier_kyc_documents_created_by', 'public.supplier_kyc_documents', 'created_by'),
+    ('idx_supplier_warehouses_created_by', 'public.supplier_warehouses', 'created_by'),
+    ('idx_transactions_chat_mirror_of_transaction_id', 'public.transactions', 'chat_mirror_of_transaction_id'),
+    ('idx_trip_finance_adjustments_created_by', 'public.trip_finance_adjustments', 'created_by'),
+    ('idx_trip_fuel_entries_approved_by', 'public.trip_fuel_entries', 'approved_by'),
+    ('idx_trip_fuel_entries_reimbursed_by', 'public.trip_fuel_entries', 'reimbursed_by'),
+    ('idx_trip_fuel_entries_entered_by', 'public.trip_fuel_entries', 'entered_by'),
+    ('idx_trip_location_checkpoints_driver_id', 'public.trip_location_checkpoints', 'driver_id'),
+    ('idx_trip_location_checkpoints_organization_id', 'public.trip_location_checkpoints', 'organization_id'),
+    ('idx_trip_location_checkpoints_session_id', 'public.trip_location_checkpoints', 'session_id'),
+    ('idx_trip_location_checkpoints_default_driver_id', 'public.trip_location_checkpoints_default', 'driver_id'),
+    ('idx_trip_location_checkpoints_default_organization_id', 'public.trip_location_checkpoints_default', 'organization_id'),
+    ('idx_trip_location_checkpoints_default_session_id', 'public.trip_location_checkpoints_default', 'session_id'),
+    ('idx_trip_messages_sender_user_id', 'public.trip_messages', 'sender_user_id'),
+    ('idx_trip_messages_context_trip_id', 'public.trip_messages', 'context_trip_id'),
+    ('idx_trip_operational_timeline_events_actor_user_id', 'public.trip_operational_timeline_events', 'actor_user_id'),
+    ('idx_trip_other_expenses_entered_by', 'public.trip_other_expenses', 'entered_by'),
+    ('idx_trip_other_expenses_reimbursed_by', 'public.trip_other_expenses', 'reimbursed_by'),
+    ('idx_trip_other_expenses_approved_by', 'public.trip_other_expenses', 'approved_by'),
+    ('idx_trip_predictions_organization_id', 'public.trip_predictions', 'organization_id'),
+    ('idx_trip_status_audit_changed_by', 'public.trip_status_audit', 'changed_by'),
+    ('idx_trip_subcontracts_sub_driver_id', 'public.trip_subcontracts', 'sub_driver_id'),
+    ('idx_trip_subcontracts_supplier_id', 'public.trip_subcontracts', 'supplier_id'),
+    ('idx_trip_toll_entries_reimbursed_by', 'public.trip_toll_entries', 'reimbursed_by'),
+    ('idx_trip_toll_entries_entered_by', 'public.trip_toll_entries', 'entered_by'),
+    ('idx_trip_toll_entries_approved_by', 'public.trip_toll_entries', 'approved_by'),
+    ('idx_trip_tracking_sessions_organization_id', 'public.trip_tracking_sessions', 'organization_id'),
+    ('idx_trip_workflow_events_actor_id', 'public.trip_workflow_events', 'actor_id'),
+    ('idx_trips_converted_by', 'public.trips', 'converted_by'),
+    ('idx_vehicle_ledger_entries_trip_id', 'public.vehicle_ledger_entries', 'trip_id'),
+    ('idx_vehicle_ledger_entries_vehicle_id', 'public.vehicle_ledger_entries', 'vehicle_id'),
+    ('idx_vehicle_ledger_entries_approved_by', 'public.vehicle_ledger_entries', 'approved_by'),
+    ('idx_vehicle_maintenance_entries_vehicle_id', 'public.vehicle_maintenance_entries', 'vehicle_id'),
+    ('idx_vehicle_maintenance_entries_entered_by', 'public.vehicle_maintenance_entries', 'entered_by'),
+    ('idx_vehicle_odometer_events_organization_id', 'public.vehicle_odometer_events', 'organization_id'),
+    ('idx_vehicle_odometer_events_driver_id', 'public.vehicle_odometer_events', 'driver_id'),
+    ('idx_vehicle_operation_ledger_entries_approved_by', 'public.vehicle_operation_ledger_entries', 'approved_by'),
+    ('idx_vehicle_operation_ledger_entries_vehicle_id', 'public.vehicle_operation_ledger_entries', 'vehicle_id')
+  ) AS t(index_name, table_name, column_name)
+  LOOP
+    rel_oid := to_regclass(idx.table_name);
+    IF rel_oid IS NOT NULL AND EXISTS (
+      SELECT 1 FROM pg_attribute
+      WHERE attrelid = rel_oid AND attname = idx.column_name AND attnum > 0 AND NOT attisdropped
+    ) THEN
+      EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %s (%I)', idx.index_name, idx.table_name, idx.column_name);
+    END IF;
+  END LOOP;
+END $$;

@@ -50,3 +50,25 @@ export async function getDriverPresenceByDriverId(
   if (error) return { presence: null, error: new Error(error.message) };
   return { presence: (data as DriverPresenceRow | null), error: null };
 }
+
+/**
+ * Batch variant for fleet-wide views — one query for N trips instead of N,
+ * grouped client-side by trip_id.
+ */
+export async function getDriverPresenceForTrips(
+  tripIds: string[],
+): Promise<{ presenceByTripId: Map<string, DriverPresenceRow>; error: Error | null }> {
+  if (tripIds.length === 0) return { presenceByTripId: new Map(), error: null };
+  const { data, error } = await supabase()
+    .from('driver_presence')
+    .select(SELECT_COLUMNS)
+    .in('trip_id', tripIds);
+
+  if (error) return { presenceByTripId: new Map(), error: new Error(error.message) };
+
+  const presenceByTripId = new Map<string, DriverPresenceRow>();
+  for (const row of (data ?? []) as DriverPresenceRow[]) {
+    if (row.trip_id) presenceByTripId.set(row.trip_id, row);
+  }
+  return { presenceByTripId, error: null };
+}

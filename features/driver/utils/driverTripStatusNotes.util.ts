@@ -4,8 +4,9 @@
  */
 import { supabase } from '@/lib/supabase';
 import type { TripRow } from '@/features/trips/services/trips.service';
+import { deriveTripStage, type TripStage } from '@/features/trips/domain';
 
-export type DriverFlowStepId = 'accepted' | 'pickup' | 'lr' | 'transit' | 'reached' | 'completed';
+export type DriverFlowStepId = TripStage;
 
 export interface ParsedDriverStatusNote {
   step: string;
@@ -65,16 +66,13 @@ export function parseDriverUpdatesFromNotes(notes: string | null): ParsedDriverS
     .reverse();
 }
 
-export function deriveDriverFlowStepFromTrip(t: TripRow): DriverFlowStepId {
-  const s = String(t.status ?? '').toLowerCase();
-  if (s === 'completed' || s === 'delivered' || s === 'done') return 'completed';
-  if (s === 'at_drop') return 'reached';
-  // En route to drop-off is explicit `in_transit` (set by DriverTripFlowCard.engageTransit).
-  // `in_progress` + started_at means "arrived at pickup / loading" after confirmArrival — not transit.
-  if (s === 'in_transit' || s === 'transit') return 'transit';
-  if (s === 'picked_up' || s === 'pickup' || s === 'in_progress') return 'pickup';
-  return 'accepted';
-}
+// Moved to features/trips/domain/tripStage.ts (deriveTripStage) — this was a
+// byte-for-byte duplicate of DriverHomeScreen.tsx's former
+// deriveDriverGuidanceStep. Kept as a thin re-export so existing call sites
+// (DriverTripFlowCard.tsx) don't need to change their import.
+export const deriveDriverFlowStepFromTrip = deriveTripStage as (
+  t: TripRow,
+) => DriverFlowStepId;
 
 export async function appendDriverStatusNote(
   tripId: string,

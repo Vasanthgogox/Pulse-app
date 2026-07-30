@@ -1,132 +1,143 @@
--- Seed: Paperkraft client — warehouses, contract agreements (3 types), lane rates.
--- Sources: docs/warehouse-contracts/clientagreementsrates (Apollo, Jyothy, Sunflag).
--- Idempotent-ish: scoped delete of prior seed for this client, then fresh insert.
--- NOTE: Already applied on remote as version 20260722091739. Do not re-apply manually.
-DO $$
-DECLARE
-  v_org   uuid := '914bf58e-dffa-4f81-b068-be91d1d4c11a';
-  v_client uuid := 'b0cf0451-9065-4621-ac06-32c45c1e9af1';
-  -- warehouse ids
-  w_kalamassery uuid; w_periyapalayam uuid; w_oragadam uuid; w_perambra uuid;
-  w_pondicherry uuid; w_bhandara uuid;
-  -- agreement ids
-  a_apollo uuid; a_jyothy uuid; a_sunflag uuid;
-BEGIN
-  -- Clean any prior seed for this client (safe: client is empty per pre-check)
-  DELETE FROM public.client_lane_rates          WHERE client_id = v_client;
-  DELETE FROM public.client_contract_versions   WHERE agreement_id IN
-    (SELECT id FROM public.client_contract_agreements WHERE client_id = v_client);
-  DELETE FROM public.client_contract_agreements WHERE client_id = v_client;
-  DELETE FROM public.client_warehouses          WHERE client_id = v_client;
+-- SKIPPED ON FRESH REPLAY: one-time data seed for a specific real customer
+-- (Paperkraft), inserting into client_warehouses / client_contract_agreements
+-- / client_lane_rates -- the last of which isn't created until
+-- 20260911000000_client_management_module.sql (this migration predates it by
+-- ~7 weeks). Not a schema/function migration, so there's nothing to
+-- supersede or backfill: skipping this seed has no effect on any other
+-- migration or app code path, only on whether this one customer's rows exist
+-- in a fresh local DB. Its own header already says "Already applied on remote
+-- ... Do not re-apply manually." Original body preserved below in a comment
+-- for history.
 
-  -- ── Warehouses (origin hubs) ────────────────────────────────────────────────
-  INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
-  VALUES (v_org, v_client, 'Kalamassery Plant', 'Kochi', 'Kerala') RETURNING id INTO w_kalamassery;
-  INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
-  VALUES (v_org, v_client, 'Periyapalayam Plant', 'Chennai', 'Tamil Nadu') RETURNING id INTO w_periyapalayam;
-  INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
-  VALUES (v_org, v_client, 'Oragadam Plant', 'Chennai', 'Tamil Nadu') RETURNING id INTO w_oragadam;
-  INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
-  VALUES (v_org, v_client, 'Perambra Plant', 'Kochi', 'Kerala') RETURNING id INTO w_perambra;
-  INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
-  VALUES (v_org, v_client, 'Pondicherry / Kalingamalai', 'Pondicherry', 'Tamil Nadu') RETURNING id INTO w_pondicherry;
-  INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
-  VALUES (v_org, v_client, 'Bhandara / Butibori / Hingna', 'Nagpur', 'Maharashtra') RETURNING id INTO w_bhandara;
-
-  -- ── Agreement 1: APOLLO — 3-year, per vehicle-type, fixed lane rates ─────────
-  INSERT INTO public.client_contract_agreements (
-    organization_id, client_id, contract_number, title, status, commercial_model,
-    effective_date, expiry_date, payment_terms, detention_terms, penalty_clauses, claims_terms, general_terms, notes
-  ) VALUES (
-    v_org, v_client, 'APOLLO-TSA-2024', 'Apollo Tyres — Transportation Services Agreement', 'active', 'per_vehicle_type',
-    '2024-10-08', '2027-10-07',
-    '{"payment_days":30,"basis":"monthly invoice (Annexure II)","gst":"exclusive, extra as applicable","tds":"deducted at source"}'::jsonb,
-    '{"rate_per_vehicle_per_day":500,"free_time":"unload same day if reporting by 3pm weekdays / 11am Sat","currency":"INR"}'::jsonb,
-    '{"short_vehicle":"Rs.750/veh/day","transit_delay":"Rs.200/day upto 3d, Rs.400/day beyond","other_customer_load":"50% of freight; repeat = termination","incidental_costs":"15% on damaged/short goods"}'::jsonb,
-    '{"basis":"net dealer price + local taxes + 15% incidental","special_events":"hijack/theft/accident/fire per Clause 6","insurance":"ATL raises claim; SP reimbursed on receipt"}'::jsonb,
-    'Governing law: Gurugram. Arbitration under Arbitration & Conciliation Act 1996. 3-year term, renewable on mutual terms.',
-    'Client: Apollo Tyres Ltd (CIN L25111KL1972PLC0002449). SP: Gogovan India Pvt Ltd. Fixed per-lane rates in Annexure.'
-  ) RETURNING id INTO a_apollo;
-
-  -- ── Agreement 2: JYOTHY — 1-year + 1-month extension, per-trip, fuel clause ──
-  INSERT INTO public.client_contract_agreements (
-    organization_id, client_id, contract_number, title, status, commercial_model,
-    effective_date, expiry_date, renewal_date, payment_terms, detention_terms, penalty_clauses, claims_terms, escalation_matrix, general_terms, notes
-  ) VALUES (
-    v_org, v_client, 'JYOTHY-TSA-2025', 'Jyothy Labs — Transportation Service Agreement', 'active', 'per_trip',
-    '2025-08-01', '2026-08-31', '2026-09-01',
-    '{"payment_days":30,"docs_cutoff_days":60,"gst":"as per tax invoice","pbg":"3% of contract value or Rs.3L, max Rs.25L, valid 13 months"}'::jsonb,
-    '{"open_body_7_5_9mt":{"1-3d":1000,"3d+":1500},"open_body_16mt":{"1-3d":1600,"3d+":2000},"container_21mt_plus":{"1-3d":2000,"3d+":3000},"starts_after_hours":24,"currency":"INR"}'::jsonb,
-    '{"transshipment_unauthorized":"25% of freight","other_material_loaded":"25% of freight","delivery_delay":"Rs.1500/day upto 3d, Rs.3000/day beyond; 50% if accident/FM","doc_loss_or_seizure":"Rs.1000/hour","unreported_claim":"Rs.5000/day"}'::jsonb,
-    '{"shortage_basis":"MRP of goods","damage_basis":"50% of invoice value / full if unusable","insurance_floor":"no claim below Rs.15000","settlement_days":10}'::jsonb,
-    '[{"transit":"Pondicherry->Bhiwandi","days":4},{"transit":"Pondicherry->Kolkata","days":5},{"transit":"Pondicherry->Tepla","days":7}]'::jsonb,
-    'Governing law: Mumbai. Arbitration in Mumbai. Fuel-price clause: R1(new)=R1+R1*0.4*FPC, applies on cumulative diesel change > Rs.1.5 sustained 7 days. Datum diesel Rs.90.48 as on 09-Jul-2025. Truck-type conversion factors per Schedule I.',
-    'Client: Jyothy Labs Ltd (CIN L24240MH1992PLC128651). One-month extension 01-Aug-2026 to 31-Aug-2026 on same terms pending annual RFQ (~Rs.120 Cr). New contract expected 01-Sep-2026 to 31-Aug-2027.'
-  ) RETURNING id INTO a_jyothy;
-
-  -- ── Agreement 3: SUNFLAG — monthly fixed rate contract ──────────────────────
-  INSERT INTO public.client_contract_agreements (
-    organization_id, client_id, contract_number, title, status, commercial_model,
-    effective_date, expiry_date, payment_terms, general_terms, notes
-  ) VALUES (
-    v_org, v_client, 'SUNFLAG-MRC-2026-07', 'Sunflag Iron & Steel — Monthly Rate Contract (Jul-Aug 2026)', 'active', 'fixed_monthly',
-    '2026-07-16', '2026-08-15',
-    '{"basis":"rate per MT (PMT)","allocation":"by relative performance vs other transporters"}'::jsonb,
-    'Object: transport of Rolled Steel / P&G / Billets / Wire rod / TMT / Pig Iron / Sponge Iron from Bhandara/Butibori/Hingna to allotted destinations. Quantity performance-based. Monthly renewed contract series (2023-2026 on file).',
-    'Client: Sunflag Iron & Steel Co. Ltd (CIN L27100MH1984PLC034003). Ref COORD/MKTG/JULY/2026. Rate per MT.'
-  ) RETURNING id INTO a_sunflag;
-
-  -- ── Lanes: APOLLO (per Apollo Rates.xlsx, fixed per-trip rates) ─────────────
-  INSERT INTO public.client_lane_rates
-    (organization_id, client_id, agreement_id, origin_warehouse_id, origin_label, destination_label, vehicle_type, rate, rate_type, valid_from, valid_to)
-  VALUES
-   (v_org,v_client,a_apollo,w_kalamassery,'Kalamassery','Cuttack','32 Ft MXL',100498,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_kalamassery,'Kalamassery','Kanpur','32 Ft SXL',91261,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_kalamassery,'Kalamassery','Zaheerabad-Telangana','32 Ft MXL',62022,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Chittoor','20 FT',10647,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Coimbatore','32 Ft MXL',33182,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Coimbatore','20 FT',17883,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Coimbatore','20 FT OPEN',25500,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Poonamallee','20 FT',6047,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Hubli','20 FT',26980,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Khammam','20 FT',25843,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Kurnool','20 FT',22431,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Guntur','20 FT',20467,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Jamshedpur','32 FT MXL',100269,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Coimbatore','32 Ft MXL',33182,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Coimbatore','20 FT',17883,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Coimbatore','20 FT OPEN',25500,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Jamshedpur','32 FT MXL',100269,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Guwahati','32 Ft MXL',162000,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Guwahati','16 MT MXL',162000,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Kolkata','32 Ft MXL',110000,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Kolkata','16 MT',110000,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Cuttack','32 Ft MXL',93000,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Cuttack','16 MT MXL',93000,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_perambra,'Perambra','Cuttack','32 Ft MXL',100498,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_perambra,'Perambra','Nagpur','32 Ft MXL',69079,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_perambra,'Perambra','Patna','32 Ft MXL',138929,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_perambra,'Perambra','Kolkata','32 Ft MXL',114101,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_perambra,'Perambra','Visakhapatnam','32 Ft MXL',67578,'fixed','2024-10-08','2027-10-07'),
-   (v_org,v_client,a_apollo,w_perambra,'Perambra','Zaheerabad-Telangana','32 Ft MXL',62022,'fixed','2024-10-08','2027-10-07');
-
-  -- ── Lanes: JYOTHY (per Jyothy Rates.xlsx + Schedule I freight) ──────────────
-  INSERT INTO public.client_lane_rates
-    (organization_id, client_id, agreement_id, origin_warehouse_id, origin_label, destination_label, vehicle_type, rate, rate_type, fuel_clause, valid_from, valid_to, notes)
-  VALUES
-   (v_org,v_client,a_jyothy,w_pondicherry,'Pondicherry / Kalingamalai','Bhiwandi','25 MT',75400,'per_trip','R1(new)=R1+R1*0.4*FPC','2025-08-01','2026-08-31','Transit 4 days'),
-   (v_org,v_client,a_jyothy,w_pondicherry,'Pondicherry / Kalingamalai','Kolkata','25 MT',114921,'per_trip','R1(new)=R1+R1*0.4*FPC','2025-08-01','2026-08-31','Transit 5 days. 21 MT (*0.85) = 97682'),
-   (v_org,v_client,a_jyothy,w_pondicherry,'Pondicherry / Kalingamalai','Tepla','25 MT',98100,'per_trip','R1(new)=R1+R1*0.4*FPC','2025-08-01','2026-08-31','Transit 7 days');
-
-  -- ── Lanes: SUNFLAG (per Sunflag Rates.xlsx + monthly contract, rate PMT) ────
-  INSERT INTO public.client_lane_rates
-    (organization_id, client_id, agreement_id, origin_warehouse_id, origin_label, destination_label, vehicle_type, rate, rate_type, valid_from, valid_to, notes)
-  VALUES
-   (v_org,v_client,a_sunflag,w_bhandara,'Bhandara / Butibori / Hingna','Bangalore/Bengaluru (Jigani, Bommasandra, Elecity etc)','GGV',3140,'per_ton','2026-07-16','2026-08-15','Zone 4.5. Rate per MT (PMT).'),
-   (v_org,v_client,a_sunflag,w_bhandara,'Bhandara / Butibori / Hingna','Hosur/Hoskote/KGF/Mandya/Harohally/Mysore/Dharampuri/Krishnagiri/Maddur','GGV',3260,'per_ton','2026-07-16','2026-08-15','Zone 4.12. Rate per MT (PMT).');
-END $$;
-
-SELECT
-  (SELECT count(*) FROM public.client_warehouses          WHERE client_id='b0cf0451-9065-4621-ac06-32c45c1e9af1') AS warehouses,
-  (SELECT count(*) FROM public.client_contract_agreements WHERE client_id='b0cf0451-9065-4621-ac06-32c45c1e9af1') AS agreements,
-  (SELECT count(*) FROM public.client_lane_rates          WHERE client_id='b0cf0451-9065-4621-ac06-32c45c1e9af1') AS lanes;
+-- -- Seed: Paperkraft client — warehouses, contract agreements (3 types), lane rates.
+-- -- Sources: docs/warehouse-contracts/clientagreementsrates (Apollo, Jyothy, Sunflag).
+-- -- Idempotent-ish: scoped delete of prior seed for this client, then fresh insert.
+-- -- NOTE: Already applied on remote as version 20260722091739. Do not re-apply manually.
+-- DO $$
+-- DECLARE
+--   v_org   uuid := '914bf58e-dffa-4f81-b068-be91d1d4c11a';
+--   v_client uuid := 'b0cf0451-9065-4621-ac06-32c45c1e9af1';
+--   -- warehouse ids
+--   w_kalamassery uuid; w_periyapalayam uuid; w_oragadam uuid; w_perambra uuid;
+--   w_pondicherry uuid; w_bhandara uuid;
+--   -- agreement ids
+--   a_apollo uuid; a_jyothy uuid; a_sunflag uuid;
+-- BEGIN
+--   -- Clean any prior seed for this client (safe: client is empty per pre-check)
+--   DELETE FROM public.client_lane_rates          WHERE client_id = v_client;
+--   DELETE FROM public.client_contract_versions   WHERE agreement_id IN
+--     (SELECT id FROM public.client_contract_agreements WHERE client_id = v_client);
+--   DELETE FROM public.client_contract_agreements WHERE client_id = v_client;
+--   DELETE FROM public.client_warehouses          WHERE client_id = v_client;
+--
+--   -- ── Warehouses (origin hubs) ────────────────────────────────────────────────
+--   INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
+--   VALUES (v_org, v_client, 'Kalamassery Plant', 'Kochi', 'Kerala') RETURNING id INTO w_kalamassery;
+--   INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
+--   VALUES (v_org, v_client, 'Periyapalayam Plant', 'Chennai', 'Tamil Nadu') RETURNING id INTO w_periyapalayam;
+--   INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
+--   VALUES (v_org, v_client, 'Oragadam Plant', 'Chennai', 'Tamil Nadu') RETURNING id INTO w_oragadam;
+--   INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
+--   VALUES (v_org, v_client, 'Perambra Plant', 'Kochi', 'Kerala') RETURNING id INTO w_perambra;
+--   INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
+--   VALUES (v_org, v_client, 'Pondicherry / Kalingamalai', 'Pondicherry', 'Tamil Nadu') RETURNING id INTO w_pondicherry;
+--   INSERT INTO public.client_warehouses (organization_id, client_id, name, city, state)
+--   VALUES (v_org, v_client, 'Bhandara / Butibori / Hingna', 'Nagpur', 'Maharashtra') RETURNING id INTO w_bhandara;
+--
+--   -- ── Agreement 1: APOLLO — 3-year, per vehicle-type, fixed lane rates ─────────
+--   INSERT INTO public.client_contract_agreements (
+--     organization_id, client_id, contract_number, title, status, commercial_model,
+--     effective_date, expiry_date, payment_terms, detention_terms, penalty_clauses, claims_terms, general_terms, notes
+--   ) VALUES (
+--     v_org, v_client, 'APOLLO-TSA-2024', 'Apollo Tyres — Transportation Services Agreement', 'active', 'per_vehicle_type',
+--     '2024-10-08', '2027-10-07',
+--     '{"payment_days":30,"basis":"monthly invoice (Annexure II)","gst":"exclusive, extra as applicable","tds":"deducted at source"}'::jsonb,
+--     '{"rate_per_vehicle_per_day":500,"free_time":"unload same day if reporting by 3pm weekdays / 11am Sat","currency":"INR"}'::jsonb,
+--     '{"short_vehicle":"Rs.750/veh/day","transit_delay":"Rs.200/day upto 3d, Rs.400/day beyond","other_customer_load":"50% of freight; repeat = termination","incidental_costs":"15% on damaged/short goods"}'::jsonb,
+--     '{"basis":"net dealer price + local taxes + 15% incidental","special_events":"hijack/theft/accident/fire per Clause 6","insurance":"ATL raises claim; SP reimbursed on receipt"}'::jsonb,
+--     'Governing law: Gurugram. Arbitration under Arbitration & Conciliation Act 1996. 3-year term, renewable on mutual terms.',
+--     'Client: Apollo Tyres Ltd (CIN L25111KL1972PLC0002449). SP: Gogovan India Pvt Ltd. Fixed per-lane rates in Annexure.'
+--   ) RETURNING id INTO a_apollo;
+--
+--   -- ── Agreement 2: JYOTHY — 1-year + 1-month extension, per-trip, fuel clause ──
+--   INSERT INTO public.client_contract_agreements (
+--     organization_id, client_id, contract_number, title, status, commercial_model,
+--     effective_date, expiry_date, renewal_date, payment_terms, detention_terms, penalty_clauses, claims_terms, escalation_matrix, general_terms, notes
+--   ) VALUES (
+--     v_org, v_client, 'JYOTHY-TSA-2025', 'Jyothy Labs — Transportation Service Agreement', 'active', 'per_trip',
+--     '2025-08-01', '2026-08-31', '2026-09-01',
+--     '{"payment_days":30,"docs_cutoff_days":60,"gst":"as per tax invoice","pbg":"3% of contract value or Rs.3L, max Rs.25L, valid 13 months"}'::jsonb,
+--     '{"open_body_7_5_9mt":{"1-3d":1000,"3d+":1500},"open_body_16mt":{"1-3d":1600,"3d+":2000},"container_21mt_plus":{"1-3d":2000,"3d+":3000},"starts_after_hours":24,"currency":"INR"}'::jsonb,
+--     '{"transshipment_unauthorized":"25% of freight","other_material_loaded":"25% of freight","delivery_delay":"Rs.1500/day upto 3d, Rs.3000/day beyond; 50% if accident/FM","doc_loss_or_seizure":"Rs.1000/hour","unreported_claim":"Rs.5000/day"}'::jsonb,
+--     '{"shortage_basis":"MRP of goods","damage_basis":"50% of invoice value / full if unusable","insurance_floor":"no claim below Rs.15000","settlement_days":10}'::jsonb,
+--     '[{"transit":"Pondicherry->Bhiwandi","days":4},{"transit":"Pondicherry->Kolkata","days":5},{"transit":"Pondicherry->Tepla","days":7}]'::jsonb,
+--     'Governing law: Mumbai. Arbitration in Mumbai. Fuel-price clause: R1(new)=R1+R1*0.4*FPC, applies on cumulative diesel change > Rs.1.5 sustained 7 days. Datum diesel Rs.90.48 as on 09-Jul-2025. Truck-type conversion factors per Schedule I.',
+--     'Client: Jyothy Labs Ltd (CIN L24240MH1992PLC128651). One-month extension 01-Aug-2026 to 31-Aug-2026 on same terms pending annual RFQ (~Rs.120 Cr). New contract expected 01-Sep-2026 to 31-Aug-2027.'
+--   ) RETURNING id INTO a_jyothy;
+--
+--   -- ── Agreement 3: SUNFLAG — monthly fixed rate contract ──────────────────────
+--   INSERT INTO public.client_contract_agreements (
+--     organization_id, client_id, contract_number, title, status, commercial_model,
+--     effective_date, expiry_date, payment_terms, general_terms, notes
+--   ) VALUES (
+--     v_org, v_client, 'SUNFLAG-MRC-2026-07', 'Sunflag Iron & Steel — Monthly Rate Contract (Jul-Aug 2026)', 'active', 'fixed_monthly',
+--     '2026-07-16', '2026-08-15',
+--     '{"basis":"rate per MT (PMT)","allocation":"by relative performance vs other transporters"}'::jsonb,
+--     'Object: transport of Rolled Steel / P&G / Billets / Wire rod / TMT / Pig Iron / Sponge Iron from Bhandara/Butibori/Hingna to allotted destinations. Quantity performance-based. Monthly renewed contract series (2023-2026 on file).',
+--     'Client: Sunflag Iron & Steel Co. Ltd (CIN L27100MH1984PLC034003). Ref COORD/MKTG/JULY/2026. Rate per MT.'
+--   ) RETURNING id INTO a_sunflag;
+--
+--   -- ── Lanes: APOLLO (per Apollo Rates.xlsx, fixed per-trip rates) ─────────────
+--   INSERT INTO public.client_lane_rates
+--     (organization_id, client_id, agreement_id, origin_warehouse_id, origin_label, destination_label, vehicle_type, rate, rate_type, valid_from, valid_to)
+--   VALUES
+--    (v_org,v_client,a_apollo,w_kalamassery,'Kalamassery','Cuttack','32 Ft MXL',100498,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_kalamassery,'Kalamassery','Kanpur','32 Ft SXL',91261,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_kalamassery,'Kalamassery','Zaheerabad-Telangana','32 Ft MXL',62022,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Chittoor','20 FT',10647,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Coimbatore','32 Ft MXL',33182,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Coimbatore','20 FT',17883,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Coimbatore','20 FT OPEN',25500,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Poonamallee','20 FT',6047,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Hubli','20 FT',26980,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Khammam','20 FT',25843,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Kurnool','20 FT',22431,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Guntur','20 FT',20467,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_periyapalayam,'Periyapalayam','Jamshedpur','32 FT MXL',100269,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Coimbatore','32 Ft MXL',33182,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Coimbatore','20 FT',17883,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Coimbatore','20 FT OPEN',25500,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Jamshedpur','32 FT MXL',100269,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Guwahati','32 Ft MXL',162000,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Guwahati','16 MT MXL',162000,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Kolkata','32 Ft MXL',110000,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Kolkata','16 MT',110000,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Cuttack','32 Ft MXL',93000,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_oragadam,'Oragadam','Cuttack','16 MT MXL',93000,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_perambra,'Perambra','Cuttack','32 Ft MXL',100498,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_perambra,'Perambra','Nagpur','32 Ft MXL',69079,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_perambra,'Perambra','Patna','32 Ft MXL',138929,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_perambra,'Perambra','Kolkata','32 Ft MXL',114101,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_perambra,'Perambra','Visakhapatnam','32 Ft MXL',67578,'fixed','2024-10-08','2027-10-07'),
+--    (v_org,v_client,a_apollo,w_perambra,'Perambra','Zaheerabad-Telangana','32 Ft MXL',62022,'fixed','2024-10-08','2027-10-07');
+--
+--   -- ── Lanes: JYOTHY (per Jyothy Rates.xlsx + Schedule I freight) ──────────────
+--   INSERT INTO public.client_lane_rates
+--     (organization_id, client_id, agreement_id, origin_warehouse_id, origin_label, destination_label, vehicle_type, rate, rate_type, fuel_clause, valid_from, valid_to, notes)
+--   VALUES
+--    (v_org,v_client,a_jyothy,w_pondicherry,'Pondicherry / Kalingamalai','Bhiwandi','25 MT',75400,'per_trip','R1(new)=R1+R1*0.4*FPC','2025-08-01','2026-08-31','Transit 4 days'),
+--    (v_org,v_client,a_jyothy,w_pondicherry,'Pondicherry / Kalingamalai','Kolkata','25 MT',114921,'per_trip','R1(new)=R1+R1*0.4*FPC','2025-08-01','2026-08-31','Transit 5 days. 21 MT (*0.85) = 97682'),
+--    (v_org,v_client,a_jyothy,w_pondicherry,'Pondicherry / Kalingamalai','Tepla','25 MT',98100,'per_trip','R1(new)=R1+R1*0.4*FPC','2025-08-01','2026-08-31','Transit 7 days');
+--
+--   -- ── Lanes: SUNFLAG (per Sunflag Rates.xlsx + monthly contract, rate PMT) ────
+--   INSERT INTO public.client_lane_rates
+--     (organization_id, client_id, agreement_id, origin_warehouse_id, origin_label, destination_label, vehicle_type, rate, rate_type, valid_from, valid_to, notes)
+--   VALUES
+--    (v_org,v_client,a_sunflag,w_bhandara,'Bhandara / Butibori / Hingna','Bangalore/Bengaluru (Jigani, Bommasandra, Elecity etc)','GGV',3140,'per_ton','2026-07-16','2026-08-15','Zone 4.5. Rate per MT (PMT).'),
+--    (v_org,v_client,a_sunflag,w_bhandara,'Bhandara / Butibori / Hingna','Hosur/Hoskote/KGF/Mandya/Harohally/Mysore/Dharampuri/Krishnagiri/Maddur','GGV',3260,'per_ton','2026-07-16','2026-08-15','Zone 4.12. Rate per MT (PMT).');
+-- END $$;
+--
+-- SELECT
+--   (SELECT count(*) FROM public.client_warehouses          WHERE client_id='b0cf0451-9065-4621-ac06-32c45c1e9af1') AS warehouses,
+--   (SELECT count(*) FROM public.client_contract_agreements WHERE client_id='b0cf0451-9065-4621-ac06-32c45c1e9af1') AS agreements,
+--   (SELECT count(*) FROM public.client_lane_rates          WHERE client_id='b0cf0451-9065-4621-ac06-32c45c1e9af1') AS lanes;

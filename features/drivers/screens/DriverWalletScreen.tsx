@@ -1530,7 +1530,7 @@ export default function DriverWalletScreen() {
     }
 
     // Last resort: pay arrangement with no invite (legacy / manual add flows)
-    return fleetCards.find((f) => {
+    const withPayNoInvite = fleetCards.find((f) => {
       const d = linkedDrivers.find(
         (row) =>
           isActiveFleetMembership(row, accepted) &&
@@ -1544,7 +1544,26 @@ export default function DriverWalletScreen() {
           (d.commission_per_km != null && d.commission_per_km > 0)
         )
       );
-    }) ?? null;
+    });
+    if (withPayNoInvite) return withPayNoInvite;
+
+    // Final fallback: every tier above requires a pay/invite/salary signal —
+    // none of them fire for a driver who is genuinely on an org's active
+    // roster (isActiveFleetMembership) but has no pay terms configured yet
+    // (e.g. a brand-new relationship, or an org linked purely through Reach
+    // referral rewards with no trip-based salary/commission at all). That
+    // driver still has a real employer, just no financial data behind it —
+    // only apply this when exactly one active membership exists, so we never
+    // guess which of several is "current" the way the tiers above can.
+    const activeMemberships = linkedDrivers.filter((row) => isActiveFleetMembership(row, accepted));
+    if (activeMemberships.length === 1) {
+      const onlyActive = activeMemberships[0]!;
+      const orgId = String(onlyActive.organization_id ?? '');
+      const match = fleetCards.find((f) => String(f.orgId ?? '') === orgId);
+      if (match) return match;
+    }
+
+    return null;
   }, [fleetCards, linkedDrivers, invites, salaryRequests, completedTrips, ledgerEntries, orgNameById]);
 
   const pastEmployerFleetCards = useMemo(() => {

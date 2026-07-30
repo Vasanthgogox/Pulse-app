@@ -130,6 +130,7 @@ import {
 import { buildManifestDeliveryPlan } from "@/features/trips/utils/manifestDeliveryPlan.util";
 import { buildDriverLastPingDisplay } from "@/features/trips/utils/driverLastPingDisplay.util";
 import { TripDetailTrackingHub } from "./TripDetailTrackingHub";
+import { TripStageControlPanel } from "./TripStageControlPanel";
 import { ManifestRefAssetCard } from "./ManifestRefAssetCard";
 import { useManifestRefAssetInsights } from "./hooks/useManifestRefAssetInsights";
 import { parseTripCoordinate } from "@/features/driver/tripHistory/tripHistoryDetail.util";
@@ -3061,6 +3062,37 @@ export default function TripDetailScreen({
                     recordedAt={driverLastPingRecordedAt}
                     broadcastActive={trackingState?.broadcastActive ?? false}
                   />
+                ) : null}
+                {canTripTrackingTab &&
+                isTripTrackingActive(trip?.status, trip?.completed_at) &&
+                trip ? (
+                  <>
+                    <TripStageControlPanel
+                      trip={trip}
+                      driverName={detail.driverName}
+                      vehicleLabel={detail.vehicleLabel}
+                    />
+                    <TouchableOpacity
+                      onPress={() => router.push(ROUTES.trackTrip(trip.id))}
+                      activeOpacity={0.8}
+                      style={{ alignSelf: "flex-start", marginTop: 8, marginBottom: 4 }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: Theme.driverPrimary }}>
+                        {entryContext === "client" ? "Simplified tracking view" : "View customer tracking"}
+                      </Text>
+                    </TouchableOpacity>
+                    {entryContext !== "client" ? (
+                      <TouchableOpacity
+                        onPress={() => router.push(ROUTES.FLEET_OPERATIONS)}
+                        activeOpacity={0.8}
+                        style={{ alignSelf: "flex-start", marginBottom: 4 }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: Theme.driverPrimary }}>
+                          Fleet operations dashboard
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </>
                 ) : null}
                 <View style={styles.refTimelineCard}>
                   {visibleJourneyLogs.map((log, index) => {

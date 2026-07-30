@@ -5,6 +5,7 @@ import type { TripMessageRow } from "../types/chat.types";
 import type { SystemLogLocationData } from "../utils/locationLogPayload.util";
 import {
   buildLocationPingCardCopy,
+  isRealLocationSample,
   isSimulatedLocationPing,
   resolveLocationCityLabel,
   type LocationPingTripHint,
@@ -87,12 +88,22 @@ export function ChatLocationSystemCard({
     tripHint,
   });
   const dateUpper = formatTripEventSheetDate(message.created_at);
-  const statusLabel = simulated ? "SIMULATED LOCATION" : "DRIVER LOCATION";
+  // Only claim "DRIVER LOCATION"/"LIVE" when there's an actual reading behind
+  // it — otherwise this is a trip-phase guess (pickup/drop fallback) and
+  // labeling it "LIVE" is the exact bug this distinction exists to prevent.
+  const isReal = isRealLocationSample(location, message.content);
+  const statusLabel = simulated
+    ? "SIMULATED LOCATION"
+    : isReal
+      ? "DRIVER LOCATION"
+      : "TRIP STATUS (ESTIMATED)";
   const metaLine = `${dateUpper} · ${statusLabel}`;
   const driverAvatar = resolveLocationPingDriverAvatar(message, {
     composeTrip,
     conversationDriverId,
   });
+  const rightPrimary = simulated ? "SIM" : isReal ? "LIVE" : "EST";
+  const rightPrimaryColor = simulated ? "#D97706" : isReal ? "#059669" : "#6b7280";
 
   return (
     <TripProgressEventCard
@@ -105,8 +116,8 @@ export function ChatLocationSystemCard({
       subLine={subLine}
       captureClock={captureClock}
       metaLine={metaLine}
-      rightPrimary={simulated ? "SIM" : "LIVE"}
-      rightPrimaryColor={simulated ? "#D97706" : "#059669"}
+      rightPrimary={rightPrimary}
+      rightPrimaryColor={rightPrimaryColor}
       time={displayTime}
     />
   );

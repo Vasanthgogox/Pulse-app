@@ -409,11 +409,27 @@ $function$;
 --   NIH250-TRP-093  nihas logs  → mover Paperkraft
 --   NIH250-TRP-091  nihas logs  → mover Paperkraft
 --   PAP127-TRP-045  Paperkraft  → mover nihas logs
+--
+-- Guarded: this is a one-time repair for specific real production trips
+-- (listed above), and its query references trips.source_indent_id, a column
+-- not added until 20260828200000_operational_identity_codes_phase1.sql (a
+-- month later). Skip entirely on a from-scratch replay -- a fresh local DB
+-- has none of these historical rows anyway, so the backfill would be a no-op
+-- even if it could run; nothing to backfill-forward later.
 DO $backfill$
 DECLARE
   r RECORD;
   v_created integer := 0;
 BEGIN
+  IF to_regclass('public.trips') IS NULL OR NOT EXISTS (
+    SELECT 1 FROM pg_attribute
+    WHERE attrelid = to_regclass('public.trips')
+      AND attname = 'source_indent_id' AND attnum > 0 AND NOT attisdropped
+  ) THEN
+    RAISE NOTICE 'skipping mover asset trip backfill: trips.source_indent_id not present yet (fresh replay)';
+    RETURN;
+  END IF;
+
   FOR r IN
     SELECT agg.indent_id, agg.driver_id, agg.vehicle_id, agg.vehicle_display_number,
            agg.created_by_user_id, agg.id AS agg_trip_id,

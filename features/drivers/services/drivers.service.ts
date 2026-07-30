@@ -147,6 +147,29 @@ function normalizeDriverRow<T extends { name?: string | null; full_name?: string
   return { ...row, name };
 }
 
+/**
+ * Batch phone lookup for N driver ids in one query — used by the fleet
+ * operations dashboard's "Call Driver" alert action, which otherwise has no
+ * way to know if a phone number exists for a given trip's driver.
+ */
+export async function getDriverPhonesByIds(
+  driverIds: string[],
+): Promise<{ error: Error | null; phoneByDriverId: Map<string, string> }> {
+  if (driverIds.length === 0) return { error: null, phoneByDriverId: new Map() };
+  const { data, error } = await supabase()
+    .from("drivers")
+    .select("id, phone")
+    .in("id", driverIds);
+  if (error) return { error: new Error(error.message), phoneByDriverId: new Map() };
+
+  const phoneByDriverId = new Map<string, string>();
+  for (const row of (data ?? []) as { id: string; phone: string | null }[]) {
+    const phone = (row.phone ?? "").trim();
+    if (phone) phoneByDriverId.set(row.id, phone);
+  }
+  return { error: null, phoneByDriverId };
+}
+
 export async function getDriversByOrganization(
   orgId: string,
   opts?: PageOpts,

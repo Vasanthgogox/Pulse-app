@@ -11,19 +11,25 @@ import {
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
+import {
+  listMyDriverKycDocuments,
+  submitDriverKycDocument,
+  latestDriverKycDocument,
+  type DriverKycDocType,
+  type DriverKycDocument,
+} from '@/features/drivers/services/driverKycDocuments.service';
 import * as Linking from 'expo-linking';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-type DocItemKey = 'aadhaar' | 'pan' | 'license';
-type DocItem = {
-  key: DocItemKey;
-  label: string;
-  icon: keyof typeof FontAwesome.glyphMap;
-  status: 'not_added' | 'added';
-  path: string | null;
-};
+const DOC_DEFS: { key: DriverKycDocType; label: string; icon: keyof typeof FontAwesome.glyphMap }[] = [
+  { key: 'license', label: 'Driving license', icon: 'car' },
+  { key: 'aadhaar', label: 'Aadhaar', icon: 'id-card' },
+  { key: 'pan', label: 'PAN', icon: 'credit-card' },
+  { key: 'selfie', label: 'Selfie', icon: 'user-circle' },
+];
 
 function normalizeDocMimeType(rawMime: string | null | undefined): string {
   const mime = (rawMime ?? '').toLowerCase();
@@ -69,6 +75,27 @@ async function readAssetBytes(uri: string, base64?: string): Promise<ArrayBuffer
   return bytes;
 }
 
+function statusLabel(doc: DriverKycDocument | undefined): string {
+  if (!doc?.storage_path) return 'Not added';
+  switch (doc.status) {
+    case 'verified':
+      return 'Verified';
+    case 'rejected':
+      return 'Rejected — tap to re-upload';
+    case 'expired':
+      return 'Expired — tap to re-upload';
+    default:
+      return 'Pending review';
+  }
+}
+
+function statusColor(doc: DriverKycDocument | undefined, colors: { emerald: string; textMuted: string }): string {
+  if (!doc?.storage_path) return colors.textMuted;
+  if (doc.status === 'verified') return colors.emerald;
+  if (doc.status === 'rejected' || doc.status === 'expired') return Theme.negative;
+  return Theme.accentGold;
+}
+
 export default function DocumentsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -77,13 +104,18 @@ export default function DocumentsScreen() {
   const isDark = theme === 'dark';
   const colors = useDriverThemeColors();
   const pageBg = driverDetailPageBackground(isDark, colors.background);
-  const [docs, setDocs] = useState<DocItem[]>([
-    { key: 'aadhaar', label: 'Aadhaar', icon: 'id-card', status: 'not_added', path: null },
-    { key: 'pan', label: 'PAN', icon: 'credit-card', status: 'not_added', path: null },
-    { key: 'license', label: 'Driving license', icon: 'car', status: 'not_added', path: null },
-  ]);
-  const [uploadingDocKey, setUploadingDocKey] = useState<DocItemKey | null>(null);
-  const uploadedCount = docs.filter((d) => d.status === 'added').length;
+  const [documents, setDocuments] = useState<DriverKycDocument[]>([]);
+  const [uploadingDocKey, setUploadingDocKey] = useState<DriverKycDocType | null>(null);
+
+  const docsByType = useMemo(() => {
+    const map = new Map<DriverKycDocType, DriverKycDocument>();
+    for (const def of DOC_DEFS) {
+      const latest = latestDriverKycDocument(documents, def.key);
+      if (latest) map.set(def.key, latest);
+    }
+    return map;
+  }, [documents]);
+  const uploadedCount = DOC_DEFS.filter((d) => docsByType.get(d.key)?.storage_path).length;
 
   const handleBack = () => {
     if (router.canGoBack()) router.back();
@@ -91,89 +123,43 @@ export default function DocumentsScreen() {
   };
 
   const loadDocuments = useCallback(async () => {
-    if (!profile?.uid) return;
-    try {
-      const {
-        data: { user },
-      } = await supabase().auth.getUser();
-      const metadata =
-        user?.user_metadata &&
-        typeof user.user_metadata === 'object' &&
-        user.user_metadata.driver_documents &&
-        typeof user.user_metadata.driver_documents === 'object'
-          ? (user.user_metadata.driver_documents as Record<string, unknown>)
-          : {};
-
-      const { data: driverProfileRow } = await supabase()
-        .from('driver_profiles')
-        .select('license_photo_url')
-        .eq('user_id', profile.uid)
-        .maybeSingle();
-      const licensePath =
-        (driverProfileRow as { license_photo_url?: string | null } | null)?.license_photo_url
-        ?? (typeof metadata.license === 'string' ? metadata.license : null);
-
-      const aadhaarPath = typeof metadata.aadhaar === 'string' ? metadata.aadhaar : null;
-      const panPath = typeof metadata.pan === 'string' ? metadata.pan : null;
-      const { data: storageItems } = await supabase()
-        .storage
-        .from('driver-documents')
-        .list(profile.uid, { limit: 100 });
-      const byPrefix = (prefix: string) =>
-        (storageItems ?? []).find((item) => (item.name ?? '').toLowerCase().startsWith(prefix))?.name ?? null;
-      const aadhaarStorage = byPrefix('aadhaar-');
-      const panStorage = byPrefix('pan-');
-      const licenseStorage = byPrefix('license-');
-      const aadhaarResolved = aadhaarPath || (aadhaarStorage ? `${profile.uid}/${aadhaarStorage}` : null);
-      const panResolved = panPath || (panStorage ? `${profile.uid}/${panStorage}` : null);
-      const licenseResolved = licensePath || (licenseStorage ? `${profile.uid}/${licenseStorage}` : null);
-
-      setDocs([
-        {
-          key: 'aadhaar',
-          label: 'Aadhaar',
-          icon: 'id-card',
-          path: aadhaarResolved,
-          status: (aadhaarResolved ?? '').trim() ? 'added' : 'not_added',
-        },
-        {
-          key: 'pan',
-          label: 'PAN',
-          icon: 'credit-card',
-          path: panResolved,
-          status: (panResolved ?? '').trim() ? 'added' : 'not_added',
-        },
-        {
-          key: 'license',
-          label: 'Driving license',
-          icon: 'car',
-          path: licenseResolved,
-          status: (licenseResolved ?? '').trim() ? 'added' : 'not_added',
-        },
-      ]);
-    } catch {
-      // keep default state
-    }
-  }, [profile?.uid]);
+    const { documents: docs } = await listMyDriverKycDocuments();
+    setDocuments(docs);
+  }, []);
 
   useEffect(() => {
     void loadDocuments();
   }, [loadDocuments]);
 
-  const openDocument = async (doc: DocItem) => {
-    if (!doc.path?.trim()) {
-      Alert.alert(doc.label, 'Not uploaded yet. You can upload from driver sign-up or profile flow.');
-      return;
-    }
+  // Realtime: admin approves/rejects → driver sees it immediately, no polling.
+  // Shared channel keyed per-driver so re-mounting this screen doesn't open a
+  // second subscription for the same user (registry dedupes by key).
+  useEffect(() => {
+    if (!profile?.uid) return;
+    const unsubscribe = subscribeSharedPostgresChanges(
+      `driver-kyc-docs:${profile.uid}`,
+      [
+        {
+          event: '*',
+          schema: 'public',
+          table: 'driver_kyc_documents',
+          filter: `driver_user_id=eq.${profile.uid}`,
+        },
+      ],
+      () => {
+        void loadDocuments();
+      },
+    );
+    return unsubscribe;
+  }, [profile?.uid, loadDocuments]);
+
+  const openDocument = async (doc: DriverKycDocument | undefined) => {
+    if (!doc?.storage_path?.trim()) return;
     try {
-      if (doc.path.startsWith('http://') || doc.path.startsWith('https://')) {
-        await Linking.openURL(doc.path);
-        return;
-      }
       const { data, error } = await supabase()
         .storage
         .from('driver-documents')
-        .createSignedUrl(doc.path, 60 * 10);
+        .createSignedUrl(doc.storage_path, 60 * 10);
       if (error || !data?.signedUrl) {
         Alert.alert('Preview unavailable', error?.message || 'Could not open document.');
         return;
@@ -184,9 +170,13 @@ export default function DocumentsScreen() {
     }
   };
 
-  const uploadDocumentFrom = async (doc: DocItem, source: 'gallery' | 'camera') => {
+  const uploadDocumentFrom = async (
+    docType: DriverKycDocType,
+    label: string,
+    source: 'gallery' | 'camera',
+  ) => {
     if (!profile?.uid || uploadingDocKey) return;
-    setUploadingDocKey(doc.key);
+    setUploadingDocKey(docType);
     try {
       if (source === 'gallery') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -228,7 +218,7 @@ export default function DocumentsScreen() {
               ? 'pdf'
               : 'jpg';
       const ext = (asset.fileName?.split('.').pop() || extByMime).toLowerCase();
-      const path = `${profile.uid}/${doc.key}-${Date.now()}.${ext}`;
+      const path = `${profile.uid}/${docType}-${Date.now()}.${ext}`;
       const uploadBytes = await readAssetBytes(asset.uri, typeof asset.base64 === 'string' ? asset.base64 : undefined);
 
       const { error: uploadError } = await supabase()
@@ -239,72 +229,56 @@ export default function DocumentsScreen() {
           upsert: true,
         });
       if (uploadError) {
-        Alert.alert('Upload failed', uploadError.message || `Could not upload ${doc.label}.`);
+        Alert.alert('Upload failed', uploadError.message || `Could not upload ${label}.`);
         return;
       }
 
-      if (doc.key === 'license') {
-        const { error: profileError } = await supabase()
-          .from('driver_profiles')
-          .upsert(
-            { user_id: profile.uid, license_photo_url: path },
-            { onConflict: 'user_id' },
-          );
-        if (profileError) {
-          Alert.alert(
-            'Uploaded with warning',
-            'File uploaded, but license profile sync failed. Refresh and try again.',
-          );
-        }
-      }
-
-      const {
-        data: { user },
-      } = await supabase().auth.getUser();
-      const existingDocs =
-        user?.user_metadata &&
-        typeof user.user_metadata === 'object' &&
-        user.user_metadata.driver_documents &&
-        typeof user.user_metadata.driver_documents === 'object'
-          ? (user.user_metadata.driver_documents as Record<string, unknown>)
-          : {};
-      const nextDocs = { ...existingDocs, [doc.key]: path };
-      const { error: metadataError } = await supabase().auth.updateUser({
-        data: { driver_documents: nextDocs },
+      const { error: submitError } = await submitDriverKycDocument({
+        doc_type: docType,
+        storage_path: path,
+        file_name: asset.fileName ?? `${docType}.${ext}`,
+        mime_type: mimeType,
+        file_size_bytes: asset.fileSize ?? undefined,
       });
-      if (metadataError) {
-        Alert.alert('Uploaded with warning', 'File uploaded, but metadata sync failed. Refresh and try again.');
+      if (submitError) {
+        Alert.alert('Uploaded with warning', `File uploaded, but status sync failed: ${submitError.message}`);
       }
 
       await loadDocuments();
-      Alert.alert('Uploaded', `${doc.label} uploaded successfully.`);
+      Alert.alert('Submitted', `${label} submitted for review.`);
     } catch (e) {
-      Alert.alert('Upload failed', e instanceof Error ? e.message : `Could not upload ${doc.label}.`);
+      Alert.alert('Upload failed', e instanceof Error ? e.message : `Could not upload ${label}.`);
     } finally {
       setUploadingDocKey(null);
     }
   };
 
-  const onDocumentPress = (doc: DocItem) => {
-    if (doc.status === 'added') {
+  const onDocumentPress = (docType: DriverKycDocType, label: string) => {
+    const doc = docsByType.get(docType);
+    const canReupload = !doc?.storage_path || doc.status === 'rejected' || doc.status === 'expired';
+
+    if (doc?.storage_path && !canReupload) {
+      // Verified or pending — view only. Pending review shouldn't be silently
+      // overwritten while an admin may already be looking at it.
       void openDocument(doc);
       return;
     }
-    Alert.alert(doc.label, 'Upload this document now?', [
+
+    const actions: { text: string; onPress?: () => void; style?: 'cancel' }[] = [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Gallery',
-        onPress: () => {
-          void uploadDocumentFrom(doc, 'gallery');
-        },
-      },
-      {
-        text: 'Camera',
-        onPress: () => {
-          void uploadDocumentFrom(doc, 'camera');
-        },
-      },
-    ]);
+      { text: 'Gallery', onPress: () => void uploadDocumentFrom(docType, label, 'gallery') },
+      { text: 'Camera', onPress: () => void uploadDocumentFrom(docType, label, 'camera') },
+    ];
+    if (doc?.storage_path) {
+      actions.splice(1, 0, { text: 'View current', onPress: () => void openDocument(doc) });
+    }
+    Alert.alert(
+      label,
+      doc?.status === 'rejected' && doc.rejection_notes
+        ? `Rejected: ${doc.rejection_notes}\n\nUpload a new one?`
+        : 'Upload this document now?',
+      actions,
+    );
   };
 
   return (
@@ -325,36 +299,38 @@ export default function DocumentsScreen() {
           Upload and verify your proof of identity. One place for all driver compliance.
         </Text>
         <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
-          {uploadedCount}/3 uploaded
+          {uploadedCount}/{DOC_DEFS.length} uploaded
         </Text>
         <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>ID & proof</Text>
         <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          {docs.map((doc, idx) => (
-            <TouchableOpacity
-              key={doc.key}
-              style={[styles.docRow, idx === 0 ? { borderTopWidth: 0 } : { borderTopColor: colors.border }]}
-              onPress={() => onDocumentPress(doc)}
-              activeOpacity={0.7}
-              disabled={uploadingDocKey != null}
-            >
-              <View style={styles.docRowLeft}>
-                <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
-                  <FontAwesome name={doc.icon} size={14} color={colors.emerald} />
+          {DOC_DEFS.map((def, idx) => {
+            const doc = docsByType.get(def.key);
+            return (
+              <TouchableOpacity
+                key={def.key}
+                style={[styles.docRow, idx === 0 ? { borderTopWidth: 0 } : { borderTopColor: colors.border }]}
+                onPress={() => onDocumentPress(def.key, def.label)}
+                activeOpacity={0.7}
+                disabled={uploadingDocKey != null}
+              >
+                <View style={styles.docRowLeft}>
+                  <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
+                    <FontAwesome name={def.icon} size={14} color={colors.emerald} />
+                  </View>
+                  <Text style={[styles.docRowLabel, { color: colors.text }]}>{def.label}</Text>
                 </View>
-                <Text style={[styles.docRowLabel, { color: colors.text }]}>{doc.label}</Text>
-              </View>
-              <View style={styles.docRowRight}>
-                <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>
-                  {uploadingDocKey === doc.key
-                    ? 'Uploading...'
-                    : doc.status === 'added'
-                      ? 'View'
-                      : 'Not added'}
-                </Text>
-                <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
-              </View>
-            </TouchableOpacity>
-          ))}
+                <View style={styles.docRowRight}>
+                  <Text
+                    style={[styles.docRowStatus, { color: statusColor(doc, colors) }]}
+                    numberOfLines={1}
+                  >
+                    {uploadingDocKey === def.key ? 'Uploading...' : statusLabel(doc)}
+                  </Text>
+                  <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
     </View>
@@ -405,10 +381,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  docTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
   docRowIcon: {
     width: 40,
     height: 40,
@@ -417,29 +389,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   docRowLabel: { fontSize: 15, fontWeight: '700', color: Theme.textPrimary },
-  docRowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  docRowStatus: { fontSize: 12, fontWeight: '600', color: Theme.textMuted },
-  chevronCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoCard: {
-    borderWidth: 1,
-    borderRadius: 14,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
-  },
+  docRowRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1, maxWidth: '55%' },
+  docRowStatus: { fontSize: 12, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
 });

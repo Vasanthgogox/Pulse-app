@@ -44,3 +44,26 @@ export async function recordTrackingCheckpoint(params: {
     wroteCheckpoint: Boolean(row?.wrote),
   };
 }
+
+/**
+ * Batch sum of distance_delta_m per trip, for journey-progress metrics
+ * (features/trips/domain/tripJourneyMetrics.ts). One RPC call for N trips —
+ * the aggregation happens in Postgres (get_trip_checkpoint_distance_sums),
+ * not by fetching raw checkpoint rows, which could number in the thousands
+ * for a multi-day long-haul trip.
+ */
+export async function getCheckpointDistanceSumsForTrips(
+  tripIds: string[],
+): Promise<{ error: Error | null; distanceMByTripId: Map<string, number> }> {
+  if (tripIds.length === 0) return { error: null, distanceMByTripId: new Map() };
+  const { data, error } = await supabase().rpc('get_trip_checkpoint_distance_sums', {
+    p_trip_ids: tripIds,
+  });
+  if (error) return { error: new Error(error.message), distanceMByTripId: new Map() };
+
+  const distanceMByTripId = new Map<string, number>();
+  for (const row of (data ?? []) as { trip_id: string; total_distance_m: number | null }[]) {
+    if (row.total_distance_m != null) distanceMByTripId.set(row.trip_id, row.total_distance_m);
+  }
+  return { error: null, distanceMByTripId };
+}

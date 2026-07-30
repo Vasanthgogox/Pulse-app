@@ -273,6 +273,58 @@ export async function getDriverReferralEarnings(): Promise<{
   };
 }
 
+/**
+ * The signed-in driver's own referral for a given trip, if this trip started
+ * life as a Reach recommendation (reach_referrals.trip_id is set once the
+ * fleet owner's bid is awarded — see convert_reach_referral). Read-only,
+ * RLS-scoped to driver_user_id = auth.uid(); presentation-layer lookup for
+ * the trip card, not a new referral state or table.
+ */
+export async function getDriverReferralForTrip(
+  tripId: string,
+): Promise<{ error: Error | null; referral: ReachDriverReferralRow | null }> {
+  const {
+    data: { session },
+  } = await supabase().auth.getSession();
+  if (!session?.user) return { error: null, referral: null };
+
+  const { data, error } = await supabase()
+    .from('reach_referrals')
+    .select(REFERRAL_COLUMNS)
+    .eq('trip_id', tripId)
+    .eq('driver_user_id', session.user.id)
+    .maybeSingle();
+
+  if (error) return { error: new Error(error.message), referral: null };
+  return { error: null, referral: (data as ReachDriverReferralRow | null) ?? null };
+}
+
+/**
+ * All of the signed-in driver's own referrals, across every campaign/fleet
+ * org — powers the Home dashboard's "at a glance" summary (pending reward
+ * total, recommendation count). Read-only, RLS-scoped to driver_user_id =
+ * auth.uid(); no new table, RPC, or referral state.
+ */
+export async function getDriverReferralsForCurrentUser(): Promise<{
+  error: Error | null;
+  referrals: ReachDriverReferralRow[];
+}> {
+  const {
+    data: { session },
+  } = await supabase().auth.getSession();
+  if (!session?.user) return { error: null, referrals: [] };
+
+  const { data, error } = await supabase()
+    .from('reach_referrals')
+    .select(REFERRAL_COLUMNS)
+    .eq('driver_user_id', session.user.id)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) return { error: new Error(error.message), referrals: [] };
+  return { error: null, referrals: (data ?? []) as ReachDriverReferralRow[] };
+}
+
 /** Fleet Owner Recommendation Inbox — pending first, then newest. */
 export async function getReachReferralInbox(
   fleetOrgId: string,

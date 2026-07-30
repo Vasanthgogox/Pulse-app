@@ -1,12 +1,21 @@
 /**
- * Trip detail — Tracking tab: telemetry card + mission log from trip timestamps.
- * Uses Theme only. Single source: trip (no extra reads).
+ * Trip detail — Tracking tab: telemetry card + operational timeline.
+ * Uses Theme only.
+ *
+ * The timeline is now event-sourced (useTripTimelineQuery — geofence_events,
+ * driver_accepted assignment audit, pod.uploaded/trip.completed workflow
+ * events) rather than inferred from trip.created_at/started_at/updated_at/
+ * completed_at. The old inferred log (buildMissionLog) is kept only as a
+ * fallback for while the real timeline is loading, on a query error, or on
+ * an old/local trip with no recorded events yet — never shown once real
+ * events exist.
  */
 import { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { formatTime } from '@/lib/format';
+import { useTripTimelineQuery } from '@/lib/queries/useTripTimelineQuery';
 import type { TripRow } from '../services/trips.service';
 
 export interface TripTrackingBlockProps {
@@ -110,19 +119,40 @@ function getTripProgressPct(trip: TripRow): number {
 const NEON_COLOR = Theme.accentGold;
 
 export function TripTrackingBlock({ trip, driverName, vehicleLabel, driverRating, reassignmentEntries }: TripTrackingBlockProps) {
+  const { events: timelineEvents, isLoading: timelineLoading, error: timelineError } =
+    useTripTimelineQuery(trip.id ?? null, trip.created_at ?? null);
+
   const missionLog = useMemo(() => {
-    const fromTrip = buildMissionLog(trip);
     const fromReassign = (reassignmentEntries ?? []).map((e) => ({
       time: e.time,
       status: e.status,
       loc: e.loc,
       sortKey: e.sortKey,
     }));
-    const merged = [...fromTrip, ...fromReassign].sort(
+
+    // Real event-sourced timeline takes priority once it has anything to show.
+    if (!timelineLoading && !timelineError && timelineEvents.length > 0) {
+      const fromEvents = timelineEvents.map((e) => ({
+        time: formatTime(e.occurredAt),
+        status: e.title.toUpperCase(),
+        loc: e.description ?? '—',
+        sortKey: e.occurredAt,
+      }));
+      return [...fromEvents, ...fromReassign].sort(
+        (a, b) => new Date(a.sortKey).getTime() - new Date(b.sortKey).getTime()
+      );
+    }
+
+    // Fallback: while loading, on error, or for a trip with no recorded
+    // events yet — the old inferred log so the card is never empty.
+    const fromTrip = buildMissionLog(trip);
+    return [...fromTrip, ...fromReassign].sort(
       (a, b) => new Date(a.sortKey).getTime() - new Date(b.sortKey).getTime()
     );
-    return merged;
   }, [
+    timelineEvents,
+    timelineLoading,
+    timelineError,
     trip.created_at,
     trip.updated_at,
     trip.status,
@@ -187,7 +217,7 @@ export function TripTrackingBlock({ trip, driverName, vehicleLabel, driverRating
         </View>
       </View>
 
-      <Text style={styles.logTitle}>MISSION LOG ENTRIES</Text>
+      <Text style={styles.logTitle}>OPERATIONAL TIMELINE</Text>
       <View style={styles.logList}>
         {missionLog.map((log, i) => (
           <View key={i} style={styles.logItem}>

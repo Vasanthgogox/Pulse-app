@@ -14,6 +14,7 @@ import {
 import {
   getDriverReachStories,
   getDriverReferralEarnings,
+  getDriverReferralForTrip,
   getDriverReferralsForCampaign,
   getReachReferralInbox,
   decideReachReferral,
@@ -172,6 +173,21 @@ export function useDriverRewardEarningsQuery(userId: string | null) {
       return res.data;
     },
     enabled: !!userId,
+    staleTime: STALE.frequent,
+  });
+}
+
+/** This trip's own Reach referral, if it started as a recommendation —
+ * powers the trip card's reward/recommendation badge. */
+export function useDriverReferralForTripQuery(tripId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.reach.driverReferralForTrip(tripId ?? ''),
+    queryFn: async () => {
+      const res = await getDriverReferralForTrip(tripId as string);
+      if (res.error) throw res.error;
+      return res.referral;
+    },
+    enabled: !!tripId,
     staleTime: STALE.frequent,
   });
 }

@@ -1,0 +1,49 @@
+-- SKIPPED ON FRESH REPLAY: CREATE OR REPLACE VIEW resolves column references
+-- immediately, and this SELECTs trips.source_indent_id, a column not added
+-- until 20260828200000_operational_identity_codes_phase1.sql (a month
+-- later). Safe to skip wholesale: this view is redefined again the same day
+-- by 20260729071741_driver_view_expose_org_name.sql, then finally by 20260729090658_driver_org_name_security_definer_fn.sql,
+-- and the truly final shape is backfilled after the column exists by
+-- 20260828200001_trips_driver_view_backfill.sql. Original body preserved
+-- below in a comment for history.
+
+-- CREATE OR REPLACE VIEW public.trips_driver_view
+-- WITH (security_invoker = true) AS
+-- SELECT
+--   id,
+--   driver_id,
+--   driver_display_trip_id,
+--   status,
+--   pickup_area AS pickup_location,
+--   pickup_area AS pickup_address,
+--   pickup_date AS pickup_scheduled_at,
+--   drop_location AS dropoff_location,
+--   drop_location AS dropoff_address,
+--   NULL::timestamp with time zone AS dropoff_scheduled_at,
+--   notes AS instructions,
+--   vehicle_id,
+--   pickup_lat,
+--   pickup_lon,
+--   drop_lat,
+--   drop_lon,
+--   started_at,
+--   created_at,
+--   updated_at,
+--   client_price,
+--   supplier_rate,
+--   driver_commission,
+--   distance,
+--   organization_id,
+--   source,
+--   supplier_id,
+--   completed_at,
+--   trip_number,
+--   indent_id,
+--   source_indent_id
+-- FROM trips t
+-- WHERE driver_id IN (
+--   SELECT d.id FROM drivers d WHERE d.user_id = auth.uid()
+-- );
+--
+-- COMMENT ON VIEW public.trips_driver_view IS
+--   'Driver-scoped trip projection (security_invoker; self-scopes via auth.uid()). organization_id + source are REQUIRED by the driver wallet to classify a trip as fleet vs open - removing either silently empties the Fleet Trips tab for every driver. Columns here must stay in sync with DriverTripRow in types/trip-views.ts. Guarded by scripts/check-driver-view-contract.ts.';

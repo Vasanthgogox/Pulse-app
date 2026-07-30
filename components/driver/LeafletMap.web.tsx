@@ -1,4 +1,5 @@
 import Theme from "@/constants/Theme";
+import { withAlpha } from "@/lib/color";
 import { LeafletMapZoomControls } from "@/components/driver/LeafletMapZoomControls";
 import { boundsFromCoordinates } from "@/features/trips/utils/mapRouteViewport.util";
 import {
@@ -149,6 +150,9 @@ function resolvePolylineLayers(
   return [];
 }
 
+/** Route outline (glow) opacity — was the "40" in the old `${color}40` hex-alpha-suffix concatenation (0x40/255 ≈ 0.25). */
+const ROUTE_OUTLINE_ALPHA = 0.25;
+
 function isMapStyleReady(map: MapLibreMapLike | null | undefined): boolean {
   if (!map) return false;
   if (typeof map.isStyleLoaded === "function") {
@@ -190,7 +194,7 @@ function upsertRouteLayer(
       type: "line",
       source: sourceId,
       paint: {
-        "line-color": `${color}40`,
+        "line-color": withAlpha(color, ROUTE_OUTLINE_ALPHA),
         "line-width": glowWidth,
         "line-blur": layer.dashed ? 0 : 1.5,
       },
@@ -200,7 +204,7 @@ function upsertRouteLayer(
       },
     });
   } else {
-    map.setPaintProperty(outlineId, "line-color", `${color}40`);
+    map.setPaintProperty(outlineId, "line-color", withAlpha(color, ROUTE_OUTLINE_ALPHA));
     map.setPaintProperty(outlineId, "line-width", glowWidth);
   }
 

@@ -48,6 +48,22 @@ describe("tripExecutionModel", () => {
     expect(isAssetExecutionTrip(assetTrip)).toBe(true);
   });
 
+  it("treats a direct_quote deploy with own driver+vehicle as asset despite bookkeeping supplier_id", () => {
+    // The scenario commit 333decbd was actually fixing: create_trip_from_direct_quote
+    // stamps a bookkeeping supplier_id (the shipper's supplier row for the winning
+    // bidder) even when the bidder deploys with its own roster driver/vehicle.
+    const directQuoteAsset = trip({
+      source: "direct_quote",
+      supplier_id: "supplier-1",
+      driver_id: "driver-1",
+      vehicle_id: "vehicle-1",
+      trip_payout_mode: null,
+    });
+
+    expect(getTripExecutionModel(directQuoteAsset)).toBe("asset");
+    expect(isAssetExecutionTrip(directQuoteAsset)).toBe(true);
+  });
+
   it("always treats a mover_asset trip as asset (driver payout + expense UI)", () => {
     // Even if payout mode drifts or a supplier_id lingers, the mover's own
     // execution trip must render the asset finance layout.

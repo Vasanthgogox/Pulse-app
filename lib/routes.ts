@@ -203,6 +203,10 @@ export const ROUTES = {
   /** Trip detail (operations hub). */
   tripDetail: (tripId: string, options?: TripDetailRouteOptions) =>
     `/trip/${encodeURIComponent(tripId)}${tripDetailRouteQuery(options)}` as const,
+  /** Customer Track & Trace — simplified read-only view for the linked client org. */
+  trackTrip: (tripId: string) => `/track/${encodeURIComponent(tripId)}` as const,
+  /** Fleet-wide operations dashboard (active alerts, dwell/transit outliers, stage distribution). */
+  FLEET_OPERATIONS: '/fleet-operations' as const,
   /** Trip detail → Finance Hub → Transactions (ledger rows for the trip). */
   tripDetailFinanceTransactions: (tripId: string) =>
     `/trip/${encodeURIComponent(tripId)}?tab=finance&financeSubTab=transactions` as const,

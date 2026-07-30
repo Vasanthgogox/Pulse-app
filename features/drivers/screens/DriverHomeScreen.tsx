@@ -16,6 +16,7 @@ import {
     type LeafletRouteLabel,
 } from "@/components/driver/LeafletMap";
 import { useOptionalDriverAvatar } from "@/contexts/DriverAvatarContext";
+import { DriverDailySummaryCard } from "@/features/driver/components/DriverDailySummaryCard";
 import { DriverDashboardMapPreview } from "@/features/driver/components/DriverDashboardMapPreview";
 import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
 import Layout from "@/constants/Layout";
@@ -74,7 +75,6 @@ import {
 } from "@/lib/driverLivePositionBus";
 import { darkMapStyle } from "@/lib/mapStyles";
 import { subscribeSignificantAppResume } from "@/lib/significantAppResume";
-import { getPopularPlacesInIndia, type PlaceResult } from "@/lib/placesService";
 import type { MapViewRef } from "@/lib/mapViewRef.types";
 import MapView, {
     Callout,
@@ -98,6 +98,20 @@ import {
     shouldShowDriverToDropRoute,
 } from "@/lib/driverMapRoute.util";
 import * as tripsService from "@/features/trips/services/trips.service";
+import {
+  deriveTripStage,
+  getTripStageGuidance,
+  getTripStopCoordinate,
+  distanceMeters,
+  bearingDegrees,
+  subsampleRouteCoordinates,
+  formatRoadDistanceM,
+  formatEtaFromRouteSeconds,
+  formatEtaArrivalClock,
+  formatTripDistance,
+  type TripStage,
+  type TripStageGuidance,
+} from "@/features/trips/domain";
 import {
   reverseGeocodeCityStateLabel,
 } from "@/lib/reverseGeocodePlace.util";
@@ -205,132 +219,17 @@ function isTripInProgress(t: tripsService.TripRow) {
   return isActiveMission(t.status) || !!t.started_at;
 }
 
-type DriverGuidanceStep =
-  | "accepted"
-  | "pickup"
-  | "transit"
-  | "reached"
-  | "completed";
-
-type DriverGuidanceConfig = {
-  title: string;
-  subtitle: string;
-  toastMessage: string;
-  target: "pickup" | "drop" | null;
-  icon: "location-arrow" | "map-marker" | "check-circle";
-};
-
-function deriveDriverGuidanceStep(t: tripsService.TripRow): DriverGuidanceStep {
-  const s = String(t.status ?? "").toLowerCase();
-  if (s === "completed" || s === "delivered" || s === "done")
-    return "completed";
-  if (s === "at_drop") return "reached";
-  if (s === "in_transit" || s === "transit") return "transit";
-  if (s === "picked_up" || s === "pickup" || s === "in_progress")
-    return "pickup";
-  return "accepted";
-}
-
-function getTripStopCoordinate(
-  trip: tripsService.TripRow,
-  target: "pickup" | "drop",
-): { latitude: number; longitude: number } | null {
-  const latitude = Number(
-    target === "pickup" ? trip.pickup_lat : trip.drop_lat,
-  );
-  const longitude = Number(
-    target === "pickup" ? trip.pickup_lon : trip.drop_lon,
-  );
-  if (
-    Number.isFinite(latitude) &&
-    Number.isFinite(longitude) &&
-    (latitude !== 0 || longitude !== 0)
-  ) {
-    return { latitude, longitude };
-  }
-
-  // Last resort: popular places fallback if coordinates are missing in DB
-  const areaStr = (
-    target === "pickup"
-      ? trip.pickup_area
-      : trip.drop_location || trip.drop_area
-  )?.trim();
-  if (areaStr) {
-    // 1. Exact or prefix/includes match
-    const popular = getPopularPlacesInIndia(areaStr);
-    if (popular.length > 0) {
-      const exact = popular.find(
-        (p: PlaceResult) => p.displayName.toLowerCase() === areaStr.toLowerCase(),
-      );
-      const match = exact || popular[0];
-      return { latitude: match.lat, longitude: match.lon };
-    }
-
-    // 2. Try matching individual parts (e.g. "Okhla, Delhi" -> match "Delhi")
-    const parts = areaStr
-      .split(/[,|\s]+/)
-      .map((p: string) => p.trim())
-      .filter((p: string) => p.length > 2);
-    for (const part of parts) {
-      const matches = getPopularPlacesInIndia(part);
-      if (matches.length > 0) {
-        return { latitude: matches[0].lat, longitude: matches[0].lon };
-      }
-    }
-  }
-
-  return null;
-}
-
-function getDriverGuidanceConfig(
-  step: DriverGuidanceStep,
-  trip: tripsService.TripRow,
-): DriverGuidanceConfig {
-  if (step === "accepted") {
-    return {
-      title: "Proceed to pickup",
-      subtitle: trip.pickup_area?.trim() || "Head to the pickup location",
-      toastMessage: "Trip accepted. Proceed to pickup.",
-      target: "pickup",
-      icon: "location-arrow",
-    };
-  }
-  if (step === "pickup") {
-    return {
-      title: "Confirm pickup",
-      subtitle: trip.pickup_area?.trim() || "You are at the pickup point",
-      toastMessage: "You reached pickup. Confirm pickup to continue.",
-      target: "pickup",
-      icon: "map-marker",
-    };
-  }
-  if (step === "transit") {
-    return {
-      title: "Proceed to drop-off",
-      subtitle: trip.drop_location?.trim() || "Head to the drop-off location",
-      toastMessage: "Pickup confirmed. Proceed to drop-off.",
-      target: "drop",
-      icon: "location-arrow",
-    };
-  }
-  if (step === "reached") {
-    return {
-      title: "Upload POD",
-      subtitle: "At drop-off. Upload POD and complete the trip.",
-      toastMessage: "You reached drop-off. Upload POD to complete the trip.",
-      target: "drop",
-      icon: "check-circle",
-    };
-  }
-  return {
-    title: "Trip completed",
-    subtitle: "All steps finished.",
-    toastMessage: "Trip completed.",
-    // Keep map routing/highlight active even after server marks completed.
-    target: "drop",
-    icon: "check-circle",
-  };
-}
+// Stage derivation, guidance copy, and stop-coordinate resolution now live in
+// features/trips/domain/ (tripStage.ts / tripStageGuidance.ts) — this screen,
+// features/driver/utils/driverTripStatusNotes.util.ts, and
+// features/driver/components/DriverTripFlowCard.tsx all consume the same
+// canonical logic instead of each keeping their own copy.
+type DriverGuidanceStep = Exclude<TripStage, "lr">;
+type DriverGuidanceConfig = TripStageGuidance;
+const deriveDriverGuidanceStep = deriveTripStage as (
+  t: tripsService.TripRow,
+) => DriverGuidanceStep;
+const getDriverGuidanceConfig = getTripStageGuidance;
 
 const DRIVER_ACCEPTED_TRIP_ID_KEY = "driver_accepted_trip_id";
 /** Set from notifications screen so dashboard selects that trip on return. */
@@ -350,113 +249,9 @@ async function getExpoLocation(): Promise<typeof ExpoLocation | null> {
   }
 }
 
-/** Approximate distance in metres between two WGS84 points (Haversine-style). */
-function distanceMeters(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const R = 6_371_000; // Earth radius in metres
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-/** Approx initial bearing (degrees 0-360) from one lat/lon to another. */
-function bearingDegrees(
-  from: { latitude: number; longitude: number },
-  to: { latitude: number; longitude: number },
-): number | null {
-  const lat1 = (from.latitude * Math.PI) / 180;
-  const lat2 = (to.latitude * Math.PI) / 180;
-  const dLon = ((to.longitude - from.longitude) * Math.PI) / 180;
-
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-  const theta = Math.atan2(y, x);
-  const deg = (theta * 180) / Math.PI;
-  if (!Number.isFinite(deg)) return null;
-  return (deg + 360) % 360;
-}
-
 const DECLINE_WARNING_TITLE = "Decline this trip?";
 const DECLINE_WARNING_MSG =
   "Warning: you will no longer be assigned to this trip. The fleet can reassign it to another driver.";
-
-/** Keep fitToCoordinates responsive on long hauls (many vertices). */
-function subsampleRouteCoordinates<
-  T extends { latitude: number; longitude: number },
->(coords: T[], maxPoints: number): T[] {
-  if (coords.length <= maxPoints) return coords;
-  const step = Math.ceil(coords.length / maxPoints);
-  const out: T[] = [];
-  for (let i = 0; i < coords.length; i += step) out.push(coords[i]);
-  const last = coords[coords.length - 1];
-  if (out[out.length - 1] !== last) out.push(last);
-  return out;
-}
-
-function formatRoadDistanceM(meters: number): string {
-  const km = meters / 1000;
-  if (!Number.isFinite(km) || km < 0) return "—";
-  return `${km.toFixed(1)} km`;
-}
-
-/** ETA from routing API remaining duration (seconds). */
-function formatEtaFromRouteSeconds(seconds: number | null | undefined): string {
-  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
-  const totalMin = Math.max(1, Math.round(seconds / 60));
-  if (totalMin < 60) return `${totalMin} min`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return m > 0 ? `${h} hr ${m} min` : `${h} hr`;
-}
-
-function formatEtaArrivalClock(seconds: number | null | undefined): string | null {
-  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
-  try {
-    const d = new Date(Date.now() + seconds * 1000);
-    return d.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return null;
-  }
-}
-
-function formatTripDistance(distance: unknown): string {
-  if (distance == null) return "—";
-  const raw = typeof distance === "string" ? distance.trim() : "";
-  if (typeof distance === "string" && raw === "") return "—";
-
-  // DB can return numeric km; other flows may return strings like "980 km" or "1,420 KM".
-  const km =
-    typeof distance === "number"
-      ? distance
-      : (() => {
-          const n = parseFloat(
-            String(distance)
-              .replace(/,/g, "")
-              .replace(/[^0-9.]/g, ""),
-          );
-          return Number.isFinite(n) ? n : NaN;
-        })();
-
-  if (!Number.isFinite(km) || km < 0) return "—";
-  return `${Math.round(km).toLocaleString("en-IN")} km`;
-}
 
 export default function DriverRadarScreen() {
   const router = useRouter();
@@ -6216,6 +6011,7 @@ export default function DriverRadarScreen() {
                     onPressExpand={() => setIsFullMapVisible(true)}
                   />
                 ) : null}
+                <DriverDailySummaryCard uid={uid} />
                 {renderDriverDashboardTripInner(false)}
               </ScrollView>
             )}

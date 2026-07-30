@@ -35,6 +35,8 @@ export const queryKeys = {
     vehicleOperationsLedgerEntries: (orgId: string, vehicleId: string, stateKey: string) =>
       ["q", "trips", "operations", "vehicle", orgId, vehicleId, "ledger-entries", stateKey] as const,
     workflow: (tripId: string) => ["q", "trips", "workflow", tripId] as const,
+    timeline: (tripId: string) => ["q", "trips", "timeline", tripId] as const,
+    driverPresence: (tripId: string) => ["q", "trips", "driver-presence", tripId] as const,
     byDriver: (driverId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "trips", "driver", driverId, opts] as const)
@@ -180,6 +182,12 @@ export const queryKeys = {
       ["q", "driver-app", userId, "linked-drivers"] as const,
     pendingOtpTrips: (userId: string) =>
       ["q", "driver-app", userId, "pending-otp-trips"] as const,
+    /** Home dashboard "at a glance" summary — today's earnings, pending
+     * rewards, trips, recommendations. Keyed by the driver row ids it
+     * aggregates over (stable, sorted, joined) so it re-fetches when the
+     * linked-driver set changes. */
+    dailySummary: (driverIdsKey: string) =>
+      ["q", "driver-app", "daily-summary", driverIdsKey] as const,
   },
 
   salaryRequests: (orgId: string, status?: string) =>
@@ -240,6 +248,8 @@ export const queryKeys = {
     driverStories: (userId: string) => ["q", "reach", "driver-stories", userId] as const,
     driverRewardEarnings: (userId: string) =>
       ["q", "reach", "driver-reward-earnings", userId] as const,
+    driverReferralForTrip: (tripId: string) =>
+      ["q", "reach", "driver-referral-for-trip", tripId] as const,
   },
 
   discover: {
