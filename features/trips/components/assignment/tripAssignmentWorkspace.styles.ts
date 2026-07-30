@@ -467,8 +467,8 @@ export const aws = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.networkCardBorder,
-    // Clip only rounded corners on the header; body lists need to scroll.
-    overflow: "visible",
+    // NOTE: overflow is set per-platform in the Platform.select below (both
+    // branches use "hidden"); declaring it here too was dead code.
     alignSelf: "stretch",
     flexDirection: "column",
     ...Platform.select({

@@ -7,6 +7,7 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
+import { usePathname } from 'expo-router';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
@@ -20,6 +21,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const springBounce = { damping: 14, stiffness: 400 };
 const springSettle = { damping: 18, stiffness: 320 };
 const DOCK_HEIGHT = Layout.tabBarHeight + 5;
+
+/** Full-screen routes that must not show the floating dock (composer / forms). */
+const HIDE_TAB_BAR_ROUTES = new Set(['chat']);
 
 /** Wraps content with a pop-in animation when selected. */
 function AnimatedTabIcon({ selected, children }: { selected: boolean; children: React.ReactNode }) {
@@ -51,11 +55,26 @@ export const TAB_CONFIG = [
   { name: 'wallet', label: 'Earnings', icon: 'wallet' as const },
 ];
 
-export function DriverTabBar({ state, navigation }: BottomTabBarProps) {
+export function DriverTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
   const colors = useDriverThemeColors();
   const { isDark } = useDriverTheme();
-  const current = state.routes[state.index]?.name;
+  const focusedRoute = state.routes[state.index];
+  const current = focusedRoute?.name;
+
+  // Custom tab bars ignore React Navigation's default `tabBarStyle` handling.
+  // Hide by route name + pathname (Expo Router) + explicit display:none.
+  const focusedTabBarStyle = StyleSheet.flatten(
+    focusedRoute ? descriptors[focusedRoute.key]?.options?.tabBarStyle : undefined,
+  );
+  const hideDock =
+    (current != null && HIDE_TAB_BAR_ROUTES.has(current)) ||
+    pathname.includes('/chat') ||
+    focusedTabBarStyle?.display === 'none';
+  if (hideDock) {
+    return null;
+  }
 
   const handlePress = (routeName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

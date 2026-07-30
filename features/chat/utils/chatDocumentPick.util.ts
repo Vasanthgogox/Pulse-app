@@ -1,5 +1,6 @@
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
+// expo-file-system SDK 54 moved readAsStringAsync/EncodingType to the legacy entry.
+import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
 export type PickedChatFile = {

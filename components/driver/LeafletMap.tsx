@@ -58,19 +58,21 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       return <LeafletMapWeb ref={webRef} {...props} />;
     }
 
-    // Load the MapLibre implementation (standalone builds). Only fall back to
-    // the react-native-maps path when actually running in Expo Go — where
-    // MapLibre's native module is unavailable. Loading rnmaps in a standalone
-    // build resolves react-native-maps to undefined and crashes on render with
-    // "Cannot read property 'MapView' of undefined" (GX-PULSE-J).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const MapLibreImpl: NativeLeafletCtor = require("@/components/driver/LeafletMap.maplibre").LeafletMapMapLibre;
+    // Load EXACTLY ONE implementation — each crashes at import time in the
+    // other environment, so neither may be required speculatively:
+    //  - MapLibre in Expo Go   → native MLRNCameraModule missing, throws on import
+    //  - rnmaps in standalone  → react-native-maps is undefined (GX-PULSE-J)
+    // Requiring MapLibre before this branch is what broke the driver Dashboard
+    // in Expo Go, so the environment check must come first.
+    const NativeImpl: NativeLeafletCtor | undefined = isExpoGo()
+      ? // eslint-disable-next-line @typescript-eslint/no-require-imports -- MapLibre must not load in Expo Go
+        require("@/components/driver/LeafletMap.rnmaps").LeafletMapRnMaps
+      : // eslint-disable-next-line @typescript-eslint/no-require-imports -- rnmaps must not load in standalone builds
+        require("@/components/driver/LeafletMap.maplibre").LeafletMapMapLibre;
 
-    let NativeImpl: NativeLeafletCtor = MapLibreImpl;
-    if (isExpoGo()) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- MapLibre must not load in Expo Go
-      NativeImpl = require("@/components/driver/LeafletMap.rnmaps").LeafletMapRnMaps ?? MapLibreImpl;
-    }
+    // A missing export must not take down the whole driver app with it — the
+    // map is a preview, so render nothing rather than throwing.
+    if (!NativeImpl) return null;
 
     return <NativeImpl ref={nativeRef} {...props} />;
   },

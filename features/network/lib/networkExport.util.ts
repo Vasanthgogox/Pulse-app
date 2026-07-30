@@ -2,7 +2,8 @@
  * Network report export — PDF and Excel for Connection Sales, Asset Sales, and Connections.
  * Same pattern as pulseDrilldownExport.util.ts / pulseAgingExport.util.ts.
  */
-import * as FileSystem from "expo-file-system";
+// expo-file-system SDK 54 moved writeAsStringAsync/cacheDirectory to the legacy entry.
+import * as FileSystem from "expo-file-system/legacy";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";

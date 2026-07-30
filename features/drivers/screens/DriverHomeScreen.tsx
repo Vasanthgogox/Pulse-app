@@ -105,7 +105,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import BottomSheet, {
     BottomSheetScrollView,
     BottomSheetTextInput,
-    BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
@@ -2497,6 +2496,20 @@ export default function DriverRadarScreen() {
     );
     return [min, mid, expanded];
   }, [screenHeight, insets.top, shouldUseStaticMapSheetCard]);
+
+  /**
+   * Cap for `enableDynamicSizing` on the static (active-mission) sheet.
+   * Without it the library computes
+   *   dynamicSnapPoint = containerHeight - min(contentHeight, containerHeight)
+   * so content taller than the container clamps to 0 and overflows past the
+   * sheet's touchable bounds — rows near the bottom (LR view/delete) render but
+   * never receive taps. Capping to the space the sheet actually owns keeps
+   * every row inside the hit-test rect; the content scrolls instead.
+   */
+  const sheetMaxDynamicContentSize = useMemo(
+    () => Math.max(240, screenHeight - insets.top - driverTabBarClearance),
+    [screenHeight, insets.top, driverTabBarClearance],
+  );
 
   const snapSheetToIndex = useCallback(
     (idx: number) => {
@@ -5880,6 +5893,7 @@ export default function DriverRadarScreen() {
               enableContentPanningGesture={!shouldUseStaticMapSheetCard}
               enableOverDrag={!shouldUseStaticMapSheetCard}
               enableDynamicSizing={shouldUseStaticMapSheetCard}
+              maxDynamicContentSize={sheetMaxDynamicContentSize}
               ref={bottomSheetRef}
               keyboardBehavior={otpClaimTripId ? "extend" : "interactive"}
               keyboardBlurBehavior="restore"
@@ -5912,11 +5926,21 @@ export default function DriverRadarScreen() {
               }}
             >
               {shouldUseStaticMapSheetCard ? (
-                <BottomSheetView
-                  style={[
+                /**
+                 * Scroll view (not BottomSheetView): the active-mission card can
+                 * be taller than the sheet. In a fixed view the overflow renders
+                 * outside the sheet's touchable bounds, so the LR view/delete
+                 * icons never receive taps. Scrolling keeps every row hittable.
+                 */
+                <BottomSheetScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={[
                     styles.olaSheetContent,
                     {
-                      paddingBottom: 0,
+                      // Clear the driver tab bar so the last row (Hold to start
+                      // transit) is fully scrollable into view, not pinned under it.
+                      paddingBottom: insets.bottom,
                       paddingHorizontal: 0,
                       flexGrow: 0,
                     },
@@ -5966,7 +5990,7 @@ export default function DriverRadarScreen() {
                       </View>
                     )}
                   </View>
-                </BottomSheetView>
+                </BottomSheetScrollView>
               ) : (
                 <BottomSheetScrollView
                   keyboardShouldPersistTaps="handled"
