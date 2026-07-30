@@ -205,8 +205,11 @@ async function searchMapbox(query: string, opts?: SearchOpts): Promise<PlaceResu
   const trimmed = query.trim();
   if (!trimmed) return [];
   if (isMapboxBlocked()) return [];
-  if (!canCallProvider('mapbox')) return [];
+  // Budget first, then the per-keystroke cooldown: canCallProvider() stamps the
+  // clock on success, so checking it before a failing token consume burns the
+  // slot and makes the next (wanted) query return [] with no provider hit.
   if (!tryConsumeMapboxToken()) return [];
+  if (!canCallProvider('mapbox')) return [];
 
   const params = new URLSearchParams({
     access_token: token,
@@ -585,7 +588,10 @@ export async function searchPlacesInIndia(query: string, opts?: SearchOpts): Pro
       return aLow.localeCompare(bLow);
     });
     const out = prefixFirst.slice(0, 25);
-    cacheSet(cacheKey, out);
+    // Do NOT cache this: it is a local popular/recents fallback, not a provider
+    // answer. Every provider can be momentarily rate-gated (each silently
+    // returns []), and caching that under the real query key would pin a wrong
+    // "no such place" result for the whole TTL — so a retry never recovers.
     return out;
   })().finally(() => {
     inflight.delete(cacheKey);

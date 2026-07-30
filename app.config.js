@@ -77,7 +77,91 @@ if (!supabaseUrl || !supabaseAnonKey) {
   }
 }
 
-const config = require('./app.json');
+// Static config inlined from the former app.json. Kept here (rather than a separate
+// app.json) because expo-doctor cannot tell that a dynamic app.config.js consumes
+// app.json, and flags the pair as conflicting. Single source of truth now.
+const config = {
+  expo: {
+    name: 'PULSE',
+    slug: 'pulse',
+    version: '1.0.0',
+    orientation: 'portrait',
+    icon: './assets/images/icon.png',
+    scheme: 'pulse',
+    userInterfaceStyle: 'automatic',
+    newArchEnabled: true,
+    splash: {
+      image: './assets/images/splash-icon.png',
+      resizeMode: 'contain',
+      backgroundColor: '#ffffff',
+    },
+    ios: {
+      bundleIdentifier: 'com.pulse.app',
+      supportsTablet: true,
+      infoPlist: {
+        LSApplicationQueriesSchemes: ['whatsapp'],
+        UIBackgroundModes: ['location'],
+        NSLocationWhenInUseUsageDescription:
+          'Driver location is used for live trip tracking.',
+        NSLocationAlwaysAndWhenInUseUsageDescription:
+          'Location tracking continues during trips even when the app is in background.',
+        NSLocationAlwaysUsageDescription:
+          'This app tracks driver location for logistics trip monitoring.',
+        NSCameraUsageDescription:
+          'Allow PULSE to use the camera for odometer photos, receipts, and document uploads.',
+        NSPhotoLibraryUsageDescription:
+          'Allow PULSE to access your photos for odometer photos, receipts, and document uploads.',
+      },
+    },
+    android: {
+      package: 'com.pulse.app',
+      adaptiveIcon: {
+        foregroundImage: './assets/images/adaptive-icon.png',
+        backgroundColor: '#000000',
+      },
+      edgeToEdgeEnabled: true,
+      predictiveBackGestureEnabled: false,
+    },
+    web: {
+      bundler: 'metro',
+      output: 'static',
+      favicon: './assets/images/favicon.png',
+      meta: {
+        viewport: {
+          content:
+            'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover',
+        },
+      },
+    },
+    plugins: [
+      [
+        'expo-router',
+        {
+          asyncRoutes: {
+            web: false,
+            ios: false,
+            android: false,
+            default: 'development',
+          },
+        },
+      ],
+      '@maplibre/maplibre-react-native',
+      [
+        'expo-image-picker',
+        {
+          cameraPermission:
+            'Allow PULSE to use the camera for odometer photos, receipts, and document uploads.',
+          photosPermission:
+            'Allow PULSE to access your photos for odometer photos, receipts, and document uploads.',
+        },
+      ],
+      'expo-detox-config-plugin',
+    ],
+    experiments: {
+      typedRoutes: true,
+    },
+  },
+};
 
 // Only include config plugins when their packages are installed (e.g. after npm install).
 // This avoids "Failed to resolve plugin" when node_modules is missing or deps not installed.

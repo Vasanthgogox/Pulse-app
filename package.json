@@ -21,7 +21,7 @@
     "start:go": "node scripts/run-expo.js start --go",
     "preview": "node scripts/run-expo.js start --go --tunnel",
     "start:tunnel": "node scripts/run-expo.js start --tunnel",
-    "expo": "node scripts/run-expo.js",
+    "expo:cli": "node scripts/run-expo.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "cross-env DOTENV_CONFIG_OVERRIDE=true node scripts/run-expo.js start --web",

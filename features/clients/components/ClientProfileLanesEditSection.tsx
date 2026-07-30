@@ -10,6 +10,7 @@ import {
   updateClientLaneRate,
 } from "@/features/clients/services/clientLaneRates.service";
 import { formatWarehouseLaneLabel } from "@/features/clients/utils/clientManagement.util";
+import { ClientProfileDateField } from "@/features/clients/components/desktop/ClientProfileDateField";
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
 import { TripCommodityFields } from "@/features/trips/components/add-trip/TripCommodityFields";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
@@ -202,6 +203,14 @@ export function ClientProfileLanesEditSection({
     });
   };
 
+  /** Valid To before Valid From would silently hide the lane from every picker. */
+  const validityError = useMemo(() => {
+    const from = draft.valid_from.trim();
+    const to = draft.valid_to.trim();
+    if (!from || !to) return null;
+    return to < from ? "Valid To cannot be earlier than Valid From." : null;
+  }, [draft.valid_from, draft.valid_to]);
+
   const hubLanes = useMemo(
     () =>
       lanesForHub(
@@ -241,6 +250,10 @@ export function ClientProfileLanesEditSection({
       : null;
     if (draft.distance_km.trim() && !Number.isFinite(distanceNum)) {
       Alert.alert("Validation", "Distance must be a valid number.");
+      return;
+    }
+    if (validityError) {
+      Alert.alert("Validation", validityError);
       return;
     }
 
@@ -571,32 +584,23 @@ export function ClientProfileLanesEditSection({
               inputStyle={styles.fieldInput}
             />
           </View>
+          {/**
+           * Vehicle type + product type + tons all come from the trip wizard's
+           * own control, so the lane form offers the same dropdowns and the
+           * same tons quick-pick chips (with free-text for custom weights)
+           * instead of plain text boxes.
+           */}
           <TripCommodityFields
             vehicleType={draft.vehicle_type}
-            loadType=""
-            tons=""
+            loadType={draft.default_load_type}
+            tons={draft.default_load_tons}
             onVehicleTypeChange={(v) => setDraft((d) => ({ ...d, vehicle_type: v }))}
-            onLoadTypeChange={() => {}}
-            onTonsChange={() => {}}
-            showTons={false}
-            showProductType={false}
+            onLoadTypeChange={(v) => setDraft((d) => ({ ...d, default_load_type: v }))}
+            onTonsChange={(v) => setDraft((d) => ({ ...d, default_load_tons: v }))}
             useFormChrome
             preferWebSelect={Platform.OS === "web"}
             fieldLabelStyle={styles.fieldLabel}
             fieldInputStyle={styles.fieldInput}
-          />
-          <Field
-            label="Product Type"
-            value={draft.default_load_type}
-            onChangeText={(v) => setDraft((d) => ({ ...d, default_load_type: v }))}
-            placeholder="e.g. Cement, Steel Coils"
-          />
-          <Field
-            label="Default Tons"
-            value={draft.default_load_tons}
-            onChangeText={(v) => setDraft((d) => ({ ...d, default_load_tons: v }))}
-            placeholder="e.g. 20"
-            keyboardType="decimal-pad"
           />
           <Field
             label="Distance (km)"
@@ -633,18 +637,27 @@ export function ClientProfileLanesEditSection({
             keyboardType="decimal-pad"
           />
           {/** Blank = open-ended; isLaneCurrentlyValid() hides expired lanes from pickers. */}
-          <Field
-            label="Valid From"
-            value={draft.valid_from}
-            onChangeText={(v) => setDraft((d) => ({ ...d, valid_from: v }))}
-            placeholder="YYYY-MM-DD"
-          />
-          <Field
-            label="Valid To"
-            value={draft.valid_to}
-            onChangeText={(v) => setDraft((d) => ({ ...d, valid_to: v }))}
-            placeholder="YYYY-MM-DD"
-          />
+          <View style={styles.dateFieldRow}>
+            <ClientProfileDateField
+              label="Valid From"
+              value={draft.valid_from}
+              onChange={(iso) => setDraft((d) => ({ ...d, valid_from: iso }))}
+              fullWidth
+            />
+            <ClientProfileDateField
+              label="Valid To"
+              value={draft.valid_to}
+              onChange={(iso) => setDraft((d) => ({ ...d, valid_to: iso }))}
+              fullWidth
+            />
+          </View>
+          {validityError ? (
+            <Text style={styles.inlineErrorText}>{validityError}</Text>
+          ) : (
+            <Text style={styles.lockedFieldHint}>
+              Leave blank for an open-ended lane
+            </Text>
+          )}
           <Field
             label="Notes"
             value={draft.notes}
@@ -919,6 +932,19 @@ const styles = StyleSheet.create({
   mapFieldWrap: {
     marginBottom: 10,
     width: "100%",
+  },
+  dateFieldRow: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+    marginBottom: 4,
+  },
+  inlineErrorText: {
+    marginTop: 4,
+    marginBottom: 6,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.negative,
   },
   chipScroll: { flexGrow: 0 },
   chip: {

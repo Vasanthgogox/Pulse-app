@@ -112,17 +112,26 @@ export function ClientProfileHubsEditSection({
       Alert.alert("Validation", "Hub name is required.");
       return;
     }
-    if (
-      draft.latitude == null ||
-      draft.longitude == null ||
-      !draft.city.trim() ||
-      !draft.state.trim() ||
-      !draft.pincode.trim()
-    ) {
+    if (draft.latitude == null || draft.longitude == null) {
       Alert.alert(
         "Validation",
-        "Pick a place from map search so city, state, and pincode are filled from the location API.",
+        "Pick a place from map search so the hub gets map coordinates.",
       );
+      return;
+    }
+    // City / state / pincode are editable, so name the field that's actually
+    // blank instead of sending the user back to the map for all three.
+    const missing = [
+      !draft.city.trim() ? "city" : null,
+      !draft.state.trim() ? "state" : null,
+      !draft.pincode.trim() ? "pincode" : null,
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      Alert.alert("Validation", `Please fill ${missing.join(", ")}.`);
+      return;
+    }
+    if (!/^\d{6}$/.test(draft.pincode.trim())) {
+      Alert.alert("Validation", "Pincode must be 6 digits.");
       return;
     }
     setSaving(true);
@@ -348,7 +357,9 @@ export function ClientProfileHubsEditSection({
           <Field
             label="Pincode"
             value={draft.pincode}
-            onChangeText={(v) => setDraft((d) => ({ ...d, pincode: v }))}
+            onChangeText={(v) =>
+              setDraft((d) => ({ ...d, pincode: v.replace(/\D/g, "").slice(0, 6) }))
+            }
             placeholder="From map"
             keyboardType="number-pad"
           />
