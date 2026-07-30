@@ -21,10 +21,17 @@ import {
   updateMemberPermissions,
 } from "@/features/organization/services/members.service";
 import {
+  deleteCustomRolePreset,
+  getCustomRolePresets,
+  saveCustomRolePreset,
+  type CustomRolePreset,
+} from "@/features/organization/services/organization.service";
+import {
   buildPermissionsFromSurfaces,
   domainsFromMember,
   domainsFromPlatformRole,
   memberDisplayRoleLabel,
+  platformRoleFromDomains,
   platformRoleFromMember,
   surfacesFromMember,
   TEAM_INVITE_ROLE_OPTIONS,
@@ -44,6 +51,7 @@ import {
   applySurfaceToggle,
   defaultSurfacesForRole,
   domainsFromSurfaces,
+  hydrateMemberSurfaces,
   MEMBER_SURFACE_CATALOG,
   type MemberSurfaceId,
   type MemberSurfaceMap,
@@ -54,7 +62,9 @@ import { useOrgCapabilities } from "@/lib/useCapabilities";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowRightLeft,
+  BookmarkPlus,
   Check,
+  ChevronDown,
   ChevronLeft,
   Lock,
   Trash2,
@@ -67,6 +77,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -137,6 +148,13 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
   const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Custom presets (organizations.settings.customRoles) ──
+  const [presets, setPresets] = useState<CustomRolePreset[]>([]);
+  const [presetsOpen, setPresetsOpen] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [presetBusy, setPresetBusy] = useState(false);
+  const [appliedPresetId, setAppliedPresetId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!member) return;
     const role = platformRoleFromMember(member) ?? "tripops";
@@ -148,6 +166,19 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
     setBaseline({ role, domains: nextDomains, surfaces: nextSurfaces });
     setError(null);
   }, [member, orgCaps]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    void (async () => {
+      const { error: presetErr, presets: loaded } = await getCustomRolePresets(orgId);
+      if (cancelled || presetErr) return;
+      setPresets(loaded);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
 
   const orgAllows = useMemo(
     () => ({
@@ -193,9 +224,87 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
       const resolved = defaultSurfacesForRole(role, orgCaps);
       setSurfaces(resolved);
       setDomains(domainsFromSurfaces(resolved));
+      setAppliedPresetId(null);
       setError(null);
     },
     [orgCaps],
+  );
+
+  const handleApplyPreset = useCallback(
+    (preset: CustomRolePreset) => {
+      // Re-intersect with the org's current capabilities — a preset saved under
+      // a richer operating model must not re-grant surfaces the org lost.
+      const resolved = hydrateMemberSurfaces({ ...preset.surfaces }, orgCaps);
+      setSurfaces(resolved);
+      const nextDomains = domainsFromSurfaces(resolved);
+      setDomains(nextDomains);
+      setPlatformRole(
+        preset.platformRole === "admin"
+          ? "admin"
+          : platformRoleFromDomains(nextDomains),
+      );
+      setAppliedPresetId(preset.id);
+      setPresetsOpen(false);
+      setError(null);
+    },
+    [orgCaps],
+  );
+
+  const handleSavePreset = useCallback(async () => {
+    if (!orgId || !canEdit) return;
+    const name = presetName.trim();
+    if (!name) {
+      setError("Give the preset a name before saving it.");
+      return;
+    }
+    setPresetBusy(true);
+    setError(null);
+    try {
+      const { error: saveErr, presets: next } = await saveCustomRolePreset(orgId, {
+        name,
+        surfaces,
+        platformRole,
+      });
+      if (saveErr) {
+        setError(saveErr.message);
+        return;
+      }
+      setPresets(next);
+      setPresetName("");
+    } finally {
+      setPresetBusy(false);
+    }
+  }, [orgId, canEdit, presetName, surfaces, platformRole]);
+
+  const handleDeletePreset = useCallback(
+    (preset: CustomRolePreset) => {
+      if (!orgId || !canEdit) return;
+      Alert.alert("Delete preset?", `Remove "${preset.name}" from this workspace?`, [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setPresetBusy(true);
+              try {
+                const { error: delErr, presets: next } =
+                  await deleteCustomRolePreset(orgId, preset.id);
+                if (delErr) {
+                  setError(delErr.message);
+                  return;
+                }
+                setPresets(next);
+                setAppliedPresetId((id) => (id === preset.id ? null : id));
+              } finally {
+                setPresetBusy(false);
+              }
+            })();
+          },
+        },
+      ]);
+    },
+    [orgId, canEdit],
   );
 
   const handleToggleDomain = useCallback(
@@ -203,24 +312,26 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
       setSurfaces((prev) => {
         const updated = applyDomainToggle(prev, key, next, orgCaps);
         if (key !== "team") {
-          setDomains(domainsFromSurfaces(updated));
-          if (platformRole === "admin" && !next) {
-            setPlatformRole(
-              domainsFromSurfaces(updated).tripops
-                ? "tripops"
-                : domainsFromSurfaces(updated).finance
-                  ? "finance"
-                  : domainsFromSurfaces(updated).sales
-                    ? "sales"
-                    : "tripops",
-            );
+          const nextDomains = domainsFromSurfaces(updated);
+          setDomains(nextDomains);
+          // Turning a domain off can no longer leave an admin labelled as such.
+          // Zero domains degrades to `restricted`, not a silent tripops grant.
+          if (!next) {
+            setPlatformRole((role) => {
+              const stillCovered =
+                role === "finance" || role === "sales" || role === "tripops"
+                  ? nextDomains[role]
+                  : false;
+              return stillCovered ? role : platformRoleFromDomains(nextDomains);
+            });
           }
         }
         return updated;
       });
+      setAppliedPresetId(null);
       setError(null);
     },
-    [orgCaps, platformRole],
+    [orgCaps],
   );
 
   const handleToggleSurface = useCallback(
@@ -230,6 +341,7 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
         setDomains(domainsFromSurfaces(updated));
         return updated;
       });
+      setAppliedPresetId(null);
       setError(null);
     },
     [orgCaps],
@@ -549,6 +661,133 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
           );
         })}
       </View>
+
+      {canEdit ? (
+        <View style={styles.presetSaveCard}>
+          <View style={styles.presetSaveHead}>
+            <View style={styles.sectionHeadCopy}>
+              <Text style={styles.sectionEyebrow}>Custom presets</Text>
+              <Text style={styles.sectionLead} numberOfLines={2}>
+                Save this exact toggle set and re-apply it to other members.
+              </Text>
+            </View>
+            {presets.length > 0 ? (
+              <Pressable
+                onPress={() => setPresetsOpen((o) => !o)}
+                disabled={busy || presetBusy}
+                style={({ pressed }) => [
+                  styles.presetApplyBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Apply a saved preset"
+              >
+                <Text style={styles.presetApplyBtnText}>
+                  Apply preset ({presets.length})
+                </Text>
+                <ChevronDown
+                  size={13}
+                  color="#171717"
+                  strokeWidth={2.4}
+                  style={presetsOpen ? styles.chevronOpen : undefined}
+                />
+              </Pressable>
+            ) : null}
+          </View>
+
+          {presetsOpen ? (
+            <View style={styles.presetList}>
+              {presets.map((p) => {
+                const on = appliedPresetId === p.id;
+                return (
+                  <View key={p.id} style={styles.presetListRow}>
+                    <Pressable
+                      onPress={() => handleApplyPreset(p)}
+                      disabled={busy || presetBusy}
+                      style={({ pressed }) => [
+                        styles.presetListMain,
+                        on && styles.presetListMainOn,
+                        pressed && { opacity: 0.85 },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.presetListName,
+                          on && styles.presetListNameOn,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {p.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.presetListMeta,
+                          on && styles.presetListMetaOn,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {
+                          Object.values(p.surfaces).filter((v) => v === true)
+                            .length
+                        }{" "}
+                        surfaces
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleDeletePreset(p)}
+                      disabled={busy || presetBusy}
+                      hitSlop={8}
+                      style={({ pressed }) => [
+                        styles.presetDeleteBtn,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete preset ${p.name}`}
+                    >
+                      <Trash2 size={13} color="#FF2E54" strokeWidth={2.2} />
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          <View style={styles.presetSaveRow}>
+            <TextInput
+              style={styles.presetInput}
+              placeholder="Name this preset…"
+              placeholderTextColor="#A3A3A3"
+              value={presetName}
+              onChangeText={setPresetName}
+              editable={!busy && !presetBusy}
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={() => void handleSavePreset()}
+            />
+            <Pressable
+              onPress={() => void handleSavePreset()}
+              disabled={busy || presetBusy || !presetName.trim()}
+              style={({ pressed }) => [
+                styles.presetSaveBtn,
+                pressed && { opacity: 0.88 },
+                (busy || presetBusy || !presetName.trim()) &&
+                  styles.presetSaveBtnDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Save as custom preset"
+            >
+              {presetBusy ? (
+                <LoadingIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <BookmarkPlus size={13} color="#FFFFFF" strokeWidth={2.2} />
+                  <Text style={styles.presetSaveBtnText}>Save</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.domainHeader}>
         <Text style={styles.sectionEyebrow}>Workspace actions</Text>
@@ -968,6 +1207,115 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   domainStack: { gap: 8, width: "100%" },
+
+  presetSaveCard: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#FBFBFB",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#EEEEEE",
+    gap: 10,
+  },
+  presetSaveHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  presetApplyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E5E5E5",
+  },
+  presetApplyBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#171717",
+    letterSpacing: -0.2,
+  },
+  chevronOpen: { transform: [{ rotate: "180deg" }] },
+  presetList: { gap: 6 },
+  presetListRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  presetListMain: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E5E5E5",
+    gap: 1,
+  },
+  presetListMainOn: {
+    backgroundColor: "#171717",
+    borderColor: "#171717",
+  },
+  presetListName: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#171717",
+    letterSpacing: -0.2,
+  },
+  presetListNameOn: { color: "#FFFFFF" },
+  presetListMeta: {
+    fontSize: 10,
+    color: "#A3A3A3",
+  },
+  presetListMetaOn: { color: "rgba(255,255,255,0.6)" },
+  presetDeleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEF2F2",
+  },
+  presetSaveRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  presetInput: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 38,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E5E5E5",
+    fontSize: 13,
+    color: "#171717",
+  },
+  presetSaveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    minHeight: 38,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "#171717",
+  },
+  presetSaveBtnDisabled: { opacity: 0.35 },
+  presetSaveBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    letterSpacing: -0.2,
+  },
 
   footer: {
     position: "absolute",

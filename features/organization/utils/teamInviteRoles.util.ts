@@ -22,7 +22,12 @@ export type PlatformTeamRole =
   | "operator"
   | "finance"
   | "sales"
-  | "tripops";
+  | "tripops"
+  /**
+   * Zero-domain floor. A member with no Finance/Sales/TripOps access left
+   * degrades to `restricted` instead of silently inheriting TripOps.
+   */
+  | "restricted";
 
 const ALL_PLATFORM_TEAM_ROLES: readonly PlatformTeamRole[] = [
   "admin",
@@ -31,6 +36,7 @@ const ALL_PLATFORM_TEAM_ROLES: readonly PlatformTeamRole[] = [
   "finance",
   "sales",
   "tripops",
+  "restricted",
 ];
 
 /** Narrows a raw string (e.g. from an RPC payload) to a known `PlatformTeamRole`. */
@@ -105,6 +111,8 @@ export const PLATFORM_ROLE_GRANTS: Record<PlatformTeamRole, string[]> = {
   finance: ["org:read", "finance:read", "finance:manage"],
   sales: ["org:read", "warehouses:read", "commerce:*"],
   tripops: ["org:read", "warehouses:read", "ops:*", "planning:*", "execution:read"],
+  // Baseline only — can see the workspace exists, nothing functional.
+  restricted: ["org:read"],
 };
 
 export type TeamInviteRoleOption = {
@@ -208,6 +216,7 @@ export function surfacesFromMember(
 /**
  * Pick a display/storage platformRole that best matches the domain set.
  * Admin only when all three are on AND `preferAdmin` is true (explicit admin preset).
+ * Zero domains → `restricted` (never silently fall back to tripops).
  */
 export function platformRoleFromDomains(
   domains: MemberDomainFlags,
@@ -220,7 +229,7 @@ export function platformRoleFromDomains(
   if (domains.tripops) return "tripops";
   if (domains.finance) return "finance";
   if (domains.sales) return "sales";
-  return "tripops";
+  return "restricted";
 }
 
 /** Union of grant strings for every enabled domain (+ org:read baseline). */
@@ -359,11 +368,25 @@ export function orgMemberRoleForPlatformRole(
       return "member";
     case "tripops":
       return "dispatcher";
+    case "restricted":
+      return "member";
   }
 }
 
+/**
+ * Labels for roles that are not offered as pickable presets in
+ * `TEAM_INVITE_ROLE_OPTIONS` (derived or legacy states).
+ */
+const NON_PRESET_ROLE_LABELS: Partial<Record<PlatformTeamRole, string>> = {
+  restricted: "Restricted",
+};
+
 export function platformRoleLabel(role: PlatformTeamRole): string {
-  return TEAM_INVITE_ROLE_OPTIONS.find((o) => o.value === role)?.label ?? role;
+  return (
+    TEAM_INVITE_ROLE_OPTIONS.find((o) => o.value === role)?.label ??
+    NON_PRESET_ROLE_LABELS[role] ??
+    role
+  );
 }
 
 export function platformRoleFromMember(

@@ -6,7 +6,10 @@
  */
 import { supabase } from "@/lib/supabase";
 import { normalizeInfrastructureErrorMessage } from "@/lib/supabaseHttp.util";
+import { uuidv7 } from "@/lib/uuidv7";
+import type { MemberSurfaceMap } from "@/lib/memberSurfaces";
 import type { CurrentOrganization, WorkspaceKyc } from "@/types/organization";
+import type { PlatformTeamRole } from "@/features/organization/utils/teamInviteRoles.util";
 
 const defaultCapabilities = {
   canPostIndent: true,
@@ -495,4 +498,130 @@ export async function updateWorkspaceKyc(
     .maybeSingle();
   if (fetchErr) return { error: new Error(fetchErr.message), kyc: null };
   return { error: null, kyc: (fresh as unknown as WorkspaceKyc) ?? null };
+}
+
+// ─── Custom member-permission presets (organizations.settings.customRoles) ────
+
+/**
+ * A saved permission template an admin can re-apply to any member, so custom
+ * roles don't require re-toggling 15+ surfaces each time. Stored in the org's
+ * `settings` JSONB — writes are gated by the existing owner/admin UPDATE policy.
+ */
+export type CustomRolePreset = {
+  id: string;
+  name: string;
+  surfaces: MemberSurfaceMap;
+  /** Role label persisted alongside the member row when this preset is applied. */
+  platformRole: PlatformTeamRole;
+  created_at: string;
+};
+
+type OrgSettings = {
+  customRoles?: CustomRolePreset[];
+};
+
+/** Drops malformed rows rather than throwing — settings is free-form JSONB. */
+function parseCustomRoles(raw: unknown): CustomRolePreset[] {
+  const list = (raw as OrgSettings | null)?.customRoles;
+  if (!Array.isArray(list)) return [];
+  return list.filter(
+    (r): r is CustomRolePreset =>
+      !!r &&
+      typeof r === "object" &&
+      typeof (r as CustomRolePreset).id === "string" &&
+      typeof (r as CustomRolePreset).name === "string" &&
+      !!(r as CustomRolePreset).surfaces &&
+      typeof (r as CustomRolePreset).surfaces === "object",
+  );
+}
+
+export async function getCustomRolePresets(orgId: string): Promise<{
+  error: Error | null;
+  presets: CustomRolePreset[];
+}> {
+  const { error, settings } = await readOrgSettings(orgId);
+  if (error) return { error, presets: [] };
+  return { error: null, presets: parseCustomRoles(settings) };
+}
+
+/** Reads the whole bag so writes can merge instead of clobbering sibling keys. */
+async function readOrgSettings(orgId: string): Promise<{
+  error: Error | null;
+  settings: OrgSettings;
+}> {
+  const { data, error } = await supabase()
+    .from("organizations")
+    .select("settings")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), settings: {} };
+  const raw = data?.settings;
+  return {
+    error: null,
+    settings: raw && typeof raw === "object" ? (raw as OrgSettings) : {},
+  };
+}
+
+/**
+ * Append (or replace by name) a preset. Read-modify-write on the JSONB bag —
+ * last write wins, which is acceptable for an owner-only, low-frequency edit.
+ */
+export async function saveCustomRolePreset(
+  orgId: string,
+  preset: { name: string; surfaces: MemberSurfaceMap; platformRole: PlatformTeamRole },
+): Promise<{ error: Error | null; presets: CustomRolePreset[] }> {
+  const name = preset.name.trim();
+  if (!name) return { error: new Error("Preset name is required"), presets: [] };
+
+  const { error: readErr, settings } = await readOrgSettings(orgId);
+  if (readErr) return { error: readErr, presets: [] };
+  const existing = parseCustomRoles(settings);
+
+  const next: CustomRolePreset = {
+    id: uuidv7(),
+    name,
+    surfaces: preset.surfaces,
+    platformRole: preset.platformRole,
+    created_at: new Date().toISOString(),
+  };
+  const merged = [
+    ...existing.filter((p) => p.name.toLowerCase() !== name.toLowerCase()),
+    next,
+  ];
+
+  const { data, error } = await supabase()
+    .from("organizations")
+    .update({ settings: { ...settings, customRoles: merged } })
+    .eq("id", orgId)
+    .select("settings")
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), presets: existing };
+  if (!data) {
+    return {
+      error: new Error(
+        "Could not save the preset. Only the workspace owner or an admin can do this.",
+      ),
+      presets: existing,
+    };
+  }
+  return { error: null, presets: parseCustomRoles(data.settings) };
+}
+
+export async function deleteCustomRolePreset(
+  orgId: string,
+  presetId: string,
+): Promise<{ error: Error | null; presets: CustomRolePreset[] }> {
+  const { error: readErr, settings } = await readOrgSettings(orgId);
+  if (readErr) return { error: readErr, presets: [] };
+  const existing = parseCustomRoles(settings);
+  const merged = existing.filter((p) => p.id !== presetId);
+
+  const { data, error } = await supabase()
+    .from("organizations")
+    .update({ settings: { ...settings, customRoles: merged } })
+    .eq("id", orgId)
+    .select("settings")
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), presets: existing };
+  return { error: null, presets: parseCustomRoles(data?.settings) };
 }

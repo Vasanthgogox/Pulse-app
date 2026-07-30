@@ -452,6 +452,49 @@ export async function updateMemberPermissions(
   }
 }
 
+/**
+ * Apply one role + permissions object to many members in a single write.
+ *
+ * Unlike `updateMemberPermissions`, this goes direct to the table rather than
+ * the `set_member_role` RPC (which is one-member-per-call). RLS is still the
+ * authority — the owner-only UPDATE policy rejects the whole statement for a
+ * non-owner, and owner rows are excluded here so ownership can never be
+ * reassigned by a bulk edit (use `transferOwnership`).
+ */
+export async function updateBulkMemberPermissions(
+  memberIds: string[],
+  platformRole: PlatformTeamRole,
+  permissions: TeamInvitePermissions,
+): Promise<{ error: Error | null; updated: number }> {
+  const ids = [...new Set(memberIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return { error: null, updated: 0 };
+
+  const role = orgMemberRoleForPlatformRole(platformRole);
+  try {
+    const { data, error } = await supabase()
+      .from("organization_members")
+      .update({ role, permissions })
+      .in("id", ids)
+      .neq("role", "owner")
+      .select("id");
+    if (error) {
+      if (looksLikeNotOwnerError(error.message)) {
+        return {
+          error: new Error("Only the organization owner can change member roles."),
+          updated: 0,
+        };
+      }
+      return { error: new Error(error.message), updated: 0 };
+    }
+    return { error: null, updated: (data ?? []).length };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      updated: 0,
+    };
+  }
+}
+
 // ─── Transfer ownership ─────────────────────────────────────────────────────────
 
 /** Detect the RPC's "target must be an active member" rejection for a friendly message. */

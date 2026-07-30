@@ -10,22 +10,30 @@ import { partyInitialsFromName } from "@/lib/partyAvatarDisplay";
 import { useOrgMembersQuery, useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
 import {
   cancelTeamInvite,
+  updateBulkMemberPermissions,
 } from "@/features/organization/services/members.service";
 import type { OrgMember, PendingPhoneTeamInvite } from "@/types/organization";
 import {
+  buildTeamInvitePermissions,
   memberDisplayRoleLabel,
   platformRoleFromMember,
+  TEAM_INVITE_ROLE_OPTIONS,
+  type PlatformTeamRole,
 } from "@/features/organization/utils/teamInviteRoles.util";
+import { useOrgCapabilities } from "@/lib/useCapabilities";
 import {
   Check,
+  CheckSquare,
   Pencil,
   Search,
   Shield,
+  Square,
   Trash2,
   UserCheck,
   UserMinus,
   UserPlus2,
   Users,
+  X,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
@@ -74,19 +82,44 @@ function MemberCard({
   isCurrentUser,
   canManage,
   onEdit,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
 }: {
   member: OrgMember;
   isCurrentUser: boolean;
   canManage: boolean;
   onEdit: (member: OrgMember) => void;
+  /** Bulk mode — show a checkbox instead of routing to the detail panel. */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (member: OrgMember) => void;
 }) {
   const displayName = member.full_name || member.phone || member.email || "Unknown";
   const isOwner = member.role === "owner";
   const isPending = member.status === "invited";
   const canEdit = canManage && !isOwner && !isCurrentUser;
+  // Owner rows and your own row are never bulk-editable (RLS rejects them too).
+  const canSelect = selectable && canEdit;
 
   return (
-    <View style={cardStyles.card}>
+    <View style={[cardStyles.card, selected && cardStyles.cardSelected]}>
+      {canSelect ? (
+        <Pressable
+          onPress={() => onToggleSelect?.(member)}
+          hitSlop={8}
+          style={cardStyles.checkboxWrap}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: selected }}
+          accessibilityLabel={`Select ${displayName}`}
+        >
+          {selected ? (
+            <CheckSquare size={18} color={Theme.primary} strokeWidth={2.4} />
+          ) : (
+            <Square size={18} color={Theme.textSecondary} strokeWidth={2.2} />
+          )}
+        </Pressable>
+      ) : null}
       <View style={cardStyles.cardCover}>
         <View style={cardStyles.coverGradient} />
         <View style={cardStyles.badgeRow}>
@@ -144,7 +177,16 @@ function MemberCard({
 
       {/* Always reserve footer height so Owner / Operator cards share one baseline. */}
       <View style={cardStyles.footerSlot}>
-        {canEdit ? (
+        {canSelect ? (
+          <Pressable
+            onPress={() => onToggleSelect?.(member)}
+            style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
+          >
+            <Text style={cardStyles.editBtnText}>
+              {selected ? "Selected" : "Select"}
+            </Text>
+          </Pressable>
+        ) : canEdit ? (
           <Pressable
             onPress={() => onEdit(member)}
             style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
@@ -272,6 +314,22 @@ const cardStyles = StyleSheet.create({
     ...Platform.select({
       web: { height: "100%" as unknown as number },
     }),
+  },
+  cardSelected: {
+    borderColor: Theme.primary,
+    borderWidth: 1.5,
+  },
+  checkboxWrap: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 3,
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
   },
   cardCover: {
     height: 56,
@@ -592,6 +650,13 @@ export function TeamMembersView({
   const [actionId, setActionId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // ── Bulk role assignment ──
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [rolePickerOpen, setRolePickerOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const orgCaps = useOrgCapabilities();
+
   React.useEffect(() => {
     if (initialSubTab) setTab(initialSubTab);
   }, [initialSubTab]);
@@ -605,6 +670,66 @@ export function TeamMembersView({
       (`/(modals)/member-permissions?memberId=${encodeURIComponent(member.id)}`) as Parameters<
         typeof router.push
       >[0],
+    );
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds([]);
+    setRolePickerOpen(false);
+  };
+
+  const handleToggleSelect = (member: OrgMember) => {
+    setSelectedIds((prev) =>
+      prev.includes(member.id)
+        ? prev.filter((id) => id !== member.id)
+        : [...prev, member.id],
+    );
+  };
+
+  const handleBulkAssignRole = (platformRole: PlatformTeamRole) => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const label =
+      TEAM_INVITE_ROLE_OPTIONS.find((o) => o.value === platformRole)?.label ??
+      platformRole;
+    Alert.alert(
+      "Change role?",
+      `Set ${ids.length} member${ids.length === 1 ? "" : "s"} to ${label}? This replaces their current permissions.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Apply",
+          onPress: async () => {
+            setBulkBusy(true);
+            try {
+              const permissions = buildTeamInvitePermissions(
+                platformRole,
+                undefined,
+                orgCaps,
+              );
+              const { error, updated } = await updateBulkMemberPermissions(
+                ids,
+                platformRole,
+                permissions,
+              );
+              if (error) {
+                Alert.alert("Could not change roles", error.message);
+                return;
+              }
+              invalidate();
+              await query.refetch();
+              exitSelectMode();
+              Alert.alert(
+                "Roles updated",
+                `${updated} member${updated === 1 ? "" : "s"} set to ${label}.`,
+              );
+            } finally {
+              setBulkBusy(false);
+            }
+          },
+        },
+      ],
     );
   };
 
@@ -767,6 +892,35 @@ export function TeamMembersView({
         />
       </View>
 
+      {canManage && tab === "members" && activeMembers.length > 1 ? (
+        <View style={[styles.bulkToggleRow, embedded && styles.bulkToggleRowEmbedded]}>
+          <Pressable
+            onPress={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            style={({ pressed }) => [
+              styles.bulkToggleBtn,
+              selectMode && styles.bulkToggleBtnOn,
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={selectMode ? "Exit multi-select" : "Select multiple members"}
+          >
+            {selectMode ? (
+              <X size={12} color={Theme.textOnPrimary} strokeWidth={2.4} />
+            ) : (
+              <CheckSquare size={12} color={Theme.primary} strokeWidth={2.2} />
+            )}
+            <Text
+              style={[
+                styles.bulkToggleText,
+                selectMode && styles.bulkToggleTextOn,
+              ]}
+            >
+              {selectMode ? "Done" : "Select"}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {tab === "members" ? (
         displayList.length === 0 ? (
           <EmptyMembers onInvite={canManage ? onInvite : undefined} />
@@ -786,6 +940,9 @@ export function TeamMembersView({
                         isCurrentUser={m.user_id === currentUserId}
                         canManage={canManage}
                         onEdit={handleEditMember}
+                        selectable={selectMode}
+                        selected={selectedIds.includes(m.id)}
+                        onToggleSelect={handleToggleSelect}
                       />
                     )}
                   </View>
@@ -859,21 +1016,100 @@ export function TeamMembersView({
     </>
   );
 
+  const bulkBar =
+    selectMode && selectedIds.length > 1 ? (
+      <View style={styles.bulkBar}>
+        {rolePickerOpen ? (
+          <View style={styles.rolePicker}>
+            <Text style={styles.rolePickerTitle}>
+              Apply to {selectedIds.length} members
+            </Text>
+            <View style={styles.rolePickerRow}>
+              {TEAM_INVITE_ROLE_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  onPress={() => handleBulkAssignRole(option.value)}
+                  disabled={bulkBusy}
+                  style={({ pressed }) => [
+                    styles.rolePickerChip,
+                    pressed && { opacity: 0.85 },
+                    bulkBusy && { opacity: 0.5 },
+                  ]}
+                >
+                  <Text style={styles.rolePickerChipText}>{option.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+        <View style={styles.bulkBarMain}>
+          <Text style={styles.bulkBarCount}>
+            {selectedIds.length} selected
+          </Text>
+          <View style={styles.bulkBarActions}>
+            <Pressable
+              onPress={exitSelectMode}
+              disabled={bulkBusy}
+              style={({ pressed }) => [
+                styles.bulkClearBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Clear selection"
+            >
+              <Text style={styles.bulkClearBtnText}>Clear</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setRolePickerOpen((o) => !o)}
+              disabled={bulkBusy}
+              style={({ pressed }) => [
+                styles.bulkPrimaryBtn,
+                pressed && { opacity: 0.88 },
+                bulkBusy && { opacity: 0.5 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Change role for selected members"
+            >
+              {bulkBusy ? (
+                <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+              ) : (
+                <>
+                  <Shield size={12} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                  <Text style={styles.bulkPrimaryBtnText}>Change role</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    ) : null;
+
   if (embedded) {
-    return <View style={styles.embeddedRoot}>{body}</View>;
+    return (
+      <View style={styles.embeddedRoot}>
+        {body}
+        {bulkBar}
+      </View>
+    );
   }
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.loaderAccent} />
-      }
-    >
-      {body}
-    </ScrollView>
+    <View style={styles.scroll}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          bulkBar ? styles.contentWithBulkBar : null,
+        ]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.loaderAccent} />
+        }
+      >
+        {body}
+      </ScrollView>
+      {bulkBar}
+    </View>
   );
 }
 
@@ -1009,6 +1245,134 @@ const styles = StyleSheet.create({
 
   embeddedRoot: {
     width: "100%",
+  },
+  contentWithBulkBar: { paddingBottom: 120 },
+
+  bulkToggleRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  bulkToggleRowEmbedded: { paddingHorizontal: 20 },
+  bulkToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  bulkToggleBtnOn: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+  },
+  bulkToggleText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.primary,
+    letterSpacing: 0.2,
+  },
+  bulkToggleTextOn: { color: Theme.textOnPrimary },
+
+  bulkBar: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    borderRadius: 16,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+    overflow: "hidden",
+  },
+  bulkBarMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  bulkBarCount: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  bulkBarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  bulkClearBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceGray,
+  },
+  bulkClearBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  bulkPrimaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    minWidth: 112,
+    minHeight: 34,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: Theme.primary,
+  },
+  bulkPrimaryBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.2,
+  },
+  rolePicker: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 4,
+    gap: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  rolePickerTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
+  },
+  rolePickerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingBottom: 8,
+  },
+  rolePickerChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  rolePickerChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
   },
   tabRowMetronic: {
     gap: 24,

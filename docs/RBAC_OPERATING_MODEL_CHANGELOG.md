@@ -22,6 +22,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | _(pending)_ | Owner-only Access Control page: dedicated owner-gated screen (`app/(modals)/access-control.tsx`) reusing `TeamMembersView`; role writes routed through new owner-only, atomic, audited `set_member_role` RPC; `org_members_update` RLS hardened so role/permission changes are owner-only (admins can no longer re-role teammates off-RPC); owner-only "Access" entry in `WorkspaceTeamPanel` |
 | _(pending)_ | Part 2: functional member roles (Finance/Sales/TripOps) — invite roles replace Planner/Operator; `permissions.platformRole` now read into `ActiveWorkspaceContext`; new `useMemberCapabilities()` intersects org model with functional role (owner/admin bypass); client-side gate on the 3 primary tabs only (`MemberDomainGate`) — no RLS change, no DB migration (reuses existing `organization_members.permissions` column and legacy `role` CHECK values) |
 | _(pending)_ | Part 3: per-member access page — Edit opens `/(modals)/member-permissions` (two-column: identity left, presets/domains right); replaces `MemberEditModal`; remove + transfer + role/domains save live on that page |
+| _(pending)_ | RBAC enhancements: zero-domain fallback → `restricted`, custom presets stored in `organizations.settings`, bulk role assignment, and removed hardcoded driver RBAC limits |
 | _(pending)_ | Fix: Team/Workspace surfaces were wrongly gated on `team_manage` (never emitted by org operating-model caps) — now available for any business org so owners can grant invite/audit/settings/KYC/notifications |
 
 ---
@@ -36,6 +37,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `docs/RBAC_OPERATING_MODEL.md` | Who-can-do-what matrix |
 | `docs/RBAC_OPERATING_MODEL_CHANGELOG.md` | This change log |
 | `.cursor/rules/pulse-operating-model-rbac.mdc` | Cursor rule for RBAC sessions |
+| `supabase/migrations/20270120000000_organizations_settings_jsonb.sql` | Add `settings` JSONB column to `organizations` for custom RBAC presets |
 | `supabase/migrations/20261207160000_discover_organizations_expose_operating_model.sql` | RPC returns `operating_model` for counterparty-aware connect roles |
 | `supabase/migrations/20261208120000_change_operating_model.sql` | `operating_model_changed_at` col + owner-only, cooldown-guarded, audited `change_operating_model` RPC |
 | `features/organization/components/workspace/ChangeOperatingModelModal.tsx` | Owner-only model picker with downgrade impact preview |
@@ -46,7 +48,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `lib/useMemberCapabilities.ts` | Hook: `useCapabilities()` (org model) ∩ member domains (or legacy single functional role) → `{ finance, sales, tripops }`; owner/admin bypass |
 | `components/MemberDomainGate.tsx` | Client-side redirect-on-deny gate for the Fiscal/Trips/Network tabs (same pattern as `ModelAccessGate`) |
 | `app/(modals)/member-permissions.tsx` | Owner-only per-member domain permission detail screen (`?memberId=`) |
-| `features/organization/components/MemberPermissionsPanel/MemberPermissionsPanel.tsx` | KYC-style WorkspaceDetailLayout page: role presets + domain Switch rows + save via `updateMemberPermissions` |
+| `features/organization/components/MemberPermissionsPanel/MemberPermissionsPanel.tsx` | KYC-style WorkspaceDetailLayout page: role presets + domain Switch rows + save via `updateMemberPermissions`; zero-domain handling; custom preset save/apply UI |
 | `features/organization/components/MemberPermissionsPanel/DomainPermissionToggleRow.tsx` | Expandable domain row (Switch + grants chips), mirrors KycRequiredDocumentRow |
 
 ---
@@ -55,16 +57,16 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 
 | File | What changed |
 |------|----------------|
-| `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe; `hasBusinessCapabilities`; `allowedConnectionRoles` (counterparty-aware client/supplier); `operatingModelTransition` (impact preview) |
+| `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe; `hasBusinessCapabilities`; `allowedConnectionRoles` (counterparty-aware client/supplier); `operatingModelTransition` (impact preview); removed hardcoded driver limits |
 | `features/organization/services/organization.service.ts` | `changeOperatingModel` RPC wrapper + `looksLikeModelChangeCooldownError` |
-| `features/organization/services/members.service.ts` | `transferOwnership` RPC wrapper + `looksLikeTransferTargetError`; `updateMemberRole` → `set_member_role`; new `updateMemberPermissions` for domain toggles + `looksLikeNotOwnerError` |
+| `features/organization/services/members.service.ts` | `transferOwnership` RPC wrapper + `looksLikeTransferTargetError`; `updateMemberRole` → `set_member_role`; new `updateMemberPermissions` for domain toggles + `looksLikeNotOwnerError`; new `updateBulkMemberPermissions` |
 | `lib/routes.ts` | `MODALS.ACCESS_CONTROL` + `MODALS.MEMBER_PERMISSIONS` |
 | `app/(modals)/_layout.tsx` | Register `access-control` + `member-permissions` fullScreenModal screens |
 | `features/organization/components/workspace/WorkspaceTeamPanel.tsx` | Owner-only "Access" button → `ROUTES.MODALS.ACCESS_CONTROL` |
 | `features/network/components/desktop/NetworkDesktopTeamPanel.tsx` | Owner-only "Access" button (network hub Team tab) → `ROUTES.MODALS.ACCESS_CONTROL` |
 | `lib/navigationPolicy/registry/org.ts` | `org.modal-access-control` + `org.modal-member-permissions` policies |
-| `features/organization/components/TeamMembersView.tsx` | Edit → member-permissions modal (no `MemberEditModal`); phone-invite cancel stays local |
-| `features/organization/utils/teamInviteRoles.util.ts` | `MemberDomainFlags`, `domains` on permissions, domain helpers, `buildPermissionsFromDomains` |
+| `features/organization/components/TeamMembersView.tsx` | Edit → member-permissions modal (no `MemberEditModal`); phone-invite cancel stays local; multi-select and bulk role assignment action bar |
+| `features/organization/utils/teamInviteRoles.util.ts` | `MemberDomainFlags`, `domains` on permissions, domain helpers, `buildPermissionsFromDomains`; added `restricted` fallback role for zero-domain members |
 | `contexts/ActiveWorkspaceContext.tsx` / `types/workspace.ts` | Expose `memberDomains` from permissions |
 | `lib/useMemberCapabilities.ts` | Prefer `memberDomains` (multi-domain) over single functional role |
 | ~~`features/organization/components/MemberEditModal.tsx`~~ | Removed — superseded by `MemberPermissionsPanel` |
