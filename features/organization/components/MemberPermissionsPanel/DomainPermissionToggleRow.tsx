@@ -7,13 +7,14 @@ import {
   applySurfaceToggle,
   memberHasSurface,
   orgAllowsSurface,
-  surfacesForDomain,
+  surfaceGroupsForDomains,
+  type MemberSurfaceDef,
   type MemberSurfaceId,
   type MemberSurfaceMap,
 } from "@/lib/memberSurfaces";
 import type { Capability } from "@/lib/capabilities";
 import type { FunctionalRole } from "@/features/organization/utils/teamInviteRoles.util";
-import { ChevronDown, ChevronUp, Lock } from "lucide-react-native";
+import { Check, ChevronDown, ChevronUp, Lock, Minus } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
   Pressable,
@@ -23,6 +24,45 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+
+/** Tri-state checkbox used for both group headers and individual surfaces. */
+function SurfaceCheckbox({
+  state,
+  accent,
+  disabled,
+  label,
+  onPress,
+}: {
+  state: "on" | "off" | "mixed";
+  accent: string;
+  disabled: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  const filled = state !== "off";
+  return (
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
+      hitSlop={6}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: state === "mixed" ? "mixed" : state === "on", disabled }}
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.checkbox,
+        filled && { backgroundColor: accent, borderColor: accent },
+        disabled && styles.checkboxDisabled,
+        pressed && !disabled && { opacity: 0.7 },
+      ]}
+    >
+      {state === "on" ? (
+        <Check size={12} color="#FFFFFF" strokeWidth={3} />
+      ) : state === "mixed" ? (
+        <Minus size={12} color="#FFFFFF" strokeWidth={3} />
+      ) : null}
+    </Pressable>
+  );
+}
 
 const DOMAIN_ACCENT: Record<FunctionalRole | "fleet" | "team", string> = {
   finance: "#0894FF",
@@ -70,17 +110,33 @@ export function DomainPermissionToggleRow({
   const lockedByOrg = !orgAllowsDomain;
   const switchOn = domainEnabled && orgAllowsDomain;
 
-  const rows = useMemo(() => {
-    const primary = surfacesForDomain(def.key);
-    const extra =
-      def.key === "tripops" ? surfacesForDomain("fleet") : [];
-    return [...primary, ...extra];
-  }, [def.key]);
+  const groups = useMemo(
+    () =>
+      surfaceGroupsForDomains(
+        def.key === "tripops" ? ["tripops", "fleet"] : [def.key],
+      ),
+    [def.key],
+  );
+  const rows = useMemo(() => groups.flatMap((g) => g.surfaces), [groups]);
 
   const enabledCount = rows.filter((r) =>
     memberHasSurface(orgCaps, surfaces, r.id, false),
   ).length;
   const availableCount = rows.filter((r) => orgAllowsSurface(orgCaps, r.id)).length;
+
+  /**
+   * Bulk-apply a group header checkbox across its org-allowed surfaces.
+   * Applies to every member unconditionally — the parent cascade can flip
+   * siblings mid-loop, so skipping based on render-time state would miss rows.
+   * When switching off, deepest-first so a parent's cascade can't re-disable a
+   * child we already handled.
+   */
+  const toggleGroup = (members: MemberSurfaceDef[], next: boolean) => {
+    const ordered = next ? members : [...members].reverse();
+    for (const surface of ordered) {
+      onToggleSurface(surface.id, next);
+    }
+  };
 
   return (
     <View style={[styles.card, switchOn && styles.cardOn]}>
@@ -125,51 +181,93 @@ export function DomainPermissionToggleRow({
       </View>
 
       {expanded ? (
-        <View
-          style={[
-            styles.surfaceList,
-            twoColSurfaces && styles.surfaceListGrid,
-          ]}
-        >
-          {rows.map((surface) => {
-            const orgOk = orgAllowsSurface(orgCaps, surface.id);
-            const on = memberHasSurface(orgCaps, surfaces, surface.id, false);
+        <View style={styles.groupStack}>
+          {groups.map((group) => {
+            const available = group.surfaces.filter((s) =>
+              orgAllowsSurface(orgCaps, s.id),
+            );
+            if (available.length === 0) return null;
+            const onCount = available.filter((s) =>
+              memberHasSurface(orgCaps, surfaces, s.id, false),
+            ).length;
+            const groupState =
+              onCount === 0 ? "off" : onCount === available.length ? "on" : "mixed";
             return (
               <View
-                key={surface.id}
-                style={[
-                  styles.surfaceRow,
-                  twoColSurfaces ? styles.surfaceRowHalf : styles.surfaceRowFull,
-                  !orgOk && styles.surfaceRowMuted,
-                ]}
+                key={group.group ?? "__basics"}
+                style={styles.groupBlock}
               >
-                <View style={styles.surfaceCopy}>
-                  <Text
-                    style={[
-                      styles.surfaceLabel,
-                      !orgOk && styles.surfaceMuted,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {surface.label}
-                  </Text>
-                  <Text style={styles.surfaceHint} numberOfLines={1}>
-                    {!orgOk ? "Blocked by operating model" : surface.hint}
-                  </Text>
+                {group.group ? (
+                  <View style={styles.groupHead}>
+                    <SurfaceCheckbox
+                      state={groupState}
+                      accent={accent}
+                      disabled={!canEdit || !switchOn}
+                      label={`${group.group} — all`}
+                      onPress={() => toggleGroup(available, groupState !== "on")}
+                    />
+                    <Text style={styles.groupTitle}>{group.group}</Text>
+                    <Text style={styles.groupCount}>
+                      {onCount}/{available.length}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View
+                  style={[
+                    styles.surfaceList,
+                    twoColSurfaces && styles.surfaceListGrid,
+                    group.group ? styles.surfaceListIndent : null,
+                  ]}
+                >
+                  {group.surfaces.map((surface) => {
+                    const orgOk = orgAllowsSurface(orgCaps, surface.id);
+                    const on = memberHasSurface(
+                      orgCaps,
+                      surfaces,
+                      surface.id,
+                      false,
+                    );
+                    return (
+                      <View
+                        key={surface.id}
+                        style={[
+                          styles.surfaceRow,
+                          twoColSurfaces
+                            ? styles.surfaceRowHalf
+                            : styles.surfaceRowFull,
+                          !orgOk && styles.surfaceRowMuted,
+                        ]}
+                      >
+                        {!orgOk ? (
+                          <Lock size={14} color="#A3A3A3" strokeWidth={2} />
+                        ) : (
+                          <SurfaceCheckbox
+                            state={on ? "on" : "off"}
+                            accent={accent}
+                            disabled={!canEdit || !switchOn}
+                            label={surface.label}
+                            onPress={() => onToggleSurface(surface.id, !on)}
+                          />
+                        )}
+                        <View style={styles.surfaceCopy}>
+                          <Text
+                            style={[
+                              styles.surfaceLabel,
+                              !orgOk && styles.surfaceMuted,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {surface.label}
+                          </Text>
+                          <Text style={styles.surfaceHint} numberOfLines={1}>
+                            {!orgOk ? "Blocked by operating model" : surface.hint}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
-                {!orgOk ? (
-                  <Lock size={14} color="#A3A3A3" strokeWidth={2} />
-                ) : (
-                  <Switch
-                    value={on}
-                    disabled={!canEdit || !switchOn}
-                    onValueChange={(next) => onToggleSurface(surface.id, next)}
-                    trackColor={{ false: "#E8E8E8", true: accent }}
-                    thumbColor="#FFFFFF"
-                    ios_backgroundColor="#E8E8E8"
-                    accessibilityLabel={surface.label}
-                  />
-                )}
               </View>
             );
           })}
@@ -257,12 +355,51 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#737373",
   },
-  surfaceList: {
-    gap: 2,
+  groupStack: {
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#F0F0F0",
+    gap: 10,
+  },
+  groupBlock: { gap: 4 },
+  groupHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  groupTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#525252",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  groupCount: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#A3A3A3",
+    fontVariant: ["tabular-nums"],
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: "#D4D4D4",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxDisabled: { opacity: 0.45 },
+  surfaceList: {
+    gap: 2,
+  },
+  surfaceListIndent: {
+    paddingLeft: 14,
   },
   surfaceListGrid: {
     flexDirection: "row",

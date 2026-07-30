@@ -117,6 +117,12 @@ export type MemberSurfaceDef = {
   hint: string;
   /** UI grouping under the permission page. */
   domain: FunctionalRole | "fleet" | "team";
+  /**
+   * Optional sub-section label inside a domain accordion. Purely presentational
+   * — surfaces with the same `group` render under one collapsible header so the
+   * flat catalog stays scannable. Ungrouped surfaces render above the groups.
+   */
+  group?: string;
   /** Org must have ANY of these capabilities (operating-model gate). */
   anyOfCaps: readonly Capability[];
   /**
@@ -164,6 +170,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.subtab.cash",
+    group: "Sub-tabs",
     label: "Cash sub-tab",
     hint: "Finance → Cash",
     domain: "finance",
@@ -172,6 +179,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.subtab.customers",
+    group: "Sub-tabs",
     label: "Customers sub-tab",
     hint: "Finance → Customers",
     domain: "finance",
@@ -181,6 +189,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.subtab.suppliers",
+    group: "Sub-tabs",
     label: "Suppliers sub-tab",
     hint: "Finance → Suppliers (aggregate / hybrid)",
     domain: "finance",
@@ -190,6 +199,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.subtab.garage",
+    group: "Sub-tabs",
     label: "Garage sub-tab",
     hint: "Finance → Garage (asset / hybrid)",
     domain: "finance",
@@ -199,6 +209,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.subtab.drivers",
+    group: "Sub-tabs",
     label: "Drivers sub-tab",
     hint: "Finance → Drivers (asset / hybrid)",
     domain: "finance",
@@ -208,6 +219,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.ledger.customers",
+    group: "Ledger access",
     label: "Ledger · customers",
     hint: "Cash-tab party filter: customers",
     domain: "finance",
@@ -217,6 +229,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.ledger.suppliers",
+    group: "Ledger access",
     label: "Ledger · suppliers",
     hint: "Cash-tab party filter: suppliers",
     domain: "finance",
@@ -226,6 +239,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.ledger.vehicle",
+    group: "Ledger access",
     label: "Ledger · vehicles",
     hint: "Cash-tab party filter: vehicles",
     domain: "finance",
@@ -235,6 +249,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.ledger.driver",
+    group: "Ledger access",
     label: "Ledger · drivers",
     hint: "Cash-tab party filter: drivers",
     domain: "finance",
@@ -244,6 +259,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.add_transaction",
+    group: "Transactions",
     label: "Add transaction",
     hint: "Add ledger entry from party / trip screens",
     domain: "finance",
@@ -252,6 +268,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.edit_transaction",
+    group: "Transactions",
     label: "Edit transaction",
     hint: "Edit existing ledger entries",
     domain: "finance",
@@ -260,6 +277,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.void_adjustments",
+    group: "Transactions",
     label: "Void / adjust entries",
     hint: "Trip finance adjustments, voids, provisions",
     domain: "finance",
@@ -268,6 +286,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.invoicing",
+    group: "Billing & POD",
     label: "Invoicing",
     hint: "Execute invoices & PDF preview",
     domain: "finance",
@@ -276,6 +295,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.pod_reconciliation",
+    group: "Billing & POD",
     label: "POD reconciliation",
     hint: "POD reconcile & log incoming PODs",
     domain: "finance",
@@ -285,6 +305,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.business_pulse",
+    group: "Reports & insights",
     label: "Business Pulse",
     hint: "Business pulse dashboard",
     domain: "finance",
@@ -293,6 +314,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.reports",
+    group: "Reports & insights",
     label: "Finance reports",
     hint: "Report tab / export summaries",
     domain: "finance",
@@ -301,6 +323,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.shared_ledger",
+    group: "Reports & insights",
     label: "Shared ledger",
     hint: "Integrated party shared ledger views",
     domain: "finance",
@@ -309,6 +332,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.trip_ledger",
+    group: "Reports & insights",
     label: "Trip ledger page",
     hint: "Open /trip-ledger and trip cash history",
     domain: "finance",
@@ -317,6 +341,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.branding",
+    group: "Billing & POD",
     label: "Invoice branding",
     hint: "Branding settings for invoice PDFs",
     domain: "finance",
@@ -325,6 +350,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.documents_center",
+    group: "Reports & insights",
     label: "Documents center",
     hint: "Org documents vault / documents-center",
     domain: "finance",
@@ -334,6 +360,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.expenses.view",
+    group: "Trip expenses",
     label: "View trip expenses",
     hint: "Fuel / toll / other expense hub (read)",
     domain: "finance",
@@ -343,6 +370,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "finance.expenses.approve",
+    group: "Trip expenses",
     label: "Approve trip expenses",
     hint: "Approve / settle driver expense claims",
     domain: "finance",
@@ -360,6 +388,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.clients.view",
+    group: "Clients",
     label: "View clients",
     hint: "Clients list & party customers",
     domain: "sales",
@@ -368,6 +397,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.clients.create",
+    group: "Clients",
     label: "Add client",
     hint: "Create client records",
     domain: "sales",
@@ -376,6 +406,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.clients.edit",
+    group: "Clients",
     label: "Edit client",
     hint: "Edit client profiles",
     domain: "sales",
@@ -384,6 +415,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.clients.detail",
+    group: "Clients",
     label: "Client detail",
     hint: "Open client detail & trips",
     domain: "sales",
@@ -392,6 +424,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.clients.analytics",
+    group: "Clients",
     label: "Client analytics",
     hint: "Client analytics / ranking views",
     domain: "sales",
@@ -400,6 +433,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.marketplace.post",
+    group: "Marketplace & network",
     label: "Post loads / give-load",
     hint: "Marketplace post & create-post (aggregate / hybrid)",
     domain: "sales",
@@ -408,6 +442,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.marketplace.bid",
+    group: "Marketplace & network",
     label: "Marketplace bid",
     hint: "Bid on marketplace listings (asset / hybrid)",
     domain: "sales",
@@ -416,6 +451,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.network.connect",
+    group: "Marketplace & network",
     label: "Network connect",
     hint: "Send connection requests",
     domain: "sales",
@@ -424,6 +460,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.network.discover",
+    group: "Marketplace & network",
     label: "Discover network",
     hint: "Discover orgs / grow network",
     domain: "sales",
@@ -432,6 +469,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.network.stories",
+    group: "Marketplace & network",
     label: "Stories & feed",
     hint: "View / interact with network stories",
     domain: "sales",
@@ -440,6 +478,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.suppliers.view",
+    group: "Suppliers",
     label: "View suppliers",
     hint: "Supplier directory (aggregate / hybrid)",
     domain: "sales",
@@ -448,6 +487,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.suppliers.create",
+    group: "Suppliers",
     label: "Add supplier",
     hint: "Create supplier records",
     domain: "sales",
@@ -456,6 +496,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.suppliers.edit",
+    group: "Suppliers",
     label: "Edit supplier",
     hint: "Edit supplier profiles",
     domain: "sales",
@@ -464,6 +505,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.suppliers.detail",
+    group: "Suppliers",
     label: "Supplier detail",
     hint: "Open supplier detail & trips",
     domain: "sales",
@@ -472,6 +514,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.suppliers.analytics",
+    group: "Suppliers",
     label: "Supplier analytics",
     hint: "Supplier analytics views",
     domain: "sales",
@@ -480,6 +523,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.load_board",
+    group: "Marketplace & network",
     label: "Load board",
     hint: "Open load board marketplace",
     domain: "sales",
@@ -488,6 +532,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.from_clients",
+    group: "Marketplace & network",
     label: "From clients",
     hint: "Loads / requests from clients hub",
     domain: "sales",
@@ -496,6 +541,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "sales.chat",
+    group: "Marketplace & network",
     label: "Business chat",
     hint: "Org / partner chat threads",
     domain: "sales",
@@ -513,6 +559,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.view",
+    group: "Trips",
     label: "View trips",
     hint: "Trips list",
     domain: "tripops",
@@ -521,6 +568,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.detail",
+    group: "Trips",
     label: "Trip detail",
     hint: "Open trip detail page",
     domain: "tripops",
@@ -529,6 +577,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.create_asset",
+    group: "Trips",
     label: "Create trip · own fleet",
     hint: "Asset / hybrid supply mode",
     domain: "tripops",
@@ -537,6 +586,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.create_aggregate",
+    group: "Trips",
     label: "Create trip · partner",
     hint: "Aggregate / hybrid supply mode",
     domain: "tripops",
@@ -545,6 +595,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.assign",
+    group: "Trips",
     label: "Assign driver / vehicle",
     hint: "First assignment on trip cards & detail",
     domain: "tripops",
@@ -553,6 +604,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.reassign",
+    group: "Trips",
     label: "Reassign assets",
     hint: "Change driver / vehicle mid-trip",
     domain: "tripops",
@@ -561,6 +613,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.tracking",
+    group: "Trip execution",
     label: "Trip tracking",
     hint: "Live map, ping, location trail",
     domain: "tripops",
@@ -569,6 +622,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.docs",
+    group: "Trip execution",
     label: "Trip documents",
     hint: "POD / LR / trip docs tab",
     domain: "tripops",
@@ -577,6 +631,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.expenses",
+    group: "Trip execution",
     label: "Trip expenses tab",
     hint: "Expense hub on trip detail",
     domain: "tripops",
@@ -586,6 +641,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.finance",
+    group: "Trip execution",
     label: "Trip finance tab",
     hint: "Trip-level finance / settlement tab",
     domain: "tripops",
@@ -595,6 +651,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.verification",
+    group: "Trip execution",
     label: "Trip verification",
     hint: "Pickup / drop verification flows",
     domain: "tripops",
@@ -603,6 +660,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.simulate",
+    group: "Trip execution",
     label: "Simulate trip status",
     hint: "Business-simulated status advances",
     domain: "tripops",
@@ -611,6 +669,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.trips.ratings",
+    group: "Trip execution",
     label: "Trip ratings",
     hint: "View / submit trip ratings",
     domain: "tripops",
@@ -619,6 +678,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.indents.view",
+    group: "Indents",
     label: "View indents / pulse loads",
     hint: "Indent list & detail",
     domain: "tripops",
@@ -627,6 +687,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.indents.create",
+    group: "Indents",
     label: "Create indent",
     hint: "Give-load create (aggregate / hybrid)",
     domain: "tripops",
@@ -635,6 +696,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.indents.edit",
+    group: "Indents",
     label: "Edit indent",
     hint: "Edit draft / open loads",
     domain: "tripops",
@@ -643,6 +705,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.indents.cancel",
+    group: "Indents",
     label: "Cancel indent",
     hint: "Cancel / close a load",
     domain: "tripops",
@@ -651,6 +714,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.indents.broadcast",
+    group: "Indents",
     label: "Broadcast / share load",
     hint: "Share draft to network / stories",
     domain: "tripops",
@@ -659,6 +723,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.indents.bid",
+    group: "Indents",
     label: "Bid on indent",
     hint: "Submit supplier quotes",
     domain: "tripops",
@@ -667,6 +732,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.indents.award",
+    group: "Indents",
     label: "Award bid",
     hint: "Accept a quote / award partner",
     domain: "tripops",
@@ -675,6 +741,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.indents.allocate",
+    group: "Indents",
     label: "Allocate indent",
     hint: "Indent allocation & supplier assign vehicle",
     domain: "tripops",
@@ -683,6 +750,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "tripops.pulse_loads",
+    group: "Indents",
     label: "Pulse loads hub",
     hint: "Pulse loads / load center home",
     domain: "tripops",
@@ -693,6 +761,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   // ── Fleet ────────────────────────────────────────────────────────────────
   {
     id: "fleet.vehicles.view",
+    group: "Vehicles",
     label: "View vehicles",
     hint: "Resources / party vehicles",
     domain: "fleet",
@@ -700,6 +769,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.vehicles.create",
+    group: "Vehicles",
     label: "Add vehicle",
     hint: "Create vehicle records",
     domain: "fleet",
@@ -708,6 +778,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.vehicles.edit",
+    group: "Vehicles",
     label: "Edit vehicle",
     hint: "Edit vehicle profile & docs",
     domain: "fleet",
@@ -716,6 +787,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.vehicles.analytics",
+    group: "Vehicles",
     label: "Vehicle analytics",
     hint: "Vehicle PnL / analytics",
     domain: "fleet",
@@ -724,6 +796,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.vehicles.documents",
+    group: "Vehicles",
     label: "Vehicle documents",
     hint: "RC / insurance / fitness vault",
     domain: "fleet",
@@ -732,6 +805,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.drivers.view",
+    group: "Drivers",
     label: "View drivers",
     hint: "Resources / party drivers",
     domain: "fleet",
@@ -739,6 +813,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.drivers.create",
+    group: "Drivers",
     label: "Add driver",
     hint: "Create driver records",
     domain: "fleet",
@@ -747,6 +822,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.drivers.edit",
+    group: "Drivers",
     label: "Edit driver",
     hint: "Edit driver profile",
     domain: "fleet",
@@ -755,6 +831,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.drivers.invite",
+    group: "Drivers",
     label: "Invite driver to app",
     hint: "Send fleet driver invite / OTP link",
     domain: "fleet",
@@ -763,6 +840,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.drivers.analytics",
+    group: "Drivers",
     label: "Driver analytics",
     hint: "Driver ranking / analytics",
     domain: "fleet",
@@ -771,6 +849,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "fleet.drivers.assign_vehicle",
+    group: "Drivers",
     label: "Assign vehicle to driver",
     hint: "Link driver ↔ vehicle on roster",
     domain: "fleet",
@@ -783,6 +862,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   // `team_manage` is membership-role based and never emitted by getCapabilitiesFromProfile.
   {
     id: "team.manage",
+    group: "Access control",
     label: "Manage team",
     hint: "Access control & member roles",
     domain: "team",
@@ -791,6 +871,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "team.invite",
+    group: "Access control",
     label: "Invite members",
     hint: "Send team invites",
     domain: "team",
@@ -800,6 +881,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "team.audit",
+    group: "Access control",
     label: "Audit trail",
     hint: "Workspace audit log",
     domain: "team",
@@ -809,6 +891,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "workspace.settings",
+    group: "Workspace settings",
     label: "Workspace settings",
     hint: "Org settings / operating model (non-owner fields)",
     domain: "team",
@@ -817,6 +900,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "workspace.kyc",
+    group: "Workspace settings",
     label: "KYC / business verify",
     hint: "View or update org KYC documents",
     domain: "team",
@@ -825,6 +909,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "workspace.products",
+    group: "Workspace settings",
     label: "Workspace products",
     hint: "Product catalog / modules panel",
     domain: "team",
@@ -833,6 +918,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   },
   {
     id: "workspace.notifications",
+    group: "Workspace settings",
     label: "Notifications",
     hint: "Org notification center",
     domain: "team",
@@ -857,6 +943,46 @@ export function surfacesForDomain(
   domain: MemberSurfaceDef["domain"],
 ): MemberSurfaceDef[] {
   return MEMBER_SURFACE_CATALOG.filter((s) => s.domain === domain);
+}
+
+export type MemberSurfaceGroup = {
+  /** `null` = ungrouped surfaces (domain-level basics), rendered first. */
+  group: string | null;
+  surfaces: MemberSurfaceDef[];
+};
+
+/**
+ * Split a domain's surfaces into ordered sub-sections by `group`, preserving
+ * catalog order. Ungrouped surfaces come back first under `group: null`.
+ */
+export function surfaceGroupsForDomains(
+  domains: readonly MemberSurfaceDef["domain"][],
+): MemberSurfaceGroup[] {
+  const out: MemberSurfaceGroup[] = [];
+  const byLabel = new Map<string, MemberSurfaceGroup>();
+  for (const domain of domains) {
+    for (const surface of surfacesForDomain(domain)) {
+      const key = surface.group ?? null;
+      if (key === null) {
+        let bucket = byLabel.get(" ungrouped");
+        if (!bucket) {
+          bucket = { group: null, surfaces: [] };
+          byLabel.set(" ungrouped", bucket);
+          out.push(bucket);
+        }
+        bucket.surfaces.push(surface);
+        continue;
+      }
+      let bucket = byLabel.get(key);
+      if (!bucket) {
+        bucket = { group: key, surfaces: [] };
+        byLabel.set(key, bucket);
+        out.push(bucket);
+      }
+      bucket.surfaces.push(surface);
+    }
+  }
+  return out;
 }
 
 /** Cash-tab ledger party filter → surface id (`all` uses cash sub-tab). */
