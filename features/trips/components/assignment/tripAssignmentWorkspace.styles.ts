@@ -481,7 +481,9 @@ export const aws = StyleSheet.create({
         boxShadow: `0 8px 24px -6px ${Theme.assignmentCardShadow}`,
       },
       default: {
-        overflow: "hidden",
+        // Native: must stay visible or the nested roster ScrollView inside the
+        // swap panel gets clipped instead of growing the card.
+        overflow: "visible",
         shadowColor: Theme.networkHubListCardShadow,
         shadowOpacity: 0.06,
         shadowRadius: 16,
@@ -594,8 +596,10 @@ export const aws = StyleSheet.create({
   panelBody: {
     padding: 18,
     gap: 14,
+    // No `flex: 1` — inside the ScrollView contentContainer there is no bounded
+    // height to flex against, so the body collapsed and `panel`'s overflow:hidden
+    // clipped the swap roster (iPad/native). Let it size to its content.
     flexGrow: 1,
-    flex: 1,
   },
   fieldsArea: {
     flexGrow: 1,

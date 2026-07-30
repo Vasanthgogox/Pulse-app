@@ -9,7 +9,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 import { usePathname } from 'expo-router';
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -67,7 +67,7 @@ export function DriverTabBar({ state, descriptors, navigation }: BottomTabBarPro
   // Hide by route name + pathname (Expo Router) + explicit display:none.
   const focusedTabBarStyle = StyleSheet.flatten(
     focusedRoute ? descriptors[focusedRoute.key]?.options?.tabBarStyle : undefined,
-  );
+  ) as ViewStyle;
   const hideDock =
     (current != null && HIDE_TAB_BAR_ROUTES.has(current)) ||
     pathname.includes('/chat') ||
