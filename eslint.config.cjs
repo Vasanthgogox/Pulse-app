@@ -283,6 +283,18 @@ module.exports = [
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  // Map implementation registry — the one sanctioned place for deferred module
+  // loading. Expo Go and standalone builds share a platform and a bundle, so no
+  // platform extension can split them; each map stack throws at import time in
+  // the other environment, so selection must be a lazy runtime require. Confined
+  // to these loader files instead of inline disables at call sites.
+  // See lib/maps/mapEnvironment.ts for the full rationale.
+  {
+    files: ['lib/maps/*Implementation.ts'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
   // Supabase Edge Functions run on Deno, where the `/// <reference .../>` type
   // directive is the idiomatic way to load ambient types — not a code smell.
   {
