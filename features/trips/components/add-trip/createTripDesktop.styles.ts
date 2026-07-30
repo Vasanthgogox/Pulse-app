@@ -2489,10 +2489,15 @@ export const createTripDesktopStyles = StyleSheet.create({
   desktopScrollListContent: {
     paddingRight: 4,
   },
+  /**
+   * Compact (phone/tablet) entity list — full-width rows, not wrapped tiles.
+   * Row-wrap here let cards shrink to content, clipping driver/vehicle names
+   * down to just the avatar + status badge on iPad.
+   */
   desktopEntityGridFlow: {
     width: "100%",
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: "column",
+    alignItems: "stretch",
     gap: 12,
   },
   desktopClientGrid: {

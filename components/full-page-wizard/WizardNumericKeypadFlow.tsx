@@ -301,6 +301,9 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
               </View>
             </View>
           </View>
+          {/* Tablet/desktop keypad: the shell hoists its footer into context, so
+           *  this host must render or Continue disappears entirely (iPad). */}
+          <WizardActionBarHost style={styles.wizardKeypadDesktopActionBar} />
         </View>
       </View>
     );

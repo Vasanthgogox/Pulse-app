@@ -16,8 +16,9 @@ import { TripCommodityFields } from "@/features/trips/components/add-trip/TripCo
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { formatINRChip } from "@/lib/format";
 import { formatCityStateLabel } from "@/lib/placeCityState.util";
+import { getLaneDistanceKm, type LatLon } from "@/lib/routingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Platform,
@@ -52,6 +53,9 @@ type LaneDraft = {
   rate: string;
   rate_type: LaneRateType;
   notes: string;
+  /** Endpoint coords from the place picker — drive the road-distance auto-fill. */
+  origin_coords: LatLon | null;
+  destination_coords: LatLon | null;
 };
 
 const emptyDraft = (warehouses: ClientWarehouseExtended[]): LaneDraft => ({
@@ -69,7 +73,21 @@ const emptyDraft = (warehouses: ClientWarehouseExtended[]): LaneDraft => ({
   rate: "",
   rate_type: "per_trip",
   notes: "",
+  origin_coords:
+    warehouses.length === 1 ? warehouseCoords(warehouses[0]!) : null,
+  destination_coords: null,
 });
+
+/** Hub coords, when the hub has been geocoded. */
+function warehouseCoords(
+  warehouse: ClientWarehouseExtended | null | undefined,
+): LatLon | null {
+  const latitude = warehouse?.latitude;
+  const longitude = warehouse?.longitude;
+  if (latitude == null || longitude == null) return null;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude };
+}
 
 function lanePrice(lane: ClientLaneRate): number {
   return Number(lane.rate ?? lane.base_rate ?? lane.per_mt_rate ?? 0) || 0;
@@ -106,6 +124,13 @@ function laneToDraft(
     rate: price > 0 ? String(price) : "",
     rate_type: lane.rate_type,
     notes: lane.notes ?? "",
+    /**
+     * Lanes store labels, not coords. The hub side can be recovered; the
+     * destination cannot, so an existing lane keeps its saved distance until
+     * the user re-picks a place. No silent recompute on open.
+     */
+    origin_coords: warehouseCoords(hub),
+    destination_coords: null,
   };
 }
 
@@ -175,11 +200,19 @@ export function ClientProfileLanesEditSection({
     return wh ? formatWarehouseLaneLabel(wh) : "";
   };
 
+  /** Hub coords keyed by id — the origin half of the distance lookup. */
+  const hubCoords = (warehouseId: string | null): LatLon | null =>
+    warehouseId
+      ? warehouseCoords(warehouses.find((w) => w.id === warehouseId))
+      : null;
+
   const selectHub = (warehouseId: string | null) => {
+    distanceTouchedRef.current = false;
     setDraft({
       ...emptyDraft(warehouses),
       origin_warehouse_id: warehouseId,
       origin_label: hubOriginLabel(warehouseId),
+      origin_coords: hubCoords(warehouseId),
     });
     setEditingId(null);
     setAddingLane(true);
@@ -189,6 +222,9 @@ export function ClientProfileLanesEditSection({
   const applyLaneTag = (lane: ClientLaneRate) => {
     setEditingId(lane.id);
     setAddingLane(false);
+    // A saved lane's distance is authoritative — treat it as user-set so the
+    // auto-fill cannot overwrite it.
+    distanceTouchedRef.current = lane.distance_km != null;
     setDraft(laneToDraft(lane, warehouses));
   };
 
@@ -196,10 +232,12 @@ export function ClientProfileLanesEditSection({
     const hubId = draft.origin_warehouse_id;
     setEditingId(null);
     setAddingLane(true);
+    distanceTouchedRef.current = false;
     setDraft({
       ...emptyDraft(warehouses),
       origin_warehouse_id: hubId,
       origin_label: hubOriginLabel(hubId) || draft.origin_label,
+      origin_coords: hubCoords(hubId) ?? draft.origin_coords,
     });
   };
 
@@ -210,6 +248,53 @@ export function ClientProfileLanesEditSection({
     if (!from || !to) return null;
     return to < from ? "Valid To cannot be earlier than Valid From." : null;
   }, [draft.valid_from, draft.valid_to]);
+
+  /**
+   * Auto-fill Distance from the two picked endpoints.
+   * Free path first (OSRM, no key/quota); falls back to an offline estimate.
+   * Never overwrites a distance the user typed or edited by hand.
+   */
+  const [distanceStatus, setDistanceStatus] = useState<
+    "idle" | "loading" | "road" | "estimate"
+  >("idle");
+  /** Set when the user edits Distance directly — locks out the auto-fill. */
+  const distanceTouchedRef = useRef(false);
+  const origin = draft.origin_coords;
+  const destination = draft.destination_coords;
+
+  useEffect(() => {
+    if (!origin || !destination) {
+      setDistanceStatus("idle");
+      return;
+    }
+    if (distanceTouchedRef.current) return;
+
+    let cancelled = false;
+    setDistanceStatus("loading");
+    getLaneDistanceKm(origin, destination)
+      .then((result) => {
+        if (cancelled || distanceTouchedRef.current) return;
+        setDraft((d) => ({ ...d, distance_km: String(result.km) }));
+        setDistanceStatus(result.source);
+      })
+      .catch(() => {
+        if (!cancelled) setDistanceStatus("idle");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    origin?.latitude,
+    origin?.longitude,
+    destination?.latitude,
+    destination?.longitude,
+  ]);
+
+  const onDistanceChange = useCallback((v: string) => {
+    distanceTouchedRef.current = true;
+    setDistanceStatus("idle");
+    setDraft((d) => ({ ...d, distance_km: v }));
+  }, []);
 
   const hubLanes = useMemo(
     () =>
@@ -560,10 +645,11 @@ export function ClientProfileLanesEditSection({
                 placeholder="Search city or area"
                 value={draft.origin_label}
                 onChangeText={(v) => setDraft((d) => ({ ...d, origin_label: v }))}
-                onSelectPlace={(label) =>
+                onSelectPlace={(label, coords) =>
                   setDraft((d) => ({
                     ...d,
-                    origin_label: formatCityStateLabel(label) || label,
+                    origin_label: label,
+                    origin_coords: { latitude: coords.lat, longitude: coords.lon },
                   }))
                 }
                 compact
@@ -578,10 +664,11 @@ export function ClientProfileLanesEditSection({
               placeholder="Search city or area"
               value={draft.destination_label}
               onChangeText={(v) => setDraft((d) => ({ ...d, destination_label: v }))}
-              onSelectPlace={(label) =>
+              onSelectPlace={(label, coords) =>
                 setDraft((d) => ({
                   ...d,
-                  destination_label: formatCityStateLabel(label) || label,
+                  destination_label: label,
+                  destination_coords: { latitude: coords.lat, longitude: coords.lon },
                 }))
               }
               compact
@@ -610,10 +697,21 @@ export function ClientProfileLanesEditSection({
           <Field
             label="Distance (km)"
             value={draft.distance_km}
-            onChangeText={(v) => setDraft((d) => ({ ...d, distance_km: v }))}
-            placeholder="e.g. 350"
+            onChangeText={onDistanceChange}
+            placeholder={
+              distanceStatus === "loading" ? "Calculating…" : "e.g. 350"
+            }
             keyboardType="decimal-pad"
           />
+          {distanceStatus !== "idle" ? (
+            <Text style={styles.distanceHint}>
+              {distanceStatus === "loading"
+                ? "Calculating road distance…"
+                : distanceStatus === "road"
+                  ? "Road distance filled automatically. Edit to override."
+                  : "Approximate (routing unavailable). Edit to override."}
+            </Text>
+          ) : null}
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Rate Type</Text>
@@ -930,6 +1028,13 @@ const styles = StyleSheet.create({
   },
   lockedFieldHint: {
     marginTop: 4,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textSection,
+  },
+  distanceHint: {
+    marginTop: -4,
+    marginBottom: 8,
     fontSize: 10,
     fontWeight: "500",
     color: Theme.textSection,

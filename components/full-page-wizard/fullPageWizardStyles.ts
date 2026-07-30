@@ -1275,6 +1275,13 @@ export const fullPageWizardStyles = StyleSheet.create({
     width: "100%",
     zIndex: 5,
   },
+  wizardKeypadDesktopActionBar: {
+    flexShrink: 0,
+    width: "100%",
+    maxWidth: 640,
+    marginTop: 12,
+    zIndex: 5,
+  },
   wizardKeypadPartyCard: {
     borderRadius: 16,
     borderWidth: 1,

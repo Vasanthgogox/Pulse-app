@@ -337,3 +337,70 @@ export async function getOptimalRoute(from: LatLon, to: LatLon): Promise<RouteRe
   // 3. Try Google (Requires token + billing)
   return await getGoogleRoute(from, to);
 }
+
+/** Straight-line km — offline fallback when every routing provider fails. */
+function straightLineKm(from: LatLon, to: LatLon): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(to.latitude - from.latitude);
+  const dLon = toRad(to.longitude - from.longitude);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(from.latitude)) *
+      Math.cos(toRad(to.latitude)) *
+      Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * Typical Indian road winding vs straight line. Only applied to the offline
+ * fallback so an estimate is not obviously short.
+ */
+const ROAD_WINDING_FACTOR = 1.25;
+
+export type LaneDistanceSource = 'road' | 'estimate';
+
+export type LaneDistanceResult = {
+  km: number;
+  /** 'road' = real routed distance; 'estimate' = straight-line × winding factor. */
+  source: LaneDistanceSource;
+};
+
+/** Memoized per endpoint pair — repeated lane edits must not refetch. */
+const laneDistanceCache = new Map<string, LaneDistanceResult>();
+
+/**
+ * Road distance in km between two lane endpoints, rounded to 1 decimal.
+ * Free by default: OSRM first (no key, no quota), then the existing Mapbox /
+ * Google fallbacks, then an offline straight-line estimate. Results are cached
+ * per coordinate pair, so re-opening a lane costs nothing.
+ */
+export async function getLaneDistanceKm(
+  from: LatLon,
+  to: LatLon,
+): Promise<LaneDistanceResult> {
+  // 4 decimals (~11m) — lane endpoints are cities/areas, not live GPS.
+  const key = buildRouteFetchKey('lane', from, to, 4);
+  const cached = laneDistanceCache.get(key);
+  if (cached) return cached;
+
+  let result: LaneDistanceResult;
+  try {
+    const route = await getOptimalRoute(from, to);
+    result =
+      route && Number.isFinite(route.distance) && route.distance > 0
+        ? { km: Math.round(route.distance / 100) / 10, source: 'road' }
+        : {
+            km: Math.round(straightLineKm(from, to) * ROAD_WINDING_FACTOR * 10) / 10,
+            source: 'estimate',
+          };
+  } catch {
+    result = {
+      km: Math.round(straightLineKm(from, to) * ROAD_WINDING_FACTOR * 10) / 10,
+      source: 'estimate',
+    };
+  }
+
+  laneDistanceCache.set(key, result);
+  return result;
+}

@@ -16,7 +16,6 @@ import { CheckCircle2, MapPinned, Search, X } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Platform,
   Pressable,
   ScrollView,
@@ -241,9 +240,13 @@ export function ClientLaneSearchPicker({
             : "No contract lanes yet."}
         </Text>
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(lane) => lane.id}
+        /**
+         * ScrollView, not FlatList: this picker renders inside the wizard shell's
+         * vertical ScrollView, and a nested VirtualizedList breaks windowing (RN
+         * warns). The list is height-capped (120–240px) so virtualization gains
+         * nothing here anyway.
+         */
+        <ScrollView
           style={[
             s.list,
             compact && s.listCompact,
@@ -251,15 +254,14 @@ export function ClientLaneSearchPicker({
           ]}
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          windowSize={7}
-          removeClippedSubviews
-          renderItem={({ item: lane }) => {
+          showsVerticalScrollIndicator={false}
+        >
+          {filtered.map((lane) => {
             const active = lane.id === selectedLaneId;
             const valid = isLaneCurrentlyValid(lane);
             return (
               <Pressable
+                key={lane.id}
                 onPress={() => onSelect(lane)}
                 style={({ pressed }) => [
                   s.row,
@@ -303,8 +305,8 @@ export function ClientLaneSearchPicker({
                 ) : null}
               </Pressable>
             );
-          }}
-        />
+          })}
+        </ScrollView>
       )}
     </View>
   );
