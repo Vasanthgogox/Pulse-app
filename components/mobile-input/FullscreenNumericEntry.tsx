@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
   applyText: {
     fontSize: 15,
     fontWeight: '600',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   applyTextMuted: {
     color: Theme.textSecondary,

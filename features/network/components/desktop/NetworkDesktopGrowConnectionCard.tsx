@@ -108,96 +108,98 @@ export function NetworkDesktopGrowConnectionCard({
     mutualCount > 0 && Boolean(viewerOrgId) && !isConnected && !isPending;
 
   return (
-    <Pressable
-      onPress={onOpenProfile}
-      disabled={!onOpenProfile}
-      style={({ pressed }) => [
-        styles.card,
-        growStyles.card,
-        pressed && onOpenProfile && styles.cardPressed,
-      ]}
-      accessibilityLabel={`Open ${org.name}`}
-    >
+    <View style={[styles.card, growStyles.card]}>
       {onDismiss ? (
         <Pressable
-          onPress={(e) => {
-            e?.stopPropagation?.();
-            onDismiss();
-          }}
+          onPress={onDismiss}
           hitSlop={8}
           style={styles.dismissBtn}
+          accessibilityRole="button"
           accessibilityLabel="Dismiss suggestion"
         >
           <X size={13} color="#A1A5B7" strokeWidth={2.2} />
         </Pressable>
       ) : null}
 
-      <View style={styles.topMetaRow}>
-        <View style={styles.topMetaLeft}>
-          <View
-            style={[
-              styles.roleTag,
-              growStyles.roleTag,
-              { backgroundColor: tone.bg, borderColor: tone.border },
-            ]}
-          >
-            <Text
+      <Pressable
+        onPress={onOpenProfile}
+        disabled={!onOpenProfile}
+        style={({ pressed }) => [
+          styles.cardBody,
+          pressed && onOpenProfile && styles.cardPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${org.name}`}
+      >
+        <View style={styles.topMetaRow}>
+          <View style={styles.topMetaLeft}>
+            <View
               style={[
-                styles.roleTagText,
-                growStyles.roleTagText,
-                { color: tone.text },
+                styles.roleTag,
+                growStyles.roleTag,
+                { backgroundColor: tone.bg, borderColor: tone.border },
               ]}
             >
-              {tone.label}
+              <Text
+                style={[
+                  styles.roleTagText,
+                  growStyles.roleTagText,
+                  { color: tone.text },
+                ]}
+              >
+                {tone.label}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.ratingWrap}>
+            <NetworkDesktopSalesStars filledStars={filledStars} size={10} />
+            <Text
+              style={[
+                styles.ratingText,
+                growStyles.ratingText,
+                ratingValue == null && styles.ratingTextEmpty,
+              ]}
+            >
+              {ratingLabel}
             </Text>
           </View>
         </View>
-        <View style={styles.ratingWrap}>
-          <NetworkDesktopSalesStars filledStars={filledStars} size={10} />
-          <Text
-            style={[
-              styles.ratingText,
-              growStyles.ratingText,
-              ratingValue == null && styles.ratingTextEmpty,
-            ]}
-          >
-            {ratingLabel}
-          </Text>
+
+        <View style={[styles.avatarWrap, growStyles.avatarWrap]}>
+          <PartyAvatar
+            name={org.name}
+            initialsColorSeed={org.id}
+            organizationImageUrl={org.avatar_url}
+            avatarUrl={org.avatar_url}
+            avatarSeed={org.avatar_seed}
+            entityType="client"
+            size={52}
+            shape="circle"
+          />
+          {isConnected ? <View style={styles.onlineDot} /> : null}
         </View>
-      </View>
 
-      <View style={[styles.avatarWrap, growStyles.avatarWrap]}>
-        <PartyAvatar
-          name={org.name}
-          initialsColorSeed={org.id}
-          organizationImageUrl={org.avatar_url}
-          avatarUrl={org.avatar_url}
-          avatarSeed={org.avatar_seed}
-          entityType="client"
-          size={52}
-          shape="circle"
-        />
-        {isConnected ? <View style={styles.onlineDot} /> : null}
-      </View>
+        <View style={styles.nameRow}>
+          <Text style={[styles.name, growStyles.name]} numberOfLines={1}>
+            {org.name}
+          </Text>
+          {isKycVerified || isConnected ? (
+            <BadgeCheck size={13} color={Theme.darkGreen} strokeWidth={2} />
+          ) : null}
+        </View>
 
-      <View style={styles.nameRow}>
-        <Text style={[styles.name, growStyles.name]} numberOfLines={1}>
-          {org.name}
+        <View style={growStyles.trustBadgesSlot}>
+          <OrgVerificationBadges
+            verification={org}
+            compact
+            style={growStyles.trustBadgesRow}
+          />
+        </View>
+
+        <Text style={[styles.handle, growStyles.handle]} numberOfLines={1}>
+          {locationLabel}
         </Text>
-        {isKycVerified || isConnected ? (
-          <BadgeCheck size={13} color={Theme.darkGreen} strokeWidth={2} />
-        ) : null}
-      </View>
-
-      <OrgVerificationBadges
-        verification={org}
-        compact
-        style={growStyles.trustBadgesRow}
-      />
-
-      <Text style={[styles.handle, growStyles.handle]} numberOfLines={1}>
-        {locationLabel}
-      </Text>
+      </Pressable>
 
       <View
         style={[
@@ -219,17 +221,19 @@ export function NetworkDesktopGrowConnectionCard({
             />
           </View>
         ) : showStatusChip ? (
-          <View style={[styles.appTag, growStyles.appTag, styles.appTagOff]}>
-            <View style={[styles.appTagDot, styles.appTagDotOff]} />
-            <Text
-              style={[
-                styles.appTagText,
-                growStyles.appTagText,
-                styles.appTagTextOff,
-              ]}
-            >
-              Discover
-            </Text>
+          <View style={growStyles.mutualFacepileSlot}>
+            <View style={[styles.appTag, growStyles.appTag, styles.appTagOff]}>
+              <View style={[styles.appTagDot, styles.appTagDotOff]} />
+              <Text
+                style={[
+                  styles.appTagText,
+                  growStyles.appTagText,
+                  styles.appTagTextOff,
+                ]}
+              >
+                Discover
+              </Text>
+            </View>
           </View>
         ) : (
           <View style={growStyles.mutualFacepileSlot} />
@@ -255,10 +259,7 @@ export function NetworkDesktopGrowConnectionCard({
           </View>
         ) : isPending ? (
           <Pressable
-            onPress={(e) => {
-              e?.stopPropagation?.();
-              onCancel?.();
-            }}
+            onPress={() => onCancel?.()}
             disabled={connecting}
             style={({ pressed }) => [
               styles.actionBtn,
@@ -286,10 +287,7 @@ export function NetworkDesktopGrowConnectionCard({
           </Pressable>
         ) : (
           <Pressable
-            onPress={(e) => {
-              e?.stopPropagation?.();
-              onConnect?.();
-            }}
+            onPress={() => onConnect?.()}
             disabled={connecting}
             style={({ pressed }) => [
               styles.actionBtn,
@@ -317,6 +315,6 @@ export function NetworkDesktopGrowConnectionCard({
           </Pressable>
         )}
       </View>
-    </Pressable>
+    </View>
   );
 }

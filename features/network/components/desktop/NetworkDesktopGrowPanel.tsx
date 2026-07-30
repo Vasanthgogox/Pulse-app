@@ -25,10 +25,14 @@ import {
 import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import { NetworkGrowSummaryCard } from "@/features/network/components/NetworkGrowSummaryCard";
 import { NetworkDesktopGrowConnectionCard } from "@/features/network/components/desktop/NetworkDesktopGrowConnectionCard";
+import { NetworkDesktopSalesGrowWidget } from "@/features/network/components/desktop/NetworkDesktopSalesGrowWidget";
+import { NetworkDesktopSidebarFeatureAd } from "@/features/network/components/desktop/NetworkDesktopSidebarFeatureAd";
+import { NetworkDesktopSidebarPromoBanners } from "@/features/network/components/desktop/NetworkDesktopSidebarPromoBanners";
 import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { NETWORK_HUB_DESKTOP_CATEGORY_LIMIT } from "@/features/network/constants/networkHubGrid";
 import { useNetworkDiscovery } from "@/features/network/hooks/useNetworkDiscovery";
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
@@ -79,12 +83,17 @@ type Props = {
   onOpenProfile: (org: DiscoverOrg) => void;
   onPressMutuals: (org: { id: string; name: string }) => void;
   onOpenMutualProfile: (org: MutualConnectionRow) => void;
+  /**
+   * When true, render as a Discover section for the merged Network tab:
+   * full-width recommendations without the left sidebar (connected list / snapshot).
+   */
+  embedded?: boolean;
 };
 
 type GrowSortMode = "recommended" | "latest" | "active";
 type GrowSignalFilter = "mutual" | "location" | "lane";
 
-const RECOMMENDATION_LIMIT = 8;
+const RECOMMENDATION_LIMIT = NETWORK_HUB_DESKTOP_CATEGORY_LIMIT;
 
 function matchesOrgNameSearch(org: DiscoverOrg, term: string): boolean {
   const q = term.trim().toLowerCase();
@@ -182,6 +191,7 @@ export function NetworkDesktopGrowPanel({
   onOpenProfile,
   onPressMutuals,
   onOpenMutualProfile,
+  embedded = false,
 }: Props) {
   const layout = useProfileHubCompactLayout();
   const ensureVerified = useEnsureVerified();
@@ -286,6 +296,12 @@ export function NetworkDesktopGrowPanel({
     [recommendationCandidates],
   );
 
+  const peopleYouMayKnow = useMemo(() => {
+    const growIds = new Set(growRecommendations.map((o) => o.id));
+    const rest = recommendationCandidates.filter((o) => !growIds.has(o.id));
+    return pickLimitedRecommendations(rest, RECOMMENDATION_LIMIT);
+  }, [recommendationCandidates, growRecommendations]);
+
   const renderGrowOrgCard = (org: ScoredDiscoverOrg) => {
     const pendingRole =
       sentRequestRoles[org.id] ?? pendingRoleByOrgId.get(org.id) ?? null;
@@ -294,28 +310,29 @@ export function NetworkDesktopGrowPanel({
       String(org.connection_status ?? "").toLowerCase() === "pending";
     const location = getDiscoverOrgLocation(org) ?? "Location not set";
     return (
-      <NetworkDesktopGrowConnectionCard
-        key={org.id}
-        org={org}
-        locationLabel={location}
-        ratingValue={org.average_rating ?? org.rating ?? null}
-        mutualCount={org.mutual_count ?? org.mutual_connections_count ?? 0}
-        viewerOrgId={orgId}
-        onPressMutuals={() =>
-          onPressMutuals({ id: org.id, name: org.name })
-        }
-        onPressMutual={onOpenMutualProfile}
-        pendingRole={pending ? pendingRole : null}
-        connecting={connectingId === org.id}
-        onOpenProfile={() => onOpenProfile(org)}
-        onConnect={() => tryBeginConnectionRequest(org)}
-        onCancel={() => void handleCancel(org)}
-        onDismiss={
-          pending
-            ? undefined
-            : () => setDismissedIds((prev) => new Set(prev).add(org.id))
-        }
-      />
+      <View key={org.id} style={styles.growCardGridCell}>
+        <NetworkDesktopGrowConnectionCard
+          org={org}
+          locationLabel={location}
+          ratingValue={org.average_rating ?? org.rating ?? null}
+          mutualCount={org.mutual_count ?? org.mutual_connections_count ?? 0}
+          viewerOrgId={orgId}
+          onPressMutuals={() =>
+            onPressMutuals({ id: org.id, name: org.name })
+          }
+          onPressMutual={onOpenMutualProfile}
+          pendingRole={pending ? pendingRole : null}
+          connecting={connectingId === org.id}
+          onOpenProfile={() => onOpenProfile(org)}
+          onConnect={() => tryBeginConnectionRequest(org)}
+          onCancel={() => void handleCancel(org)}
+          onDismiss={
+            pending
+              ? undefined
+              : () => setDismissedIds((prev) => new Set(prev).add(org.id))
+          }
+        />
+      </View>
     );
   };
 
@@ -429,8 +446,32 @@ export function NetworkDesktopGrowPanel({
   };
 
   return (
-    <View style={[styles.salesBody, layout.salesBody]}>
-      <View style={[styles.splitRow, layout.splitRow]}>
+    <View
+      style={[
+        embedded
+          ? { width: "100%", paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0, backgroundColor: "transparent", borderBottomWidth: 0 }
+          : styles.salesBody,
+        !embedded && layout.salesBody,
+        embedded && { marginTop: 0 },
+      ]}
+    >
+      {embedded ? (
+        <View style={[styles.sectionToolbar, layout.sectionToolbar, { marginBottom: 10 }]}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[styles.sectionTitle, layout.sectionTitle]}>
+              Discover partners
+            </Text>
+            <Text style={[styles.sectionSub, layout.sectionSub]}>
+              {discoverableCount} organisations to discover · {totalConnections}{" "}
+              connected · {todayInviteCount}/{DAILY_CONNECTION_INVITE_LIMIT} invites
+              today
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={[styles.splitRow, layout.splitRow, embedded && { gap: 0 }]}>
+        {embedded ? null : (
         <View style={[styles.sidebar, layout.sidebar]}>
           <NetworkGrowSummaryCard
             discoverCount={discoverableCount}
@@ -494,6 +535,16 @@ export function NetworkDesktopGrowPanel({
               </Pressable>
             ) : null}
           </View>
+
+          <NetworkDesktopSalesGrowWidget
+            orgId={orgId}
+            onOpenProfile={onOpenProfile}
+            inviteDailyCapReached={
+              discoverInviteCount >= discoverInviteLimit
+            }
+          />
+
+          <NetworkDesktopSidebarPromoBanners />
 
           <View style={[styles.salesCard, styles.salesCardPad]}>
             <Text style={styles.cardTitle}>
@@ -570,14 +621,19 @@ export function NetworkDesktopGrowPanel({
               </Text>
             </View>
           </View>
-        </View>
 
-        <View style={[styles.mainCol, layout.mainCol]}>
-          <View style={styles.growTeamsHeader}>
-            <Text style={styles.growTeamsCount}>
-              {growRecommendations.length} Partners
-            </Text>
-          </View>
+          <NetworkDesktopSidebarFeatureAd layout="stack" />
+        </View>
+        )}
+
+        <View style={[styles.mainCol, layout.mainCol, embedded && { flex: 1, width: "100%" }]}>
+          {embedded ? null : (
+            <View style={styles.growTeamsHeader}>
+              <Text style={styles.growTeamsCount}>
+                {growRecommendations.length + peopleYouMayKnow.length} Partners
+              </Text>
+            </View>
+          )}
 
           <View style={[styles.salesCard, styles.growToolbarCard]}>
             <View style={styles.growToolbarBottom}>
@@ -614,10 +670,41 @@ export function NetworkDesktopGrowPanel({
                 </Text>
                 <ChevronDown size={12} color={METRONIC.muted} />
               </Pressable>
-              <Pressable style={styles.growToolbarFilterBtn}>
-                <Filter size={13} color={Theme.textOnPrimary} />
-                <Text style={styles.growToolbarFilterBtnText}>Filters</Text>
-              </Pressable>
+              {embedded ? (
+                <View style={styles.tagWrap}>
+                  <FilterChip
+                    label="Mutuals"
+                    active={signalFilters.has("mutual")}
+                    onPress={() =>
+                      setSignalFilters((prev) => toggleSet(prev, "mutual"))
+                    }
+                  />
+                  <FilterChip
+                    label="Route"
+                    active={signalFilters.has("location")}
+                    onPress={() =>
+                      setSignalFilters((prev) => toggleSet(prev, "location"))
+                    }
+                  />
+                  <FilterChip
+                    label="Lane"
+                    active={signalFilters.has("lane")}
+                    onPress={() =>
+                      setSignalFilters((prev) => toggleSet(prev, "lane"))
+                    }
+                  />
+                  {filtersActive ? (
+                    <Pressable onPress={clearFilters} style={styles.salesClearBtn}>
+                      <Text style={styles.salesClearBtnText}>Clear</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
+                <Pressable style={styles.growToolbarFilterBtn}>
+                  <Filter size={13} color={Theme.textOnPrimary} />
+                  <Text style={styles.growToolbarFilterBtnText}>Filters</Text>
+                </Pressable>
+              )}
             </View>
           </View>
 
@@ -649,6 +736,20 @@ export function NetworkDesktopGrowPanel({
               {growRecommendations.map((org) => renderGrowOrgCard(org))}
             </View>
           )}
+
+          {peopleYouMayKnow.length > 0 ? (
+            <>
+              <View style={[styles.growSectionHeader, { marginTop: 20 }]}>
+                <Text style={styles.growSectionTitle}>People you may know</Text>
+                <Text style={styles.growSectionSub}>
+                  Up to {RECOMMENDATION_LIMIT} more suggestions
+                </Text>
+              </View>
+              <View style={styles.growCardGrid}>
+                {peopleYouMayKnow.map((org) => renderGrowOrgCard(org))}
+              </View>
+            </>
+          ) : null}
         </View>
       </View>
 

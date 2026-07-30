@@ -7,6 +7,7 @@ import {
 } from "@/features/clients/services/clientWarehouses.service";
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { formatCityStateLabel } from "@/lib/placeCityState.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { MapPin } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -109,6 +110,19 @@ export function ClientProfileHubsEditSection({
   const handleSave = async () => {
     if (!draft.name.trim()) {
       Alert.alert("Validation", "Hub name is required.");
+      return;
+    }
+    if (
+      draft.latitude == null ||
+      draft.longitude == null ||
+      !draft.city.trim() ||
+      !draft.state.trim() ||
+      !draft.pincode.trim()
+    ) {
+      Alert.alert(
+        "Validation",
+        "Pick a place from map search so city, state, and pincode are filled from the location API.",
+      );
       return;
     }
     setSaving(true);
@@ -275,13 +289,19 @@ export function ClientProfileHubsEditSection({
                 }))
               }
               onSelectPlace={(displayName, coords) => {
+                const label = formatCityStateLabel({
+                  city: coords.city,
+                  state: coords.state,
+                  displayName,
+                });
                 setDraft((d) => ({
                   ...d,
-                  mapPlaceLabel: displayName,
-                  address: d.address.trim() || displayName,
-                  city: coords.city?.trim() || d.city,
-                  state: coords.state?.trim() || d.state,
-                  pincode: coords.pincode?.trim() || d.pincode,
+                  mapPlaceLabel: label,
+                  address: d.address.trim() || label,
+                  // Always take city / state / pincode from the place API (overwrite stale draft).
+                  city: coords.city?.trim() || "",
+                  state: coords.state?.trim() || "",
+                  pincode: coords.pincode?.trim() || "",
                   latitude: coords.lat,
                   longitude: coords.lon,
                 }));
@@ -313,7 +333,7 @@ export function ClientProfileHubsEditSection({
                 label="City"
                 value={draft.city}
                 onChangeText={(v) => setDraft((d) => ({ ...d, city: v }))}
-                placeholder="City"
+                placeholder="From map"
               />
             </View>
             <View style={styles.fieldHalf}>
@@ -321,7 +341,7 @@ export function ClientProfileHubsEditSection({
                 label="State"
                 value={draft.state}
                 onChangeText={(v) => setDraft((d) => ({ ...d, state: v }))}
-                placeholder="State"
+                placeholder="From map"
               />
             </View>
           </View>
@@ -329,9 +349,12 @@ export function ClientProfileHubsEditSection({
             label="Pincode"
             value={draft.pincode}
             onChangeText={(v) => setDraft((d) => ({ ...d, pincode: v }))}
-            placeholder="600093"
+            placeholder="From map"
             keyboardType="number-pad"
           />
+          <Text style={styles.mapCoordsHint}>
+            City, state, and pincode fill automatically from the place you pick
+          </Text>
           <Field
             label="Local GSTIN"
             value={draft.local_gstin}

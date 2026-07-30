@@ -2,55 +2,55 @@
  * Create story — LOAD (from an existing indent or manual) or VEHICLE AVAILABILITY.
  * Expires in 24h. No social updates.
  */
-import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
-import Theme from "@/constants/Theme";
-import Layout from "@/constants/Layout";
 import Illustration12 from "@/assets/illustrations/12.svg";
 import Illustration22 from "@/assets/illustrations/22.svg";
 import Illustration24 from "@/assets/illustrations/24.svg";
 import Illustration28 from "@/assets/illustrations/28.svg";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
+import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import {
+    createIndent,
+    getIndentDisplayNumber,
+    resolveSupplierTargetDisplayRate,
+} from "@/features/indents/services/indents.service";
 import { BroadcastPickIndentCard } from "@/features/network/components/BroadcastPickIndentCard";
 import { createPost, type PostType } from "@/features/network/services/posts.service";
-import {
-  createIndent,
-  getIndentDisplayNumber,
-  resolveSupplierTargetDisplayRate,
-} from "@/features/indents/services/indents.service";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useDirectQuoteCountsQuery, useIndentsQuery, useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
-import { useIndentsQuery, useDirectQuoteCountsQuery, useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { useVehiclesQuery } from "@/lib/queries/useVehiclesQuery";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import {
-  ArrowLeft,
-  ArrowRight,
-  Car,
-  Check,
-  CheckCircle2,
-  Circle,
-  Clock,
-  MapPin,
-  Package,
-  Search,
-  Truck,
-  Zap,
+    ArrowLeft,
+    ArrowRight,
+    Car,
+    Check,
+    CheckCircle2,
+    Circle,
+    Clock,
+    MapPin,
+    Package,
+    Search,
+    Truck,
+    Zap,
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

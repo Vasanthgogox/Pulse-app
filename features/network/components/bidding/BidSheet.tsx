@@ -11,6 +11,10 @@ import {
   getVisibleIndentById,
   resolveSupplierTargetDisplayRate,
 } from '@/features/indents/services/indents.service';
+import {
+  StoryFlowSheetPortal,
+  useStoryPhonePopup,
+} from "@/features/network/components/StoryMobilePopupShell";
 import { type BidRow } from '@/features/network/services/bids.service';
 import { type PostRow } from '@/features/network/services/posts.service';
 import { formatINR } from '@/lib/format';
@@ -32,7 +36,6 @@ import {
   Alert,
   Animated,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -73,8 +76,9 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
   const insets = useSafeAreaInsets();
   const { currentOrganization } = useOrganization();
   const { width: viewportWidth } = useWindowDimensions();
+  const phonePopup = useStoryPhonePopup();
   const isDesktop =
-    Platform.OS === 'web' && viewportWidth >= DESKTOP_MIN_WIDTH;
+    !phonePopup && Platform.OS === 'web' && viewportWidth >= DESKTOP_MIN_WIDTH;
   const queryClient = useQueryClient();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -125,10 +129,10 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
   useEffect(() => {
     if (visible) {
       setAmount(
-        existingBid?.amount
-          ? String(Math.round(existingBid.amount))
-          : initialAmount && initialAmount > 0
-            ? String(Math.round(initialAmount))
+        initialAmount && initialAmount > 0
+          ? String(Math.round(initialAmount))
+          : existingBid?.amount
+            ? String(Math.round(existingBid.amount))
             : '',
       );
       setNote(existingBid?.note ?? initialNote ?? '');
@@ -301,7 +305,7 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
         <View style={styles.loadSummary}>
           {post.vehicle_type ? (
             <View style={styles.summaryChip}>
-              <Truck size={11} color={Theme.primary} />
+              <Truck size={13} color={Theme.textPrimaryDark} strokeWidth={2.2} />
               <Text style={styles.summaryChipText}>{post.vehicle_type}</Text>
             </View>
           ) : null}
@@ -351,7 +355,7 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
           <TextInput
             style={[styles.amountInput, isDesktop && styles.amountInputDesktop]}
             placeholder="0"
-            placeholderTextColor={Theme.textSecondary}
+            placeholderTextColor={Theme.textMuted}
             keyboardType={Platform.OS === 'web' ? 'numeric' : 'number-pad'}
             value={amount}
             onChangeText={handleAmountChange}
@@ -367,11 +371,16 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
           {isDesktop ? 'Note (optional)' : 'NOTE (OPTIONAL)'}
         </Text>
         <View style={[styles.noteContainer, isDesktop && styles.noteContainerDesktop]}>
-          <MessageSquare size={14} color={Theme.textSecondary} style={styles.noteIcon} />
+          <MessageSquare
+            size={15}
+            color={Theme.textPrimaryDark}
+            strokeWidth={2.2}
+            style={styles.noteIcon}
+          />
           <TextInput
             style={[styles.noteInput, isDesktop && styles.noteInputDesktop]}
             placeholder="Add a message with your bid..."
-            placeholderTextColor={Theme.textSecondary}
+            placeholderTextColor={Theme.textMuted}
             value={note}
             onChangeText={setNote}
             multiline
@@ -392,10 +401,14 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
         disabled={!canSubmit}
       >
         {isPending ? (
-          <LoadingIndicator color="#fff" />
+          <LoadingIndicator color={Theme.buttonPrimaryText} />
         ) : (
           <>
-            {isEditMode ? <Edit3 size={16} color="#fff" /> : <ThumbsUp size={16} color="#fff" />}
+            {isEditMode ? (
+              <Edit3 size={16} color={Theme.buttonPrimaryText} strokeWidth={2.3} />
+            ) : (
+              <ThumbsUp size={16} color={Theme.buttonPrimaryText} strokeWidth={2.3} />
+            )}
             <Text style={styles.submitBtnText}>
               {isEditMode ? 'Update bid' : 'Submit bid'}
               {canSubmit ? ` — ${formatINR(parsedAmount)}` : ''}
@@ -434,7 +447,11 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
         accessibilityRole="button"
         accessibilityLabel="Close bid dialog"
       >
-        <X size={isDesktop ? 20 : 22} color={isDesktop ? Theme.textPrimaryDark : Theme.textSecondary} />
+        <X
+          size={isDesktop ? 20 : 22}
+          color={Theme.textPrimaryDark}
+          strokeWidth={2.3}
+        />
       </Pressable>
     </View>
   );
@@ -473,19 +490,21 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
   );
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={[styles.overlay, isDesktop && styles.overlayDesktop]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-          enabled={Platform.OS !== 'web'}
-          style={[styles.kvContainer, isDesktop && styles.kvContainerDesktop]}
-          pointerEvents="box-none"
-        >
-          {sheetBody}
-        </KeyboardAvoidingView>
-      </View>
-    </Modal>
+    <StoryFlowSheetPortal
+      visible={visible}
+      onClose={onClose}
+      accessibilityLabel="Close bid sheet"
+      animationType="fade"
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        enabled={Platform.OS !== 'web'}
+        style={[styles.kvContainer, isDesktop && styles.kvContainerDesktop]}
+        pointerEvents="box-none"
+      >
+        {sheetBody}
+      </KeyboardAvoidingView>
+    </StoryFlowSheetPortal>
   );
 }
 
@@ -509,7 +528,7 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     backgroundColor: Theme.overlayBackdrop,
   },
-  kvContainer: { justifyContent: 'flex-end' },
+  kvContainer: { justifyContent: 'flex-end', width: '100%' },
   kvContainerDesktop: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -554,11 +573,11 @@ const styles = StyleSheet.create({
   },
   headerTextCol: { flex: 1, minWidth: 0 },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: Theme.textPrimary,
-    letterSpacing: -0.5,
-    marginBottom: 2,
+    fontSize: 22,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.4,
+    marginBottom: 4,
   },
   headerTitleDesktop: {
     fontSize: 22,
@@ -566,9 +585,10 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: Theme.textSecondary,
+    fontSize: 13,
+    color: Theme.textPrimary,
     fontWeight: '600',
+    lineHeight: 18,
     marginBottom: 12,
   },
   desktopFormKicker: {
@@ -718,57 +738,66 @@ const styles = StyleSheet.create({
   loadSummary: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
     marginBottom: 20,
     padding: 12,
+    borderRadius: 12,
     backgroundColor: Theme.surface,
   },
   summaryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    gap: 5,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   summaryChipText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    color: Theme.textSecondary,
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
   },
   rateChip: {
-    backgroundColor: 'rgba(205, 233, 247, 0.35)',
+    backgroundColor: Theme.brandBlueSoft,
+    borderColor: Theme.brandBlueInk,
   },
   rateChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+  },
+  inputGroup: { marginBottom: 18 },
+  inputLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: Theme.brandBlueInk,
-  },
-  inputGroup: { marginBottom: 16 },
-  inputLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: Theme.textSecondary,
-    letterSpacing: 0.8,
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.6,
     marginBottom: 8,
   },
   inputLabelDesktop: {
-    fontSize: 11,
-    letterSpacing: 0.6,
+    fontSize: 12,
+    letterSpacing: 0.4,
     color: Theme.textPrimaryDark,
     marginBottom: 6,
   },
   desktopAmountHint: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: Theme.textSecondary,
+    color: Theme.textPrimary,
     marginBottom: 10,
   },
   amountRow: {
     flexDirection: 'row',
     alignItems: 'center',
     overflow: 'hidden',
-    backgroundColor: Theme.primary + '08',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.cardWhite,
   },
   amountRowDesktop: {
     backgroundColor: Theme.surface,
@@ -777,26 +806,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     backgroundColor: Theme.buttonPrimary,
+    borderRightWidth: 1,
+    borderRightColor: Theme.buttonPrimaryBorder,
   },
   currencyBadgeDesktop: {
     paddingHorizontal: 18,
     paddingVertical: 18,
   },
   currencyText: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
   },
   currencyTextDesktop: {
     fontSize: 22,
   },
   amountInput: {
     flex: 1,
-    fontSize: 28,
-    fontWeight: '900',
-    color: Theme.textPrimary,
+    fontSize: 30,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
     paddingHorizontal: 16,
-    letterSpacing: -1,
+    letterSpacing: -0.8,
     ...Platform.select({
       web: { outlineStyle: 'none', outlineWidth: 0, boxShadow: 'none' } as unknown as TextStyle,
     }),
@@ -811,6 +842,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
     backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 12,
     padding: 12,
     minHeight: 72,
   },
@@ -821,10 +855,10 @@ const styles = StyleSheet.create({
   noteIcon: { marginTop: 2 },
   noteInput: {
     flex: 1,
-    fontSize: 14,
-    color: Theme.textPrimary,
+    fontSize: 15,
+    color: Theme.textPrimaryDark,
     fontWeight: '500',
-    lineHeight: 20,
+    lineHeight: 22,
     textAlignVertical: 'top',
   },
   noteInputDesktop: {
@@ -840,6 +874,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: 12,
     paddingVertical: 16,
     marginTop: 4,
   },
@@ -849,10 +884,10 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.5 },
   submitBtnText: {
-    fontSize: 15,
-    fontWeight: '900',
+    fontSize: 16,
+    fontWeight: '800',
     color: Theme.buttonPrimaryText,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   errorText: {
     fontSize: 12,

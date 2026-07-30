@@ -18,6 +18,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { ClientProfileHubsEditSection } from "@/features/clients/components/ClientProfileHubsEditSection";
 import { ClientProfileLanesEditSection } from "@/features/clients/components/ClientProfileLanesEditSection";
+import { ClientProfileFinanceStatementSection } from "@/features/clients/components/ClientProfileFinanceStatementSection";
+import { ClientProfileMarginAnalysisSection } from "@/features/clients/components/ClientProfileMarginAnalysisSection";
+import { ClientProfilePerformanceSection } from "@/features/clients/components/ClientProfilePerformanceSection";
 import type {
   ClientLaneRate,
   ClientWarehouseExtended,
@@ -30,6 +33,7 @@ const CONTRACTS_PAGE_SIZE = 5;
 
 type EditPanel = "BASIC" | "WAREHOUSES" | "CONTRACTS" | "KYC";
 type ClientEditPanelTarget = "BASIC" | "WAREHOUSES" | "CONTRACTS";
+type ViewTab = "OVERVIEW" | "FINANCE" | "PERFORMANCE" | "MARGIN";
 
 type EditTab = {
   id: EditPanel;
@@ -99,6 +103,8 @@ export type CounterpartyProfileSystemCardProps = {
   /** Enables inline hub/lane CRUD in edit mode (client profiles). */
   organizationId?: string;
   clientId?: string;
+  /** Partner id — enables Finance / Performance / Margin tabs for suppliers. */
+  supplierId?: string;
   editableWarehouses?: ClientWarehouseExtended[];
   editableLaneRates?: ClientLaneRate[];
   onProfileEntitiesChange?: () => void;
@@ -136,6 +142,15 @@ function completionPercent(input: {
     total += 1;
   }
   return Math.max(10, Math.min(100, Math.round((score / total) * 100)));
+}
+
+/** Trust % reads as an alert level, not a fixed brand color — 0% shouldn't paint green. */
+function trustLabelColor(label: string): string {
+  const n = Number.parseFloat(label);
+  if (!Number.isFinite(n)) return Theme.textMuted;
+  if (n >= 70) return Theme.positive;
+  if (n >= 40) return Theme.warning;
+  return Theme.textMuted;
 }
 
 function Badge({
@@ -204,6 +219,7 @@ export function CounterpartyProfileSystemCard({
   onOpenClientEditPanel,
   organizationId,
   clientId,
+  supplierId,
   editableWarehouses = [],
   editableLaneRates = [],
   onProfileEntitiesChange,
@@ -219,8 +235,14 @@ export function CounterpartyProfileSystemCard({
       : Layout.screenPaddingHorizontal
     : Layout.screenPaddingHorizontal;
   const pageMaxWidth = isPage && isWide ? 1520 : isPage ? 720 : 960;
+  const analyticsPartyId =
+    type === "client" ? clientId : type === "supplier" ? supplierId : undefined;
+  const showAnalyticsTabs = Boolean(organizationId && analyticsPartyId);
+  const analyticsPartyRole: "client" | "supplier" =
+    type === "supplier" ? "supplier" : "client";
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [editPanel, setEditPanel] = useState<EditPanel>("BASIC");
+  const [viewTab, setViewTab] = useState<ViewTab>("OVERVIEW");
   const [asideWidth, setAsideWidth] = useState(ASIDE_DEFAULT);
   const [isAsideResizing, setIsAsideResizing] = useState(false);
   const asideWidthRef = useRef(ASIDE_DEFAULT);
@@ -823,6 +845,43 @@ export function CounterpartyProfileSystemCard({
         </View>
       </View>
 
+      {showAnalyticsTabs ? (
+        <View
+          style={[
+            styles.viewTabBar,
+            isPage && {
+              paddingHorizontal: pagePad,
+              maxWidth: pageMaxWidth,
+              alignSelf: "center",
+              width: "100%",
+            },
+          ]}
+        >
+          {(
+            [
+              { id: "OVERVIEW" as const, label: "Overview" },
+              { id: "FINANCE" as const, label: "Finance · Statement" },
+              { id: "PERFORMANCE" as const, label: "Lane Performance" },
+              { id: "MARGIN" as const, label: "Margin Analysis" },
+            ] as const
+          ).map((tab) => {
+            const active = viewTab === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.viewTabChip, active && styles.viewTabChipActive]}
+                onPress={() => setViewTab(tab.id)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.viewTabChipText, active && styles.viewTabChipTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : null}
+
       <ScrollView
         style={styles.viewScroll}
         contentContainerStyle={[
@@ -835,6 +894,38 @@ export function CounterpartyProfileSystemCard({
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {showAnalyticsTabs && organizationId && analyticsPartyId && viewTab === "FINANCE" ? (
+          <>
+            <ClientProfileFinanceStatementSection
+              organizationId={organizationId}
+              clientId={analyticsPartyId}
+              clientName={organizationName}
+              partyRole={analyticsPartyRole}
+            />
+            <View style={{ height: 24 }} />
+          </>
+        ) : showAnalyticsTabs && organizationId && analyticsPartyId && viewTab === "PERFORMANCE" ? (
+          <>
+            <ClientProfilePerformanceSection
+              organizationId={organizationId}
+              clientId={analyticsPartyId}
+              clientName={organizationName}
+              partyRole={analyticsPartyRole}
+            />
+            <View style={{ height: 24 }} />
+          </>
+        ) : showAnalyticsTabs && organizationId && analyticsPartyId && viewTab === "MARGIN" ? (
+          <>
+            <ClientProfileMarginAnalysisSection
+              organizationId={organizationId}
+              clientId={analyticsPartyId}
+              clientName={organizationName}
+              partyRole={analyticsPartyRole}
+            />
+            <View style={{ height: 24 }} />
+          </>
+        ) : (
+          <>
         <View style={[styles.identityCard, isPage && styles.identityCardPage]}>
           {!isPage ? <View style={styles.identityBlob} /> : null}
           {isPage && isWide ? (
@@ -892,7 +983,11 @@ export function CounterpartyProfileSystemCard({
                   <View style={styles.metricCell}>
                     <Text style={[styles.kpiTileLabel, styles.kpiTileLabelPage]}>Trust</Text>
                     <Text
-                      style={[styles.kpiTileValue, styles.kpiTileValuePage, { color: Theme.positive }]}
+                      style={[
+                        styles.kpiTileValue,
+                        styles.kpiTileValuePage,
+                        { color: trustLabelColor(networkTrustLabel) },
+                      ]}
                       numberOfLines={1}
                     >
                       {networkTrustLabel}
@@ -947,7 +1042,15 @@ export function CounterpartyProfileSystemCard({
                 </View>
                 <View style={styles.kpiTile}>
                   <Text style={[styles.kpiTileLabel, isPage && styles.kpiTileLabelPage]}>Network Trust</Text>
-                  <Text style={[styles.kpiTileValue, isPage && styles.kpiTileValuePage, { color: Theme.positive }]}>{networkTrustLabel}</Text>
+                  <Text
+                    style={[
+                      styles.kpiTileValue,
+                      isPage && styles.kpiTileValuePage,
+                      { color: trustLabelColor(networkTrustLabel) },
+                    ]}
+                  >
+                    {networkTrustLabel}
+                  </Text>
                 </View>
               </View>
             </>
@@ -1264,43 +1367,45 @@ export function CounterpartyProfileSystemCard({
                     )}{" "}
                     of {filteredContracts.length}
                   </Text>
-                  <View style={styles.mtFooterNav}>
-                    <TouchableOpacity
-                      style={[
-                        styles.mtNavBtn,
-                        safeContractPage <= 0 && styles.mtNavBtnDisabled,
-                      ]}
-                      disabled={safeContractPage <= 0}
-                      onPress={() => setContractPage(Math.max(0, safeContractPage - 1))}
-                      accessibilityLabel="Previous contracts page"
-                    >
-                      <FontAwesome
-                        name="chevron-left"
-                        size={11}
-                        color={Theme.textPrimaryDark}
-                      />
-                    </TouchableOpacity>
-                    <Text style={styles.mtPageLabel}>
-                      {safeContractPage + 1} / {contractTotalPages}
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.mtNavBtn,
-                        safeContractPage >= contractTotalPages - 1 && styles.mtNavBtnDisabled,
-                      ]}
-                      disabled={safeContractPage >= contractTotalPages - 1}
-                      onPress={() =>
-                        setContractPage(Math.min(contractTotalPages - 1, safeContractPage + 1))
-                      }
-                      accessibilityLabel="Next contracts page"
-                    >
-                      <FontAwesome
-                        name="chevron-right"
-                        size={11}
-                        color={Theme.textPrimaryDark}
-                      />
-                    </TouchableOpacity>
-                  </View>
+                  {contractTotalPages > 1 ? (
+                    <View style={styles.mtFooterNav}>
+                      <TouchableOpacity
+                        style={[
+                          styles.mtNavBtn,
+                          safeContractPage <= 0 && styles.mtNavBtnDisabled,
+                        ]}
+                        disabled={safeContractPage <= 0}
+                        onPress={() => setContractPage(Math.max(0, safeContractPage - 1))}
+                        accessibilityLabel="Previous contracts page"
+                      >
+                        <FontAwesome
+                          name="chevron-left"
+                          size={11}
+                          color={Theme.textPrimaryDark}
+                        />
+                      </TouchableOpacity>
+                      <Text style={styles.mtPageLabel}>
+                        {safeContractPage + 1} / {contractTotalPages}
+                      </Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.mtNavBtn,
+                          safeContractPage >= contractTotalPages - 1 && styles.mtNavBtnDisabled,
+                        ]}
+                        disabled={safeContractPage >= contractTotalPages - 1}
+                        onPress={() =>
+                          setContractPage(Math.min(contractTotalPages - 1, safeContractPage + 1))
+                        }
+                        accessibilityLabel="Next contracts page"
+                      >
+                        <FontAwesome
+                          name="chevron-right"
+                          size={11}
+                          color={Theme.textPrimaryDark}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
             </View>
@@ -1314,7 +1419,9 @@ export function CounterpartyProfileSystemCard({
               <Text style={[styles.sectionHeading, isPage && styles.sectionHeadingPage]}>Verification Vault</Text>
             </View>
             {kycDocs.length === 0 ? (
-              <Text style={styles.emptyMuted}>No KYC documents on file.</Text>
+              <View style={styles.emptyPanel}>
+                <Text style={styles.emptyMuted}>No KYC documents on file.</Text>
+              </View>
             ) : (
               kycDocs.map((doc) => (
                 <View key={doc.id} style={styles.kycVaultCard}>
@@ -1352,6 +1459,8 @@ export function CounterpartyProfileSystemCard({
         )}
 
         <View style={{ height: 24 }} />
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -1415,6 +1524,42 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   viewStickyRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  viewTabBar: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 6,
+    backgroundColor: Theme.cardWhite,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderInput,
+  },
+  viewTabChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    backgroundColor: Theme.surfaceGray,
+    minHeight: 30,
+    justifyContent: "center",
+  },
+  viewTabChipActive: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
+  },
+  viewTabChipText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textRouteCard,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  viewTabChipTextActive: {
+    color: Theme.textOnPrimary,
+  },
   iconBtn: {
     width: 44,
     height: 44,
@@ -2044,6 +2189,7 @@ const styles = StyleSheet.create({
   mtHead: {
     flexDirection: "row",
     alignItems: "center",
+    width: "100%",
     paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: "#F9FAFB",
@@ -2063,6 +2209,7 @@ const styles = StyleSheet.create({
   mtRow: {
     flexDirection: "row",
     alignItems: "center",
+    width: "100%",
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -2146,6 +2293,7 @@ const styles = StyleSheet.create({
   },
   simpleTableHead: {
     flexDirection: "row",
+    width: "100%",
     backgroundColor: Theme.surfaceGray,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -2173,6 +2321,7 @@ const styles = StyleSheet.create({
   simpleTr: {
     flexDirection: "row",
     alignItems: "center",
+    width: "100%",
     paddingVertical: 13,
     paddingHorizontal: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -2621,6 +2770,7 @@ const styles = StyleSheet.create({
   contractTr: {
     flexDirection: "row",
     alignItems: "center",
+    width: "100%",
     paddingVertical: 12,
     paddingHorizontal: 14,
     gap: 10,

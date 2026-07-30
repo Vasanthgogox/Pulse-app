@@ -1,21 +1,20 @@
+/**
+ * Driver profile hub — Counterparty-style chrome; existing Overview / Compliance / Finance content.
+ */
 import Theme from "@/constants/Theme";
-import { DriverProfileHubHero } from "@/features/drivers/components/desktop/DriverProfileHubHero";
-import { DriverProfileOverviewPanel } from "@/features/drivers/components/desktop/DriverProfileOverviewPanel";
 import {
   clientProfileStyles as cpStyles,
   hubStyles as styles,
 } from "@/features/clients/components/desktop/clientProfileHub.styles";
+import { DriverProfileOverviewPanel } from "@/features/drivers/components/desktop/DriverProfileOverviewPanel";
+import { partnerProfileDashboardStyles as party } from "@/features/drivers/components/partnerProfileDashboard.styles";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import {
-  PartyProfileCompactChrome,
-  publicEntityToChromeModel,
-} from "@/features/party/components/PartyProfileCompactChrome";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
-import { driverToPublicEntity } from "@/features/public-profile/mappers";
 import { useLayoutInsets } from "@/lib/layoutInsets";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Wallet } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -24,7 +23,7 @@ type DriverProfileTab = "overview" | "compliance" | "finance";
 const TABS: { id: DriverProfileTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "compliance", label: "Compliance" },
-  { id: "finance", label: "Finance" },
+  { id: "finance", label: "Finance · Statement" },
 ];
 
 type Props = {
@@ -49,11 +48,6 @@ export function DriverProfileHub({
   const layoutInsets = useLayoutInsets();
   const [tab, setTab] = useState<DriverProfileTab>("overview");
 
-  const chromeModel = useMemo(
-    () => publicEntityToChromeModel(driverToPublicEntity(driver)),
-    [driver],
-  );
-
   const panel =
     tab === "overview" ? (
       <DriverProfileOverviewPanel
@@ -72,7 +66,9 @@ export function DriverProfileHub({
       </View>
     ) : (
       <View style={[styles.card, compact && mobile.cardCompact]}>
-        <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>Finance</Text>
+        <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>
+          Finance · Statement
+        </Text>
         <Text style={[styles.aboutBody, compact && mobile.aboutBodyCompact]}>
           Open the driver ledger for payable balance, salary requests, and trip settlements.
         </Text>
@@ -95,60 +91,62 @@ export function DriverProfileHub({
     );
 
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={[
-        styles.scrollContent,
-        compact && mobile.scrollContentCompact,
-        { paddingBottom: layoutInsets.scrollBottomPadding(compact ? 16 : 24) },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      {compact ? (
-        <PartyProfileCompactChrome model={chromeModel} onBack={onBack} />
-      ) : (
-        <DriverProfileHubHero driver={driver} tripCount={tripCount} onBack={onBack} />
-      )}
-
-      <View style={[styles.tabBar, compact && mobile.tabBarCompact]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={compact ? mobile.tabScrollCompact : styles.tabScroll}
-          contentContainerStyle={
-            compact ? mobile.tabScrollContentCompact : styles.tabScrollContent
-          }
-        >
-          {TABS.map((t) => {
-            const active = tab === t.id;
-            return (
-              <Pressable
-                key={t.id}
-                style={[
-                  styles.tabBtn,
-                  compact && mobile.tabBtnCompact,
-                  active && styles.tabBtnActive,
-                ]}
-                onPress={() => setTab(t.id)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    compact && mobile.tabTextCompact,
-                    active && styles.tabTextActive,
-                  ]}
-                >
-                  {t.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+    <View style={party.viewRoot}>
+      <View style={party.viewStickyHeader}>
+        <View style={party.viewStickyLeft}>
+          {onBack ? (
+            <Pressable
+              onPress={onBack}
+              style={party.iconBtn}
+              hitSlop={12}
+              accessibilityLabel="Back"
+            >
+              <FontAwesome name="chevron-left" size={22} color={Theme.textPrimaryDark} />
+            </Pressable>
+          ) : null}
+          <Text style={party.viewStickyTitle} numberOfLines={1}>
+            Driver Profile
+          </Text>
+        </View>
+        <View style={party.viewStickyRight}>
+          <View style={[party.badge, { backgroundColor: Theme.surfaceGray, borderColor: Theme.borderMedium }]}>
+            <Text style={[party.badgeText, { color: Theme.textMuted }]}>DRIVER</Text>
+          </View>
+        </View>
       </View>
 
-      {panel}
-    </ScrollView>
+      <View style={party.viewTabBar}>
+        {TABS.map((t) => {
+          const active = tab === t.id;
+          return (
+            <Pressable
+              key={t.id}
+              style={[party.viewTabChip, active && party.viewTabChipActive]}
+              onPress={() => setTab(t.id)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
+              <Text
+                style={[party.viewTabChipText, active && party.viewTabChipTextActive]}
+              >
+                {t.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[
+          party.hubBody,
+          compact && mobile.scrollContentCompact,
+          { paddingBottom: layoutInsets.scrollBottomPadding(compact ? 16 : 24) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {panel}
+      </ScrollView>
+    </View>
   );
 }

@@ -1,10 +1,6 @@
 /**
- * Campaign Detail — Pulse Boost V2 Studio (HTML-mock layout).
- * Breadcrumb header with the REAL indent reference; hero identity card
- * (route corridor / required truck / current tier); health & diagnostics
- * with score ring; performance metrics + target reach; conversion pipeline
- * funnel; sticky-style right column with the live story preview
- * (Driver/Fleet perspective) and the Referral Escrow summary.
+ * Campaign Detail — Metronic Pulse Reach studio.
+ * Breadcrumb header, hero identity, health/metrics, live ad preview + escrow.
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -14,6 +10,12 @@ import { ReachCampaignTimeline } from "@/features/reach/components/ReachCampaign
 import { ReachStoryPostPreview } from "@/features/reach/components/ReachStoryPostPreview";
 import { CampaignUpgradePanel } from "@/features/reach/components/CampaignUpgradePanel";
 import { BoostSheet } from "@/features/reach/components/BoostSheet";
+import {
+  REACH_DESKTOP_BP,
+  REACH_DETAIL_PAGE_MAX,
+  REACH_M,
+  reachMetronicShared as m,
+} from "@/features/reach/styles/reachMetronic";
 import {
   useReachCampaignsQuery,
   useReachPlansQuery,
@@ -68,8 +70,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const DESKTOP_BREAKPOINT = 1024;
-const PAGE_MAX_WIDTH = 1440;
+const DESKTOP_BREAKPOINT = REACH_DESKTOP_BP;
+const PAGE_MAX_WIDTH = REACH_DETAIL_PAGE_MAX;
 
 function statusColors(status: string): { bg: string; border: string; text: string } {
   if (status === "active") {
@@ -185,12 +187,12 @@ export default function ReachCampaignDetailScreen() {
   };
 
   const header = (
-    <View style={[styles.headerBleed, { paddingHorizontal: pagePadH }]}>
-      <View style={[styles.headerInner, isDesktop && styles.headerMax]}>
+    <View style={[m.headerBleed, { paddingHorizontal: pagePadH }]}>
+      <View style={[m.headerInner, isDesktop && m.headerMaxDetail]}>
         {/* Breadcrumbs */}
         <View style={styles.headerLeft}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
-            <ArrowLeft size={16} color={Theme.textSecondary} />
+          <Pressable onPress={() => router.back()} style={m.backBtn} hitSlop={8}>
+            <ArrowLeft size={16} color={REACH_M.subtle} />
           </Pressable>
           <View style={styles.headerDivider} />
           <Pressable onPress={() => router.back()} hitSlop={6}>
@@ -215,11 +217,11 @@ export default function ReachCampaignDetailScreen() {
         {/* Center studio identity (desktop) */}
         {isDesktop ? (
           <View style={styles.headerCenter}>
-            <Text style={styles.studioTitle}>Campaign detail</Text>
+            <Text style={m.brandTitle}>Campaign detail</Text>
             {isActive ? (
-              <View style={styles.livePill}>
+              <View style={m.statusLive}>
                 <View style={styles.liveDot} />
-                <Text style={styles.livePillText}>Live</Text>
+                <Text style={m.statusLiveText}>Live</Text>
               </View>
             ) : null}
           </View>
@@ -228,15 +230,15 @@ export default function ReachCampaignDetailScreen() {
         {/* Actions */}
         <View style={styles.headerRight}>
           {hasSource ? (
-            <Pressable style={styles.headerGhostBtn} onPress={handleShare}>
-              <Share2 size={13} color={Theme.textRouteCard} />
-              {isDesktop ? <Text style={styles.headerGhostText}>Share</Text> : null}
+            <Pressable style={m.ghostBtn} onPress={handleShare}>
+              <Share2 size={13} color={REACH_M.subtle} />
+              {isDesktop ? <Text style={m.ghostBtnText}>Share</Text> : null}
             </Pressable>
           ) : null}
           {isActive ? (
-            <Pressable style={styles.headerDarkBtn} onPress={() => setUpgradeRequested(true)}>
+            <Pressable style={m.primaryBtn} onPress={() => setUpgradeRequested(true)}>
               <Sparkles size={13} color={Theme.textOnPrimary} />
-              <Text style={styles.headerDarkText}>Upgrade plan</Text>
+              <Text style={m.primaryBtnText}>Upgrade plan</Text>
             </Pressable>
           ) : null}
         </View>
@@ -246,11 +248,11 @@ export default function ReachCampaignDetailScreen() {
 
   if (!campaign) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[m.pageCanvas, { paddingTop: insets.top }]}>
         {header}
         {campaignsQ.isLoading ? (
           <View style={styles.emptyWrap}>
-            <ActivityIndicator color={Theme.primary} />
+            <ActivityIndicator color={REACH_M.primary} />
           </View>
         ) : (
           <View style={styles.emptyWrap}>
@@ -312,7 +314,7 @@ export default function ReachCampaignDetailScreen() {
       <View style={[styles.heroGrid, isDesktop && styles.heroGridDesktop]}>
         {hasRoute || (isVehicle && campaign.snapshot_origin) ? (
           <View style={styles.heroCell}>
-            <View style={[styles.heroCellIcon, { backgroundColor: Theme.primary + "14" }]}>
+            <View style={[styles.heroCellIcon, { backgroundColor: REACH_M.primary + "14" }]}>
               <MapPin size={15} color={Theme.primary} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -377,7 +379,7 @@ export default function ReachCampaignDetailScreen() {
     <View style={styles.panelCard}>
       <View style={styles.panelHeader}>
         <View style={styles.panelHeaderLeft}>
-          <View style={[styles.panelIcon, { backgroundColor: Theme.primary + "14" }]}>
+          <View style={[styles.panelIcon, { backgroundColor: REACH_M.primary + "14" }]}>
             <BarChart3 size={14} color={Theme.primary} />
           </View>
           <Text style={styles.panelTitle}>Campaign Performance Metrics</Text>
@@ -472,7 +474,7 @@ export default function ReachCampaignDetailScreen() {
     <View style={styles.panelCard}>
       <View style={styles.panelHeader}>
         <View style={styles.panelHeaderLeft}>
-          <View style={[styles.panelIcon, { backgroundColor: Theme.surface }]}>
+          <View style={[styles.panelIcon, { backgroundColor: REACH_M.quote }]}>
             <Filter size={14} color={Theme.textSecondary} />
           </View>
           <Text style={styles.panelTitle}>Conversion Pipeline Funnel</Text>
@@ -721,7 +723,7 @@ export default function ReachCampaignDetailScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[m.pageCanvas, { paddingTop: insets.top }]}>
       {header}
 
       <ScrollView
@@ -763,7 +765,7 @@ export default function ReachCampaignDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.networkPageBackground },
+  container: { flex: 1, backgroundColor: REACH_M.canvas },
   scroll: { flex: 1 },
   page: { gap: 16, width: "100%", paddingTop: 16 },
   pageDesktop: {
@@ -775,8 +777,8 @@ const styles = StyleSheet.create({
   // ── Header ──
   headerBleed: {
     borderBottomWidth: 1,
-    borderBottomColor: Theme.borderInput,
-    backgroundColor: Theme.cardWhite,
+    borderBottomColor: REACH_M.border,
+    backgroundColor: REACH_M.card,
   },
   headerInner: {
     flexDirection: "row",
@@ -804,27 +806,27 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
-    backgroundColor: Theme.cardWhite,
+    borderColor: REACH_M.border,
+    backgroundColor: REACH_M.card,
     alignItems: "center",
     justifyContent: "center",
   },
-  crumbMuted: { fontSize: 12, fontWeight: "600", color: Theme.textRouteCard },
+  crumbMuted: { fontSize: 12, fontWeight: "600", color: REACH_M.subtle },
   crumbSep: { fontSize: 12, fontWeight: "500", color: Theme.borderMedium },
   crumbIdChip: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     flexShrink: 1,
     minWidth: 0,
   },
   crumbIdText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     fontVariant: ["tabular-nums"],
   },
   headerCenter: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
@@ -841,7 +843,7 @@ const styles = StyleSheet.create({
   studioTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     letterSpacing: -0.1,
   },
   livePill: {
@@ -869,11 +871,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: REACH_M.card,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
   },
-  headerGhostText: { fontSize: 12, fontWeight: "600", color: Theme.textRouteCard },
+  headerGhostText: { fontSize: 12, fontWeight: "600", color: REACH_M.subtle },
   headerDarkBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -881,12 +883,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: REACH_M.primary,
   },
   headerDarkText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },
 
   emptyWrap: { alignItems: "center", paddingVertical: 60, gap: 8 },
-  emptyTitle: { fontSize: 13, fontWeight: "700", color: Theme.textPrimaryDark },
+  emptyTitle: { fontSize: 13, fontWeight: "700", color: REACH_M.text },
 
   mainSplit: { gap: 16 },
   mainSplitDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 16 },
@@ -898,10 +900,10 @@ const styles = StyleSheet.create({
 
   // ── Hero ──
   heroCard: {
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 10,
+    backgroundColor: REACH_M.card,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     padding: 16,
     gap: 14,
   },
@@ -912,13 +914,13 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.borderInput,
+    borderBottomColor: REACH_M.border,
   },
   heroTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   heroTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     letterSpacing: -0.3,
     flexShrink: 1,
   },
@@ -940,13 +942,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   heroMetaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 },
-  heroMetaText: { fontSize: 12, fontWeight: "500", color: Theme.textRouteCard },
+  heroMetaText: { fontSize: 12, fontWeight: "500", color: REACH_M.subtle },
   heroMetaDot: { fontSize: 12, color: Theme.borderMedium },
-  heroMetaStrong: { fontSize: 12, fontWeight: "700", color: Theme.textSecondary },
+  heroMetaStrong: { fontSize: 12, fontWeight: "700", color: REACH_M.subtle },
   indentRefBox: {
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -957,14 +959,14 @@ const styles = StyleSheet.create({
   indentRefLabel: {
     fontSize: 9,
     fontWeight: "700",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   indentRefValue: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     fontVariant: ["tabular-nums"],
     marginTop: 2,
   },
@@ -978,9 +980,9 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 12,
     borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
   },
   heroCellTier: {
     backgroundColor: Theme.accentBrownWash,
@@ -997,14 +999,14 @@ const styles = StyleSheet.create({
   heroCellLabel: {
     fontSize: 9,
     fontWeight: "700",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   heroCellValue: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     marginTop: 2,
   },
   tierValueRow: { flexDirection: "row", alignItems: "baseline", gap: 6 },
@@ -1018,7 +1020,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: REACH_M.card,
     borderWidth: 1,
     borderColor: Theme.accentBrownBorder,
     flexShrink: 0,
@@ -1037,10 +1039,10 @@ const styles = StyleSheet.create({
 
   // ── Shared panel card ──
   panelCard: {
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 10,
+    backgroundColor: REACH_M.card,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     padding: 16,
     gap: 14,
   },
@@ -1051,7 +1053,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.borderInput,
+    borderBottomColor: REACH_M.border,
   },
   panelHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 9, flex: 1, minWidth: 0 },
   panelIcon: {
@@ -1065,14 +1067,14 @@ const styles = StyleSheet.create({
   panelTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     letterSpacing: -0.1,
   },
-  panelAside: { fontSize: 11, fontWeight: "600", color: Theme.textMuted, flexShrink: 0 },
+  panelAside: { fontSize: 11, fontWeight: "600", color: REACH_M.muted, flexShrink: 0 },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textSecondary,
+    color: REACH_M.subtle,
     letterSpacing: 0.2,
   },
 
@@ -1081,15 +1083,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     flexShrink: 0,
   },
   reachChipText: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     fontVariant: ["tabular-nums"],
   },
   metricsLoading: { paddingVertical: 14, alignItems: "center" },
@@ -1102,9 +1104,9 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: 12,
     borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
   },
   metricTilePositive: {
     backgroundColor: Theme.positiveMuted,
@@ -1123,18 +1125,18 @@ const styles = StyleSheet.create({
   metricTileLabel: {
     fontSize: 9,
     fontWeight: "700",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   metricTileValue: {
     fontSize: 22,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     fontVariant: ["tabular-nums"],
     letterSpacing: -0.5,
   },
-  metricTileSub: { fontSize: 9, fontWeight: "500", color: Theme.textMuted },
+  metricTileSub: { fontSize: 9, fontWeight: "500", color: REACH_M.muted },
   progressBlock: { gap: 6, paddingTop: 4 },
   progressLabels: {
     flexDirection: "row",
@@ -1145,13 +1147,13 @@ const styles = StyleSheet.create({
   progressLabel: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     letterSpacing: 0.2,
   },
   progressTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     overflow: "hidden",
   },
   progressFill: { height: "100%", borderRadius: 3 },
@@ -1166,17 +1168,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 2,
     borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
   },
   funnelCellGold: {
     backgroundColor: Theme.accentBrownWash,
     borderColor: Theme.accentBrownBorder,
   },
   funnelCellPrimary: {
-    backgroundColor: Theme.primary + "12",
-    borderColor: Theme.primary + "33",
+    backgroundColor: REACH_M.primary + "12",
+    borderColor: REACH_M.primary + "33",
   },
   funnelCellPositive: {
     backgroundColor: Theme.positiveMuted,
@@ -1185,13 +1187,13 @@ const styles = StyleSheet.create({
   funnelValue: {
     fontSize: 15,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     fontVariant: ["tabular-nums"],
   },
   funnelLabel: {
     fontSize: 8,
     fontWeight: "700",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     textTransform: "uppercase",
     letterSpacing: 0.3,
     textAlign: "center",
@@ -1205,11 +1207,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Theme.borderInput,
   },
-  escrowLabel: { fontSize: 12, fontWeight: "500", color: Theme.textRouteCard },
+  escrowLabel: { fontSize: 12, fontWeight: "500", color: REACH_M.subtle },
   escrowValue: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     fontVariant: ["tabular-nums"],
   },
   escrowTotalLabel: { fontSize: 12, fontWeight: "700", color: Theme.success },
@@ -1219,7 +1221,7 @@ const styles = StyleSheet.create({
     color: Theme.success,
     fontVariant: ["tabular-nums"],
   },
-  escrowHint: { fontSize: 10, fontWeight: "500", color: Theme.textMuted, lineHeight: 15, marginTop: 2 },
+  escrowHint: { fontSize: 10, fontWeight: "500", color: REACH_M.muted, lineHeight: 15, marginTop: 2 },
 
   // ── Driver network ──
   driverMetricsRow: { flexDirection: "row", gap: 8 },
@@ -1231,20 +1233,20 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 2,
     borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
   },
   driverMetricValue: {
     fontSize: 18,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: REACH_M.text,
     fontVariant: ["tabular-nums"],
   },
   driverMetricLabel: {
     fontSize: 9,
     fontWeight: "600",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     textTransform: "uppercase",
     letterSpacing: 0.2,
     textAlign: "center",
@@ -1258,24 +1260,24 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 6,
     borderRadius: 6,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
   },
-  waveBadgeText: { fontSize: 10, fontWeight: "700", color: Theme.textSecondary },
+  waveBadgeText: { fontSize: 10, fontWeight: "700", color: REACH_M.subtle },
   waveTextWrap: { flex: 1, minWidth: 0, gap: 2 },
-  waveTitle: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
-  waveSub: { fontSize: 11, fontWeight: "500", color: Theme.textMuted },
-  waveTime: { fontSize: 10, fontWeight: "500", color: Theme.textMuted, flexShrink: 0 },
+  waveTitle: { fontSize: 12, fontWeight: "700", color: REACH_M.text },
+  waveSub: { fontSize: 11, fontWeight: "500", color: REACH_M.muted },
+  waveTime: { fontSize: 10, fontWeight: "500", color: REACH_M.muted, flexShrink: 0 },
   waveHint: {
     fontSize: 10,
     fontWeight: "500",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     lineHeight: 15,
     marginTop: 2,
   },
 
-  timelineHint: { fontSize: 11, fontWeight: "500", color: Theme.textMuted, lineHeight: 15 },
+  timelineHint: { fontSize: 11, fontWeight: "500", color: REACH_M.muted, lineHeight: 15 },
 
   // ── Actions ──
   actionsCol: { gap: 8 },
@@ -1283,10 +1285,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: REACH_M.quote,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
@@ -1294,17 +1296,17 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: REACH_M.card,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: REACH_M.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  actionText: { fontSize: 12, fontWeight: "600", color: Theme.textPrimaryDark },
+  actionText: { fontSize: 12, fontWeight: "600", color: REACH_M.text },
   noSourceHint: {
     fontSize: 11,
     fontWeight: "500",
-    color: Theme.textMuted,
+    color: REACH_M.muted,
     fontStyle: "italic",
   },
 });

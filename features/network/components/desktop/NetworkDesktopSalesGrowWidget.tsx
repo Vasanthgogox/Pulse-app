@@ -86,7 +86,6 @@ function GrowRecommendationRow({
         styles.salesGrowRow,
         striped && styles.salesGrowRowStripe,
         isLast && styles.salesGrowRowLast,
-        { borderLeftColor: accentColor },
       ]}
     >
       <Pressable
@@ -110,8 +109,17 @@ function GrowRecommendationRow({
             <Text style={styles.salesGrowRowName} numberOfLines={1}>
               {org.name}
             </Text>
-            <View style={styles.salesGrowRoleBadge}>
-              <Text style={styles.salesGrowRoleBadgeText}>Client</Text>
+            <View
+              style={[styles.salesGrowRoleBadge, styles.salesGrowRoleBadgeClient]}
+            >
+              <Text
+                style={[
+                  styles.salesGrowRoleBadgeText,
+                  styles.salesGrowRoleBadgeTextClient,
+                ]}
+              >
+                Client
+              </Text>
             </View>
           </View>
 
@@ -171,11 +179,14 @@ function GrowRecommendationRow({
             disabled={connecting}
             style={({ pressed }) => [
               styles.salesGrowActionSend,
-              { backgroundColor: accentColor },
               pressed && styles.salesGrowActionPressed,
             ]}
           >
-            <UserPlus size={11} color={Theme.cardWhite} strokeWidth={2.4} />
+            <UserPlus
+              size={12}
+              color={Theme.loadAddButtonText}
+              strokeWidth={2.4}
+            />
             <Text style={styles.salesGrowActionSendText}>
               {connecting ? "…" : "Send"}
             </Text>
@@ -210,6 +221,13 @@ export function NetworkDesktopSalesGrowWidget({
       inviteDailyCapReached === true
     );
   }, [sentQ.data, inviteDailyCapReached]);
+
+  const todayInviteCount = useMemo(
+    () => todayPendingInviteCountFromSent(sentQ.data ?? []),
+    [sentQ.data],
+  );
+
+  const inviteSummary = `${todayInviteCount}/${DAILY_CONNECTION_INVITE_LIMIT} invites sent today`;
 
   const pendingByOrgId = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -359,6 +377,10 @@ export function NetworkDesktopSalesGrowWidget({
           })}
         </View>
       )}
+
+      <View style={styles.salesGrowInviteMeta}>
+        <Text style={styles.salesGrowInviteMetaText}>{inviteSummary}</Text>
+      </View>
 
       {onViewAllGrow ? (
         <Pressable

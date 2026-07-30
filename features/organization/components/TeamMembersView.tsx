@@ -31,6 +31,7 @@ import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -141,15 +142,20 @@ function MemberCard({
         </View>
       </View>
 
-      {canEdit ? (
-        <Pressable
-          onPress={() => onEdit(member)}
-          style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
-        >
-          <Pencil size={12} color={Theme.primary} strokeWidth={2.2} />
-          <Text style={cardStyles.editBtnText}>Edit</Text>
-        </Pressable>
-      ) : null}
+      {/* Always reserve footer height so Owner / Operator cards share one baseline. */}
+      <View style={cardStyles.footerSlot}>
+        {canEdit ? (
+          <Pressable
+            onPress={() => onEdit(member)}
+            style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
+          >
+            <Pencil size={12} color={Theme.primary} strokeWidth={2.2} />
+            <Text style={cardStyles.editBtnText}>Edit</Text>
+          </Pressable>
+        ) : (
+          <View style={cardStyles.footerSpacer} />
+        )}
+      </View>
     </View>
   );
 }
@@ -250,13 +256,22 @@ function PendingPhoneInviteCard({
 const cardStyles = StyleSheet.create({
   card: {
     flex: 1,
+    alignSelf: "stretch",
+    flexDirection: "column",
     backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    borderRadius: 14,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
     overflow: "hidden",
+    minHeight: 220,
+    ...Platform.select({
+      web: { height: "100%" as unknown as number },
+    }),
   },
   cardCover: {
     height: 56,
@@ -352,6 +367,7 @@ const cardStyles = StyleSheet.create({
     color: Theme.aggregatePillText,
   },
   cardBody: {
+    flex: 1,
     paddingHorizontal: 10,
     paddingTop: 0,
     paddingBottom: 10,
@@ -360,6 +376,7 @@ const cardStyles = StyleSheet.create({
   },
   avatarWrap: {
     marginTop: -26,
+    marginBottom: 4,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -394,13 +411,13 @@ const cardStyles = StyleSheet.create({
   phone: {
     fontSize: 10,
     fontWeight: "500",
-    color: Theme.textSecondary,
+    color: Theme.textPrimaryDark,
     textAlign: "center",
   },
   email: {
     fontSize: 9,
-    fontWeight: "400",
-    color: Theme.textMuted,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
     textAlign: "center",
     paddingHorizontal: 6,
   },
@@ -477,12 +494,21 @@ const cardStyles = StyleSheet.create({
     borderTopColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
   },
+  footerSlot: {
+    flexShrink: 0,
+    minHeight: 36,
+    width: "100%",
+  },
+  footerSpacer: {
+    height: 36,
+  },
   editBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
     height: 36,
+    width: "100%",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
@@ -909,8 +935,21 @@ const styles = StyleSheet.create({
   },
 
   grid: { paddingHorizontal: 14, gap: 12 },
-  gridRow: { flexDirection: "row", alignItems: "stretch", gap: 12 },
-  gridCell: { flex: 1, minWidth: 0 },
+  gridRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+    ...Platform.select({
+      web: { alignItems: "stretch" as const },
+    }),
+  },
+  gridCell: {
+    flex: 1,
+    minWidth: 0,
+    ...Platform.select({
+      web: { display: "flex" as const, alignSelf: "stretch" as const },
+    }),
+  },
   busyCard: {
     backgroundColor: Theme.surface,
     borderRadius: 18,

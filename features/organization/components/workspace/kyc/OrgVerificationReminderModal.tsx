@@ -162,14 +162,11 @@ export function OrgVerificationReminderModal({ visible, copy, onVerify, onLater 
       playEntrance();
       return;
     }
-    if (!dismissingRef.current && shellVisible) {
-      playExit(() => {
-        setShellVisible(false);
-        dragY.setValue(0);
-        setIsDragging(false);
-      });
-    }
-  }, [visible, dragY, playEntrance, playExit, shellVisible]);
+    dismissingRef.current = false;
+    setShellVisible(false);
+    dragY.setValue(0);
+    setIsDragging(false);
+  }, [visible, dragY, playEntrance]);
 
   const resetDrag = useCallback(() => {
     Animated.spring(dragY, {
@@ -184,6 +181,8 @@ export function OrgVerificationReminderModal({ visible, copy, onVerify, onLater 
   const requestDismiss = useCallback(() => {
     if (dismissingRef.current) return;
     dismissingRef.current = true;
+    // Flip parent visibility first so the effect cannot race-reopen.
+    onLater();
     if (!isWebDesktop) {
       Animated.timing(dragY, {
         toValue: 480,
@@ -194,17 +193,13 @@ export function OrgVerificationReminderModal({ visible, copy, onVerify, onLater 
         dragY.setValue(0);
         setIsDragging(false);
         playExit(() => {
-          dismissingRef.current = false;
           setShellVisible(false);
-          onLater();
         });
       });
       return;
     }
     playExit(() => {
-      dismissingRef.current = false;
       setShellVisible(false);
-      onLater();
     });
   }, [dragY, isWebDesktop, onLater, playExit]);
 

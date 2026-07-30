@@ -2,19 +2,19 @@
  * Load story preview — single elegant card with entrance motion + Lottie hero.
  */
 import { HubPromoHeroLottie } from "@/components/hub/HubPromoLottie";
-import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
 import type { PostRow } from "@/features/network/services/posts.service";
 import { formatINR } from "@/lib/format";
 import { ArrowRight, Package } from "lucide-react-native";
 import { useEffect, useRef } from "react";
 import {
-  Animated,
-  Easing,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
+    Animated,
+    Easing,
+    Platform,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 
 const INK = Theme.loadAddButtonText;

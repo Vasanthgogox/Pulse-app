@@ -5,7 +5,19 @@
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { addToPlacesCache, getPopularPlacesInIndia, searchPlacesInIndia, type PlaceResult } from "@/lib/placesService";
+import {
+  addToPlacesCache,
+  getPopularPlacesInIndia,
+  resolveIndiaPincode,
+  reverseGeocodePlaceInIndia,
+  searchPlacesInIndia,
+  type PlaceResult,
+} from "@/lib/placesService";
+import {
+  enrichPlaceSelectionSync,
+  formatCityStateFromParts,
+  formatCityStateLabel,
+} from "@/lib/placeCityState.util";
 import { scrollFocusedWebInputIntoView } from "@/lib/webKeyboard";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { MapPin, Search, X, ChevronDown } from "lucide-react-native";
@@ -111,6 +123,8 @@ export function LocationSearchField({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modalInputRef = useRef<TextInput>(null);
   const abortRef = useRef<AbortController | null>(null);
+  /** Bumps when a newer place is selected so async city/state/pin enrich doesn't overwrite. */
+  const enrichGenRef = useRef(0);
 
   const closeDropdown = useCallback(() => {
     setDropdownOpen(false);
@@ -171,17 +185,73 @@ export function LocationSearchField({
 
   const handleSelect = useCallback(
     (place: PlaceResult) => {
-      setDraft(place.displayName);
-      onChangeText(place.displayName);
-      onSelectPlace?.(place.displayName, {
-        lat: place.lat,
-        lon: place.lon,
-        pincode: place.pincode ?? null,
-        city: place.city ?? null,
-        state: place.state ?? null,
+      const sync = enrichPlaceSelectionSync(place);
+      const gen = ++enrichGenRef.current;
+      setDraft(sync.label);
+      onChangeText(sync.label);
+      onSelectPlace?.(sync.label, {
+        lat: sync.lat,
+        lon: sync.lon,
+        pincode: sync.pincode,
+        city: sync.city,
+        state: sync.state,
       });
-      addToPlacesCache(place).catch(() => {});
+      addToPlacesCache({
+        ...place,
+        city: sync.city,
+        state: sync.state,
+        pincode: sync.pincode,
+      }).catch(() => {});
       closeDropdown();
+
+      const hasCoords =
+        Number.isFinite(sync.lat) &&
+        Number.isFinite(sync.lon) &&
+        !(sync.lat === 0 && sync.lon === 0);
+      const needsEnrich = hasCoords && (!sync.city || !sync.state || !sync.pincode);
+      if (!needsEnrich || !onSelectPlace) return;
+
+      void (async () => {
+        try {
+          let city = sync.city;
+          let state = sync.state;
+          let reverseGeo =
+            !city || !state
+              ? await reverseGeocodePlaceInIndia(sync.lat, sync.lon)
+              : null;
+          if (reverseGeo) {
+            city = city || reverseGeo.city;
+            state = state || reverseGeo.state;
+          }
+          const pincode =
+            sync.pincode ||
+            (await resolveIndiaPincode({
+              lat: sync.lat,
+              lon: sync.lon,
+              displayName: place.displayName,
+              hintPincode: sync.pincode,
+              city,
+              state,
+              reverseGeo,
+            }));
+          if (gen !== enrichGenRef.current) return;
+          const label =
+            formatCityStateFromParts(city, state) ||
+            formatCityStateLabel(place.displayName) ||
+            sync.label;
+          setDraft(label);
+          onChangeText(label);
+          onSelectPlace(label, {
+            lat: sync.lat,
+            lon: sync.lon,
+            city,
+            state,
+            pincode,
+          });
+        } catch {
+          // Keep sync result — reverse geocode / pin resolve is best-effort.
+        }
+      })();
     },
     [onChangeText, onSelectPlace, closeDropdown]
   );
@@ -189,9 +259,15 @@ export function LocationSearchField({
   const handleUseCustom = useCallback(() => {
     const trimmed = draft.trim();
     if (trimmed) {
-      onChangeText(trimmed);
-      onSelectPlace?.(trimmed, { lat: 0, lon: 0 });
-      addToPlacesCache({ placeId: `custom-${trimmed}`, displayName: trimmed, lat: 0, lon: 0 }).catch(() => {});
+      const label = formatCityStateLabel(trimmed) || trimmed;
+      onChangeText(label);
+      onSelectPlace?.(label, { lat: 0, lon: 0 });
+      addToPlacesCache({
+        placeId: `custom-${label}`,
+        displayName: label,
+        lat: 0,
+        lon: 0,
+      }).catch(() => {});
     }
     closeDropdown();
   }, [draft, onChangeText, onSelectPlace, closeDropdown]);

@@ -1,30 +1,31 @@
 /**
- * Give / Get loads — Network home quick actions with Metronic illustrations + Lottie.
+ * Give / Get loads + Pulse Reach + Pulse Assist — Network home quick actions.
+ * Metronic SVG illustration cards (character art) in one shared chrome / rail.
  */
 import Theme from "@/constants/Theme";
 import {
-  NETWORK_HUB_GRID_ROW_PADDING_H,
-  SPLIT_STACK_BREAKPOINT,
+    NETWORK_HUB_GRID_ROW_PADDING_H,
+    SPLIT_STACK_BREAKPOINT,
 } from "@/features/network/constants/networkHubGrid";
 import { useVerifiedActionGuard } from "@/features/network/utils/verifiedActionGuard";
+import { showAppAlert } from "@/lib/appAlert";
 import {
-  fitNetworkLoadsIllustration,
-  NETWORK_LOADS_QUICK_ACTIONS,
-  type NetworkLoadsQuickAction,
+    fitNetworkLoadsIllustration,
+    NETWORK_LOADS_QUICK_ACTIONS,
+    type NetworkLoadsQuickAction,
 } from "@/lib/networkLoadsQuickCardsAssets";
 import { ROUTES } from "@/lib/routes";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import LottieView, { type AnimationObject } from "lottie-react-native";
-import { ArrowUpRight, Zap } from "lucide-react-native";
+import { ArrowUpRight, Lock, Zap } from "lucide-react-native";
 import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    useWindowDimensions,
+    View,
+    type ViewStyle,
 } from "react-native";
 
 const NATIVE_APP = Platform.OS !== "web";
@@ -48,32 +49,12 @@ function MarketplaceArt({
   action,
   illusBoxW,
   illusBoxH,
-  useLottie,
 }: {
   action: NetworkLoadsQuickAction;
   illusBoxW: number;
   illusBoxH: number;
-  useLottie?: boolean;
 }) {
   const Illustration = action.illustration;
-
-  if (useLottie && action.lottie) {
-    const scale = action.lottieScale ?? 1.1;
-    const size = Math.round(Math.min(illusBoxW, illusBoxH) * scale);
-    return (
-      <View style={[styles.lottieSlot, { width: illusBoxW, height: illusBoxH }]}>
-        <LottieView
-          source={action.lottie as AnimationObject}
-          autoPlay
-          loop
-          speed={0.88}
-          resizeMode="contain"
-          style={{ width: size, height: size }}
-        />
-      </View>
-    );
-  }
-
   const illusSize = fitNetworkLoadsIllustration(
     illusBoxW,
     illusBoxH,
@@ -94,28 +75,37 @@ function MarketplaceCard({
   const { width } = useWindowDimensions();
   const sidebar = variant === "sidebar";
   const mobileTile = isMobile && variant === "tile";
+  const locked = Boolean(action.locked);
 
-  const illusBoxW = sidebar ? 76 : compact || width < 380 ? 80 : 96;
-  const illusBoxH = sidebar ? 64 : compact || width < 380 ? 68 : 80;
+  const illusBoxW = sidebar ? 88 : compact || width < 380 ? 92 : 112;
+  const illusBoxH = sidebar ? 72 : compact || width < 380 ? 78 : 92;
 
-  const arrowOrb = (
+  const actionOrb = (
     <View
       style={[
         mobileTile ? styles.arrowOrbMobile : styles.arrowOrb,
-        { borderColor: `${action.accent}28`, backgroundColor: Theme.cardWhite },
+        locked ? styles.arrowOrbLocked : styles.arrowOrbDefault,
       ]}
     >
-      <ArrowUpRight
-        size={mobileTile ? 14 : sidebar ? 12 : 13}
-        color={action.accent}
-        strokeWidth={2.2}
-      />
+      {locked ? (
+        <Lock
+          size={mobileTile ? 13 : sidebar ? 12 : 13}
+          color={Theme.textPrimaryDark}
+          strokeWidth={2.3}
+        />
+      ) : (
+        <ArrowUpRight
+          size={mobileTile ? 14 : sidebar ? 13 : 14}
+          color={Theme.textPrimaryDark}
+          strokeWidth={2.2}
+        />
+      )}
     </View>
   );
 
   if (mobileTile) {
-    const artW = compact ? 76 : 84;
-    const artH = compact ? 64 : 72;
+    const artW = compact ? 88 : 100;
+    const artH = compact ? 74 : 84;
 
     return (
       <View
@@ -123,9 +113,16 @@ function MarketplaceCard({
           styles.cardMobile,
           compact && styles.cardMobileCompact,
           { backgroundColor: action.wash },
-          pressed && styles.cardPressed,
+          locked && styles.cardLocked,
+          pressed && !locked && styles.cardPressed,
         ]}
       >
+        {locked ? (
+          <View style={styles.lockedBadge}>
+            <Lock size={10} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+            <Text style={styles.lockedBadgeText}>Locked</Text>
+          </View>
+        ) : null}
         <View style={styles.cardMobileBody}>
           <View style={styles.cardMobileText}>
             <Text style={[styles.chip, { color: action.accent }]}>
@@ -143,9 +140,8 @@ function MarketplaceCard({
               action={action}
               illusBoxW={artW}
               illusBoxH={artH}
-              useLottie
             />
-            {arrowOrb}
+            {actionOrb}
           </View>
         </View>
       </View>
@@ -159,9 +155,16 @@ function MarketplaceCard({
         sidebar && styles.cardSidebar,
         compact && !sidebar && styles.cardCompact,
         { backgroundColor: action.wash },
-        pressed && styles.cardPressed,
+        locked && styles.cardLocked,
+        pressed && !locked && styles.cardPressed,
       ]}
     >
+      {locked ? (
+        <View style={styles.lockedBadge}>
+          <Lock size={10} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+          <Text style={styles.lockedBadgeText}>Locked</Text>
+        </View>
+      ) : null}
       <View style={[styles.cardBody, sidebar && styles.cardBodySidebar]}>
         <View style={[styles.textCol, sidebar && styles.textColSidebar]}>
           <Text style={[styles.chip, { color: action.accent }]}>
@@ -186,17 +189,17 @@ function MarketplaceCard({
             styles.illusWrap,
             { width: illusBoxW, height: illusBoxH },
             sidebar && styles.illusWrapSidebar,
+            locked && styles.illusLocked,
           ]}
         >
           <MarketplaceArt
             action={action}
             illusBoxW={illusBoxW}
             illusBoxH={illusBoxH}
-            useLottie={!sidebar}
           />
         </View>
 
-        {arrowOrb}
+        {actionOrb}
       </View>
     </View>
   );
@@ -240,13 +243,24 @@ export function NetworkLoadsQuickCards({
   const sidebar = layout === "sidebar";
   const isMobile = !sidebar && (NATIVE_APP || width < SPLIT_STACK_BREAKPOINT);
 
-  const openLoadCenter = () => {
+  const openAction = (action: NetworkLoadsQuickAction) => {
+    if (Platform.OS !== "web") {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    if (action.locked) {
+      showAppAlert(
+        "Pulse Assist is locked",
+        "100% guaranteed assist is coming soon. We’ll unlock this feature for your org when it’s ready.",
+      );
+      return;
+    }
+    if (action.id === "reach") {
+      router.push(ROUTES.REACH.HOME as never);
+      return;
+    }
     // Give / get load are verified-org only. Unverified taps route to the KYC
     // panel instead of the Load Center.
     guardVerified(() => {
-      if (Platform.OS !== "web") {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
       router.push(ROUTES.PULSE_LOADS);
     });
   };
@@ -262,13 +276,20 @@ export function NetworkLoadsQuickCards({
         style={tile ? (isMobile ? styles.cardSlotMobile : styles.cardSlot) : styles.sidebarCardPress}
       >
         <Pressable
-          onPress={openLoadCenter}
+          onPress={() => openAction(action)}
           style={({ pressed }) => [
             tile ? styles.cardPress : styles.sidebarCardPressInner,
-            pressed && styles.pressableScale,
+            pressed && !action.locked && styles.pressableScale,
           ]}
           accessibilityRole="button"
-          accessibilityLabel={`${action.label} — open Load Center`}
+          accessibilityState={{ disabled: Boolean(action.locked) }}
+          accessibilityLabel={
+            action.locked
+              ? "Pulse Assist — feature locked"
+              : action.id === "reach"
+                ? "Open Pulse Reach"
+                : `${action.label} — open Load Center`
+          }
         >
           {({ pressed }) => (
             <MarketplaceCard
@@ -431,29 +452,56 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     width: "100%",
-    minHeight: 108,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    minHeight: 118,
+    borderRadius: 18,
+    borderWidth: 0,
     overflow: "hidden",
+    position: "relative",
     ...cardShadow,
+  },
+  cardLocked: {
+    opacity: 0.72,
+  },
+  lockedBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+  },
+  lockedBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+  },
+  illusLocked: {
+    opacity: 0.55,
   },
   cardMobile: {
     width: "100%",
-    minHeight: 96,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    minHeight: 104,
+    borderRadius: 18,
+    borderWidth: 0,
     overflow: "hidden",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    position: "relative",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     ...cardShadow,
   },
   cardMobileCompact: {
-    minHeight: 88,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    minHeight: 96,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   cardMobileBody: {
     flexDirection: "row",
@@ -483,29 +531,32 @@ const styles = StyleSheet.create({
   cardMobileAside: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     flexShrink: 0,
   },
   arrowOrbMobile: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     flexShrink: 0,
   },
-  lottieSlot: {
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
+  arrowOrbDefault: {
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.cardWhite,
+  },
+  arrowOrbLocked: {
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surface,
   },
   cardCompact: {
-    minHeight: 100,
-    borderRadius: 12,
+    minHeight: 108,
+    borderRadius: 16,
   },
   cardSidebar: {
-    minHeight: 92,
+    minHeight: 100,
   },
   cardPressed: {
     opacity: 0.94,
@@ -515,16 +566,16 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    minHeight: 108,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    minHeight: 118,
   },
   cardBodySidebar: {
-    paddingHorizontal: 13,
-    paddingVertical: 12,
-    minHeight: 92,
-    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 100,
+    gap: 10,
   },
   textCol: {
     flex: 1,
@@ -537,31 +588,31 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   chip: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "700",
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   title: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.35,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   titleSidebar: {
     fontSize: 14,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   sub: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
     color: SUB_ON_WASH,
-    lineHeight: 15,
+    lineHeight: 16,
   },
   subSidebar: {
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 15,
   },
   illusWrap: {
     alignItems: "center",
@@ -572,9 +623,9 @@ const styles = StyleSheet.create({
     marginRight: 0,
   },
   arrowOrb: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,

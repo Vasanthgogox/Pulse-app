@@ -161,18 +161,21 @@ export function BusinessConnectionRequestModal({
   }, [visible, invite.id, invite.partnerOrgId, invite.verificationStatus]);
   useEffect(() => {
     if (visible) {
+      // Parent still wants the sheet open (including "next invite" after Later).
       dismissingRef.current = false;
       setShellVisible(true);
       dragY.setValue(0);
       setIsDragging(false);
       return;
     }
-    if (!dismissingRef.current) {
-      setShellVisible(false);
-      dragY.setValue(0);
-      setIsDragging(false);
-    }
-  }, [visible, dragY, invite.id]);
+    // Parent dismissed — close shell. Keep dismissingRef until here so an
+    // intermediate shellVisible=false render cannot race-reopen while visible
+    // was still true for a frame.
+    dismissingRef.current = false;
+    setShellVisible(false);
+    dragY.setValue(0);
+    setIsDragging(false);
+  }, [visible, dragY]);
 
   const resetDrag = useCallback(() => {
     Animated.spring(dragY, {
@@ -187,17 +190,17 @@ export function BusinessConnectionRequestModal({
   const requestDismiss = useCallback(() => {
     if (busy || dismissingRef.current) return;
     dismissingRef.current = true;
+    // Flip parent visibility first so the visible effect cannot reopen the shell.
+    onLater();
     Animated.timing(dragY, {
       toValue: 480,
       duration: 220,
       useNativeDriver: true,
     }).start(({ finished }) => {
-      dismissingRef.current = false;
       if (!finished) return;
       dragY.setValue(0);
       setIsDragging(false);
       setShellVisible(false);
-      onLater();
     });
   }, [busy, dragY, onLater]);
 

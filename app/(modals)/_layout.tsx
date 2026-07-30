@@ -49,7 +49,12 @@ export default function ModalsLayout() {
       />
       <Stack.Screen
         name="story-detail"
-        options={{ presentation: 'fullScreenModal', headerShown: false }}
+        options={{
+          presentation: "transparentModal",
+          headerShown: false,
+          contentStyle: { flex: 1, backgroundColor: "transparent" },
+          animation: "fade",
+        }}
       />
       <Stack.Screen
         name="chat"

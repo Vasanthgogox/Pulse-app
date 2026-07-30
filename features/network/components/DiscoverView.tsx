@@ -21,9 +21,12 @@ import {
 import {
   getNetworkHubGrowGridColumns,
   isNetworkHubSplitStacked,
+  NETWORK_HUB_DESKTOP_CATEGORY_LIMIT,
+  NETWORK_HUB_MOBILE_CATEGORY_LIMIT,
   NETWORK_HUB_GRID_GAP_PX,
   NETWORK_HUB_GRID_ROW_PADDING_H,
   NETWORK_HUB_SPLIT_GRID_COLUMNS,
+  SPLIT_STACK_BREAKPOINT,
 } from "@/features/network/constants/networkHubGrid";
 import { useNetworkDiscovery } from '@/features/network/hooks/useNetworkDiscovery';
 import type { DiscoverOrg } from '@/features/network/services/discover.service';
@@ -397,7 +400,14 @@ export function DiscoverView({
     () => getNetworkHubGrowGridColumns(windowWidth),
     [windowWidth],
   );
-  const growSectionLimit = growGridColumns * 2;
+  /** Desktop: 8 per category. Mobile: 6 per category. */
+  const growSectionLimit = useMemo(
+    () =>
+      windowWidth >= SPLIT_STACK_BREAKPOINT
+        ? NETWORK_HUB_DESKTOP_CATEGORY_LIMIT
+        : NETWORK_HUB_MOBILE_CATEGORY_LIMIT,
+    [windowWidth],
+  );
 
   const growNetworkRecommendations = useMemo(() => {
     const slots: ScoredOrg[] = [];

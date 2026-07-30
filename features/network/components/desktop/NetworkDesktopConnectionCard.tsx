@@ -95,68 +95,77 @@ export function NetworkDesktopConnectionCard({
   const ratingLabel = formatRating(ratingValue);
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${item.name}`}
-    >
-      <View style={styles.topMetaRow}>
-        <View style={styles.topMetaLeft}>
-          <View
-            style={[
-              styles.roleTag,
-              { backgroundColor: tone.bg, borderColor: tone.border },
-            ]}
-          >
-            <Text style={[styles.roleTagText, { color: tone.text }]}>{item.role}</Text>
+    <View style={styles.card}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.cardBody,
+          pressed && styles.cardPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${item.name}`}
+      >
+        <View style={styles.topMetaRow}>
+          <View style={styles.topMetaLeft}>
+            <View
+              style={[
+                styles.roleTag,
+                { backgroundColor: tone.bg, borderColor: tone.border },
+              ]}
+            >
+              <Text style={[styles.roleTagText, { color: tone.text }]}>
+                {item.role}
+              </Text>
+            </View>
+            {inApp ? (
+              <NetworkHubGlassBadge pill={INTEGRATED_PILL} size="compact" />
+            ) : null}
           </View>
-          {inApp ? (
-            <NetworkHubGlassBadge pill={INTEGRATED_PILL} size="compact" />
+          <View style={styles.ratingWrap}>
+            <NetworkDesktopSalesStars filledStars={filledStars} size={10} />
+            <Text
+              style={[
+                styles.ratingText,
+                ratingValue == null && styles.ratingTextEmpty,
+              ]}
+            >
+              {ratingLabel}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.avatarWrap}>
+          <PartyAvatar
+            name={item.name}
+            entityType={entityType}
+            avatarUrl={item.avatar_url}
+            avatarSeed={item.avatar_seed}
+            size={56}
+            shape="circle"
+          />
+          {inApp ? <View style={styles.onlineDot} /> : null}
+        </View>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>
+            {item.name}
+          </Text>
+          {isKycVerified || inApp ? (
+            <BadgeCheck size={14} color={Theme.darkGreen} strokeWidth={2.2} />
           ) : null}
         </View>
-        <View style={styles.ratingWrap}>
-          <NetworkDesktopSalesStars filledStars={filledStars} size={10} />
-          <Text
-            style={[
-              styles.ratingText,
-              ratingValue == null && styles.ratingTextEmpty,
-            ]}
-          >
-            {ratingLabel}
-          </Text>
+        <View style={styles.trustBadgesSlot}>
+          {item.role !== "DRIVER" ? (
+            <OrgVerificationBadges
+              verification={item}
+              compact
+              style={styles.trustBadgesRow}
+            />
+          ) : null}
         </View>
-      </View>
-
-      <View style={styles.avatarWrap}>
-        <PartyAvatar
-          name={item.name}
-          entityType={entityType}
-          avatarUrl={item.avatar_url}
-          avatarSeed={item.avatar_seed}
-          size={56}
-          shape="circle"
-        />
-        {inApp ? <View style={styles.onlineDot} /> : null}
-      </View>
-      <View style={styles.nameRow}>
-        <Text style={styles.name} numberOfLines={1}>
-          {item.name}
+        <Text style={styles.handle} numberOfLines={1}>
+          {handle}
         </Text>
-        {isKycVerified || inApp ? (
-          <BadgeCheck size={14} color={Theme.darkGreen} strokeWidth={2.2} />
-        ) : null}
-      </View>
-      {item.role !== "DRIVER" ? (
-        <OrgVerificationBadges
-          verification={item}
-          compact
-          style={styles.trustBadgesRow}
-        />
-      ) : null}
-      <Text style={styles.handle} numberOfLines={1}>
-        {handle}
-      </Text>
+      </Pressable>
 
       <View style={styles.footerRow}>
         <View
@@ -183,10 +192,7 @@ export function NetworkDesktopConnectionCard({
 
         {inApp && onChat ? (
           <Pressable
-            onPress={(e) => {
-              e?.stopPropagation?.();
-              onChat();
-            }}
+            onPress={onChat}
             style={({ pressed }) => [
               styles.actionBtn,
               styles.actionBtnChat,
@@ -204,10 +210,7 @@ export function NetworkDesktopConnectionCard({
           </View>
         ) : (
           <Pressable
-            onPress={(e) => {
-              e?.stopPropagation?.();
-              onInvite?.();
-            }}
+            onPress={() => onInvite?.()}
             disabled={inviteDisabled}
             style={({ pressed }) => [
               styles.actionBtn,
@@ -219,7 +222,7 @@ export function NetworkDesktopConnectionCard({
             accessibilityLabel={`Invite ${item.name}`}
           >
             {actionLoading ? (
-              <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+              <LoadingIndicator size="small" color={Theme.buttonPrimaryText} />
             ) : (
               <Text style={styles.actionBtnInviteText}>
                 {item.phone?.trim() ? "Invite" : "Add phone"}
@@ -228,6 +231,6 @@ export function NetworkDesktopConnectionCard({
           </Pressable>
         )}
       </View>
-    </Pressable>
+    </View>
   );
 }

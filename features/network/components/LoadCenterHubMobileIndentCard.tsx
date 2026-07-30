@@ -13,14 +13,16 @@ import {
 } from "@/components/hub/hubGridCardLayout";
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { PartyAvatar } from "@/components/PartyAvatar";
-import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { IndentHubPerforation } from "@/features/indents/components/IndentHubPerforation";
 import {
   indentReviewHubLayout,
 } from "@/features/indents/styles/indentReviewHubStyles";
 import { getIndentDisplayNumber, type IndentRow } from "@/features/indents";
-import type { LoadCenterTicketCommerce } from "@/features/network/utils/loadCenter.model";
+import type {
+  GetLoadSourceTag,
+  LoadCenterTicketCommerce,
+} from "@/features/network/utils/loadCenter.model";
 import { formatINR } from "@/lib/format";
 import { formatMobileTripSchedule } from "@/features/trips/components/TripsHubMobileTripCard";
 import type { LoadCenterTripAllocation } from "@/features/network/utils/loadCenterTripAllocation.util";
@@ -71,6 +73,9 @@ function quoteStatusPillStyles(status: string) {
   if (s === "rejected") {
     return { pill: styles.statusRejected, text: styles.statusRejectedText };
   }
+  if (s === "countered") {
+    return { pill: styles.statusCountered, text: styles.statusCounteredText };
+  }
   return { pill: styles.statusPending, text: styles.statusPendingText };
 }
 
@@ -85,6 +90,8 @@ export type LoadCenterHubMobileIndentCardProps = {
   rightFooterLabel: string;
   /** Travel-ticket stub: target rate / your quote (GET LOAD, claimed). */
   ticketCommerce?: LoadCenterTicketCommerce | null;
+  /** Network partner vs market discovery (Reach / ad). */
+  sourceTag?: GetLoadSourceTag | null;
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   organizationImageUrl?: string | null;
@@ -123,6 +130,7 @@ export function LoadCenterHubMobileIndentCard({
   leftFooterLabel,
   rightFooterLabel,
   ticketCommerce,
+  sourceTag = null,
   avatarUrl,
   avatarSeed,
   organizationImageUrl,
@@ -165,9 +173,11 @@ export function LoadCenterHubMobileIndentCard({
       : null;
   const quoteStatusNorm = (commerce?.quoteStatus ?? "").trim().toLowerCase();
   const statusStyles =
-    quoteStatusNorm && commerce?.kicker === "YOUR QUOTE"
+    quoteStatusNorm &&
+    (commerce?.kicker === "YOUR QUOTE" || commerce?.kicker === "COUNTER OFFER")
       ? quoteStatusPillStyles(quoteStatusNorm)
       : null;
+  const referenceLabel = commerce?.referenceLabel?.trim() || "Target";
   const rightCaption =
     commerce?.rightCaption?.trim() ||
     (!heroAmount ? rightFooterLabel : null);
@@ -214,7 +224,9 @@ export function LoadCenterHubMobileIndentCard({
                       ? "Awarded"
                       : quoteStatusNorm === "rejected"
                         ? "Rejected"
-                        : "Pending"}
+                        : quoteStatusNorm === "countered"
+                          ? "Countered"
+                          : "Pending"}
                   </Text>
                 </View>
               ) : null}
@@ -234,7 +246,7 @@ export function LoadCenterHubMobileIndentCard({
             </View>
             {referenceTarget ? (
               <Text style={styles.stubReference} numberOfLines={1}>
-                {`Target · ₹ ${referenceTarget}`}
+                {`${referenceLabel} · ₹ ${referenceTarget}`}
               </Text>
             ) : null}
           </View>
@@ -351,6 +363,33 @@ export function LoadCenterHubMobileIndentCard({
                 >
                   {displayName}
                 </Text>
+                {sourceTag ? (
+                  <View
+                    style={[
+                      styles.sourcePill,
+                      sourceTag === "network"
+                        ? styles.sourcePillNetwork
+                        : styles.sourcePillMarket,
+                    ]}
+                    accessibilityLabel={
+                      sourceTag === "network"
+                        ? "Network"
+                        : "Market through ad"
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.sourcePillText,
+                        sourceTag === "network"
+                          ? styles.sourcePillTextNetwork
+                          : styles.sourcePillTextMarket,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {sourceTag === "network" ? "Network" : "Market"}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
             <View style={styles.headMetaCol}>
@@ -470,7 +509,7 @@ const styles = StyleSheet.create({
   list: {
     width: "100%",
     gap: 0,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: 0,
   },
   cardWrap: {
     ...hubMobileListCanvasStyles.cardWrap,
@@ -586,6 +625,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     justifyContent: "center",
+    gap: 3,
   },
   brand: {
     fontSize: 12,
@@ -599,6 +639,35 @@ const styles = StyleSheet.create({
   brandHub: {
     fontSize: 12,
     lineHeight: 15,
+  },
+  sourcePill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 999,
+    flexShrink: 1,
+    maxWidth: "100%",
+  },
+  sourcePillNetwork: {
+    backgroundColor: Theme.loadStatusTabTrayBg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.loadStatusTabBorderSoft,
+  },
+  sourcePillMarket: {
+    backgroundColor: Theme.accentBrown,
+  },
+  sourcePillText: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    includeFontPadding: false,
+  },
+  sourcePillTextNetwork: {
+    color: Theme.pulseIndigo,
+  },
+  sourcePillTextMarket: {
+    color: Theme.textOnPrimary,
   },
   headMetaCol: {
     flexShrink: 0,
@@ -912,4 +981,6 @@ const styles = StyleSheet.create({
   statusAwardedText: { color: "#B45309" },
   statusRejected: { backgroundColor: "#FEE2E2" },
   statusRejectedText: { color: "#B91C1C" },
+  statusCountered: { backgroundColor: Theme.warningMuted },
+  statusCounteredText: { color: Theme.warning },
 });

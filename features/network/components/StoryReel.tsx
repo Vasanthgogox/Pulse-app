@@ -6,6 +6,7 @@ import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import { type PostRow } from "@/features/network/services/posts.service";
 import { splitLocationParts } from "@/features/network/utils/storyDisplay";
 import { recordReachEvent } from "@/features/reach/services/events.service";
@@ -13,7 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Plus } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 interface StoryReelProps {
@@ -59,7 +60,7 @@ const STORY_METRICS_DEFAULT: StoryMetrics = {
   plusSize: 14,
 };
 
-/** Desktop story column (embedded 80% row) — larger avatars and labels. */
+/** Desktop story strip — slightly larger avatars and labels. */
 const STORY_METRICS_EMBEDDED: StoryMetrics = {
   avatar: 72,
   ring: 84,
@@ -136,12 +137,18 @@ function StoryAvatar({
   name,
   avatarUrl,
   avatarSeed,
+  organizationImageUrl,
+  organizationAvatarSeed,
+  initialsColorSeed,
   entityType = "supplier" as const,
   size,
 }: {
   name: string;
   avatarUrl?: string | null;
   avatarSeed?: string | null;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  initialsColorSeed?: string | null;
   entityType?: "client" | "supplier" | "driver";
   size: number;
 }) {
@@ -150,6 +157,9 @@ function StoryAvatar({
       name={name}
       avatarUrl={avatarUrl}
       avatarSeed={avatarSeed}
+      organizationImageUrl={organizationImageUrl}
+      organizationAvatarSeed={organizationAvatarSeed}
+      initialsColorSeed={initialsColorSeed}
       entityType={entityType}
       size={size}
       style={styles.avatarPlain}
@@ -411,6 +421,7 @@ function BroadcastStory({
 export function StoryReel({
   posts,
   orgId,
+  orgName,
   onCreatePost,
   embedded = false,
   canCreatePost = true,
@@ -418,6 +429,7 @@ export function StoryReel({
 }: StoryReelProps) {
   const router = useRouter();
   const { profile } = useAuth();
+  const { currentOrganization } = useOrganization();
   const [seenKeys, setSeenKeys] = useState<Record<string, true>>({});
   const seenStorageKey = `q:stories:seen:${orgId ?? "global"}`;
   /** Impression (v1): sponsored story rendered into this strip — NOT "seen
@@ -517,6 +529,51 @@ export function StoryReel({
   const ownStoryQueueIds = ownStoryQueueResolved.map((s) => s.id).join(",");
   const hasOwnStories = ownStoryQueueResolved.length > 0;
 
+  /** Mine bubble is the org brand (logo), not the signed-in user's personal avatar. */
+  const mineAvatar = useMemo(() => {
+    const orgLogo =
+      (currentOrganization?.id === orgId
+        ? currentOrganization?.logo_url
+        : null
+      )?.trim() ||
+      (latestOwnStory?.org_avatar_url ?? "").trim() ||
+      null;
+    const orgSeed =
+      (latestOwnStory?.org_avatar_seed ?? "").trim() || null;
+    const name =
+      (orgName ?? "").trim() ||
+      (currentOrganization?.id === orgId
+        ? currentOrganization?.name
+        : null
+      )?.trim() ||
+      (latestOwnStory?.org_name ?? "").trim() ||
+      profile?.displayName?.trim() ||
+      profile?.full_name?.trim() ||
+      "Mine";
+    return {
+      name,
+      organizationImageUrl: orgLogo,
+      organizationAvatarSeed: orgSeed,
+      /** Personal photo only when the org has no logo yet. */
+      avatarUrl: orgLogo ? null : (profile?.avatar_url ?? null),
+      avatarSeed: orgLogo || orgSeed ? null : (profile?.avatar_seed ?? null),
+      initialsColorSeed: orgId ?? currentOrganization?.id ?? null,
+    };
+  }, [
+    currentOrganization?.id,
+    currentOrganization?.logo_url,
+    currentOrganization?.name,
+    latestOwnStory?.org_avatar_seed,
+    latestOwnStory?.org_avatar_url,
+    latestOwnStory?.org_name,
+    orgId,
+    orgName,
+    profile?.avatar_seed,
+    profile?.avatar_url,
+    profile?.displayName,
+    profile?.full_name,
+  ]);
+
   useEffect(() => {
     if (!orgId) return;
     for (const post of stories) {
@@ -598,15 +655,22 @@ export function StoryReel({
           }
         >
           <StoryAvatar
-            name={profile?.displayName ?? profile?.full_name ?? "Mine"}
-            avatarUrl={profile?.avatar_url ?? null}
-            avatarSeed={profile?.avatar_seed ?? null}
+            name={mineAvatar.name}
+            organizationImageUrl={mineAvatar.organizationImageUrl}
+            organizationAvatarSeed={mineAvatar.organizationAvatarSeed}
+            avatarUrl={mineAvatar.avatarUrl}
+            avatarSeed={mineAvatar.avatarSeed}
+            initialsColorSeed={mineAvatar.initialsColorSeed}
             entityType="supplier"
             size={metrics.avatar}
           />
           </StoryBubble>
           <View
-            style={[styles.pulseStoryWatermark, embedded && styles.pulseStoryWatermarkEmbedded]}
+            style={[
+              styles.pulseStoryWatermark,
+              embedded && styles.pulseStoryWatermarkEmbedded,
+              { marginTop: Math.max(0, (metrics.ring - (embedded ? 48 : 38)) / 2) },
+            ]}
             pointerEvents="none"
           >
             <PulseBrandMark
@@ -652,10 +716,8 @@ const styles = StyleSheet.create({
   },
   wrapEmbedded: {
     paddingTop: 10,
-    paddingBottom: 14,
-    flex: 1,
+    paddingBottom: 12,
     minWidth: 0,
-    justifyContent: "center",
     overflow: "visible",
   },
   scroll: {
@@ -669,35 +731,35 @@ const styles = StyleSheet.create({
     overflow: "visible",
   },
   scrollEmbedded: {
+    // Parent (Network top cluster) already applies screen horizontal inset.
     paddingHorizontal: 0,
-    paddingRight: 8,
+    paddingRight: 4,
   },
   scrollEmbeddedDesktop: {
-    gap: 14,
-    paddingTop: 4,
-    paddingBottom: 10,
+    gap: 12,
+    paddingTop: 2,
+    paddingBottom: 8,
   },
   mineCluster: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
     marginRight: 4,
     flexShrink: 0,
     paddingVertical: 2,
   },
   mineClusterEmbedded: {
-    gap: 14,
+    gap: 12,
     marginRight: 8,
     paddingVertical: 4,
   },
   pulseStoryWatermark: {
-    alignSelf: "center",
     justifyContent: "center",
-    opacity: 0.11,
+    opacity: 0.14,
     minWidth: 52,
   },
   pulseStoryWatermarkEmbedded: {
-    opacity: 0.12,
+    opacity: 0.14,
     minWidth: 64,
   },
   watermarkPulse: {
@@ -771,7 +833,7 @@ const styles = StyleSheet.create({
   },
   loadPreviewRoute: {
     fontWeight: "600",
-    color: Theme.textSecondary,
+    color: Theme.textPrimary,
     textAlign: "center",
     letterSpacing: -0.1,
     width: "100%",

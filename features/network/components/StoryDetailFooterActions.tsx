@@ -2,16 +2,16 @@
  * Story viewer footer — refined Load Center action buttons.
  */
 import Theme from "@/constants/Theme";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Feather from "@expo/vector-icons/Feather";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { ArrowUpRight, Eye, Rocket } from "lucide-react-native";
 import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    useWindowDimensions,
+    View,
 } from "react-native";
 
 const INK = Theme.loadAddButtonText;

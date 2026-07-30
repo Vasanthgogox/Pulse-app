@@ -9,13 +9,17 @@ import {
   deleteClientLaneRate,
   updateClientLaneRate,
 } from "@/features/clients/services/clientLaneRates.service";
-import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { formatWarehouseLaneLabel } from "@/features/clients/utils/clientManagement.util";
+import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
+import { TripCommodityFields } from "@/features/trips/components/add-trip/TripCommodityFields";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { formatINRChip } from "@/lib/format";
+import { formatCityStateLabel } from "@/lib/placeCityState.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -77,12 +81,20 @@ function lanePricingType(lane: ClientLaneRate): "per_trip" | "per_ton" {
   return "per_trip";
 }
 
-function laneToDraft(lane: ClientLaneRate): LaneDraft {
+function laneToDraft(
+  lane: ClientLaneRate,
+  warehouses: ClientWarehouseExtended[],
+): LaneDraft {
   const price = lanePrice(lane);
+  const hub = lane.origin_warehouse_id
+    ? warehouses.find((w) => w.id === lane.origin_warehouse_id)
+    : null;
   return {
     origin_warehouse_id: lane.origin_warehouse_id,
-    origin_label: lane.origin_label,
-    destination_label: lane.destination_label,
+    origin_label: hub
+      ? formatWarehouseLaneLabel(hub)
+      : formatCityStateLabel(lane.origin_label),
+    destination_label: formatCityStateLabel(lane.destination_label),
     vehicle_type: lane.vehicle_type ?? "",
     default_load_type: lane.default_load_type ?? "",
     default_load_tons:
@@ -151,7 +163,7 @@ export function ClientProfileLanesEditSection({
 
   const startEdit = (lane: ClientLaneRate) => {
     setEditingId(lane.id);
-    setDraft(laneToDraft(lane));
+    setDraft(laneToDraft(lane, warehouses));
     setAddingLane(false);
   };
 
@@ -176,7 +188,7 @@ export function ClientProfileLanesEditSection({
   const applyLaneTag = (lane: ClientLaneRate) => {
     setEditingId(lane.id);
     setAddingLane(false);
-    setDraft(laneToDraft(lane));
+    setDraft(laneToDraft(lane, warehouses));
   };
 
   const startBlankLaneForHub = () => {
@@ -201,7 +213,12 @@ export function ClientProfileLanesEditSection({
   );
 
   const handleSave = async () => {
-    const originLabel = draft.origin_label.trim();
+    const hub = draft.origin_warehouse_id
+      ? warehouses.find((w) => w.id === draft.origin_warehouse_id)
+      : null;
+    const originLabel = hub
+      ? formatWarehouseLaneLabel(hub)
+      : draft.origin_label.trim();
     const destination = draft.destination_label.trim();
     if (!originLabel || !destination) {
       Alert.alert("Validation", "Pickup area and destination are required.");
@@ -230,8 +247,8 @@ export function ClientProfileLanesEditSection({
     setSaving(true);
     const payload = {
       origin_warehouse_id: draft.origin_warehouse_id,
-      origin_label: originLabel,
-      destination_label: destination,
+      origin_label: hub ? originLabel : formatCityStateLabel(originLabel) || originLabel,
+      destination_label: formatCityStateLabel(destination) || destination,
       vehicle_type: draft.vehicle_type.trim() || null,
       /** Both feed the trip wizard's Commodity step via buildClientLanePrefill. */
       default_load_type: draft.default_load_type.trim() || null,
@@ -326,10 +343,10 @@ export function ClientProfileLanesEditSection({
               return (
                 <View key={lane.id} style={styles.tr}>
                   <Text style={[styles.td, styles.tdPickup, styles.colPickup]} numberOfLines={2}>
-                    {lane.origin_label}
+                    {formatCityStateLabel(lane.origin_label) || lane.origin_label}
                   </Text>
                   <Text style={[styles.td, styles.tdDest, styles.colDest]} numberOfLines={2}>
-                    {lane.destination_label}
+                    {formatCityStateLabel(lane.destination_label) || lane.destination_label}
                   </Text>
                   <Text style={[styles.td, styles.tdVehicle, styles.colVehicle]} numberOfLines={1}>
                     {vehicleLabel || "—"}
@@ -482,7 +499,9 @@ export function ClientProfileLanesEditSection({
                             style={[styles.laneTagDest, active && styles.laneTagTextSelected]}
                             numberOfLines={1}
                           >
-                            {(lane.destination_label ?? "").trim() || "Destination"}
+                            {formatCityStateLabel(lane.destination_label) ||
+                              (lane.destination_label ?? "").trim() ||
+                              "Destination"}
                           </Text>
                           {(lane.vehicle_type ?? "").trim() ? (
                             <Text
@@ -506,23 +525,65 @@ export function ClientProfileLanesEditSection({
             </View>
           ) : null}
 
-          <Field
-            label="Pickup Area *"
-            value={draft.origin_label}
-            onChangeText={(v) => setDraft((d) => ({ ...d, origin_label: v }))}
-            placeholder="e.g. Chennai"
-          />
-          <Field
-            label="Destination *"
-            value={draft.destination_label}
-            onChangeText={(v) => setDraft((d) => ({ ...d, destination_label: v }))}
-            placeholder="e.g. Bangalore"
-          />
-          <Field
-            label="Vehicle Type"
-            value={draft.vehicle_type}
-            onChangeText={(v) => setDraft((d) => ({ ...d, vehicle_type: v }))}
-            placeholder="e.g. 32ft, 10T, Open Body"
+          {draft.origin_warehouse_id ? (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Pickup Area *</Text>
+              <View style={[styles.fieldInput, styles.fieldInputLocked]}>
+                <Text style={styles.lockedFieldText} numberOfLines={2}>
+                  {draft.origin_label || "—"}
+                </Text>
+              </View>
+              <Text style={styles.lockedFieldHint}>Locked to selected hub (city + state)</Text>
+            </View>
+          ) : (
+            <View style={styles.mapFieldWrap}>
+              <LocationSearchField
+                label="Pickup Area *"
+                placeholder="Search city or area"
+                value={draft.origin_label}
+                onChangeText={(v) => setDraft((d) => ({ ...d, origin_label: v }))}
+                onSelectPlace={(label) =>
+                  setDraft((d) => ({
+                    ...d,
+                    origin_label: formatCityStateLabel(label) || label,
+                  }))
+                }
+                compact
+                labelStyle={styles.fieldLabel}
+                inputStyle={styles.fieldInput}
+              />
+            </View>
+          )}
+          <View style={styles.mapFieldWrap}>
+            <LocationSearchField
+              label="Destination *"
+              placeholder="Search city or area"
+              value={draft.destination_label}
+              onChangeText={(v) => setDraft((d) => ({ ...d, destination_label: v }))}
+              onSelectPlace={(label) =>
+                setDraft((d) => ({
+                  ...d,
+                  destination_label: formatCityStateLabel(label) || label,
+                }))
+              }
+              compact
+              labelStyle={styles.fieldLabel}
+              inputStyle={styles.fieldInput}
+            />
+          </View>
+          <TripCommodityFields
+            vehicleType={draft.vehicle_type}
+            loadType=""
+            tons=""
+            onVehicleTypeChange={(v) => setDraft((d) => ({ ...d, vehicle_type: v }))}
+            onLoadTypeChange={() => {}}
+            onTonsChange={() => {}}
+            showTons={false}
+            showProductType={false}
+            useFormChrome
+            preferWebSelect={Platform.OS === "web"}
+            fieldLabelStyle={styles.fieldLabel}
+            fieldInputStyle={styles.fieldInput}
           />
           <Field
             label="Product Type"
@@ -700,6 +761,7 @@ const styles = StyleSheet.create({
   tableHead: {
     flexDirection: "row",
     alignItems: "center",
+    width: "100%",
     backgroundColor: Theme.textPrimaryDark,
     paddingVertical: 11,
     paddingHorizontal: 14,
@@ -729,6 +791,7 @@ const styles = StyleSheet.create({
   tr: {
     flexDirection: "row",
     alignItems: "center",
+    width: "100%",
     paddingVertical: 12,
     paddingHorizontal: 14,
     gap: 10,
@@ -835,6 +898,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderInput,
     borderRadius: 6,
+    width: "100%",
+  },
+  fieldInputLocked: {
+    backgroundColor: Theme.borderLight,
+    justifyContent: "center",
+    minHeight: 36,
+  },
+  lockedFieldText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  lockedFieldHint: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textSection,
+  },
+  mapFieldWrap: {
+    marginBottom: 10,
     width: "100%",
   },
   chipScroll: { flexGrow: 0 },

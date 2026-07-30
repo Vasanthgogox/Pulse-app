@@ -21,13 +21,13 @@ import {
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
-  ArrowLeft,
   BadgeCheck,
   Building2,
   Camera,
   Mail,
   MapPin,
   Sparkles,
+  X,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -68,11 +68,18 @@ export function NetworkDesktopHubHero({
   const { profile } = useAuth();
   const { width } = useWindowDimensions();
   const router = useRouter();
-  const canGoBack = router.canGoBack();
   const isNarrow = width < 720;
   const officeMapQ = useOrganizationOfficeMap(orgId);
   const { logoUri, logoStoragePath, uploading, canEdit, onLogoPress } =
     useWorkspaceOrgLogo();
+
+  const closePage = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/(tabs)/network" as Parameters<typeof router.replace>[0]);
+  };
 
   const [userAvatarUri, setUserAvatarUri] = useState<string | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
@@ -175,6 +182,19 @@ export function NetworkDesktopHubHero({
       <View style={[styles.hero, heroLocal.heroNarrow]}>
         <View style={styles.heroHexOverlay} pointerEvents="none" />
         <View style={heroLocal.narrowInner}>
+          <Pressable
+            onPress={closePage}
+            style={({ pressed }) => [
+              styles.heroBackCorner,
+              heroLocal.narrowClose,
+              pressed && { opacity: 0.85 },
+            ]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Close company profile"
+          >
+            <X size={16} color={METRONIC.text} strokeWidth={2.4} />
+          </Pressable>
           {avatarNode}
           <View style={heroLocal.narrowTextCol}>
             <View style={heroLocal.narrowNameRow}>
@@ -237,17 +257,15 @@ export function NetworkDesktopHubHero({
     <View style={styles.hero}>
       <View style={styles.heroHexOverlay} pointerEvents="none" />
       <View style={styles.heroInner}>
-        {canGoBack ? (
-          <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => [styles.heroBackCorner, pressed && { opacity: 0.85 }]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <ArrowLeft size={16} color={METRONIC.text} strokeWidth={2.4} />
-          </Pressable>
-        ) : null}
+        <Pressable
+          onPress={closePage}
+          style={({ pressed }) => [styles.heroBackCorner, pressed && { opacity: 0.85 }]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Close company profile"
+        >
+          <X size={16} color={METRONIC.text} strokeWidth={2.4} />
+        </Pressable>
         <Pressable
           onPress={onProfilePress}
           style={({ pressed }) => [styles.heroWelcomeCorner, pressed && { opacity: 0.9 }]}
@@ -330,6 +348,12 @@ const heroLocal = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 10,
     paddingHorizontal: 14,
+  },
+  narrowClose: {
+    position: "relative",
+    top: 0,
+    left: 0,
+    flexShrink: 0,
   },
   narrowInner: {
     flexDirection: "row",

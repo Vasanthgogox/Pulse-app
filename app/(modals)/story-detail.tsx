@@ -2,6 +2,8 @@ import { LazySuspenseInlineFallback } from '@/components/LazySuspenseFallback';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { StoryMobilePopupShell } from '@/features/network/components/StoryMobilePopupShell';
+import StoryDetailScreen from '@/features/network/screens/StoryDetailScreen';
 import {
   checkOrgsConnected,
   getStoryClosedInfo,
@@ -20,11 +22,9 @@ import {
   Truck,
   XCircle,
 } from 'lucide-react-native';
-import { lazy, Suspense, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const StoryDetailScreen = lazy(() => import('@/features/network/screens/StoryDetailScreen'));
 
 function isPreviewExpired(preview: StoryPreviewRow): boolean {
   if (!preview.is_active) return true;
@@ -87,6 +87,7 @@ function StoryClosedView({
   const insets = useSafeAreaInsets();
   const copy = CLOSED_COPY[reason];
   return (
+    <StoryMobilePopupShell onBackdropPress={onGoHome}>
     <View
       style={[
         styles.container,
@@ -114,6 +115,7 @@ function StoryClosedView({
         </Pressable>
       </View>
     </View>
+    </StoryMobilePopupShell>
   );
 }
 
@@ -131,6 +133,7 @@ function PreviewShell({
       : null;
 
   return (
+    <StoryMobilePopupShell>
     <View style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
       <View style={styles.card}>
         <View style={styles.iconWrap}>
@@ -157,6 +160,7 @@ function PreviewShell({
       </View>
       {children}
     </View>
+    </StoryMobilePopupShell>
   );
 }
 
@@ -213,7 +217,11 @@ export default function StoryDetailRoute() {
   }, [params]);
 
   if (status === 'restoring' || previewQ.isLoading) {
-    return <LazySuspenseInlineFallback />;
+    return (
+      <StoryMobilePopupShell onBackdropPress={() => router.back()}>
+        <LazySuspenseInlineFallback />
+      </StoryMobilePopupShell>
+    );
   }
 
   const preview = previewQ.data;
@@ -227,7 +235,11 @@ export default function StoryDetailRoute() {
 
   if (storyClosed && !isOwnStory) {
     if (closedInfoQ.isLoading) {
-      return <LazySuspenseInlineFallback />;
+      return (
+        <StoryMobilePopupShell onBackdropPress={() => router.back()}>
+          <LazySuspenseInlineFallback />
+        </StoryMobilePopupShell>
+      );
     }
     return (
       <StoryClosedView
@@ -238,7 +250,11 @@ export default function StoryDetailRoute() {
   }
 
   if (!preview) {
-    return <LazySuspenseInlineFallback />;
+    return (
+      <StoryMobilePopupShell onBackdropPress={() => router.back()}>
+        <LazySuspenseInlineFallback />
+      </StoryMobilePopupShell>
+    );
   }
 
   if (!user) {
@@ -255,7 +271,11 @@ export default function StoryDetailRoute() {
   }
 
   if (connectionQ.isLoading) {
-    return <LazySuspenseInlineFallback />;
+    return (
+      <StoryMobilePopupShell onBackdropPress={() => router.back()}>
+        <LazySuspenseInlineFallback />
+      </StoryMobilePopupShell>
+    );
   }
 
   if (!connectionQ.data) {
@@ -268,11 +288,7 @@ export default function StoryDetailRoute() {
     );
   }
 
-  return (
-    <Suspense fallback={<LazySuspenseInlineFallback />}>
-      <StoryDetailScreen />
-    </Suspense>
-  );
+  return <StoryDetailScreen />;
 }
 
 const styles = StyleSheet.create({

@@ -258,20 +258,24 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   }, [activeItem, clearInviteDeferral]);
 
   const handleLater = useCallback(() => {
-    if (!activeItem || !orgId) return;
-    const snoozedId = activeItem.indent.id;
+    if (!orgId || visibleQueue.length === 0) return;
     const snoozedAtMs = Date.now();
-    setSessionCollapsedIndentIds((prev) => {
-      if (!prev.has(snoozedId)) return prev;
-      const next = new Set(prev);
-      next.delete(snoozedId);
+    // One Later dismisses every pending award popup for the cooldown window —
+    // otherwise the next queue item immediately reopens the full modal.
+    setSnoozeByIndentId((prev) => {
+      const next = { ...prev };
+      for (const item of visibleQueue) {
+        next[item.indent.id] = snoozedAtMs;
+      }
       return next;
     });
+    for (const item of visibleQueue) {
+      saveDeploySnooze(orgId, item.indent.id, snoozedAtMs);
+    }
+    setSessionCollapsedIndentIds(new Set());
     setMinimized(false);
-    setExplicitlyExpandedIndentId((prev) => (prev === snoozedId ? null : prev));
-    setSnoozeByIndentId((prev) => ({ ...prev, [snoozedId]: snoozedAtMs }));
-    saveDeploySnooze(orgId, snoozedId, snoozedAtMs);
-  }, [activeItem, orgId]);
+    setExplicitlyExpandedIndentId(null);
+  }, [orgId, visibleQueue]);
 
   const handleAssign = useCallback(() => {
     if (!activeItem) return;

@@ -162,18 +162,17 @@ function InviteSignalRow({
       }}
       isUnread={tab === "received"}
       onPress={canOpenDetail ? () => onOpenInviteDetail?.(item) : undefined}
+      headerEnd={
+        item.kind !== "driver" ? (
+          <OrgVerificationBadges
+            verification={{ verificationStatus: item.verificationStatus }}
+            compact
+            style={{ justifyContent: "flex-end" }}
+          />
+        ) : undefined
+      }
       footer={
-        <>
-          {item.kind !== "driver" ? (
-            <View style={{ marginBottom: 8 }}>
-              <OrgVerificationBadges
-                verification={{ verificationStatus: item.verificationStatus }}
-                compact
-                style={{ justifyContent: "flex-start" }}
-              />
-            </View>
-          ) : null}
-          {tab === "received" ? (
+        tab === "received" ? (
           <RegistryCardActions>
             <RegistryGhostButton
               label="Decline"
@@ -194,8 +193,7 @@ function InviteSignalRow({
               disabled={busy}
             />
           </RegistryCardActions>
-        )}
-        </>
+        )
       }
     />
   );
@@ -258,27 +256,29 @@ function InviteGridCard({
           ) : null}
         </View>
         <View style={styles.gridTextCol}>
-          <Text style={styles.gridHeadline} numberOfLines={3}>
-            <Text style={styles.gridActor}>{item.name}</Text>
-            <Text style={styles.gridAction}> {actionText}</Text>
-            {highlightText ? (
-              <Text style={styles.gridHighlight}> {highlightText}</Text>
+          <View style={styles.gridHeadlineRow}>
+            <Text style={styles.gridHeadline} numberOfLines={3}>
+              <Text style={styles.gridActor}>{item.name}</Text>
+              <Text style={styles.gridAction}> {actionText}</Text>
+              {highlightText ? (
+                <Text style={styles.gridHighlight}> {highlightText}</Text>
+              ) : null}
+              {trailingText ? (
+                <Text style={styles.gridAction}> {trailingText}</Text>
+              ) : null}
+            </Text>
+            {item.kind !== "driver" ? (
+              <OrgVerificationBadges
+                verification={{ verificationStatus: item.verificationStatus }}
+                compact
+                style={styles.gridBadges}
+              />
             ) : null}
-            {trailingText ? (
-              <Text style={styles.gridAction}> {trailingText}</Text>
-            ) : null}
-          </Text>
+          </View>
           <Text style={styles.gridMeta} numberOfLines={1}>
             {formatRelativeTime(item.createdAt)}
             <Text style={styles.gridMetaContext}> · {inviteContextLabel(item)}</Text>
           </Text>
-          {item.kind !== "driver" ? (
-            <OrgVerificationBadges
-              verification={{ verificationStatus: item.verificationStatus }}
-              compact
-              style={{ marginTop: 6, justifyContent: "flex-start" }}
-            />
-          ) : null}
         </View>
       </View>
 
@@ -760,10 +760,23 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 3,
   },
+  gridHeadlineRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    width: "100%",
+  },
   gridHeadline: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 11,
     lineHeight: 16,
     color: METRONIC.primaryBtn,
+  },
+  gridBadges: {
+    flexShrink: 0,
+    justifyContent: "flex-end" as const,
+    maxWidth: "48%",
   },
   gridActor: {
     fontWeight: "600",

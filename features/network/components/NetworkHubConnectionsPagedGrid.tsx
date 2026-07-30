@@ -34,6 +34,10 @@ export type NetworkHubConnectionsPagedGridProps<T> = {
   resetKey: string;
   keyExtractor: (item: T) => string;
   renderItem: (item: T) => ReactNode;
+  /** Fires when the visible page of items changes (for synced tables / counts). */
+  onVisiblePageChange?: (items: T[]) => void;
+  /** Override default horizontal grid padding. */
+  contentPaddingHorizontal?: number;
 };
 
 function chunkRow<T>(items: T[], columns: number): (T | null)[] {
@@ -58,6 +62,8 @@ export function NetworkHubConnectionsPagedGrid<T>({
   resetKey,
   keyExtractor,
   renderItem,
+  onVisiblePageChange,
+  contentPaddingHorizontal = NETWORK_HUB_GRID_ROW_PADDING_H,
 }: NetworkHubConnectionsPagedGridProps<T>) {
   const { t } = useLanguage();
   const [page, setPage] = useState(0);
@@ -70,6 +76,12 @@ export function NetworkHubConnectionsPagedGrid<T>({
     () => buildPages(items, pageSize, pageCount),
     [items, pageSize, pageCount],
   );
+
+  const visiblePageItems = pages[Math.min(page, pageCount - 1)] ?? [];
+
+  useEffect(() => {
+    onVisiblePageChange?.(visiblePageItems);
+  }, [visiblePageItems, onVisiblePageChange]);
 
   const singleColumn = columns === 1;
 
@@ -130,7 +142,13 @@ export function NetworkHubConnectionsPagedGrid<T>({
       }
 
       return (
-        <View style={[styles.grid, rows >= 2 && styles.gridTwoRow]}>
+        <View
+          style={[
+            styles.grid,
+            rows >= 2 && styles.gridTwoRow,
+            { paddingHorizontal: contentPaddingHorizontal },
+          ]}
+        >
           {gridRows.map((row, rowIndex) => (
             <View
               key={`hub-page-row-${rowIndex}`}
@@ -153,7 +171,7 @@ export function NetworkHubConnectionsPagedGrid<T>({
         </View>
       );
     },
-    [columns, keyExtractor, renderItem, rows, singleColumn],
+    [columns, contentPaddingHorizontal, keyExtractor, renderItem, rows, singleColumn],
   );
 
   if (items.length === 0) {
@@ -274,7 +292,6 @@ const styles = StyleSheet.create({
   },
   grid: {
     width: "100%",
-    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
     gap: NETWORK_HUB_GRID_GAP_PX,
   },
   gridTwoRow: {
@@ -288,12 +305,13 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   rowHubTiles: {
-    alignItems: "flex-start",
+    alignItems: "stretch",
     gap: 12,
   },
   cell: {
     flex: 1,
     minWidth: 0,
+    alignSelf: "stretch",
     overflow: "hidden",
   },
   nativeList: {

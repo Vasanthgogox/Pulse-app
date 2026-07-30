@@ -17,11 +17,10 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { Alert, AppState, Platform, type AppStateStatus } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 type DriverInviteModalContextValue = {
   allInvites: DriverInviteRow[];
@@ -64,7 +63,6 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
   const [busyId, setBusyId] = useState<string | null>(null);
   const [declineTarget, setDeclineTarget] = useState<DriverInviteRow | null>(null);
   const [fleetConnectionRevision, setFleetConnectionRevision] = useState(0);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const bumpFleetConnectionRevision = useCallback(() => {
     setFleetConnectionRevision((n) => n + 1);
@@ -87,28 +85,17 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
     console.warn('[DriverInviteModal] invites query:', msg);
   }, [isError, error]);
 
-  /** Brief tab return: clear snooze only. Significant resume: invalidate invites. */
+  /** Significant resume only — brief inactive→active must not clear Later snooze. */
   useEffect(() => {
     if (!uid) return;
 
-    const onAppStateChange = (nextState: AppStateStatus) => {
-      const prev = appStateRef.current;
-      appStateRef.current = nextState;
-      const becameActive =
-        nextState === 'active' && (prev === 'background' || prev === 'inactive');
-      if (becameActive) clearSessionSnooze();
-    };
-
-    const sub = AppState.addEventListener('change', onAppStateChange);
     const unsubResume = subscribeSignificantAppResume(() => {
-      clearSessionSnooze();
       invalidateInvites();
     });
     return () => {
-      sub.remove();
       unsubResume();
     };
-  }, [uid, clearSessionSnooze, invalidateInvites]);
+  }, [uid, invalidateInvites]);
 
   /** Event-driven refresh when fleet sends or updates an invitation. */
   useEffect(() => {
@@ -154,9 +141,13 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
   }, [pendingCount, refreshInvites, clearSessionSnooze]);
 
   const handleLater = useCallback(() => {
-    if (!activeInvite) return;
-    setSessionSnoozedIds((prev) => new Set(prev).add(activeInvite.id));
-  }, [activeInvite]);
+    // Snooze every currently visible pending invite so Later is one tap.
+    setSessionSnoozedIds((prev) => {
+      const next = new Set(prev);
+      for (const invite of visiblePendingInvites) next.add(invite.id);
+      return next;
+    });
+  }, [visiblePendingInvites]);
 
   const handleAccept = useCallback(async () => {
     if (!activeInvite) return;

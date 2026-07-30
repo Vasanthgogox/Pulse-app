@@ -4,11 +4,14 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import {
+  StoryFlowSheetPortal,
+  useStoryPhoneFrameMetrics,
+} from "@/features/network/components/StoryMobilePopupShell";
 import type { StoryViewRow } from "@/features/network/services/story-views.service";
 import { Eye, X } from "lucide-react-native";
 import {
   ActivityIndicator,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -55,13 +58,17 @@ export function StoryViewersSheet({
 }: StoryViewersSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
+  const { phonePopup, sheetBottomPad } = useStoryPhoneFrameMetrics();
   const listMaxHeight = Math.min(views.length * 58 + 8, windowHeight * 0.32);
+  const bottomPad = sheetBottomPad ?? insets.bottom + 14;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close viewers" />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
+    <StoryFlowSheetPortal
+      visible={visible}
+      onClose={onClose}
+      accessibilityLabel="Close viewers"
+    >
+      <View style={[styles.sheet, phonePopup && styles.sheetPhone, { paddingBottom: bottomPad }]}>
           <View style={styles.handle} />
 
           <View style={styles.header}>
@@ -123,18 +130,12 @@ export function StoryViewersSheet({
               ))}
             </ScrollView>
           )}
-        </View>
       </View>
-    </Modal>
+    </StoryFlowSheetPortal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(77, 54, 54, 0.32)",
-    justifyContent: "flex-end",
-  },
   sheet: {
     width: "100%",
     backgroundColor: Theme.cardWhite,
@@ -156,6 +157,9 @@ const styles = StyleSheet.create({
       android: { elevation: 16 },
       default: {},
     }),
+  },
+  sheetPhone: {
+    maxHeight: "88%",
   },
   handle: {
     width: 32,

@@ -103,13 +103,17 @@ export const ROUTES = {
       | "sales"
       | "goals"
       | "asset"
+      | "network"
       | "connections"
       | "grow"
       | "chat" = "details",
-  ) =>
-    tab === "details"
+  ) => {
+    const normalized =
+      tab === "connections" || tab === "grow" ? "network" : tab;
+    return normalized === "details"
       ? ("/(tabs)/network/hub" as const)
-      : (`/(tabs)/network/hub?tab=${tab}` as const),
+      : (`/(tabs)/network/hub?tab=${normalized}` as const);
+  },
   /** Business intelligence command center with cross-filter analytics. */
   BUSINESS_PULSE:    '/business-pulse'    as const,
   /** Personal identity: name, email, phone, personal avatar */

@@ -10,6 +10,7 @@ import { NetworkDesktopConnectionCard } from "@/features/network/components/desk
 import { NetworkHubConnectionsPagedGrid } from "@/features/network/components/NetworkHubConnectionsPagedGrid";
 import {
   getNetworkHubConnectionsLayout,
+  getNetworkHubMetronicConnectionsLayout,
   NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS,
   SPLIT_STACK_BREAKPOINT,
   NETWORK_HUB_GRID_GAP_PX,
@@ -88,8 +89,12 @@ interface ConnectionsViewProps {
   desktopMetronicGrid?: boolean;
   /** Desktop Metronic — single row, 4 visible, horizontal scroll. */
   desktopMetronicHorizontalScroll?: boolean;
+  /** Hub sort: recommended (default name), most trips, or A–Z. */
+  hubSortMode?: "recommended" | "active" | "alpha";
   /** Open integrated partner chat (desktop hub flex panel). */
   onChatIntegrated?: (item: ConnectedOrg) => void;
+  /** Visible Metronic / hub page (2 rows) — keep partners table in sync. */
+  onVisiblePageChange?: (items: ConnectedOrg[]) => void;
 }
 
 const COVER_TOKENS = [
@@ -468,7 +473,9 @@ export function ConnectionsView({
   hubFilter,
   desktopMetronicGrid = false,
   desktopMetronicHorizontalScroll = false,
+  hubSortMode = "recommended",
   onChatIntegrated,
+  onVisiblePageChange,
 }: ConnectionsViewProps) {
   const windowWidth = useWebLayoutWidth();
   const [search, setSearch] = useState("");
@@ -1002,14 +1009,21 @@ export function ConnectionsView({
         total_trips: tripCountByDriverId.get(d.id) ?? null,
       }));
 
-    let all = [...clients, ...suppliers, ...drivers].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
+    let all = [...clients, ...suppliers, ...drivers];
     if (effectiveFilter !== "ALL")
       all = all.filter((c) => c.role === effectiveFilter);
     if (effectiveSearch.trim()) {
       const q = effectiveSearch.toLowerCase();
       all = all.filter((c) => c.name.toLowerCase().includes(q));
+    }
+    if (hubSortMode === "active") {
+      all.sort(
+        (a, b) =>
+          (b.total_trips ?? 0) - (a.total_trips ?? 0) ||
+          a.name.localeCompare(b.name),
+      );
+    } else {
+      all.sort((a, b) => a.name.localeCompare(b.name));
     }
     return all;
   }, [
@@ -1018,6 +1032,7 @@ export function ConnectionsView({
     driversQ.data,
     effectiveSearch,
     effectiveFilter,
+    hubSortMode,
     clientRatingsById,
     supplierRatingsById,
     driverRatingsById,
@@ -1035,7 +1050,12 @@ export function ConnectionsView({
     () => getNetworkHubConnectionsLayout(windowWidth, { nativeApp: isNativeApp }),
     [windowWidth, isNativeApp],
   );
+  const metronicConnectionsLayout = useMemo(
+    () => getNetworkHubMetronicConnectionsLayout(windowWidth),
+    [windowWidth],
+  );
   const connectionsPaginationKey = `${effectiveFilter}:${effectiveSearch}:${hubConnectionsLayout.columns}x${hubConnectionsLayout.rows}`;
+  const metronicPaginationKey = `${effectiveFilter}:${effectiveSearch}:${metronicConnectionsLayout.columns}x${metronicConnectionsLayout.rows}`;
 
   const inviteOffAppParty = async (item: ConnectedOrg) => {
     if (item.is_integrated) return;
@@ -1096,42 +1116,28 @@ export function ConnectionsView({
     />
   );
 
-  const metronicRows = useMemo(() => {
-    const cols = 4;
-    const rows: ConnectedOrg[][] = [];
-    for (let i = 0; i < connections.length; i += cols) {
-      rows.push(connections.slice(i, i + cols));
-    }
-    return rows;
-  }, [connections]);
-
   const renderMetronicGridBody = () => (
-    <View style={styles.metronicGridRoot}>
-      {metronicRows.map((row, ri) => (
-        <View key={`metronic-row-${ri}`} style={styles.metronicGridRow}>
-          {row.map((item) => (
-            <View key={`${item.role}-${item.id}`} style={styles.metronicGridCell}>
-              <NetworkDesktopConnectionCard
-                item={item}
-                onPress={onOpenProfile ? () => onOpenProfile(item) : undefined}
-                onInvite={() => void inviteOffAppParty(item)}
-                onChat={
-                  item.is_integrated && item.linked_organization_id && onChatIntegrated
-                    ? () => onChatIntegrated(item)
-                    : undefined
-                }
-                actionLoading={invitingId === item.id}
-              />
-            </View>
-          ))}
-          {row.length < 4
-            ? Array.from({ length: 4 - row.length }).map((_, pad) => (
-                <View key={`metronic-pad-${ri}-${pad}`} style={styles.metronicGridCell} />
-              ))
-            : null}
-        </View>
-      ))}
-    </View>
+    <NetworkHubConnectionsPagedGrid
+      items={connections}
+      layout={metronicConnectionsLayout}
+      resetKey={`metronic:${metronicPaginationKey}`}
+      keyExtractor={(item) => `${item.role}-${item.id}`}
+      onVisiblePageChange={onVisiblePageChange}
+      contentPaddingHorizontal={0}
+      renderItem={(item) => (
+        <NetworkDesktopConnectionCard
+          item={item}
+          onPress={onOpenProfile ? () => onOpenProfile(item) : undefined}
+          onInvite={() => void inviteOffAppParty(item)}
+          onChat={
+            item.is_integrated && item.linked_organization_id && onChatIntegrated
+              ? () => onChatIntegrated(item)
+              : undefined
+          }
+          actionLoading={invitingId === item.id}
+        />
+      )}
+    />
   );
 
   const metronicHorizontalCardWidth = useMemo(() => {
@@ -1193,6 +1199,7 @@ export function ConnectionsView({
         resetKey={connectionsPaginationKey}
         keyExtractor={(item) => `${item.role}-${item.id}`}
         renderItem={renderHubConnectionListCard}
+        onVisiblePageChange={onVisiblePageChange}
       />
     );
 
@@ -1483,8 +1490,19 @@ const styles = StyleSheet.create({
   },
   metronicGridRoot: {
     width: "100%",
-    gap: 12,
     paddingBottom: 8,
+    ...(Platform.OS === "web"
+      ? ({
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 12,
+          alignItems: "stretch",
+        } as object)
+      : {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 12,
+        }),
   },
   metronicGridRow: {
     flexDirection: "row",
@@ -1492,9 +1510,10 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   metronicGridCell: {
-    flex: 1,
     minWidth: 0,
-    maxWidth: "25%",
+    ...(Platform.OS === "web"
+      ? { width: "100%" }
+      : { width: "47%", flexGrow: 1 }),
   },
   metronicHorizontalScrollWrap: {
     width: "100%",
