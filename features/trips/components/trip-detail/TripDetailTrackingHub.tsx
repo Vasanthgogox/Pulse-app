@@ -1,5 +1,5 @@
 import Theme from "@/constants/Theme";
-import type { ManifestDeliveryPlan } from "@/features/trips/utils/manifestDeliveryPlan.util";
+import type { LiveTrackingPresentation } from "@/features/trips/utils/liveTrackingPresentation.util";
 import {
   formatHubPingOfflineLabel,
   type DriverLastPingDisplay,
@@ -13,46 +13,19 @@ import {
   View,
 } from "react-native";
 
-const ETA_BADGE = 32;
-
 type Props = {
   onOpenLiveTracking: () => void;
-  deliveryPlan: ManifestDeliveryPlan;
+  /** Null only during the brief initial load -- the row below is skipped until it's ready. */
+  presentation: LiveTrackingPresentation | null;
   driverLastPing: DriverLastPingDisplay;
   recordedAt?: string | null;
   broadcastActive?: boolean;
 };
 
-function EtaBadge({
-  label,
-  value,
-  unit,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-}) {
-  return (
-    <View style={styles.etaCol}>
-      <Text style={styles.etaSlotLabel} numberOfLines={1}>
-        {label}
-      </Text>
-      <View style={styles.etaBadge}>
-        <Text style={styles.etaBadgeValue} numberOfLines={1}>
-          {value}
-        </Text>
-        <Text style={styles.etaBadgeUnit} numberOfLines={1}>
-          {unit}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-/** In-transit trip tab: live map CTA, ETA badges, and last driver ping. */
+/** In-transit trip tab: live map CTA, expected arrival, and last driver ping. */
 export function TripDetailTrackingHub({
   onOpenLiveTracking,
-  deliveryPlan,
+  presentation,
   driverLastPing,
   recordedAt,
   broadcastActive = false,
@@ -92,28 +65,32 @@ export function TripDetailTrackingHub({
         <Feather name="chevron-right" size={12} color={Theme.textMuted} />
       </TouchableOpacity>
 
-      <View style={styles.etaBand}>
-        <View style={styles.etaRow}>
-          <EtaBadge
-            label="Driver ETA"
-            value={deliveryPlan.etaBadgeValue}
-            unit={deliveryPlan.etaBadgeUnit}
-          />
-          <EtaBadge
-            label="Est. delivery"
-            value={deliveryPlan.deliveryDateBadgeValue}
-            unit={deliveryPlan.deliveryDateBadgeUnit}
-          />
-          <View style={styles.etaPlanCol}>
-            <Text style={styles.etaPlanSummary} numberOfLines={2}>
-              {deliveryPlan.planSummaryLine}
+      {presentation && presentation.showEta ? (
+        <View style={styles.etaBand}>
+          <View style={styles.etaRow}>
+            <Text style={styles.etaHeadline} numberOfLines={1}>
+              {presentation.statusTitle}
             </Text>
-            <Text style={styles.etaPlanDetail} numberOfLines={2}>
-              {deliveryPlan.planDetailLine}
+            {presentation.distanceRemainingLabel ? (
+              <Text style={styles.etaDistance} numberOfLines={1}>
+                {presentation.distanceRemainingLabel}
+              </Text>
+            ) : null}
+          </View>
+          <View style={styles.etaArrivalRow}>
+            <Text style={styles.etaArrivalLabel}>Expected arrival</Text>
+            <Text
+              style={[
+                styles.etaArrivalValue,
+                presentation.eta.isUnavailable && styles.etaArrivalValueMuted,
+              ]}
+              numberOfLines={1}
+            >
+              {presentation.eta.label}
             </Text>
           </View>
         </View>
-      </View>
+      ) : null}
 
       {showPing ? (
         <View style={styles.pingBlock}>
@@ -251,64 +228,40 @@ const styles = StyleSheet.create({
   etaRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   },
-  etaCol: {
-    width: ETA_BADGE,
-    alignItems: "center",
-    gap: 3,
-    flexShrink: 0,
+  etaHeadline: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    color: Theme.pulseIndigo,
   },
-  etaSlotLabel: {
-    width: ETA_BADGE,
-    fontSize: 6.5,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
+  etaDistance: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  etaArrivalRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 4,
+  },
+  etaArrivalLabel: {
+    fontSize: 9,
+    fontWeight: "600",
     color: Theme.textMuted,
-    textAlign: "center",
-    lineHeight: 8,
   },
-  etaBadge: {
-    width: ETA_BADGE,
-    height: ETA_BADGE,
-    borderRadius: 8,
-    backgroundColor: Theme.buttonPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 2,
-  },
-  etaBadgeValue: {
+  etaArrivalValue: {
     fontSize: 11,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    lineHeight: 12,
   },
-  etaBadgeUnit: {
-    fontSize: 6.5,
+  etaArrivalValueMuted: {
+    color: Theme.textMuted,
     fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    lineHeight: 8,
-    marginTop: 0,
-  },
-  etaPlanCol: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-    gap: 2,
-    minHeight: ETA_BADGE + 11,
-  },
-  etaPlanSummary: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    lineHeight: 12,
-  },
-  etaPlanDetail: {
-    fontSize: 8,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    lineHeight: 11,
   },
   pingBlock: {
     paddingHorizontal: 8,

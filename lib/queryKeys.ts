@@ -37,6 +37,7 @@ export const queryKeys = {
     workflow: (tripId: string) => ["q", "trips", "workflow", tripId] as const,
     timeline: (tripId: string) => ["q", "trips", "timeline", tripId] as const,
     driverPresence: (tripId: string) => ["q", "trips", "driver-presence", tripId] as const,
+    checkpointDistance: (tripId: string) => ["q", "trips", "checkpoint-distance", tripId] as const,
     byDriver: (driverId: string, opts?: { limit?: number; offset?: number }) =>
       opts
         ? (["q", "trips", "driver", driverId, opts] as const)

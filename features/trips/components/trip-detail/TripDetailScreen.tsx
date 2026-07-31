@@ -127,7 +127,11 @@ import {
   mergeMapLocationTrail,
   resolveMapTruckLocation,
 } from "@/features/trips/utils/mapDriverTracking.util";
-import { buildManifestDeliveryPlan } from "@/features/trips/utils/manifestDeliveryPlan.util";
+import { buildLiveTrackingPresentation } from "@/features/trips/utils/liveTrackingPresentation.util";
+import { computeTripStageMetrics } from "@/features/trips/domain/tripStageMetrics";
+import { computeJourneyMetrics } from "@/features/trips/domain/tripJourneyMetrics";
+import { useTripTimelineQuery } from "@/lib/queries/useTripTimelineQuery";
+import { useTripCheckpointDistanceQuery } from "@/lib/queries/useTripCheckpointDistanceQuery";
 import { buildDriverLastPingDisplay } from "@/features/trips/utils/driverLastPingDisplay.util";
 import { TripDetailTrackingHub } from "./TripDetailTrackingHub";
 import { TripStageControlPanel } from "./TripStageControlPanel";
@@ -1037,26 +1041,39 @@ export default function TripDetailScreen({
     manifestRouteFetchEndpoints?.to.longitude,
   ]);
 
-  const liveTrackingDeliveryPlan = useMemo(
+  // Trip Operations Platform, wired in once here -- LiveTrackingModal and
+  // TripDetailTrackingHub both consume liveTrackingPresentation below rather
+  // than each deriving their own stage/progress/ETA. See
+  // docs/TRIP_OPERATIONS_PLATFORM.md and liveTrackingPresentation.util.ts.
+  const { events: liveTrackingTimelineEvents } = useTripTimelineQuery(
+    detail.trip?.id ?? null,
+    detail.trip?.created_at ?? null,
+  );
+  const { distanceCoveredM: liveTrackingDistanceCoveredM } = useTripCheckpointDistanceQuery(
+    detail.trip?.id ?? null,
+  );
+  const liveTrackingStageMetrics = useMemo(
+    () => (detail.trip ? computeTripStageMetrics(detail.trip, liveTrackingTimelineEvents) : null),
+    [detail.trip, liveTrackingTimelineEvents],
+  );
+  const liveTrackingJourneyMetrics = useMemo(
     () =>
-      buildManifestDeliveryPlan({
-        tripDistance: detail.trip?.distance,
-        mapRouteDistanceKm,
-        routeEtaSeconds: manifestRouteEtaSeconds,
-        estimatedDuration: detail.trip?.estimated_duration,
-        startedAt: detail.trip?.started_at,
-        pickupAt: detail.trip?.pickup_date,
-        createdAt: detail.trip?.created_at,
-      }),
-    [
-      detail.trip?.distance,
-      detail.trip?.estimated_duration,
-      detail.trip?.started_at,
-      detail.trip?.pickup_date,
-      detail.trip?.created_at,
-      mapRouteDistanceKm,
-      manifestRouteEtaSeconds,
-    ],
+      detail.trip && liveTrackingStageMetrics
+        ? computeJourneyMetrics(detail.trip, liveTrackingDistanceCoveredM, liveTrackingStageMetrics)
+        : null,
+    [detail.trip, liveTrackingDistanceCoveredM, liveTrackingStageMetrics],
+  );
+  const liveTrackingPresentation = useMemo(
+    () =>
+      detail.trip && liveTrackingStageMetrics
+        ? buildLiveTrackingPresentation({
+            trip: detail.trip,
+            stageMetrics: liveTrackingStageMetrics,
+            journeyMetrics: liveTrackingJourneyMetrics,
+            routeEtaSeconds: manifestRouteEtaSeconds,
+          })
+        : null,
+    [detail.trip, liveTrackingStageMetrics, liveTrackingJourneyMetrics, manifestRouteEtaSeconds],
   );
 
   // Vault upload hooks — must run before loading/error early returns (Rules of Hooks).
@@ -2917,7 +2934,7 @@ export default function TripDetailScreen({
                   <View>
                     <Text style={styles.refHeroMetaLabel}>ETA manifest</Text>
                     <Text style={styles.refHeroMetaValue} numberOfLines={1}>
-                      {liveTrackingDeliveryPlan.driverEtaLabel}
+                      {liveTrackingPresentation?.eta.label ?? '—'}
                     </Text>
                   </View>
                   <View style={styles.refHeroMetaIconGhost}>
@@ -3057,7 +3074,7 @@ export default function TripDetailScreen({
                 isTripTrackingActive(trip?.status, trip?.completed_at) ? (
                   <TripDetailTrackingHub
                     onOpenLiveTracking={() => detail.setShowTrackingModal(true)}
-                    deliveryPlan={liveTrackingDeliveryPlan}
+                    presentation={liveTrackingPresentation}
                     driverLastPing={driverLastPingDisplay}
                     recordedAt={driverLastPingRecordedAt}
                     broadcastActive={trackingState?.broadcastActive ?? false}
@@ -3544,7 +3561,7 @@ export default function TripDetailScreen({
                         ETA Manifest
                       </Text>
                       <Text style={neoStyles.heroMetricValue}>
-                        {liveTrackingDeliveryPlan.driverEtaLabel}
+                        {liveTrackingPresentation?.eta.label ?? '—'}
                       </Text>
                     </View>
                     <View style={neoStyles.heroMetricDivider} />
@@ -4100,7 +4117,7 @@ export default function TripDetailScreen({
                             <Text style={neoStyles.radarSpeed}>
                               {resolvedDistanceLabel ?? "Calculating"}{" "}
                               <Text style={neoStyles.radarSpeedUnit}>
-                                · ETA {liveTrackingDeliveryPlan.driverEtaLabel}
+                                · {liveTrackingPresentation?.eta.label ?? '—'}
                               </Text>
                             </Text>
                           )}
@@ -5957,9 +5974,7 @@ export default function TripDetailScreen({
           driverName={detail.driverName}
           driverPhone={detail.driverPhone}
           currentUserId={detail.currentUserId}
-          routeEtaSeconds={manifestRouteEtaSeconds}
-          mapRouteDistanceKm={mapRouteDistanceKm}
-          deliveryPlan={liveTrackingDeliveryPlan}
+          presentation={liveTrackingPresentation}
           displayClientName={
             detail.displayClientName ?? trip.client_name ?? null
           }

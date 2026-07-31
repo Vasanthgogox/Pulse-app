@@ -1,6 +1,22 @@
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { formatManifestEteFromRouteSeconds } from "@/features/trips/utils/manifestEta.util";
 
+/**
+ * Scope note: this used to also back the customer/business Live Tracking
+ * views (LiveTrackingModal / TripDetailTrackingHub) as a "current ETA"
+ * source -- that was the bug (a static distance/350-km-per-day plan shown
+ * as if it were live, with no check that the result was still in the
+ * future). Live tracking now consumes computeJourneyMetrics() +
+ * liveTrackingEta.util.ts instead; see docs/TRIP_OPERATIONS_PLATFORM.md.
+ *
+ * This module's one remaining legitimate consumer is
+ * features/chat/utils/longHaulLateDisplay.util.ts, which needs exactly this
+ * static "originally scheduled" baseline -- a delay comparison ("3 days
+ * late") is inherently a comparison against a fixed original promise, not a
+ * moving live prediction. Don't reach for this file for anything that
+ * displays as "current" status; that's the distinction that broke last time.
+ */
+
 /** Long-haul planning pace (aligned with adaptive ping / TAT rules). */
 export const MANIFEST_PLAN_KM_PER_DAY = 350;
 

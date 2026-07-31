@@ -32,10 +32,7 @@ import {
   formatHubPingOfflineLabel,
   formatHubPingTimeLabel,
 } from "@/features/trips/utils/driverLastPingDisplay.util";
-import {
-  buildManifestDeliveryPlan,
-  type ManifestDeliveryPlan,
-} from "@/features/trips/utils/manifestDeliveryPlan.util";
+import type { LiveTrackingPresentation } from "@/features/trips/utils/liveTrackingPresentation.util";
 import type { DriverActivityTimelineRow } from "../hooks/useTripDetail";
 import type { TrackingState } from "@/features/tracking/hooks/useTrackingState";
 
@@ -76,13 +73,9 @@ interface LiveTrackingModalProps {
   driverName: string | null;
   driverPhone?: string | null;
   currentUserId: string | null;
-  /** Route driving duration (seconds) when driver GPS routing is available. */
-  routeEtaSeconds?: number | null;
-  /** Pre-calculated trip distance (km) or map fallback label. */
-  mapRouteDistanceKm?: string | null;
   displayClientName?: string | null;
-  /** Pre-built plan; computed in parent when omitted. */
-  deliveryPlan?: ManifestDeliveryPlan;
+  /** Computed once in TripDetailScreen from the Trip Operations Platform; null only during initial load. */
+  presentation: LiveTrackingPresentation | null;
 }
 
 function formatAssignmentDate(iso: string | null | undefined): string {
@@ -135,10 +128,8 @@ export function LiveTrackingModal({
   driverName,
   driverPhone,
   currentUserId,
-  routeEtaSeconds = null,
-  mapRouteDistanceKm = null,
   displayClientName,
-  deliveryPlan: deliveryPlanProp,
+  presentation,
 }: LiveTrackingModalProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -209,22 +200,10 @@ export function LiveTrackingModal({
   const pingTimeShort = lastPingRecordedAt
     ? formatHubPingTimeLabel(lastPingRecordedAt)
     : null;
-  const deliveryPlan =
-    deliveryPlanProp ??
-    buildManifestDeliveryPlan({
-      tripDistance: trip.distance,
-      mapRouteDistanceKm,
-      routeEtaSeconds,
-      estimatedDuration: trip.estimated_duration,
-      startedAt: trip.started_at,
-      pickupAt: trip.pickup_date,
-      createdAt: trip.created_at,
-    });
-  const statusHeadline = trackingStatusHeadline(
-    trip?.status ?? "draft",
-    driverOffline,
-    trackingState.broadcastActive,
-  );
+  // Trip stage headline (deriveTripStage/getStageMetadata via presentation) --
+  // driver connectivity (online/offline/broadcasting) is shown separately by
+  // the TRACKING/LIVE/OFFLINE chip below, not conflated into this text.
+  const statusHeadline = presentation?.statusTitle ?? "Tracking trip";
   const tripRef = getTripDisplayNumber(trip);
   const headerTitle =
     (displayClientName ?? trip.client_name ?? "").trim() ||
@@ -242,8 +221,11 @@ export function LiveTrackingModal({
   const driverPingLine =
     lastPingDisplay.locationLabel ?? lastPingDisplay.cityLabel ?? null;
 
-  const { step, label } = trackingStepAndLabel(trip?.status ?? "draft");
-  const progressPct = Math.round((step / 4) * 100);
+  // Distance-based journey progress (real GPS-covered distance vs. planned
+  // route), not a workflow step count -- see computeJourneyMetrics(). Falls
+  // back to a coarse stage estimate before departure via the presentation
+  // builder itself; 0 only while presentation hasn't loaded yet.
+  const progressPct = Math.round((presentation?.progressFraction ?? 0) * 100);
   const statusTone = driverOffline
     ? "offline"
     : trackingState.broadcastActive
@@ -552,9 +534,11 @@ export function LiveTrackingModal({
                     </View>
                     <View style={styles.statusCopy}>
                       <Text style={styles.statusHeadline}>{statusHeadline}</Text>
-                      <Text style={styles.statusSubcopy}>
-                        Step {step} of 4 · {label}
-                      </Text>
+                      {presentation?.distanceRemainingLabel ? (
+                        <Text style={styles.statusSubcopy}>
+                          {presentation.distanceRemainingLabel}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                   <View
@@ -603,39 +587,61 @@ export function LiveTrackingModal({
                     ]}
                   />
                 </View>
+                {presentation?.showEta ? (
+                  <View style={styles.arrivalRow}>
+                    <Text style={styles.arrivalLabel}>Expected arrival</Text>
+                    <Text
+                      style={[
+                        styles.arrivalValue,
+                        presentation.eta.isUnavailable && styles.arrivalValueMuted,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {presentation.eta.label}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
-              <View style={styles.planCard}>
-                <Text style={styles.planCardLabel}>Delivery plan</Text>
-                <View style={styles.planCardBody}>
-                  <View style={styles.planBadgeCol}>
-                    <EtaBadgeCompact
-                      label="Driver ETA"
-                      value={deliveryPlan.etaBadgeValue}
-                      unit={deliveryPlan.etaBadgeUnit}
-                    />
-                    <EtaBadgeCompact
-                      label="Est. delivery"
-                      value={deliveryPlan.deliveryDateBadgeValue}
-                      unit={deliveryPlan.deliveryDateBadgeUnit}
-                    />
-                  </View>
-                  <View style={styles.planTextCol}>
-                    <Text style={styles.planSummary}>
-                      {deliveryPlan.planSummaryLine}
+              <View style={styles.driverCard}>
+                <Text style={styles.driverCardLabel}>Driver</Text>
+                <View style={styles.driverCardBody}>
+                  <View style={styles.driverCardTextCol}>
+                    <Text style={styles.driverCardLocation} numberOfLines={2}>
+                      {lastPingDisplay.hasPing
+                        ? (driverPingLine ?? "Last driver ping")
+                        : driverOffline
+                          ? "No GPS ping yet"
+                          : "Waiting for GPS"}
                     </Text>
-                    <Text style={styles.planDetail} numberOfLines={3}>
-                      {deliveryPlan.planDetailLine}
-                    </Text>
-                    {deliveryPlan.estimatedDeliveryDateLabel !== "—" ? (
-                      <View style={styles.planDateChip}>
-                        <Feather name="calendar" size={10} color={Theme.pulseIndigo} />
-                        <Text style={styles.planDateChipText}>
-                          {deliveryPlan.estimatedDeliveryDateLabel}
-                        </Text>
-                      </View>
-                    ) : null}
+                    <View style={styles.driverCardMetaRow}>
+                      <Text style={styles.driverCardMetaLabel}>Last updated</Text>
+                      <Text
+                        style={[
+                          styles.driverCardMetaValue,
+                          driverOffline && { color: TRACKING.offline.metaText },
+                        ]}
+                      >
+                        {lastPingDisplay.hasPing
+                          ? (offlineLabel ?? pingTimeShort ?? "Just now")
+                          : "—"}
+                      </Text>
+                    </View>
                   </View>
+                  {mapTruckLocation ? (
+                    <Pressable
+                      onPress={openLastPingInMaps}
+                      style={({ pressed }) => [
+                        styles.driverCardNavBtn,
+                        pressed && styles.actionBtnPressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Open driver location in maps"
+                    >
+                      <Navigation size={14} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                      <Text style={styles.driverCardNavBtnText}>Navigate</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
 
@@ -651,64 +657,11 @@ export function LiveTrackingModal({
                         strokeWidth={1.75}
                       />
                     }
-                    label="From"
+                    label="Origin"
                     title={originPrimary}
                     subtitle={trip.pickup_area?.trim() || "Pickup"}
                     isFirst
                   />
-                  {lastPingDisplay.hasPing ? (
-                    <RouteStopRow
-                      variant={driverOffline ? "current-offline" : "current-live"}
-                      label="Driver now"
-                      title={driverPingLine ?? "Last driver ping"}
-                      subtitle={pingTimeShort ?? "Ping time unknown"}
-                      meta={
-                        offlineLabel ? (
-                          <Text
-                            style={[
-                              styles.offlineMeta,
-                              { color: TRACKING.offline.metaText },
-                            ]}
-                          >
-                            {offlineLabel}
-                          </Text>
-                        ) : (
-                          <Text style={styles.onlineMeta}>On route</Text>
-                        )
-                      }
-                      onPress={
-                        mapTruckLocation ? openLastPingInMaps : undefined
-                      }
-                      actionLabel={
-                        mapTruckLocation ? "Open in maps" : undefined
-                      }
-                    />
-                  ) : driverOffline ? (
-                    <View
-                      style={[
-                        styles.noPingCard,
-                        {
-                          backgroundColor: TRACKING.offline.rowBg,
-                          borderColor: TRACKING.offline.bannerBorder,
-                        },
-                      ]}
-                    >
-                      <Feather
-                        name="alert-circle"
-                        size={14}
-                        color={Theme.pulseIndigo}
-                      />
-                      <Text
-                        style={[
-                          styles.noPingText,
-                          { color: TRACKING.offline.metaText },
-                        ]}
-                      >
-                        No GPS ping yet — ask the driver to open the app and accept
-                        the trip.
-                      </Text>
-                    </View>
-                  ) : null}
                   <RouteStopRow
                     variant="destination"
                     icon={
@@ -718,7 +671,7 @@ export function LiveTrackingModal({
                         strokeWidth={1.75}
                       />
                     }
-                    label="To"
+                    label="Destination"
                     title={destPrimary}
                     subtitle={(trip.drop_location ?? "").trim() || "Destination"}
                     isLast
@@ -813,41 +766,6 @@ function locationPrimaryLine(value: string | null | undefined): string {
   if (!raw) return "—";
   const comma = raw.indexOf(",");
   return comma > 0 ? raw.slice(0, comma).trim() : raw;
-}
-
-function trackingStatusHeadline(
-  status: string,
-  driverOffline: boolean,
-  broadcastActive: boolean,
-): string {
-  if (driverOffline) return "Driver offline";
-  if (broadcastActive) return "Live on map";
-  const s = status.toLowerCase();
-  if (s === "in_transit" || s === "in transit") return "In transit";
-  if (s === "in_progress") return "At pickup";
-  if (s === "completed" || s === "delivered") return "Delivered";
-  if (s === "assigned" || s === "pending_acceptance") return "Assigned";
-  return "Tracking trip";
-}
-
-function EtaBadgeCompact({
-  label,
-  value,
-  unit,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-}) {
-  return (
-    <View style={styles.etaCompactSlot}>
-      <Text style={styles.etaCompactLabel}>{label}</Text>
-      <View style={styles.etaBadge}>
-        <Text style={styles.etaBadgeValue}>{value}</Text>
-        <Text style={styles.etaBadgeUnit}>{unit}</Text>
-      </View>
-    </View>
-  );
 }
 
 function RouteStopRow({
@@ -1037,20 +955,6 @@ function ExpandedContent({ lines }: { lines: [string, string][] }) {
       ))}
     </View>
   );
-}
-
-function trackingStepAndLabel(status: string): { step: number; label: string } {
-  const s = status.toLowerCase();
-  if (s === "completed" || s === "delivered" || s === "done")
-    return { step: 4, label: "Completed" };
-  if (s === "arrived" || s === "at_destination" || s === "at_drop")
-    return { step: 3, label: "Arrived" };
-  if (
-    s === "in_progress" || s === "in_transit" || s === "dispatched" ||
-    s === "picked_up" || s === "pickup"
-  )
-    return { step: 2, label: "In progress" };
-  return { step: 1, label: "Assigned" };
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -1323,7 +1227,27 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 3,
   },
-  planCard: {
+  arrivalRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginTop: 12,
+  },
+  arrivalLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.8)",
+  },
+  arrivalValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+  },
+  arrivalValueMuted: {
+    color: "rgba(255,255,255,0.7)",
+    fontWeight: "600",
+  },
+  driverCard: {
     borderRadius: 14,
     padding: 14,
     marginBottom: 14,
@@ -1331,71 +1255,59 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
-  planCardLabel: {
+  driverCardLabel: {
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.6,
     textTransform: "uppercase",
     color: Theme.pulseIndigo,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  planCardBody: {
+  driverCardBody: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     gap: 12,
   },
-  planBadgeCol: {
-    flexDirection: "row",
-    gap: 8,
-    flexShrink: 0,
-  },
-  planTextCol: {
+  driverCardTextCol: {
     flex: 1,
     minWidth: 0,
     gap: 4,
-    paddingBottom: 2,
   },
-  planSummary: {
-    fontSize: 12,
+  driverCardLocation: {
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    lineHeight: 16,
+    lineHeight: 18,
   },
-  planDetail: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    lineHeight: 14,
-  },
-  planDateChip: {
+  driverCardMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
     gap: 5,
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.pulseIndigoRing,
   },
-  planDateChipText: {
+  driverCardMetaLabel: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.pulseIndigo,
-  },
-  etaCompactSlot: {
-    alignItems: "center",
-    gap: 4,
-  },
-  etaCompactLabel: {
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
     color: Theme.textMuted,
-    textAlign: "center",
+  },
+  driverCardMetaValue: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  driverCardNavBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: Theme.buttonPrimary,
+    flexShrink: 0,
+  },
+  driverCardNavBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
   },
   routeSection: {
     marginBottom: 14,
@@ -1407,30 +1319,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.textMuted,
     marginBottom: 10,
-  },
-  etaBadge: {
-    width: 56,
-    height: 56,
-    paddingHorizontal: 4,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: Theme.buttonPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  etaBadgeValue: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    lineHeight: 20,
-  },
-  etaBadgeUnit: {
-    fontSize: 9,
-    fontWeight: "500",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
-    marginTop: 1,
   },
   routeTimeline: {
     gap: 4,
@@ -1534,34 +1422,6 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     color: Theme.textSecondary,
     lineHeight: 14,
-  },
-  offlineMeta: {
-    fontSize: 10,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  onlineMeta: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: Theme.positive,
-    marginTop: 4,
-  },
-  noPingCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginLeft: 34,
-    marginRight: 0,
-    marginVertical: 6,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  noPingText: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: "500",
-    lineHeight: 15,
   },
   actionBar: {
     flexDirection: "row",
