@@ -135,3 +135,86 @@ export async function rejectDriverKycDocument(
   });
   return { error: error?.message ?? null };
 }
+
+// ── Driver-level submissions ("submit for verification" queue) ───────────────
+
+export type DriverKycReviewStatus = 'submitted' | 'approved' | 'rejected';
+
+export interface DriverKycSubmissionRow {
+  driver_user_id: string;
+  driver_id: string | null;
+  driver_name: string | null;
+  driver_phone: string | null;
+  organization_name: string | null;
+  submitted_at: string;
+  review_status: DriverKycReviewStatus;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  /** 1 on first submission, incremented each time the driver re-submits. */
+  attempt_count: number;
+  /**
+   * Optional documents the driver did not supply (e.g. "PAN") — a legitimate
+   * end state, not a gap to chase. Null when every optional doc is present.
+   */
+  optional_not_provided: string | null;
+  document_count: number;
+  pending_count: number;
+  verified_count: number;
+  rejected_count: number;
+}
+
+/**
+ * Drivers who have pressed "submit for verification", newest first. Reads the
+ * driver_kyc_review_queue view, which joins driver identity onto the raw
+ * submission row — the documents table only carries driver_user_id.
+ */
+export async function fetchDriverKycSubmissions(): Promise<DriverKycSubmissionRow[]> {
+  const { data, error } = await supabase
+    .from('driver_kyc_review_queue')
+    .select(
+      'driver_user_id,driver_id,driver_name,driver_phone,organization_name,submitted_at,review_status,reviewed_at,review_notes,attempt_count,optional_not_provided,document_count,pending_count,verified_count,rejected_count',
+    )
+    .order('submitted_at', { ascending: false });
+
+  if (error || !data?.length) return [];
+  return data as DriverKycSubmissionRow[];
+}
+
+/** Documents belonging to one driver, with signed URLs for inline viewing. */
+export async function fetchDriverKycDocumentsForDriver(
+  driverUserId: string,
+): Promise<DriverKycQueueRow[]> {
+  const all = await fetchDriverKycQueue();
+  return all.filter((d) => d.driver_user_id === driverUserId);
+}
+
+/** Records the driver-level outcome after per-document decisions are made. */
+export async function reviewDriverKycSubmission(
+  driverUserId: string,
+  status: 'approved' | 'rejected',
+  notes?: string,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc('platform_review_driver_kyc_submission', {
+    p_driver_user_id: driverUserId,
+    p_status: status,
+    p_notes: notes ?? null,
+  });
+  return { error: error?.message ?? null };
+}
+
+/**
+ * Reverses a finished decision, putting the driver back in the awaiting queue.
+ * Separate from reviewDriverKycSubmission because that one now refuses to touch
+ * an already-decided submission — un-approving a verified driver should take a
+ * deliberate action with a recorded reason, not a stray click.
+ */
+export async function reopenDriverKycSubmission(
+  driverUserId: string,
+  reason: string,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc('driver_kyc_reopen_submission', {
+    p_driver_user_id: driverUserId,
+    p_reason: reason,
+  });
+  return { error: error?.message ?? null };
+}

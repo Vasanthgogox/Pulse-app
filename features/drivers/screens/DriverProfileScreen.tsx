@@ -112,6 +112,12 @@ export default function DriverProfileScreen() {
   const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
   const [loadingDriverRatings, setLoadingDriverRatings] = useState(false);
   const [kycUploadedCount, setKycUploadedCount] = useState(0);
+  const [kycStatus, setKycStatus] = useState<{
+    reviewStatus: string | null;
+    isVerified: boolean;
+    verifiedDocs: number;
+    requiredDocs: number;
+  } | null>(null);
 
   const scrollBottomPad = driverTabBarScrollInset(insets.bottom);
 
@@ -164,49 +170,58 @@ export default function DriverProfileScreen() {
       });
   }, [profile?.uid]);
 
+  /**
+   * Reads driver_kyc_status — the authoritative view over driver_kyc_documents
+   * and driver_kyc_submissions. This previously inferred KYC state from auth
+   * user_metadata, a driver_profiles column, and storage filename prefixes
+   * (all pre-dating the driver_kyc_documents table), so it could never show
+   * verification and drifted from the real rows: an approved driver still read
+   * "3/3 uploaded" with no mention of being verified.
+   */
   const loadKycSummary = useCallback(async () => {
     if (!profile?.uid) {
       setKycUploadedCount(0);
+      setKycStatus(null);
       return;
     }
     try {
-      const {
-        data: { user: authUser },
-      } = await supabase().auth.getUser();
-      const metadata =
-        authUser?.user_metadata &&
-        typeof authUser.user_metadata === 'object' &&
-        authUser.user_metadata.driver_documents &&
-        typeof authUser.user_metadata.driver_documents === 'object'
-          ? (authUser.user_metadata.driver_documents as Record<string, unknown>)
-          : {};
-
-      const { data: driverProfileRow } = await supabase()
-        .from('driver_profiles')
-        .select('license_photo_url')
-        .eq('user_id', profile.uid)
+      const { data } = await supabase()
+        .from('driver_kyc_status')
+        .select('review_status,is_verified,verified_docs,uploaded_docs,required_docs')
+        .eq('driver_user_id', profile.uid)
         .maybeSingle();
-      const { data: storageItems } = await supabase()
-        .storage
-        .from('driver-documents')
-        .list(profile.uid, { limit: 100 });
-      const hasStoragePrefix = (prefix: string) =>
-        (storageItems ?? []).some((item) => (item.name ?? '').toLowerCase().startsWith(prefix));
 
-      const license = (driverProfileRow as { license_photo_url?: string | null } | null)?.license_photo_url
-        ?? (typeof metadata.license === 'string' ? metadata.license : null)
-        ?? (hasStoragePrefix('license-') ? 'present' : null);
-      const aadhaar =
-        (typeof metadata.aadhaar === 'string' ? metadata.aadhaar : null)
-        ?? (hasStoragePrefix('aadhaar-') ? 'present' : null);
-      const pan =
-        (typeof metadata.pan === 'string' ? metadata.pan : null)
-        ?? (hasStoragePrefix('pan-') ? 'present' : null);
+      const row = data as {
+        review_status: string | null;
+        is_verified: boolean | null;
+        verified_docs: number | null;
+        uploaded_docs: number | null;
+        required_docs: number | null;
+      } | null;
 
-      const uploaded = [license, aadhaar, pan].filter((x) => Boolean((x ?? '').trim())).length;
-      setKycUploadedCount(uploaded);
+      if (row) {
+        setKycStatus({
+          reviewStatus: row.review_status,
+          isVerified: !!row.is_verified,
+          verifiedDocs: row.verified_docs ?? 0,
+          requiredDocs: row.required_docs ?? 0,
+        });
+        setKycUploadedCount(row.uploaded_docs ?? 0);
+        return;
+      }
+
+      // No submission yet — fall back to counting uploaded documents so the
+      // row still reflects progress before the driver presses submit.
+      const { count } = await supabase()
+        .from('driver_kyc_documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('driver_user_id', profile.uid)
+        .is('deleted_at', null);
+      setKycStatus(null);
+      setKycUploadedCount(count ?? 0);
     } catch {
       setKycUploadedCount(0);
+      setKycStatus(null);
     }
   }, [profile?.uid]);
 
@@ -689,9 +704,34 @@ export default function DriverProfileScreen() {
                     </View>
                     <View style={styles.rowCardText}>
                       <Text style={[styles.rowEyebrow, { color: muted }]}>KYC & COMPLIANCE</Text>
-                      <Text style={[styles.rowTitle, { color: colors.text }]}>Upload & verify documents</Text>
-                      <Text style={[styles.rowSub, { color: muted }]} numberOfLines={2}>
-                        {kycUploadedCount}/3 uploaded · Aadhaar, PAN, driving license
+                      <View style={styles.rowTitleLine}>
+                        <Text style={[styles.rowTitle, { color: colors.text }]}>
+                          {kycStatus?.isVerified ? 'Identity verified' : 'Upload & verify documents'}
+                        </Text>
+                        {kycStatus?.isVerified ? (
+                          <View style={[styles.verifiedPill, { backgroundColor: colors.emeraldMuted }]}>
+                            <Text style={[styles.verifiedPillText, { color: colors.emerald }]}>
+                              VERIFIED
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text
+                        style={[
+                          styles.rowSub,
+                          {
+                            color: kycStatus?.reviewStatus === 'rejected' ? Theme.negative : muted,
+                          },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {kycStatus?.isVerified
+                          ? `${kycStatus.verifiedDocs} document${kycStatus.verifiedDocs === 1 ? '' : 's'} verified by our team`
+                          : kycStatus?.reviewStatus === 'submitted'
+                            ? 'Awaiting verification — our team is reviewing'
+                            : kycStatus?.reviewStatus === 'rejected'
+                              ? 'Rejected — tap to see what needs fixing'
+                              : `${kycUploadedCount} uploaded · tap to add or submit`}
                       </Text>
                     </View>
                   </View>
@@ -982,6 +1022,9 @@ const styles = StyleSheet.create({
   },
   rowEyebrow: { fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
   rowTitle: { fontSize: 15, fontWeight: '700' },
+  rowTitleLine: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  verifiedPill: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
+  verifiedPillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   rowSub: { marginTop: 4, fontSize: 11, fontWeight: '500', lineHeight: 15 },
   chevPill: { padding: 8, borderRadius: 12 },
   statsRow: { flexDirection: 'row', gap: 10 },

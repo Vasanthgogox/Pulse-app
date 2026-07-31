@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket } from 'lucide-react';
+import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket, UserRound } from 'lucide-react';
 import { AdminDataProvider, useAdmin } from '@/context/AdminDataProvider';
 import { ApplicationQueue } from '@/components/queue/ApplicationQueue';
 import { AuditTrail } from '@/components/queue/AuditTrail';
 import { OrgWorkspace } from '@/components/workspace/OrgWorkspace';
+import { DriverKycPanel } from '@/components/queue/DriverKycPanel';
 import { VerificationActionPanel } from '@/components/workspace/VerificationActionPanel';
 import { CreditsPanel } from '@/components/credits/CreditsPanel';
 import { ReferralsPanel } from '@/components/growth/ReferralsPanel';
@@ -12,7 +13,7 @@ import { BoostControlCenterPanel } from '@/components/growth/BoostControlCenterP
 import { Badge } from '@/components/ui/badge';
 import { supabaseConfigError } from '@/lib/supabase';
 
-type ConsoleView = 'verification' | 'credits' | 'referrals' | 'reward-rules' | 'boost-ops';
+type ConsoleView = 'verification' | 'driver-kyc' | 'credits' | 'referrals' | 'reward-rules' | 'boost-ops';
 
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,14 @@ function Topbar({
             }`}
           >
             Verification
+          </button>
+          <button
+            onClick={() => setView('driver-kyc')}
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              view === 'driver-kyc' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            <UserRound className="size-3" /> Driver KYC
           </button>
           <button
             onClick={() => setView('credits')}
@@ -160,7 +169,9 @@ function AdminShell() {
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         <Topbar dark={dark} setDark={setDark} view={view} setView={setView} />
 
-        {view === 'credits' ? (
+        {view === 'driver-kyc' ? (
+          <DriverKycPanel />
+        ) : view === 'credits' ? (
           <CreditsPanel />
         ) : view === 'referrals' ? (
           <ReferralsPanel />

@@ -140,3 +140,91 @@ export function latestDriverKycDocument(
     .filter((d) => d.doc_type === docType)
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
 }
+
+/**
+ * Doc types the driver must supply before "submit for verification" unlocks.
+ * Fallback only — the live set comes from driver_kyc_doc_requirements via
+ * listDriverKycDocRequirements(), so changing the rule is an UPDATE rather
+ * than a release. PAN is deliberately absent: it is not universal among
+ * drivers (tax-filing document, many never apply for one), so requiring it
+ * locked those drivers out of verification entirely.
+ */
+export const MANDATORY_DRIVER_KYC_DOC_TYPES: readonly DriverKycDocType[] = [
+  'license',
+  'aadhaar',
+  'selfie',
+];
+
+export interface DriverKycDocRequirement {
+  doc_type: DriverKycDocType;
+  label: string;
+  is_mandatory: boolean;
+  sort_order: number;
+}
+
+/**
+ * Removes an optional document the driver doesn't have (e.g. a wrongly
+ * uploaded, then rejected, PAN). Soft delete server-side; mandatory documents
+ * are refused, since those must be fixed rather than abandoned.
+ */
+export async function withdrawDriverKycDocument(
+  documentId: string,
+): Promise<{ error: Error | null }> {
+  const { error } = await supabase().rpc('driver_withdraw_kyc_document', {
+    p_document_id: documentId,
+  });
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
+
+/** Which documents are required vs optional. Falls back to the constant above. */
+export async function listDriverKycDocRequirements(): Promise<DriverKycDocRequirement[]> {
+  const { data, error } = await supabase()
+    .from('driver_kyc_doc_requirements')
+    .select('doc_type,label,is_mandatory,sort_order')
+    .order('sort_order', { ascending: true });
+
+  if (error || !data?.length) return [];
+  return data as DriverKycDocRequirement[];
+}
+
+export type DriverKycReviewStatus = 'submitted' | 'approved' | 'rejected';
+
+export interface DriverKycSubmission {
+  driver_user_id: string;
+  submitted_at: string;
+  review_status: DriverKycReviewStatus;
+  reviewed_at: string | null;
+  review_notes: string | null;
+}
+
+/** Current submission for the signed-in driver, or null if never submitted. */
+export async function getMyDriverKycSubmission(): Promise<{
+  error: Error | null;
+  submission: DriverKycSubmission | null;
+}> {
+  const {
+    data: { user },
+  } = await supabase().auth.getUser();
+  if (!user) return { error: null, submission: null };
+
+  const { data, error } = await supabase()
+    .from('driver_kyc_submissions')
+    .select('driver_user_id,submitted_at,review_status,reviewed_at,review_notes')
+    .eq('driver_user_id', user.id)
+    .maybeSingle();
+
+  if (error) return { error: new Error(error.message), submission: null };
+  return { error: null, submission: (data as DriverKycSubmission | null) ?? null };
+}
+
+/**
+ * Hands the whole document set to the platform review queue. The RPC re-checks
+ * completeness server-side, so a client-side gate slipping through still can't
+ * queue a partial submission.
+ */
+export async function submitDriverKycForVerification(): Promise<{ error: Error | null }> {
+  const { error } = await supabase().rpc('driver_submit_kyc_for_verification');
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
