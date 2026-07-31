@@ -155,6 +155,12 @@ export function WebNavMirrorToggle({
 }: Props) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const hoverClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * No permitted tabs → render nothing. Otherwise the capsule and its two
+   * sliding indicator rails still paint as an empty pill, which is what a
+   * restricted member saw once per-domain visibility started filtering items.
+   */
+  const hasItems = items.length > 0;
 
   const previewingElsewhere =
     hoverIndex != null && hoverIndex !== activeIndex;
@@ -246,6 +252,9 @@ export function WebNavMirrorToggle({
       width: segmentWidths[hover]?.value ?? ACTIVE_W,
     };
   });
+
+  // Placed after every hook so hook order stays stable across renders.
+  if (!hasItems) return null;
 
   return (
     <View
