@@ -32,13 +32,14 @@ Operational Alerts           evaluateOperationalAlerts()    Rules over Stage + J
   ▼
 Alert Action Capabilities     getAlertActions() / ALERT_ACTION_CAPABILITIES    What an operator can do, and what's real today
   │
-  ┌──────────┼───────────┬──────────────────┐
-  │          │           │                  │
-Driver App  Business   Customer Track      Fleet Operations
-            Panel      & Trace             Dashboard
+  ┌──────────┼─────────────┬──────────────┬──────────────┬──────────────┐
+  │          │             │              │              │              │
+Driver     Mission      Business       Live Tracking   Fleet          Map
+Map        Card         Panel          (Business/      Operations     Camera
+Guidance   (driver app)                 Client)        Dashboard      (policy)
 ```
 
-Every box below "Alert Action Capabilities" is a presentation layer. None of them derive stage, timing, or alert logic themselves.
+Every box below "Alert Action Capabilities" is a presentation layer. None of them derive stage, timing, or alert logic themselves — with one deliberate exception, Map Camera, which is a UI policy (framing/padding/debounce) rather than a domain service; it still reads Stage Guidance for *what* to frame, it just also owns *how* the camera behaves, which isn't a trip-state question.
 
 ## Canonical domain modules
 
@@ -64,10 +65,13 @@ Supporting batch data functions live alongside the services they extend (`trips.
 |---|---|---|
 | Driver App map guidance | `features/drivers/screens/DriverHomeScreen.tsx` | `tripStage.ts`, `tripStageGuidance.ts`, `tripStageEta.ts` |
 | Driver Flow Card | `features/driver/components/DriverTripFlowCard.tsx` | `tripStageMetadata.ts` for wording only — **its state machine is not yet consolidated, see Deferred below** |
+| Driver Mission Card | `features/driver/components/MissionCardLayout.tsx` (rendered by `DriverTripFlowCard.tsx`) | Stage Metadata, Stage Metrics, Journey Metrics, Operational Alerts — the last two only ever reach the driver as translated plain-language guidance (`features/driver/utils/driverAlertGuidance.util.ts`), never as raw health tiers or alert titles. Workflow handlers (accept/arrive/transit/complete) stay owned by `DriverTripFlowCard`; this component is presentation-only. |
 | Business stepper | `features/trips/components/trip-detail/sections/TripStatusTimeline.tsx` | `deriveTripStage()`, `getStageMetadata()`, real `driver_accepted` event (heuristic removed) |
 | Business Operations Panel | `features/trips/components/trip-detail/TripStageControlPanel.tsx` | Full stack through Alerts |
 | Customer Track & Trace | `features/trips/screens/TripTrackTraceScreen.tsx` | Stage, Metadata, Timeline (reuses the existing client-org RLS model — no new access model) |
+| Live Tracking (Business/Client) | `features/trips/components/trip-detail/modals/LiveTrackingModal.tsx`, `TripDetailTrackingHub.tsx` | Journey Metrics + canonical Stage Metadata via one shared model, `features/trips/utils/liveTrackingPresentation.util.ts` (built once in `TripDetailScreen.tsx`, both screens consume it — replaced a since-deleted independent status/step interpretation and a static distance/350-km-per-day planning util that had drifted into showing expired dates as live). ETA resolution goes through `liveTrackingEta.util.ts`'s future-checked priority chain, never a raw computed date. |
 | Fleet Operations Dashboard | `features/trips/screens/FleetOperationsDashboardScreen.tsx` | Full stack, batch-fetched across all active trips in an org |
+| Map Camera | `features/drivers/screens/DriverHomeScreen.tsx` (`fitMapToActiveContext`) | Stage Guidance, for goal-based framing — plus the Camera Policy below, which is UI behavior, not a domain service |
 
 ## The rule
 
@@ -75,23 +79,44 @@ Supporting batch data functions live alongside the services they extend (`trips.
 
 Concretely: if a screen needs "what stage is this trip in", it calls `deriveTripStage()`. If it needs wording, it calls `getStageMetadata()`. If it needs "how long has this been going on", it reads `computeTripStageMetrics()`/`computeJourneyMetrics()`, not `Date.now() - trip.updated_at`. If it needs to flag a problem, it reads `evaluateOperationalAlerts()`, not a bespoke threshold check.
 
-Four independent stage interpretations existed before this platform; three are now consolidated. Watch for a fifth appearing anywhere a new screen touches trip progress — that's the signal this rule is being skipped, not a normal architectural variation.
+Four independent stage interpretations existed before this platform; three were consolidated at v1.0. The rule then caught a fifth — `LiveTrackingModal`'s own `trackingStepAndLabel()`/`trackingStatusHeadline()`, plus a separate static planning util (`manifestDeliveryPlan.util.ts`) that had drifted into acting as a live-tracking ETA source — both now deleted/scoped in favor of the shared `liveTrackingPresentation.util.ts`. `DriverTripFlowCard`'s local state machine remains the one deliberately-deferred exception (see below). Keep watching for the next one; that's the signal this rule is being skipped, not a normal architectural variation.
 
-## Deferred by design
+## Camera Policy (Map Camera)
 
-Not gaps discovered late — each was evaluated and explicitly postponed, usually because real usage evidence should shape it rather than a guess:
+Not a domain service — a UI policy for `DriverHomeScreen.tsx`'s map, worth documenting so it isn't rediscovered from code:
 
-| Deferred | Why |
-|---|---|
-| `DriverTripFlowCard` state-machine consolidation | Its local state (optimistic transitions, a rank-based anti-regression guard, a check-constraint carve-out, non-optimistic completion) exists because of prior incidents, not because nobody simplified it. Needs its own instrumented investigation — trace render-stage / local-step / optimistic-mutation / server-update / prop-refresh / resync before removing anything — not a same-pass rewrite. |
-| Analytics dashboards | Which KPIs matter, which thresholds need tuning, and what "fleet health" means are better answered after dispatchers have used the alerts, not guessed up front. |
-| Alert persistence | `evaluateOperationalAlerts()` derives fresh every call; every alert returned is active by construction. Persist only if expensive reporting, SLA history, billing, or KPI snapshots make re-derivation impractical. |
-| Notification delivery (push/email/Slack/webhooks) | Decide which alerts deserve proactive delivery only after operators are actually using the dashboard — building this first risks infrastructure for alerts nobody acts on. |
-| Scheduler / background processing | The dashboard polls (30s) rather than holding a realtime channel per active trip. Revisit only if `driver_presence` is ever published to `supabase_realtime`. |
-| Public tracking links (anonymous/token-based) | Track & Trace deliberately reuses the existing client-organization RLS model instead of introducing a second, parallel authorization model. If a public link is ever needed, it's a new capability decision, not something to retrofit into this. |
-| Dispatcher trip-specific chat deep-linking | `ALERT_ACTION_CAPABILITIES.message` names exactly what's missing: `ChatRouteContent`/`ChatScreen` need to read and apply a `tripId` param the way the driver-side `/(driver)/chat?tripId=` already does. |
+- **One debounced fit per meaningful context change.** Trip-key change, route-geometry finishing load, and a guidance-step change each used to schedule their own independent timer; they now share one debounce, so a burst of near-simultaneous triggers collapses into a single settled fit instead of visible camera jumps.
+- **Manual pan/pinch suppresses auto-fit** until either a real context change (trip/stage/route) or the driver explicitly taps "Center" (the focus-and-follow button) — the app doesn't fight a driver who's deliberately exploring the map.
+- **Goal-based framing by trip context**, not just current stage:
+  - Assigned → driver + pickup
+  - At Pickup → tight driver + pickup (not the whole trip corridor)
+  - Transit → driver + remaining route + destination (the corridor belongs here, not at the endpoints)
+  - At Drop → tight driver + drop
+  - Completed → no automatic fitting at all; drivers routinely pan the completed trip and re-fitting would fight that
+- Bottom/top camera padding are derived, not guessed: bottom from the mission sheet's real measured height (`onLayout`, not a screen-fraction constant), top from `mapControlsTopInset()` (the same offset the floating controls bar already uses).
+- **Known gap:** this policy's interaction-suppression currently only wired on the native `MapView` path (`onPanDrag`). The Leaflet (web) wrapper has no equivalent drag/zoom-start callback yet, so web users' manual pans don't yet suppress auto-fit — tracked as separate follow-up work, not bundled into the native camera change.
+
+## Delivered vs. deferred
+
+What was postponed at v1.0 and has since shipped, alongside what's still deliberately not built:
+
+| Item | Status | Why |
+|---|---|---|
+| Driver Mission UI | **Completed** | `MissionCardLayout` + translated guidance, built on the existing platform — see Consumers above. |
+| Track & Trace / Live Tracking migration | **Completed** | `LiveTrackingModal`/`TripDetailTrackingHub` moved off the static planning util and their own status/step interpretation onto `liveTrackingPresentation.util.ts` — see Consumers above. |
+| `DriverTripFlowCard` state-machine consolidation | Deferred | Its local state (optimistic transitions, a rank-based anti-regression guard, a check-constraint carve-out, non-optimistic completion) exists because of prior incidents, not because nobody simplified it. Needs its own instrumented investigation — trace render-stage / local-step / optimistic-mutation / server-update / prop-refresh / resync before removing anything — not a same-pass rewrite. |
+| Leaflet interaction parity (web map camera) | Deferred | Native's camera policy suppresses auto-fit on manual pan via `onPanDrag`; the Leaflet wrapper has no equivalent drag/zoom-start callback yet. Separate, independently-testable follow-up — not bundled into the native camera change. |
+| Analytics dashboards | Deferred | Which KPIs matter, which thresholds need tuning, and what "fleet health" means are better answered after dispatchers have used the alerts, not guessed up front. |
+| Alert persistence | Deferred | `evaluateOperationalAlerts()` derives fresh every call; every alert returned is active by construction. Persist only if expensive reporting, SLA history, billing, or KPI snapshots make re-derivation impractical. |
+| Notification delivery (push/email/Slack/webhooks) | Deferred | Decide which alerts deserve proactive delivery only after operators are actually using the dashboard — building this first risks infrastructure for alerts nobody acts on. |
+| Scheduler / background processing | Deferred | The dashboard polls (30s) rather than holding a realtime channel per active trip. Revisit only if `driver_presence` is ever published to `supabase_realtime`. |
+| Public tracking links (anonymous/token-based) | Deferred | Track & Trace deliberately reuses the existing client-organization RLS model instead of introducing a second, parallel authorization model. If a public link is ever needed, it's a new capability decision, not something to retrofit into this. |
+| Dispatcher trip-specific chat deep-linking | Deferred | `ALERT_ACTION_CAPABILITIES.message` names exactly what's missing: `ChatRouteContent`/`ChatScreen` need to read and apply a `tripId` param the way the driver-side `/(driver)/chat?tripId=` already does. |
 
 ## Known, unrelated issues (not this platform's)
 
-- `features/trips/domain/tripExecutionModel.test.ts` has one pre-existing failing assertion (`getTripExecutionModel` returns `"asset"` where the test expects `"aggregate"`), reproducible on a clean checkout before any of this work. Investigate separately: has `getTripExecutionModel()` changed, does the test fixture reflect current business rules, or is the test's expectation stale.
-- `features/trips/components/assignment/tripAssignmentWorkspace.styles.ts:471` has a duplicate `overflow` style property (`TS2783`) — a styling cleanup, unrelated to this architecture.
+Both issues previously tracked here are resolved:
+- `tripExecutionModel.test.ts`'s failing assertion was a real regression (commit `333decbd` had widened a `direct_quote` override too broadly, silently reclassifying supplier-linked subcontractor trips). Fixed by scoping the override to `trip.source === "direct_quote"`; a regression test for the direct-quote case was added alongside it.
+- The duplicate `overflow` style in `tripAssignmentWorkspace.styles.ts:471` was dead code (both `Platform.select()` branches already set `overflow: "hidden"`) and has been removed.
+
+One new, separately-tracked issue surfaced during the Live Tracking migration: `updateTripStatus.tripDelivered.test.ts` has 2 of 5 tests failing in complete isolation, unrelated to any file touched by this work — a Supabase mock-chain exhaustion issue in the test itself (`trips.service.ts`'s `.from("trips")` chain resolves to `undefined` partway through the suite). Not investigated further since it's outside this document's scope.

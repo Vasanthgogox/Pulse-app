@@ -3,15 +3,10 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
   FLOW_EMERALD,
   FLOW_EMERALD_DARK,
-  FLOW_MINT,
-  HeroAssignerBlock,
-  HeroKindBadge,
   sheetStyles,
   TRIP_SHEET_BODY_PAD,
   TRIP_SHEET_BTN_HEIGHT,
-  TRIP_SHEET_HERO_PAD,
   TRIP_SHEET_TOP_RADIUS,
-  TripDetailsStrip,
 } from '@/components/driver/DriverTripSheetLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
@@ -21,7 +16,21 @@ import { useDriverReferralForTripQuery } from '@/lib/queries/useReachCampaignsQu
 import type { JobCardAssignerPayload } from '@/features/trips/utils/driverAssignerDisplay.util';
 import type { DriverFlowStepId as StepId } from '@/features/driver/utils/driverTripStatusNotes.util';
 import { deriveDriverFlowStepFromTrip } from '@/features/driver/utils/driverTripStatusNotes.util';
-import { getStageMetadata } from '@/features/trips/domain';
+import {
+  computeJourneyMetrics,
+  computeTripStageMetrics,
+  evaluateOperationalAlerts,
+  getStageMetadata,
+  getTripStageTarget,
+  getTripStopCoordinate,
+  type TripStageMetrics,
+} from '@/features/trips/domain';
+import { getDriverAlertGuidance } from '@/features/driver/utils/driverAlertGuidance.util';
+import { useTripTimelineQuery } from '@/lib/queries/useTripTimelineQuery';
+import { useTripCheckpointDistanceQuery } from '@/lib/queries/useTripCheckpointDistanceQuery';
+import { useTripDriverPresenceQuery } from '@/lib/queries/useTripDriverPresenceQuery';
+import { openExternalNavigation } from '@/lib/mapsNavigation.util';
+import { MissionCardLayout } from '@/features/driver/components/MissionCardLayout';
 import {
   clearLrPhase,
   hasEnteredLrPhase,
@@ -34,7 +43,6 @@ import * as tripDocumentsService from '@/features/trips/services/tripDocuments.s
 import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Sparkles, Wallet } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // expo-file-system SDK 54 moved readAsStringAsync/EncodingType to the legacy entry.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -56,6 +64,10 @@ import {
 } from 'react-native';
 import { Pressable as HoldPressable } from 'react-native-gesture-handler';
 import { compressImage } from '@/lib/pod/imageCompression';
+
+/** Secondary row (Call / Chat / Camera, Navigate) and the stage CTA below it. */
+const ACTION_BTN_HEIGHT = 52;
+const PRIMARY_BTN_HEIGHT = 58;
 
 const HOLD_DURATION_MS = 1500;
 /** So finger drift / parent scroll do not end the hold (sheet / ScrollView). */
@@ -96,6 +108,25 @@ function progressForStep(step: StepId): number {
   if (step === 'pickup') return 40;
   if (step === 'accepted') return 20;
   return 0;
+}
+
+function formatDurationShort(ms: number): string {
+  const totalMin = Math.max(0, Math.round(ms / 60_000));
+  if (totalMin < 60) return `${totalMin}m`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+/** Only the two stages where the driver is stationary awaiting an action. */
+function dwellLabelForStep(step: StepId, metrics: TripStageMetrics): string | null {
+  if ((step === 'pickup' || step === 'lr') && metrics.pickupDwellDuration?.isRunning) {
+    return `At pickup for ${formatDurationShort(metrics.pickupDwellDuration.ms)}`;
+  }
+  if (step === 'reached' && metrics.dropDwellDuration?.isRunning) {
+    return `At drop for ${formatDurationShort(metrics.dropDwellDuration.ms)}`;
+  }
+  return null;
 }
 
 function formatBytes(bytes: number): string {
@@ -144,14 +175,6 @@ async function optimizeImageForUpload(
     arrayBuffer: await readArrayBufferFromUri(manipulated.uri),
     mimeType: 'image/jpeg',
   };
-}
-
-function stageForStep(step: StepId): 1 | 2 | 3 | 4 {
-  if (step === 'accepted') return 1;
-  if (step === 'pickup' || step === 'lr') return 2;
-  if (step === 'reached') return 3;
-  if (step === 'transit') return 3;
-  return 4;
 }
 
 /**
@@ -421,17 +444,6 @@ export function DriverTripFlowCard({
     return null;
   }, [referralQ.data]);
 
-  const driverLivePlaceText = useMemo(() => {
-    const hasCoords =
-      driverLatitude != null &&
-      driverLongitude != null &&
-      Number.isFinite(driverLatitude) &&
-      Number.isFinite(driverLongitude);
-    const label = driverLocationLabel?.trim();
-    if (!hasCoords && !label) return null;
-    return label || (hasCoords ? 'Getting address…' : null);
-  }, [driverLatitude, driverLongitude, driverLocationLabel]);
-
   const shareTripDocumentInChat = useCallback(
     async (
       doc: { storage_path: string; file_name: string; mime_type: string | null },
@@ -544,7 +556,6 @@ export function DriverTripFlowCard({
   }, [tripIsAggregate, commissionAmount]);
 
   const _progressPct = useMemo(() => progressForStep(step), [step]);
-  const stage = useMemo(() => stageForStep(step), [step]);
   const title = useMemo(() => titleForStep(step), [step]);
 
   const showHeroAssigner = useMemo(() => {
@@ -584,6 +595,47 @@ export function DriverTripFlowCard({
   const dropLabel =
     (localTrip.drop_location || (localTrip as { drop_area?: string }).drop_area)?.trim() ||
     '—';
+
+  // Same platform services the business Operations Control Panel consumes
+  // (see docs/TRIP_OPERATIONS_PLATFORM.md) — reused here, not reimplemented.
+  const { events: timelineEvents } = useTripTimelineQuery(trip.id ?? null, localTrip.created_at ?? null);
+  const { distanceCoveredM } = useTripCheckpointDistanceQuery(trip.id ?? null);
+  const { presence } = useTripDriverPresenceQuery(trip.id ?? null);
+  const stageMetrics = useMemo(
+    () => computeTripStageMetrics(localTrip, timelineEvents),
+    [localTrip, timelineEvents],
+  );
+  const journeyMetrics = useMemo(
+    () => computeJourneyMetrics(localTrip, distanceCoveredM, stageMetrics),
+    [localTrip, distanceCoveredM, stageMetrics],
+  );
+  const dwellLabel = useMemo(() => dwellLabelForStep(step, stageMetrics), [step, stageMetrics]);
+  const operationalAlerts = useMemo(
+    () => evaluateOperationalAlerts({ metrics: stageMetrics, events: timelineEvents, presence, journeyMetrics }),
+    [stageMetrics, timelineEvents, presence, journeyMetrics],
+  );
+  // Translated to plain, action-oriented copy — drivers never see alert
+  // titles or health tiers directly (that's dispatch language).
+  const guidanceMessage = useMemo(() => getDriverAlertGuidance(operationalAlerts), [operationalAlerts]);
+
+  const stageTarget = useMemo(
+    () => (step === 'completed' ? null : getTripStageTarget(step)),
+    [step],
+  );
+  const navigateCoordinate = useMemo(
+    () => (stageTarget ? getTripStopCoordinate(localTrip, stageTarget) : null),
+    [stageTarget, localTrip],
+  );
+  const onNavigate = useMemo(() => {
+    if (!navigateCoordinate) return null;
+    return () => {
+      void openExternalNavigation(navigateCoordinate.latitude, navigateCoordinate.longitude);
+    };
+  }, [navigateCoordinate]);
+  const routeTotalKm = useMemo(() => {
+    const d = Number(localTrip.distance);
+    return Number.isFinite(d) && d > 0 ? d : null;
+  }, [localTrip.distance]);
 
   const loadPodDocuments = useCallback(
     (opts?: { silent?: boolean }) => {
@@ -1152,79 +1204,27 @@ export function DriverTripFlowCard({
       ) : null}
 
       {step !== 'completed' ? (
-        <LinearGradient
-          colors={[FLOW_EMERALD_DARK, FLOW_EMERALD]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.flowHero}
-        >
-          <View style={styles.progressSegmentsHero}>
-            {[1, 2, 3, 4].map((i) => (
-              <View
-                key={i}
-                style={[
-                  styles.progressSegmentHero,
-                  {
-                    backgroundColor:
-                      i <= stage ? '#fff' : 'rgba(255,255,255,0.25)',
-                  },
-                ]}
-              />
-            ))}
-          </View>
-          <View style={styles.heroTopRow}>
-            <View style={styles.heroEyebrowRow}>
-              <Sparkles size={9} color={FLOW_MINT} strokeWidth={2.5} />
-              <Text style={styles.heroEyebrow}>{title.toUpperCase()}</Text>
-            </View>
-            {assignedBy ? (
-              <HeroKindBadge kind={assignedBy.kind} label={assignedBy.kindLabel} />
-            ) : null}
-          </View>
-          <View style={styles.heroMainRow}>
-            <View
-              style={[
-                styles.heroEarningsBlock,
-                !showHeroAssigner && styles.heroEarningsBlockFull,
-              ]}
-            >
-              <View style={styles.heroIconWrap}>
-                <Wallet size={14} color={FLOW_EMERALD} strokeWidth={2.2} />
-              </View>
-              <View style={styles.heroTextBlock}>
-                <Text style={styles.heroAmount} numberOfLines={1}>
-                  {earnings}
-                </Text>
-                <Text style={styles.heroAmountLabel}>EST. EARNINGS</Text>
-              </View>
-            </View>
-            {showHeroAssigner && assignedBy ? (
-              <>
-                <View style={styles.heroColDivider} />
-                <HeroAssignerBlock assigner={assignedBy} />
-              </>
-            ) : null}
-          </View>
-        </LinearGradient>
+        <MissionCardLayout
+          title={title}
+          earnings={earnings}
+          assignedBy={assignedBy}
+          showHeroAssigner={showHeroAssigner}
+          target={stageTarget}
+          pickupLabel={pickupLabel}
+          dropLabel={dropLabel}
+          remainingKm={step === 'accepted' || step === 'pickup' || step === 'transit' ? distanceToTargetKm ?? null : null}
+          routeTotalKm={routeTotalKm}
+          distanceLabel={detailsStatLeft}
+          etaLabel={tripEtaLabel}
+          customerName={localTrip.client_name?.trim() === '—' ? null : localTrip.client_name}
+          vehicleNumber={localTrip.vehicle_display_number}
+          dwellLabel={dwellLabel}
+          guidanceMessage={guidanceMessage}
+        />
       ) : null}
 
       {step !== 'completed' ? (
         <View style={styles.flowBody}>
-          {(localTrip.pickup_area || localTrip.drop_location) ? (
-            <>
-              <Text style={[sheetStyles.sectionLabel, { color: Theme.textMuted }]}>
-                TRIP DETAILS
-              </Text>
-              <TripDetailsStrip
-                statLeft={detailsStatLeft}
-                statRight={tripEtaLabel}
-                pickup={pickupLabel}
-                dropoff={dropLabel}
-                locationLabel={driverLivePlaceText}
-              />
-            </>
-          ) : null}
-
           {stepError ? (
             <View style={[styles.errorWrap, { backgroundColor: Theme.negativeMuted, borderColor: Theme.negative }]}>
               <FontAwesome name="exclamation-circle" size={12} color={Theme.negative} />
@@ -1236,22 +1236,24 @@ export function DriverTripFlowCard({
 
           <View style={styles.actionIconsRow}>
             <TouchableOpacity
-              style={[styles.actionIconBtn, { backgroundColor: Theme.screenBackground, borderColor: Theme.border, opacity: 0.35 }]}
+              style={[styles.actionBtn, styles.actionBtnDisabled, { backgroundColor: Theme.surface, borderColor: Theme.border }]}
               activeOpacity={0.8}
               disabled
               accessibilityLabel="Call (not available)"
             >
-              <FontAwesome name="phone" size={16} color={Theme.textPrimaryDark} />
+              <FontAwesome name="phone" size={15} color={Theme.textPrimaryDark} />
+              <Text style={[styles.actionBtnText, { color: Theme.textPrimaryDark }]}>Call</Text>
             </TouchableOpacity>
 
-            <View style={styles.actionIconBtnWrap}>
+            <View style={styles.actionBtnWrap}>
               <TouchableOpacity
-                style={[styles.actionIconBtn, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}
+                style={[styles.actionBtn, { backgroundColor: Theme.surface, borderColor: Theme.border }]}
                 activeOpacity={0.8}
                 onPress={() => router.push(`/(driver)/chat?tripId=${encodeURIComponent(localTrip.id)}`)}
                 accessibilityLabel="Open trip messages"
               >
-                <FontAwesome name="comment-o" size={16} color={Theme.textPrimaryDark} />
+                <FontAwesome name="comment-o" size={15} color={Theme.textPrimaryDark} />
+                <Text style={[styles.actionBtnText, { color: Theme.textPrimaryDark }]}>Chat</Text>
               </TouchableOpacity>
               {tripChatUnread > 0 ? (
                 <View style={[styles.messageBadge, { backgroundColor: colors.emerald }]}>
@@ -1261,7 +1263,7 @@ export function DriverTripFlowCard({
             </View>
 
             <TouchableOpacity
-              style={[styles.actionIconBtn, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}
+              style={[styles.actionBtn, { backgroundColor: Theme.surface, borderColor: Theme.border }]}
               activeOpacity={0.8}
               onPress={step === 'reached' ? uploadPod : uploadStagePhoto}
               disabled={stagePhotoUploading || podUploading}
@@ -1270,10 +1272,25 @@ export function DriverTripFlowCard({
               {stagePhotoUploading || podUploading ? (
                 <LoadingIndicator size="small" color={Theme.textPrimaryDark} />
               ) : (
-                <FontAwesome name="camera" size={16} color={Theme.textPrimaryDark} />
+                <FontAwesome name="camera" size={15} color={Theme.textPrimaryDark} />
               )}
+              <Text style={[styles.actionBtnText, { color: Theme.textPrimaryDark }]}>Camera</Text>
             </TouchableOpacity>
           </View>
+
+          {onNavigate ? (
+            <TouchableOpacity
+              style={[styles.navigateBar, { backgroundColor: Theme.surface, borderColor: Theme.border }]}
+              onPress={onNavigate}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Open navigation"
+            >
+              <FontAwesome name="location-arrow" size={14} color={FLOW_EMERALD} />
+              <Text style={[styles.navigateBarText, { color: FLOW_EMERALD }]}>Navigate</Text>
+              <FontAwesome name="angle-right" size={18} color={Theme.textMuted} style={styles.navigateChevron} />
+            </TouchableOpacity>
+          ) : null}
 
           {step === 'accepted' ? (
             <TouchableOpacity
@@ -1288,7 +1305,7 @@ export function DriverTripFlowCard({
                 end={{ x: 1, y: 0 }}
                 style={styles.primaryGradient}
               >
-                <FontAwesome name="check-circle" size={14} color="#fff" />
+                <FontAwesome name="check-circle" size={17} color="#fff" />
                 <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Arrived at pickup'}</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -1307,7 +1324,7 @@ export function DriverTripFlowCard({
                 end={{ x: 1, y: 0 }}
                 style={styles.primaryGradient}
               >
-                <FontAwesome name="archive" size={14} color="#fff" />
+                <FontAwesome name="archive" size={17} color="#fff" />
                 <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Package collected'}</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -1326,7 +1343,7 @@ export function DriverTripFlowCard({
                 end={{ x: 1, y: 0 }}
                 style={styles.primaryGradient}
               >
-                <FontAwesome name="map-marker" size={14} color="#fff" />
+                <FontAwesome name="map-marker" size={17} color="#fff" />
                 <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Arrived at drop-off'}</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -1398,7 +1415,7 @@ export function DriverTripFlowCard({
             >
               <View style={[styles.holdFill, { width: `${lrHoldProgress}%`, backgroundColor: colors.emerald }]} />
               <View style={[styles.holdContent, { pointerEvents: 'none' }]}>
-                <FontAwesome name="truck" size={15} color={lrHoldProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
+                <FontAwesome name="truck" size={17} color={lrHoldProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
                 <Text
                   style={[
                     styles.holdText,
@@ -1505,7 +1522,7 @@ export function DriverTripFlowCard({
             >
               <View style={[styles.holdFill, { width: `${holdProgress}%`, backgroundColor: colors.emerald }]} />
               <View style={[styles.holdContent, { pointerEvents: 'none' }]}>
-                <FontAwesome name="check-circle" size={15} color={holdProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
+                <FontAwesome name="check-circle" size={17} color={holdProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
                 <Text
                   style={[
                     styles.holdText,
@@ -1682,7 +1699,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginHorizontal: 16,
+    marginHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
     marginBottom: 8,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -1695,102 +1712,26 @@ const styles = StyleSheet.create({
   },
   handleWrap: { alignItems: 'center', paddingBottom: 8 },
   handleBar: { width: 36, height: 4, borderRadius: 999, opacity: 0.5 },
-  flowHero: {
-    paddingTop: TRIP_SHEET_HERO_PAD.top,
-    paddingHorizontal: TRIP_SHEET_HERO_PAD.horizontal,
-    paddingBottom: TRIP_SHEET_HERO_PAD.bottom,
-    gap: 10,
-  },
-  progressSegmentsHero: {
-    flexDirection: 'row',
-    gap: 5,
-    width: '100%',
-  },
-  progressSegmentHero: {
-    height: 4,
-    flex: 1,
-    borderRadius: 999,
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  heroEyebrowRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    flex: 1,
-    minWidth: 0,
-  },
-  heroEyebrow: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.9,
-    color: FLOW_MINT,
-    textTransform: 'uppercase',
-  },
-  heroMainRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minWidth: 0,
-  },
-  heroEarningsBlock: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
-  },
-  heroEarningsBlockFull: {
-    flex: 1,
-  },
-  heroColDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 30,
-    backgroundColor: 'rgba(255,255,255,0.28)',
-    alignSelf: 'center',
-    flexShrink: 0,
-  },
-  heroIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  heroTextBlock: {
-    flex: 1,
-    minWidth: 0,
-    gap: 1,
-  },
-  heroAmount: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: -0.25,
-    lineHeight: 20,
-  },
-  heroAmountLabel: {
-    fontSize: 7,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    color: FLOW_MINT,
-    textTransform: 'uppercase',
-  },
   flowBody: {
     paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
-    paddingTop: TRIP_SHEET_BODY_PAD.top,
+    paddingTop: 14,
     paddingBottom: TRIP_SHEET_BODY_PAD.bottom,
-    gap: TRIP_SHEET_BODY_PAD.gap,
+    gap: 10,
     backgroundColor: Theme.surface,
   },
-  actionIconsRow: { flexDirection: 'row', gap: 8 },
-  actionIconBtnWrap: { flex: 1, position: 'relative' },
+  actionIconsRow: { flexDirection: 'row', gap: 10 },
+  navigateBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    height: ACTION_BTN_HEIGHT,
+    paddingHorizontal: 16,
+  },
+  navigateBarText: { fontSize: 14, fontWeight: '800' },
+  navigateChevron: { marginLeft: 'auto' },
+  actionBtnWrap: { flex: 1, position: 'relative' },
   messageBadge: {
     position: 'absolute',
     top: -4,
@@ -1803,27 +1744,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   messageBadgeText: { fontSize: 9, fontWeight: '900', color: '#fff' },
-  actionIconBtn: {
+  actionBtn: {
     flex: 1,
-    height: TRIP_SHEET_BTN_HEIGHT,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryBtnWrap: {
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  primaryGradient: {
-    minHeight: TRIP_SHEET_BTN_HEIGHT,
     flexDirection: 'row',
+    height: ACTION_BTN_HEIGHT,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  actionBtnText: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
+  actionBtnDisabled: { opacity: 0.45 },
+  primaryBtnWrap: {
+    marginTop: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  primaryGradient: {
+    minHeight: PRIMARY_BTN_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     paddingHorizontal: 14,
   },
-  primaryBtnText: { ...sheetStyles.bodyBtnText, letterSpacing: 0.1, color: Theme.buttonDarkText },
+  primaryBtnText: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2, color: Theme.buttonDarkText },
   primaryBtn: {
     marginTop: 6,
     minHeight: TRIP_SHEET_BTN_HEIGHT,
@@ -1986,14 +1932,14 @@ const styles = StyleSheet.create({
   podRequired: { ...sheetStyles.bodyMetaText, textAlign: 'center' },
 
   holdBtnWrap: {
-    minHeight: TRIP_SHEET_BTN_HEIGHT,
-    borderRadius: 10,
+    minHeight: PRIMARY_BTN_HEIGHT,
+    borderRadius: 12,
     overflow: 'hidden',
     justifyContent: 'center',
   },
   holdFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
-  holdContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12 },
-  holdText: { ...sheetStyles.bodyBtnText, letterSpacing: 0.1 },
+  holdContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 12 },
+  holdText: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
   errorWrap: {
     marginTop: 12,
     borderWidth: 1,

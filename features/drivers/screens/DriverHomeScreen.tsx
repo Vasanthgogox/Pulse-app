@@ -500,6 +500,11 @@ export default function DriverRadarScreen() {
   const inlineMapViewportHeightRef = useRef(0);
   const inlineMapLastFitKeyRef = useRef<string | null>(null);
   const fullMapLastFitKeyRef = useRef<string | null>(null);
+  /** Real rendered height of the mission sheet (measured via onLayout), not a screen-fraction guess. */
+  const [measuredSheetHeight, setMeasuredSheetHeight] = useState(0);
+  /** Suppressed once the driver manually pans/pinches, until a meaningful context change or "Center" re-enables it. */
+  const inlineMapUserInteractedRef = useRef(false);
+  const fullMapUserInteractedRef = useRef(false);
   const OtpInputComponent =
     Platform.OS === "web" ? TextInput : BottomSheetTextInput;
   const otpInputRef = useRef<TextInput | null>(null);
@@ -2266,10 +2271,15 @@ export default function DriverRadarScreen() {
       : null;
   const highlightedTarget = activeGuidance?.target ?? null;
 
-  // Ola-style: keep the important route/marker in the top ~50% of the screen.
-  const olaMapBottomPaddingPx = Math.round(
-    Dimensions.get("window").height * 0.5,
-  );
+  // Keep the important route/marker clear of the mission sheet. Derived from
+  // the sheet's real measured height (onLayout on its content, above) rather
+  // than a screen-fraction guess -- that guess goes stale the moment the
+  // sheet's content height changes (e.g. the mission card gaining/losing a
+  // guidance banner) since nothing kept it in sync.
+  const olaMapBottomPaddingPx =
+    measuredSheetHeight > 0
+      ? measuredSheetHeight + 24
+      : Math.round(Dimensions.get("window").height * 0.5);
   const screenHeight = Dimensions.get("window").height;
   const sheetSnapPoints = useMemo(() => {
     if (shouldUseStaticMapSheetCard) {
@@ -3345,6 +3355,22 @@ export default function DriverRadarScreen() {
       if (!tripForBounds || !pickup || !drop) return;
 
       const isFullScreen = options?.isFullScreen === true;
+
+      // Camera policy: once the driver manually pans/pinches, stop stealing
+      // the camera. `force: true` is only ever passed by a real context
+      // change (trip/stage/route actually changed) or the "Center" action --
+      // that's what re-enables auto-fit, not a timer.
+      const userInteractedRef = isFullScreen
+        ? fullMapUserInteractedRef
+        : inlineMapUserInteractedRef;
+      if (!options?.force && userInteractedRef.current) return;
+      if (options?.force) userInteractedRef.current = false;
+
+      // Uber/Porter-style: once delivered, leave the camera alone. Drivers
+      // routinely pan around the completed trip; fighting that is exactly
+      // the "camera feels random" complaint this exists to fix.
+      if (activeGuidanceStep === "completed") return;
+
       const showLeafletEarly =
         Platform.OS === "web" || useLeafletFallback || leafLetForced;
       if (!showLeafletEarly && !targetRef.current) return;
@@ -3355,13 +3381,27 @@ export default function DriverRadarScreen() {
           ? inlineMapViewportHeightRef.current
           : Math.round(screenHeight * 0.42);
 
-      // When using Ola-style bottom sheet, reserve the lower portion for the panel.
-      // This keeps pickup/drop focus visible in the top ~50%.
+      // Bottom: reserve space for the mission sheet (real measured height,
+      // see olaMapBottomPaddingPx). Top: reserve space for the floating
+      // header/controls bar using the same offset they're actually
+      // positioned with, instead of a disconnected magic number.
       const bottomPadding = isFullScreen
         ? 160
         : shouldShowMap
           ? olaMapBottomPaddingPx
           : Math.max(110, Math.round(inlineMapHeight * 0.45));
+      const topPadding = mapControlsTopInset(
+        isFullScreen ? "modal" : "embedded",
+        insets.top,
+      );
+
+      const livePosition = navStartCoordinate ?? truckPosition ?? driverMapPosition;
+
+      // Goal-based framing: ask "what is the driver trying to see", not just
+      // "which stage". At the endpoints the goal is a tight look at driver +
+      // that one stop, not the whole corridor -- the corridor belongs to transit.
+      const isTightStopFit =
+        activeGuidanceStep === "pickup" || activeGuidanceStep === "reached";
 
       const coordsForFit = (() => {
         const merged: { latitude: number; longitude: number }[] = [];
@@ -3369,18 +3409,21 @@ export default function DriverRadarScreen() {
           if (!coords?.length) return;
           merged.push(...subsampleRouteCoordinates(coords, 120));
         };
-        // Transit+: fit the remaining road to drop (not the full trip corridor).
+        if (activeGuidanceStep === "pickup" && livePosition) return [livePosition, pickup];
+        if (activeGuidanceStep === "reached" && livePosition) return [livePosition, drop];
+
+        // Transit: fit the remaining road to drop (not the full trip corridor).
         if (shouldShowDriverToDropRoute(activeGuidanceStep)) {
           pushCoords(optimalRoute?.coordinates);
           if (merged.length >= 2) return merged;
           const end = guidanceTargetCoordinate ?? drop;
-          if (navStartCoordinate && end) return [navStartCoordinate, end];
+          if (livePosition && end) return [livePosition, end];
         }
+        // Assigned: fit driver + pickup along the approach route.
         if (shouldShowDriverApproachRoute(activeGuidanceStep)) {
           pushCoords(approachRoute?.coordinates);
           if (merged.length >= 2) return merged;
-          const live = navStartCoordinate ?? truckPosition ?? driverMapPosition;
-          if (live && pickup) return [live, pickup];
+          if (livePosition && pickup) return [livePosition, pickup];
         }
         pushCoords(tripLegRoute?.coordinates);
         if (merged.length >= 2) return merged;
@@ -3412,7 +3455,7 @@ export default function DriverRadarScreen() {
           bounds.ne,
           bounds.sw,
           80,
-          DRIVER_MAP_OVERVIEW_MAX_ZOOM,
+          isTightStopFit ? DRIVER_MAP_MAX_ZOOM : DRIVER_MAP_OVERVIEW_MAX_ZOOM,
         );
         lastFitKeyRef.current = fitKey;
         return;
@@ -3422,7 +3465,7 @@ export default function DriverRadarScreen() {
       targetRef.current.fitToCoordinates(
         [bounds.ne, bounds.sw, ...coordsForFit],
         {
-          edgePadding: { top: 100, right: 50, bottom: bottomPadding, left: 50 },
+          edgePadding: { top: topPadding, right: 50, bottom: bottomPadding, left: 50 },
           animated: false,
         },
       );
@@ -3445,7 +3488,47 @@ export default function DriverRadarScreen() {
       olaMapBottomPaddingPx,
       leafLetForced,
       useLeafletFallback,
+      insets.top,
     ],
+  );
+
+  // Never depend on fitMapToActiveContext identity in the effects below, or
+  // they re-fire on every GPS tick and undo Focus/follow.
+  const fitMapToActiveContextRef = useRef(fitMapToActiveContext);
+  fitMapToActiveContextRef.current = fitMapToActiveContext;
+  const lastNavFocusStepKeyRef = useRef<string | null>(null);
+
+  // Single shared debounce for every auto-fit trigger below. Trip-key
+  // change, route-geometry finishing load, and a guidance-step change used
+  // to each schedule their own independent timer -- a burst of two of these
+  // near-simultaneously produced two visible camera jumps instead of one
+  // settled fit, which read as "random" framing. Scheduling through one
+  // shared timer means only the LAST trigger in a burst actually fits,
+  // using whatever context is current by then.
+  const pendingFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleFit = useCallback(
+    (
+      targetRef: MutableRefObject<MapViewRef | null>,
+      options: { isFullScreen?: boolean; force?: boolean },
+      delayMs: number,
+    ) => {
+      if (pendingFitTimerRef.current) clearTimeout(pendingFitTimerRef.current);
+      pendingFitTimerRef.current = setTimeout(() => {
+        pendingFitTimerRef.current = null;
+        try {
+          fitMapToActiveContextRef.current(targetRef, options);
+        } catch {
+          /* ignore */
+        }
+      }, delayMs);
+    },
+    [],
+  );
+  useEffect(
+    () => () => {
+      if (pendingFitTimerRef.current) clearTimeout(pendingFitTimerRef.current);
+    },
+    [],
   );
 
   // Overview-first: fit route bounds whenever the assigned trip key changes.
@@ -3453,14 +3536,11 @@ export default function DriverRadarScreen() {
     if (!shouldShowMap) return;
     if (!defaultBoundsTripKey) return;
     if (isFollowingLocation) return;
-    const t = setTimeout(() => {
-      fitMapToActiveContext(mapRef, { force: true });
-    }, 200);
-    return () => clearTimeout(t);
+    scheduleFit(mapRef, { force: true }, 200);
   }, [
     defaultBoundsTripKey,
     shouldShowMap,
-    fitMapToActiveContext,
+    scheduleFit,
     isFollowingLocation,
   ]);
 
@@ -3474,26 +3554,21 @@ export default function DriverRadarScreen() {
         : (optimalRoute?.coordinates?.length ?? 0) >= 2);
     if (!hasGeometry) return;
     if (isFollowingLocation) return;
-    const t = setTimeout(() => {
-      fitMapToActiveContext(mapRef, { force: true });
-    }, 150);
-    return () => clearTimeout(t);
+    scheduleFit(mapRef, { force: true }, 150);
   }, [
     tripLegRoute,
     approachRoute,
     optimalRoute,
     activeGuidanceStep,
     shouldShowMap,
-    fitMapToActiveContext,
+    scheduleFit,
     isFollowingLocation,
   ]);
 
-  // Active leg: one overview fit when the step changes — never depend on
-  // fitMapToActiveContext identity or it re-fires on GPS and undoes Focus/follow.
-  const fitMapToActiveContextRef = useRef(fitMapToActiveContext);
-  fitMapToActiveContextRef.current = fitMapToActiveContext;
-  const lastNavFocusStepKeyRef = useRef<string | null>(null);
-
+  // Active leg: one overview fit when the step changes, plus the UI-state
+  // resets (route summary, tracking card, follow-mode) that only belong to
+  // an actual step transition -- kept separate from the two triggers above
+  // since those fire on trip/geometry changes where these resets don't apply.
   useEffect(() => {
     if (!shouldShowMap) return;
     if (!activeGuidanceTrip?.id) return;
@@ -3510,15 +3585,8 @@ export default function DriverRadarScreen() {
     // (green = live follow on me, not "card open").
     setShowTrackingInfoCard(true);
     setIsFollowingLocation(false);
-    const t = setTimeout(() => {
-      try {
-        fitMapToActiveContextRef.current(mapRef, { force: true });
-      } catch {
-        /* ignore */
-      }
-    }, 280);
-    return () => clearTimeout(t);
-  }, [activeGuidanceStep, activeGuidanceTrip?.id, shouldShowMap]);
+    scheduleFit(mapRef, { force: true }, 280);
+  }, [activeGuidanceStep, activeGuidanceTrip?.id, shouldShowMap, scheduleFit]);
 
   // Pulsating circle when searching for assignments (online, no mission, nothing to decide).
   // When multiple assignments exist, incoming is surfaced via notifications only — do not treat as "searching".
@@ -4326,6 +4394,9 @@ export default function DriverRadarScreen() {
               // Manual gesture: drop follow so we don't snap the camera back on the
               // next GPS tick. Driver can re-engage via the "My location" pill.
               if (isFollowingLocation) setIsFollowingLocation(false);
+              // Also suppress auto-fit until a real context change or "Center" --
+              // don't fight a driver who's deliberately exploring the map.
+              (isFullScreen ? fullMapUserInteractedRef : inlineMapUserInteractedRef).current = true;
             }}
             onMapReady={() => {
               // Native map became ready — clear "booting" so we don't fallback on next launch.
@@ -4717,6 +4788,10 @@ export default function DriverRadarScreen() {
                       setIsFetchingLocation(false);
                       return;
                     }
+                    // Explicit "Center" action: re-enable auto-fit the same
+                    // way a real context change would.
+                    inlineMapUserInteractedRef.current = false;
+                    fullMapUserInteractedRef.current = false;
                     // Always zoom camera to current position + enable live follow.
                     setShowTrackingInfoCard(true);
                     setIsFollowingLocation(true);
@@ -5741,7 +5816,13 @@ export default function DriverRadarScreen() {
                     },
                   ]}
                 >
-                  <View style={[styles.assignedSheetContent, { flexGrow: 0 }]}>
+                  <View
+                    style={[styles.assignedSheetContent, { flexGrow: 0 }]}
+                    onLayout={(e) => {
+                      const h = Math.round(e.nativeEvent.layout.height);
+                      setMeasuredSheetHeight((prev) => (Math.abs(prev - h) > 2 ? h : prev));
+                    }}
+                  >
                     {showDeferredInviteCard && pendingInvite ? (
                       <DriverInviteCard
                         invite={pendingInvite}

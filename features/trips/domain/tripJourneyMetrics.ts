@@ -62,7 +62,7 @@ export const DEFAULT_EXPECTED_PACE_KM_PER_DAY = 400;
  * interval misparsed as a few hours would produce a wildly, dangerously
  * wrong expected pace for exactly the long-haul trips this exists for.
  */
-function parseIntervalMs(raw: string | null | undefined): number | null {
+export function parseIntervalMs(raw: string | null | undefined): number | null {
   const s = raw?.trim();
   if (!s) return null;
   const m = s.match(/^(?:(\d+)\s+days?\s+)?(\d{1,3}):(\d{2}):(\d{2})(?:\.\d+)?$/i);
