@@ -42,8 +42,12 @@ export class LeafletLiveTruckLayer {
       // setLatLng throws "Cannot read property '_leaflet_pos' of undefined".
       // Only move the marker while it is still attached to a live map.
       const marker = this.marker;
-      if (!marker || !this.map.hasLayer(marker)) return;
-      marker.setLatLng([pos.latitude, pos.longitude]);
+      if (!marker || !this.isMapLive() || !this.map.hasLayer(marker)) return;
+      try {
+        marker.setLatLng([pos.latitude, pos.longitude]);
+      } catch {
+        // Map torn down between the guard and this call — drop the frame.
+      }
     });
   }
 
@@ -75,20 +79,39 @@ export class LeafletLiveTruckLayer {
     this.unsub = store.subscribe((point) => this.onStorePoint(point));
   }
 
+  /**
+   * True while the map still has its DOM panes. After `map.remove()` Leaflet
+   * clears `_panes`/`_mapPane`, and layer calls (even `hasLayer` → `setLatLng`)
+   * then read `_leaflet_pos` off an undefined pane and throw (GX-PULSE-X).
+   */
+  private isMapLive(): boolean {
+    const internals = this.map as unknown as {
+      _mapPane?: unknown;
+      _container?: unknown;
+    };
+    return !!internals._mapPane && !!internals._container;
+  }
+
   detach(): void {
     this.unsub?.();
     this.unsub = null;
     this.interp.cancel();
-    this.marker?.remove();
+    try {
+      this.marker?.remove();
+    } catch {
+      // Map already removed — the marker went with it.
+    }
     this.marker = null;
   }
 
   private onStorePoint(point: TripMapPoint | null): void {
+    // Store events can also land after teardown (realtime push racing unmount).
+    if (!this.marker || !this.isMapLive()) return;
     if (!point) {
-      this.marker?.setOpacity(0);
+      try { this.marker.setOpacity(0); } catch { /* map gone */ }
       return;
     }
-    if (!this.marker || !this.map.hasLayer(this.marker)) return;
+    if (!this.map.hasLayer(this.marker)) return;
 
     this.marker.setOpacity(point.stale ? 0.55 : 1);
 

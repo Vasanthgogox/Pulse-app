@@ -6,6 +6,7 @@ import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter
 import { WebNavMirrorToggle } from "@/components/demo/WebNavMirrorToggle";
 import { WEB_TOP_NAV_ICON } from "@/components/demo/webTopNavIcon.tokens";
 import { NotificationBellIcon } from "@/components/NotificationBellIcon";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { RegistryWebDrawer } from "@/components/RegistryWebDrawer";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -170,6 +171,21 @@ export function DemoTabBar({
   const router = useRouter();
   const pathname = usePathname();
   const { profile } = useAuth();
+  // The header sits above every gate, so the chat icon needs the same
+  // `sales.chat` grant the /chat route enforces — otherwise it's a dead end.
+  const { can: canSurface, isLoading: chatAccessLoading } = useMemberAccess();
+  const canOpenChat = chatAccessLoading || canSurface('sales.chat');
+  /**
+   * The bell drawer carries trip alerts + salary items, and the inbox carries
+   * partner connection invites — both real data, both above every gate. A member
+   * with no functional domain gets neither icon. Fail open while access loads so
+   * the header doesn't reflow.
+   */
+  const canSeeNotifications =
+    chatAccessLoading ||
+    canSurface('tripops.trips.view') ||
+    canSurface('finance.view');
+  const canSeeInvites = chatAccessLoading || canSurface('sales.network.connect');
   const { currentOrganization } = useOrganization();
   const queryClient = useQueryClient();
   const orgId = currentOrganization?.id ?? null;
@@ -549,6 +565,8 @@ export function DemoTabBar({
   }, [isDesktopWeb, networkDockOpen]);
 
   const openMessages = () => {
+    // Guarded at the source so every caller (dock, mobile bar) is covered.
+    if (!canOpenChat) return;
     runNetworkDockAction(() => {
       router.push(ROUTES.CHAT);
     });
@@ -705,65 +723,71 @@ export function DemoTabBar({
               (showNotifications || showInvitations) && styles.webUtilityWrapAboveDrawer,
             ]}
           >
-            <AnimatedPress
-              style={styles.webHeaderIconHit}
-              activeOpacity={0.72}
-              onPressIn={warmChatRoute}
-              onPress={() => {
-                setShowNotifications(false);
-                setShowInvitations(false);
-                router.push(ROUTES.CHAT as Parameters<typeof router.push>[0]);
-              }}
-            >
-              <MessageSquare
-                size={WEB_TOP_NAV_ICON.size}
-                color={WEB_TOP_NAV_ICON.muted}
-                strokeWidth={WEB_TOP_NAV_ICON.stroke}
-              />
-              {messageUnreadCount > 0 ? (
-                <View style={[styles.webHeaderIconDot, styles.webHeaderIconDotChat]} />
-              ) : null}
-            </AnimatedPress>
-            <View style={styles.webPopoverAnchor} ref={notificationsPopoverRootRef}>
+            {canOpenChat ? (
               <AnimatedPress
                 style={styles.webHeaderIconHit}
                 activeOpacity={0.72}
+                onPressIn={warmChatRoute}
                 onPress={() => {
-                  setRegistryPanelsMounted(true);
-                  setShowNotifications((v) => !v);
-                  setShowInvitations(false);
-                }}
-              >
-                <NotificationBellIcon
-                  size={WEB_TOP_NAV_ICON.size}
-                  color={
-                    showNotifications ? WEB_TOP_NAV_ICON.active : WEB_TOP_NAV_ICON.muted
-                  }
-                  strokeWidth={WEB_TOP_NAV_ICON.stroke}
-                  badgeCount={showNotifications ? 0 : notificationCount}
-                />
-              </AnimatedPress>
-            </View>
-            <View style={styles.webPopoverAnchor} ref={invitationsPopoverRootRef}>
-              <AnimatedPress
-                style={styles.webHeaderIconHit}
-                activeOpacity={0.72}
-                onPress={() => {
-                  setRegistryPanelsMounted(true);
-                  setShowInvitations((v) => !v);
                   setShowNotifications(false);
+                  setShowInvitations(false);
+                  router.push(ROUTES.CHAT as Parameters<typeof router.push>[0]);
                 }}
               >
-                <Inbox
+                <MessageSquare
                   size={WEB_TOP_NAV_ICON.size}
-                  color={showInvitations ? WEB_TOP_NAV_ICON.active : WEB_TOP_NAV_ICON.muted}
+                  color={WEB_TOP_NAV_ICON.muted}
                   strokeWidth={WEB_TOP_NAV_ICON.stroke}
                 />
-                {pendingInvites > 0 && !showInvitations ? (
-                  <View style={[styles.webHeaderIconDot, styles.webHeaderIconDotInbox]} />
+                {messageUnreadCount > 0 ? (
+                  <View style={[styles.webHeaderIconDot, styles.webHeaderIconDotChat]} />
                 ) : null}
               </AnimatedPress>
-            </View>
+            ) : null}
+            {canSeeNotifications ? (
+              <View style={styles.webPopoverAnchor} ref={notificationsPopoverRootRef}>
+                <AnimatedPress
+                  style={styles.webHeaderIconHit}
+                  activeOpacity={0.72}
+                  onPress={() => {
+                    setRegistryPanelsMounted(true);
+                    setShowNotifications((v) => !v);
+                    setShowInvitations(false);
+                  }}
+                >
+                  <NotificationBellIcon
+                    size={WEB_TOP_NAV_ICON.size}
+                    color={
+                      showNotifications ? WEB_TOP_NAV_ICON.active : WEB_TOP_NAV_ICON.muted
+                    }
+                    strokeWidth={WEB_TOP_NAV_ICON.stroke}
+                    badgeCount={showNotifications ? 0 : notificationCount}
+                  />
+                </AnimatedPress>
+              </View>
+            ) : null}
+            {canSeeInvites ? (
+              <View style={styles.webPopoverAnchor} ref={invitationsPopoverRootRef}>
+                <AnimatedPress
+                  style={styles.webHeaderIconHit}
+                  activeOpacity={0.72}
+                  onPress={() => {
+                    setRegistryPanelsMounted(true);
+                    setShowInvitations((v) => !v);
+                    setShowNotifications(false);
+                  }}
+                >
+                  <Inbox
+                    size={WEB_TOP_NAV_ICON.size}
+                    color={showInvitations ? WEB_TOP_NAV_ICON.active : WEB_TOP_NAV_ICON.muted}
+                    strokeWidth={WEB_TOP_NAV_ICON.stroke}
+                  />
+                  {pendingInvites > 0 && !showInvitations ? (
+                    <View style={[styles.webHeaderIconDot, styles.webHeaderIconDotInbox]} />
+                  ) : null}
+                </AnimatedPress>
+              </View>
+            ) : null}
             <AnimatedPress
               onPress={onProfilePress}
               style={styles.webAvatarBtn}

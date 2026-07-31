@@ -282,6 +282,20 @@ export class TimeoutError extends Error {
 }
 
 /**
+ * Identity-independent TimeoutError check. `instanceof` is unreliable here: this
+ * module is reachable from more than one lazily-loaded web chunk, so a rejection
+ * created in one chunk can fail `instanceof` against the class in another. That
+ * made a benign sign-out timeout log at error level (GX-PULSE-10).
+ */
+export function isTimeoutError(e: unknown): e is Error {
+  if (e instanceof TimeoutError) return true;
+  const name = (e as { name?: unknown } | null)?.name;
+  if (name === "TimeoutError") return true;
+  const message = (e as { message?: unknown } | null)?.message;
+  return typeof message === "string" && /^Operation timed out after \d+ms$/.test(message);
+}
+
+/**
  * Race a promise against a timeout. Includes random jitter (0–500 ms)
  * to avoid thundering-herd when many devices wake from background simultaneously.
  */

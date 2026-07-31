@@ -985,6 +985,87 @@ export function surfaceGroupsForDomains(
   return out;
 }
 
+/**
+ * Split an explicit surface-id list into ordered sub-sections by `group`,
+ * preserving the given id order. Used by presentational sections (Supply,
+ * Compliance, …) that cut across catalog `domain` buckets.
+ */
+export function surfaceGroupsForIds(
+  ids: readonly MemberSurfaceId[],
+): MemberSurfaceGroup[] {
+  const out: MemberSurfaceGroup[] = [];
+  const byLabel = new Map<string, MemberSurfaceGroup>();
+  for (const id of ids) {
+    const surface = SURFACE_BY_ID[id];
+    if (!surface) continue;
+    const key = surface.group ?? " ungrouped";
+    let bucket = byLabel.get(key);
+    if (!bucket) {
+      bucket = { group: surface.group ?? null, surfaces: [] };
+      byLabel.set(key, bucket);
+      out.push(bucket);
+    }
+    bucket.surfaces.push(surface);
+  }
+  return out;
+}
+
+/**
+ * Presentational sections for the member-permissions page.
+ *
+ * These are VIEWS over the existing catalog — every id below is already a real,
+ * enforced surface. A section does not grant anything on its own and is not
+ * persisted; only the underlying surface ids are stored. A surface may appear in
+ * more than one section (e.g. trip docs under both Operations and Compliance) —
+ * toggling it anywhere flips the same single grant.
+ */
+export type MemberSectionKey =
+  | "supply"
+  | "compliance"
+  | "vendor_support"
+  | "it";
+
+export const MEMBER_SECTION_SURFACES: Record<
+  MemberSectionKey,
+  readonly MemberSurfaceId[]
+> = {
+  supply: [
+    "sales.suppliers.view",
+    "sales.suppliers.create",
+    "sales.suppliers.edit",
+    "sales.suppliers.detail",
+    "sales.suppliers.analytics",
+    "finance.subtab.suppliers",
+    "finance.ledger.suppliers",
+    "tripops.indents.bid",
+    "tripops.indents.award",
+    "tripops.indents.allocate",
+  ],
+  compliance: [
+    "workspace.kyc",
+    "team.audit",
+    "tripops.trips.docs",
+    "tripops.trips.verification",
+    "fleet.vehicles.documents",
+    "finance.pod_reconciliation",
+    "finance.documents_center",
+  ],
+  vendor_support: [
+    "sales.chat",
+    "sales.network.connect",
+    "sales.network.discover",
+    "sales.network.stories",
+    "sales.from_clients",
+  ],
+  it: [
+    "workspace.settings",
+    "workspace.products",
+    "workspace.notifications",
+    "team.manage",
+    "team.invite",
+  ],
+};
+
 /** Cash-tab ledger party filter → surface id (`all` uses cash sub-tab). */
 export function ledgerCategorySurface(
   category: "all" | "customers" | "suppliers" | "vehicle" | "driver",
@@ -1169,6 +1250,32 @@ export function applySurfaceToggle(
       if (orgAllowsSurface(orgCaps, cursor)) out[cursor] = true;
       cursor = SURFACE_BY_ID[cursor]?.requires;
     }
+  }
+  return out;
+}
+
+/**
+ * Section master switch — bulk-apply every org-allowed surface in a
+ * presentational section (Supply, Compliance, …).
+ *
+ * Routes each surface through `applySurfaceToggle`, so turning a section ON also
+ * turns on each surface's parent chain (a supplier ledger row needs finance.view
+ * above it), and turning it OFF cascades that surface's own children off.
+ * Off is applied in reverse so a parent's cascade cannot re-disable a row that
+ * was already handled.
+ */
+export function applySectionToggle(
+  current: MemberSurfaceMap,
+  section: MemberSectionKey,
+  next: boolean,
+  orgCaps: Capability[],
+): MemberSurfaceMap {
+  const ids = MEMBER_SECTION_SURFACES[section].filter((id) =>
+    orgAllowsSurface(orgCaps, id),
+  );
+  let out: MemberSurfaceMap = { ...current };
+  for (const id of next ? ids : [...ids].reverse()) {
+    out = applySurfaceToggle(out, id, next, orgCaps);
   }
   return out;
 }

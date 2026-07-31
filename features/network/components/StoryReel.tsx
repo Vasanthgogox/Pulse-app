@@ -31,10 +31,10 @@ interface StoryReelProps {
    */
   canCreatePost?: boolean;
   /**
-   * Connected / integrated partner org ids. A sponsored Reach post from one
-   * of these shows twice in the strip: a normal network story (no Ad) and a
-   * sponsored Ad bubble — so in-network partners aren't reduced to only an ad.
-   * Prefer shipper (client) orgs; supplier-only LOAD posts are filtered upstream.
+   * @deprecated No longer read. This used to duplicate a connected org's
+   * sponsored post into an organic twin + an Ad bubble, which made one indent
+   * look like two loads. Sponsored posts now render once. Kept so existing
+   * call sites keep compiling; safe to drop from callers.
    */
   networkPartnerOrgIds?: ReadonlySet<string>;
 }
@@ -108,30 +108,12 @@ function storyBubbleKey(post: PostRow): string {
 }
 
 /**
- * In-network sponsored posts become two reel entries: an organic twin
- * (no Ad chrome) plus the sponsored original. Reach-only orgs stay Ad-only.
+ * One indent = one bubble. A boosted post from a connected org previously
+ * rendered twice here (an organic twin with the Ad chrome stripped, plus the
+ * sponsored original), so the same load read as two separate loads in the
+ * strip. Sponsored posts now show once, with their Ad badge, whether or not
+ * the poster is already a connection.
  */
-function expandNetworkSponsoredTwins(
-  posts: PostRow[],
-  partnerOrgIds: ReadonlySet<string> | undefined,
-): PostRow[] {
-  if (!partnerOrgIds || partnerOrgIds.size === 0) return posts;
-  const out: PostRow[] = [];
-  for (const post of posts) {
-    if (
-      post.is_sponsored &&
-      partnerOrgIds.has((post.organization_id ?? "").trim())
-    ) {
-      out.push({
-        ...post,
-        is_sponsored: false,
-        reach_campaign_id: null,
-      });
-    }
-    out.push(post);
-  }
-  return out;
-}
 
 function StoryAvatar({
   name,
@@ -425,7 +407,6 @@ export function StoryReel({
   onCreatePost,
   embedded = false,
   canCreatePost = true,
-  networkPartnerOrgIds,
 }: StoryReelProps) {
   const router = useRouter();
   const { profile } = useAuth();
@@ -476,21 +457,13 @@ export function StoryReel({
     [seenStorageKey],
   );
 
-  const businessOnly = expandNetworkSponsoredTwins(
-    [...posts].filter((p) => p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY"),
-    networkPartnerOrgIds,
-  ).sort((a, b) => {
-    // Same org + type: organic network bubble left of its Ad twin.
-    if (a.organization_id === b.organization_id && a.type === b.type) {
-      const aAd = a.is_sponsored ? 1 : 0;
-      const bAd = b.is_sponsored ? 1 : 0;
-      if (aAd !== bAd) return aAd - bAd;
-    }
-    return (
-      new Date(b.created_at ?? 0).getTime() -
-      new Date(a.created_at ?? 0).getTime()
+  const businessOnly = [...posts]
+    .filter((p) => p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY")
+    .sort(
+      (a, b) =>
+        new Date(b.created_at ?? 0).getTime() -
+        new Date(a.created_at ?? 0).getTime(),
     );
-  });
   const seenStoryKeys = new Set<string>();
   const stories: PostRow[] = [];
   const ownStories: PostRow[] = [];

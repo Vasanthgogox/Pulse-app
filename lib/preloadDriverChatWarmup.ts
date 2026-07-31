@@ -7,6 +7,7 @@ import { TRIP_CHAT_HISTORY_PAGE } from '@/features/chat/services/chat.service';
 import { driverChatConversationsQueryKey } from '@/features/chat/hooks/useDriverChatConversationsQuery';
 import {
   driverChatMessagesQueryKey,
+  driverChatNextPageParam,
   type DriverChatMessagesPage,
 } from '@/features/chat/utils/driverChatMessageCache.util';
 import type { QueryClient } from '@tanstack/react-query';
@@ -38,13 +39,16 @@ export function preloadDriverChatThread(
     queryKey: driverChatMessagesQueryKey(cid),
     initialPageParam: undefined as string | undefined,
     staleTime: THREAD_STALE_MS,
-    queryFn: async () => {
+    queryFn: async ({ pageParam }) => {
       const rows = await chatService.getMessagesByConversation(cid, {
+        before: pageParam,
         limit: TRIP_CHAT_HISTORY_PAGE,
         partyType: null,
       });
       return { rows } satisfies DriverChatMessagesPage;
     },
+    getNextPageParam: (lastPage: DriverChatMessagesPage) =>
+      driverChatNextPageParam(lastPage, TRIP_CHAT_HISTORY_PAGE),
   });
 }
 

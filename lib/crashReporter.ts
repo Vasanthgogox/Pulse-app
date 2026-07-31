@@ -45,6 +45,32 @@ function isAuthNoise(event: Sentry.ErrorEvent): boolean {
   );
 }
 
+/**
+ * Warning-level auth signals that are already handled in code and self-recover:
+ * a slow token refresh keeps the existing session, an expired one clears it, and
+ * a sign-out that times out remotely still clears locally. They were logged via
+ * `captureMessage(level: 'warning')`, but Sentry still grouped them as separate
+ * unresolved *issues* (GX-PULSE-1A / 1B / 10 / Y-adjacent), which buried the real
+ * crashes. Keep them out of the issue stream — the breadcrumb trail retains them
+ * for any report that does fail.
+ */
+const BENIGN_AUTH_SIGNALS = [
+  'refresh_invalid_session_cleared',
+  'refresh_session_timeout',
+  'refresh_timeout_degraded_session_preserved',
+  'sign_out_timeout_local_cleared',
+  'force_sign_out_timeout_local_cleared',
+];
+
+function isBenignAuthSignal(event: Sentry.ErrorEvent): boolean {
+  if (event.level !== 'warning') return false;
+  const haystack = [
+    event.message ?? '',
+    ...(event.exception?.values ?? []).map((v) => v.value ?? ''),
+  ].join(' ');
+  return BENIGN_AUTH_SIGNALS.some((s) => haystack.includes(s));
+}
+
 export function initCrashReporter(): void {
   if (initialized || __DEV__ || !DSN) return;
   Sentry.init({
@@ -55,7 +81,8 @@ export function initCrashReporter(): void {
     release: RELEASE,
     environment: ENVIRONMENT,
     // Drop expected "no session" permission-denied noise before it reports.
-    beforeSend: (event) => (isAuthNoise(event) ? null : event),
+    beforeSend: (event) =>
+      isAuthNoise(event) || isBenignAuthSignal(event) ? null : event,
   });
   initialized = true;
 }

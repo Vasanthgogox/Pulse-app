@@ -12,9 +12,18 @@ type Props = { children: ReactNode };
 type State = {
   hasError: boolean;
   errorMessage: string | null;
+  /** Kept so the retry path can rebuild a faithful Error for stale-chunk matching. */
+  errorName: string | null;
   componentStack: string | null;
   recoveringDeploy: boolean;
 };
+
+/** Rebuild an Error that still carries `name`, which stale-chunk matching needs. */
+function toError(name: string | null, message: string): Error {
+  const err = new Error(message);
+  if (name) err.name = name;
+  return err;
+}
 
 /**
  * App-wide error boundary. Wraps the provider tree in app/_layout.tsx so a crash
@@ -32,6 +41,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   state: State = {
     hasError: false,
     errorMessage: null,
+    errorName: null,
     componentStack: null,
     recoveringDeploy: false,
   };
@@ -39,7 +49,11 @@ export class AppErrorBoundary extends Component<Props, State> {
   private retryKey = 0;
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    return { hasError: true, errorMessage: error?.message ?? null };
+    return {
+      hasError: true,
+      errorMessage: error?.message ?? null,
+      errorName: error?.name ?? null,
+    };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
@@ -57,14 +71,19 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   private handleRetry = () => {
-    const msg = this.state.errorMessage;
-    if (msg && isStaleWebChunkError(new Error(msg)) && recoverStaleWebDeploy()) {
+    const { errorMessage, errorName } = this.state;
+    if (
+      (errorMessage || errorName) &&
+      isStaleWebChunkError(toError(errorName, errorMessage ?? '')) &&
+      recoverStaleWebDeploy()
+    ) {
       return;
     }
     this.retryKey += 1;
     this.setState({
       hasError: false,
       errorMessage: null,
+      errorName: null,
       componentStack: null,
       recoveringDeploy: false,
     });
@@ -76,8 +95,10 @@ export class AppErrorBoundary extends Component<Props, State> {
         return <View style={{ flex: 1 }} />;
       }
       const staleDeploy =
-        this.state.errorMessage != null &&
-        isStaleWebChunkError(new Error(this.state.errorMessage));
+        (this.state.errorMessage != null || this.state.errorName != null) &&
+        isStaleWebChunkError(
+          toError(this.state.errorName, this.state.errorMessage ?? ''),
+        );
       const technicalDetails = [this.state.errorMessage, this.state.componentStack]
         .filter(Boolean)
         .join('\n\n');

@@ -38,6 +38,7 @@ import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { ROUTES } from "@/lib/routes";
 import { canAccessPartyKind } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { buildPulseCommerceUrl, openSuiteProductApp, openSuiteProductAppInNewTab } from "@/lib/suite/suiteAuth";
 import { useRouter } from "expo-router";
 import {
@@ -117,6 +118,7 @@ export function WorkspaceHubMenu({
   const insets = useSafeAreaInsets();
   const { user, profile, signOut } = useAuth();
   const capabilities = useCapabilities();
+  const { can: canSurface } = useMemberAccess();
   const { locale } = useLanguage();
   const { currentOrganization } = useOrganization();
   const [workspaceRegion, setWorkspaceRegion] = useState<
@@ -238,29 +240,40 @@ export function WorkspaceHubMenu({
     openSuiteProductAppInNewTab(commerceUrl);
   }, [commerceUrl]);
 
-  const workspaceRows: HubRow[] = useMemo(
-    () => [
-      {
+  /**
+   * This drawer renders above every MemberDomainGate, so each workspace row
+   * needs its own surface check — otherwise a member with no access still
+   * reaches org KYC (GSTIN, identity documents), workspace settings and the
+   * Commerce app. Party rows below are already filtered via useCapabilities.
+   */
+  const workspaceRows: HubRow[] = useMemo(() => {
+    const rows: HubRow[] = [];
+    if (canSurface("workspace.kyc")) {
+      rows.push({
         id: "ws-kyc",
         label: "Org Identity & KYC",
         icon: hubLucideIcon(Shield),
         panelId: "kyc",
-      },
-      {
+      });
+    }
+    if (canSurface("workspace.settings")) {
+      rows.push({
         id: "ws-settings",
         label: "Settings",
         icon: hubLucideIcon(Settings),
         panelId: "settings",
-      },
-      {
+      });
+    }
+    if (canSurface("workspace.products")) {
+      rows.push({
         id: "ws-commerce",
         label: "Commerce",
         icon: hubLucideIcon(Store),
         onPress: openCommerce,
-      },
-    ],
-    [openCommerce],
-  );
+      });
+    }
+    return rows;
+  }, [openCommerce, canSurface]);
 
   const partyRows: HubRow[] = useMemo(() => {
     const all: {
@@ -317,7 +330,9 @@ export function WorkspaceHubMenu({
     title: string,
     sectionRows: HubRow[],
     accentColor: string = HUB_PURPLE,
-  ) => (
+  ) =>
+    // No permitted rows → drop the whole card, not an empty titled section.
+    sectionRows.length === 0 ? null : (
     <View style={hubStyles.sectionCard}>
       <View style={hubStyles.sectionHeader}>
         <View style={[hubStyles.sectionAccent, { backgroundColor: accentColor }]} />
@@ -381,7 +396,9 @@ export function WorkspaceHubMenu({
     title: string,
     sectionRows: HubRow[],
     accentColor: string = HUB_PURPLE,
-  ) => (
+  ) =>
+    // No permitted rows → drop the whole card, not an empty titled section.
+    sectionRows.length === 0 ? null : (
     <View style={hubStyles.sectionCard}>
       <View style={hubStyles.sectionHeader}>
         <View style={[hubStyles.sectionAccent, { backgroundColor: accentColor }]} />

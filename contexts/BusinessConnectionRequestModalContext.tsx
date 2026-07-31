@@ -3,6 +3,7 @@ import { useOptionalAwardedIndentDeployModal } from '@/contexts/AwardedIndentDep
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { BusinessConnectionRequestModal } from '@/features/network/components/BusinessConnectionRequestModal';
 import { isConnectionProtocolInvite } from '@/features/network/utils/businessConnectionOffer.util';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 import {
   clearAutoPromptRecord,
   inviteAutoPromptKey,
@@ -46,7 +47,16 @@ export {
 
 export function BusinessConnectionRequestModalProvider({ children }: { children: ReactNode }) {
   const org = useOptionalOrganization();
-  const orgId = org?.currentOrganization?.id ?? null;
+  /**
+   * Also mounted above every MemberDomainGate — see the note in
+   * AwardedIndentDeployModalContext. Inbound connection invites expose partner
+   * org identities, so a member without network access must not receive them.
+   * Nulling orgId disables the invite fetch outright.
+   */
+  const { can: canSurface, isLoading: accessLoading } = useMemberAccess();
+  const canSeeInvites =
+    !accessLoading && canSurface('sales.network.connect');
+  const orgId = canSeeInvites ? org?.currentOrganization?.id ?? null : null;
   const deployGate = useOptionalAwardedIndentDeployModal();
 
   const { receivedItems, refreshInboundProtocol } = useInboundProtocolInvites(orgId);

@@ -263,14 +263,16 @@ export function TripMap({
       const avgLng = allCoords.reduce((s, c) => s + c[1], 0) / allCoords.length;
 
       // ── Clean up old instance ────────────────────────────────────────────
-      if (mapInstanceRef.current) {
-        try {
-          if (typeof mapInstanceRef.current.off === 'function') mapInstanceRef.current.off();
-          if (typeof mapInstanceRef.current.stop === 'function') mapInstanceRef.current.stop();
-          mapInstanceRef.current.remove();
-        } catch {
-          /* ignore */
-        }
+      // stop() → remove() → off(), same ordering rationale as the unmount
+      // cleanup below: a bare off() first would strip the internal listeners
+      // remove() needs, leaving a detached pane behind (GX-PULSE-X). This path
+      // runs far more often than unmount — the effect re-runs on every truck
+      // location update — so it is the likelier origin of the crash.
+      const prev = mapInstanceRef.current;
+      if (prev) {
+        try { prev.stop?.(); } catch { /* ignore */ }
+        try { prev.remove(); } catch { /* ignore */ }
+        try { prev.off?.(); } catch { /* ignore */ }
         mapInstanceRef.current = null;
       }
       if (!mapRef.current || !isRunActive()) return;
@@ -712,13 +714,16 @@ export function TripMap({
       }
       const m = mapInstanceRef.current;
       if (m) {
-        try {
-          m.off();
-          m.stop();
-          m.remove();
-        } catch {
-          /* ignore */
-        }
+        // Order matters. `off()` with no args strips Leaflet's OWN internal
+        // listeners (including the zoom-transition handler that map.remove()
+        // relies on to unwind an in-flight animation), so calling it first left
+        // a half-torn-down map whose pane was already detached — the source of
+        // `_leaflet_pos` of undefined (GX-PULSE-X). stop() cancels any running
+        // pan/zoom, remove() does the real teardown, and only then is dropping
+        // any residual app listeners safe.
+        try { m.stop(); } catch { /* ignore */ }
+        try { m.remove(); } catch { /* ignore */ }
+        try { m.off(); } catch { /* ignore */ }
         mapInstanceRef.current = null;
       }
     };

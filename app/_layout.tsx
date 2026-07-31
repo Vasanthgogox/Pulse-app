@@ -14,6 +14,7 @@ import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
 import { DemoTabBar } from '@/components/demo/DemoTabBar';
 import type { DemoTabId } from '@/components/demo/DemoTabBar';
 import { useMemberAccess } from '@/lib/useMemberAccess';
+import { useMemberCapabilities } from '@/lib/useMemberCapabilities';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { routeStackScreenOptions } from '@/lib/routeStackOptions';
@@ -547,6 +548,14 @@ function RootOverlayTabBar() {
   const { can: canSurface, isLoading: surfaceLoading } = useMemberAccess();
   // Fail open while surfaces hydrate so the nav item doesn't flicker in and out.
   const canViewLoadsHub = surfaceLoading || canSurface('tripops.pulse_loads');
+  /**
+   * This nav renders above every MemberDomainGate, so the three primary tabs
+   * were always visible — a member with no functional role saw Fiscal / Trips /
+   * Network and could tap straight into a gate notice. Same access source the
+   * gates use; fail open while it resolves so tabs don't flicker.
+   */
+  const memberDomainAccess = useMemberCapabilities();
+  const domainsLoading = memberDomainAccess.isLoading;
 
   const showOnRootScreens = pathnameHasRootTopNav(pathname);
 
@@ -588,9 +597,9 @@ function RootOverlayTabBar() {
     <DemoTabBar
       activeTab={activeTab}
       visibility={{
-        finance: true,
-        trips: true,
-        network: true,
+        finance: domainsLoading || memberDomainAccess.finance,
+        trips: domainsLoading || memberDomainAccess.tripops,
+        network: domainsLoading || memberDomainAccess.sales,
         loadCenter: canViewLoadsHub,
       }}
       onTabChange={(tab) => {

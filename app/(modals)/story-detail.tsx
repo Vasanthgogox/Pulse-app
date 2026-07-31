@@ -12,6 +12,7 @@ import {
   type StoryPreviewRow,
 } from '@/features/network/services/posts.service';
 import { ROUTES } from '@/lib/routes';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -124,7 +125,8 @@ function PreviewShell({
   children,
 }: {
   preview: StoryPreviewRow;
-  children: React.ReactNode;
+  /** Omitted when there's no action to offer (e.g. member lacks the story grant). */
+  children?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   const routeLabel =
@@ -167,6 +169,7 @@ function PreviewShell({
 export default function StoryDetailRoute() {
   const { user, status } = useAuth();
   const { currentOrganization } = useOrganization();
+  const { can: canSurface, isLoading: accessLoading } = useMemberAccess();
   const router = useRouter();
   const params = useLocalSearchParams<{ postId?: string; orgId?: string; storyType?: string; queue?: string }>();
   const myOrgId = currentOrganization?.id ?? '';
@@ -270,7 +273,18 @@ export default function StoryDetailRoute() {
     );
   }
 
-  if (connectionQ.isLoading) {
+  /**
+   * Signed-in members still need the `sales.network.stories` grant to reach the
+   * bidding screen. Without it they fall back to the same public preview an
+   * outsider sees — this is the door that made chat → story → live indent work
+   * for a fully restricted member. Owners/admins bypass via useMemberAccess.
+   * Own-org broadcasts stay visible so a load giver never locks themselves out.
+   */
+  if (!accessLoading && !isOwnStory && !canSurface('sales.network.stories')) {
+    return <PreviewShell preview={preview} />;
+  }
+
+  if (accessLoading || connectionQ.isLoading) {
     return (
       <StoryMobilePopupShell onBackdropPress={() => router.back()}>
         <LazySuspenseInlineFallback />

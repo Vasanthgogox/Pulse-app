@@ -7,9 +7,14 @@ import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { useGlobalSyncStore } from '@/lib/globalSync/useGlobalSyncStore';
 import { useVehicleIdleToastAlert } from '@/lib/globalSync/useOperationsDerived';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 
 /**
  * Persistent top toast for **vehicle idle** on desktop web until dismissed (RPC + Realtime).
+ *
+ * Mounted in the root layout, so it renders above every MemberDomainGate — it
+ * needs its own `tripops.trips.tracking` check or a member with no trip access
+ * sees trip numbers and vehicle state in the toast.
  */
 export function GlobalOperationsToast() {
   const layoutWidth = useWebLayoutWidth();
@@ -17,11 +22,15 @@ export function GlobalOperationsToast() {
   const auth = useOptionalAuth();
   const orgId = org?.currentOrganization?.id ?? null;
   const bootstrapStatus = useGlobalSyncStore((s) => s.bootstrapStatus);
+  const { can: canSurface, isLoading: accessLoading } = useMemberAccess();
 
   const idle = useVehicleIdleToastAlert();
 
   const isDesktopWeb = Platform.OS === 'web' && layoutWidth >= Layout.webDesktopMinWidth;
   if (!isDesktopWeb || auth?.profile?.role === 'driver' || !orgId || bootstrapStatus !== 'ready' || !idle) {
+    return null;
+  }
+  if (accessLoading || !canSurface('tripops.trips.tracking')) {
     return null;
   }
 

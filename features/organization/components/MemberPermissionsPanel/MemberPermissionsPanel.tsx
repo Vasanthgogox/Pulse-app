@@ -48,11 +48,14 @@ import {
 } from "@/lib/capabilities";
 import {
   applyDomainToggle,
+  applySectionToggle,
   applySurfaceToggle,
   defaultSurfacesForRole,
   domainsFromSurfaces,
   hydrateMemberSurfaces,
+  MEMBER_SECTION_SURFACES,
   MEMBER_SURFACE_CATALOG,
+  type MemberSectionKey,
   type MemberSurfaceId,
   type MemberSurfaceMap,
 } from "@/lib/memberSurfaces";
@@ -339,6 +342,32 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
       setSurfaces((prev) => {
         const updated = applySurfaceToggle(prev, id, next, orgCaps);
         setDomains(domainsFromSurfaces(updated));
+        return updated;
+      });
+      setAppliedPresetId(null);
+      setError(null);
+    },
+    [orgCaps],
+  );
+
+  /**
+   * Section master switch. Sections span domains (Supply touches sales, finance
+   * and tripops), so recompute domain flags and the role label from the result
+   * rather than assuming a single owning domain.
+   */
+  const handleToggleSection = useCallback(
+    (section: MemberSectionKey, next: boolean) => {
+      setSurfaces((prev) => {
+        const updated = applySectionToggle(prev, section, next, orgCaps);
+        const nextDomains = domainsFromSurfaces(updated);
+        setDomains(nextDomains);
+        setPlatformRole((role) => {
+          const stillCovered =
+            role === "finance" || role === "sales" || role === "tripops"
+              ? nextDomains[role]
+              : false;
+          return stillCovered ? role : platformRoleFromDomains(nextDomains);
+        });
         return updated;
       });
       setAppliedPresetId(null);
@@ -796,22 +825,41 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
         </Text>
       </View>
       <View style={styles.domainStack}>
-        {DOMAIN_TOGGLE_ROWS.map((def) => (
-          <DomainPermissionToggleRow
-            key={def.key}
-            def={def}
-            domainEnabled={
-              def.key === "team" ? teamDomainEnabled : domains[def.key]
-            }
-            surfaces={surfaces}
-            orgCaps={orgCaps}
-            canEdit={canEdit && !busy}
-            orgAllowsDomain={orgAllows[def.key]}
-            defaultExpanded={false}
-            onToggleDomain={(next) => handleToggleDomain(def.key, next)}
-            onToggleSurface={handleToggleSurface}
-          />
-        ))}
+        {DOMAIN_TOGGLE_ROWS.map((def) => {
+          // Section rows (supply, compliance, …) have no domain flag of their
+          // own — they regroup surfaces the domain rows above already own.
+          const isSection = def.key in MEMBER_SECTION_SURFACES;
+          return (
+            <DomainPermissionToggleRow
+              key={def.key}
+              def={def}
+              domainEnabled={
+                isSection
+                  ? true
+                  : def.key === "team"
+                    ? teamDomainEnabled
+                    : domains[def.key as FunctionalRole]
+              }
+              surfaces={surfaces}
+              orgCaps={orgCaps}
+              canEdit={canEdit && !busy}
+              orgAllowsDomain={
+                isSection
+                  ? true
+                  : orgAllows[def.key as FunctionalRole | "team"]
+              }
+              defaultExpanded={false}
+              onToggleDomain={(next) => {
+                if (isSection) {
+                  handleToggleSection(def.key as MemberSectionKey, next);
+                  return;
+                }
+                handleToggleDomain(def.key as FunctionalRole | "team", next);
+              }}
+              onToggleSurface={handleToggleSurface}
+            />
+          );
+        })}
       </View>
 
       {error ? (
@@ -1206,7 +1254,7 @@ const styles = StyleSheet.create({
     color: "#525252",
     letterSpacing: -0.1,
   },
-  domainStack: { gap: 8, width: "100%" },
+  domainStack: { gap: 12, width: "100%" },
 
   presetSaveCard: {
     marginTop: 10,

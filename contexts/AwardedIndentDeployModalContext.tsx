@@ -13,6 +13,7 @@ import {
   useMyDirectQuotesQuery,
 } from "@/lib/queries/useIndentsQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import {
   isIndentDeployFlowPath,
   parseIndentIdFromDeployFlowPath,
@@ -56,7 +57,24 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   const router = useRouter();
   const pathname = usePathname();
   const org = useOptionalOrganization();
-  const orgId = org?.currentOrganization?.id ?? null;
+  /**
+   * This provider wraps the whole tab layout, so it sits ABOVE every
+   * MemberDomainGate. Without its own check a member with no tripops access saw
+   * the awarded-deploy card (rate, client, route, Assign vehicle) rendered
+   * beside the gate's own "no workspace access" notice.
+   *
+   * Gate the orgId rather than just the render: a null orgId disables the
+   * quotes/indents/trips queries, so a restricted member never fetches the
+   * commercial detail in the first place.
+   */
+  const { can: canSurface, isLoading: accessLoading } = useMemberAccess();
+  const canDeployAwarded =
+    !accessLoading &&
+    canSurface("tripops.trips.view") &&
+    canSurface("tripops.trips.assign");
+  const orgId = canDeployAwarded
+    ? org?.currentOrganization?.id ?? null
+    : null;
 
   const { data: myQuotes = [], isPending: myQuotesLoading } =
     useMyDirectQuotesQuery(orgId);
@@ -326,7 +344,7 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   return (
     <AwardedIndentDeployModalContext.Provider value={value}>
       {children}
-      {visibleQueue.length > 0 ? (
+      {canDeployAwarded && visibleQueue.length > 0 ? (
         <>
           <AwardedIndentDeployModal
             visible={showExpandedDeployModal}

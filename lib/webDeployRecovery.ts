@@ -42,11 +42,22 @@ export function isStaleNativeBundleError(error: Error): boolean {
 /** Lazy route chunks missing after a new Netlify deploy (hashed filenames no longer exist). */
 export function isStaleWebChunkError(error: Error): boolean {
   if (platformOS() !== 'web') return false;
-  const msg = error.message ?? '';
+  // Match on name too: Metro throws `AsyncRequireError` whose `message` is the
+  // failing URL only, and the boundary's retry path reconstructs the error from
+  // a stored message alone — so both fields must be considered.
+  const msg = `${error.name ?? ''}: ${error.message ?? ''}`;
+  // Keep in sync with `isStaleWebChunkError` in polyfills/webChunkRecovery.js —
+  // that pre-main copy catches these before React mounts; this one is what the
+  // AppErrorBoundary uses once a lazy route rejects inside the tree. The
+  // `AsyncRequireError` / `Loading module … failed` pair was missing here, so
+  // Metro's own async-require failure escaped to Sentry as a render error
+  // instead of triggering a recovery reload (GX-PULSE-Y).
   return (
     /Requiring unknown module/i.test(msg) ||
     /Unexpected token '<'/i.test(msg) ||
     /Loading chunk [\w-]+ failed/i.test(msg) ||
+    /Loading module .* failed/i.test(msg) ||
+    /AsyncRequireError/i.test(msg) ||
     /Failed to fetch dynamically imported module/i.test(msg) ||
     /error loading dynamically imported module/i.test(msg) ||
     /Importing a module script failed/i.test(msg)

@@ -5,6 +5,7 @@
 import * as chatService from '@/features/chat/services/chat.service';
 import { TRIP_CHAT_HISTORY_PAGE } from '@/features/chat/services/chat.service';
 import {
+  driverChatNextPageParam,
   flattenDriverChatMessages,
   type DriverChatMessagesPage,
 } from '@/features/chat/utils/driverChatMessageCache.util';
@@ -48,10 +49,8 @@ export function useDriverChatMessagesQuery(conversationId: string | null) {
       });
       return { rows } satisfies DriverChatMessagesPage;
     },
-    getNextPageParam: (lastPage) => {
-      if (lastPage.rows.length < TRIP_CHAT_HISTORY_PAGE) return undefined;
-      return lastPage.rows[0]?.created_at;
-    },
+    getNextPageParam: (lastPage) =>
+      driverChatNextPageParam(lastPage, TRIP_CHAT_HISTORY_PAGE),
   });
 
   const messages = useMemo(

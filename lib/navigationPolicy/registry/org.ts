@@ -479,6 +479,16 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
     id: 'org.chat',
     pattern: '/chat',
     experience: 'org',
+    // Operating-model floor only. Per-member `sales.chat` is enforced in the
+    // route itself — this grant set is org capabilities, not member surfaces.
+    grants: {
+      anyOf: [
+        'dispatch',
+        'dispatch_for_own_fleet',
+        'marketplace_post',
+        'marketplace_bid',
+      ],
+    },
     priority: 100,
     onDeny: { type: 'sign_in' },
   },
@@ -652,6 +662,10 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
     id: 'org.modal-story-detail',
     pattern: '/story-detail',
     experience: 'org',
+    // Intentionally ungated: this is also the public broadcast share link, so
+    // anonymous visitors must reach the preview. The `sales.network.stories`
+    // check lives in the route, which downgrades ungranted members to that same
+    // preview instead of the bidding screen.
     priority: 100,
     onDeny: { type: 'sign_in' },
   },

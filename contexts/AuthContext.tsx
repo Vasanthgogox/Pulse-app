@@ -32,7 +32,7 @@ import {
   mergeAuthProfiles,
   recordCircuitBreakerHit,
   resetCircuitBreaker,
-  TimeoutError,
+  isTimeoutError,
   withTimeout,
   type AuthStatus,
   type UserProfile,
@@ -288,7 +288,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await withTimeout(authService.signOut(), AUTH_TIMEOUT_MS);
     } catch (e) {
-      logAuthError("force_sign_out_error", e, { reason });
+      // Local state is cleared below regardless, so a remote-revoke timeout is
+      // not an error — same rationale as signOut().
+      if (isTimeoutError(e)) {
+        logAuth("force_sign_out_timeout_local_cleared", { reason }, "warn");
+      } else {
+        logAuthError("force_sign_out_error", e, { reason });
+      }
     }
     clearAuthState(true);
     logAuth("forced_sign_out", { reason });
@@ -315,11 +321,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           return await withTimeout(loadVerifiedProfile(), PROFILE_VERIFY_TIMEOUT_MS);
         } catch (e) {
-          if (e instanceof TimeoutError) {
+          if (isTimeoutError(e)) {
             try {
               return await withTimeout(loadVerifiedProfile(), PROFILE_VERIFY_TIMEOUT_MS);
             } catch (retryErr) {
-              if (retryErr instanceof TimeoutError) {
+              if (isTimeoutError(retryErr)) {
                 logAuth("profile_verification_timeout", { uid, retried: true });
               } else {
                 logAuthError("profile_verification_error", retryErr, { uid, retried: true });
@@ -524,7 +530,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                   } catch (e) {
                     if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                    if (e instanceof TimeoutError) {
+                    if (isTimeoutError(e)) {
                       logAuth(
                         "restore_refresh_timeout",
                         { uid: sessionUser.uid },
@@ -739,7 +745,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-      if (e instanceof TimeoutError) {
+      if (isTimeoutError(e)) {
         logAuth("refresh_session_timeout", { message: e.message }, "warn");
       } else {
         logAuthError("refresh_session_error", e);
@@ -768,7 +774,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const wrapActionResult = (result: { error: Error | null }): { error: Error | null } => {
     if (!result.error) return result;
-    if (result.error instanceof TimeoutError) {
+    if (isTimeoutError(result.error)) {
       return { error: new AuthError("NETWORK_TIMEOUT", result.error.message, result.error) };
     }
     return result;
@@ -792,7 +798,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       // Local state is cleared below either way, so the user is signed out even
       // when the remote revoke times out on a flaky network. Warn, don't error.
-      if (e instanceof TimeoutError) {
+      if (isTimeoutError(e)) {
         logAuth("sign_out_timeout_local_cleared", { message: e.message }, "warn");
       } else {
         logAuthError("sign_out_error", e);

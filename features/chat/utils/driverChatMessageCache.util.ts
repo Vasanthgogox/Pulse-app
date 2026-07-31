@@ -10,6 +10,19 @@ export type DriverChatMessagesPage = {
   rows: TripMessageRow[];
 };
 
+/**
+ * Single source of truth for the thread's cursor. Both the live infinite query
+ * and the navigation prefetch must pass this — a prefetch that omits it seeds a
+ * query whose observer then calls an undefined getNextPageParam (GX-PULSE-1H).
+ */
+export function driverChatNextPageParam(
+  lastPage: DriverChatMessagesPage,
+  pageSize: number,
+): string | undefined {
+  if (lastPage.rows.length < pageSize) return undefined;
+  return lastPage.rows[0]?.created_at;
+}
+
 export function flattenDriverChatMessages(
   data: InfiniteData<DriverChatMessagesPage> | undefined,
 ): TripMessageRow[] {

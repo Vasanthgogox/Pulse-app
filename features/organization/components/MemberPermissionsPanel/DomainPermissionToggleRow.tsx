@@ -5,9 +5,12 @@
  */
 import {
   applySurfaceToggle,
+  MEMBER_SECTION_SURFACES,
   memberHasSurface,
   orgAllowsSurface,
   surfaceGroupsForDomains,
+  surfaceGroupsForIds,
+  type MemberSectionKey,
   type MemberSurfaceDef,
   type MemberSurfaceId,
   type MemberSurfaceMap,
@@ -64,19 +67,33 @@ function SurfaceCheckbox({
   );
 }
 
-const DOMAIN_ACCENT: Record<FunctionalRole | "fleet" | "team", string> = {
+const DOMAIN_ACCENT: Record<
+  FunctionalRole | "fleet" | "team" | MemberSectionKey,
+  string
+> = {
   finance: "#0894FF",
   sales: "#C959DD",
   tripops: "#FF9004",
   fleet: "#0894FF",
   team: "#171717",
+  supply: "#00A6A6",
+  compliance: "#E5484D",
+  vendor_support: "#7C5CFF",
+  it: "#525252",
 };
 
+export type DomainToggleRowKey = FunctionalRole | "team" | MemberSectionKey;
+
 export type DomainToggleRowDef = {
-  key: FunctionalRole | "team";
+  key: DomainToggleRowKey;
   label: string;
   hint: string;
 };
+
+/** Section rows are presentational views over existing surfaces. */
+function isSectionKey(key: DomainToggleRowKey): key is MemberSectionKey {
+  return key in MEMBER_SECTION_SURFACES;
+}
 
 type Props = {
   def: DomainToggleRowDef;
@@ -109,12 +126,21 @@ export function DomainPermissionToggleRow({
   const accent = DOMAIN_ACCENT[def.key];
   const lockedByOrg = !orgAllowsDomain;
   const switchOn = domainEnabled && orgAllowsDomain;
+  const isSection = isSectionKey(def.key);
+  /**
+   * A section's own switch is a bulk shortcut, not a gate — its checkboxes stay
+   * editable regardless, so flipping the section off doesn't lock you out of
+   * turning individual rows back on. Domain rows do gate on their master switch.
+   */
+  const surfacesEditable = canEdit && (isSection || switchOn);
 
   const groups = useMemo(
     () =>
-      surfaceGroupsForDomains(
-        def.key === "tripops" ? ["tripops", "fleet"] : [def.key],
-      ),
+      isSectionKey(def.key)
+        ? surfaceGroupsForIds(MEMBER_SECTION_SURFACES[def.key])
+        : surfaceGroupsForDomains(
+            def.key === "tripops" ? ["tripops", "fleet"] : [def.key],
+          ),
     [def.key],
   );
   const rows = useMemo(() => groups.flatMap((g) => g.surfaces), [groups]);
@@ -123,6 +149,8 @@ export function DomainPermissionToggleRow({
     memberHasSurface(orgCaps, surfaces, r.id, false),
   ).length;
   const availableCount = rows.filter((r) => orgAllowsSurface(orgCaps, r.id)).length;
+  /** Section switch reads "everything in here is on". */
+  const sectionAllOn = availableCount > 0 && enabledCount === availableCount;
 
   /**
    * Bulk-apply a group header checkbox across its org-allowed surfaces.
@@ -139,13 +167,18 @@ export function DomainPermissionToggleRow({
   };
 
   return (
-    <View style={[styles.card, switchOn && styles.cardOn]}>
+    <View
+      style={[
+        styles.card,
+        (isSection ? enabledCount > 0 : switchOn) && styles.cardOn,
+      ]}
+    >
       <View style={styles.row}>
         <View style={[styles.dot, { backgroundColor: accent }]} />
         <View style={styles.copy}>
           <Text style={styles.label}>{def.label}</Text>
           <Text style={styles.hint} numberOfLines={1}>
-            {lockedByOrg
+            {lockedByOrg && !isSection
               ? "Not available for this workspace operating model"
               : def.hint}
           </Text>
@@ -170,13 +203,13 @@ export function DomainPermissionToggleRow({
           )}
         </Pressable>
         <Switch
-          value={switchOn}
-          disabled={!canEdit || lockedByOrg}
+          value={isSection ? sectionAllOn : switchOn}
+          disabled={!canEdit || (isSection ? availableCount === 0 : lockedByOrg)}
           onValueChange={onToggleDomain}
           trackColor={{ false: "#E8E8E8", true: accent }}
           thumbColor="#FFFFFF"
           ios_backgroundColor="#E8E8E8"
-          accessibilityLabel={`${def.label} domain`}
+          accessibilityLabel={`${def.label} ${isSection ? "section" : "domain"}`}
         />
       </View>
 
@@ -202,7 +235,7 @@ export function DomainPermissionToggleRow({
                     <SurfaceCheckbox
                       state={groupState}
                       accent={accent}
-                      disabled={!canEdit || !switchOn}
+                      disabled={!surfacesEditable}
                       label={`${group.group} — all`}
                       onPress={() => toggleGroup(available, groupState !== "on")}
                     />
@@ -245,7 +278,7 @@ export function DomainPermissionToggleRow({
                           <SurfaceCheckbox
                             state={on ? "on" : "off"}
                             accent={accent}
-                            disabled={!canEdit || !switchOn}
+                            disabled={!surfacesEditable}
                             label={surface.label}
                             onPress={() => onToggleSurface(surface.id, !on)}
                           />
@@ -290,13 +323,34 @@ export const DOMAIN_TOGGLE_ROWS: DomainToggleRowDef[] = [
   },
   {
     key: "tripops",
-    label: "TripOps + Fleet",
+    label: "Operations",
     hint: "Trips, indents, tracking, docs, vehicles, drivers",
   },
   {
     key: "team",
     label: "Team / Workspace",
     hint: "Access control, invites, audit, settings, KYC",
+  },
+  // Sections below regroup surfaces owned by the domains above — no new grants.
+  {
+    key: "supply",
+    label: "Supply",
+    hint: "Suppliers, supplier ledger, bidding, award, allocation",
+  },
+  {
+    key: "compliance",
+    label: "Compliance",
+    hint: "KYC, audit trail, trip & vehicle documents, POD",
+  },
+  {
+    key: "vendor_support",
+    label: "Vendor support",
+    hint: "Partner chat, network connect, discovery, client requests",
+  },
+  {
+    key: "it",
+    label: "IT dept",
+    hint: "Workspace settings, products, notifications, team access",
   },
 ];
 
@@ -307,9 +361,9 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#FBFBFB",
     borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingHorizontal: 14,
+    paddingTop: 13,
+    paddingBottom: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#EEEEEE",
     gap: 0,
@@ -329,16 +383,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   copy: { flex: 1, minWidth: 0, gap: 1 },
+  // L1 — domain / section title. Largest, darkest, tightest.
   label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#171717",
-    letterSpacing: -0.3,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0A0A0A",
+    letterSpacing: -0.4,
   },
   hint: {
-    fontSize: 11,
-    color: "#737373",
-    lineHeight: 14,
+    fontSize: 11.5,
+    color: "#8A8A8A",
+    lineHeight: 15,
     letterSpacing: -0.1,
   },
   expandChip: {
@@ -356,33 +411,43 @@ const styles = StyleSheet.create({
     color: "#737373",
   },
   groupStack: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#F0F0F0",
-    gap: 10,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#EAEAEA",
+    // Wide gap between groups is the main separator between L2 blocks.
+    gap: 18,
   },
-  groupBlock: { gap: 4 },
+  groupBlock: { gap: 6 },
   groupHead: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 8,
+    paddingBottom: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#EFEFEF",
   },
+  // L2 — group header. Uppercase micro-caps read as a different tier than L1.
   groupTitle: {
     flex: 1,
     minWidth: 0,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "700",
-    color: "#525252",
+    color: "#404040",
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.7,
   },
   groupCount: {
     fontSize: 10,
-    fontWeight: "600",
-    color: "#A3A3A3",
+    fontWeight: "700",
+    color: "#8A8A8A",
     fontVariant: ["tabular-nums"],
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    backgroundColor: "#F4F4F4",
+    overflow: "hidden",
   },
   checkbox: {
     width: 18,
@@ -396,10 +461,14 @@ const styles = StyleSheet.create({
   },
   checkboxDisabled: { opacity: 0.45 },
   surfaceList: {
-    gap: 2,
+    gap: 4,
   },
+  // Left rule ties every child surface visually to its group header.
   surfaceListIndent: {
-    paddingLeft: 14,
+    marginLeft: 13,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: "#F0F0F0",
   },
   surfaceListGrid: {
     flexDirection: "row",
@@ -428,17 +497,19 @@ const styles = StyleSheet.create({
   surfaceRowMuted: {
     opacity: 0.7,
   },
-  surfaceCopy: { flex: 1, minWidth: 0, gap: 1 },
+  surfaceCopy: { flex: 1, minWidth: 0, gap: 2 },
+  // L3 — the actual grant. Must out-rank its own hint clearly.
   surfaceLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    color: "#171717",
+    color: "#1F1F1F",
     letterSpacing: -0.2,
   },
   surfaceMuted: { color: "#A3A3A3" },
+  // L4 — hint. Deliberately the lightest thing on screen.
   surfaceHint: {
-    fontSize: 10,
-    color: "#A3A3A3",
-    lineHeight: 13,
+    fontSize: 10.5,
+    color: "#ADADAD",
+    lineHeight: 14,
   },
 });

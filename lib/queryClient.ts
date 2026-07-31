@@ -93,10 +93,29 @@ function attachDevObserver(client: QueryClient): void {
   };
 }
 
+/**
+ * Aborted fetches are not failures — TanStack cancels in-flight requests when a
+ * screen unmounts mid-navigation, and Safari surfaces that as `AbortError: Fetch
+ * is aborted`. Reporting them created pure Sentry noise (GX-PULSE-1E / 1F).
+ */
+function isAbortError(error: unknown): boolean {
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    if (error.name === 'AbortError') return true;
+  }
+  const name = (error as { name?: unknown } | null)?.name;
+  if (name === 'AbortError' || name === 'CanceledError') return true;
+  const message =
+    error instanceof Error ? error.message : String(error ?? '');
+  return /\bAbortError\b|Fetch is aborted|The operation was aborted|signal is aborted/i.test(
+    message,
+  );
+}
+
 export function makeQueryClient() {
   const client = new QueryClient({
     queryCache: new QueryCache({
       onError: (error, query) => {
+        if (isAbortError(error)) return;
         logger.error('[query] fetch failed', {
           error: error instanceof Error ? error : new Error(String(error)),
           queryKey: JSON.stringify(query.queryKey),
@@ -105,6 +124,7 @@ export function makeQueryClient() {
     }),
     mutationCache: new MutationCache({
       onError: (error) => {
+        if (isAbortError(error)) return;
         logger.error('[mutation] failed', {
           error: error instanceof Error ? error : new Error(String(error)),
         });
