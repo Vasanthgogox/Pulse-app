@@ -46,9 +46,10 @@ export function TripChatRoomActionCard({
 }: TripChatRoomActionCardProps) {
   const router = useRouter();
 
-  if (isTripRoomFeedbackMirror(message)) {
-    return null;
-  }
+  // Bail-out must come after every hook: returning here first changed the hook
+  // count whenever a message became (or stopped being) a feedback mirror,
+  // producing React error #310.
+  const isFeedbackMirror = isTripRoomFeedbackMirror(message);
 
   const legacy = useMemo(
     () => platformActionCardToTripMessage(message),
@@ -63,6 +64,11 @@ export function TripChatRoomActionCard({
       ),
     [tripHint, composeTrip],
   );
+
+  // Safe here — all hooks above have run.
+  if (isFeedbackMirror) {
+    return null;
+  }
 
   const openLedger = () => {
     handleTripChatRoomAction("view_ledger", message, {

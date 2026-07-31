@@ -316,6 +316,89 @@ export default function DriverControlScreen() {
   const safeBack = useSafeBack("/(driver)");
   const goToRadar = safeBack;
 
+  // ── Hooks hoisted above the guards below ───────────────────────────────────
+  // These used to live after `if (loading)` / `if (!trip)` / `if
+  // (!isAuthorizedForTrip)`, so the hook count changed as the trip loaded and
+  // authorization resolved — React error #310. They are all null-safe on `trip`.
+  const openVerificationFlow = useCallback(
+    (side: "start" | "end") => {
+      if (!trip?.id) return;
+      router.push(ROUTES.tripVerification(trip.id, side) as Href);
+    },
+    [router, trip?.id],
+  );
+  const openFuelEntry = useCallback(() => {
+    if (!trip?.id) return;
+    router.push(ROUTES.tripFuelEntry(trip.id) as Href);
+  }, [router, trip?.id]);
+  const openTollEntry = useCallback(() => {
+    if (!trip?.id) return;
+    router.push(ROUTES.tripTollEntry(trip.id) as Href);
+  }, [router, trip?.id]);
+
+  const employerOrgIdSet = useMemo(() => {
+    const set = new Set<string>();
+    linkedDriversFull.forEach((d) => {
+      const orgId = String(d.organization_id ?? '');
+      if (orgId) set.add(orgId);
+    });
+    return set;
+  }, [linkedDriversFull]);
+
+  const controlCurrentEmployer = useMemo(() => {
+    const d = linkedDriversFull.find(
+      (row) => !row.left_at && employerOrgIdSet.has(String(row.organization_id ?? '')),
+    );
+    if (!d) return null;
+    return { orgId: String(d.organization_id ?? ''), driverRowId: d.id };
+  }, [linkedDriversFull, employerOrgIdSet]);
+
+  const isControlTripAttributed = useMemo(() => {
+    if (!controlCurrentEmployer || !trip?.id) return false;
+    const eid = controlCurrentEmployer.orgId;
+    return attributeSalaryRequests.some(
+      (r) =>
+        r.request_type === 'trip_based' &&
+        String(r.organization_id ?? '') === eid &&
+        (r.trip_ids ?? []).includes(trip.id),
+    );
+  }, [attributeSalaryRequests, controlCurrentEmployer, trip?.id]);
+
+  const handleAttributeControlTrip = useCallback(async () => {
+    if (!controlCurrentEmployer || !trip) return;
+    setAttributeLoading(true);
+    try {
+      const earnings = Math.round(tripEarningsForDriver(trip));
+      if (earnings <= 0) {
+        Alert.alert('No earnings', 'Trip earnings could not be calculated.');
+        return;
+      }
+      const tripDate = trip.pickup_date ?? trip.started_at ?? trip.created_at ?? '';
+      const tripDateStr = tripDate
+        ? new Date(tripDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '';
+      const tripRef = getDriverTripDisplayNumber(trip, driverTripNumberById);
+      const attrNote = [`Fleet trip · ${tripRef}`, tripDateStr, `₹${earnings.toLocaleString('en-IN')}`]
+        .filter(Boolean).join(' · ');
+      const { error } = await salaryRequestsService.createSalaryRequest(
+        controlCurrentEmployer.driverRowId,
+        controlCurrentEmployer.orgId,
+        'trip_based',
+        earnings,
+        { tripIds: [trip.id], note: attrNote, createdBy: profile?.uid ?? null },
+      );
+      if (error) {
+        Alert.alert('Error', error.message);
+      } else {
+        Alert.alert('Trip attributed', 'Sent to your employer for review.');
+        void salaryRequestsService.getSalaryRequestsByDriverIds(linkedDriversFull.map((d) => d.id))
+          .then((sRes) => setAttributeSalaryRequests(sRes.requests ?? []));
+      }
+    } finally {
+      setAttributeLoading(false);
+    }
+  }, [controlCurrentEmployer, trip, driverTripNumberById, linkedDriversFull, profile?.uid]);
+
   if (loading) {
     return <CenteredLoadingView message="Loading…" />;
   }
@@ -408,21 +491,6 @@ export default function DriverControlScreen() {
         ? STEPS.findIndex((s) => s.id === "transit")
         : stepIndex;
   const tripIsAggregate = isAggregateTrip(trip);
-  const openVerificationFlow = useCallback(
-    (side: "start" | "end") => {
-      if (!trip?.id) return;
-      router.push(ROUTES.tripVerification(trip.id, side) as Href);
-    },
-    [router, trip?.id],
-  );
-  const openFuelEntry = useCallback(() => {
-    if (!trip?.id) return;
-    router.push(ROUTES.tripFuelEntry(trip.id) as Href);
-  }, [router, trip?.id]);
-  const openTollEntry = useCallback(() => {
-    if (!trip?.id) return;
-    router.push(ROUTES.tripTollEntry(trip.id) as Href);
-  }, [router, trip?.id]);
   const commission = tripIsAggregate
     ? 0
     : computeDriverTripEstEarningsInr(trip, {
@@ -454,76 +522,14 @@ export default function DriverControlScreen() {
                 ? 20
                 : 0;
 
-  // Employer-based attribution
-  // left_at NOT filtered: a trip assigned by a former employer is still a fleet trip.
-  const employerOrgIdSet = useMemo(() => {
-    const set = new Set<string>();
-    linkedDriversFull.forEach((d) => {
-      const orgId = String(d.organization_id ?? '');
-      if (orgId) set.add(orgId);
-    });
-    return set;
-  }, [linkedDriversFull]);
-
-  const controlCurrentEmployer = useMemo(() => {
-    const d = linkedDriversFull.find(
-      (row) => !row.left_at && employerOrgIdSet.has(String(row.organization_id ?? '')),
-    );
-    if (!d) return null;
-    return { orgId: String(d.organization_id ?? ''), driverRowId: d.id };
-  }, [linkedDriversFull, employerOrgIdSet]);
-
+  // Employer-based attribution: employerOrgIdSet / controlCurrentEmployer are
+  // computed above, before the loading + authorization guards.
   // Fleet trip: employer dispatched directly OR employer is supplier on a cross-org trip.
   const isControlTripFleet = controlCurrentEmployer
     ? (employerOrgIdSet.has(String(trip.organization_id ?? '')) ||
         (!!trip.supplier_id && employerOrgIdSet.has(String(trip.supplier_id ?? ''))))
     : false;
 
-  const isControlTripAttributed = useMemo(() => {
-    if (!controlCurrentEmployer) return false;
-    const eid = controlCurrentEmployer.orgId;
-    return attributeSalaryRequests.some(
-      (r) =>
-        r.request_type === 'trip_based' &&
-        String(r.organization_id ?? '') === eid &&
-        (r.trip_ids ?? []).includes(trip.id),
-    );
-  }, [attributeSalaryRequests, controlCurrentEmployer, trip.id]);
-
-  const handleAttributeControlTrip = useCallback(async () => {
-    if (!controlCurrentEmployer || !trip) return;
-    setAttributeLoading(true);
-    try {
-      const earnings = Math.round(tripEarningsForDriver(trip));
-      if (earnings <= 0) {
-        Alert.alert('No earnings', 'Trip earnings could not be calculated.');
-        return;
-      }
-      const tripDate = trip.pickup_date ?? trip.started_at ?? trip.created_at ?? '';
-      const tripDateStr = tripDate
-        ? new Date(tripDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-        : '';
-      const tripRef = getDriverTripDisplayNumber(trip, driverTripNumberById);
-      const attrNote = [`Fleet trip · ${tripRef}`, tripDateStr, `₹${earnings.toLocaleString('en-IN')}`]
-        .filter(Boolean).join(' · ');
-      const { error } = await salaryRequestsService.createSalaryRequest(
-        controlCurrentEmployer.driverRowId,
-        controlCurrentEmployer.orgId,
-        'trip_based',
-        earnings,
-        { tripIds: [trip.id], note: attrNote, createdBy: profile?.uid ?? null },
-      );
-      if (error) {
-        Alert.alert('Error', error.message);
-      } else {
-        Alert.alert('Trip attributed', 'Sent to your employer for review.');
-        void salaryRequestsService.getSalaryRequestsByDriverIds(linkedDriversFull.map((d) => d.id))
-          .then((sRes) => setAttributeSalaryRequests(sRes.requests ?? []));
-      }
-    } finally {
-      setAttributeLoading(false);
-    }
-  }, [controlCurrentEmployer, trip, driverTripNumberById, linkedDriversFull, profile?.uid]);
 
   return (
     <View

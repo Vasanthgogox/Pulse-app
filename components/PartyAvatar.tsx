@@ -85,6 +85,40 @@ export function PartyAvatar({
 }: PartyAvatarProps) {
   const radius = partyAvatarRadius(size, shape);
 
+  // These hooks MUST run before the offline-role early return below. They used
+  // to sit after it, so the hook count changed whenever
+  // `shouldUseOfflinePartyRoleAvatar` flipped — e.g. as `isIntegrated` resolved
+  // for a freshly picked client — and React threw minified error #310
+  // (GX-PULSE-T, seen on /create-indent).
+  const [resolvedPhotoUri, setResolvedPhotoUri] = useState<string | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
+  const hasRawPhotoField = Boolean(
+    (organizationImageUrl ?? "").trim() || (avatarUrl ?? "").trim(),
+  );
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [organizationImageUrl, avatarUrl, avatarSeed, organizationAvatarSeed, entityType, name]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!hasRawPhotoField) {
+      setResolvedPhotoUri(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    resolvePartyPhotoUriAsync({
+      organizationImageUrl,
+      avatarUrl,
+    }).then((uri) => {
+      if (!cancelled) setResolvedPhotoUri(uri);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationImageUrl, avatarUrl, hasRawPhotoField]);
+
   if (shouldUseOfflinePartyRoleAvatar(isIntegrated, entityType)) {
     const roleType = entityType as "client" | "supplier" | "driver" | "vehicle";
     const { accent, iconColor, accessibilityLabel } = offlinePartyRolePresentation(roleType);
@@ -135,35 +169,6 @@ export function PartyAvatar({
       </View>
     );
   }
-
-  const [resolvedPhotoUri, setResolvedPhotoUri] = useState<string | null>(null);
-  const [imageFailed, setImageFailed] = useState(false);
-  const hasRawPhotoField = Boolean(
-    (organizationImageUrl ?? "").trim() || (avatarUrl ?? "").trim(),
-  );
-
-  useEffect(() => {
-    setImageFailed(false);
-  }, [organizationImageUrl, avatarUrl, avatarSeed, organizationAvatarSeed, entityType, name]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!hasRawPhotoField) {
-      setResolvedPhotoUri(null);
-      return () => {
-        cancelled = true;
-      };
-    }
-    resolvePartyPhotoUriAsync({
-      organizationImageUrl,
-      avatarUrl,
-    }).then((uri) => {
-      if (!cancelled) setResolvedPhotoUri(uri);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [hasRawPhotoField, organizationImageUrl, avatarUrl]);
 
   const awaitingSignedPhoto =
     hasRawPhotoField && resolvedPhotoUri == null;

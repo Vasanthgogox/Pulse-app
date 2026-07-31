@@ -14,11 +14,11 @@ import { useGlobalSyncStore } from './useGlobalSyncStore';
 const HEALTH_LOG_INTERVAL_MS = 30_000;
 
 export function useGlobalSyncHealthCheck(): void {
-  _useHealthCheck();
+  useHealthCheckImpl();
 }
 
 /** Real implementation — logs only in __DEV__. */
-function _useHealthCheck(): void {
+function useHealthCheckImpl(): void {
   const bootstrapStatus   = useGlobalSyncStore(s => s.bootstrapStatus);
   const bootstrapDuration = useGlobalSyncStore(s => s.bootstrapDuration);
   const bootstrapError    = useGlobalSyncStore(s => s.bootstrapError);

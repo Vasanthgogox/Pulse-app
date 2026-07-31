@@ -210,10 +210,12 @@ export function DemoTabBarAutoHideShell({
   style?: object;
 }) {
   const ctx = useContext(ProgressCtx);
-  if (!ctx) return <>{children}</>;
-  const { progress } = ctx;
+  // useAnimatedStyle must run unconditionally: returning early when there is no
+  // provider changed the hook count between renders (React error #310). The
+  // no-provider case is handled after the hook instead.
+  const progress = ctx?.progress;
   const animatedStyle = useAnimatedStyle(() => {
-    const p = progress.value;
+    const p = progress ? progress.value : 1;
     return {
       opacity: interpolate(p, [0, 0.4, 1], [0, 0.92, 1], Extrapolation.CLAMP),
       transform: [
@@ -231,6 +233,7 @@ export function DemoTabBarAutoHideShell({
       ],
     };
   });
+  if (!ctx) return <>{children}</>;
   return (
     <Animated.View style={[style, animatedStyle, pe("box-none")]}>
       {children}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,13 +23,9 @@ export function OnboardingPage() {
   const navigate = useNavigate();
   const org = useOrganization();
 
-  if (!org.organizationHydrated) {
-    return <OnboardingLoading />;
-  }
-
-  if (org.hasPlatformOrganization || org.commerceSetupComplete) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  // All hooks first: these useState calls used to sit below the hydration and
+  // redirect guards, so the hook count changed as soon as the org hydrated —
+  // React error #310.
   const [companyName, setCompanyName] = useState(org.profile?.name ?? '');
   const [whName, setWhName] = useState('');
   const [whCity, setWhCity] = useState('');
@@ -38,6 +34,25 @@ export function OnboardingPage() {
   const [stockQty, setStockQty] = useState('100');
   const [custName, setCustName] = useState('');
   const [custEmail, setCustEmail] = useState('');
+
+  // The state above now initializes before the org has hydrated, so profile.name
+  // may not exist yet. Seed it once when it arrives, without clobbering typing.
+  const companyNameSeeded = useRef(false);
+  useEffect(() => {
+    if (companyNameSeeded.current) return;
+    const seed = org.profile?.name;
+    if (!seed) return;
+    companyNameSeeded.current = true;
+    setCompanyName((prev) => (prev.trim() ? prev : seed));
+  }, [org.profile?.name]);
+
+  if (!org.organizationHydrated) {
+    return <OnboardingLoading />;
+  }
+
+  if (org.hasPlatformOrganization || org.commerceSetupComplete) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const step = org.onboardingStep;
 

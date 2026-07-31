@@ -38,6 +38,10 @@ export function WarehouseDetailSheet({ warehouseId, open, onClose }: WarehouseDe
     if (!open) { setEditing(false); setDeleteConfirm(false); }
   }, [open]);
 
+  // `useState(saving)` below used to sit under an early return, so the hook
+  // count changed whenever `warehouse` went null -> set (React error #310).
+  const [saving, setSaving] = useState(false);
+
   if (!warehouse) return null;
 
   const canSave = name.trim().length > 0 && city.trim().length > 0;
@@ -49,8 +53,6 @@ export function WarehouseDetailSheet({ warehouseId, open, onClose }: WarehouseDe
     setPincode(warehouse!.address.pincode);
     setCapacity(String(warehouse!.capacity_m3));
   }
-
-  const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     if (!canSave || saving) return;

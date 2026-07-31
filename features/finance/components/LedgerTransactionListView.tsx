@@ -404,6 +404,36 @@ export function LedgerTransactionListView({
     };
   }, [transactions, useFlatList]);
 
+  // These three useState calls must run before the empty-state return below.
+  // They used to sit after it, so the hook count changed the moment the list
+  // went from empty to populated (or back) — React error #310.
+  const [fiscalSubTab, setFiscalSubTab] = useState<
+    "transaction" | "table" | "analytics"
+  >("transaction");
+  /** Timeline: which date sections are expanded. When undefined, all sections are expanded (opened) by default. */
+  const [expandedSectionsByKey, setExpandedSectionsByKey] = useState<
+    Record<string, boolean>
+  >({});
+  /** Timeline: per-section flow filter for daily data. */
+  const [sectionFlowFilterByKey, setSectionFlowFilterByKey] = useState<
+    Record<string, "all" | "out" | "in">
+  >({});
+
+  const getVehicleForRow = useCallback(
+    (row: LedgerRow): string => {
+      const fromRow = (row.vehicle_number ?? "").trim();
+      if (fromRow) return formatIndianVehicleNumber(fromRow);
+      if (row.trip_id && tripDetailsMap?.[row.trip_id]) {
+        const fromTrip = (tripDetailsMap[row.trip_id].vehicle_number ?? "").trim();
+        if (fromTrip) return formatIndianVehicleNumber(fromTrip);
+      }
+      const fromLookup = getVehicleNumberForTripId?.(row.trip_id ?? null);
+      if (fromLookup) return formatIndianVehicleNumber(fromLookup);
+      return "";
+    },
+    [getVehicleNumberForTripId, tripDetailsMap],
+  );
+
   if (transactions.length === 0) {
     return (
       <View style={styles.wrap}>
@@ -420,9 +450,6 @@ export function LedgerTransactionListView({
     );
   }
 
-  const [fiscalSubTab, setFiscalSubTab] = useState<
-    "transaction" | "table" | "analytics"
-  >("transaction");
   const effectiveFiscalSubTab = showFiscalSubTabs
     ? fiscalSubTab
     : useEntityDesktopTable
@@ -439,15 +466,6 @@ export function LedgerTransactionListView({
         effectiveFiscalSubTab === "table")
     );
 
-  /** Timeline: which date sections are expanded. When undefined, all sections are expanded (opened) by default. */
-  const [expandedSectionsByKey, setExpandedSectionsByKey] = useState<
-    Record<string, boolean>
-  >({});
-  /** Timeline: per-section flow filter for daily data. */
-  const [sectionFlowFilterByKey, setSectionFlowFilterByKey] = useState<
-    Record<string, "all" | "out" | "in">
-  >({});
-
   /** All date-section dropdowns are open by default (undefined => expanded). User can collapse via toggle. */
   const isSectionExpanded = (key: string) =>
     expandedSectionsByKey[key] !== false;
@@ -462,21 +480,6 @@ export function LedgerTransactionListView({
   const setSectionFlowFilter = (key: string, filter: "all" | "out" | "in") => {
     setSectionFlowFilterByKey((prev) => ({ ...prev, [key]: filter }));
   };
-
-  const getVehicleForRow = useCallback(
-    (row: LedgerRow): string => {
-      const fromRow = (row.vehicle_number ?? "").trim();
-      if (fromRow) return formatIndianVehicleNumber(fromRow);
-      if (row.trip_id && tripDetailsMap?.[row.trip_id]) {
-        const fromTrip = (tripDetailsMap[row.trip_id].vehicle_number ?? "").trim();
-        if (fromTrip) return formatIndianVehicleNumber(fromTrip);
-      }
-      const fromLookup = getVehicleNumberForTripId?.(row.trip_id ?? null);
-      if (fromLookup) return formatIndianVehicleNumber(fromLookup);
-      return "";
-    },
-    [getVehicleNumberForTripId, tripDetailsMap],
-  );
 
   return (
     <View style={[styles.wrap, embedInParentScroll && styles.wrapEmbedded]}>

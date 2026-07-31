@@ -318,17 +318,20 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
     }
   };
 
-  if (!trip) return null;
-
+  // NOTE: no early return above this point. Everything below runs hooks
+  // (useMemo/useRef/useEffect), and a `if (!trip) return null` here changed the
+  // hook count between renders whenever `trip` flipped null -> set, which React
+  // reports as minified error #310. The bail-out now happens after every hook
+  // has been called; see the `if (!trip) return null` further down.
   const originalAmount = trip?.amount ?? 0;
   const s = parseFloat(shortage) || 0;
   const d = parseFloat(damage) || 0;
   const p = parseFloat(penalty) || 0;
   const totalDeductions = s + d + p;
   const finalAmount = originalAmount - totalDeductions;
-  const receivedLRs = Array.isArray(trip.trip_pods) ? trip.trip_pods : [];
-  const allLRs = Array.isArray(trip.lr_numbers) ? trip.lr_numbers : [];
-  const tripExtras = trip as PodReconciliationTripView & {
+  const receivedLRs = Array.isArray(trip?.trip_pods) ? trip.trip_pods : [];
+  const allLRs = Array.isArray(trip?.lr_numbers) ? trip.lr_numbers : [];
+  const tripExtras = (trip ?? {}) as Partial<PodReconciliationTripView> & {
     vehicle_no?: string | null;
     vehicle_display_number?: string | null;
     vehicle_type?: string | null;
@@ -339,7 +342,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
     tripExtras.vehicle_display_number ||
     'N/A';
   const assignedVehicleType = tripExtras.vehicle_type || tripExtras.truck_type || undefined;
-  const dispatchDate = trip.date
+  const dispatchDate = trip?.date
     ? new Date(trip.date).toLocaleDateString('en-IN', {
         day: 'numeric',
         month: 'short',
@@ -449,6 +452,10 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
     previewLoadStartedRef.current = false;
     previewLoadEndedRef.current = false;
   }, [previewDocUrl]);
+
+  // Safe to bail out here: every hook above has already run, so the hook count
+  // is identical whether or not `trip` is set (React error #310 / GX-PULSE-T).
+  if (!trip) return null;
 
   const renderAuditForm = () => (
     <>

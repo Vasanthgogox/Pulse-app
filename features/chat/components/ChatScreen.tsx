@@ -7128,6 +7128,41 @@ function ChatBubble({
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
 
+  // Capture isNew at first mount only — never re-animate on re-renders.
+  const wasNewRef = useRef(isNew === true);
+  const wasNew    = wasNewRef.current;
+
+  // Bootstrap messages start at opacity=1 / translateY=0 / scale=1 (no animation).
+  // Only brand-new Realtime messages slide in from below.
+  const enterOpacity = useRef(new Animated.Value(wasNew ? 0 : 1)).current;
+  const enterY       = useRef(new Animated.Value(wasNew ? 8 : 0)).current;
+  const enterScale   = useRef(new Animated.Value(wasNew ? 0.97 : 1)).current;
+
+  useEffect(() => {
+    if (!wasNew) return;
+    Animated.parallel([
+      Animated.timing(enterOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(enterY, {
+        toValue: 0,
+        duration: 260,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.spring(enterScale, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 20,
+        bounciness: 3,
+      }),
+    ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — runs once on mount
+
   if (slackLayout) {
     const ownAvatar: ResolvedPartyAvatarIdentity = {
       displayName: profile?.full_name || profile?.displayName || "You",
@@ -7176,40 +7211,6 @@ function ChatBubble({
     // keep raw
   }
 
-  // Capture isNew at first mount only — never re-animate on re-renders.
-  const wasNewRef = useRef(isNew === true);
-  const wasNew    = wasNewRef.current;
-
-  // Bootstrap messages start at opacity=1 / translateY=0 / scale=1 (no animation).
-  // Only brand-new Realtime messages slide in from below.
-  const enterOpacity = useRef(new Animated.Value(wasNew ? 0 : 1)).current;
-  const enterY       = useRef(new Animated.Value(wasNew ? 8 : 0)).current;
-  const enterScale   = useRef(new Animated.Value(wasNew ? 0.97 : 1)).current;
-
-  useEffect(() => {
-    if (!wasNew) return;
-    Animated.parallel([
-      Animated.timing(enterOpacity, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
-      Animated.timing(enterY, {
-        toValue: 0,
-        duration: 260,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
-      Animated.spring(enterScale, {
-        toValue: 1,
-        useNativeDriver: true,
-        speed: 20,
-        bounciness: 3,
-      }),
-    ]).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty — runs once on mount
 
   return (
     <Animated.View

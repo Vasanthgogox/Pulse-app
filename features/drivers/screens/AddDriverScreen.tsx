@@ -32,9 +32,6 @@ export default function AddDriverScreen() {
     }
   }, [canCreate, returnTo, router]);
 
-  if (!canCreate) {
-    return null;
-  }
   const [themedInfo, setThemedInfo] = useState<{
     title: string;
     message: string;
@@ -42,6 +39,12 @@ export default function AddDriverScreen() {
   } | null>(null);
   /** Resolves the pending `handleInvite` Promise after the user dismisses the themed alert. */
   const alertResolveRef = useRef<(() => void) | null>(null);
+
+  // After the hooks above: an early return here changed the hook count once
+  // `canCreate` resolved, which React reports as error #310.
+  if (!canCreate) {
+    return null;
+  }
 
   const onThemedInfoOk = () => {
     setThemedInfo(null);
