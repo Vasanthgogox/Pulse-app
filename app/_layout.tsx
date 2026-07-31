@@ -505,6 +505,8 @@ function RootLayoutNav() {
                 options={{ presentation: 'fullScreenModal', animation: 'slide_from_right', headerShown: false }}
               />
               <Stack.Screen name="trip" options={{ animation: 'slide_from_right', headerShown: false }} />
+              <Stack.Screen name="track" options={{ animation: 'slide_from_right', headerShown: false }} />
+              <Stack.Screen name="fleet-operations" options={{ animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
               <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
               <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />

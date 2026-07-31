@@ -54,6 +54,8 @@ export const ROUTE_INVENTORY: readonly RouteInventoryEntry[] = [
   { file: 'app/add-commodity-type/index.tsx', samplePath: '/add-commodity-type' },
   { file: 'app/add-trip/index.tsx', samplePath: '/add-trip' },
   { file: 'app/alert-detail.tsx', samplePath: '/alert-detail' },
+  { file: 'app/fleet-operations/index.tsx', samplePath: '/fleet-operations' },
+  { file: 'app/track/[tripId].tsx', samplePath: '/track/samp-tripId' },
   { file: 'app/audit/index.tsx', samplePath: '/audit' },
   { file: 'app/audit-log/index.tsx', samplePath: '/audit-log' },
   { file: 'app/auth/callback.tsx', samplePath: '/auth/callback' },
