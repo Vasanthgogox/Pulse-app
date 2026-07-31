@@ -25,22 +25,32 @@ export function getTripExecutionModel(trip: TripRow): TripExecutionModel {
   if (payoutMode === "asset") return "asset";
   if (payoutMode === "market") return "aggregate";
   /**
-   * Unset mode. `supplier_id` alone cannot decide this: on the direct-quote
-   * deploy path it is bookkeeping only (the shipper's supplier row for the
-   * winning bidder) and is therefore present on BOTH models.
+   * Unset mode. `supplier_id` alone cannot decide this in general — but the
+   * two real scenarios that reach here are distinguished by `trip.source`:
    *
-   * The real discriminator is how the load is executed:
-   *   own driver + own vehicle  -> the supplier hauls it himself         -> asset
-   *   anything else             -> handed to a sub-supplier (phone/plate
-   *                                typed in, no roster ids)              -> aggregate
+   *   source = 'direct_quote', own driver + own vehicle:
+   *     supplier_id is bookkeeping only (the shipper's supplier row for the
+   *     winning bidder) and is present on BOTH models. create_trip_from_direct_quote
+   *     does not stamp trip_payout_mode, so without this check every
+   *     first-supplier asset deploy rendered the aggregate trip-detail UI
+   *     (no Expense Hub, no driver payout). -> asset
    *
-   * create_trip_from_direct_quote does not stamp trip_payout_mode, so without
-   * this check every first-supplier asset deploy rendered the aggregate
-   * trip-detail UI (no Expense Hub, no driver payout).
+   *   anything else with a supplier_id (e.g. a manually-created trip handed
+   *   to a subcontractor):
+   *     supplier_id means the load was handed to a sub-supplier. Assigning
+   *     that sub-supplier's own driver/vehicle for tracking does not change
+   *     who the financial counterparty is. -> aggregate
+   *
+   * These two rules previously conflicted (the direct-quote fix was applied
+   * unconditionally instead of scoped to source = 'direct_quote'), which
+   * silently reclassified subcontractor-driver-assign trips as asset. Keep
+   * the source check when touching this — that's the one thing distinguishing
+   * the two cases.
    */
+  const isDirectQuoteDeploy = String(trip.source ?? "").trim().toLowerCase() === "direct_quote";
   const hasOwnDriver = String(trip.driver_id ?? "").trim().length > 0;
   const hasOwnVehicle = String(trip.vehicle_id ?? "").trim().length > 0;
-  if (hasOwnDriver && hasOwnVehicle) return "asset";
+  if (isDirectQuoteDeploy && hasOwnDriver && hasOwnVehicle) return "asset";
   if (String(trip.supplier_id ?? "").trim()) return "aggregate";
   return "asset";
 }

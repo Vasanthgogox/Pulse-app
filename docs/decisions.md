@@ -169,3 +169,13 @@ The root defect is that **`is_org_member()` encodes the wrong security boundary*
 
 **Do not re-scope the pilot to Independent-only** unless that is an explicit business decision with documented acceptance criteria. Doing so would invalidate documented product behaviour (Fleet / Pending personas) and reduce the value of pilot evidence. Until such a decision is recorded, Pilot Entry waits on ADR-010.
 
+## Trip Operations Platform — one canonical trip-state interpretation (ADR-011, accepted)
+
+**Status:** Accepted, architecture complete. See `docs/TRIP_OPERATIONS_PLATFORM.md` for the full layered design.
+
+**Decision:** Trip stage, timing, and operational exceptions have exactly one derivation each — `deriveTripStage()`, `computeTripStageMetrics()` / `computeJourneyMetrics()`, and `evaluateOperationalAlerts()` (all `features/trips/domain/`) — consumed, not reimplemented, by every surface: driver guidance, the business operations panel, the business stepper, Customer Track & Trace, and the Fleet Operations Dashboard.
+
+**Why:** four independent interpretations of trip progress existed before this (driver map guidance, `DriverTripFlowCard`'s step machine, the business stepper's own status-string mapping plus a heuristic guess at driver acceptance, and an inferred mission log built from raw timestamps). They were converging toward drift, not coincidence — the same trip could show a different stage on different screens.
+
+**Rule going forward:** a new operational surface consumes these services; it does not derive its own interpretation of trip status, timing, or exceptions. `DriverTripFlowCard`'s local state machine is the one deliberately unconsolidated piece — see `docs/TRIP_OPERATIONS_PLATFORM.md`'s Deferred section for why, and what an eventual investigation needs to trace before touching it.
+

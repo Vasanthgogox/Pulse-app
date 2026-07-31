@@ -74,6 +74,26 @@ function tripHintCity(hint?: LocationPingTripHint): string | null {
   return pickup || drop || null;
 }
 
+/**
+ * True when the city label can be traced to an actual reading (reverse-geocoded
+ * GPS, or a location embedded in the message content itself) rather than a
+ * guess derived from the trip's static pickup/drop fields. The trip-hint
+ * fallback in {@link resolveLocationCityLabel} answers "where would the driver
+ * plausibly be given the trip phase" — it is not a location sample, and must
+ * never be presented as one (that's exactly the "Driver is at NCR" bug: NCR
+ * was the trip's pickup hub, not anywhere the driver's device reported being).
+ */
+export function isRealLocationSample(
+  location: SystemLogLocationData | null,
+  messageContent?: string | null,
+): boolean {
+  if ((location?.address_name ?? "").trim()) return true;
+  const content = (messageContent ?? "").trim();
+  if (content.match(/[—–]\s*(.+?)\.?\s*$/)?.[1]) return true;
+  const hyphen = content.match(/-\s*(.+?)\.?\s*$/);
+  return Boolean(hyphen?.[1] && !hyphen[1].includes("UTC"));
+}
+
 /** Resolve a human city/area label — never lat/long. */
 export function resolveLocationCityLabel(
   location: SystemLogLocationData | null,
@@ -227,12 +247,18 @@ export function buildLocationPingCardCopy(params: {
   );
   const simulated = params.simulated === true;
   const consolidatedCount = params.consolidatedCount;
+  // "Driver is at X" asserts a real reading — only say it when there is one.
+  // Otherwise this is a trip-phase guess (pickup/drop fallback), and must read
+  // as a status estimate, not a location report, or it's just a more subtle
+  // version of the exact bug this distinction exists to prevent.
+  const isReal = isRealLocationSample(params.location, params.message.content);
+  const verb = isReal ? "Driver is at" : "Trip status — near";
 
   let title: string;
   if (typeof consolidatedCount === "number" && consolidatedCount > 1) {
-    title = `Driver is at ${city} · ${consolidatedCount} updates · ${shortLog}`;
+    title = `${verb} ${city} · ${consolidatedCount} updates · ${shortLog}`;
   } else {
-    title = `Driver is at ${city} · ${shortLog}`;
+    title = `${verb} ${city} · ${shortLog}`;
   }
   if (simulated) {
     title = `${title} (simulated)`;
@@ -264,12 +290,15 @@ export function buildLocationPingInboxPreviewText(params: {
   );
   const simulated = params.simulated === true;
   const count = params.consolidatedCount;
+  const verb = isRealLocationSample(params.location, params.message.content)
+    ? "Driver is at"
+    : "Trip status — near";
 
   let base: string;
   if (typeof count === "number" && count > 1) {
-    base = `Driver is at ${city} · ${count} updates · ${when}`;
+    base = `${verb} ${city} · ${count} updates · ${when}`;
   } else {
-    base = `Driver is at ${city} · ${when}`;
+    base = `${verb} ${city} · ${when}`;
   }
   return simulated ? `${base} (simulated)` : base;
 }

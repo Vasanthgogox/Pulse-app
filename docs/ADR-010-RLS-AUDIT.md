@@ -15,6 +15,31 @@
 | Implementation (Step 2+) | ⏳ Not started — correctly gated on matrix sign-off |
 | Pilot Entry | ⛔ Blocked pending ADR-010 completion + P1 re-run |
 
+### Current product impact (until Deliverable 3 completes)
+
+This was originally scoped as authorization/security infrastructure. It has a confirmed, live product consequence, traced end-to-end from a real driver-facing symptom (Reach Stories showing an employed driver as independent, no Recommend affordance):
+
+```
+resolveDriverParticipation()
+        │
+        ▼
+organization_members (role='driver')
+        │
+        ▼
+No rows can exist today — chk_org_members_role does not permit role='driver'
+(Deliverable 3, step 5, not started)
+        │
+        ▼
+Every driver resolves to `independent`, regardless of real fleet employment
+        │
+        ▼
+Recommend never appears · employer-aware experiences read as "no employer"
+```
+
+**Because `organization_members` does not yet support `role='driver'` and no backfill has occurred, all drivers resolve to the independent participation model.** Features that depend on driver organization membership — including Reach participation, employer-aware experiences, and any future organization-scoped permissions for drivers — cannot function as designed until the migration and backfill (Deliverable 3, steps 5–7) are complete. This is not a per-driver bug; it is a platform-wide condition affecting every driver, today, and it will silently affect any new feature built on the same assumption until this ships.
+
+**What this changes about prioritization:** ADR-010 is a feature-enabling dependency, not only a background security correction. The role-matrix sign-off gate is unchanged — this does not argue for skipping it — but the cost of leaving it unsigned is now a known, named product gap, not a theoretical one.
+
 **Architectural outcome of ADR-010:** authorization is a **first-class platform concern**, not an RLS implementation detail. The valuable result is not the helpers alone — it is an explicit contract that future reviews can validate against.
 
 ```

@@ -17,9 +17,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverChat } from '@/features/chat/contexts/DriverChatContext';
 import { sendDocumentShareMessage } from '@/features/chat/services/chat.service';
+import { useDriverReferralForTripQuery } from '@/lib/queries/useReachCampaignsQuery';
 import type { JobCardAssignerPayload } from '@/features/trips/utils/driverAssignerDisplay.util';
 import type { DriverFlowStepId as StepId } from '@/features/driver/utils/driverTripStatusNotes.util';
 import { deriveDriverFlowStepFromTrip } from '@/features/driver/utils/driverTripStatusNotes.util';
+import { getStageMetadata } from '@/features/trips/domain';
 import {
   clearLrPhase,
   hasEnteredLrPhase,
@@ -152,13 +154,17 @@ function stageForStep(step: StepId): 1 | 2 | 3 | 4 {
   return 4;
 }
 
+/**
+ * Thin adapter over getStageMetadata() — was its own third wording set,
+ * alongside getTripStageGuidance()'s CTA copy and getStageMetadata()'s badge
+ * titles. `step` is already the canonical stage (deriveDriverFlowStepFromTrip
+ * -> deriveTripStage), so this is presentation-only, not a duplicate
+ * derivation. 'lr' is a local-only sub-step of 'pickup' — no server column
+ * represents it, so there's no shared-engine title to defer to here.
+ */
 function titleForStep(step: StepId): string {
-  if (step === 'accepted') return 'Head to Pickup';
-  if (step === 'pickup') return 'At Pickup Location';
   if (step === 'lr') return 'Upload Lorry Receipt';
-  if (step === 'transit') return 'Head to Drop-off';
-  if (step === 'reached') return 'At Drop-off Location';
-  return 'Trip completed';
+  return getStageMetadata(step).title;
 }
 
 export interface DriverTripFlowCardProps {
@@ -398,6 +404,22 @@ export function DriverTripFlowCard({
     const conv = conversations.find((c) => String(c.trip_id) === id);
     return Math.max(0, conv?.unread_dispatcher_count ?? 0);
   }, [conversations, localTrip?.id]);
+
+  // Presentation-only: this trip may have started life as a Reach
+  // recommendation. Read-only lookup against reach_referrals — no new
+  // reward logic, just surfacing the existing referral state on the card.
+  const referralQ = useDriverReferralForTripQuery(localTrip?.id ?? null);
+  const referralBadge = useMemo(() => {
+    const referral = referralQ.data;
+    if (!referral) return null;
+    if (referral.status === 'rewarded') {
+      return { label: `Reward ${formatINR(referral.reward_amount)} credited`, tone: 'rewarded' as const };
+    }
+    if (referral.status === 'bid_submitted' || referral.status === 'approved') {
+      return { label: 'Recommended by you · reward pending', tone: 'pending' as const };
+    }
+    return null;
+  }, [referralQ.data]);
 
   const driverLivePlaceText = useMemo(() => {
     const hasCoords =
@@ -1103,6 +1125,32 @@ export function DriverTripFlowCard({
         </View>
       ) : null}
 
+      {referralBadge ? (
+        <View
+          style={[
+            styles.referralBadgeRow,
+            referralBadge.tone === 'rewarded'
+              ? { backgroundColor: Theme.positiveMuted }
+              : { backgroundColor: Theme.accentGoldMuted },
+          ]}
+        >
+          <FontAwesome
+            name={referralBadge.tone === 'rewarded' ? 'gift' : 'clock-o'}
+            size={11}
+            color={referralBadge.tone === 'rewarded' ? Theme.positive : Theme.accentGold}
+          />
+          <Text
+            style={[
+              styles.referralBadgeText,
+              { color: referralBadge.tone === 'rewarded' ? Theme.positive : Theme.accentGoldPressed },
+            ]}
+            numberOfLines={1}
+          >
+            {referralBadge.label}
+          </Text>
+        </View>
+      ) : null}
+
       {step !== 'completed' ? (
         <LinearGradient
           colors={[FLOW_EMERALD_DARK, FLOW_EMERALD]}
@@ -1629,6 +1677,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 24,
     elevation: 16,
+  },
+  referralBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  referralBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    flexShrink: 1,
   },
   handleWrap: { alignItems: 'center', paddingBottom: 8 },
   handleBar: { width: 36, height: 4, borderRadius: 999, opacity: 0.5 },

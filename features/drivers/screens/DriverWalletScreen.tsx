@@ -1547,8 +1547,8 @@ export default function DriverWalletScreen() {
       };
     }
 
-    // Pay arrangement with no invite (legacy / manual add flows)
-    const withPayOnly = fleetCards.find((f) => {
+    // Last resort: pay arrangement with no invite (legacy / manual add flows)
+    const withPayNoInvite = fleetCards.find((f) => {
       const d = linkedDrivers.find(
         (row) =>
           isActiveFleetMembership(row, accepted) &&
@@ -1563,23 +1563,25 @@ export default function DriverWalletScreen() {
         )
       );
     });
-    if (withPayOnly) return withPayOnly;
+    if (withPayNoInvite) return withPayNoInvite;
 
-    // Final fallback: active fleet membership with neither invite nor pay terms.
-    // Org added the driver straight to its roster (manual add) without sending an
-    // invite or setting salary/commission — a state the add-driver flow allows.
-    // isActiveFleetMembership already excludes tracking_only stubs and left stints,
-    // so reaching here means the membership is real: the org IS the employer.
-    // Without this, fleet-dispatched trips misfile as "Direct assignments" at ₹0.
-    return (
-      fleetCards.find((f) =>
-        linkedDrivers.some(
-          (row) =>
-            isActiveFleetMembership(row, accepted) &&
-            String(row.organization_id ?? '') === String(f.orgId ?? ''),
-        ),
-      ) ?? null
-    );
+    // Final fallback: every tier above requires a pay/invite/salary signal —
+    // none of them fire for a driver who is genuinely on an org's active
+    // roster (isActiveFleetMembership) but has no pay terms configured yet
+    // (e.g. a brand-new relationship, or an org linked purely through Reach
+    // referral rewards with no trip-based salary/commission at all). That
+    // driver still has a real employer, just no financial data behind it —
+    // only apply this when exactly one active membership exists, so we never
+    // guess which of several is "current" the way the tiers above can.
+    const activeMemberships = linkedDrivers.filter((row) => isActiveFleetMembership(row, accepted));
+    if (activeMemberships.length === 1) {
+      const onlyActive = activeMemberships[0]!;
+      const orgId = String(onlyActive.organization_id ?? '');
+      const match = fleetCards.find((f) => String(f.orgId ?? '') === orgId);
+      if (match) return match;
+    }
+
+    return null;
   }, [fleetCards, linkedDrivers, invites, salaryRequests, completedTrips, ledgerEntries, orgNameById]);
 
   const pastEmployerFleetCards = useMemo(() => {

@@ -1,0 +1,55 @@
+-- SKIPPED ON FRESH REPLAY: CREATE OR REPLACE VIEW resolves column references
+-- immediately, and this SELECTs trips.source_indent_id, a column not added
+-- until 20260828200000_operational_identity_codes_phase1.sql (a month
+-- later). Safe to skip wholesale: this view is redefined again the same day
+-- by 20260729090658_driver_org_name_security_definer_fn.sql,
+-- and the truly final shape is backfilled after the column exists by
+-- 20260828200001_trips_driver_view_backfill.sql. Original body preserved
+-- below in a comment for history.
+
+-- CREATE OR REPLACE VIEW public.trips_driver_view
+-- WITH (security_invoker = true) AS
+-- SELECT
+--   t.id,
+--   t.driver_id,
+--   t.driver_display_trip_id,
+--   t.status,
+--   t.pickup_area AS pickup_location,
+--   t.pickup_area AS pickup_address,
+--   t.pickup_date AS pickup_scheduled_at,
+--   t.drop_location AS dropoff_location,
+--   t.drop_location AS dropoff_address,
+--   NULL::timestamp with time zone AS dropoff_scheduled_at,
+--   t.notes AS instructions,
+--   t.vehicle_id,
+--   t.pickup_lat,
+--   t.pickup_lon,
+--   t.drop_lat,
+--   t.drop_lon,
+--   t.started_at,
+--   t.created_at,
+--   t.updated_at,
+--   t.client_price,
+--   t.supplier_rate,
+--   t.driver_commission,
+--   t.distance,
+--   t.organization_id,
+--   t.source,
+--   t.supplier_id,
+--   t.completed_at,
+--   t.trip_number,
+--   t.indent_id,
+--   t.source_indent_id,
+--   -- Dispatching org's display name. organizations RLS is is_org_member(id) and a
+--   -- driver is NOT a member of the orgs that hire them, so the client cannot read
+--   -- this itself. Resolved here (view is owned by postgres) and safe: it exposes
+--   -- only the name of an org whose trip this driver personally ran.
+--   o.name AS organization_name
+-- FROM trips t
+-- LEFT JOIN organizations o ON o.id = t.organization_id
+-- WHERE t.driver_id IN (
+--   SELECT d.id FROM drivers d WHERE d.user_id = auth.uid()
+-- );
+--
+-- COMMENT ON VIEW public.trips_driver_view IS
+--   'Driver-scoped trip projection (security_invoker; self-scopes via auth.uid()). organization_id + source are REQUIRED by the driver wallet to classify a trip as fleet vs open - removing either silently empties the Fleet Trips tab. organization_name is required to label which fleet a trip belongs to: organizations RLS (is_org_member) blocks drivers from resolving it client-side. Columns must stay in sync with DriverTripRow in types/trip-views.ts. Guarded by scripts/check-driver-view-contract.ts.';

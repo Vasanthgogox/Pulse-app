@@ -6,6 +6,8 @@ import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { ViewStyle } from "react-native";
+import { useTripTimelineQuery } from "@/lib/queries/useTripTimelineQuery";
+import { deriveTripStage, getStageMetadata } from "@/features/trips/domain";
 import type { TripRow } from "../../../services/trips.service";
 
 // ── Stage definitions ──────────────────────────────────────────────────────
@@ -37,7 +39,22 @@ const STAGES: { key: TripStageKey; short: string; full: string }[] = [
   { key: "pod_received", short: "POD Received", full: "POD Received" },
 ];
 
-/** Map raw trip.status to the closest TripStageKey */
+/**
+ * Map raw trip.status to the closest TripStageKey.
+ *
+ * DEAD CODE in the only live call site (TripDetailScreen.tsx renders this
+ * component with variant="journey" and never passes onRevert/onNext), which
+ * is the only path that uses activeIdx/prevStage/nextStage/statusToStageIndex
+ * below. Left as-is rather than consolidated onto deriveTripStage(): several
+ * of its branches (s_in/s_out/d_in/d_out/pod_pending) match trip.status
+ * literals ('s_in', 'd_out', etc.) that the trips_status_check CHECK
+ * constraint doesn't even allow, so they can never fire regardless of this
+ * component's variant — there's no real behavior here to preserve or
+ * faithfully remap. If the `default` (8-stage stepper + revert/advance)
+ * variant is ever wired up for real, consolidate this then, once it's clear
+ * what real event should back each of the 8 steps (several — "Destination
+ * Out" in particular — don't have one today).
+ */
 export function statusToStageIndex(status: string, hasStarted = false): number {
   const s = (status ?? "").toLowerCase();
   if (s === "pod_received" || s === "pod received") return 7;
@@ -60,66 +77,31 @@ export function statusToStageIndex(status: string, hasStarted = false): number {
   return 0; // confirmed / assigned / draft
 }
 
-/** Driver flow stages compressed into four visible journey segments. */
-function getJourneySegmentProgress(trip: TripRow): 0 | 1 | 2 | 3 | 4 {
-  const s = (trip.status ?? "").toLowerCase();
-  const createdMs = new Date(trip.created_at ?? "").getTime();
-  const updatedMs = new Date(trip.updated_at ?? "").getTime();
-  const hasPostCreateUpdate =
-    Number.isFinite(createdMs) &&
-    Number.isFinite(updatedMs) &&
-    updatedMs - createdMs > 1000;
-  const acceptedByDriver =
-    trip.status_updated_role === "driver" ||
-    Number(trip.status_revision ?? 0) > 0 ||
-    hasPostCreateUpdate;
-  if (s === "completed" || s === "delivered" || s === "done" || !!trip.completed_at) {
-    return 4;
-  }
-  if (s === "arrived" || s === "at_destination" || s === "at_drop") return 3;
-  if (s === "in_transit" || s === "intransit" || s === "transit") return 3;
-  if (s === "in_progress" && trip.started_at) return 3;
-  if (
-    s === "in_progress" ||
-    s === "picked_up" ||
-    s === "pickup" ||
-    s === "at_pickup" ||
-    s === "dispatched" ||
-    s === "confirmed_arrival"
-  ) {
-    return 2;
-  }
-  if (s === "assigned") return acceptedByDriver ? 1 : 0;
-  if (s === "draft" || s === "pending_acceptance") return 0;
+/**
+ * Driver flow stage compressed into one of four visible journey segments —
+ * now a thin adapter over deriveTripStage(), not its own interpretation.
+ * `driverAccepted` comes from a real driver_accepted timeline event
+ * (Phase 3), replacing the status_updated_role/status_revision/
+ * hasPostCreateUpdate heuristic this used to guess it with.
+ *
+ * Segment 3 still covers both 'transit' and 'reached' (matches the previous
+ * conflation of in_transit/at_drop) — the journey bar is a 4-segment scale
+ * and canonical TripStage has 5 stages; giving 'reached' its own segment
+ * would mean a 5-bar layout, a visual change beyond this consolidation pass.
+ */
+function getJourneySegmentProgress(trip: TripRow, driverAccepted: boolean): 0 | 1 | 2 | 3 | 4 {
+  const stage = deriveTripStage(trip);
+  if (stage === "completed") return 4;
+  if (stage === "transit" || stage === "reached") return 3;
+  if (stage === "pickup" || stage === "lr") return 2;
+  if (stage === "accepted") return driverAccepted ? 1 : 0;
   return 0;
 }
 
+/** Thin adapter over getStageMetadata() — same wording as everywhere else that renders a stage. */
 function getJourneyStageLabel(trip: TripRow): string {
-  const s = (trip.status ?? "").toLowerCase();
-  if (s === "completed" || s === "delivered" || s === "done" || !!trip.completed_at) {
-    return "Completed";
-  }
-  if (s === "arrived" || s === "at_destination" || s === "at_drop") {
-    return "At Drop-off";
-  }
-  if (s === "in_transit" || s === "intransit" || s === "transit") {
-    return "In Transit";
-  }
-  if (s === "in_progress" && trip.started_at) return "In Transit";
-  if (
-    s === "in_progress" ||
-    s === "picked_up" ||
-    s === "pickup" ||
-    s === "at_pickup" ||
-    s === "dispatched" ||
-    s === "confirmed_arrival"
-  ) {
-    return "At Pickup";
-  }
-  if (s === "assigned" || s === "draft" || s === "pending_acceptance") {
-    return "Head to Pickup";
-  }
-  return "Assigned";
+  const stage = deriveTripStage(trip);
+  return getStageMetadata(stage === "lr" ? "pickup" : stage).title;
 }
 
 const PROGRESS_BY_INDEX: number[] = [6, 14, 22, 36, 44, 58, 78, 100];
@@ -163,7 +145,11 @@ export function TripStatusTimeline({
   onOpenMaps,
 }: TripStatusTimelineProps) {
   const activeIdx = statusToStageIndex(trip.status ?? "", !!trip.started_at);
-  const journeySegmentProgress = getJourneySegmentProgress(trip);
+  // Same queryKey as TripStageControlPanel's useTripTimelineQuery for this
+  // trip — React Query dedupes the fetch, this doesn't add a second request.
+  const { events: timelineEvents } = useTripTimelineQuery(trip.id ?? null, trip.created_at ?? null);
+  const driverAccepted = timelineEvents.some((e) => e.type === "driver_accepted");
+  const journeySegmentProgress = getJourneySegmentProgress(trip, driverAccepted);
   const journeyStageLabel = getJourneyStageLabel(trip);
   const progress = PROGRESS_BY_INDEX[activeIdx] ?? 0;
   const currentStage = STAGES[activeIdx];

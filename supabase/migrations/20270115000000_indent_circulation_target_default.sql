@@ -34,6 +34,16 @@ ALTER TABLE public.indents
 --    here made CREATE OR REPLACE fail with a return-type mismatch (Postgres
 --    cannot change a function's return type via OR REPLACE). Keep this list in
 --    sync with the live signature whenever either migration is edited.
+--
+--    Even accounting for that, 20261031000002_rewrite_market_indents_sql_language.sql
+--    (which runs immediately before this one) redefines the function WITHOUT
+--    `weight` at all -- so by the time this migration runs, on a from-scratch
+--    replay the live signature has no `weight` column, and OR REPLACE still
+--    fails (Postgres cannot change OUT-parameter shape via OR REPLACE, only
+--    DROP + CREATE can). DROP first so this succeeds regardless of the
+--    function's prior shape; safe since nothing redefines this function after
+--    this migration.
+DROP FUNCTION IF EXISTS public.market_indents_for_org(uuid);
 CREATE OR REPLACE FUNCTION public.market_indents_for_org(org_id uuid)
  RETURNS TABLE(id uuid, organization_id uuid, indent_number text, pickup_area text, drop_location text, client_name text, client_price numeric, supplier_target numeric, status text, vehicle_type text, load_type text, pickup_date date, circulation_target text, created_at timestamp with time zone, updated_at timestamp with time zone, creator_organization_name text, assigned_supplier_id uuid, assigned_supplier_rate numeric, weight numeric)
  LANGUAGE sql

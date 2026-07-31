@@ -1,0 +1,11 @@
+-- Guard migration: ensures the `platform` schema exists before
+-- 20260714090843_add_missing_foreign_key_indexes.sql indexes platform.invitations
+-- and platform.memberships. On remote, that schema was created out-of-band ahead
+-- of this timestamp, so the FK-index migration replayed fine there. A clean local
+-- `supabase db reset` replays migrations in timestamp order from scratch and hits
+-- "schema platform does not exist" at that statement, since the migration that
+-- actually creates the schema (20261106000100_identity_core.sql) is dated months
+-- later. This file only bootstraps the schema itself — table/RLS/seed ownership
+-- stays with 20261106000100_identity_core.sql, which already uses
+-- CREATE SCHEMA IF NOT EXISTS and is unaffected by this running first.
+CREATE SCHEMA IF NOT EXISTS platform;

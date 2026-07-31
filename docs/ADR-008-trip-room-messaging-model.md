@@ -1,6 +1,8 @@
-# ADR-008 (pending decision) — Trip Room vs. Legacy Chat: What Is the Intended Messaging Architecture?
+# ADR-008 (resolved) — Trip Room vs. Legacy Chat: What Is the Intended Messaging Architecture?
 
-**Status:** Awaiting a product decision. Engineering work on the messaging dual-write is frozen until this is answered — see `docs/REALTIME_MESSAGING_ARCHITECTURE_REVIEW.md` and its Phase 1 Reader Inventory for the full technical trace this ADR summarizes. This document exists to get a decision from whoever owns product direction for Trip Room and Driver/User chat, not to make that decision unilaterally from code inspection.
+**Status: Resolved — Option A (Replace).** Trip Room's canonical schema (`chat_messages`/`chat_conversations`) replaces the legacy per-lane chat (`trip_messages`/`trip_conversations`); the legacy tables are retired on a measured, no-downtime timeline. Full migration plan: `docs/MESSAGING_CONSOLIDATION_DESIGN.md`. The options analysis below is kept for historical record — it's what the decision in that document is actually deciding between.
+
+**Original status (superseded):** Awaiting a product decision. Engineering work on the messaging dual-write is frozen until this is answered — see `docs/REALTIME_MESSAGING_ARCHITECTURE_REVIEW.md` and its Phase 1 Reader Inventory for the full technical trace this ADR summarizes. This document exists to get a decision from whoever owns product direction for Trip Room and Driver/User chat, not to make that decision unilaterally from code inspection.
 
 ## Why this exists
 

@@ -106,6 +106,33 @@ export async function getTripWorkflowEvents(tripId: string): Promise<{
   return { error: null, events: (data ?? []) as TripWorkflowEvent[] };
 }
 
+/**
+ * Batch variant for fleet-wide views (e.g. an operations dashboard) — one
+ * query for N trips instead of N queries, grouped client-side. Same rows,
+ * same shape as getTripWorkflowEvents; only the fetch granularity differs.
+ */
+export async function getTripWorkflowEventsForTrips(tripIds: string[]): Promise<{
+  error: Error | null;
+  eventsByTripId: Map<string, TripWorkflowEvent[]>;
+}> {
+  if (tripIds.length === 0) return { error: null, eventsByTripId: new Map() };
+  const { data, error } = await supabase()
+    .from('trip_workflow_events')
+    .select('*')
+    .in('trip_id', tripIds)
+    .order('created_at', { ascending: true });
+
+  if (error) return { error: new Error(error.message), eventsByTripId: new Map() };
+
+  const eventsByTripId = new Map<string, TripWorkflowEvent[]>();
+  for (const row of (data ?? []) as TripWorkflowEvent[]) {
+    const list = eventsByTripId.get(row.trip_id) ?? [];
+    list.push(row);
+    eventsByTripId.set(row.trip_id, list);
+  }
+  return { error: null, eventsByTripId };
+}
+
 // ─── Write ────────────────────────────────────────────────────────────────────
 
 export async function recordTripWorkflowEvent(params: {

@@ -1,109 +1,122 @@
--- Applied on remote as 20260716063044.
--- Follow-up to 20260716062940: ensure status checks use kyc_verification_status
--- enum values ('pending', 'unverified') safely and re-assert grants.
--- Idempotent — matches live remote function bodies.
+-- SKIPPED ON FRESH REPLAY: both functions here DECLARE
+-- v_current_status public.kyc_verification_status, a type not created until
+-- 20260801000000_workspace_kyc_structure.sql -- plpgsql resolves DECLARE
+-- types at CREATE FUNCTION time, so this fails outright on a from-scratch
+-- replay. Safe to skip wholesale, not just guard: this migration
+-- (20260716063044) is itself superseded by 20261113000000_convert_admin_procedures_to_functions.sql
+-- and finally by 20261206000000_admin_approve_reject_allow_unverified_tail.sql,
+-- whose own header comment confirms it exists precisely so "a full
+-- `supabase db reset` ends with the intended behavior" -- i.e. the team has
+-- already hit and solved this exact drift pattern for this function; nothing
+-- calls admin_approve_profile/admin_reject_profile before that tail migration
+-- runs. Original body preserved below in a comment for history.
 
-CREATE OR REPLACE FUNCTION public.admin_approve_profile(
-  p_org_id    uuid,
-  p_admin_id  uuid,
-  p_notes     text DEFAULT NULL
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-DECLARE
-  v_current_status public.kyc_verification_status;
-BEGIN
-  SELECT verification_status INTO v_current_status
-  FROM public.organizations
-  WHERE id = p_org_id
-  FOR UPDATE;
-
-  IF v_current_status IS NULL THEN
-    RAISE EXCEPTION 'Organization not found: %', p_org_id;
-  END IF;
-
-  IF v_current_status NOT IN ('pending', 'unverified') THEN
-    RAISE EXCEPTION 'Profile is not awaiting review. Current status: %', v_current_status;
-  END IF;
-
-  UPDATE public.organizations
-  SET
-    verification_status = 'verified',
-    verified_at         = now(),
-    verified_by         = p_admin_id,
-    updated_at          = now()
-  WHERE id = p_org_id;
-
-  INSERT INTO public.verification_audit_logs
-    (org_id, changed_by, previous_status, new_status, notes)
-  VALUES
-    (p_org_id, p_admin_id, v_current_status, 'verified', p_notes);
-
-  RETURN jsonb_build_object(
-    'ok', true,
-    'org_id', p_org_id,
-    'verification_status', 'verified',
-    'previous_status', v_current_status::text
-  );
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.admin_reject_profile(
-  p_org_id            uuid,
-  p_admin_id          uuid,
-  p_rejection_reasons jsonb,
-  p_notes             text DEFAULT NULL
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-DECLARE
-  v_current_status public.kyc_verification_status;
-BEGIN
-  IF p_rejection_reasons IS NULL
-     OR jsonb_array_length(p_rejection_reasons->'checklist') = 0
-  THEN
-    RAISE EXCEPTION 'At least one rejection reason is required.';
-  END IF;
-
-  SELECT verification_status INTO v_current_status
-  FROM public.organizations
-  WHERE id = p_org_id
-  FOR UPDATE;
-
-  IF v_current_status IS NULL THEN
-    RAISE EXCEPTION 'Organization not found: %', p_org_id;
-  END IF;
-
-  IF v_current_status NOT IN ('pending', 'unverified') THEN
-    RAISE EXCEPTION 'Profile is not awaiting review. Current status: %', v_current_status;
-  END IF;
-
-  UPDATE public.organizations
-  SET
-    verification_status = 'rejected',
-    frozen_at           = NULL,
-    rejection_reasons   = p_rejection_reasons,
-    kyc_rejected_reason = p_rejection_reasons->>'notes',
-    updated_at          = now()
-  WHERE id = p_org_id;
-
-  INSERT INTO public.verification_audit_logs
-    (org_id, changed_by, previous_status, new_status, rejection_reasons, notes)
-  VALUES
-    (p_org_id, p_admin_id, v_current_status, 'rejected', p_rejection_reasons, p_notes);
-
-  RETURN jsonb_build_object(
-    'ok', true,
-    'org_id', p_org_id,
-    'verification_status', 'rejected',
-    'previous_status', v_current_status::text
-  );
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.admin_approve_profile(uuid, uuid, text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.admin_reject_profile(uuid, uuid, jsonb, text) TO service_role;
+-- -- Applied on remote as 20260716063044.
+-- -- Follow-up to 20260716062940: ensure status checks use kyc_verification_status
+-- -- enum values ('pending', 'unverified') safely and re-assert grants.
+-- -- Idempotent — matches live remote function bodies.
+--
+-- CREATE OR REPLACE FUNCTION public.admin_approve_profile(
+--   p_org_id    uuid,
+--   p_admin_id  uuid,
+--   p_notes     text DEFAULT NULL
+-- )
+-- RETURNS jsonb
+-- LANGUAGE plpgsql
+-- SET search_path = public
+-- AS $$
+-- DECLARE
+--   v_current_status public.kyc_verification_status;
+-- BEGIN
+--   SELECT verification_status INTO v_current_status
+--   FROM public.organizations
+--   WHERE id = p_org_id
+--   FOR UPDATE;
+--
+--   IF v_current_status IS NULL THEN
+--     RAISE EXCEPTION 'Organization not found: %', p_org_id;
+--   END IF;
+--
+--   IF v_current_status NOT IN ('pending', 'unverified') THEN
+--     RAISE EXCEPTION 'Profile is not awaiting review. Current status: %', v_current_status;
+--   END IF;
+--
+--   UPDATE public.organizations
+--   SET
+--     verification_status = 'verified',
+--     verified_at         = now(),
+--     verified_by         = p_admin_id,
+--     updated_at          = now()
+--   WHERE id = p_org_id;
+--
+--   INSERT INTO public.verification_audit_logs
+--     (org_id, changed_by, previous_status, new_status, notes)
+--   VALUES
+--     (p_org_id, p_admin_id, v_current_status, 'verified', p_notes);
+--
+--   RETURN jsonb_build_object(
+--     'ok', true,
+--     'org_id', p_org_id,
+--     'verification_status', 'verified',
+--     'previous_status', v_current_status::text
+--   );
+-- END;
+-- $$;
+--
+-- CREATE OR REPLACE FUNCTION public.admin_reject_profile(
+--   p_org_id            uuid,
+--   p_admin_id          uuid,
+--   p_rejection_reasons jsonb,
+--   p_notes             text DEFAULT NULL
+-- )
+-- RETURNS jsonb
+-- LANGUAGE plpgsql
+-- SET search_path = public
+-- AS $$
+-- DECLARE
+--   v_current_status public.kyc_verification_status;
+-- BEGIN
+--   IF p_rejection_reasons IS NULL
+--      OR jsonb_array_length(p_rejection_reasons->'checklist') = 0
+--   THEN
+--     RAISE EXCEPTION 'At least one rejection reason is required.';
+--   END IF;
+--
+--   SELECT verification_status INTO v_current_status
+--   FROM public.organizations
+--   WHERE id = p_org_id
+--   FOR UPDATE;
+--
+--   IF v_current_status IS NULL THEN
+--     RAISE EXCEPTION 'Organization not found: %', p_org_id;
+--   END IF;
+--
+--   IF v_current_status NOT IN ('pending', 'unverified') THEN
+--     RAISE EXCEPTION 'Profile is not awaiting review. Current status: %', v_current_status;
+--   END IF;
+--
+--   UPDATE public.organizations
+--   SET
+--     verification_status = 'rejected',
+--     frozen_at           = NULL,
+--     rejection_reasons   = p_rejection_reasons,
+--     kyc_rejected_reason = p_rejection_reasons->>'notes',
+--     updated_at          = now()
+--   WHERE id = p_org_id;
+--
+--   INSERT INTO public.verification_audit_logs
+--     (org_id, changed_by, previous_status, new_status, rejection_reasons, notes)
+--   VALUES
+--     (p_org_id, p_admin_id, v_current_status, 'rejected', p_rejection_reasons, p_notes);
+--
+--   RETURN jsonb_build_object(
+--     'ok', true,
+--     'org_id', p_org_id,
+--     'verification_status', 'rejected',
+--     'previous_status', v_current_status::text
+--   );
+-- END;
+-- $$;
+--
+-- GRANT EXECUTE ON FUNCTION public.admin_approve_profile(uuid, uuid, text) TO service_role;
+-- GRANT EXECUTE ON FUNCTION public.admin_reject_profile(uuid, uuid, jsonb, text) TO service_role;

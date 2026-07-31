@@ -5,12 +5,16 @@ import Theme from '@/constants/Theme';
 import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker';
 import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomControls';
 import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
+import { withAlpha } from '@/lib/color';
 import React, { useCallback, useImperativeHandle, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 import type { LeafletLatLng, LeafletMapProps, LeafletMapRef, LeafletPolylineLayer } from './LeafletMap.types';
+
+/** Route outline (glow) opacity — was the "40" in the old `${color}40` hex-alpha-suffix concatenation (0x40/255 ≈ 0.25). Same constant as LeafletMap.web.tsx. */
+const ROUTE_OUTLINE_ALPHA = 0.25;
 
 function resolvePolylineLayers(
   polylines: LeafletPolylineLayer[] | undefined,
@@ -227,7 +231,7 @@ export const LeafletMapRnMaps = React.forwardRef<
               <React.Fragment key={layer.id}>
                 <Polyline
                   coordinates={layer.coordinates}
-                  strokeColor={`${color}40`}
+                  strokeColor={withAlpha(color, ROUTE_OUTLINE_ALPHA)}
                   strokeWidth={glowWidth}
                   lineCap="round"
                   lineJoin="round"
