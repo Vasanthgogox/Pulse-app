@@ -7,9 +7,8 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
-import { usePathname } from 'expo-router';
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -21,9 +20,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const springBounce = { damping: 14, stiffness: 400 };
 const springSettle = { damping: 18, stiffness: 320 };
 const DOCK_HEIGHT = Layout.tabBarHeight + 5;
-
-/** Full-screen routes that must not show the floating dock (composer / forms). */
-const HIDE_TAB_BAR_ROUTES = new Set(['chat']);
 
 /** Wraps content with a pop-in animation when selected. */
 function AnimatedTabIcon({ selected, children }: { selected: boolean; children: React.ReactNode }) {
@@ -57,22 +53,18 @@ export const TAB_CONFIG = [
 
 export function DriverTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const pathname = usePathname();
   const colors = useDriverThemeColors();
   const { isDark } = useDriverTheme();
   const focusedRoute = state.routes[state.index];
   const current = focusedRoute?.name;
 
-  // Custom tab bars ignore React Navigation's default `tabBarStyle` handling.
-  // Hide by route name + pathname (Expo Router) + explicit display:none.
+  // Custom tab bars ignore React Navigation's default tabBarStyle handling.
+  // Routes like chat set `tabBarStyle: { display: 'none' }` so the composer
+  // can sit on the safe area (phone + iPad + web) without overlapping the dock.
   const focusedTabBarStyle = StyleSheet.flatten(
     focusedRoute ? descriptors[focusedRoute.key]?.options?.tabBarStyle : undefined,
-  ) as ViewStyle;
-  const hideDock =
-    (current != null && HIDE_TAB_BAR_ROUTES.has(current)) ||
-    pathname.includes('/chat') ||
-    focusedTabBarStyle?.display === 'none';
-  if (hideDock) {
+  );
+  if (focusedTabBarStyle?.display === 'none') {
     return null;
   }
 
