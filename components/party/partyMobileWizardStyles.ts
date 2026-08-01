@@ -24,6 +24,18 @@ export const partyMobileWizardStyles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 1,
   },
+  /**
+   * Carded desktop/tablet: the card is height-capped and clips overflow, so the
+   * step body must shrink and scroll. Without this, a step that grows (tablet
+   * phone step = on-screen keypad + invitee match card) pushes the footer
+   * action out of the card and the flow can't be completed. `flexGrow: 0`
+   * overrides the ScrollView default so short steps stay content-sized.
+   */
+  cardScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minHeight: 0,
+  },
   topBar: {
     flexDirection: "row",
     alignItems: "center",

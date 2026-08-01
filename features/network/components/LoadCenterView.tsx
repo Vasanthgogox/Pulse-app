@@ -620,6 +620,15 @@ export function LoadCenterView({
       <View style={styles.loadsInlineFilterPanelDesktop}>
         <View style={styles.loadsInlineFilterPanelInner}>
           <View style={chatChrome.filterHeaderRow}>
+          <View style={styles.loadsFilterTabsWrap}>
+            <LoadCenterUnderlineTabStrip
+              variant="yellow"
+              tabs={mainLoadTabs}
+              activeKey={loadSubTab}
+              onChange={(key) => setLoadSubTab(key as LoadSubTab)}
+              formatLabel={formatLoadTabLabel}
+            />
+          </View>
           <View style={styles.loadsFilterActions}>
             {loadSubTab === "GIVE_LOAD" ? renderAddLoadButton() : null}
             {loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD" ? (
@@ -634,15 +643,6 @@ export function LoadCenterView({
                 onPartyPress={openIntegratedParty}
               />
             ) : null}
-          </View>
-          <View style={chatChrome.filterHeaderRight}>
-            <LoadCenterUnderlineTabStrip
-              variant="yellow"
-              tabs={mainLoadTabs}
-              activeKey={loadSubTab}
-              onChange={(key) => setLoadSubTab(key as LoadSubTab)}
-              formatLabel={formatLoadTabLabel}
-            />
           </View>
         </View>
         <View style={chatChrome.searchScopeStrip}>
@@ -1757,6 +1757,15 @@ const styles = StyleSheet.create({
     flex: 1,
     flexShrink: 1,
     minWidth: 0,
+  },
+  /** Give load / Get load / Claimed tab strip, now first in filterHeaderRow (left side).
+   * Local copy of chatChrome.filterHeaderRight without its `marginLeft: "auto"` — that
+   * rule assumes the tab strip is last in the row and would fight this reordering. */
+  loadsFilterTabsWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
   },
   mobileNetworkToolbarRow: {
     paddingHorizontal: Layout.screenPaddingHorizontal,

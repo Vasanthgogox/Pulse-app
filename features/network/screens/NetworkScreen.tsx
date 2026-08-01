@@ -1702,6 +1702,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   connectionsHubCardWrapInset: {
+    // The wrap is `width: 100%`, so a horizontal margin would shift the box off
+    // the right edge instead of insetting it. Stretch to the parent instead so
+    // both sides sit inside the screen padding.
+    width: "auto",
+    alignSelf: "stretch",
     marginHorizontal: Layout.screenPaddingHorizontal,
   },
   connectionsHubCard: {
