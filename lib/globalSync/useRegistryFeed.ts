@@ -5,8 +5,14 @@ import { buildRegistryFeed } from '@/lib/globalSync/registryFeed.util';
 import { useAlertRegistryNotifications } from '@/lib/globalSync/useAlertRegistryNotifications';
 import { useGlobalSyncStore } from '@/lib/globalSync/useGlobalSyncStore';
 import { useOperationsShelfItems } from '@/lib/globalSync/useOperationsDerived';
+import { useNetworkNotificationsQuery } from '@/lib/queries/useNetworkNotificationsQuery';
 
-/** Unified registry feed (ops + finance) from bootstrap store — zero extra DB. */
+/**
+ * Unified registry feed. Ops + finance lanes are derived from the bootstrap store
+ * (zero extra DB). The network lane is the one exception: cross-org indent/bid/
+ * award events cannot be derived locally, so they are read from
+ * `network_notifications` and kept live over realtime.
+ */
 export function useRegistryFeed(
   tab: 'active' | 'history',
   orgId: string | null,
@@ -19,6 +25,14 @@ export function useRegistryFeed(
     activeSharedNotifications,
     historySharedNotifications,
   } = useAlertRegistryNotifications(orgId);
+  // Single query for both lifecycle tabs; split locally so only one channel opens.
+  const { data: networkNotifications } = useNetworkNotificationsQuery(orgId);
+
+  const { activeNetwork, historyNetwork } = useMemo(() => {
+    const active = networkNotifications.filter((n) => n.status === 'open');
+    const history = networkNotifications.filter((n) => n.status !== 'open');
+    return { activeNetwork: active, historyNetwork: history };
+  }, [networkNotifications]);
 
   const opsAlerts = useMemo((): GlobalOperationAlert[] => {
     const covered = new Set(
@@ -73,6 +87,8 @@ export function useRegistryFeed(
         historySalary: historySalaryRequests,
         activeShared: activeSharedNotifications,
         historyShared: historySharedNotifications,
+        activeNetwork,
+        historyNetwork,
       }),
     [
       tab,
@@ -81,6 +97,8 @@ export function useRegistryFeed(
       historySalaryRequests,
       activeSharedNotifications,
       historySharedNotifications,
+      activeNetwork,
+      historyNetwork,
     ],
   );
 

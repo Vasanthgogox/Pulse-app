@@ -2,41 +2,26 @@
  * Indent detail — single indent view. Hero card aligns with Load Center cards
  * (pills, route row, indent id, specs slab); freight card, Live Bids, footer follow.
  */
-import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import {
-  indentReviewHubLayout,
-  indentReviewHubSpecValue,
-  indentReviewHubText,
-} from "@/features/indents/styles/indentReviewHubStyles";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { canAccessSuppliers } from "@/lib/capabilities";
-import { useCapabilities } from "@/lib/useCapabilities";
-import { useMemberAccess } from "@/lib/useMemberAccess";
-import { IndentBidAmountEntry } from "@/features/indents/components/bidding/IndentBidAmountEntry";
-import { IndentAwardCelebrationModal } from "@/features/indents/components/bidding/IndentAwardCelebrationModal";
 import type { IndentAwardCelebrationData } from "@/features/indents/components/bidding/IndentAwardCelebrationModal";
+import { IndentAwardCelebrationModal } from "@/features/indents/components/bidding/IndentAwardCelebrationModal";
+import { IndentBidAmountEntry } from "@/features/indents/components/bidding/IndentBidAmountEntry";
 import { IndentCounterOfferEntry } from "@/features/indents/components/bidding/IndentCounterOfferEntry";
 import { IndentGiveLoadPartiesStrip } from "@/features/indents/components/IndentGiveLoadPartiesStrip";
 import { IndentLinkedTripCard } from "@/features/indents/components/IndentLinkedTripCard";
 import { IndentReviewHubCard } from "@/features/indents/components/IndentReviewHubCard";
 import {
-  IndentReviewHubBidsBody,
-  IndentReviewHubBidsHeader,
-  IndentReviewHubSplitLayout,
+    IndentReviewHubBidsBody,
+    IndentReviewHubBidsHeader,
+    IndentReviewHubSplitLayout,
 } from "@/features/indents/components/IndentReviewHubSplitLayout";
 import { IndentSupplierPartySummary } from "@/features/indents/components/IndentSupplierPartySummary";
 import type { SupplierQuoteActionHint } from "@/features/indents/components/IndentSupplierQuoteCard";
-import { shareIndentOnWhatsApp } from "@/features/indents/utils/indentShare.util";
-import {
-  bidMarginFromClient,
-  buildSupplierQuoteFooterInsight,
-} from "@/features/indents/utils/bidding/indentLiveBids.util";
-import { buildIndentAwardedBidAlert } from "@/features/indents/utils/bidding/indentBidAlert.util";
-import { resolveIndentClientEntityDisplayName } from "@/features/indents/utils/indentPartyDisplay.util";
 import {
     createDirectQuote,
     submitDirectQuoteCounterOffer,
@@ -50,13 +35,27 @@ import {
     updateIndent,
     type IndentRow,
 } from "@/features/indents/services/indents.service";
-import { selectIntegratedSuppliersForLoadCenter } from "@/features/network/utils/loadCenterIntegratedParties.util";
-import type { LoadCenterIntegratedParty } from "@/features/network/utils/loadCenterIntegratedParties.util";
 import {
-  resolveTripPartyLabels,
-  type LoadCenterDriverProfile,
+    indentReviewHubLayout,
+    indentReviewHubSpecValue,
+    indentReviewHubText,
+} from "@/features/indents/styles/indentReviewHubStyles";
+import { buildIndentAwardedBidAlert } from "@/features/indents/utils/bidding/indentBidAlert.util";
+import {
+    bidMarginFromClient,
+    buildSupplierQuoteFooterInsight,
+} from "@/features/indents/utils/bidding/indentLiveBids.util";
+import { resolveIndentClientEntityDisplayName } from "@/features/indents/utils/indentPartyDisplay.util";
+import { shareIndentOnWhatsApp } from "@/features/indents/utils/indentShare.util";
+import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
+import type { LoadCenterIntegratedParty } from "@/features/network/utils/loadCenterIntegratedParties.util";
+import { selectIntegratedSuppliersForLoadCenter } from "@/features/network/utils/loadCenterIntegratedParties.util";
+import {
+    resolveTripPartyLabels,
+    type LoadCenterDriverProfile,
 } from "@/features/network/utils/loadCenterTripAllocation.util";
 import { getTripOperationalDisplay } from "@/features/operations/display";
+import { canAccessSuppliers } from "@/lib/capabilities";
 import { formatINR } from "@/lib/format";
 import {
     useClientsQuery,
@@ -72,8 +71,9 @@ import {
 } from "@/lib/queries/useIndentsQuery";
 import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
 import { ROUTES } from "@/lib/routes";
+import { useCapabilities } from "@/lib/useCapabilities";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
-import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -377,12 +377,11 @@ export function IndentDetailScreen({
             .map((q) => updateDirectQuoteStatus(q.id, "rejected")),
         );
         const awardedAmount = Number(winner.amount ?? 0);
+        // Status only — bundling supplier_target here fails on broadcast indents
+        // (enforce_indent_draft_broadcast_rules blocks commercial edits), which
+        // used to leave awards stuck at broadcast after the quote was accepted.
         const { error: indentErr } = await updateIndent(indentId, {
           status: "awarded",
-          supplier_target:
-            Number.isFinite(awardedAmount) && awardedAmount > 0
-              ? awardedAmount
-              : Number(indent.supplier_target ?? 0),
         });
         if (indentErr) {
           Alert.alert(

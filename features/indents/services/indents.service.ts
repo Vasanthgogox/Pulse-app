@@ -3,29 +3,29 @@
  * Service-layer validation: single pass over inputs before insert.
  */
 import { getClientById } from "@/features/clients/services/clients.service";
+import { findIndentInMarketList } from "@/features/indents/utils/findIndentInList.util";
 import {
   deactivatePostsForIndent,
   isIndentTerminalForStory,
 } from "@/features/network/services/indentStoryPosts.service";
-import { syncDomainRows } from "@/lib/cache/domainSync";
-import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
-import type { DeltaResponse } from "@/lib/cache/deltaTypes";
-import { DEFAULT_PAGE_SIZE, FINITE_LIST_CAP, type PageOpts } from "@/lib/pagination";
-import { supabase } from "@/lib/supabase";
 import {
   getIndentOperationalDisplay,
   getTripOperationalDisplay,
 } from "@/features/operations/display";
+import type { DeltaResponse } from "@/lib/cache/deltaTypes";
+import { syncDomainRows } from "@/lib/cache/domainSync";
+import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
+import { DEFAULT_PAGE_SIZE, FINITE_LIST_CAP, type PageOpts } from "@/lib/pagination";
+import { supabase } from "@/lib/supabase";
 import {
-    VALIDATION,
-    dateISO,
-    maxLength,
-    nonNegativeAmount,
-    positiveAmount,
-    required,
-    runValidators,
+  VALIDATION,
+  dateISO,
+  maxLength,
+  nonNegativeAmount,
+  positiveAmount,
+  required,
+  runValidators,
 } from "@/lib/validation";
-import { findIndentInMarketList } from "@/features/indents/utils/findIndentInList.util";
 
 export { findIndentInMarketList } from "@/features/indents/utils/findIndentInList.util";
 
@@ -882,6 +882,17 @@ export async function updateIndent(
     .maybeSingle();
 
   if (error) return { error: new Error(error.message), indent: null };
+  // RLS / 0-row updates return no error and null data — treat as failure when
+  // the caller asked to change status, otherwise awards look successful while
+  // the indent stays broadcast/open.
+  if (!data && updates.status !== undefined) {
+    return {
+      error: new Error(
+        "Indent status could not be updated. Please refresh and try again.",
+      ),
+      indent: null,
+    };
+  }
 
   if (
     updates.status !== undefined &&

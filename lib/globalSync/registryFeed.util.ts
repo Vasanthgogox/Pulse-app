@@ -1,8 +1,9 @@
 import type { GlobalOperationAlert } from '@/lib/globalSync/priorityEngine.util';
 import type { SalaryRequestWithDriverRow } from '@/features/drivers/services/salaryRequests.service';
 import type { SharedLedgerNotificationRow } from '@/features/finance/services/sharedLedgerNotifications.service';
+import type { NetworkNotificationRow } from '@/features/network/services/networkNotifications.service';
 
-export type RegistryFeedKind = 'ops' | 'salary' | 'shared';
+export type RegistryFeedKind = 'ops' | 'salary' | 'shared' | 'network';
 
 /** Metronic-style notification filter tabs. */
 export type RegistryFilterTab = 'all' | 'driver' | 'trip' | 'payment' | 'archive';
@@ -15,6 +16,7 @@ export type RegistryFeedEntry = {
   ops?: GlobalOperationAlert;
   salary?: SalaryRequestWithDriverRow;
   shared?: SharedLedgerNotificationRow;
+  network?: NetworkNotificationRow;
 };
 
 function parseSortMs(iso: string | null | undefined, fallbackWeight = 0): number {
@@ -30,8 +32,22 @@ export function buildRegistryFeed(input: {
   historySalary: SalaryRequestWithDriverRow[];
   activeShared: SharedLedgerNotificationRow[];
   historyShared: SharedLedgerNotificationRow[];
+  /** Cross-org indent/bid/award inbox. Optional: absent until the table ships. */
+  activeNetwork?: NetworkNotificationRow[];
+  historyNetwork?: NetworkNotificationRow[];
 }): RegistryFeedEntry[] {
   const entries: RegistryFeedEntry[] = [];
+  const pushNetwork = (rows: NetworkNotificationRow[] | undefined, weight: number) => {
+    for (const network of rows ?? []) {
+      entries.push({
+        id: `network:${network.id}`,
+        kind: 'network',
+        sortKey: parseSortMs(network.created_at, weight),
+        createdAt: network.created_at,
+        network,
+      });
+    }
+  };
 
   if (input.tab === 'active') {
     for (const ops of input.opsAlerts) {
@@ -61,6 +77,7 @@ export function buildRegistryFeed(input: {
         shared,
       });
     }
+    pushNetwork(input.activeNetwork, 30_000);
   } else {
     for (const salary of input.historySalary) {
       entries.push({
@@ -80,6 +97,7 @@ export function buildRegistryFeed(input: {
         shared,
       });
     }
+    pushNetwork(input.historyNetwork, 0);
   }
 
   return entries.sort((a, b) => b.sortKey - a.sortKey);
@@ -101,6 +119,8 @@ export function entryMatchesRegistryFilter(
     return false;
   }
   if (filter === 'trip') {
+    // Indent/bid/award events are load-lifecycle signals, so they live here.
+    if (entry.kind === 'network') return true;
     if (entry.kind !== 'ops' || !entry.ops) return false;
     const cat = entry.ops.category;
     if (cat === 'unassigned_trip') return false;

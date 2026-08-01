@@ -267,6 +267,14 @@ export const queryKeys = {
   unlinkedCounterparties: (orgId: string) =>
     ["q", "network", "unlinked-counterparties", orgId] as const,
 
+  networkNotifications: {
+    all: (orgId: string) => ["q", "network", "notifications", orgId] as const,
+    list: (orgId: string, statusFilter: string) =>
+      ["q", "network", "notifications", orgId, statusFilter] as const,
+    count: (orgId: string) =>
+      ["q", "network", "notifications", orgId, "count"] as const,
+  },
+
   orgMembers: {
     all: (orgId: string) => ["q", "org-members", orgId] as const,
     list: (orgId: string) => ["q", "org-members", orgId, "list"] as const,

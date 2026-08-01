@@ -34,15 +34,24 @@ import {
   type RegistryPartyLookup,
 } from "@/lib/alertRegistry/registryOpsPresentation.util";
 import {
+  resolveNetworkRegistryAvatar,
   resolveSalaryRegistryAvatar,
   resolveSharedRegistryAvatar,
 } from "@/lib/alertRegistry/registryNotificationAvatar.util";
+import {
+  networkNotificationActionLabel,
+  networkNotificationActionText,
+  networkNotificationTagLabel,
+  sharedLedgerActionLabel,
+} from "@/lib/sharedLedger/registryLabels";
+import { useMarkNetworkNotificationRead } from "@/lib/queries/useNetworkNotificationsQuery";
+import { ROUTES } from "@/lib/routes";
+import { useRouter } from "expo-router";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
-import { sharedLedgerActionLabel } from "@/lib/sharedLedger/registryLabels";
 import type { AlertDetailMode } from "@/lib/alertRegistry/alertDetailRoute.util";
 import type { RegistryFeedKind } from "@/lib/globalSync/registryFeed.util";
 import { AlertDetailScreen } from "@/features/alertRegistry/components/AlertDetailScreen";
@@ -237,6 +246,8 @@ function RegistryFeedList({
   const { data: drivers = [] } = useDriversQuery(orgId);
   const { data: clients = [] } = useClientsQuery(orgId);
   const { data: suppliers = [] } = useSuppliersQuery(orgId);
+  const router = useRouter();
+  const markNetworkRead = useMarkNetworkNotificationRead(orgId);
   const driversById = useMemo(
     () => new Map(drivers.map((driver) => [driver.id, driver])),
     [drivers],
@@ -341,6 +352,82 @@ function RegistryFeedList({
                     onPress={() => finance.onOpenOps(ops)}
                   />
                 </RegistryCardActions>
+              }
+            />
+          );
+        }
+
+        if (entry.kind === "network" && entry.network) {
+          const item = entry.network;
+          const hasAmount =
+            item.amount_meta != null && Number.isFinite(Number(item.amount_meta));
+          const amountText = hasAmount
+            ? `₹${Number(item.amount_meta).toLocaleString("en-IN", {
+                maximumFractionDigits: 0,
+              })}`
+            : null;
+          const networkAvatar = resolveNetworkRegistryAvatar(item, {
+            partnerDisplay: partyCtx.partnerDisplay,
+            partnerAvatarUri: partyCtx.partnerAvatarUri,
+          });
+          const openIndent = () => {
+            if (item.indent_id) {
+              void markNetworkRead.mutateAsync(item.id).catch(() => {});
+              router.push(ROUTES.indentDetail(item.indent_id));
+            }
+          };
+          return (
+            <AlertRegistrySignalCard
+              key={entry.id}
+              mode={isActiveView ? "active" : "completed"}
+              onPress={openIndent}
+              avatar={networkAvatar}
+              actorName={networkAvatar.name}
+              actionText={networkNotificationActionText(item.event_type)}
+              highlightText={amountText ?? item.title}
+              detailTitle={item.title}
+              detailSubtitle={item.subtitle ?? undefined}
+              timeLabel={formatRelativeTime(item.created_at)}
+              contextLabel={item.subtitle ?? undefined}
+              tags={
+                isActiveView
+                  ? [
+                      {
+                        label: networkNotificationTagLabel(item.event_type),
+                        variant:
+                          item.event_type === "awarded"
+                            ? "success"
+                            : item.event_type === "counter_offered"
+                              ? "warning"
+                              : "default",
+                      } satisfies RegistryTag,
+                    ]
+                  : undefined
+              }
+              isUnread={isActiveView && item.status === "open"}
+              statusPill={
+                !isActiveView
+                  ? {
+                      label: String(item.status ?? "read"),
+                      tone: sharedNotificationStatusTone(item.status),
+                    }
+                  : undefined
+              }
+              footer={
+                isActiveView ? (
+                  <RegistryCardActions>
+                    <RegistryGhostButton
+                      label="Dismiss"
+                      onPress={() => {
+                        void markNetworkRead.mutateAsync(item.id).catch(() => {});
+                      }}
+                    />
+                    <RegistryPrimaryButton
+                      label={networkNotificationActionLabel(item.event_type)}
+                      onPress={openIndent}
+                    />
+                  </RegistryCardActions>
+                ) : undefined
               }
             />
           );

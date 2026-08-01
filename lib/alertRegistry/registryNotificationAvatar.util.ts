@@ -5,6 +5,7 @@ import type {
   InboundPartnerDisplay,
   InboundProtocolInviteItem,
 } from "@/lib/globalSync/inboundProtocol.types";
+import type { NetworkNotificationRow } from "@/features/network/services/networkNotifications.service";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import type { ActiveTripSummary } from "@/lib/globalSync/types";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
@@ -150,6 +151,29 @@ export function resolveSharedRegistryAvatar(
   return {
     name: item.title?.trim() || "Partner",
     entityType: "client",
+    initialsColorSeed: item.id,
+  };
+}
+
+/** Avatar for cross-org network notifications; keyed on the acting org. */
+export function resolveNetworkRegistryAvatar(
+  item: NetworkNotificationRow,
+  ctx: {
+    partnerDisplay: Record<string, InboundPartnerDisplay>;
+    partnerAvatarUri: Record<string, string | null>;
+  },
+): RegistryNotificationAvatar {
+  if (item.actor_org_id) {
+    return partnerAvatar(
+      item.actor_org_id,
+      ctx.partnerDisplay,
+      ctx.partnerAvatarUri,
+      item.title,
+    );
+  }
+  return {
+    name: item.title?.trim() || "Partner",
+    entityType: "supplier",
     initialsColorSeed: item.id,
   };
 }
