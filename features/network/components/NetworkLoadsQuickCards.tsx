@@ -18,6 +18,7 @@ import { ROUTES } from "@/lib/routes";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { ArrowUpRight, Lock, Zap } from "lucide-react-native";
+import { useState } from "react";
 import {
     Platform,
     Pressable,
@@ -31,6 +32,16 @@ import {
 const NATIVE_APP = Platform.OS !== "web";
 /** Readable subline on pastel supply/demand washes. */
 const SUB_ON_WASH = "#64748B";
+
+/** Tablet web: 4 tiles in one row starve the text column — go 2×2 below this. */
+const TILE_FOUR_UP_MIN_WIDTH = 1280;
+const TILE_PAD_H = 16;
+const SIDEBAR_PAD_H = 14;
+const ARROW_ORB_W = 32;
+/** Text column floor: under this the label truncates to "Give …" and the chip wraps. */
+const TEXT_MIN_W = 128;
+/** Below this the illustration is noise, not art — drop it and give the text the space. */
+const ART_MIN_W = 56;
 
 export interface NetworkLoadsQuickCardsProps {
   compact?: boolean;
@@ -73,12 +84,29 @@ function MarketplaceCard({
   isMobile,
 }: MarketplaceCardProps) {
   const { width } = useWindowDimensions();
+  const [cardWidth, setCardWidth] = useState(0);
   const sidebar = variant === "sidebar";
   const mobileTile = isMobile && variant === "tile";
   const locked = Boolean(action.locked);
 
-  const illusBoxW = sidebar ? 88 : compact || width < 380 ? 92 : 112;
-  const illusBoxH = sidebar ? 72 : compact || width < 380 ? 78 : 92;
+  const illusMaxW = sidebar ? 88 : compact || width < 380 ? 92 : 112;
+  const illusMaxH = sidebar ? 72 : compact || width < 380 ? 78 : 92;
+
+  // The illustration and arrow are fixed-size, so a narrow card used to squeeze
+  // the text column to a few pixels. Give the text its floor first, then spend
+  // whatever is left on the art.
+  const rowPadH = sidebar ? SIDEBAR_PAD_H : TILE_PAD_H;
+  const rowGap = sidebar ? 10 : 12;
+  const artBudget =
+    cardWidth > 0
+      ? cardWidth - rowPadH * 2 - rowGap * 2 - ARROW_ORB_W - TEXT_MIN_W
+      : illusMaxW;
+  const illusBoxW = Math.min(illusMaxW, Math.floor(artBudget));
+  const showIllustration = illusBoxW >= ART_MIN_W;
+  const illusBoxH = Math.max(
+    48,
+    Math.round(illusMaxH * (illusBoxW / illusMaxW)),
+  );
 
   const actionOrb = (
     <View
@@ -125,7 +153,10 @@ function MarketplaceCard({
         ) : null}
         <View style={styles.cardMobileBody}>
           <View style={styles.cardMobileText}>
-            <Text style={[styles.chip, { color: action.accent }]}>
+            <Text
+              style={[styles.chip, { color: action.accent }]}
+              numberOfLines={1}
+            >
               {action.chip}
             </Text>
             <Text style={styles.titleMobile} numberOfLines={1}>
@@ -150,6 +181,10 @@ function MarketplaceCard({
 
   return (
     <View
+      onLayout={(e) => {
+        const w = Math.round(e.nativeEvent.layout.width);
+        if (w > 0 && w !== cardWidth) setCardWidth(w);
+      }}
       style={[
         styles.card,
         sidebar && styles.cardSidebar,
@@ -167,7 +202,10 @@ function MarketplaceCard({
       ) : null}
       <View style={[styles.cardBody, sidebar && styles.cardBodySidebar]}>
         <View style={[styles.textCol, sidebar && styles.textColSidebar]}>
-          <Text style={[styles.chip, { color: action.accent }]}>
+          <Text
+            style={[styles.chip, { color: action.accent }]}
+            numberOfLines={1}
+          >
             {action.chip}
           </Text>
           <Text
@@ -184,20 +222,22 @@ function MarketplaceCard({
           </Text>
         </View>
 
-        <View
-          style={[
-            styles.illusWrap,
-            { width: illusBoxW, height: illusBoxH },
-            sidebar && styles.illusWrapSidebar,
-            locked && styles.illusLocked,
-          ]}
-        >
-          <MarketplaceArt
-            action={action}
-            illusBoxW={illusBoxW}
-            illusBoxH={illusBoxH}
-          />
-        </View>
+        {showIllustration ? (
+          <View
+            style={[
+              styles.illusWrap,
+              { width: illusBoxW, height: illusBoxH },
+              sidebar && styles.illusWrapSidebar,
+              locked && styles.illusLocked,
+            ]}
+          >
+            <MarketplaceArt
+              action={action}
+              illusBoxW={illusBoxW}
+              illusBoxH={illusBoxH}
+            />
+          </View>
+        ) : null}
 
         {actionOrb}
       </View>
@@ -242,6 +282,8 @@ export function NetworkLoadsQuickCards({
   const { width } = useWindowDimensions();
   const sidebar = layout === "sidebar";
   const isMobile = !sidebar && (NATIVE_APP || width < SPLIT_STACK_BREAKPOINT);
+  /** Tablet web sits between: one row of 4 is too tight, so pair them 2×2. */
+  const twoUp = !sidebar && !isMobile && width < TILE_FOUR_UP_MIN_WIDTH;
 
   const openAction = (action: NetworkLoadsQuickAction) => {
     if (Platform.OS !== "web") {
@@ -273,7 +315,13 @@ export function NetworkLoadsQuickCards({
     return (
       <View
         key={action.id}
-        style={tile ? (isMobile ? styles.cardSlotMobile : styles.cardSlot) : styles.sidebarCardPress}
+        style={
+          tile
+            ? isMobile
+              ? styles.cardSlotMobile
+              : [styles.cardSlot, twoUp && styles.cardSlotTwoUp]
+            : styles.sidebarCardPress
+        }
       >
         <Pressable
           onPress={() => openAction(action)}
@@ -324,6 +372,7 @@ export function NetworkLoadsQuickCards({
         style={[
           styles.rail,
           compact && styles.railCompact,
+          twoUp && styles.railTwoUp,
           isMobile && styles.railMobile,
         ]}
       >
@@ -438,6 +487,9 @@ const styles = StyleSheet.create({
   },
   railCompact: {
     gap: 10,
+  },
+  railTwoUp: {
+    flexWrap: "wrap",
   },
   railMobile: {
     flexDirection: "column",
@@ -634,6 +686,12 @@ const styles = StyleSheet.create({
   cardSlot: {
     flex: 1,
     flexBasis: 0,
+    minWidth: 0,
+  },
+  cardSlotTwoUp: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "48%",
     minWidth: 0,
   },
   cardSlotMobile: {

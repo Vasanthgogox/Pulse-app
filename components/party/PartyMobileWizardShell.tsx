@@ -3,6 +3,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   useWindowDimensions,
   View,
@@ -63,6 +64,63 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
   // fixed card height, which would leave a large empty gap above the footer.
   const cardFit = Platform.OS === "web" && width >= 720;
 
+  const stepContent = (
+    <>
+      <View style={styles.hero}>
+        <View style={styles.titleRow}>
+          <View style={styles.liveDot} />
+          <Text style={styles.entityTitle}>{entityTitle}</Text>
+        </View>
+        {showEntitySubtitle ? (
+          <Text style={styles.subtitle}>{subtitle}</Text>
+        ) : null}
+      </View>
+
+      {noOrganizationBanner}
+
+      {formError ? (
+        <View style={styles.errorBar}>
+          <Text style={styles.errorText}>{formError}</Text>
+        </View>
+      ) : null}
+
+      <View
+        style={[
+          styles.body,
+          isKeypadLayout
+            ? cardFit
+              ? styles.bodyKeypadFit
+              : styles.bodyKeypad
+            : hideFooter
+              ? styles.bodySource
+              : cardFit
+                ? styles.bodyFieldsFit
+                : styles.bodyFields,
+        ]}
+      >
+        <View style={isKeypadLayout ? styles.bodyKeypadHeader : undefined}>
+          <Text style={[styles.stepTitle, cardFit && styles.stepTitleCompact]}>
+            {stepTitle}
+          </Text>
+          {isKeypadLayout ? (
+            <Text style={styles.stepHintKeypad}>{stepHint}</Text>
+          ) : stepHint ? (
+            <Text style={styles.stepHint}>{stepHint}</Text>
+          ) : null}
+        </View>
+        {isKeypadLayout ? (
+          <View
+            style={cardFit ? styles.bodyKeypadContentFit : styles.bodyKeypadContent}
+          >
+            {children}
+          </View>
+        ) : (
+          children
+        )}
+      </View>
+    </>
+  );
+
   return (
     <KeyboardAvoidingView
       style={cardFit ? styles.rootFit : styles.root}
@@ -101,54 +159,17 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
           <View style={styles.backBtnSpacer} />
         </View>
 
-        <View style={styles.hero}>
-          <View style={styles.titleRow}>
-            <View style={styles.liveDot} />
-            <Text style={styles.entityTitle}>{entityTitle}</Text>
-          </View>
-          {showEntitySubtitle ? (
-            <Text style={styles.subtitle}>{subtitle}</Text>
-          ) : null}
-        </View>
-
-        {noOrganizationBanner}
-
-        {formError ? (
-          <View style={styles.errorBar}>
-            <Text style={styles.errorText}>{formError}</Text>
-          </View>
-        ) : null}
-
-        <View
-          style={[
-            styles.body,
-            isKeypadLayout
-              ? cardFit
-                ? styles.bodyKeypadFit
-                : styles.bodyKeypad
-              : hideFooter
-                ? styles.bodySource
-                : cardFit
-                  ? styles.bodyFieldsFit
-                  : styles.bodyFields,
-          ]}
-        >
-          <View style={isKeypadLayout ? styles.bodyKeypadHeader : undefined}>
-            <Text style={[styles.stepTitle, cardFit && styles.stepTitleCompact]}>{stepTitle}</Text>
-            {isKeypadLayout ? (
-              <Text style={styles.stepHintKeypad}>{stepHint}</Text>
-            ) : stepHint ? (
-              <Text style={styles.stepHint}>{stepHint}</Text>
-            ) : null}
-          </View>
-          {isKeypadLayout ? (
-            <View style={cardFit ? styles.bodyKeypadContentFit : styles.bodyKeypadContent}>
-              {children}
-            </View>
-          ) : (
-            children
-          )}
-        </View>
+        {cardFit ? (
+          <ScrollView
+            style={styles.cardScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {stepContent}
+          </ScrollView>
+        ) : (
+          stepContent
+        )}
 
         {!hideFooter ? (
           <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
