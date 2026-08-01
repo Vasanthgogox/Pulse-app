@@ -354,7 +354,7 @@ export function ShareLoadSheet({
     setError(null);
 
     const weight = indent.weight != null ? indent.weight / 1000 : undefined;
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    // P0.1: indent lifecycle owns marketplace visibility — do not stamp a 24h posts.expires_at.
 
     const { error: err, postId: newPostId } = await createPost({
       organizationId: orgId,
@@ -369,7 +369,6 @@ export function ShareLoadSheet({
         resolveSupplierTargetDisplayRate(indent.supplier_target, indent.client_price) ??
         undefined,
       material: indent.load_type ?? undefined,
-      expiresAt,
       sourceIndentId: indent.id,
     });
 

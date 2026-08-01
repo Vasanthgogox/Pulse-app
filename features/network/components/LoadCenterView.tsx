@@ -547,7 +547,7 @@ export function LoadCenterView({
     if (loadSubTab === "AWARDED") refetchMyQuotes();
   }, [loadSubTab, refetchMyQuotes]);
 
-  /** Refetch quote counts when viewing Quoted tab so bids received are up to date. */
+  /** Refetch offer counts when viewing Receiving Bids so badges stay current. */
   useEffect(() => {
     if (loadSubTab === "GIVE_LOAD" && statusFilterTab === "QUOTED") {
       refetchQuoteCounts();
@@ -1014,8 +1014,8 @@ export function LoadCenterView({
               Number(existingQuote.counter_amount) > 0
             ? "countered"
             : isPending
-              ? "quoted"
-              : "open";
+              ? "receiving bids"
+              : "open market";
       const quoteAmount = Number(existingQuote?.amount ?? 0);
       const counterInr =
         existingQuote?.counter_amount != null &&

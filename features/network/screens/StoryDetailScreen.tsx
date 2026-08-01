@@ -10,8 +10,8 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import {
     getIndentDisplayNumber,
     getVisibleIndentById,
-    resolveSupplierTargetDisplayRate,
 } from "@/features/indents/services/indents.service";
+import { resolveCommercialOpportunity } from "@/features/marketplace/domain";
 import { StoryBroadcastPreview } from "@/features/network/components/StoryBroadcastPreview";
 import { StoryOwnerFooterActions } from "@/features/network/components/StoryDetailFooterActions";
 import {
@@ -307,11 +307,6 @@ export default function StoryDetailScreen() {
     enabled: Boolean(myOrgId && post?.source_indent_id && post.type === "LOAD"),
     staleTime: 60_000,
   });
-  const loadTargetRate = resolveSupplierTargetDisplayRate(
-    linkedIndentQ.data?.supplier_target,
-    linkedIndentQ.data?.client_price,
-    post?.rate_offer,
-  );
   const color = post ? seedColor(post.organization_id) : PALETTE[0];
   const isLoad = post?.type === "LOAD";
   const isVehicle = post?.type === "VEHICLE_AVAILABILITY";
@@ -325,14 +320,15 @@ export default function StoryDetailScreen() {
       ) ?? null,
     [myCampaignsQ.data, post?.id],
   );
-  const canBidOnLoad = Boolean(isLoad && !isOwnPost && myOrgId && post);
+  // Fetch bids whenever this is someone else's LOAD — commercial rules live in the resolver.
+  const shouldFetchMyBid = Boolean(isLoad && !isOwnPost && myOrgId && post);
   const canContactVehicle = Boolean(isVehicle && !isOwnPost && myOrgId);
   const isDeletingCurrent = deletingPostId != null && deletingPostId === post?.id;
 
   // Fetch my existing bid on current post (for non-own load posts)
-  const myBidQ = useMyBidQuery(canBidOnLoad ? (post?.id ?? null) : null, myOrgId || null);
+  const myBidQ = useMyBidQuery(shouldFetchMyBid ? (post?.id ?? null) : null, myOrgId || null);
   const myBid = myBidQ.data ?? null;
-  const myQuotesQ = useMyDirectQuotesQuery(canBidOnLoad ? myOrgId : null);
+  const myQuotesQ = useMyDirectQuotesQuery(shouldFetchMyBid ? myOrgId : null);
   const myDirectQuote = useMemo(() => {
     const indentId = post?.source_indent_id;
     if (!indentId || !myQuotesQ.data?.length) return null;
@@ -348,6 +344,50 @@ export default function StoryDetailScreen() {
   const hasSubmittedBid = Boolean(myBid || myDirectQuote);
   const bidStatus = (myBid?.status ?? myDirectQuote?.status ?? "pending").toLowerCase();
   const bidNote = myBid?.note ?? myDirectQuote?.notes ?? null;
+
+  const commercialOpportunity = useMemo(
+    () =>
+      resolveCommercialOpportunity({
+        viewerOrgId: myOrgId || null,
+        ownerOrgId: post?.organization_id ?? "",
+        isLoad: Boolean(isLoad),
+        indentStatus: linkedIndentQ.data?.status ?? null,
+        postIsActive: post?.is_active,
+        bidCount: Math.max(post?.bid_count ?? 0, hasSubmittedBid ? 1 : 0),
+        supplierTarget: linkedIndentQ.data?.supplier_target,
+        rateOffer: post?.rate_offer,
+        myBidAmount: submittedBidAmount > 0 ? submittedBidAmount : null,
+        myBidStatus: hasSubmittedBid ? bidStatus : null,
+        counterAmount: counterOfferInr,
+        isSponsored: post?.is_sponsored,
+        reachCampaignId: post?.reach_campaign_id ?? activeCampaignForPost?.id,
+        hasActiveCampaign: Boolean(activeCampaignForPost),
+        viewerCanBidCapability: allowLoadPosts,
+      }),
+    [
+      myOrgId,
+      post?.organization_id,
+      post?.is_active,
+      post?.bid_count,
+      post?.rate_offer,
+      post?.is_sponsored,
+      post?.reach_campaign_id,
+      isLoad,
+      linkedIndentQ.data?.status,
+      linkedIndentQ.data?.supplier_target,
+      hasSubmittedBid,
+      submittedBidAmount,
+      bidStatus,
+      counterOfferInr,
+      activeCampaignForPost,
+      allowLoadPosts,
+    ],
+  );
+  const loadDisplayPrice = commercialOpportunity.pricing.displayPrice;
+  const canBidOnLoad =
+    commercialOpportunity.permissions.canBid ||
+    commercialOpportunity.permissions.canEditBid ||
+    commercialOpportunity.bidding.hasBid;
 
   // Record view (fire-and-forget, once per post per session)
   const recordView = useRecordStoryViewMutation();
@@ -575,7 +615,7 @@ export default function StoryDetailScreen() {
             loadMaterial={loadMaterial}
             originParts={originParts}
             destinationParts={destinationParts}
-            loadTargetRate={loadTargetRate}
+            loadTargetRate={loadDisplayPrice}
             isDesktopPreview={isDesktopPreview}
             storyKey={post.id}
           />
@@ -678,16 +718,16 @@ export default function StoryDetailScreen() {
         )}
 
         {canBidOnLoad && post && (
-          hasSubmittedBid ? (
+          commercialOpportunity.bidding.hasBid ? (
             /* Already bid — show status + edit; surface shipper counter when present */
             <>
               <View
                 style={[
                   styles.bidStatusBanner,
-                  counterOfferInr != null && styles.bidStatusBannerCounter,
+                  commercialOpportunity.bidding.counterAmount != null && styles.bidStatusBannerCounter,
                 ]}
               >
-                {counterOfferInr != null ? (
+                {commercialOpportunity.bidding.counterAmount != null ? (
                   <ArrowLeftRight size={16} color={Theme.warning} strokeWidth={2.5} />
                 ) : (
                   <CheckCircle2 size={16} color="#10b981" strokeWidth={2.5} />
@@ -696,28 +736,36 @@ export default function StoryDetailScreen() {
                   <Text
                     style={[
                       styles.bidStatusLabel,
-                      counterOfferInr != null && styles.bidStatusLabelCounter,
+                      commercialOpportunity.bidding.counterAmount != null && styles.bidStatusLabelCounter,
                     ]}
                   >
-                    {counterOfferInr != null
+                    {commercialOpportunity.bidding.counterAmount != null
                       ? "Counter offer received"
                       : "Bid submitted"}
                   </Text>
                   <Text style={styles.bidStatusAmount}>
                     ₹
-                    {(counterOfferInr ?? submittedBidAmount).toLocaleString("en-IN")}
-                    {counterOfferInr == null && bidNote ? ` · ${bidNote}` : ""}
+                    {(
+                      commercialOpportunity.bidding.counterAmount ??
+                      commercialOpportunity.bidding.myBidAmount ??
+                      0
+                    ).toLocaleString("en-IN")}
+                    {commercialOpportunity.bidding.counterAmount == null && bidNote
+                      ? ` · ${bidNote}`
+                      : ""}
                   </Text>
-                  {counterOfferInr != null && submittedBidAmount > 0 ? (
+                  {commercialOpportunity.bidding.counterAmount != null &&
+                  (commercialOpportunity.bidding.myBidAmount ?? 0) > 0 ? (
                     <Text style={styles.bidStatusSub}>
-                      Your bid · ₹{submittedBidAmount.toLocaleString("en-IN")}
+                      Your bid · ₹
+                      {commercialOpportunity.bidding.myBidAmount!.toLocaleString("en-IN")}
                     </Text>
                   ) : null}
                 </View>
                 <View
                   style={[
                     styles.bidStatusBadge,
-                    counterOfferInr != null
+                    commercialOpportunity.bidding.counterAmount != null
                       ? styles.bidBadgeCounter
                       : bidStatus === "accepted"
                         ? styles.bidBadgeAccepted
@@ -729,36 +777,39 @@ export default function StoryDetailScreen() {
                   <Text
                     style={[
                       styles.bidStatusBadgeText,
-                      counterOfferInr != null && styles.bidStatusBadgeTextCounter,
+                      commercialOpportunity.bidding.counterAmount != null &&
+                        styles.bidStatusBadgeTextCounter,
                     ]}
                   >
-                    {counterOfferInr != null
+                    {commercialOpportunity.bidding.counterAmount != null
                       ? "REVIEW"
                       : bidStatus.toUpperCase()}
                   </Text>
                 </View>
               </View>
-              {bidStatus === "pending" && (
+              {commercialOpportunity.permissions.canEditBid && (
                 <Pressable
                   style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
                   onPress={() => guardVerified(() => { setEditBidMode(true); setBidPost(post); })}
                 >
                   <Edit3 size={16} color={INK} />
                   <Text style={styles.authorizeBtnText}>
-                    {counterOfferInr != null ? "Respond to counter" : "Edit bid"}
+                    {commercialOpportunity.actions.primary?.label ?? "Edit bid"}
                   </Text>
                 </Pressable>
               )}
             </>
-          ) : (
+          ) : commercialOpportunity.permissions.canBid ? (
             <Pressable
               style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
               onPress={() => guardVerified(() => { setEditBidMode(false); setBidPost(post); })}
             >
               <Send size={16} color={INK} />
-              <Text style={styles.authorizeBtnText}>Place bid on indent</Text>
+              <Text style={styles.authorizeBtnText}>
+                {commercialOpportunity.actions.primary?.label ?? "Place bid on indent"}
+              </Text>
             </Pressable>
-          )
+          ) : null
         )}
 
         {canContactVehicle && (

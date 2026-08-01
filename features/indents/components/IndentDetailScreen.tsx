@@ -137,6 +137,7 @@ const SUPPLIER_BID_ENABLED_STATUSES = new Set([
   "pending",
   "broadcast",
   "draft",
+  // Legacy compatibility only. No new indents enter 'quoted' after 20270128103100.
   "quoted",
 ]);
 
@@ -923,6 +924,7 @@ export function IndentDetailScreen({
           <View style={styles.headerSubtitleRow}>
             {(statusLower === "open" ||
               statusLower === "broadcast" ||
+              // Legacy compatibility only — no new 'quoted' after 20270128103100.
               statusLower === "quoted" ||
               statusLower === "pending") &&
             !["awarded", "completed", "deployed", "cancelled"].includes(

@@ -1,0 +1,16 @@
+-- Placeholder for a migration owned by pulse-unified-base.
+--
+-- pulse-unified-base shares this Supabase project and pushed `market_indents_via_reach`
+-- at this version. It recreated public.market_indents_for_org with a `via_reach` branch
+-- (sponsored/reach-targeted loads) and, in doing so, renamed the input parameter
+-- org_id -> p_org_id. That rename broke every PostgREST call from this app until
+-- 20270128103000.
+--
+-- The SQL is intentionally NOT duplicated here: this file exists only so
+-- `supabase db push` from this repo does not fail with "Remote migration versions not
+-- found in local migrations directory". The resulting function definition is asserted
+-- in 20270128103000_market_indents_for_org_pin_p_org_id.sql, so `supabase db reset`
+-- still reproduces remote.
+--
+-- Do not add statements here. New schema work belongs in a fresh, off-midnight version
+-- (the sibling repo timestamps at YYYYMMDD000000).

@@ -92,7 +92,9 @@ Do not continue searching for alternative explanations.
 - DB marketplace schema → `docs/database/marketplace.md`
 - Trips domain → `docs/trips.md`
 - Finance domain → `docs/finance.md`
-- Network/marketplace → `docs/network.md`
+- Network/marketplace → `docs/MARKETPLACE_DOMAIN.md` (Marketplace Platform M0–M5); short pointer `docs/network.md`
+- Product strategy (KPIs, dual streams, M2 tiers) → `docs/PRODUCT_STRATEGY.md`
+- Platform Consumer Rule (Trip + Marketplace) → `docs/PLATFORM_CONSUMER_RULE.md`
 - UI patterns → `docs/ui.md`
 - Debugging & common errors → `docs/debugging.md`
 - Architectural decisions → `docs/decisions.md`

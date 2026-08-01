@@ -69,9 +69,9 @@ export const LOAD_CENTER_PROMO_PRESETS: Record<
   give_quoted: {
     illustration: Illustration14,
     aspect: 600 / 466,
-    title: "No loads with quotes yet",
+    title: "No loads receiving bids yet",
     description:
-      "Loads with supplier bids appear here. Review quotes and award the best partner.",
+      "Loads with supplier bids appear here. Review offers and award the best partner.",
     ctaLabel: "",
     bullets: [
       { label: "Compare bids", icon: "xls" },
@@ -139,12 +139,12 @@ export const LOAD_CENTER_PROMO_PRESETS: Record<
   get_quoted: {
     illustration: Illustration6,
     aspect: 600 / 595,
-    title: "No quoted loads yet",
+    title: "No bids in My Bids yet",
     description:
-      "Loads where you have sent a quote appear here while the shipper reviews bids.",
+      "Loads where you have sent a bid appear here while the shipper reviews offers.",
     ctaLabel: "",
     bullets: [
-      { label: "Quote pending", icon: "xls" },
+      { label: "Bid pending", icon: "xls" },
       { label: "Update bid", icon: "doc" },
       { label: "Follow up", icon: "mail" },
       { label: "Await award", icon: "pdf" },

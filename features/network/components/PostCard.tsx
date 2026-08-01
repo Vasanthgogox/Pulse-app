@@ -2,10 +2,17 @@
  * Network feed post card.
  * UPDATE = white card with left color bar, org avatar, social actions.
  * LOAD = dark trip-style card (aligns with Trips hub / ledger bar).
+ *
+ * LOAD commercial truth (price, bid CTA, boost) comes from
+ * resolveCommercialOpportunity() — do not re-derive here.
  */
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
+import {
+  resolveCommercialOpportunity,
+  type CommercialAction,
+} from '@/features/marketplace/domain';
 import { type PostRow } from '@/features/network/services/posts.service';
 import { formatINR } from '@/lib/format';
 import { PartyAvatar } from '@/components/PartyAvatar';
@@ -19,7 +26,7 @@ import {
   ThumbsUp,
   Truck,
 } from 'lucide-react-native';
-import React, { useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   Animated,
   Pressable,
@@ -119,12 +126,20 @@ function UpdateCard({ post, color, onPress }: { post: PostRow; color: string; on
 
 // ─── Load Card ────────────────────────────────────────────────────────────────
 
-function LoadCard({ post, isOwner, onBid, onBoost, onPress }: {
+function LoadCard({
+  post,
+  isOwner,
+  displayPrice,
+  primaryAction,
+  onPrimaryAction,
+  onPress,
+}: {
   post: PostRow;
   color: string;
   isOwner: boolean;
-  onBid?: () => void;
-  onBoost?: () => void;
+  displayPrice: number | null;
+  primaryAction: CommercialAction | null;
+  onPrimaryAction?: () => void;
   onPress: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -206,12 +221,12 @@ function LoadCard({ post, isOwner, onBid, onBoost, onPress }: {
           )}
         </View>
 
-        {/* Rate + action */}
+        {/* Rate + action — from CommercialOpportunity */}
         <View style={styles.loadFooter}>
-          {post.rate_offer != null ? (
+          {displayPrice != null ? (
             <View>
-              <Text style={styles.rateLabel}>OFFERED RATE</Text>
-              <Text style={styles.rateValue}>{formatINR(post.rate_offer)}</Text>
+              <Text style={styles.rateLabel}>TARGET RATE</Text>
+              <Text style={styles.rateValue}>{formatINR(displayPrice)}</Text>
             </View>
           ) : (
             <View>
@@ -220,19 +235,25 @@ function LoadCard({ post, isOwner, onBid, onBoost, onPress }: {
             </View>
           )}
 
-          {!isOwner ? (
-            <Pressable style={styles.bidBtn} onPress={onBid}>
+          {primaryAction?.kind === "bid" || primaryAction?.kind === "edit_bid" || primaryAction?.kind === "respond_counter" ? (
+            <Pressable style={styles.bidBtn} onPress={onPrimaryAction}>
               <ThumbsUp size={13} color={Theme.textOnPrimary} />
-              <Text style={styles.bidBtnText}>Bid Now</Text>
+              <Text style={styles.bidBtnText}>{primaryAction.label}</Text>
             </Pressable>
-          ) : !post.is_sponsored && onBoost ? (
-            <Pressable style={styles.boostBtn} onPress={onBoost}>
+          ) : primaryAction?.kind === "boost" ? (
+            <Pressable style={styles.boostBtn} onPress={onPrimaryAction}>
               <Rocket size={13} color={Theme.textPrimaryDark} />
-              <Text style={styles.boostBtnText}>Boost</Text>
+              <Text style={styles.boostBtnText}>{primaryAction.label}</Text>
             </Pressable>
-          ) : post.bid_count > 0 ? (
+          ) : primaryAction?.kind === "view_bids" || primaryAction?.kind === "award" ? (
             <Pressable style={styles.viewBidsBtn} onPress={onPress}>
-              <Text style={styles.viewBidsBtnText}>{post.bid_count} Bid{post.bid_count !== 1 ? 's' : ''}</Text>
+              <Text style={styles.viewBidsBtnText}>{primaryAction.label}</Text>
+            </Pressable>
+          ) : isOwner && post.bid_count > 0 ? (
+            <Pressable style={styles.viewBidsBtn} onPress={onPress}>
+              <Text style={styles.viewBidsBtnText}>
+                {post.bid_count} Bid{post.bid_count !== 1 ? "s" : ""}
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -248,9 +269,46 @@ export function PostCard({ post, orgId, onBid, onDetail, onBoost }: PostCardProp
   const color = seedColor(post.organization_id);
   const isOwner = post.organization_id === orgId;
 
+  const opportunity = useMemo(
+    () =>
+      resolveCommercialOpportunity({
+        viewerOrgId: orgId || null,
+        ownerOrgId: post.organization_id,
+        isLoad: post.type === "LOAD",
+        postIsActive: post.is_active,
+        bidCount: post.bid_count ?? 0,
+        rateOffer: post.rate_offer,
+        isSponsored: post.is_sponsored,
+        reachCampaignId: post.reach_campaign_id,
+      }),
+    [
+      orgId,
+      post.organization_id,
+      post.type,
+      post.is_active,
+      post.bid_count,
+      post.rate_offer,
+      post.is_sponsored,
+      post.reach_campaign_id,
+    ],
+  );
+
   const handlePress = () => {
     if (onDetail) onDetail(post);
     else router.push({ pathname: '/(modals)/post-detail', params: { postId: post.id } });
+  };
+
+  const handlePrimary = () => {
+    const kind = opportunity.actions.primary?.kind;
+    if (kind === "bid" || kind === "edit_bid" || kind === "respond_counter") {
+      onBid?.(post);
+      return;
+    }
+    if (kind === "boost") {
+      onBoost?.(post);
+      return;
+    }
+    handlePress();
   };
 
   if (post.type === 'LOAD') {
@@ -259,8 +317,9 @@ export function PostCard({ post, orgId, onBid, onDetail, onBoost }: PostCardProp
         post={post}
         color={color}
         isOwner={isOwner}
-        onBid={() => onBid?.(post)}
-        onBoost={onBoost ? () => onBoost(post) : undefined}
+        displayPrice={opportunity.pricing.displayPrice}
+        primaryAction={opportunity.actions.primary}
+        onPrimaryAction={handlePrimary}
         onPress={handlePress}
       />
     );

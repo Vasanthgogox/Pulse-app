@@ -138,6 +138,8 @@ export const Theme = {
   /** Warm brown — Pulse Reach / growth surfaces (aligned with brand ink). */
   accentBrown: "#6B4F3A",
   accentBrownDeep: "#4D3636",
+  /** Lightest step of the brown ramp — entry tier / least emphasis. */
+  accentBrownLight: "#8A7364",
   accentBrownMuted: "rgba(107, 79, 58, 0.12)",
   accentBrownWash: "#F6F0EA",
   accentBrownBorder: "rgba(107, 79, 58, 0.28)",

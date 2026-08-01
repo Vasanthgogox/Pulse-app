@@ -12,9 +12,27 @@ alwaysApply: true
 - It must be **strictly greater** than the previous migration's prefix so apply order is correct.
 - Future-looking timestamps are acceptable and not a bug by themselves.
 
+### Shared project: never use a midnight timestamp
+
+`pulse-unified-base` pushes to the **same** Supabase project and timestamps every
+migration at `YYYYMMDD000000`. A version is a primary key in
+`supabase_migrations.schema_migrations`, so if both repos pick the same one, whoever
+pushes second is **silently skipped** — `db push` sees the version already recorded and
+never runs the SQL, while `migration list` reports it as applied.
+
+That is exactly how the `quoted`-trigger fix and the Get Load outage both happened
+(2026-08-01, see `docs/REACH_STABILITY_SPRINT.md`).
+
+- In this repo, always use a **non-`000000` time component** (e.g. `20270128103000`).
+- Before pushing, run `supabase migration list --linked` and confirm each of your
+  versions maps to **your** filename, not a same-numbered migration from the sibling repo.
+- When the sibling repo owns a version this repo is missing, add a **comment-only
+  placeholder** file at that version rather than deleting or renaming remote history.
+
 ## Creating migrations
 
-- Prefer: `supabase migration new <description>` — auto-generates a correct UTC timestamp.
+- Prefer: `supabase migration new <description>` — auto-generates a correct UTC timestamp
+  (real UTC time, so it is naturally off-midnight and collision-safe).
 - Do not manually craft timestamps unless you must **insert between** two existing migrations.
 - Do not copy-paste a timestamp from another file — generate fresh.
 

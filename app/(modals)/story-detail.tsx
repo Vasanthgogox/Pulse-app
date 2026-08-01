@@ -2,6 +2,7 @@ import { LazySuspenseInlineFallback } from '@/components/LazySuspenseFallback';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { resolveCommercialOpportunity } from '@/features/marketplace/domain';
 import { StoryMobilePopupShell } from '@/features/network/components/StoryMobilePopupShell';
 import StoryDetailScreen from '@/features/network/screens/StoryDetailScreen';
 import {
@@ -27,10 +28,21 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function isPreviewExpired(preview: StoryPreviewRow): boolean {
-  if (!preview.is_active) return true;
-  if (!preview.expires_at) return false;
-  return new Date(preview.expires_at).getTime() <= Date.now();
+/**
+ * Preview gate: market closed when resolver says the listing is not open-market
+ * visible for an anonymous/share viewer. Backend sets is_active from indent
+ * lifecycle for LOAD stories (M0); do not invent close from expires_at alone.
+ */
+function isPreviewMarketClosed(preview: StoryPreviewRow): boolean {
+  if (preview.type !== 'LOAD') return preview.is_active === false;
+  const opportunity = resolveCommercialOpportunity({
+    viewerOrgId: null,
+    ownerOrgId: preview.organization_id,
+    isLoad: true,
+    postIsActive: preview.is_active,
+    bidCount: 0,
+  });
+  return !opportunity.visibility.isOpenMarketVisible;
 }
 
 const CLOSED_COPY: Record<
@@ -186,7 +198,7 @@ export default function StoryDetailRoute() {
 
   const storyClosed =
     !previewQ.isLoading &&
-    (previewQ.data == null || isPreviewExpired(previewQ.data));
+    (previewQ.data == null || isPreviewMarketClosed(previewQ.data));
 
   /** Why the link is dead — awarded indent, cancelled, expired, deleted. */
   const closedInfoQ = useQuery({

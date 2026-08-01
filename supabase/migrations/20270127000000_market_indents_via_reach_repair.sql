@@ -1,0 +1,9 @@
+-- Placeholder for a migration owned by pulse-unified-base.
+--
+-- Follow-up repair to `market_indents_via_reach` (20270126000000), pushed by
+-- pulse-unified-base against this shared Supabase project.
+--
+-- See 20270126000000_market_indents_via_reach.sql for why these placeholders exist and
+-- where the resulting market_indents_for_org definition is asserted.
+--
+-- Do not add statements here.

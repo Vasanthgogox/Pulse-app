@@ -173,8 +173,9 @@ export async function submitPulseBidWithDirectQuote(input: {
         'This load has already been awarded or closed. Bidding is no longer available on this story.';
     }
     if (msg.includes('Post is not active')) {
+      // Legacy server message — P0.1 uses indent gate; keep mapping for older remotes.
       msg =
-        'This story is no longer active. The load may have been awarded or expired.';
+        'This story is no longer open for bids. The load may have been awarded or closed.';
     }
     return { error: new Error(msg), bidId: null, alreadyBid: false };
   }

@@ -6,51 +6,14 @@ import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import { BidReceivedHammer, getIndentDisplayNumber, type IndentRow } from "@/features/indents";
+import {
+  giveLoadBidReceivedDisplayStatus,
+  giveLoadStatusPillLabel,
+  giveLoadStatusPillStyles,
+} from "@/features/network/utils/loadCenter.model";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Check } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-
-function giveLoadStatusPillStyles(status: string): { pill: object; text: object } {
-  const s = (status || "").toLowerCase();
-  if (s === "awarded") {
-    return {
-      pill: {
-        backgroundColor: Theme.positive,
-        borderWidth: 1,
-        borderColor: Theme.darkGreen,
-      },
-      text: { color: Theme.textOnPrimary },
-    };
-  }
-  if (["completed", "closed", "cancelled", "expired"].includes(s)) {
-    return {
-      pill: {
-        backgroundColor: Theme.surfaceGray,
-        borderWidth: 1,
-        borderColor: Theme.borderMedium,
-      },
-      text: { color: Theme.textSecondary },
-    };
-  }
-  if (s === "quoted") {
-    return {
-      pill: {
-        backgroundColor: Theme.screenBackground,
-        borderWidth: 1,
-        borderColor: Theme.borderLight,
-      },
-      text: { color: Theme.textPrimaryDark },
-    };
-  }
-  return {
-    pill: {
-      backgroundColor: Theme.tripHubUnassignedPillBg,
-      borderWidth: 1,
-      borderColor: Theme.borderLight,
-    },
-    text: { color: Theme.textPrimaryDark },
-  };
-}
 
 function formatIndentCardDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -79,7 +42,9 @@ export function BroadcastPickIndentCard({
   onPress,
 }: BroadcastPickIndentCardProps) {
   const status = (load.status || "").toLowerCase();
-  const statusPill = giveLoadStatusPillStyles(status);
+  const derivedStatus = giveLoadBidReceivedDisplayStatus(status, bidCount);
+  const statusPill = giveLoadStatusPillStyles(derivedStatus);
+  const statusLabel = giveLoadStatusPillLabel(status, bidCount);
   const vehicleDetail = load.vehicle_type || "—";
   const weightValue = Number(load.weight);
   const weightDetail =
@@ -105,7 +70,7 @@ export function BroadcastPickIndentCard({
           </View>
           <View style={[styles.loadStatePill, statusPill.pill]}>
             <Text style={[styles.loadStatePillText, statusPill.text]}>
-              {status}
+              {statusLabel}
             </Text>
           </View>
         </View>

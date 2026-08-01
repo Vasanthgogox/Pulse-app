@@ -59,7 +59,7 @@ export function StoryViewersSheet({
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { phonePopup, sheetBottomPad } = useStoryPhoneFrameMetrics();
-  const listMaxHeight = Math.min(views.length * 58 + 8, windowHeight * 0.32);
+  const listMaxHeight = Math.min(views.length * 48 + 6, windowHeight * 0.32);
   const bottomPad = sheetBottomPad ?? insets.bottom + 14;
 
   return (
@@ -74,7 +74,7 @@ export function StoryViewersSheet({
           <View style={styles.header}>
             <View style={styles.headerLeading}>
               <View style={styles.headerIcon}>
-                <Eye size={15} color={INK} strokeWidth={2.25} />
+                <Eye size={12} color={INK} strokeWidth={2.25} />
               </View>
               <Text style={styles.title}>{viewersTitle(views.length, loading)}</Text>
             </View>
@@ -85,7 +85,7 @@ export function StoryViewersSheet({
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
-              <X size={16} color={INK} strokeWidth={2.25} />
+              <X size={13} color={INK} strokeWidth={2.25} />
             </Pressable>
           </View>
 
@@ -96,7 +96,7 @@ export function StoryViewersSheet({
           ) : views.length === 0 ? (
             <View style={styles.empty}>
               <View style={styles.emptyIcon}>
-                <Eye size={22} color={MUTED} strokeWidth={1.75} />
+                <Eye size={18} color={MUTED} strokeWidth={1.75} />
               </View>
               <Text style={styles.emptyText}>No one has viewed this yet</Text>
               <Text style={styles.emptyHint}>Viewers from your network will appear here</Text>
@@ -114,7 +114,7 @@ export function StoryViewersSheet({
                     name={item.viewer_org_name?.trim() || "Partner"}
                     initialsColorSeed={item.viewer_org_id}
                     entityType="client"
-                    size={40}
+                    size={32}
                     shape="circle"
                   />
                   <View style={styles.rowText}>
@@ -124,7 +124,7 @@ export function StoryViewersSheet({
                     <Text style={styles.viewedAt}>{timeAgo(item.viewed_at)}</Text>
                   </View>
                   <View style={styles.seenMark}>
-                    <Eye size={13} color={INK} strokeWidth={2} />
+                    <Eye size={11} color={INK} strokeWidth={2} />
                   </View>
                 </View>
               ))}
@@ -162,31 +162,31 @@ const styles = StyleSheet.create({
     maxHeight: "88%",
   },
   handle: {
-    width: 32,
+    width: 28,
     height: 3,
     borderRadius: 2,
     backgroundColor: Theme.loadStatusTabBorderSoft,
     alignSelf: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
-    gap: 12,
+    marginBottom: 9,
+    gap: 10,
   },
   headerLeading: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     flex: 1,
     minWidth: 0,
   },
   headerIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: SKY,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.loadStatusTabBorderSoft,
@@ -195,15 +195,15 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   title: {
-    fontSize: 16,
+    fontSize: 13.5,
     fontWeight: "800",
     color: INK,
-    letterSpacing: -0.35,
+    letterSpacing: -0.3,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: Theme.loadStatusTabTrayBg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.loadStatusTabBorderSoft,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.96 }],
   },
   loadingWrap: {
-    paddingVertical: 28,
+    paddingVertical: 20,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -224,16 +224,16 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   listContent: {
-    gap: 8,
-    paddingBottom: 4,
+    gap: 6,
+    paddingBottom: 2,
   },
   viewerCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    gap: 9,
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    borderRadius: 11,
     backgroundColor: Theme.loadStatusTabTrayBg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.loadStatusTabBorderSoft,
@@ -241,24 +241,24 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 1,
   },
   orgName: {
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: "800",
     color: INK,
     letterSpacing: -0.2,
   },
   viewedAt: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: MUTED,
     letterSpacing: 0.05,
   },
   seenMark: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: SKY,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.loadStatusTabBorderSoft,
@@ -268,29 +268,29 @@ const styles = StyleSheet.create({
   },
   empty: {
     alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    gap: 6,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+    gap: 4,
   },
   emptyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Theme.loadStatusTabTrayBg,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: "800",
     color: INK,
     letterSpacing: -0.2,
   },
   emptyHint: {
-    fontSize: 11,
+    fontSize: 10,
     color: MUTED,
     textAlign: "center",
-    lineHeight: 15,
+    lineHeight: 14,
   },
 });

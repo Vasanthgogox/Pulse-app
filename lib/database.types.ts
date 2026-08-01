@@ -13947,7 +13947,7 @@ export type Database = {
         Returns: undefined
       }
       market_indents_for_org: {
-        Args: { org_id: string }
+        Args: { p_org_id: string }
         Returns: {
           assigned_supplier_id: string
           assigned_supplier_rate: number

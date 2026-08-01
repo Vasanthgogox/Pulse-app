@@ -174,7 +174,9 @@ export function LoadCenterHubMobileIndentCard({
   const quoteStatusNorm = (commerce?.quoteStatus ?? "").trim().toLowerCase();
   const statusStyles =
     quoteStatusNorm &&
-    (commerce?.kicker === "YOUR QUOTE" || commerce?.kicker === "COUNTER OFFER")
+    (commerce?.kicker === "YOUR BID" ||
+      commerce?.kicker === "YOUR QUOTE" ||
+      commerce?.kicker === "COUNTER OFFER")
       ? quoteStatusPillStyles(quoteStatusNorm)
       : null;
   const referenceLabel = commerce?.referenceLabel?.trim() || "Target";
