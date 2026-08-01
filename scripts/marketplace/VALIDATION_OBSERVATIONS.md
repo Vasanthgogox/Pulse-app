@@ -97,6 +97,35 @@ Load / post / indent IDs: __________
 
 ---
 
+## Scenario 3.5 — Award Notification & Winner Journey (P0-4 candidate)
+
+**Log out of Org A. Log in as Org C (the winning bidder) with no prior context — as a real transporter who just won would.**
+
+**Where I expected to see the award (before looking):**
+
+**Where I actually looked, in order (1st / 2nd / 3rd):**
+
+**How long until I found it (or gave up):**
+
+**What happened**
+
+**Where I hesitated**
+
+| Dimension | Score (1–5) | Note |
+|-----------|-------------|------|
+| Discovery | | |
+| Clarity | | |
+| Confidence | | |
+| Decision Making | | |
+| Execution | | |
+| Trust | | |
+
+**₹10 lakh test:** Yes / No — Why?
+
+**M2 opportunity — Marketplace → Execution Workspace handoff:** *(Where should the award notification/entry point live, based on where you and other testers actually looked — not a guess?)*
+
+---
+
 ## Scenario 4 — Completion
 
 **What happened**  
@@ -129,14 +158,14 @@ Same six scores + ₹10L + one M2 opportunity:
 
 ## Score rollup
 
-| Dimension | S1 | S2 | S3 | S4 | Weakest scenario |
-|-----------|----|----|----|----|------------------|
-| Discovery | | | | | |
-| Clarity | | | | | |
-| Confidence | | | | | |
-| Decision Making | | | | | |
-| Execution | | | | | |
-| Trust | | | | | |
+| Dimension | S1 | S2 | S3 | S3.5 | S4 | Weakest scenario |
+|-----------|----|----|----|------|----|------------------|
+| Discovery | | | | | | |
+| Clarity | | | | | | |
+| Confidence | | | | | | |
+| Decision Making | | | | | | |
+| Execution | | | | | | |
+| Trust | | | | | | |
 
 **Session average (all scored 1–5 cells):** ______ / 5 · **Threshold:** ≥ 4.0 · **Pass?** ☐ Yes ☐ No
 
@@ -157,6 +186,7 @@ Do not dump a backlog. Rank using impact × effort. Seed rows from observations;
 | Bid Comparison | High | Medium | P1 | |
 | Progressive Story | High | Medium | P1 | |
 | Live Market Signals | Medium | Low | P2 | |
+| Marketplace → Execution Workspace handoff (award notification + entry point; placement decided by Scenario 3.5 convergence, not guessed) | High | TBD after S3.5 | P0-4 candidate | Scenario 3.5 |
 | *(from walkthrough)* | | | | |
 | *(from walkthrough)* | | | | |
 

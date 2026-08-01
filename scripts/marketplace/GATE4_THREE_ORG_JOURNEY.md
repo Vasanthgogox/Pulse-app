@@ -61,6 +61,36 @@ Award Org C.
 
 ---
 
+## Scenario 3.5 — Award Notification & Winner Journey
+
+**P0-4 candidate.** Confirmed by code inspection before this scenario was added: `useAwardQuote.ts` only toasts the *awarding* org — nothing writes a notification, and no trigger fires anything toward the winning supplier when `direct_quotes.status` becomes `accepted`. A passive "Awarded"/"Claimed" tab exists in Load Center, but nothing points the supplier at it. Whether that's actually a problem in practice is exactly what this scenario measures — don't fix anything from this scenario before running it.
+
+Steps:
+1. Org A publishes a Reach load.
+2. Org C (marketplace bidder) submits a bid.
+3. Org A awards Org C.
+4. **Log out of Org A. Log in as Org C** — as if you are the transporter who just won, with no prior knowledge of where to look.
+
+| Check | Pass |
+|-------|------|
+| Award notification received (push / in-app) | ⬜ |
+| Awarded load visible without hunting | ⬜ |
+| Appears on Dashboard / home | ⬜ |
+| Appears in "My Loads" / "My Jobs" / "Assigned Loads" | ⬜ |
+| Status reads Awarded | ⬜ |
+| Can begin execution (assign driver / deploy) from here | ⬜ |
+| Cannot bid again on this load | ⬜ |
+| Other (non-winning) suppliers lose access | ⬜ |
+
+**Record, don't fix yet:**
+- Where did you *expect* to see the award, before looking?
+- Where did you *actually* look first, second, third?
+- How long until you found it (or gave up)?
+
+**After Scenario 3.5:** Score six dimensions + ₹10L in `VALIDATION_OBSERVATIONS.md`. If 8–10 test suppliers converge on the same place (e.g. "Dashboard" or "My Trips"), that — not a guess — is where the Marketplace → Execution Workspace handoff belongs. This is M2 input, not an M0 blocker to fix reactively.
+
+---
+
 ## Scenario 4 — Completion
 
 Complete the shipment.
