@@ -102,7 +102,7 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
 
   return (
     <View style={groupTop ? styles.rootGrouped : flow.root} testID={Platform.OS === "web" ? undefined : testID}>
-      <View style={wizardShell ? flow.mainPaddedWizard : flow.mainPadded}>
+      <View style={wizardShell || groupTop ? flow.mainPaddedWizard : flow.mainPadded}>
         <View style={wizardShell ? fullPageWizardStyles.wizardFieldBlock : undefined}>
           <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.label}>
             {label}

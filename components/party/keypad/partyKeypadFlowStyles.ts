@@ -48,7 +48,7 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     flexShrink: 1,
     minHeight: 0,
   },
-  /** Inside FullPageWizardShell — shell already applies horizontal padding. */
+  /** Inside a wizard shell (full-page or carded) — the shell already pads. */
   mainPaddedWizard: {
     flexShrink: 1,
     minHeight: 0,

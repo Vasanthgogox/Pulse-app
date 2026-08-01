@@ -88,7 +88,16 @@ export function setupViewportHeightBootstrap() {
       window.scrollTo(0, 0);
       return;
     }
-    var h = Math.round(vv && vv.height ? vv.height : inner);
+    // Android Chrome runs with interactive-widget=overlays-content: the soft
+    // keyboard OVERLAYS the page instead of resizing it, and occlusion is
+    // handled separately via --keyboard-height. So the app's layout height must
+    // stay at the full window height. Using vv.height here shrank html/body/#root
+    // (they are clamped by `max-height: var(--app-vh)`) the moment the keyboard
+    // opened, which re-laid out the form under the focused input, moved it, and
+    // fed another viewport event — the keyboard reading as opening and closing
+    // by itself. Take the larger of the two so a keyboard-shrunk visualViewport
+    // can never shorten the layout.
+    var h = Math.round(vv && vv.height ? Math.max(vv.height, inner) : inner);
     document.documentElement.style.setProperty('--app-vh', h + 'px');
     document.documentElement.style.setProperty('--app-vt', '0px');
   }
