@@ -164,30 +164,45 @@ function PartyChip({
 
 export { splitTripLocationParts } from "@/features/trips/utils/tripLocationDisplay.util";
 
+/** Matches a date-only value (`YYYY-MM-DD`) with no time component. */
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export function formatMobileTripSchedule(iso: string | null | undefined): {
+  /** Empty when the source value carries no time of day. */
   time: string;
   dateLine: string;
+  /** Pre-joined `time · date` (or just the date when there is no time). */
+  scheduleLine: string;
 } {
   const raw = iso?.trim();
-  if (!raw) return { time: "—", dateLine: "—" };
+  if (!raw) return { time: "—", dateLine: "—", scheduleLine: "—" };
   try {
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return { time: "—", dateLine: "—" };
+    // A bare `YYYY-MM-DD` parses as midnight UTC, which renders as 05:30 in
+    // en-IN. Those columns hold no time of day, so parse as local and omit it.
+    const dateOnly = DATE_ONLY_RE.test(raw);
+    const d = dateOnly ? new Date(`${raw}T00:00:00`) : new Date(raw);
+    if (Number.isNaN(d.getTime()))
+      return { time: "—", dateLine: "—", scheduleLine: "—" };
+    const time = dateOnly
+      ? ""
+      : d.toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+    const dateLine = d.toLocaleDateString("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "2-digit",
+    });
     return {
-      time: d.toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }),
-      dateLine: d.toLocaleDateString("en-IN", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        year: "2-digit",
-      }),
+      time,
+      dateLine,
+      scheduleLine: time ? `${time} · ${dateLine}` : dateLine,
     };
   } catch {
-    return { time: "—", dateLine: "—" };
+    return { time: "—", dateLine: "—", scheduleLine: "—" };
   }
 }
 
@@ -472,7 +487,7 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
               <View style={styles.refRow}>
                 <Text style={styles.refLine} numberOfLines={1}>
                   <Text style={styles.refId}>{tripNo}</Text>
-                  <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
+                  <Text style={styles.refMuted}>{` · ${schedule.scheduleLine}`}</Text>
                 </Text>
               </View>
               {secondaryLabel ? (
@@ -505,7 +520,7 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
               <View style={styles.refRow}>
                 <Text style={styles.refLine} numberOfLines={1}>
                   <Text style={styles.refId}>{tripNo}</Text>
-                  <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
+                  <Text style={styles.refMuted}>{` · ${schedule.scheduleLine}`}</Text>
                 </Text>
               </View>
               {secondaryLabel ? (

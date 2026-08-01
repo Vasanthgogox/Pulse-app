@@ -49,6 +49,7 @@ import {
     resolveGetLoadSourceTag,
     resolveGetLoadTicketCommerce,
     resolveGiveLoadMobileDisplayStatus,
+    resolveGiveLoadTicketCommerce,
     STATUS_TABS,
     statusMatchesFilter,
     type DoneSubTab,
@@ -892,6 +893,19 @@ export function LoadCenterView({
         linkedOrgByOrganizationId,
       );
 
+      const ticketCommerce = resolveGiveLoadTicketCommerce(
+        statusFilterTab,
+        load,
+        {
+          isDone,
+          isDraft,
+          awardedAmountInr: awardedAmount,
+          isAwarded: isAwardedPendingTrip || hasDirectSupplier,
+          bidCount,
+          loadTypeDetail,
+        },
+      );
+
       return (
         <LoadCenterHubMobileIndentCard
           indent={load}
@@ -901,6 +915,7 @@ export function LoadCenterView({
           dest={load.drop_location || "—"}
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
+          ticketCommerce={ticketCommerce}
           rightFooterLabel={
             isAwardedPendingTrip && awardedAmount != null
               ? formatINR(awardedAmount)

@@ -251,6 +251,83 @@ export function resolveGetLoadTicketCommerce(
   };
 }
 
+/**
+ * GIVE LOAD hub ticket — your own indents.
+ *
+ * Hero is the awarded amount once a supplier is picked, otherwise the target
+ * rate you set. The client rate sits underneath as the reference line so the
+ * buy price and the sell price are readable together on the card.
+ */
+export function resolveGiveLoadTicketCommerce(
+  statusFilterTab: StatusFilterTab,
+  load: {
+    client_price?: number | null;
+    supplier_target?: number | null;
+  },
+  options: {
+    isDone: boolean;
+    isDraft: boolean;
+    awardedAmountInr: number | null;
+    isAwarded: boolean;
+    bidCount: number;
+    loadTypeDetail: string;
+  },
+): LoadCenterTicketCommerce {
+  const positive = (value: unknown): number | null => {
+    const n = Number(value ?? 0);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const targetRateInr = positive(load.supplier_target);
+  const clientRateInr = positive(load.client_price);
+  const awardedInr = positive(options.awardedAmountInr);
+
+  if (options.isDone || statusFilterTab === "DONE") {
+    return {
+      kicker: "COMPLETED",
+      amountInr: null,
+      rightCaption: "On books",
+    };
+  }
+
+  if (options.isAwarded && awardedInr != null) {
+    return {
+      kicker: "AWARDED",
+      amountInr: awardedInr,
+      targetRateInr: clientRateInr,
+      referenceLabel: "Client rate",
+    };
+  }
+
+  const bidCaption =
+    options.bidCount > 0
+      ? `${options.bidCount} bid${options.bidCount === 1 ? "" : "s"}`
+      : null;
+
+  if (targetRateInr != null) {
+    return {
+      kicker: options.isDraft ? "DRAFT TARGET" : "TARGET RATE",
+      amountInr: targetRateInr,
+      targetRateInr: clientRateInr,
+      referenceLabel: "Client rate",
+      rightCaption: bidCaption,
+    };
+  }
+
+  if (clientRateInr != null) {
+    return {
+      kicker: "CLIENT RATE",
+      amountInr: clientRateInr,
+      rightCaption: bidCaption,
+    };
+  }
+
+  return {
+    kicker: "TARGET RATE",
+    amountInr: null,
+    rightCaption: bidCaption ?? options.loadTypeDetail,
+  };
+}
+
 /** Give Load mobile card status on Done → show completed when a trip exists. */
 export function resolveGiveLoadMobileDisplayStatus(
   statusFilterTab: StatusFilterTab,

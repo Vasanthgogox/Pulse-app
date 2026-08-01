@@ -92,7 +92,8 @@ interface AddDriverModalProps {
 const PHONE_DEBOUNCE_MS = 400;
 const MIN_PHONE_LENGTH_FOR_SEARCH = 8;
 const DL_SANITIZE_REGEX = /[\s-]/g;
-const DL_FORMAT_REGEX = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
+// Serial block is 7 or 8 digits: most states issue 15-char DLs, some (e.g. AP) 16.
+const DL_FORMAT_REGEX = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7,8}$/;
 
 const validateDrivingLicenseNumber = (licenseNumber: string): string | null => {
   const trimmed = licenseNumber.trim();

@@ -179,7 +179,8 @@ export interface PartyRegistrationPortalProps {
 
 const DL_CLEAN = /[\s-]/g;
 
-const DL_FORMAT = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
+// Serial block is 7 or 8 digits: most states issue 15-char DLs, some (e.g. AP) 16.
+const DL_FORMAT = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7,8}$/;
 
 const MIN_PHONE_LENGTH_FOR_SEARCH = 8;
 const PHONE_DEBOUNCE_MS = 400;

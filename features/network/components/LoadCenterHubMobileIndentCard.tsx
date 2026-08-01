@@ -197,7 +197,7 @@ export function LoadCenterHubMobileIndentCard({
         <Text style={[styles.refLine, hubTicket && styles.refLineHub]} numberOfLines={1}>
           <Text style={[styles.refId, hubTicket && styles.refIdHub]}>{indentNo}</Text>
           <Text style={[styles.refMuted, hubTicket && styles.refMutedHub]}>
-            {` · ${schedule.time} · ${schedule.dateLine}`}
+            {` · ${schedule.scheduleLine}`}
           </Text>
         </Text>
       </View>
@@ -269,7 +269,7 @@ export function LoadCenterHubMobileIndentCard({
         <Text style={[styles.refLine, styles.refLineHub]} numberOfLines={1}>
           <Text style={[styles.refId, styles.refIdHub]}>{indentNo}</Text>
           <Text style={[styles.refMuted, styles.refMutedHub]}>
-            {` · ${schedule.time} · ${schedule.dateLine}`}
+            {` · ${schedule.scheduleLine}`}
           </Text>
         </Text>
       </View>
@@ -291,7 +291,7 @@ export function LoadCenterHubMobileIndentCard({
         <Text style={[styles.refLine, hubTicket && styles.refLineHub]} numberOfLines={1}>
           <Text style={[styles.refId, hubTicket && styles.refIdHub]}>{indentNo}</Text>
           <Text style={[styles.refMuted, hubTicket && styles.refMutedHub]}>
-            {` · ${schedule.time} · ${schedule.dateLine}`}
+            {` · ${schedule.scheduleLine}`}
           </Text>
         </Text>
       </View>
