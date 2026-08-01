@@ -64,6 +64,10 @@ function filterOpportunityPosts(
     if (p.organization_id === orgId) return false;
     if (!p.is_active) return false;
     if (p.type !== wantType) return false;
+    // Sponsored reach is audience-gated server-side and is sorted to the top
+    // below — applying the supplier-only rule here would drop the paid post
+    // before it ever reaches that sort.
+    if (p.is_sponsored) return true;
     if (
       mode === "get" &&
       shouldHideLoadStoryFromAuthor({

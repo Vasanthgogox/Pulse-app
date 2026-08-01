@@ -25,16 +25,22 @@ interface AwardModalProps {
 export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalProps) {
   const { currentLoad, selectedQuoteId, awarding, sortedQuotes, pendingCount, lowestPendingAmount, quotesLoading, connectedSupplierOrgIds } = award;
 
+  const selectedIsPending = sortedQuotes.some(
+    (q) =>
+      q.id === selectedQuoteId && (q.status || "").toLowerCase() === "pending",
+  );
+
+  // Reach-only bidders may bid but may not be awarded until they accept a
+  // supplier invite, so the primary action swaps to "Invite as supplier".
+  const needsInvite =
+    !!selectedQuoteId && selectedIsPending && award.selectedBidderNeedsInvite;
+  const inviteSending = award.selectedBidderInviteStatus === "sending";
+  const invitePending = award.selectedBidderInviteStatus === "pending";
+  const inviteDisabled = inviteSending || invitePending;
+
   // Single source for the gate so the `disabled` prop and the dimmed style can
   // never disagree — a button that looks enabled but ignores taps reads as a bug.
-  const awardDisabled =
-    awarding ||
-    !selectedQuoteId ||
-    !sortedQuotes.some(
-      (q) =>
-        q.id === selectedQuoteId &&
-        (q.status || "").toLowerCase() === "pending",
-    );
+  const awardDisabled = awarding || !selectedQuoteId || !selectedIsPending;
 
   return (
     <Modal
@@ -181,29 +187,56 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
               )}
               {pendingCount > 0 && (
                 <Text style={styles.bidEmptySubtext}>
-                  {selectedQuoteId
-                    ? "Review the selected offer, then Award selected."
-                    : "Tap an offer to select, then Award selected."}
+                  {needsInvite
+                    ? invitePending
+                      ? "Waiting for this supplier to accept your invite. You can award once they accept."
+                      : "This bidder is not in your supplier network yet. Invite them as a supplier to award this load."
+                    : selectedQuoteId
+                      ? "Review the selected offer, then Award selected."
+                      : "Tap an offer to select, then Award selected."}
                 </Text>
               )}
             </>
           )}
           {currentLoad && (
             <>
-              <TouchableOpacity
-                style={[
-                  styles.modalSubmit,
-                  { marginTop: 16 },
-                  awardDisabled && styles.modalSubmitDisabled,
-                ]}
-                onPress={() => void award.award()}
-                activeOpacity={0.9}
-                disabled={awardDisabled}
-              >
-                <Text style={styles.modalSubmitText}>
-                  {awarding ? "Awarding…" : "Award selected"}
-                </Text>
-              </TouchableOpacity>
+              {/* Unconnected bidder: awarding is blocked until they accept a
+                  supplier invite, so the primary action becomes the invite. */}
+              {needsInvite ? (
+                <TouchableOpacity
+                  style={[
+                    styles.modalSubmit,
+                    { marginTop: 16 },
+                    inviteDisabled && styles.modalSubmitDisabled,
+                  ]}
+                  onPress={() => void award.inviteSelectedBidder()}
+                  activeOpacity={0.9}
+                  disabled={inviteDisabled}
+                >
+                  <Text style={styles.modalSubmitText}>
+                    {inviteSending
+                      ? "Sending invite…"
+                      : invitePending
+                        ? "Invite sent — awaiting acceptance"
+                        : "Invite as supplier"}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.modalSubmit,
+                    { marginTop: 16 },
+                    awardDisabled && styles.modalSubmitDisabled,
+                  ]}
+                  onPress={() => void award.award()}
+                  activeOpacity={0.9}
+                  disabled={awardDisabled}
+                >
+                  <Text style={styles.modalSubmitText}>
+                    {awarding ? "Awarding…" : "Award selected"}
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.viewIndentBtn}
                 onPress={() => {

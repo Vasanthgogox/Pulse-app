@@ -16,6 +16,10 @@ import { confirmDialog } from "@/lib/confirmDialog";
 import { type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+/** Lazy: keeps the connections service out of the Load Center entry chunk. */
+const loadConnectionRequestsService = () =>
+  import("@/features/connections/services/connectionRequests.service");
+
 interface UseAwardQuoteParams {
   orgId: string | null;
   queryClient: QueryClient;
@@ -35,6 +39,12 @@ export interface AwardQuoteResult {
   lowestPendingAmount: number | null;
   quotesLoading: boolean;
   connectedSupplierOrgIds: Set<string>;
+  /** True when the selected bidder is not yet an integrated supplier. */
+  selectedBidderNeedsInvite: boolean;
+  /** Invite status for the selected bidder, when one has been sent. */
+  selectedBidderInviteStatus: "none" | "pending" | "sending";
+  /** Send the supplier invite that unblocks awarding an unconnected bidder. */
+  inviteSelectedBidder: () => Promise<void>;
   open: (load: IndentRow) => void;
   close: () => void;
   selectQuote: (id: string | null) => void;
@@ -119,6 +129,100 @@ export function useAwardQuote({
     if (soloPendingQuoteId) setSelectedQuoteId(soloPendingQuoteId);
   }, [currentLoad?.id, soloPendingQuoteId]);
 
+  /**
+   * Reach-only bidders: a paid campaign lets any targeted org bid, but a load
+   * may only be awarded to an integrated supplier. The winner must accept a
+   * supplier invite first — approving it fires on_connection_request_approved,
+   * which creates the organization_relations + suppliers rows, after which the
+   * bidder counts as connected and the normal award path applies.
+   */
+  const selectedBidderOrgId = useMemo(() => {
+    if (!selectedQuoteId) return null;
+    const q = awardModalQuotes.find((x) => x.id === selectedQuoteId);
+    return q?.bidder_organization_id ?? null;
+  }, [selectedQuoteId, awardModalQuotes]);
+
+  const selectedBidderNeedsInvite = useMemo(
+    () =>
+      !!selectedBidderOrgId && !connectedSupplierOrgIds.has(selectedBidderOrgId),
+    [selectedBidderOrgId, connectedSupplierOrgIds],
+  );
+
+  const [inviteStatusByOrgId, setInviteStatusByOrgId] = useState<
+    Record<string, "pending" | "sending">
+  >({});
+
+  const selectedBidderInviteStatus = selectedBidderOrgId
+    ? (inviteStatusByOrgId[selectedBidderOrgId] ?? "none")
+    : "none";
+
+  // Reflect an invite sent in an earlier session, so the modal does not offer
+  // to re-send one that is already awaiting the bidder's response.
+  useEffect(() => {
+    if (!orgId || !selectedBidderOrgId || !selectedBidderNeedsInvite) return;
+    if (inviteStatusByOrgId[selectedBidderOrgId]) return;
+    let cancelled = false;
+    (async () => {
+      const { getLatestConnectionRequestStatus } =
+        await loadConnectionRequestsService();
+      const { status } = await getLatestConnectionRequestStatus(
+        orgId,
+        selectedBidderOrgId,
+      );
+      if (cancelled || status !== "pending") return;
+      setInviteStatusByOrgId((m) => ({ ...m, [selectedBidderOrgId]: "pending" }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    orgId,
+    selectedBidderOrgId,
+    selectedBidderNeedsInvite,
+    inviteStatusByOrgId,
+  ]);
+
+  const inviteSelectedBidder = useCallback(async () => {
+    if (!orgId || !selectedBidderOrgId) return;
+    const winner = awardModalQuotes.find((q) => q.id === selectedQuoteId);
+    const name = winner?.bidder_organization_name ?? "this supplier";
+    setInviteStatusByOrgId((m) => ({ ...m, [selectedBidderOrgId]: "sending" }));
+    const { createConnectionRequest, looksLikeConnectionRateLimitError } =
+      await loadConnectionRequestsService();
+    // requestCarrierSupplier: I am the shipper adding them to my supplier book.
+    const { error, alreadyInvited } = await createConnectionRequest(
+      orgId,
+      selectedBidderOrgId,
+      { requestShipperClient: false, requestCarrierSupplier: true },
+    );
+    if (error) {
+      setInviteStatusByOrgId((m) => {
+        const next = { ...m };
+        delete next[selectedBidderOrgId];
+        return next;
+      });
+      showAppAlert(
+        looksLikeConnectionRateLimitError(error.message)
+          ? "Daily limit exceeded"
+          : "Could not send invite",
+        error.message,
+      );
+      return;
+    }
+    setInviteStatusByOrgId((m) => ({ ...m, [selectedBidderOrgId]: "pending" }));
+    onSuccess(
+      alreadyInvited
+        ? `${name} already has a pending supplier invite.`
+        : `Supplier invite sent to ${name}. You can award once they accept.`,
+    );
+  }, [
+    orgId,
+    selectedBidderOrgId,
+    selectedQuoteId,
+    awardModalQuotes,
+    onSuccess,
+  ]);
+
   const open = useCallback((load: IndentRow) => {
     setCurrentLoad(load);
     setSelectedQuoteId(null);
@@ -165,6 +269,19 @@ export function useAwardQuote({
       showAppAlert(
         "Invalid selection",
         "Please select a pending offer to award.",
+      );
+      return;
+    }
+    // Enforce the supplier-link gate here as well as in the UI: the modal hides
+    // the Award button for unconnected bidders, but a stale render or a
+    // connection revoked mid-flow must not slip an unlinked award through.
+    if (
+      winner.bidder_organization_id &&
+      !connectedSupplierOrgIds.has(winner.bidder_organization_id)
+    ) {
+      showAppAlert(
+        "Supplier not connected",
+        `${winner.bidder_organization_name ?? "This bidder"} is not in your supplier network yet. Send a supplier invite and award once they accept.`,
       );
       return;
     }
@@ -260,6 +377,9 @@ export function useAwardQuote({
     lowestPendingAmount,
     quotesLoading,
     connectedSupplierOrgIds,
+    selectedBidderNeedsInvite,
+    selectedBidderInviteStatus,
+    inviteSelectedBidder,
     open,
     close,
     selectQuote,

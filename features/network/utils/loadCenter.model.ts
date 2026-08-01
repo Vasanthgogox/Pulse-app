@@ -53,7 +53,12 @@ export const STATUS_TABS: {
   {
     id: "OPEN",
     label: "Open",
-    statuses: ["open", "pending", "broadcast", "draft"],
+    // `quoted` is included: a DB trigger flips an indent broadcast -> quoted on
+    // the FIRST bid from ANY org, and the status is a single shared field. Left
+    // out, one supplier's bid removed the load from every other supplier's Open
+    // tab — killing the competing bids the broadcast (or paid Reach) was for.
+    // Give Load / Find Work narrow this per-viewer below; see useLoadCenterFilters.
+    statuses: ["open", "pending", "broadcast", "draft", "quoted"],
   },
   { id: "QUOTED", label: "Quoted", statuses: ["quoted"] },
   { id: "AWARDED", label: "Awarded", statuses: ["awarded"] },

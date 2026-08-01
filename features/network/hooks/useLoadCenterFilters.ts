@@ -235,7 +235,15 @@ export function useLoadCenterFilters({
     const statusFiltered = (() => {
       if (statusFilterTab === "OPEN") {
         // Find Work: Open should only show loads I haven't quoted yet.
-        return findWorkLoads.filter((load) => !myQuoteByIndentId.has(load.id));
+        // Deliberately keyed on MY quote, not the indent status: `quoted` is a
+        // shared field set by the first bidder, so filtering on it here would
+        // hide a still-biddable load from every other supplier.
+        return findWorkLoads.filter(
+          (load) =>
+            !myQuoteByIndentId.has(load.id) &&
+            !statusMatchesFilter((load.status || "").toLowerCase(), "AWARDED") &&
+            !statusMatchesFilter((load.status || "").toLowerCase(), "DONE"),
+        );
       }
       if (statusFilterTab === "QUOTED") {
         // Find Work: Quoted means I have sent a quote (pending/rejected/etc).

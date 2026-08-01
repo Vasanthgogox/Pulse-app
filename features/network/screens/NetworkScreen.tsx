@@ -50,7 +50,7 @@ import {
   UnlinkedCounterpartiesSection,
 } from "@/features/network/components/UnlinkedCounterpartiesSection";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
-import { shouldHideLoadStoryFromAuthor } from "@/features/network/utils/storyLoadVisibility.util";
+import { shouldShowFeedPostForOrg } from "@/features/network/utils/storyLoadVisibility.util";
 import {
   cancelPendingConnectionRequestByOrgPair,
   type ConnectionRequestRow,
@@ -413,36 +413,32 @@ function NetworkScreenInner() {
     for (const id of integratedSupplierOrgIds) ids.add(id);
     return ids;
   }, [integratedClientOrgIds, integratedSupplierOrgIds]);
+  /**
+   * The clients/suppliers books back every relationship rule in the feed
+   * filter. They resolve independently of the feed itself, so until both have
+   * settled an empty book is indistinguishable from a genuinely empty one.
+   */
+  const partnerBooksReady = clientsQ.isSuccess && suppliersQ.isSuccess;
   const feedPosts = useMemo(
     () =>
       (feedQ.data ?? []).filter((post) => {
         if (!isPostVisibleForOrg(post, { allowLoadPosts })) return false;
-        if (!orgId) return false;
-        const authorOrgId = (post.organization_id ?? "").trim();
-        if (!authorOrgId) return false;
-        if (authorOrgId === orgId) return true;
-        // Find Work parity: supplier-only counterparties' LOAD stories/ads
-        // are not bid opportunities for me (I am their client).
-        if (
-          post.type === "LOAD" &&
-          shouldHideLoadStoryFromAuthor({
-            authorOrgId,
-            supplierOrgIds: integratedSupplierOrgIds,
-            clientOrgIds: integratedClientOrgIds,
-          })
-        ) {
-          return false;
-        }
-        // Sponsored posts are already audience-gated by get_network_feed via
-        // reach_campaign_targets (wave release). Re-applying the connection
-        // check here would filter out the extended reach the customer paid for.
-        if (post.is_sponsored) return true;
-        return integratedPartnerOrgIds.has(authorOrgId);
+        return shouldShowFeedPostForOrg({
+          authorOrgId: post.organization_id,
+          viewerOrgId: orgId,
+          postType: post.type,
+          isSponsored: post.is_sponsored,
+          partnerBooksReady,
+          supplierOrgIds: integratedSupplierOrgIds,
+          clientOrgIds: integratedClientOrgIds,
+          partnerOrgIds: integratedPartnerOrgIds,
+        });
       }),
     [
       feedQ.data,
       allowLoadPosts,
       orgId,
+      partnerBooksReady,
       integratedPartnerOrgIds,
       integratedSupplierOrgIds,
       integratedClientOrgIds,
