@@ -96,9 +96,30 @@ export function readWebVisualViewportMetrics(): WebVisualViewportMetrics {
  * Chasing `offsetTop` mid-gesture moves the whole `#root` shell while an RN
  * ScrollView is also scrolling (Org name / onboarding fields) and reads as
  * "scroll cuts off". Document pan is cancelled via `window.scrollTo(0, 0)`.
+ *
+ * On Android (non-iOS) this instead holds --app-vh at the FULL window height —
+ * see the branch below. Despite the iOS-centric name, this must run on Android
+ * too: it is the only ongoing writer of --app-vh once React claims ownership.
  */
 export function applyIOSWebSafariViewportPin(): void {
-  if (!isIOSWeb() || typeof document === 'undefined') return;
+  if (typeof document === 'undefined') return;
+  if (!isIOSWeb()) {
+    // Android Chrome (overlays-content): the keyboard overlays the page rather
+    // than resizing it, so the layout height must stay at the full window
+    // height. This still has to be written on every viewport event, because the
+    // static-HTML bootstrap stops writing --app-vh as soon as React claims
+    // ownership (__appVhOwned) — leaving nobody updating it. Using
+    // max(visualViewport.height, innerHeight) keeps a keyboard-shrunk visual
+    // viewport from clamping html/body/#root via `max-height: var(--app-vh)`.
+    if (typeof window === 'undefined') return;
+    const vv = window.visualViewport;
+    const full = Math.round(
+      vv ? Math.max(vv.height, window.innerHeight) : window.innerHeight,
+    );
+    document.documentElement.style.setProperty('--app-vh', `${full}px`);
+    document.documentElement.style.setProperty('--app-vt', '0px');
+    return;
+  }
   const { height, offsetTop, keyboardInset } = readWebVisualViewportMetrics();
   const keyboardOpenByHeight = keyboardInset >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
   document.documentElement.style.setProperty('--app-vh', `${height}px`);
@@ -154,6 +175,7 @@ export function blurActiveWebEditable(): boolean {
   if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !el.isContentEditable) {
     return false;
   }
+  cancelPendingWebInputScroll();
   el.blur();
   return true;
 }
@@ -168,10 +190,25 @@ export function shouldApplyWebKeyboardScrollInset(): boolean {
   return !isIOSWeb();
 }
 
+let pendingFocusScrollFrame: number | null = null;
+let pendingFocusScrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Cancel any in-flight focus scroll (new focus / blur supersedes the old one). */
+export function cancelPendingWebInputScroll(): void {
+  if (pendingFocusScrollFrame != null) {
+    cancelAnimationFrame(pendingFocusScrollFrame);
+    pendingFocusScrollFrame = null;
+  }
+  if (pendingFocusScrollTimer != null) {
+    clearTimeout(pendingFocusScrollTimer);
+    pendingFocusScrollTimer = null;
+  }
+}
+
 /**
- * Scroll the focused editable into view after the virtual keyboard animates.
- * iOS: nearest + auto only — smooth multi-pass scrollIntoView flickers against
- * the signup ScrollView (City / office fields).
+ * Scroll the focused editable into view once the virtual keyboard has settled.
+ * Single cancellable pass — see the comment inside on why multi-pass scrolling
+ * made the Android keyboard flicker open/closed.
  */
 export function scrollFocusedWebInputIntoView(): void {
   if (typeof document === 'undefined') return;
@@ -181,20 +218,31 @@ export function scrollFocusedWebInputIntoView(): void {
   const tag = el.tagName;
   if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !el.isContentEditable) return;
 
-  const ios = isIOSWeb();
-  const block: ScrollLogicalPosition = ios || isIOSWebSafari() ? 'nearest' : 'center';
+  // Supersede any scroll queued by a previous field. Tapping quickly between
+  // fields used to leave up to three queued passes per field alive (rAF,
+  // double-rAF and a 320ms timer); they then fired against whatever input was
+  // focused *later*, scrolling the page out from under it while the keyboard
+  // was still animating. On Android Chrome each of those document scrolls
+  // resizes visualViewport, which re-reads keyboard geometry and relayouts —
+  // the keyboard reads as opening and closing on its own, worst when tapping
+  // rapidly or switching Full name -> Email.
+  cancelPendingWebInputScroll();
 
+  // `nearest` on every platform: `center` forces a document scroll even when
+  // the field is already fully visible, which is the common case here since
+  // the form's own ScrollView has already positioned it.
   const run = () => {
+    pendingFocusScrollFrame = null;
+    pendingFocusScrollTimer = null;
+    if (document.activeElement !== el) return; // focus moved on; stale pass
     try {
-      el.scrollIntoView({ block, behavior: ios ? 'auto' : 'smooth' });
+      el.scrollIntoView({ block: 'nearest', behavior: 'auto' });
     } catch {
-      el.scrollIntoView({ block });
+      el.scrollIntoView({ block: 'nearest' });
     }
   };
 
-  requestAnimationFrame(run);
-  if (!ios) {
-    requestAnimationFrame(() => requestAnimationFrame(run));
-    setTimeout(run, 320);
-  }
+  // Single pass, after the keyboard has settled. Running one at rAF (before the
+  // keyboard exists) only produced a scroll that the later passes had to undo.
+  pendingFocusScrollTimer = setTimeout(run, isIOSWeb() ? 0 : 300);
 }

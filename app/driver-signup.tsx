@@ -348,6 +348,12 @@ export default function DriverSignUpScreen() {
     pendingScrollFieldRef.current = null;
     if (!name) return;
     if (useMobileLayout) {
+      // Let the browser keep the focused input visible on web. Forcing our own
+      // scroll here fought the browser's native focus scroll on Android: two
+      // scrollers moving the same content while the keyboard animated made the
+      // page jump and re-fire viewport resizes. `scrollToEnd` was also simply
+      // wrong per-field — focusing "Full name" slammed the form to the bottom.
+      if (Platform.OS === 'web') return;
       mobileScrollRef.current?.scrollToEnd({ animated: true });
       return;
     }
