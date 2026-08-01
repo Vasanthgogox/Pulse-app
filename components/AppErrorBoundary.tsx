@@ -57,11 +57,23 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    if (isStaleWebChunkError(error) && recoverStaleWebDeploy()) {
+    const staleChunk = isStaleWebChunkError(error);
+    if (staleChunk && recoverStaleWebDeploy()) {
       this.setState({ recoveringDeploy: true });
       return;
     }
     this.setState({ componentStack: info.componentStack ?? null });
+    if (staleChunk) {
+      // Recovery declined (reload budget spent / loop suspected). The user still
+      // gets the "update available" screen, but this is a stale-deploy artifact,
+      // not an app bug — report it as a warning so it does not sit in Sentry as
+      // an actionable render error (GX-PULSE-T).
+      logger.warn('[AppErrorBoundary] stale_chunk_reload_declined', {
+        message: error?.message ?? String(error),
+        name: error?.name ?? typeof error,
+      });
+      return;
+    }
     logger.error('[AppErrorBoundary] render error', {
       message: error?.message ?? String(error),
       name: error?.name ?? typeof error,

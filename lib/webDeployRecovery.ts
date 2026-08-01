@@ -5,6 +5,18 @@
  */
 
 const RELOAD_GUARD_KEY = 'pulse_deploy_reload_v1';
+/**
+ * A single deploy can strand more than one lazy chunk: the user reloads onto the
+ * fresh entry, then navigates to a route whose chunk was requested from the old
+ * cached bundle. A one-shot session guard blocked that second recovery and let
+ * the AsyncRequireError fall through to Sentry as a render error (GX-PULSE-T).
+ * Allow a few reloads per session instead, so each stranded route can recover,
+ * while still bounding a genuine reload loop (chunk 404s even when current).
+ */
+const MAX_RELOADS_PER_SESSION = 3;
+/** Reloads inside this window are treated as a loop, not as distinct recoveries. */
+const RELOAD_LOOP_WINDOW_MS = 10_000;
+const RELOAD_LAST_AT_KEY = 'pulse_deploy_reload_at_v1';
 
 declare global {
    
@@ -64,17 +76,29 @@ export function isStaleWebChunkError(error: Error): boolean {
   );
 }
 
-/** One hard reload with cache-bust query so users pick up the current entry + chunks. */
+/**
+ * Hard reload with a cache-bust query so users pick up the current entry + chunks.
+ * Bounded per session: up to MAX_RELOADS_PER_SESSION recoveries, and never twice
+ * inside RELOAD_LOOP_WINDOW_MS (that shape is a reload loop, not a stale chunk).
+ */
 export function recoverStaleWebDeploy(): boolean {
   if (platformOS() !== 'web' || typeof window === 'undefined') return false;
+  if (!window.location) return false;
+  const now = Date.now();
   try {
-    if (sessionStorage.getItem(RELOAD_GUARD_KEY)) return false;
-    sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
+    const count = Number(sessionStorage.getItem(RELOAD_GUARD_KEY) ?? '0') || 0;
+    if (count >= MAX_RELOADS_PER_SESSION) return false;
+    // A second failure moments after a reload means reloading is not fixing it —
+    // stop and let the error surface rather than bouncing the user forever.
+    const lastAt = Number(sessionStorage.getItem(RELOAD_LAST_AT_KEY) ?? '0') || 0;
+    if (lastAt && now - lastAt < RELOAD_LOOP_WINDOW_MS) return false;
+    sessionStorage.setItem(RELOAD_GUARD_KEY, String(count + 1));
+    sessionStorage.setItem(RELOAD_LAST_AT_KEY, String(now));
   } catch {
     return false;
   }
   const url = new URL(window.location.href);
-  url.searchParams.set('_cb', String(Date.now()));
+  url.searchParams.set('_cb', String(now));
   window.location.replace(url.toString());
   return true;
 }

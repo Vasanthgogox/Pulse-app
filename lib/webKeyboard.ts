@@ -109,7 +109,18 @@ export function applyIOSWebSafariViewportPin(): void {
   window.scrollTo(0, 0);
 }
 
-/** True when `node` is (or is inside) a web editable control. */
+/**
+ * True when `node` is (or is inside, or *contains*) a web editable control.
+ *
+ * Walking only upwards is not enough on React Native Web: a `TextInput` renders
+ * the real `<input>` inside a wrapper `<div>` (plus the field's own padded
+ * container / label row). A tap on that padding hits the wrapper, whose
+ * ancestors contain no INPUT, so an upward-only check calls it "outside the
+ * field" and blurs — the keyboard closes and RN's own press handler immediately
+ * refocuses the input, reopening it. That blur/refocus race is what makes the
+ * Android keyboard flicker open-closed on the signup form steps. Checking
+ * descendants too makes a tap anywhere on the field a no-op for dismissal.
+ */
 export function isWebEditableDomTarget(target: EventTarget | null): boolean {
   if (typeof HTMLElement === 'undefined' || !(target instanceof Node)) {
     return false;
@@ -122,6 +133,11 @@ export function isWebEditableDomTarget(target: EventTarget | null): boolean {
       if (node.isContentEditable) return true;
     }
     node = node.parentNode;
+  }
+  if (target instanceof HTMLElement) {
+    if (target.querySelector('input, textarea, select, [contenteditable="true"]')) {
+      return true;
+    }
   }
   return false;
 }

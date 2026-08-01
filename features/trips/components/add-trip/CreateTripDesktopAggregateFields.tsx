@@ -11,7 +11,6 @@ import { normalizeIndianMobileLast10 } from "@/features/trips/utils/driverPhoneL
 import {
   applyIndianVehicleKeystroke,
   getIndianVehicleKeyboardType,
-  getIndianVehicleNormalizedLength,
 } from "@/lib/indianVehicleInput.util";
 import { formatMobileNumber } from "@/lib/format";
 import type { AddTripIssueField } from "./useAddTripForm";
@@ -79,8 +78,7 @@ export const CreateTripDesktopAggregateFields = memo(
   }: CreateTripDesktopAggregateFieldsProps) {
     const phoneLast10 = normalizeIndianMobileLast10(driverPhone);
     const phoneComplete = phoneLast10.length >= 10;
-    const vehicleLen = getIndianVehicleNormalizedLength(vehicleText);
-    const vehicleKeyboard = getIndianVehicleKeyboardType(vehicleLen);
+    const vehicleKeyboard = getIndianVehicleKeyboardType(vehicleText);
 
     const currencyInputProps = Platform.select({
       web: { outlineStyle: "none" } as object,

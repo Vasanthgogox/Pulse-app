@@ -75,10 +75,12 @@ export function signupMobileWebScrollGestureProps(options: {
   return {
     keyboardDismissMode: 'on-drag',
     onScrollBeginDrag: dismiss,
-    onTouchStart: (event: { target?: unknown }) => {
-      if (!shouldDismissOnTouchTarget((event.target as EventTarget) ?? null)) return;
-      dismiss();
-    },
+    // Deliberately no onTouchStart dismiss. touchstart fires *before* the
+    // browser moves focus, so dismissing there blurs the currently-focused
+    // input on every tap — including a tap that is moving focus to the next
+    // field. The keyboard closes and then reopens a frame later when focus
+    // lands, which is the open/close flicker on Android Chrome. Dragging
+    // (onScrollBeginDrag + keyboardDismissMode) still dismisses.
     bounces: !(Platform.OS === 'web' && isIOSWeb() && options.keyboardVisible),
   };
 }
