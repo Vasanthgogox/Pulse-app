@@ -231,32 +231,9 @@ export function LiveTrackingModal({
     : trackingState.broadcastActive
       ? "live"
       : "idle";
-  const statusChangeRowsOnly = driverActivityTimelineRows.filter(
-    (r) => r.kind === "status",
-  ) as Extract<DriverActivityTimelineRow, { kind: "status" }>[];
 
   const timelineSection = (
     <View style={styles.timelineWrap}>
-      {statusChangeRowsOnly.length > 0 ? (
-        <View style={styles.statusChangesWrap}>
-          {statusChangeRowsOnly.map((row, idx) => (
-            <View
-              key={row.id}
-              style={[
-                styles.statusChangeRow,
-                idx === statusChangeRowsOnly.length - 1 &&
-                  styles.statusChangeRowLast,
-              ]}
-            >
-              <Text style={styles.statusChangeLabel}>{row.status_label}</Text>
-              <Text style={styles.statusChangeTime}>
-                {formatAssignmentDate(row.changed_at)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-
       {driverActivityTimelineRows.length === 0 ? (
         <View style={styles.emptyTimeline}>
           <Text style={styles.emptyTimelineText}>No activity recorded yet</Text>
@@ -653,7 +630,7 @@ export function LiveTrackingModal({
                     icon={
                       <Package
                         size={12}
-                        color={Theme.textSecondary}
+                        color={Theme.textPrimary}
                         strokeWidth={1.75}
                       />
                     }
@@ -667,7 +644,7 @@ export function LiveTrackingModal({
                     icon={
                       <Home
                         size={12}
-                        color={Theme.textSecondary}
+                        color={Theme.textPrimary}
                         strokeWidth={1.75}
                       />
                     }
@@ -722,7 +699,7 @@ export function LiveTrackingModal({
                   accessibilityLabel="Reassign driver"
                 >
                   <Text style={styles.reassignLinkText}>Re-assign driver</Text>
-                  <Feather name="chevron-right" size={14} color={Theme.textMuted} />
+                  <Feather name="chevron-right" size={14} color={Theme.textPrimary} />
                 </Pressable>
               ) : null}
             </View>
@@ -747,7 +724,7 @@ export function LiveTrackingModal({
                 <Feather
                   name={activityOpen ? "chevron-up" : "chevron-down"}
                   size={16}
-                  color={Theme.textMuted}
+                  color={Theme.textPrimary}
                 />
               </Pressable>
               {activityOpen ? timelineSection : null}
@@ -962,6 +939,15 @@ function ExpandedContent({ lines }: { lines: [string, string][] }) {
 const SHEET_OVERLAP = 20;
 const SCREEN_PAD = Layout.screenPaddingHorizontal;
 
+/** Activity rail geometry — dot centre must sit on the first text line and on the line. */
+const TIMELINE_DOT_SIZE = 14;
+const TIMELINE_ROW_PAD_V = 10;
+const TIMELINE_LABEL_LINE_HEIGHT = 15;
+const TIMELINE_DOT_TOP = Math.round(
+  TIMELINE_ROW_PAD_V + TIMELINE_LABEL_LINE_HEIGHT / 2 - TIMELINE_DOT_SIZE / 2,
+);
+const TIMELINE_DOT_CENTER = TIMELINE_DOT_TOP + TIMELINE_DOT_SIZE / 2;
+
 /** Solid tracking tones — slate + Pulse purple (offline), green (live). */
 const TRACKING = {
   live: {
@@ -986,19 +972,19 @@ const TRACKING = {
     rowBg: "#F5F3FF",
     rowBorder: Theme.pulseIndigoRing,
     badgeBg: Theme.loadMainTabBg,
-    metaText: "#64748b",
+    metaText: Theme.textPrimary,
   },
   idle: {
     bannerBg: Theme.surface,
     bannerBorder: Theme.borderMedium,
     iconBg: Theme.pulseIndigo,
     chipBg: Theme.surfaceGray,
-    chipText: Theme.textSecondary,
+    chipText: Theme.textPrimaryDark,
     progress: Theme.pulseIndigo,
     rowBg: Theme.pulseIndigoWash,
     rowBorder: Theme.pulseIndigoRing,
     badgeBg: Theme.pulseIndigo,
-    metaText: Theme.textSecondary,
+    metaText: Theme.textPrimary,
   },
 } as const;
 
@@ -1043,7 +1029,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "600",
     letterSpacing: 0.6,
-    color: Theme.textSecondary,
+    color: Theme.textPrimaryDark,
   },
   livePill: {
     position: "absolute",
@@ -1073,6 +1059,9 @@ const styles = StyleSheet.create({
     marginTop: -SHEET_OVERLAP,
     paddingHorizontal: 0,
     gap: 8,
+    width: "100%",
+    maxWidth: Layout.trackingSheetMaxWidth,
+    alignSelf: "center",
   },
   headerFloat: {
     position: "absolute",
@@ -1124,8 +1113,8 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     marginTop: 2,
     fontSize: 10,
-    fontWeight: "400",
-    color: Theme.textSecondary,
+    fontWeight: "500",
+    color: Theme.textPrimary,
     textAlign: "center",
   },
   statusCard: {
@@ -1197,7 +1186,7 @@ const styles = StyleSheet.create({
   statusSubcopy: {
     fontSize: 11,
     fontWeight: "500",
-    color: Theme.textSecondary,
+    color: Theme.textPrimary,
     lineHeight: 14,
   },
   statusChip: {
@@ -1212,7 +1201,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.5,
-    color: Theme.textSecondary,
+    color: Theme.textPrimaryDark,
   },
   statusChipTextSolid: {
     color: Theme.textOnPrimary,
@@ -1236,15 +1225,15 @@ const styles = StyleSheet.create({
   arrivalLabel: {
     fontSize: 11,
     fontWeight: "600",
-    color: "rgba(255,255,255,0.8)",
+    color: Theme.textPrimary,
   },
   arrivalValue: {
     fontSize: 14,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.textPrimaryDark,
   },
   arrivalValueMuted: {
-    color: "rgba(255,255,255,0.7)",
+    color: Theme.textPrimary,
     fontWeight: "600",
   },
   driverCard: {
@@ -1287,12 +1276,12 @@ const styles = StyleSheet.create({
   driverCardMetaLabel: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textMuted,
+    color: Theme.textPrimary,
   },
   driverCardMetaValue: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textSecondary,
+    color: Theme.textPrimaryDark,
   },
   driverCardNavBtn: {
     flexDirection: "row",
@@ -1317,7 +1306,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.5,
     textTransform: "uppercase",
-    color: Theme.textMuted,
+    color: Theme.textPrimary,
     marginBottom: 10,
   },
   routeTimeline: {
@@ -1393,7 +1382,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.4,
     textTransform: "uppercase",
-    color: Theme.textMuted,
+    color: Theme.textPrimary,
   },
   routeRowTitle: {
     fontSize: 12,
@@ -1419,8 +1408,8 @@ const styles = StyleSheet.create({
   },
   routeRowSubtitle: {
     fontSize: 10,
-    fontWeight: "400",
-    color: Theme.textSecondary,
+    fontWeight: "500",
+    color: Theme.textPrimary,
     lineHeight: 14,
   },
   actionBar: {
@@ -1487,7 +1476,7 @@ const styles = StyleSheet.create({
   reassignLinkText: {
     fontSize: 12,
     fontWeight: "600",
-    color: Theme.textMuted,
+    color: Theme.textPrimaryDark,
   },
   activityCard: {
     marginHorizontal: SCREEN_PAD,
@@ -1514,54 +1503,20 @@ const styles = StyleSheet.create({
   activityCardTitle: {
     flex: 1,
     fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textSecondary,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
   activityCount: {
     fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textMuted,
+    fontWeight: "600",
+    color: Theme.textPrimary,
     marginRight: 4,
   },
   timelineWrap: {
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
-  },
-  statusChangesWrap: {
-    paddingHorizontal: SCREEN_PAD,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  statusChangesTitle: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 8,
-  },
-  statusChangeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  statusChangeRowLast: {
-    borderBottomWidth: 0,
-  },
-  statusChangeLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: Theme.textPrimaryDark,
-  },
-  statusChangeTime: {
-    fontSize: 10,
-    color: Theme.textMuted,
   },
   emptyTimeline: {
     padding: 24,
@@ -1569,28 +1524,28 @@ const styles = StyleSheet.create({
   },
   emptyTimelineText: {
     fontSize: 13,
-    color: Theme.textMuted,
+    color: Theme.textPrimary,
   },
   timelineLine: {
     position: "absolute",
-    left: SCREEN_PAD + 11,
-    top: 0,
-    bottom: 0,
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.borderMedium,
+    left: SCREEN_PAD + TIMELINE_DOT_SIZE / 2,
+    top: TIMELINE_DOT_CENTER,
+    bottom: TIMELINE_DOT_CENTER,
+    width: 1,
+    backgroundColor: Theme.borderFocus,
   },
   timelineItem: {
     flexDirection: "row",
     paddingHorizontal: SCREEN_PAD,
   },
   timelineDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: TIMELINE_DOT_SIZE,
+    height: TIMELINE_DOT_SIZE,
+    borderRadius: TIMELINE_DOT_SIZE / 2,
     borderWidth: 2,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.borderFocus,
     backgroundColor: Theme.screenBackground,
-    marginTop: 18,
+    marginTop: TIMELINE_DOT_TOP,
     marginRight: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -1608,7 +1563,7 @@ const styles = StyleSheet.create({
   },
   timelineItemBody: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: TIMELINE_ROW_PAD_V,
   },
   timelineItemBorder: {
     borderBottomWidth: 1,
@@ -1625,30 +1580,32 @@ const styles = StyleSheet.create({
   },
   timelineLocation: {
     fontSize: 11,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    lineHeight: 15,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+    lineHeight: TIMELINE_LABEL_LINE_HEIGHT,
   },
   timelineLocationActive: {
     color: Theme.textPrimaryDark,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   timelineCoords: {
     fontSize: 10,
-    color: Theme.textMuted,
+    fontWeight: "500",
+    color: Theme.textPrimary,
     marginTop: 2,
   },
   timelineTimeBadge: {
     backgroundColor: Theme.surfaceGray,
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 1,
     borderRadius: 6,
     flexShrink: 0,
   },
   timelineTimeText: {
     fontSize: 9,
-    fontWeight: "500",
-    color: Theme.textMuted,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    lineHeight: TIMELINE_LABEL_LINE_HEIGHT - 2,
   },
   expandedPanel: {
     marginTop: 10,
@@ -1659,8 +1616,8 @@ const styles = StyleSheet.create({
   },
   expandedTitle: {
     fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
+    fontWeight: "700",
+    color: Theme.textPrimary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 4,

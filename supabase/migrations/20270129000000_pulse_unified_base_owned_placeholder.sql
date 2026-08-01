@@ -1,0 +1,5 @@
+-- Version owned by the pulse-unified-base sibling repo (same Supabase project).
+-- Placeholder only, per .cursor/rules/supabase-migrations.mdc — do not add SQL here;
+-- the actual migration lives in that repo's history. This file exists solely so
+-- `supabase migration list --linked` and `db push` see a matching local version
+-- and don't block on a remote-only entry.

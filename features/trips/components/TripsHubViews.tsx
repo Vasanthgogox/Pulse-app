@@ -9,6 +9,10 @@ import {
   type HubListPaginationBarProps,
 } from "@/components/hub/HubListPaginationBar";
 import { HubScreenBottomBar } from "@/components/hub/HubScreenBottomBar";
+import {
+  HUB_CARD_TOOLBAR_MIN_WIDTH,
+  HUB_GRID_MIN_WIDTH,
+} from "@/components/hub/hubGridCardLayout";
 import Theme from "@/constants/Theme";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
@@ -249,8 +253,18 @@ function sortedTripLedger(entries: LedgerRow[]): LedgerRow[] {
   });
 }
 
-function useMobilePlanCardLayout(viewportWidth: number): boolean {
-  return Platform.OS !== "web" || viewportWidth < 768;
+/**
+ * Stacked hub list card for every width the desktop grid does not cover — native,
+ * phones **and tablets**. Must stay in step with the grid breakpoint used by
+ * `TripsScreen`, or tablet widths fall back to the legacy wide fleet card.
+ */
+function isMobilePlanCardLayout(viewportWidth: number): boolean {
+  return Platform.OS !== "web" || viewportWidth < HUB_GRID_MIN_WIDTH;
+}
+
+/** Tablet: stacked card keeps the finance toolbar the wide card used to show. */
+function stackedCardShowsToolbar(viewportWidth: number): boolean {
+  return Platform.OS === "web" && viewportWidth >= HUB_CARD_TOOLBAR_MIN_WIDTH;
 }
 
 /** Short pickup / schedule label for hub table. */
@@ -418,6 +432,17 @@ function tripsHubTripCardAreEqual(
   if (prev.ledgerTxnCount !== next.ledgerTxnCount) return false;
   if (prev.hubGrid !== next.hubGrid) return false;
   if (prev.layoutCompact !== next.layoutCompact) return false;
+  // Compare the layout *mode*, not raw pixels: resizing inside one band must not
+  // re-render the list, but crossing the band has to re-render or already-mounted
+  // cards keep the layout they first rendered with (rotation / split view).
+  if (
+    isMobilePlanCardLayout(prev.viewportWidth ?? 0) !==
+      isMobilePlanCardLayout(next.viewportWidth ?? 0) ||
+    stackedCardShowsToolbar(prev.viewportWidth ?? 0) !==
+      stackedCardShowsToolbar(next.viewportWidth ?? 0)
+  ) {
+    return false;
+  }
   if (prev.currentOrganizationId !== next.currentOrganizationId) return false;
   return true;
 }
@@ -544,7 +569,7 @@ function TripsHubTripCardInner({
         ? styles.fleetMissionPillTextRose
         : styles.fleetMissionPillTextEmerald;
 
-  const mobilePlanLayout = useMobilePlanCardLayout(viewportWidth);
+  const mobilePlanLayout = isMobilePlanCardLayout(viewportWidth);
 
   const hubMobileCardProps = {
     trip,
@@ -610,7 +635,24 @@ function TripsHubTripCardInner({
   }
 
   if (mobilePlanLayout) {
-    return <TripsHubMobileTripCard {...hubMobileCardProps} />;
+    return (
+      <TripsHubMobileTripCard
+        {...hubMobileCardProps}
+        actions={
+          stackedCardShowsToolbar(viewportWidth) ? (
+            <TripsHubTripCardToolbar
+              revenue={revenue}
+              receivableDue={receivableDue}
+              payableDue={payableDue}
+              salesLabel={tr("tripsHubColSales")}
+              receivableLabel={tr("tripsHubColDue")}
+              payableLabel={tr("tripsHubMetricGroupPayable")}
+              clearedLabel={tr("tripsHubSettlementCleared")}
+            />
+          ) : undefined
+        }
+      />
+    );
   }
 
   return (

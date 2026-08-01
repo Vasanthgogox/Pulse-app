@@ -12,6 +12,12 @@ import { QueryClient, QueryCache, MutationCache } from '@tanstack/react-query';
 import type { QueryCacheNotifyEvent } from '@tanstack/react-query';
 import { isWithinAppQueryBootQuietPeriod } from '@/lib/hooks/appQueryGateState';
 import { logger } from '@/lib/logger';
+import {
+  recordInvalidateQueries,
+  recordInvalidationStorm,
+  recordRefetchQueries,
+  recordSetQueryData,
+} from '@/lib/platform/scalability/queryCacheMetrics';
 
 /** Shared stale-time constants — import in query hooks to apply per-query tiers. */
 export const STALE = {
@@ -38,7 +44,51 @@ const KNOWN_SLOW_QUERY_KEY_FRAGMENTS = ['"market"'] as const;
 const INVALIDATION_STORM_WINDOW_MS = 1_000;
 const INVALIDATION_STORM_THRESHOLD = 20;
 
-/** Attach a dev-only observer that logs slow fetches, failed queries, and invalidation storms. */
+/** Always-on cache counters for Platform Health (P0). */
+function attachPlatformCacheMetrics(client: QueryClient): void {
+  let stormWindowStart = 0;
+  let stormCount = 0;
+  let stormLogged = false;
+
+  const origInvalidate = client.invalidateQueries.bind(client);
+  (client as unknown as { invalidateQueries: typeof origInvalidate }).invalidateQueries = function (...args) {
+    recordInvalidateQueries();
+    const now = Date.now();
+    if (now - stormWindowStart > INVALIDATION_STORM_WINDOW_MS) {
+      stormWindowStart = now;
+      stormCount = 0;
+      stormLogged = false;
+    }
+    stormCount += 1;
+    if (stormCount >= INVALIDATION_STORM_THRESHOLD && !stormLogged) {
+      stormLogged = true;
+      recordInvalidationStorm();
+      if (__DEV__) {
+        console.warn(
+          `[query] invalidation storm: ${stormCount}+ invalidations in 1s — check realtime subscriptions`,
+          args[0],
+        );
+      }
+    }
+    return origInvalidate(...args);
+  };
+
+  const origSetQueryData = client.setQueryData.bind(client);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (client as any).setQueryData = (...args: Parameters<typeof origSetQueryData>) => {
+    recordSetQueryData();
+    return origSetQueryData(...args);
+  };
+
+  const origRefetch = client.refetchQueries.bind(client);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (client as any).refetchQueries = (...args: Parameters<typeof origRefetch>) => {
+    recordRefetchQueries();
+    return origRefetch(...args);
+  };
+}
+
+/** Attach a dev-only observer that logs slow fetches and failed queries. */
 function attachDevObserver(client: QueryClient): void {
   if (!__DEV__) return;
   const startTimes = new Map<string, number>();
@@ -67,30 +117,6 @@ function attachDevObserver(client: QueryClient): void {
       }
     }
   });
-
-  // Invalidation storm detector — fires when >THRESHOLD queries are invalidated
-  // within a 1s window. Catches runaway realtime subscriptions before they ship.
-  let stormWindowStart = 0;
-  let stormCount = 0;
-  let stormLogged = false;
-  const origInvalidate = client.invalidateQueries.bind(client);
-  (client as unknown as { invalidateQueries: typeof origInvalidate }).invalidateQueries = function (...args) {
-    const now = Date.now();
-    if (now - stormWindowStart > INVALIDATION_STORM_WINDOW_MS) {
-      stormWindowStart = now;
-      stormCount = 0;
-      stormLogged = false;
-    }
-    stormCount += 1;
-    if (stormCount >= INVALIDATION_STORM_THRESHOLD && !stormLogged) {
-      stormLogged = true;
-      console.warn(
-        `[query] invalidation storm: ${stormCount}+ invalidations in 1s — check realtime subscriptions`,
-        args[0],
-      );
-    }
-    return origInvalidate(...args);
-  };
 }
 
 /**
@@ -144,6 +170,7 @@ export function makeQueryClient() {
       },
     },
   });
+  attachPlatformCacheMetrics(client);
   attachDevObserver(client);
   return client;
 }

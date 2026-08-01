@@ -95,6 +95,7 @@ Do not continue searching for alternative explanations.
 - Network/marketplace → `docs/MARKETPLACE_DOMAIN.md` (Marketplace Platform M0–M5); short pointer `docs/network.md`
 - Product strategy (KPIs, dual streams, M2 tiers) → `docs/PRODUCT_STRATEGY.md`
 - Platform Consumer Rule (Trip + Marketplace) → `docs/PLATFORM_CONSUMER_RULE.md`
+- Realtime & Authorization Platform Rules (postgres_changes vs Broadcast, One Authorization Truth) → `docs/REALTIME_PLATFORM_RULES.md`
 - UI patterns → `docs/ui.md`
 - Debugging & common errors → `docs/debugging.md`
 - Architectural decisions → `docs/decisions.md`

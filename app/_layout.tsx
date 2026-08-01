@@ -524,6 +524,7 @@ function RootLayoutNav() {
                 }}
               />
               <Stack.Screen name="audit" options={{ headerShown: false }} />
+              <Stack.Screen name="platform-health" options={{ headerShown: false }} />
               <Stack.Screen name="+not-found" options={{ headerShown: false }} />
             </Stack>
             <NavigationLoadingOverlay />

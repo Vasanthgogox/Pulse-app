@@ -4,6 +4,7 @@
  */
 import { PulsePillButton } from "@/components/PulsePillButton";
 import { ContentErrorState } from '@/components/ContentErrorState';
+import { HUB_GRID_MIN_WIDTH } from "@/components/hub/hubGridCardLayout";
 import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
 import { HubScreenBottomBar } from "@/components/hub/HubScreenBottomBar";
 import { HubScreenShell } from "@/components/hub/HubScreenShell";
@@ -235,8 +236,8 @@ export function LoadCenterView({
     [],
   );
 
-  /** Desktop web: 3 indent cards per row (mobile <820 uses hub list cards). */
-  const useGridLayout = Platform.OS === "web" && width >= 1024;
+  /** Desktop web: 3 indent cards per row (phones + tablets use hub list cards). */
+  const useGridLayout = Platform.OS === "web" && width >= HUB_GRID_MIN_WIDTH;
   const isMobileView = width < 820;
   /** Desktop: Suggested partners sit in a Network-style left sidebar. */
   const usePartnerSidebar = Boolean(orgId) && isGiveGetTab && !isMobileView;

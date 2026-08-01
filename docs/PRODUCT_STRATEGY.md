@@ -2,19 +2,23 @@
 
 **Status:** Operating north star after foundational platforms. Architecture is not the bottleneck — **commercial conversion** and **operational excellence** are.
 
-Companions: `docs/MARKETPLACE_DOMAIN.md` · `docs/TRIP_OPERATIONS_PLATFORM.md` · `docs/PLATFORM_CONSUMER_RULE.md` · `docs/MARKETPLACE_M1_CONSISTENCY_CHECKLIST.md`
+Companions: `docs/MARKETPLACE_DOMAIN.md` · `docs/TRIP_OPERATIONS_PLATFORM.md` · `docs/SCALABILITY_PLATFORM.md` · `docs/PLATFORM_CONSUMER_RULE.md` · `docs/MARKETPLACE_M1_CONSISTENCY_CHECKLIST.md`
 
 ---
 
-## Where Pulse is today — three platform pillars
+## Where Pulse is today — platform pillars
 
-These are foundational. They should **not** keep changing every sprint. What evolves now is how users **experience** them.
+These are foundational. They should **not** keep changing every sprint. What evolves now is how users **experience** them — **after** system health gates are green.
 
-| Pillar | Truth it owns | Doc |
-|--------|---------------|-----|
-| **Trip Operations Platform** | Execution truth | `docs/TRIP_OPERATIONS_PLATFORM.md` |
-| **Marketplace Platform** | Commercial truth | `docs/MARKETPLACE_DOMAIN.md` |
-| **Driver Mission Platform** | Execution experience (consumes Trip Ops) | Trip domain + driver Mission UI |
+| Pillar | Truth it owns | Status | Doc |
+|--------|---------------|--------|-----|
+| **Trip Operations Platform** | Execution truth | ✅ Stable | `docs/TRIP_OPERATIONS_PLATFORM.md` |
+| **Marketplace Platform** | Commercial truth | ✅ Stable | `docs/MARKETPLACE_DOMAIN.md` |
+| **Scalability & Reliability Platform** | Performance & synchronization truth | 🟡 Active (P0–P4 before M2 UX) | `docs/SCALABILITY_PLATFORM.md` |
+| **Product Intelligence Platform** | Analytics, AI, recommendations | 🔵 Future — do not mix into Scalability | TBD |
+| **Driver Mission** | Execution experience (consumes Trip Ops) | Product surface | Trip domain + driver Mission UI |
+
+**Release discipline:** Marketplace M2 and major Driver/Dispatcher UX wait until Scalability **P0–P4** are gated. Intelligence stays separate from Scalability (“Can the system survive?” vs “How do we improve the business?”).
 
 **Long-term advantage:** the same shipment flows seamlessly  
 
@@ -22,7 +26,7 @@ These are foundational. They should **not** keep changing every sprint. What evo
 Discovery → Bidding → Award → Execution → Completion → Trusted relationship
 ```
 
-Most products are either a marketplace *or* a TMS. Pulse is a **logistics operating platform** where commercial decisions and operational execution share one continuous journey — one commercial truth, one operational truth, UX on top. Maintain that discipline to avoid fragmentation as the product grows.
+Most products are either a marketplace *or* a TMS. Pulse is a **logistics operating platform** where commercial decisions and operational execution share one continuous journey — one commercial truth, one operational truth, one performance truth under them, UX on top. Maintain that discipline to avoid fragmentation as the product grows.
 
 ---
 
