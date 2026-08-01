@@ -65,6 +65,19 @@ function stripCurrencyPrefix(formatted: string): string {
   return formatted.replace(/^[^\d,.-]+/, "").trim() || formatted;
 }
 
+/** `HH:MM` from a full timestamp; empty when absent or unparseable. */
+function formatIndentCreatedTime(iso: string | null | undefined): string {
+  const raw = iso?.trim();
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function quoteStatusPillStyles(status: string) {
   const s = status.toLowerCase();
   if (s === "accepted") {
@@ -148,6 +161,12 @@ export function LoadCenterHubMobileIndentCard({
   const schedule = formatMobileTripSchedule(
     pickupIso ?? indent.pickup_date ?? indent.created_at,
   );
+  // `pickup_date` is a date-only column, so `schedule` carries no time of day.
+  // Surface the real creation time instead of leaving the stub date-only.
+  const createdTime = formatIndentCreatedTime(indent.created_at);
+  const scheduleSuffix = ` · ${schedule.scheduleLine}${
+    !schedule.time && createdTime ? ` · Created ${createdTime}` : ""
+  }`;
   const hubTicket = dense || fillGrid;
   const displayName = formatPartyName(titleName, hubTicket);
   const avatarFb =
@@ -197,7 +216,7 @@ export function LoadCenterHubMobileIndentCard({
         <Text style={[styles.refLine, hubTicket && styles.refLineHub]} numberOfLines={1}>
           <Text style={[styles.refId, hubTicket && styles.refIdHub]}>{indentNo}</Text>
           <Text style={[styles.refMuted, hubTicket && styles.refMutedHub]}>
-            {` · ${schedule.scheduleLine}`}
+            {scheduleSuffix}
           </Text>
         </Text>
       </View>
@@ -269,7 +288,7 @@ export function LoadCenterHubMobileIndentCard({
         <Text style={[styles.refLine, styles.refLineHub]} numberOfLines={1}>
           <Text style={[styles.refId, styles.refIdHub]}>{indentNo}</Text>
           <Text style={[styles.refMuted, styles.refMutedHub]}>
-            {` · ${schedule.scheduleLine}`}
+            {scheduleSuffix}
           </Text>
         </Text>
       </View>
@@ -291,7 +310,7 @@ export function LoadCenterHubMobileIndentCard({
         <Text style={[styles.refLine, hubTicket && styles.refLineHub]} numberOfLines={1}>
           <Text style={[styles.refId, hubTicket && styles.refIdHub]}>{indentNo}</Text>
           <Text style={[styles.refMuted, hubTicket && styles.refMutedHub]}>
-            {` · ${schedule.scheduleLine}`}
+            {scheduleSuffix}
           </Text>
         </Text>
       </View>
