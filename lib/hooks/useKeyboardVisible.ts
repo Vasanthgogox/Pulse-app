@@ -61,10 +61,32 @@ export function useKeyboardVisible() {
       }
 
       let focusOutTimer: ReturnType<typeof setTimeout> | undefined;
+      let focusInTimer: ReturnType<typeof setTimeout> | undefined;
+
+      // Last inset committed to React state. Android Chrome fires visualViewport
+      // `scroll` + `resize` many times while the keyboard animates, each a few
+      // px apart. Committing every one of those re-renders the whole step and
+      // re-runs the scroll-clearance layout, which reads on screen as the
+      // keyboard/page flickering. Only commit when the value actually changes
+      // by more than animation jitter, or when open/closed flips.
+      let lastCommittedInset = -1;
+      let lastCommittedOpen: boolean | null = null;
+      const INSET_COMMIT_EPSILON_PX = 24;
 
       const applyInset = (inset: number) => {
         const open = inset >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
         const height = open ? inset : 0;
+        const sameOpenState = lastCommittedOpen === open;
+        const withinJitter =
+          Math.abs(height - lastCommittedInset) < INSET_COMMIT_EPSILON_PX;
+        if (sameOpenState && withinJitter) {
+          // Still keep the CSS var exact — it is free and does not re-render.
+          setCssKeyboardHeight(height);
+          applyIOSWebSafariViewportPin();
+          return;
+        }
+        lastCommittedInset = height;
+        lastCommittedOpen = open;
         // Write CSS vars synchronously in one pass — keyboard-height and the iOS
         // Safari viewport pin (--app-vh/--app-vt) must land in the same tick so
         // React and the CSS pin never disagree about the current frame's geometry.
@@ -99,9 +121,18 @@ export function useKeyboardVisible() {
 
       const onFocusIn = (e: FocusEvent) => {
         if (!isEditableTarget(e.target)) return;
-        sync();
-        // Single delayed sync after keyboard has fully animated open (~350ms on Android Chrome).
-        setTimeout(sync, 350);
+        // A pending "keyboard closed" commit from tapping away from the previous
+        // field is now stale — focus moved to another input, so the keyboard is
+        // staying up. Cancelling it stops the visible close/reopen bounce when
+        // moving between the name / email / password fields.
+        clearTimeout(focusOutTimer);
+        // Do NOT sync() synchronously here: at focusin the keyboard has not
+        // opened yet, so the viewport still reads "closed" and we would commit
+        // keyboardVisible=false only to flip it true a moment later — the exact
+        // open/close flicker. The viewport resize event and the delayed sync
+        // below report the real geometry.
+        clearTimeout(focusInTimer);
+        focusInTimer = setTimeout(sync, 350);
       };
 
       const onFocusOut = () => {
@@ -128,6 +159,7 @@ export function useKeyboardVisible() {
 
       return () => {
         clearTimeout(focusOutTimer);
+        clearTimeout(focusInTimer);
         vv?.removeEventListener("resize", sync);
         vv?.removeEventListener("scroll", sync);
         window.removeEventListener("resize", sync);
