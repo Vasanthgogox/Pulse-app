@@ -53,6 +53,12 @@ export function useInvalidateNetwork(orgId: string | null) {
     void import('@/lib/globalSync/useGlobalSyncStore').then(({ useGlobalSyncStore }) => {
       void useGlobalSyncStore.getState().refreshInboundProtocol(orgId);
     });
+    // Force full clients/suppliers sync after accept — delta cursors can miss
+    // trigger-created rows for a frame and leave the party book looking empty.
+    void import('@/lib/cache/cacheMetadataStore').then(({ clearDomainCacheMeta }) => {
+      void clearDomainCacheMeta('clients', orgId);
+      void clearDomainCacheMeta('suppliers', orgId);
+    });
     void invalidateFleetDriverConnectionCaches(qc, orgId);
     qc.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });

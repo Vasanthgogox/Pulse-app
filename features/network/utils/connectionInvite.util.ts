@@ -19,6 +19,23 @@ export type PartyForConnectionInvite = {
   phone?: string | null;
 };
 
+/** Receiver-facing outcome for directional connection invites (prevents Clients/Suppliers confusion). */
+export function connectionInviteReceiverOutcome(requestShipperClient: boolean): {
+  pill: string;
+  subtitle: string;
+} {
+  if (requestShipperClient) {
+    return {
+      pill: "JOINS AS SUPPLIER",
+      subtitle: "Accepting adds them to your Suppliers list",
+    };
+  }
+  return {
+    pill: "JOINS AS CLIENT",
+    subtitle: "Accepting adds them to your Clients list",
+  };
+}
+
 export async function runConnectionInvite(
   orgId: string,
   item: PartyForConnectionInvite,

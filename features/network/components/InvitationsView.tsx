@@ -17,6 +17,7 @@ import {
   rejectConnectionRequest,
   type ConnectionRequestRow,
 } from "@/features/connections/services/connectionRequests.service";
+import { connectionInviteReceiverOutcome } from "@/features/network/utils/connectionInvite.util";
 import { Check, Clock3, Search, Send, UserPlus2, X } from "lucide-react-native";
 import LottieView from "lottie-react-native";
 import React, { useMemo, useState } from "react";
@@ -63,9 +64,23 @@ function formatRelativeShort(iso: string): string {
   return `${Math.max(1, m)}m`;
 }
 
-function rolePillText(row: ConnectionRequestRow): string {
+function rolePillText(row: ConnectionRequestRow, perspective: "incoming" | "sent"): string {
+  if (perspective === "incoming") {
+    return connectionInviteReceiverOutcome(!!row.request_shipper_client).pill;
+  }
   if (row.request_shipper_client) return "ADD AS CLIENT";
   return "ADD AS SUPPLIER";
+}
+
+function incomingOutcomeSubtitle(row: ConnectionRequestRow): string {
+  return connectionInviteReceiverOutcome(!!row.request_shipper_client).subtitle;
+}
+
+function sentOutcomeSubtitle(row: ConnectionRequestRow): string {
+  if (row.request_shipper_client) {
+    return "They’ll appear under your Clients after they accept";
+  }
+  return "They’ll appear under your Suppliers after they accept";
 }
 
 function HubCardIncoming({
@@ -113,7 +128,7 @@ function HubCardIncoming({
             <Text style={hubStyles.modeBadgeText}>Received</Text>
           </View>
           <View style={hubStyles.roleBadge}>
-            <Text style={hubStyles.roleBadgeText}>{rolePillText(row)}</Text>
+            <Text style={hubStyles.roleBadgeText}>{rolePillText(row, "incoming")}</Text>
           </View>
           <View style={[hubStyles.statusPill, isPending ? hubStyles.statusPending : hubStyles.statusMuted]}>
             <Clock3 size={10} color={Theme.warning} strokeWidth={2.4} />
@@ -137,7 +152,7 @@ function HubCardIncoming({
             {(row.from_org_name ?? "—").toUpperCase()}
           </Text>
           <Text style={hubStyles.subtitle} numberOfLines={2}>
-            Wants to connect with your network
+            {incomingOutcomeSubtitle(row)}
           </Text>
           <View style={hubStyles.metaRow}>
             <View style={hubStyles.metaChip}>
@@ -226,7 +241,7 @@ function HubCardSent({
             <Text style={hubStyles.modeBadgeText}>Sent</Text>
           </View>
           <View style={hubStyles.roleBadge}>
-            <Text style={hubStyles.roleBadgeText}>{rolePillText(row)}</Text>
+            <Text style={hubStyles.roleBadgeText}>{rolePillText(row, "sent")}</Text>
           </View>
           <View style={[hubStyles.statusPill, isPending ? hubStyles.statusPending : hubStyles.statusMuted]}>
             <Clock3 size={10} color={Theme.warning} strokeWidth={2.4} />
@@ -250,7 +265,7 @@ function HubCardSent({
             {(row.to_org_name ?? "—").toUpperCase()}
           </Text>
           <Text style={hubStyles.subtitle} numberOfLines={2}>
-            Invitation shared from your network hub
+            {sentOutcomeSubtitle(row)}
           </Text>
           <View style={hubStyles.metaRow}>
             <View style={hubStyles.metaChip}>

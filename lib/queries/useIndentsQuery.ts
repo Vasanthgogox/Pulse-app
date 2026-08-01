@@ -78,15 +78,30 @@ export async function getIntegratedSupplierOrgIdsForShipper(
 ): Promise<string[]> {
   const ids = new Set<string>();
 
-  const { data: relations } = await supabase()
+  // Shipper → supplier (Add Supplier / client_supplier).
+  const { data: clientSupplier } = await supabase()
     .from('organization_relations')
     .select('to_organization_id')
     .eq('from_organization_id', shipperOrgId)
     .eq('relation_type', 'client_supplier')
     .eq('status', 'active');
 
-  for (const row of relations ?? []) {
+  for (const row of clientSupplier ?? []) {
     const supplierOrgId = String(row.to_organization_id ?? '').trim();
+    if (supplierOrgId) ids.add(supplierOrgId);
+  }
+
+  // Supplier → shipper (Add Client / supplier_client). Bond→AERO style links
+  // only create this direction — skipping it leaves awardees' market cache stale.
+  const { data: supplierClient } = await supabase()
+    .from('organization_relations')
+    .select('from_organization_id')
+    .eq('to_organization_id', shipperOrgId)
+    .eq('relation_type', 'supplier_client')
+    .eq('status', 'active');
+
+  for (const row of supplierClient ?? []) {
+    const supplierOrgId = String(row.from_organization_id ?? '').trim();
     if (supplierOrgId) ids.add(supplierOrgId);
   }
 
@@ -112,6 +127,7 @@ export function invalidateMarketIndentsForIntegratedSuppliers(
   for (const supplierOrgId of supplierOrgIds) {
     if (!supplierOrgId || supplierOrgId === shipperOrgId) continue;
     qc.invalidateQueries({ queryKey: queryKeys.indents.market(supplierOrgId) });
+    qc.invalidateQueries({ queryKey: queryKeys.indents.finite(supplierOrgId) });
     qc.invalidateQueries({ queryKey: ['q', 'indents', supplierOrgId, 'visible'] });
   }
 }

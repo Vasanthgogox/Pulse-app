@@ -387,10 +387,12 @@ export async function getMarketIndentsForOrganization(
 ): Promise<{ error: Error | null; indents: IndentRow[] }> {
   if (!orgId) return { error: new Error("orgId is required"), indents: [] };
 
+  // Param must be p_org_id — renamed from org_id in market_indents_via_reach.
+  // Named-arg mismatch 404s the RPC and drops Claimed/Find Work for suppliers.
   const { data: rpcData, error: rpcError } = await supabase().rpc(
     "market_indents_for_org",
     {
-      org_id: orgId,
+      p_org_id: orgId,
     },
   );
   if (!rpcError && Array.isArray(rpcData)) {
@@ -415,44 +417,51 @@ export async function getMarketIndentsForOrganization(
     };
   }
 
+  // Fallback when RPC is unavailable: partner-link indents (RLS-limited) plus
+  // quoted/awarded indents via SECURITY DEFINER quoted_indents_for_org. Always
+  // run the quoted merge — do not early-return on an empty link map, or an
+  // awardee with only an accepted quote never sees Claimed.
   const linkMap = await fetchPartnerShipperLinkSinceMap(orgId);
-  if (linkMap.size === 0) return { error: null, indents: [] };
+  let indents: IndentRow[] = [];
 
-  const shipperIds = [...linkMap.keys()];
-  const { data, error } = await supabase()
-    .from("indents")
-    .select("*, organizations(name)")
-    .in("organization_id", shipperIds)
-    // NULL fails an IN check — see fail-open note above.
-    .or(
-      "circulation_target.is.null,circulation_target.in.(integrated_supplier,both)",
-    )
-    .neq("status", "draft")
-    .order("created_at", { ascending: false });
+  if (linkMap.size > 0) {
+    const shipperIds = [...linkMap.keys()];
+    const { data, error } = await supabase()
+      .from("indents")
+      .select("*, organizations(name)")
+      .in("organization_id", shipperIds)
+      // NULL fails an IN check — see fail-open note above.
+      .or(
+        "circulation_target.is.null,circulation_target.in.(integrated_supplier,both)",
+      )
+      .neq("status", "draft")
+      .order("created_at", { ascending: false });
 
-  if (error) return { error: new Error(error.message), indents: [] };
+    if (error) return { error: new Error(error.message), indents: [] };
 
-  const rows = (data ?? []).filter((row) => {
-    const since = linkMap.get(String(row.organization_id ?? ""));
-    if (!since) return false;
-    const status = String(row.status ?? "").toLowerCase();
-    const isActive =
-      status !== "completed" &&
-      status !== "cancelled" &&
-      status !== "closed" &&
-      status !== "expired";
-    if (isActive) return true;
-    return String(row.created_at ?? "") >= since;
-  }) as (IndentRow & {
-    organizations?: { name: string | null } | null;
-  })[];
-  const indents: IndentRow[] = rows.map((row) => {
-    const { organizations, ...rest } = row;
-    return normalizeIndentRow({
-      ...rest,
-      creator_organization_name: organizations?.name ?? null,
-    } as IndentRow & { trips?: IndentTripJoin[] | null });
-  });
+    const rows = (data ?? []).filter((row) => {
+      const since = linkMap.get(String(row.organization_id ?? ""));
+      if (!since) return false;
+      const status = String(row.status ?? "").toLowerCase();
+      const isActive =
+        status !== "completed" &&
+        status !== "cancelled" &&
+        status !== "closed" &&
+        status !== "expired";
+      if (isActive) return true;
+      return String(row.created_at ?? "") >= since;
+    }) as (IndentRow & {
+      organizations?: { name: string | null } | null;
+    })[];
+    indents = rows.map((row) => {
+      const { organizations, ...rest } = row;
+      return normalizeIndentRow({
+        ...rest,
+        creator_organization_name: organizations?.name ?? null,
+      } as IndentRow & { trips?: IndentTripJoin[] | null });
+    });
+  }
+
   const merged = await mergeQuotedIndentsForSupplier(orgId, indents);
   return {
     error: null,

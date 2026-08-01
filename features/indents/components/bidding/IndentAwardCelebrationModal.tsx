@@ -190,8 +190,9 @@ export const IndentAwardCelebrationModal = memo(
 
               <Text style={styles.title}>Load Successfully Awarded!</Text>
               <Text style={styles.body}>
-                The shipment indent dispatch confirmation was dispatched to{" "}
-                <Text style={styles.bodyEm}>{data.carrier}</Text>.
+                Awarded to{" "}
+                <Text style={styles.bodyEm}>{data.carrier}</Text>. They can
+                assign staff and deploy from Load Center → Claimed.
               </Text>
 
               <View style={styles.metrics}>
