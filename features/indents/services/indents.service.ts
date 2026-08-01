@@ -352,8 +352,10 @@ async function mergeLinkedShipperActiveIndents(
 
   const shipperIds = [...linkMap.keys()];
   const { data: rows, error } = await supabase()
+    // indents has two FKs to organizations (organization_id, assigned_supplier_id),
+    // so the embed must name the constraint or PostgREST returns PGRST201.
     .from("indents")
-    .select("*, organizations(name)")
+    .select("*, organizations!indents_organization_id_fkey(name)")
     .in("organization_id", shipperIds)
     // NULL fails an IN check — treat it as the createIndent default so a
     // missing circulation_target fails open instead of hiding the load.
@@ -428,7 +430,7 @@ export async function getMarketIndentsForOrganization(
     const shipperIds = [...linkMap.keys()];
     const { data, error } = await supabase()
       .from("indents")
-      .select("*, organizations(name)")
+      .select("*, organizations!indents_organization_id_fkey(name)")
       .in("organization_id", shipperIds)
       // NULL fails an IN check — see fail-open note above.
       .or(
@@ -648,21 +650,20 @@ export async function getBroadcastIndentTarget(
 }
 
 /** Supplier-facing target rate (not load-giver client sales price). */
+import { resolveCommercialPricing } from "@/features/marketplace/domain/commercialPricing";
+
 export function resolveSupplierTargetDisplayRate(
   supplierTarget: number | null | undefined,
   clientPrice?: number | null | undefined,
   fallback?: number | null | undefined,
 ): number | null {
-  // Supplier-facing rate only: supplier_target, then broadcast rate_offer.
-  // Never fall back to client_price (load owner's client sales price).
-  // Skip non-positive/invalid values (supplier_target is often 0).
+  // Supplier-facing rate only — never client_price (load owner's client sales price).
   void clientPrice;
-  for (const candidate of [supplierTarget, fallback]) {
-    if (candidate == null) continue;
-    const n = Number(candidate);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return null;
+  return resolveCommercialPricing({
+    supplierTarget,
+    rateOffer: fallback,
+    bidCount: 0,
+  }).displayPrice;
 }
 
 /**

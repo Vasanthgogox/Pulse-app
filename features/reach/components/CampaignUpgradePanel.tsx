@@ -63,7 +63,7 @@ export function CampaignUpgradePanel({
         <Text style={styles.upgradeRowText}>
           Upgrade to {nextPlan.name} — only {upgradeDiffCredits} credits more
         </Text>
-        <ChevronRight size={13} color={Theme.textMuted} />
+        <ChevronRight size={13} color={Theme.accentBrown} />
       </Pressable>
     );
   }
@@ -109,14 +109,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: Theme.accentGoldMuted,
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    borderRadius: 10,
+    backgroundColor: Theme.accentBrownWash,
     borderWidth: 1,
-    borderColor: Theme.accentGoldBorder,
+    borderColor: Theme.accentBrownBorder,
   },
-  upgradeRowText: { fontSize: 12, fontWeight: "800", color: Theme.textPrimaryDark, flexShrink: 1 },
+  upgradeRowText: { fontSize: 11, fontWeight: "800", color: Theme.accentBrownDeep, flexShrink: 1 },
   upgradeCard: {
     borderRadius: 14,
     borderWidth: 1,

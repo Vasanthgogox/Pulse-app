@@ -1,6 +1,7 @@
 /**
  * Load Center desktop sidebar — Pulse story share + Pulse Reach boost banners.
  */
+import { PulseMascotBanner } from "@/components/PulseMascotBanner";
 import Theme from "@/constants/Theme";
 import {
   METRONIC,
@@ -9,7 +10,6 @@ import {
 import { ROUTES } from "@/lib/routes";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import LottieView, { type AnimationObject } from "lottie-react-native";
 import { Rocket, Zap } from "lucide-react-native";
 import {
   Platform,
@@ -61,18 +61,7 @@ export function LoadCenterSidebarBanners({
               : "Create an open indent, then Pulse it as a story so partners can quote fast."}
           </Text>
         </View>
-        <View style={local.storyArt}>
-          <LottieView
-            source={
-              require("@/assets/Animated folder/magic-wand.json") as AnimationObject
-            }
-            autoPlay
-            loop
-            speed={0.85}
-            resizeMode="contain"
-            style={local.lottieSm}
-          />
-        </View>
+        <PulseMascotBanner id="broadcastSignal" maxHeight={84} />
         <Pressable
           onPress={pulseStory}
           disabled={!onPulseStory}
@@ -99,33 +88,20 @@ export function LoadCenterSidebarBanners({
         accessibilityRole="button"
         accessibilityLabel="Open Pulse Reach — boost your indent story"
       >
-        <View style={local.reachTop}>
-          <View style={local.reachCopy}>
-            <View style={local.reachChipRow}>
-              <Rocket size={11} color={Theme.accentBrown} strokeWidth={2.3} />
-              <Text style={[local.chip, { color: Theme.accentBrown }]}>
-                Pulse Reach
-              </Text>
-            </View>
-            <Text style={local.reachTitle}>Boost your indent story</Text>
-            <Text style={local.reachSub}>
-              Make it effective and interesting — amplify reach so more
-              partners see and quote your loads.
+        <View style={local.reachCopy}>
+          <View style={local.reachChipRow}>
+            <Rocket size={11} color={Theme.accentBrown} strokeWidth={2.3} />
+            <Text style={[local.chip, { color: Theme.accentBrown }]}>
+              Pulse Reach
             </Text>
           </View>
-          <View style={local.reachArt}>
-            <LottieView
-              source={
-                require("@/assets/Animated folder/business-startup.json") as AnimationObject
-              }
-              autoPlay
-              loop
-              speed={0.9}
-              resizeMode="contain"
-              style={local.lottieMd}
-            />
-          </View>
+          <Text style={local.reachTitle}>Boost your indent story</Text>
+          <Text style={local.reachSub}>
+            Make it effective and interesting — amplify reach so more partners
+            see and quote your loads.
+          </Text>
         </View>
+        <PulseMascotBanner id="loadsPileUp" maxHeight={84} />
         <View style={local.reachCta}>
           <Text style={local.reachCtaText}>Open Pulse Reach</Text>
         </View>
@@ -157,11 +133,6 @@ const local = {
   storyCopy: {
     gap: 3,
     minWidth: 0,
-  } satisfies ViewStyle,
-  storyArt: {
-    alignItems: "center",
-    justifyContent: "center",
-    height: 72,
   } satisfies ViewStyle,
   chip: {
     fontSize: 9,
@@ -206,13 +177,7 @@ const local = {
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
   } satisfies ViewStyle,
-  reachTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  } satisfies ViewStyle,
   reachCopy: {
-    flex: 1,
     minWidth: 0,
     gap: 4,
   } satisfies ViewStyle,
@@ -234,13 +199,6 @@ const local = {
     color: METRONIC.subtle,
     lineHeight: 15,
   } satisfies TextStyle,
-  reachArt: {
-    width: 88,
-    height: 88,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  } satisfies ViewStyle,
   reachCta: {
     alignSelf: "flex-start",
     paddingHorizontal: 10,
@@ -255,12 +213,4 @@ const local = {
     fontWeight: "700",
     color: Theme.accentBrown,
   } satisfies TextStyle,
-  lottieSm: {
-    width: 96,
-    height: 72,
-  } satisfies ViewStyle,
-  lottieMd: {
-    width: 88,
-    height: 88,
-  } satisfies ViewStyle,
 };

@@ -146,7 +146,7 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
           <View style={styles.recoRow}>
             <EntityAvatar
               name={recommendedQuote.bidder_organization_name ?? "Supplier"}
-              avatarSeed={recommendedQuote.bidder_organization_id}
+              initialsColorSeed={recommendedQuote.bidder_organization_id}
               entityType="supplier"
               size={36}
               showIntegrationBadge={false}

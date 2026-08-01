@@ -177,5 +177,31 @@ The root defect is that **`is_org_member()` encodes the wrong security boundary*
 
 **Why:** four independent interpretations of trip progress existed before this (driver map guidance, `DriverTripFlowCard`'s step machine, the business stepper's own status-string mapping plus a heuristic guess at driver acceptance, and an inferred mission log built from raw timestamps). They were converging toward drift, not coincidence — the same trip could show a different stage on different screens.
 
-**Rule going forward:** a new operational surface consumes these services; it does not derive its own interpretation of trip status, timing, or exceptions. `DriverTripFlowCard`'s local state machine is the one deliberately unconsolidated piece — see `docs/TRIP_OPERATIONS_PLATFORM.md`'s Deferred section for why, and what an eventual investigation needs to trace before touching it.
+**The rule:** a new operational surface consumes these services; it does not derive its own interpretation of trip status, timing, or exceptions. See also the repo-wide **Platform Consumer Rule** in `docs/PLATFORM_CONSUMER_RULE.md` (same rule for Marketplace / `resolveCommercialOpportunity()`). `DriverTripFlowCard`'s local state machine remains the one deliberately unconsolidated piece — see `docs/TRIP_OPERATIONS_PLATFORM.md` Deferred section.
+
+## Commerce-earned relationship lifecycle (ADR-012, proposed)
+
+**Status:** Proposed — awaiting product/architecture agreement. Full lifecycle: `docs/ADR-012-commerce-earned-relationship.md`. **M0 Stabilization is complete.** Do not implement Execution Partner / Verified until **M4 Commerce Network** (after M1 Resolver + M3 Intelligence). See `docs/MARKETPLACE_DOMAIN.md`.
+
+**Decision (proposed):** Marketplace / Reach awarding follows *work together → know someone*, not Relationship Guard v1's *know someone → work together*. Relationship evolves: None → Bid Consent → Execution Partner (on Award) → Verified Business Partner (on successful trip completion). Do not write social `organization_relations.status = active` as the first commerce state at completion. Reach/marketplace stays open after bids until Award. Bid drawers show Source + Relationship. Award UI says "Award Supplier" with Business Relationship Consent copy — no Connect language.
+
+**Supersedes for Bid → Award:** `docs/architecture/11-relationship-guard-v1.md` enforcement model (block award until connected). Organic Grow/invite connections remain a parallel path.
+
+**Implementation order:** M0 Stabilization (done) → M1 Commercial Resolver → M2 Experience → M3 Intelligence → **M4 Commerce Network (this ADR)** → M5 Financial Platform.
+
+## Marketplace Platform — one commercial object (architecture spec)
+
+**Status:** Operating north star after M0/M1. Architecture is not the bottleneck — **commercial conversion** is. Full product strategy (four KPIs, dual streams, M2 tiers, weekly eight numbers): **`docs/PRODUCT_STRATEGY.md`**.
+
+**Decision:** Indent / Story / Reach / Load Center / Bid Sheet must not each invent commercial state. There is one commercial lifecycle (Draft → Published → Receiving Bids → Evaluating → Awarded → Executing → Completed). Surfaces consume `CommercialOpportunity` from `resolveCommercialOpportunity()` (**M1**), the same consolidation pattern as Trip Operations' `deriveTripStage()` stack.
+
+**Milestones:** ✓ M0 Stabilization → ✓ M1 Commercial Resolver (engineering complete; **product validation = consistency matrix**) → **M2 Marketplace Experience (next — UX only)** → M3 Intelligence → M4 Commerce Network → M5 Financial Platform.
+
+**After M1 validation:** Marketplace architecture is **feature-complete**. Feature-freeze platform/domain work. **~20%** maintenance / consumer-rule bugs; **~80%** conversion UX (M2) and intelligence pipeline (M3). Dual streams: Marketplace = commercial conversion; Trip Operations = operational excellence. Compass: four business KPIs + weekly eight-number executive review — see `docs/PRODUCT_STRATEGY.md`. Every Marketplace feature must move Published → Viewed → Bid → Awarded → Executed → Completed.
+
+**Shared rule:** `docs/PLATFORM_CONSUMER_RULE.md` — no UI may derive business state when a domain resolver exists (Trip + Marketplace).
+
+**Principle:** Platform eliminates duplicate business logic; Product improves customer outcomes — after a platform milestone, optimize behaviour and KPIs before extending the platform (`docs/PRODUCT_STRATEGY.md`).
+
+**Rule going forward:** a new marketplace surface consumes `CommercialOpportunity`; it does not branch on raw `indents.status`, orphan story clocks, or campaign status for Bid CTA / price / open-market visibility. `status='quoted'` is a deprecated compatibility value only — do not reopen status-name work.
 

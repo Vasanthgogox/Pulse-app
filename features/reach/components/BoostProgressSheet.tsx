@@ -20,17 +20,25 @@ import { ChevronRight, Rocket, X } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const INK = Theme.loadAddButtonText;
 const MUTED = Theme.loadStatusTabTextMuted;
 
 type CampaignStatus = "draft" | "active" | "completed" | "cancelled";
 
-const STATUS_VISUAL: Record<CampaignStatus, { dot: string; label: string }> = {
-  draft: { dot: "⚪", label: "Draft" },
-  active: { dot: "🟢", label: "Active" },
-  completed: { dot: "🔵", label: "Completed" },
-  cancelled: { dot: "🔵", label: "Cancelled" },
+/** Emoji dots rendered at inconsistent sizes per platform — use a drawn dot. */
+const STATUS_VISUAL: Record<CampaignStatus, { tone: string; label: string }> = {
+  draft: { tone: Theme.textMuted, label: "Draft" },
+  active: { tone: Theme.success, label: "Active" },
+  completed: { tone: Theme.accentBrown, label: "Completed" },
+  cancelled: { tone: Theme.textMuted, label: "Cancelled" },
 };
+
+function StatusDot({ tone }: { tone: string }) {
+  return (
+    <View style={[styles.statusDotRing, { borderColor: `${tone}33` }]}>
+      <View style={[styles.statusDotCore, { backgroundColor: tone }]} />
+    </View>
+  );
+}
 
 interface BoostProgressSheetProps {
   visible: boolean;
@@ -72,23 +80,31 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
           <View style={styles.header}>
             <View style={styles.headerLeading}>
               <View style={styles.headerIcon}>
-                <Rocket size={15} color={display?.color ?? INK} strokeWidth={2.25} />
+                <Rocket
+                  size={12}
+                  color={display?.color ?? Theme.accentBrown}
+                  strokeWidth={2.25}
+                />
               </View>
-              <View>
-                <Text style={styles.title}>
+              <View style={styles.headerCopy}>
+                <Text style={styles.title} numberOfLines={1}>
                   {isCompleted ? "Campaign finished" : plan ? `${plan.name} Plan` : "Boost progress"}
                 </Text>
-                {plan ? <Text style={styles.subtitle}>{formatINR(plan.price_inr)}</Text> : null}
+                {plan ? (
+                  <Text style={styles.subtitle}>
+                    {formatINR(plan.price_inr)}
+                  </Text>
+                ) : null}
               </View>
             </View>
             <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={8} accessibilityRole="button">
-              <X size={16} color={MUTED} strokeWidth={2.25} />
+              <X size={13} color={MUTED} strokeWidth={2.25} />
             </Pressable>
           </View>
 
           {statusVisual ? (
             <View style={styles.statusRow}>
-              <Text style={styles.statusDot}>{statusVisual.dot}</Text>
+              <StatusDot tone={statusVisual.tone} />
               <View style={styles.statusTextCol}>
                 <Text style={styles.statusLabel}>{statusVisual.label}</Text>
                 <Text style={styles.statusSublabel}>
@@ -115,7 +131,11 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
               <View style={styles.progressLabelRow}>
                 <Text style={styles.progressLabel}>Campaign Reach</Text>
                 <Text style={styles.progressValue}>
-                  {Math.min(metrics.impressions, plan.estimated_reach_max)} / {plan.estimated_reach_max}
+                  {Math.min(metrics.impressions, plan.estimated_reach_max)}
+                  <Text style={styles.progressValueTotal}>
+                    {" / "}
+                    {plan.estimated_reach_max}
+                  </Text>
                 </Text>
               </View>
               <View style={styles.progressTrack}>
@@ -124,7 +144,7 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
                     styles.progressFill,
                     {
                       width: `${Math.min(100, (metrics.impressions / plan.estimated_reach_max) * 100)}%`,
-                      backgroundColor: display?.color ?? Theme.primary,
+                      backgroundColor: display?.color ?? Theme.accentBrown,
                     },
                   ]}
                 />
@@ -132,21 +152,23 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
             </View>
           ) : null}
 
-          <View style={styles.divider} />
-
           {isActive && campaign ? (
-            <View style={styles.timelineRow}>
+            <View style={styles.timelineCard}>
               <View style={styles.timelineCell}>
                 <Text style={styles.timelineLabel}>Started</Text>
                 <Text style={styles.timelineValue}>{formatLedgerDateTime(campaign.published_at)}</Text>
               </View>
+              <View style={styles.timelineSplit} />
               <View style={styles.timelineCell}>
                 <Text style={styles.timelineLabel}>Expires</Text>
                 <Text style={styles.timelineValue}>{formatLedgerDateTime(campaign.expires_at)}</Text>
               </View>
+              <View style={styles.timelineSplit} />
               <View style={styles.timelineCell}>
                 <Text style={styles.timelineLabel}>Remaining</Text>
-                <Text style={styles.timelineValue}>{formatRemaining(campaign.expires_at)}</Text>
+                <Text style={[styles.timelineValue, styles.timelineValueAccent]}>
+                  {formatRemaining(campaign.expires_at)}
+                </Text>
               </View>
             </View>
           ) : null}
@@ -163,34 +185,40 @@ export function BoostProgressSheet({ visible, onClose, orgId, campaignId, onBoos
                 onBoostAgain();
               }}
             >
-              <Rocket size={14} color={INK} />
+              <Rocket size={12} color={Theme.accentBrown} />
               <Text style={styles.boostAgainBtnText}>Boost again</Text>
             </Pressable>
           ) : null}
 
           <View style={styles.divider} />
 
-          <Pressable
-            style={styles.viewAllRow}
-            onPress={() => {
-              onClose();
-              router.push(ROUTES.REACH.campaignDetail(campaignId) as never);
-            }}
-          >
-            <Text style={styles.viewAllText}>View full campaign</Text>
-            <ChevronRight size={14} color={Theme.textMuted} />
-          </Pressable>
+          <View style={styles.linkList}>
+            <Pressable
+              style={({ pressed }) => [styles.linkRow, pressed && styles.linkRowPressed]}
+              onPress={() => {
+                onClose();
+                router.push(ROUTES.REACH.campaignDetail(campaignId) as never);
+              }}
+            >
+              <Text style={[styles.linkText, styles.linkTextPrimary]}>
+                View full campaign
+              </Text>
+              <ChevronRight size={12} color={Theme.accentBrown} />
+            </Pressable>
 
-          <Pressable
-            style={styles.viewAllRow}
-            onPress={() => {
-              onClose();
-              router.push(ROUTES.REACH.HISTORY as never);
-            }}
-          >
-            <Text style={styles.viewAllText}>View all Reach campaigns</Text>
-            <ChevronRight size={14} color={Theme.textMuted} />
-          </Pressable>
+            <View style={styles.divider} />
+
+            <Pressable
+              style={({ pressed }) => [styles.linkRow, pressed && styles.linkRowPressed]}
+              onPress={() => {
+                onClose();
+                router.push(ROUTES.REACH.HISTORY as never);
+              }}
+            >
+              <Text style={styles.linkText}>View all Reach campaigns</Text>
+              <ChevronRight size={12} color={Theme.textMuted} />
+            </Pressable>
+          </View>
       </View>
     </StoryFlowSheetPortal>
   );
@@ -201,83 +229,169 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    gap: 12,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    gap: 8,
   },
   sheetPhone: {
     width: "100%",
     maxHeight: "88%",
   },
   handle: {
-    width: 36,
-    height: 4,
+    width: 28,
+    height: 3,
     borderRadius: 2,
     backgroundColor: Theme.borderMedium,
     alignSelf: "center",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  headerLeading: { flexDirection: "row", alignItems: "center", gap: 10 },
+  headerLeading: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
   headerIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: Theme.accentGoldMuted,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Theme.accentBrownWash,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.accentBrownBorder,
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { fontSize: 15, fontWeight: "800", color: Theme.textPrimaryDark },
-  subtitle: { fontSize: 11, fontWeight: "600", color: MUTED, marginTop: 1 },
+  headerCopy: { flex: 1, minWidth: 0 },
+  title: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  subtitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.accentBrown,
+    letterSpacing: 0.2,
+    marginTop: 1,
+  },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  statusDot: { fontSize: 14 },
-  statusTextCol: { flex: 1 },
-  statusLabel: { fontSize: 13, fontWeight: "800", color: Theme.textPrimaryDark },
-  statusSublabel: { fontSize: 11, fontWeight: "500", color: MUTED, marginTop: 1 },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  statusDotRing: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2.5,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  statusDotCore: { width: 7, height: 7, borderRadius: 4 },
+  statusTextCol: { flex: 1, minWidth: 0 },
+  statusLabel: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
+  },
+  statusSublabel: { fontSize: 10, fontWeight: "500", color: MUTED, marginTop: 1 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: Theme.borderLight },
   metricsCard: {
-    backgroundColor: Theme.surface,
-    borderRadius: 14,
+    // White so the grid's own `Theme.surface` cells read as separate tiles —
+    // surface-on-surface made the four metrics blur into one grey block.
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 11,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    padding: 14,
+    padding: 9,
   },
-  progressBlock: { gap: 6 },
+  progressBlock: { gap: 5 },
   progressLabelRow: { flexDirection: "row", justifyContent: "space-between" },
-  progressLabel: { fontSize: 11, fontWeight: "700", color: MUTED },
-  progressValue: { fontSize: 11, fontWeight: "800", color: Theme.textPrimaryDark },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: Theme.surface, overflow: "hidden" },
+  progressLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: MUTED,
+    letterSpacing: 0.2,
+  },
+  progressValue: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.accentBrown,
+    fontVariant: ["tabular-nums"],
+  },
+  progressValueTotal: { color: MUTED, fontWeight: "700" },
+  progressTrack: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Theme.accentBrownSoft,
+    overflow: "hidden",
+  },
   progressFill: { height: "100%", borderRadius: 3 },
-  timelineRow: { flexDirection: "row", justifyContent: "space-between" },
-  timelineCell: { alignItems: "center", flex: 1, gap: 2 },
-  timelineLabel: { fontSize: 9, fontWeight: "700", color: Theme.textMuted, textTransform: "uppercase" },
-  timelineValue: { fontSize: 11, fontWeight: "700", color: Theme.textPrimaryDark, textAlign: "center" },
+  timelineCard: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingVertical: 8,
+  },
+  timelineCell: {
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+    paddingHorizontal: 4,
+  },
+  timelineSplit: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+    marginVertical: 2,
+  },
+  timelineLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  timelineValue: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+  },
+  timelineValueAccent: { color: Theme.accentBrown, fontWeight: "800" },
   boostAgainBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    minHeight: 46,
-    borderRadius: 14,
-    backgroundColor: Theme.loadAddButtonBg,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
+    gap: 6,
+    minHeight: 36,
+    borderRadius: 11,
+    backgroundColor: Theme.accentBrownWash,
+    borderWidth: 1,
+    borderColor: Theme.accentBrownBorder,
   },
-  boostAgainBtnText: { fontSize: 12, fontWeight: "800", color: INK },
-  viewAllRow: {
+  boostAgainBtnText: { fontSize: 11, fontWeight: "800", color: Theme.accentBrown },
+  linkList: { marginTop: -2 },
+  linkRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    paddingVertical: 12,
+    paddingVertical: 9,
   },
-  viewAllText: { fontSize: 12, fontWeight: "700", color: Theme.textMuted },
+  linkRowPressed: { opacity: 0.6 },
+  linkText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.1,
+  },
+  linkTextPrimary: { color: Theme.accentBrown, fontWeight: "800" },
 });

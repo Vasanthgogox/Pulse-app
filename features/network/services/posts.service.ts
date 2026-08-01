@@ -31,15 +31,6 @@ function normalizeFeedPost(row: PostRow): PostRow {
   };
 }
 
-function isPostExpired(row: PostRow): boolean {
-  const now = Date.now();
-  const expiresAt = row.expires_at ? new Date(row.expires_at).getTime() : NaN;
-  if (Number.isFinite(expiresAt)) return expiresAt <= now;
-  const createdAt = new Date(row.created_at).getTime();
-  if (!Number.isFinite(createdAt)) return false;
-  return createdAt + 24 * 60 * 60 * 1000 <= now;
-}
-
 export interface PostRow {
   id: string;
   organization_id: string;
@@ -143,33 +134,15 @@ export async function getNetworkFeed(
   });
   if (error) return { error: new Error(error.message), posts: [] };
   const rawPosts = (data ?? []) as PostRow[];
-  // Keep own-org awarded/completed LOAD posts (is_active=false but source_indent_id set)
-  // so the story remains visible after the indent is awarded.
+  // Marketplace Stability P0.1: backend (get_network_feed + indent lifecycle) is the
+  // visibility authority. Do not filter or write is_active from posts.expires_at here —
+  // that dual clock killed discovery while indents were still open for bids.
+  // Own-org awarded LOAD posts may still appear with is_active=false for shipper history.
   const activePosts = rawPosts.filter(
     (p) =>
-      !isPostExpired(p) &&
-      (p.is_active === true ||
-        (p.organization_id === orgId && p.source_indent_id != null)),
+      p.is_active === true ||
+      (p.organization_id === orgId && p.source_indent_id != null),
   );
-
-  // Best effort: auto-deactivate expired own stories so they disappear for everyone.
-  const expiredOwnIds = rawPosts
-    .filter((p) => p.organization_id === orgId && isPostExpired(p))
-    .map((p) => p.id);
-  if (expiredOwnIds.length > 0) {
-    Promise.resolve(
-      supabase()
-        .from('posts')
-        .update({ is_active: false })
-        .in('id', expiredOwnIds)
-        .eq('organization_id', orgId)
-        .then(({ error }) => {
-          if (error && __DEV__) console.warn('[posts] auto-deactivate expired posts failed:', error.message);
-        }),
-    ).catch((err: unknown) => {
-      if (__DEV__) console.warn('[posts] auto-deactivate unexpected error:', err);
-    });
-  }
 
   const posts = activePosts.map(normalizeFeedPost);
   return { error: null, posts };
@@ -411,17 +384,19 @@ export async function getStoryClosedInfo(
       if (status === 'cancelled') {
         return { reason: 'withdrawn', indentStatus: status };
       }
+      if (status === 'expired' || status === 'closed') {
+        return { reason: 'expired', indentStatus: status };
+      }
+      // Indent still open for bids — posts.expires_at must not invent a close reason.
+      if (post.is_active === false) return { reason: 'closed', indentStatus: status };
+      return fallback;
     } catch {
-      // RLS-hidden indent — fall through to time-based reasons.
+      // RLS-hidden indent — fall through.
     }
   }
 
-  const expired =
-    post.expires_at != null &&
-    new Date(post.expires_at).getTime() <= Date.now();
-  if (expired) return { reason: 'expired', indentStatus: null };
   if (post.is_active === false) return { reason: 'closed', indentStatus: null };
-  return { reason: 'expired', indentStatus: null };
+  return fallback;
 }
 
 export async function incrementPostViewCount(postId: string): Promise<void> {

@@ -1,5 +1,7 @@
 # Relationship Guard v1 — Bid → Award
 
+> **Superseded for Bid → Award enforcement (proposed):** `docs/ADR-012-commerce-earned-relationship.md` rejects requiring an accepted connection before award. Marketplace relationships are earned through Bid Consent → Execution Partner → Verified Business Partner. Keep this document for the grounded inventory of `organization_relations` / `connection_requests` and the historical Guard v1 flow — do not implement `canAward()` as "must already be connected" for Reach/marketplace paths.
+
 Layer 3 domain document. Independent track from `06`-`10` (Commerce/Core/Execution) — this is Network/Bidding, and does not block on or get blocked by the `ExecutionOrchestrator` acceptance gate.
 
 **The one business question this document answers:** how does an unknown external workspace become eligible to receive work?

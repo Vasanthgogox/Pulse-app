@@ -79,7 +79,7 @@ function fitIllustration(boxW: number, boxH: number, aspect: number) {
   return { width: w, height: h };
 }
 
-function defaultExpiresAt(): string {
+function defaultVehicleExpiresAt(): string {
   return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 }
 
@@ -433,7 +433,7 @@ export default function CreatePostScreen() {
     setSubmitting(true);
     const parsed = parseFloat(rate.replace(/,/g, ""));
     const weightParsed = parseFloat(weight);
-    const expiresAt = defaultExpiresAt();
+    // LOAD + indent: visibility follows indent (P0.1). Vehicle stories keep a soft display TTL.
 
     let error: Error | null = null;
 
@@ -458,7 +458,6 @@ export default function CreatePostScreen() {
           resolveSupplierTargetDisplayRate(indent.supplier_target, indent.client_price) ??
           undefined,
         material: indent.load_type ?? undefined,
-        expiresAt,
         sourceIndentId: selectedIndentId,
       });
       error = res.error;
@@ -499,7 +498,6 @@ export default function CreatePostScreen() {
           weightTonnes: weightTonnes,
           rateOffer: rateNum,
           material: mat || undefined,
-          expiresAt,
           sourceIndentId: pulseIndent.id,
         });
         error = res.error;
@@ -512,7 +510,7 @@ export default function CreatePostScreen() {
         origin: origin.trim() || undefined,
         destination: destination.trim() || undefined,
         vehicleType: vehicleType || undefined,
-        expiresAt,
+        expiresAt: defaultVehicleExpiresAt(),
       });
       error = res.error;
     }

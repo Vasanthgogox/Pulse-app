@@ -1,6 +1,6 @@
 /**
  * AwardModal — Offer Hub modal for reviewing and awarding quotes.
- * Extracted from LoadCenterView.tsx.
+ * Commercial truth (price, canAward, lifecycle) from resolveCommercialOpportunity().
  */
 import Theme from "@/constants/Theme";
 import { getIndentDisplayNumber, type IndentRow } from "@/features/indents";
@@ -9,11 +9,23 @@ import {
   indentReviewHubStyles,
   indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
+import { resolveCommercialOpportunity } from "@/features/marketplace/domain";
 import { type AwardQuoteResult } from "@/features/network/hooks/useAwardQuote";
 import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useMemo } from "react";
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { X } from "lucide-react-native";
+
+const LIFECYCLE_LABEL: Record<string, string> = {
+  draft: "Draft",
+  published: "Open Market",
+  receiving_bids: "Receiving Bids",
+  evaluating: "Evaluating",
+  awarded: "Awarded",
+  executing: "Executing",
+  completed: "Completed",
+};
 
 interface AwardModalProps {
   visible: boolean;
@@ -24,6 +36,31 @@ interface AwardModalProps {
 
 export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalProps) {
   const { currentLoad, selectedQuoteId, awarding, sortedQuotes, pendingCount, lowestPendingAmount, quotesLoading, connectedSupplierOrgIds } = award;
+
+  const opportunity = useMemo(() => {
+    if (!currentLoad) return null;
+    return resolveCommercialOpportunity({
+      viewerOrgId: currentLoad.organization_id,
+      ownerOrgId: currentLoad.organization_id,
+      isLoad: true,
+      indentStatus: currentLoad.status,
+      postIsActive: true,
+      bidCount: sortedQuotes.length,
+      supplierTarget: currentLoad.supplier_target,
+      currentBestBid: lowestPendingAmount,
+      ownerEvaluating: pendingCount > 0,
+    });
+  }, [
+    currentLoad,
+    sortedQuotes.length,
+    lowestPendingAmount,
+    pendingCount,
+  ]);
+
+  const targetRateInr = opportunity?.pricing.displayPrice ?? null;
+  const lifecycleLabel = opportunity
+    ? LIFECYCLE_LABEL[opportunity.lifecycleState] ?? opportunity.lifecycleState
+    : null;
 
   const selectedIsPending = sortedQuotes.some(
     (q) =>
@@ -40,7 +77,21 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
 
   // Single source for the gate so the `disabled` prop and the dimmed style can
   // never disagree — a button that looks enabled but ignores taps reads as a bug.
-  const awardDisabled = awarding || !selectedQuoteId || !selectedIsPending;
+  const hasPendingSelection = Boolean(selectedQuoteId) && selectedIsPending;
+  const awardDisabled =
+    awarding ||
+    !hasPendingSelection ||
+    !(opportunity?.permissions.canAward ?? false);
+
+  const awardCtaLabel = awarding
+    ? "Awarding…"
+    : opportunity?.actions.primary?.kind === "award"
+      ? "Award selected"
+      : opportunity?.permissions.canAward
+        ? "Award selected"
+        : lifecycleLabel
+          ? `${lifecycleLabel} — viewing only`
+          : "Award selected";
 
   return (
     <Modal
@@ -78,7 +129,9 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
               </Text>
               {currentLoad ? (
                 <Text style={styles.modalSubtitle}>
-                  Audit indent {getIndentDisplayNumber(currentLoad)}
+                  {lifecycleLabel
+                    ? `${lifecycleLabel} · ${getIndentDisplayNumber(currentLoad)}`
+                    : `Audit indent ${getIndentDisplayNumber(currentLoad)}`}
                 </Text>
               ) : null}
             </View>
@@ -108,10 +161,27 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                     style={indentReviewHubStyles.reviewHubHeroStatValue}
                     numberOfLines={1}
                   >
-                    {quotesLoading ? "—" : String(sortedQuotes.length)}
+                    {quotesLoading
+                      ? "—"
+                      : String(opportunity?.pricing.bidCount ?? sortedQuotes.length)}
                   </Text>
                 </View>
-                {lowestPendingAmount != null && pendingCount > 0 ? (
+                {targetRateInr != null ? (
+                  <View style={indentReviewHubStyles.reviewHubHeroMetaColEnd}>
+                    <Text style={indentReviewHubStyles.reviewHubHeroStatLabel}>
+                      Target
+                    </Text>
+                    <Text
+                      style={[
+                        indentReviewHubStyles.reviewHubHeroStatValue,
+                        indentReviewHubStyles.reviewHubHeroStatValueEnd,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {formatINR(targetRateInr)}
+                    </Text>
+                  </View>
+                ) : lowestPendingAmount != null && pendingCount > 0 ? (
                   <View style={indentReviewHubStyles.reviewHubHeroMetaColEnd}>
                     <Text style={indentReviewHubStyles.reviewHubHeroStatLabel}>
                       Lowest bid
@@ -172,11 +242,14 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                 <IndentLiveBidsPanel
                   quotes={sortedQuotes}
                   clientPriceInr={Number(currentLoad?.client_price ?? 0)}
-                  targetRateInr={Number(currentLoad?.supplier_target ?? 0)}
+                  targetRateInr={Number(targetRateInr ?? 0)}
                   pickupDateIso={currentLoad?.pickup_date}
                   selectedQuoteId={selectedQuoteId}
                   onSelectQuote={award.selectQuote}
-                  canSelect={pendingCount > 0}
+                  canSelect={
+                    pendingCount > 0 &&
+                    Boolean(opportunity?.permissions.canAward)
+                  }
                   connectedSupplierOrgIds={connectedSupplierOrgIds}
                 />
               </ScrollView>
@@ -185,7 +258,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                   No pending offers to award.
                 </Text>
               )}
-              {pendingCount > 0 && (
+              {pendingCount > 0 && opportunity?.permissions.canAward && (
                 <Text style={styles.bidEmptySubtext}>
                   {needsInvite
                     ? invitePending
@@ -232,9 +305,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                   activeOpacity={0.9}
                   disabled={awardDisabled}
                 >
-                  <Text style={styles.modalSubmitText}>
-                    {awarding ? "Awarding…" : "Award selected"}
-                  </Text>
+                  <Text style={styles.modalSubmitText}>{awardCtaLabel}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity

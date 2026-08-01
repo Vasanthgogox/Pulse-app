@@ -64,7 +64,7 @@ export function StoryOwnerFooterActions({
           accessibilityLabel="View story viewers"
         >
           <View style={styles.viewersIconWrap}>
-            <Eye size={12} color={INK} strokeWidth={2.25} />
+            <Eye size={10} color={INK} strokeWidth={2.25} />
           </View>
           <Text style={styles.viewersPillText}>{viewsLabel}</Text>
         </Pressable>
@@ -83,7 +83,7 @@ export function StoryOwnerFooterActions({
             accessibilityLabel="View bids"
           >
             <View style={[styles.viewersIconWrap, styles.bidsIconWrap]}>
-              <Feather name="inbox" size={12} color={INK} />
+              <Feather name="inbox" size={10} color={INK} />
             </View>
             <Text style={styles.viewersPillText}>{bidsLabel}</Text>
           </Pressable>
@@ -103,14 +103,16 @@ export function StoryOwnerFooterActions({
             accessibilityLabel="Boost this load"
           >
             <View style={[styles.viewersIconWrap, styles.boostIconWrap]}>
-              <Rocket size={12} color={INK} strokeWidth={2.25} />
+              <Rocket size={10} color={INK} strokeWidth={2.25} />
             </View>
             <Text style={styles.viewersPillText}>{boostLabel}</Text>
           </Pressable>
         ) : null}
       </View>
 
-      <Text style={styles.hint}>{hint}</Text>
+      <Text style={styles.hint} numberOfLines={2}>
+        {hint}
+      </Text>
 
       <View style={[styles.actionRow, sideBySide && styles.actionRowInline]}>
         <Pressable
@@ -126,7 +128,7 @@ export function StoryOwnerFooterActions({
             {primaryLabel}
           </Text>
           <View style={styles.primaryBtnIcon}>
-            <ArrowUpRight size={14} color={INK} strokeWidth={2.5} />
+            <ArrowUpRight size={11} color={INK} strokeWidth={2.5} />
           </View>
         </Pressable>
 
@@ -141,10 +143,10 @@ export function StoryOwnerFooterActions({
           accessibilityLabel="Share story bidding link on WhatsApp"
         >
           <View style={styles.shareIconBadge}>
-            <FontAwesome name="whatsapp" size={15} color={Theme.textOnPrimary} />
+            <FontAwesome name="whatsapp" size={11} color={Theme.textOnPrimary} />
           </View>
           <Text style={styles.shareBtnText} numberOfLines={1}>
-            Share on WhatsApp
+            WhatsApp
           </Text>
         </Pressable>
       </View>
@@ -167,7 +169,7 @@ const btnShadow = Platform.select({
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
-    gap: 10,
+    gap: 7,
   },
   metricsRow: {
     width: "100%",
@@ -175,15 +177,15 @@ const styles = StyleSheet.create({
   },
   metricsRowSplit: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   metricPill: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 7,
     borderRadius: 999,
     backgroundColor: Theme.loadStatusTabTrayBg,
     borderWidth: StyleSheet.hairlineWidth,
@@ -202,18 +204,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
-    gap: 6,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 7,
     borderRadius: 999,
     backgroundColor: Theme.loadStatusTabTrayBg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.loadStatusTabBorderSoft,
   },
   viewersIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 17,
+    height: 17,
+    borderRadius: 9,
     backgroundColor: Theme.loadAddButtonBg,
     alignItems: "center",
     justifyContent: "center",
@@ -229,22 +231,22 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.92)",
   },
   viewersPillText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: MUTED,
     letterSpacing: 0.1,
   },
   hint: {
-    fontSize: 11,
+    fontSize: 10,
     color: MUTED,
     fontWeight: "600",
     textAlign: "center",
-    lineHeight: 16,
-    paddingHorizontal: 12,
+    lineHeight: 14,
+    paddingHorizontal: 6,
   },
   actionRow: {
     width: "100%",
-    gap: 10,
+    gap: 8,
   },
   actionRowInline: {
     flexDirection: "row",
@@ -255,14 +257,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   primaryBtn: {
-    minHeight: 50,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    minHeight: 38,
+    borderRadius: 11,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
     backgroundColor: Theme.loadAddButtonBg,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
@@ -274,15 +276,15 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     flexShrink: 1,
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: "800",
     color: INK,
     letterSpacing: -0.15,
   },
   primaryBtnIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 19,
+    height: 19,
+    borderRadius: 10,
     backgroundColor: Theme.accentGoldMuted,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.accentGoldBorder,
@@ -291,14 +293,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   shareBtn: {
-    minHeight: 50,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    minHeight: 38,
+    borderRadius: 11,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 6,
     backgroundColor: Theme.cardWhite,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.loadStatusTabTrayBorder,
@@ -310,15 +312,15 @@ const styles = StyleSheet.create({
   },
   shareBtnText: {
     flexShrink: 1,
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: "800",
     color: INK,
     letterSpacing: -0.15,
   },
   shareIconBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 19,
+    height: 19,
+    borderRadius: 10,
     backgroundColor: WA_GREEN,
     alignItems: "center",
     justifyContent: "center",

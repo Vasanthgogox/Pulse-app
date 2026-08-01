@@ -71,13 +71,13 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
   },
   metricCellCredits: {
-    backgroundColor: Theme.accentGoldMuted,
+    backgroundColor: Theme.accentBrownWash,
     borderWidth: 1,
-    borderColor: Theme.accentGoldBorder,
+    borderColor: Theme.accentBrownBorder,
   },
   metricValue: { fontSize: 13, fontWeight: "800", color: Theme.textPrimaryDark },
   metricValueBids: { color: Theme.success },
-  metricValueCredits: { color: Theme.textPrimaryDark },
+  metricValueCredits: { color: Theme.accentBrownDeep },
   metricLabel: {
     fontSize: 8,
     fontWeight: "700",
@@ -86,5 +86,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     textAlign: "center",
   },
-  metricLabelCredits: { color: Theme.accentGoldPressed },
+  metricLabelCredits: { color: Theme.accentBrown },
 });

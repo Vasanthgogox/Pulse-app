@@ -8,16 +8,21 @@ import { formatINR } from "@/lib/format";
 
 export type LoadSubTab = "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
 
-/** Give Load: card pill when at least one supplier bid exists. */
-export const GIVE_LOAD_QUOTE_RECEIVED_STATUS = "quote received";
+/** Give Load: card pill when at least one supplier bid exists (still open market). */
+export const GIVE_LOAD_RECEIVING_BIDS_STATUS = "receiving bids";
+
+/** @deprecated Use GIVE_LOAD_RECEIVING_BIDS_STATUS — kept for older call sites. */
+export const GIVE_LOAD_QUOTE_RECEIVED_STATUS = GIVE_LOAD_RECEIVING_BIDS_STATUS;
 
 export function getLoadCenterStatusTabLabel(
   loadSubTab: LoadSubTab,
   tabId: StatusFilterTab,
   defaultLabel: string,
 ): string {
-  if (loadSubTab === "GIVE_LOAD" && tabId === "OPEN") return "Created";
-  if (loadSubTab === "GIVE_LOAD" && tabId === "QUOTED") return "Quote received";
+  if (loadSubTab === "GIVE_LOAD" && tabId === "OPEN") return "Open Market";
+  if (loadSubTab === "GIVE_LOAD" && tabId === "QUOTED") return "Receiving Bids";
+  if (loadSubTab === "GET_LOAD" && tabId === "OPEN") return "Open Market";
+  if (loadSubTab === "GET_LOAD" && tabId === "QUOTED") return "My Bids";
   return defaultLabel;
 }
 
@@ -29,12 +34,44 @@ export function giveLoadBidReceivedDisplayStatus(
   const terminalForQuotePill =
     status === "awarded" || statusMatchesFilter(status, "DONE");
   if (!terminalForQuotePill && bidCount > 0) {
-    return GIVE_LOAD_QUOTE_RECEIVED_STATUS;
+    return GIVE_LOAD_RECEIVING_BIDS_STATUS;
+  }
+  if (status === "quoted") {
+    // Legacy compatibility only.
+    // No new indents enter 'quoted' after migration 20270128103100.
+    return GIVE_LOAD_RECEIVING_BIDS_STATUS;
   }
   return status;
 }
 
-/** Status filter tabs: Open | Quoted | Awarded | Done. Maps to indent status values. */
+/**
+ * Same DB row, different business situations: "just published, nobody's
+ * looked yet" and "actively being competed for" both sit at status='open'
+ * (or its legacy siblings) — the difference is purely bid_count, derived
+ * here, never written back to the database.
+ */
+export function giveLoadStatusPillLabel(
+  indentStatus: string,
+  bidCount: number,
+): string {
+  const derived = giveLoadBidReceivedDisplayStatus(indentStatus, bidCount);
+  if (derived === GIVE_LOAD_RECEIVING_BIDS_STATUS) return "Receiving Bids";
+  if (statusMatchesFilter(derived, "OPEN")) return "Open Market";
+  if (derived === "awarded") return "Awarded";
+  if (statusMatchesFilter(derived, "DONE")) return "Completed";
+  return derived.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Marketplace lifecycle tabs (product labels).
+ * Internal filter ids stay OPEN|QUOTED|AWARDED|DONE for query-key / URL compatibility.
+ * Product UI never says "Quoted" — use Open Market / Receiving Bids / My Bids.
+ *
+ * `status='quoted'` is a deprecated DB value, not an active business state.
+ * Legacy compatibility only. No new indents enter 'quoted' after migration
+ * 20270128103100 (trigger dropped + backfill). Keep accepting it in OPEN so
+ * any residual row still appears as open-for-bidding.
+ */
 export type StatusFilterTab = "OPEN" | "QUOTED" | "AWARDED" | "DONE";
 
 /** Done tab sub-filters (Find Work / Claimed / Give Load). */
@@ -52,15 +89,23 @@ export const STATUS_TABS: {
 }[] = [
   {
     id: "OPEN",
-    label: "Open",
-    // `quoted` is included: a DB trigger flips an indent broadcast -> quoted on
-    // the FIRST bid from ANY org, and the status is a single shared field. Left
-    // out, one supplier's bid removed the load from every other supplier's Open
-    // tab — killing the competing bids the broadcast (or paid Reach) was for.
-    // Give Load / Find Work narrow this per-viewer below; see useLoadCenterFilters.
-    statuses: ["open", "pending", "broadcast", "draft", "quoted"],
+    label: "Open Market",
+    statuses: [
+      "open",
+      "pending",
+      "broadcast",
+      "draft",
+      // Legacy compatibility only — no new rows after 20270128103100.
+      "quoted",
+    ],
   },
-  { id: "QUOTED", label: "Quoted", statuses: ["quoted"] },
+  {
+    id: "QUOTED",
+    label: "Receiving Bids",
+    // Not a DB status filter. Give Load: bid count > 0. Get Load: my quote exists.
+    // Empty on purpose — do not match indent.status === 'quoted' here.
+    statuses: [],
+  },
   { id: "AWARDED", label: "Awarded", statuses: ["awarded"] },
   {
     id: "DONE",
@@ -148,12 +193,12 @@ export function resolveGetLoadMobileCardLabels(
       : isCountered
         ? "countered"
         : isPending
-          ? "quoted"
-          : "open";
+          ? "receiving bids"
+          : "open market";
   const rightFooter = isCountered
     ? `Counter ${formatINR(counterInr)}`
     : isPending
-      ? `Quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
+      ? `Your bid ${formatINR(Number(existingQuote?.amount ?? 0))}`
       : isAccepted
         ? "Awarded"
         : loadTypeDetail;
@@ -220,7 +265,7 @@ export function resolveGetLoadTicketCommerce(
 
   if (quoteStatus === "pending" && hasQuote) {
     return {
-      kicker: "YOUR QUOTE",
+      kicker: "YOUR BID",
       amountInr: quoteAmount,
       targetRateInr: targetRateInr > 0 ? targetRateInr : null,
       referenceLabel: "Target",
@@ -352,8 +397,15 @@ export function shouldHideGetLoadStatePill(
   stateLabel: string,
   quoteAccepted: boolean,
 ): boolean {
-  if (filter === "OPEN" && stateLabel === "OPEN") return true;
-  if (filter === "QUOTED" && stateLabel === "QUOTED") return true;
+  if (filter === "OPEN" && (stateLabel === "OPEN" || stateLabel === "OPEN MARKET"))
+    return true;
+  if (
+    filter === "QUOTED" &&
+    (stateLabel === "QUOTED" ||
+      stateLabel === "RECEIVING BIDS" ||
+      stateLabel === "MY BIDS")
+  )
+    return true;
   if (filter === "AWARDED" && quoteAccepted) return true;
   return false;
 }
@@ -384,7 +436,13 @@ export function giveLoadStatusPillStyles(status: string): {
       text: { color: Theme.textSecondary },
     };
   }
-  if (s === "quoted" || s === GIVE_LOAD_QUOTE_RECEIVED_STATUS) {
+  // Legacy compatibility only: status='quoted' shares Receiving Bids pill styles.
+  // No new indents enter 'quoted' after migration 20270128103100.
+  if (
+    s === "quoted" ||
+    s === GIVE_LOAD_RECEIVING_BIDS_STATUS ||
+    s === "receiving bids"
+  ) {
     return {
       pill: {
         backgroundColor: Theme.screenBackground,

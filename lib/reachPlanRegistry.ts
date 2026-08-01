@@ -7,6 +7,7 @@
  * describes reach from the plan row itself ("Reach up to N verified fleet
  * owners"), so the number is never duplicated between DB and client.
  */
+import Theme from '@/constants/Theme';
 
 export type ReachPlanCode = 'basic' | 'boost' | 'max';
 
@@ -16,10 +17,15 @@ export interface ReachPlanDisplayMeta {
   color: string;
 }
 
+/**
+ * Tiers read as one warm-brown ramp (light → deep) rather than three unrelated
+ * hues, so a campaign surface stays on the Pulse Reach accent while still
+ * signalling which plan is running.
+ */
 export const REACH_PLAN_DISPLAY: Record<ReachPlanCode, ReachPlanDisplayMeta> = {
-  basic: { code: 'basic', icon: 'Rocket', color: '#4D3636' },
-  boost: { code: 'boost', icon: 'Zap',    color: '#d97706' },
-  max:   { code: 'max',   icon: 'Flame',  color: '#E82127' },
+  basic: { code: 'basic', icon: 'Rocket', color: Theme.accentBrownLight },
+  boost: { code: 'boost', icon: 'Zap',    color: Theme.accentBrown },
+  max:   { code: 'max',   icon: 'Flame',  color: Theme.accentBrownDeep },
 };
 
 export function getReachPlanDisplay(code: string): ReachPlanDisplayMeta | undefined {

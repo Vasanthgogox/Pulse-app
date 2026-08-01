@@ -27,6 +27,11 @@ export interface EntityAvatarProps {
   name: string;
   avatarUrl?: string | null;
   avatarSeed?: string | null;
+  /**
+   * Tints the initials fallback from a stable id (e.g. org id) without opting the
+   * party into a generated face. Pass ids here, never as `avatarSeed`.
+   */
+  initialsColorSeed?: string | null;
   organizationImageUrl?: string | null;
   organizationAvatarSeed?: string | null;
   /** Determines which seed generator to use for preset fallback. */
@@ -48,6 +53,7 @@ export function EntityAvatar({
   name,
   avatarUrl,
   avatarSeed,
+  initialsColorSeed,
   organizationImageUrl,
   organizationAvatarSeed,
   entityType = "client",
@@ -87,6 +93,7 @@ export function EntityAvatar({
       organizationAvatarSeed={organizationAvatarSeed}
       avatarUrl={avatarUrl}
       avatarSeed={avatarSeed}
+      initialsColorSeed={initialsColorSeed}
       entityType={entityType}
       isIntegrated={isIntegrated}
       size={size}

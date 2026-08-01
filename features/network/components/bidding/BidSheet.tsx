@@ -9,8 +9,8 @@ import { createDirectQuote } from '@/features/indents/services/direct-quotes.ser
 import {
   getBroadcastIndentTarget,
   getVisibleIndentById,
-  resolveSupplierTargetDisplayRate,
 } from '@/features/indents/services/indents.service';
+import { resolveCommercialOpportunity } from '@/features/marketplace/domain';
 import {
   StoryFlowSheetPortal,
   useStoryPhonePopup,
@@ -31,7 +31,7 @@ import {
   Truck,
   X,
 } from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -107,17 +107,55 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
     enabled: visible && !!sourceIndentId && !!orgId,
     staleTime: 60_000,
   });
-  const targetRate = resolveSupplierTargetDisplayRate(
-    linkedIndentQ.data?.supplier_target,
-    linkedIndentQ.data?.client_price,
-    post?.rate_offer,
+  const opportunity = useMemo(
+    () =>
+      resolveCommercialOpportunity({
+        viewerOrgId: orgId || null,
+        ownerOrgId: post?.organization_id ?? "",
+        isLoad: post?.type === "LOAD",
+        indentStatus: linkedIndentQ.data?.status ?? null,
+        postIsActive: post?.is_active,
+        bidCount: post?.bid_count ?? (existingBid ? 1 : 0),
+        supplierTarget: linkedIndentQ.data?.supplier_target,
+        rateOffer: post?.rate_offer,
+        myBidAmount: existingBid?.amount ?? null,
+        myBidStatus: existingBid?.status ?? null,
+        isSponsored: post?.is_sponsored,
+        reachCampaignId: post?.reach_campaign_id,
+      }),
+    [
+      orgId,
+      post?.organization_id,
+      post?.type,
+      post?.is_active,
+      post?.bid_count,
+      post?.rate_offer,
+      post?.is_sponsored,
+      post?.reach_campaign_id,
+      linkedIndentQ.data?.status,
+      linkedIndentQ.data?.supplier_target,
+      existingBid?.amount,
+      existingBid?.status,
+    ],
   );
+  const targetRate = opportunity.pricing.displayPrice;
+  const biddingAllowed =
+    opportunity.permissions.canBid ||
+    opportunity.permissions.canEditBid ||
+    (isEditMode &&
+      opportunity.bidding.hasBid &&
+      opportunity.bidding.acceptsNewBids);
+
   const submitMutation = useSubmitBidMutation(post?.id ?? null, orgId);
   const updateMutation = useUpdateBidMutation(post?.id ?? null, orgId);
   const isPending = isEditMode ? updateMutation.isPending : submitMutation.isPending;
 
   const parsedAmount = Number(amount.replace(/,/g, '').trim() || '0');
-  const canSubmit = Number.isFinite(parsedAmount) && parsedAmount > 0 && !isPending;
+  const canSubmit =
+    biddingAllowed &&
+    Number.isFinite(parsedAmount) &&
+    parsedAmount > 0 &&
+    !isPending;
 
   const origin = splitLocation(post?.origin);
   const destination = splitLocation(post?.destination);
@@ -164,17 +202,21 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
   }, [visible, isDesktop, existingBid?.amount, existingBid?.note, initialAmount, initialNote]);
 
   const invalidateQuoteCaches = async (matchedIndentId: string) => {
+    // Reach Stability: prefer narrow keys. Full indents.all() refetches every
+    // Give/Get list and freezes UI under concurrent bids.
     await Promise.allSettled([
       queryClient.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) }),
-      queryClient.invalidateQueries({ queryKey: [...queryKeys.indents.finite(orgId), 'my-direct-quotes'] }),
-      queryClient.invalidateQueries({ queryKey: ['indents', matchedIndentId, 'direct-quotes'] }),
-      queryClient.invalidateQueries({ queryKey: ['indents', 'quote-counts'] }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) }),
+      queryClient.invalidateQueries({
+        queryKey: [...queryKeys.indents.finite(orgId), 'my-direct-quotes'],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ['indents', matchedIndentId, 'direct-quotes'],
+      }),
       queryClient.invalidateQueries({
         predicate: (q) =>
           Array.isArray(q.queryKey) &&
           q.queryKey[0] === 'indents' &&
-          q.queryKey[1] === 'offer-counts',
+          (q.queryKey[1] === 'offer-counts' || q.queryKey[1] === 'quote-counts'),
       }),
     ]);
   };

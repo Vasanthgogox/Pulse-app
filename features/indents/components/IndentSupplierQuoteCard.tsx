@@ -275,7 +275,7 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
       <View style={styles.metaRow}>
         <EntityAvatar
           name={shipperName}
-          avatarSeed={shipperOrgId ?? shipperName}
+          initialsColorSeed={shipperOrgId ?? shipperName}
           entityType="client"
           size={40}
           showIntegrationBadge={false}

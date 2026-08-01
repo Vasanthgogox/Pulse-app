@@ -332,7 +332,7 @@ export function GetLoadQuoteChip({
   switch (variant) {
     case "pending":
       line1 = formatINRChip(Number(quoteAmount ?? 0));
-      line2 = "quoted";
+      line2 = "bid";
       amountLine = true;
       break;
     case "rejected":

@@ -68,7 +68,8 @@ export interface IndentForAggregation {
   client_price: number;
   /** Indicative supplier target rate. Used as fallback display; actual due is from accepted quote. */
   supplier_target?: number | null;
-  /** 'pending' | 'quoted' | 'awarded' | 'completed' | 'cancelled' */
+  /** 'pending' | 'quoted' (legacy) | 'awarded' | 'completed' | 'cancelled'
+   * 'quoted' is deprecated — no new rows after migration 20270128103100. */
   status: string;
 }
 

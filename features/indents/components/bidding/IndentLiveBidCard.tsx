@@ -183,7 +183,7 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
         <View style={styles.avatarWrap}>
           <EntityAvatar
             name={partyName}
-            avatarSeed={quote.bidder_organization_id}
+            initialsColorSeed={quote.bidder_organization_id}
             entityType="supplier"
             size={AVATAR_SIZE}
             showIntegrationBadge={false}

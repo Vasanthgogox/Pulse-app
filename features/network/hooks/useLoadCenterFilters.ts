@@ -135,10 +135,10 @@ export function useLoadCenterFilters({
   );
 
   /**
-   * Find Work "Done": terminal loads that I interacted with (quoted), excluding any
-   * load awarded to me (those belong in Claimed → Done). We later union this with
-   * Claimed → Done when rendering Find Work → Done, so users can view all done
-   * outcomes from one place without changing award/deploy flow.
+   * Find Work "Done": terminal loads that I bid on, excluding any load awarded
+   * to me (those belong in Claimed → Done). We later union this with Claimed →
+   * Done when rendering Find Work → Done, so users can view all done outcomes
+   * from one place without changing award/deploy flow.
    */
   const findWorkDoneLoads = useMemo(() => {
     return marketIndents.filter((i) => {
@@ -234,7 +234,7 @@ export function useLoadCenterFilters({
   const filteredFindWorkLoads = useMemo(() => {
     const statusFiltered = (() => {
       if (statusFilterTab === "OPEN") {
-        // Find Work: Open should only show loads I haven't quoted yet.
+        // Find Work Open Market: loads I haven't bid on yet.
         // Deliberately keyed on MY quote, not the indent status: `quoted` is a
         // shared field set by the first bidder, so filtering on it here would
         // hide a still-biddable load from every other supplier.
@@ -246,7 +246,7 @@ export function useLoadCenterFilters({
         );
       }
       if (statusFilterTab === "QUOTED") {
-        // Find Work: Quoted means I have sent a quote (pending/rejected/etc).
+        // Find Work My Bids: loads where I already sent a bid/quote.
         return findWorkLoads.filter((load) => myQuoteByIndentId.has(load.id));
       }
       if (statusFilterTab === "AWARDED") {
@@ -393,17 +393,20 @@ export function useLoadCenterFilters({
     const statusFiltered = hirePartnerLoads.filter((load) => {
       const status = (load.status || "").toLowerCase();
       if (statusFilterTab === "QUOTED") {
+        // Give Load: Receiving Bids — still open market, at least one bid.
+        // Driven by bid count only; indent.status is never flipped to 'quoted'.
         const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
         const isNotTerminal =
           !statusMatchesFilter(status, "AWARDED") &&
           !statusMatchesFilter(status, "DONE");
-        return (isQuotedStatus || hasBids) && isNotTerminal;
+        return hasBids && isNotTerminal;
       }
       if (statusFilterTab === "OPEN") {
+        // Open Market — published, no bids yet. First bid moves to Receiving Bids
+        // (shipper tab only). Marketplace for other suppliers stays open via
+        // indent.status remaining open/broadcast (ADR-012 Phase 0).
         const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-        if (hasBids || isQuotedStatus) return false;
+        if (hasBids) return false;
         return statusMatchesFilter(status, "OPEN");
       }
       return statusMatchesFilter(status, statusFilterTab);
@@ -458,16 +461,14 @@ export function useLoadCenterFilters({
           const status = (load.status || "").toLowerCase();
           if (filter === "QUOTED") {
             const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-            const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
             const isNotTerminal =
               !statusMatchesFilter(status, "AWARDED") &&
               !statusMatchesFilter(status, "DONE");
-            return (isQuotedStatus || hasBids) && isNotTerminal;
+            return hasBids && isNotTerminal;
           }
           if (filter === "OPEN") {
             const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-            const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-            if (hasBids || isQuotedStatus) return false;
+            if (hasBids) return false;
             return statusMatchesFilter(status, "OPEN");
           }
           return statusMatchesFilter(status, filter);

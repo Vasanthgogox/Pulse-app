@@ -19,6 +19,33 @@ function invalidateIndentOfferCounts(qc: QueryClient) {
   });
 }
 
+/**
+ * Reach Stability: keep bid success cheap.
+ * Do not invalidate the full posts feed or all indents lists — those cause
+ * story/feed refetch storms under concurrent bidding.
+ */
+function invalidateAfterBidWrite(
+  qc: QueryClient,
+  postId: string | null,
+  orgId: string | null,
+) {
+  if (postId) {
+    void qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+    void qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
+    void qc.invalidateQueries({ queryKey: queryKeys.posts.detail(postId) });
+    void qc.invalidateQueries({ queryKey: queryKeys.storyViews.forPost(postId) });
+  }
+  // Offer counts only — Load Center "Receiving Bids" badges. Narrower than
+  // queryKeys.indents.all which refetches every indent list for the org.
+  invalidateIndentOfferCounts(qc);
+  if (orgId) {
+    void qc.invalidateQueries({
+      queryKey: [...queryKeys.indents.finite(orgId), 'my-direct-quotes'],
+    });
+    void qc.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) });
+  }
+}
+
 export function useBidsForPostQuery(postId: string | null) {
   return useQuery({
     queryKey: queryKeys.bids.forPost(postId ?? ''),
@@ -62,16 +89,7 @@ export function useSubmitBidMutation(postId: string | null, orgId: string | null
     },
     onSuccess: () => {
       try {
-        if (postId) {
-          qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
-          qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
-          qc.invalidateQueries({ queryKey: queryKeys.posts.detail(postId) });
-          qc.invalidateQueries({ queryKey: queryKeys.storyViews.forPost(postId) });
-        }
-        if (orgId) {
-          qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
-        }
-        invalidateIndentOfferCounts(qc);
+        invalidateAfterBidWrite(qc, postId, orgId);
       } catch { /* cache invalidation failure is non-critical */ }
     },
   });
@@ -84,14 +102,7 @@ export function useUpdateBidMutation(postId: string | null, orgId: string | null
       updateBid(bidId, orgId!, amount, note),
     onSuccess: () => {
       try {
-        if (postId) {
-          qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
-          qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
-        }
-        if (orgId) {
-          qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
-        }
-        invalidateIndentOfferCounts(qc);
+        invalidateAfterBidWrite(qc, postId, orgId);
       } catch { /* cache invalidation failure is non-critical */ }
     },
   });

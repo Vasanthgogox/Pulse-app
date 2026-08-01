@@ -66,9 +66,9 @@ function statusTone(status: string): { bg: string; text: string; label: string }
 
 function ChannelIcon({ channel }: { channel: StoryOwnerBidRow["channel"] }) {
   if (channel === "pulse_story") {
-    return <Zap size={11} color={INK} strokeWidth={2.25} />;
+    return <Zap size={9} color={INK} strokeWidth={2.25} />;
   }
-  return <Truck size={11} color={INK} strokeWidth={2.25} />;
+  return <Truck size={9} color={INK} strokeWidth={2.25} />;
 }
 
 function BidRowCard({ row }: { row: StoryOwnerBidRow }) {
@@ -78,8 +78,9 @@ function BidRowCard({ row }: { row: StoryOwnerBidRow }) {
     <View style={styles.bidCard}>
       <PartyAvatar
         name={row.bidderName}
-        avatarSeed={row.bidderOrgId}
-        size={40}
+        initialsColorSeed={row.bidderOrgId}
+        entityType="supplier"
+        size={32}
       />
       <View style={styles.bidMain}>
         <View style={styles.bidTopRow}>
@@ -140,7 +141,7 @@ export function StoryOwnerBidsSheet({
 
   const storyCount = bids.filter((b) => b.channel === "pulse_story").length;
   const loadCount = bids.filter((b) => b.channel === "load_center").length;
-  const listMaxHeight = Math.min(Math.max(filtered.length, 1) * 92 + 12, windowHeight * 0.42);
+  const listMaxHeight = Math.min(Math.max(filtered.length, 1) * 74 + 10, windowHeight * 0.42);
   const bottomPad = sheetBottomPad ?? insets.bottom + 14;
 
   return (
@@ -155,7 +156,7 @@ export function StoryOwnerBidsSheet({
           <View style={styles.header}>
             <View style={styles.headerLeading}>
               <View style={styles.headerIcon}>
-                <Gavel size={15} color={INK} strokeWidth={2.25} />
+                <Gavel size={12} color={INK} strokeWidth={2.25} />
               </View>
               <View style={styles.headerCopy}>
                 <Text style={styles.title}>{storyOwnerBidsLabel(bids.length, loading)}</Text>
@@ -173,7 +174,7 @@ export function StoryOwnerBidsSheet({
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
-              <X size={16} color={MUTED} strokeWidth={2.25} />
+              <X size={13} color={MUTED} strokeWidth={2.25} />
             </Pressable>
           </View>
 
@@ -236,7 +237,7 @@ export function StoryOwnerBidsSheet({
               accessibilityLabel="Open indent review hub"
             >
               <Text style={styles.reviewBtnText}>Open review hub</Text>
-              <Feather name="arrow-up-right" size={14} color={Theme.buttonPrimaryText} />
+              <Feather name="arrow-up-right" size={12} color={Theme.buttonPrimaryText} />
             </Pressable>
           ) : null}
       </View>
@@ -262,30 +263,30 @@ const styles = StyleSheet.create({
   },
   handle: {
     alignSelf: "center",
-    width: 36,
-    height: 4,
+    width: 28,
+    height: 3,
     borderRadius: 2,
     backgroundColor: Theme.borderMedium,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
-    gap: 10,
+    marginBottom: 8,
+    gap: 8,
   },
   headerLeading: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     flex: 1,
     minWidth: 0,
   },
   headerIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: SKY,
     alignItems: "center",
     justifyContent: "center",
@@ -293,25 +294,25 @@ const styles = StyleSheet.create({
   headerCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
   },
   title: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "800",
     color: INK,
     letterSpacing: -0.2,
   },
   subtitle: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: MUTED,
     letterSpacing: 0.2,
     textTransform: "uppercase",
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceLight,
@@ -322,12 +323,12 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 10,
+    gap: 5,
+    marginBottom: 8,
   },
   filterChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
@@ -338,7 +339,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.loadStatusTabBorderSoft,
   },
   filterChipText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "700",
     color: MUTED,
     letterSpacing: 0.15,
@@ -347,37 +348,37 @@ const styles = StyleSheet.create({
     color: INK,
   },
   loadingWrap: {
-    paddingVertical: 28,
+    paddingVertical: 20,
     alignItems: "center",
   },
   emptyWrap: {
-    paddingVertical: 18,
+    paddingVertical: 14,
     paddingHorizontal: 8,
-    gap: 6,
+    gap: 4,
   },
   emptyTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: INK,
     textAlign: "center",
   },
   emptyBody: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: MUTED,
-    lineHeight: 16,
+    lineHeight: 14,
     textAlign: "center",
   },
   listContent: {
-    gap: 8,
-    paddingBottom: 4,
+    gap: 6,
+    paddingBottom: 2,
   },
   bidCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
-    padding: 10,
-    borderRadius: 14,
+    gap: 8,
+    padding: 8,
+    borderRadius: 11,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
@@ -385,7 +386,7 @@ const styles = StyleSheet.create({
   bidMain: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: 3,
   },
   bidTopRow: {
     flexDirection: "row",
@@ -395,13 +396,13 @@ const styles = StyleSheet.create({
   },
   bidderName: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.15,
   },
   bidAmount: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "800",
     color: INK,
     fontVariant: ["tabular-nums"],
@@ -410,14 +411,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 5,
   },
   channelPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
     borderRadius: 999,
     backgroundColor: Theme.loadStatusTabTrayBg,
     borderWidth: StyleSheet.hairlineWidth,
@@ -449,35 +450,35 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   statusPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 7,
     alignSelf: "flex-start",
   },
   statusText: {
-    fontSize: 8,
+    fontSize: 7.5,
     fontWeight: "800",
     letterSpacing: 0.25,
     textTransform: "uppercase",
   },
   reviewBtn: {
-    marginTop: 12,
-    minHeight: 46,
-    borderRadius: 14,
+    marginTop: 9,
+    minHeight: 36,
+    borderRadius: 11,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
   },
   reviewBtnPressed: {
     opacity: 0.92,
     transform: [{ scale: 0.99 }],
   },
   reviewBtnText: {
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "800",
     color: Theme.buttonPrimaryText,
     letterSpacing: 0.4,
