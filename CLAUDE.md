@@ -86,6 +86,7 @@ Do not continue searching for alternative explanations.
 - Auth & session → `docs/auth.md`
 - Routing → `docs/routing.md`
 - Conventions & naming → `docs/conventions.md`
+- **Trip variants (3 creation flows, two-row rule, traps)** → `docs/TRIP_VARIANTS.md`
 - **DB query guide (live schema, FKs, enums, traps, health)** → `docs/database/QUERY_GUIDE.md`
 - DB core tables → `docs/database/core.md`
 - DB trips schema → `docs/database/trips.md`

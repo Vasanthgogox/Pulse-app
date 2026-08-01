@@ -73,10 +73,18 @@ organizations (37)
 |---|---|
 | `status` | completed 78, assigned 30, in_transit 12, loading 5, unloading 5, draft 1, at_drop 1, cancelled 1, in_progress 1 |
 | `source` | direct_quote 60, manual 57, mover_asset 17 |
+
+> `mover_asset` rows are the **mover's half of a two-row load** — always
+> `supplier_id` null and `supplier_rate = 0` (no sub-supplier to pay). They pair to an
+> aggregator row via `source_indent_id`, not `indent_id` (blocked by the
+> `trips_one_per_indent` unique index). **Exclude them when summing margin or you will
+> double-count.** All 17 are correctly paired. See `docs/TRIP_VARIANTS.md`.
 | `payment_status` | pending 93, paid 26, partial 15 |
 
-> `in_progress` (1 row) looks like a legacy straggler next to `in_transit` — treat
-> `in_transit` as canonical. Unverified; not chased down in this pass.
+> `in_progress` is **not** legacy. `tripPreservableStatuses.util.ts` deliberately accepts
+> 24 status spellings, including `in_transit`/`in_progress`/`intransit`/`transit` as four
+> spellings of one phase. There is no CHECK constraint by design. Do not "clean up"
+> odd status values. See `docs/TRIP_VARIANTS.md`.
 
 ### `indents` (91)
 `indent_number`, `display_indent_id`, `indent_code`, `indent_operational_code`,
@@ -321,6 +329,10 @@ GROUP BY 1;
 9. `drivers.user_id` is null for manually-added drivers — inner joins silently drop them.
 10. Multiple display IDs per trip (`trip_number`, `display_trip_id`, `trip_code`,
     `booking_ref`, `trip_operational_code`) — confirm which one the UI shows.
+11. One load can be **two trip rows** (aggregator + mover). They do **not** share a
+    display code — each org numbers its own. Match on `source_indent_id`, never on
+    `display_trip_id`.
+12. `trips.status` has no CHECK constraint on purpose — 24 spellings are tolerated.
 
 ---
 
