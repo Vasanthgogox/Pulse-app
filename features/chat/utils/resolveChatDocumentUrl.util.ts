@@ -2,8 +2,19 @@
  * Resolves a Supabase storage path to a time-limited HTTPS URL for chat document_share messages.
  * Driver POD/trip photos live in `trip-documents`; dispatcher-shared org docs may use `documents`.
  *
- * Uses sequential bucket tries (stops on first success) + 50-min in-memory TTL cache.
+ * Uses race-first bucket tries (first success wins) + 50-min in-memory TTL cache.
  * Signed URLs are valid for 60 min; caching at 50 min avoids serving an about-to-expire URL.
+ *
+ * Chat uploads (`trip_chat/…`) only hit `trip-documents` — never waste round-trips on other buckets.
+ *
+ * ONLY plain `/object/sign/` URLs are produced. Two endpoints are unusable here:
+ *   • `/render/image/sign/…` (imgproxy transforms) → 403 FeatureNotEnabled,
+ *     "feature not enabled for this tenant". createSignedUrl still hands back a
+ *     signed transform URL, so the failure only surfaces as a broken <Image>.
+ *   • `/object/public/…` and `/render/image/public/…` → 400 NoSuchBucket, because
+ *     every bucket here is private. getPublicUrl is a pure string builder and
+ *     never errors, so this fallback could only ever produce a broken URL.
+ * Re-enable transforms only after confirming the endpoint returns 200 for this project.
  */
 import { supabase } from '@/lib/supabase';
 
@@ -19,8 +30,10 @@ const preferredBucketByPath = new Map<string, StorageBucketName>();
 
 function bucketsToTry(path: string): StorageBucketName[] {
   const hit = preferredBucketByPath.get(path);
-  if (!hit) return [...BUCKET_TRY_ORDER];
-  return [hit, ...BUCKET_TRY_ORDER.filter((b) => b !== hit)];
+  if (hit) return [hit, ...BUCKET_TRY_ORDER.filter((b) => b !== hit)];
+  // Chat camera / image messages always land in trip-documents.
+  if (path.startsWith('trip_chat/')) return ['trip-documents'];
+  return [...BUCKET_TRY_ORDER];
 }
 
 function rememberPreferredBucket(path: string, bucket: StorageBucketName) {
@@ -38,9 +51,6 @@ const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
  */
 const blobUrlCache = new Map<string, string>();
 
-/** Cache for transformed (thumbnail) signed URLs, keyed by `${path}:${width}x${height}q${quality}`. */
-const thumbUrlCache = new Map<string, { url: string; expiresAt: number }>();
-
 /**
  * In-flight request dedup — separate from the TTL caches above, which only short-circuit
  * *after* a request completes. Without this, N components mounting for the same storagePath
@@ -48,19 +58,55 @@ const thumbUrlCache = new Map<string, { url: string; expiresAt: number }>();
  * way as the corresponding cache; cleared once the shared promise settles either way.
  */
 const inFlightSignedUrl = new Map<string, Promise<string | null>>();
-const inFlightThumbUrl = new Map<string, Promise<string | null>>();
 const inFlightBlobUrl = new Map<string, Promise<{ url: string; revoke: () => void } | null>>();
 
 type ImageTransformResize = "cover" | "contain";
 
-function thumbCacheKey(
+/**
+ * Race createSignedUrl across candidate buckets — first success wins.
+ * Avoids serial 200–800ms waits on missing buckets (was the main chat-thumb stall).
+ */
+function raceCreateSignedUrl(
   path: string,
-  width: number,
-  height: number,
-  quality: number,
-  resize: ImageTransformResize = "cover",
-): string {
-  return `${path}:${width}x${height}q${quality}:${resize}`;
+): Promise<{ url: string; bucket: StorageBucketName } | null> {
+  const buckets = bucketsToTry(path);
+  if (buckets.length === 0) return Promise.resolve(null);
+  if (buckets.length === 1) {
+    const bucket = buckets[0]!;
+    return supabase()
+      .storage.from(bucket)
+      .createSignedUrl(path, SIGNED_EXPIRY_SEC)
+      .then(({ data, error }) => {
+        if (!error && data?.signedUrl) return { url: data.signedUrl, bucket };
+        return null;
+      })
+      .catch(() => null);
+  }
+
+  return new Promise((resolve) => {
+    let remaining = buckets.length;
+    let settled = false;
+    for (const bucket of buckets) {
+      void supabase()
+        .storage.from(bucket)
+        .createSignedUrl(path, SIGNED_EXPIRY_SEC)
+        .then(({ data, error }) => {
+          if (settled) return;
+          if (!error && data?.signedUrl) {
+            settled = true;
+            resolve({ url: data.signedUrl, bucket });
+            return;
+          }
+          remaining -= 1;
+          if (remaining === 0) resolve(null);
+        })
+        .catch(() => {
+          if (settled) return;
+          remaining -= 1;
+          if (remaining === 0) resolve(null);
+        });
+    }
+  });
 }
 
 /** Strip accidental bucket prefix so createSignedUrl targets the object key inside the bucket. */
@@ -87,31 +133,36 @@ export function peekChatDocumentSignedUrl(storagePath: string): string | null {
   return null;
 }
 
+/** Warm the signed-URL cache after upload so the sender paints without a Storage round-trip. */
+export function warmChatDocumentSignedUrlCache(storagePath: string, signedUrl: string) {
+  const path = normalizeTripDocumentsStoragePath(String(storagePath ?? "").trim());
+  const url = String(signedUrl ?? "").trim();
+  if (!path || !/^https?:\/\//i.test(url)) return;
+  signedUrlCache.set(path, { url, expiresAt: Date.now() + CACHE_TTL_MS });
+  rememberPreferredBucket(path, "trip-documents");
+}
+
+/**
+ * Warm the thumbnail cache after upload / prefetch.
+ * Thumbnails and full images share one plain signed URL per path — transforms are
+ * unavailable on this tenant (see file header), so there is no per-size cache slot.
+ */
+export function warmChatImageThumbnailCache(storagePath: string, signedUrl: string) {
+  warmChatDocumentSignedUrlCache(storagePath, signedUrl);
+}
+
 async function fetchChatDocumentStorageUrl(path: string): Promise<string | null> {
-  let lastError: string | null = null;
-
-  for (const bucket of bucketsToTry(path)) {
-    try {
-      const { data, error } = await supabase().storage.from(bucket).createSignedUrl(path, SIGNED_EXPIRY_SEC);
-      if (!error && data?.signedUrl) {
-        rememberPreferredBucket(path, bucket);
-        signedUrlCache.set(path, { url: data.signedUrl, expiresAt: Date.now() + CACHE_TTL_MS });
-        return data.signedUrl;
-      }
-      if (error) lastError = error.message ?? lastError;
-    } catch {
-      // try next bucket
-    }
+  const raced = await raceCreateSignedUrl(path);
+  if (raced) {
+    rememberPreferredBucket(path, raced.bucket);
+    signedUrlCache.set(path, { url: raced.url, expiresAt: Date.now() + CACHE_TTL_MS });
+    return raced.url;
   }
 
-  // Fallback: trip-documents may still yield a public URL if bucket is public
-  const { data: pub } = supabase().storage.from('trip-documents').getPublicUrl(path);
-  if (pub?.publicUrl?.startsWith('http')) {
-    return pub.publicUrl;
-  }
-
-  if (__DEV__ && lastError) {
-    console.warn('[resolveChatDocumentStorageUrl]', path, lastError);
+  // No getPublicUrl fallback — every bucket here is private, so a public URL is a
+  // guaranteed 400 (see file header). Returning null lets callers use the blob path.
+  if (__DEV__) {
+    console.warn('[resolveChatDocumentStorageUrl] no signed URL', path);
   }
   return null;
 }
@@ -142,14 +193,18 @@ export async function resolveChatDocumentStorageUrl(storagePath: string): Promis
 async function fetchChatDocumentBlobObjectUrl(
   path: string,
 ): Promise<{ url: string; revoke: () => void } | null> {
-  const dlResults = await Promise.allSettled(
-    BUCKET_TRY_ORDER.map((bucket) => supabase().storage.from(bucket).download(path))
-  );
-  for (const result of dlResults) {
-    if (result.status === 'fulfilled' && !result.value.error && result.value.data) {
-      const url = URL.createObjectURL(result.value.data);
-      blobUrlCache.set(path, url);
-      return { url, revoke: () => {} };
+  // Prefer known/chat bucket first — do not download from three buckets in parallel.
+  for (const bucket of bucketsToTry(path)) {
+    try {
+      const { data, error } = await supabase().storage.from(bucket).download(path);
+      if (!error && data) {
+        rememberPreferredBucket(path, bucket);
+        const url = URL.createObjectURL(data);
+        blobUrlCache.set(path, url);
+        return { url, revoke: () => {} };
+      }
+    } catch {
+      // try next
     }
   }
   return null;
@@ -182,100 +237,43 @@ export async function tryChatDocumentBlobObjectUrl(
 }
 
 /**
- * Resolve a Supabase Image Transformation URL for a chat document image.
- * Returns a signed URL with resize applied — never loads the original binary.
- * Falls back to the full signed URL if the transform endpoint fails.
+ * Instant read of a cached signed URL — use for initial React state so the first
+ * paint does not schedule an effect-only network round-trip.
  *
- * Used by OptimizedChatImage / ChatImage (default 300×300 @ q70).
- * The transform is handled server-side by Supabase's imgproxy integration.
- */
-/**
- * Instant read of a cached transformed URL — use for initial React state so the
- * first paint does not schedule an effect-only network round-trip.
+ * Thumbnail and full-size resolve to the same plain signed URL, because imgproxy
+ * transforms are unavailable on this tenant (see file header). The width / height /
+ * quality / resize parameters are accepted for call-site compatibility and to keep
+ * the intended fetch box documented, but they do not affect the URL.
  */
 export function peekChatImageThumbnailUrl(
   storagePath: string,
-  width = 300,
-  height = 300,
-  quality = 70,
-  resize: ImageTransformResize = "cover",
+  _width = 300,
+  _height = 300,
+  _quality = 70,
+  _resize: ImageTransformResize = "cover",
 ): string | null {
   const raw = String(storagePath ?? "").trim();
   if (/^https?:\/\//i.test(raw)) return raw;
   const path = normalizeTripDocumentsStoragePath(raw);
   if (!path) return null;
-  const cacheKey = thumbCacheKey(path, width, height, quality, resize);
-  const cached = thumbUrlCache.get(cacheKey);
-  if (cached && Date.now() < cached.expiresAt) return cached.url;
-  return null;
-}
-
-async function fetchChatImageThumbnail(
-  storagePath: string,
-  path: string,
-  cacheKey: string,
-  width: number,
-  height: number,
-  quality: number,
-  resize: ImageTransformResize,
-): Promise<string | null> {
-  for (const bucket of bucketsToTry(path)) {
-    try {
-      const { data, error } = await supabase()
-        .storage
-        .from(bucket)
-        .createSignedUrl(path, SIGNED_EXPIRY_SEC, {
-          transform: {
-            width,
-            height,
-            quality,
-            resize,
-          },
-        });
-      if (!error && data?.signedUrl) {
-        rememberPreferredBucket(path, bucket);
-        thumbUrlCache.set(cacheKey, { url: data.signedUrl, expiresAt: Date.now() + CACHE_TTL_MS });
-        return data.signedUrl;
-      }
-    } catch {
-      // try next bucket
-    }
-  }
-
-  // Fallback: return the full signed URL if transforms are not available.
-  return resolveChatDocumentStorageUrl(storagePath);
+  return peekChatDocumentSignedUrl(path);
 }
 
 export async function resolveChatImageThumbnail(
   storagePath: string,
-  width  = 300,
-  height = 300,
-  quality = 70,
-  resize: ImageTransformResize = "cover",
+  _width = 300,
+  _height = 300,
+  _quality = 70,
+  _resize: ImageTransformResize = "cover",
 ): Promise<string | null> {
   const path = normalizeTripDocumentsStoragePath(String(storagePath ?? '').trim());
   if (!path || /^https?:\/\//i.test(path)) return storagePath || null;
-
-  const cacheKey = thumbCacheKey(path, width, height, quality, resize);
-  const cached = thumbUrlCache.get(cacheKey);
-  if (cached && Date.now() < cached.expiresAt) return cached.url;
-
-  const pending = inFlightThumbUrl.get(cacheKey);
-  if (pending) return pending;
-
-  const request = fetchChatImageThumbnail(storagePath, path, cacheKey, width, height, quality, resize).finally(
-    () => {
-      inFlightThumbUrl.delete(cacheKey);
-    },
-  );
-  inFlightThumbUrl.set(cacheKey, request);
-  return request;
+  // Dedupe on path alone — shared with signedUrlCache / inFlightSignedUrl, so every
+  // on-screen size for one object collapses into a single createSignedUrl call.
+  return resolveChatDocumentStorageUrl(storagePath);
 }
 
-/**
- * Large preview / lightbox: CDN transform with a generous max edge so we avoid
- * pulling the full original binary when imgproxy is available.
- */
+/** Lightbox: same signed object URL as the thumbnail (already cached by then). */
 export async function resolveChatImageFullDisplayUrl(
   storagePath: string,
   maxEdge = 1280,
@@ -284,7 +282,7 @@ export async function resolveChatImageFullDisplayUrl(
   return resolveChatImageThumbnail(storagePath, maxEdge, maxEdge, quality);
 }
 
-/** Sync peek for the full-display transform cache slot. */
+/** Sync peek for the lightbox URL. */
 export function peekChatImageFullDisplayUrl(
   storagePath: string,
   maxEdge = 1280,

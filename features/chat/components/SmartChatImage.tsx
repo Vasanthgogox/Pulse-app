@@ -1,11 +1,9 @@
 /**
  * SmartChatImage — thin WhatsApp-style chat image pipeline.
  *
- * - Prefers **metadata.thumb_url** (or event_payload.thumb_url) — no Storage RPC on receive.
- * - Else **public render URL** `.../render/image/public/...?width=&quality=` (CDN/imgproxy, not Postgres).
+ * - Prefers **metadata.thumb_url** when it is a signed/object URL (public render URLs 403 — ignored).
  * - Else cached **signed transform** via resolveChatImageThumbnail (single flight + module TTL cache).
- * - Lightbox: if the thumbnail already loaded from the public render URL, reuse CDN at full width
- *   instead of calling Storage `createSignedUrl` again (cuts Storage/imgproxy load).
+ * - Never uses `/storage/v1/render/image/public/…` — trip-documents is RLS-gated.
  * - Resets lightbox state when `storagePath` changes so list virtualization cannot leak URLs across rows.
  * - **expo-image** disk+memory cache + optional **blurhash** / data-URI placeholder to avoid layout jump.
  */
@@ -34,11 +32,11 @@ import {
   resolveChatDocumentStorageUrl,
   resolveChatImageFullDisplayUrl,
   resolveChatImageThumbnail,
+  tryChatDocumentBlobObjectUrl,
 } from "../utils/resolveChatDocumentUrl.util";
 import {
   appendImageTransformQuery,
-  buildSupabaseRenderImagePublicUrl,
-  isSupabasePublicRenderImageUrl,
+  isDirectChatImageHttpUrl,
 } from "../utils/storageRenderImageUrl";
 import { extractThinImagePayload } from "../utils/thinImageMetadata";
 import {
@@ -92,19 +90,12 @@ export function SmartChatImage({
 
   const thin = useMemo(() => extractThinImagePayload(message ?? undefined), [message]);
 
+  // Public `/render/image/public/…` URLs always 403 on RLS-gated trip-documents —
+  // only accept signed / object HTTPS thumbs from metadata.
   const prebuiltThumb = useMemo(() => {
-    if (!thin.thumbUrl || isSupabasePublicRenderImageUrl(thin.thumbUrl)) return null;
+    if (!thin.thumbUrl || !isDirectChatImageHttpUrl(thin.thumbUrl)) return null;
     return appendImageTransformQuery(thin.thumbUrl, thumbWidth, thumbQuality);
   }, [thin.thumbUrl, thumbWidth, thumbQuality]);
-
-  const publicRenderThumb = useMemo(() => {
-    if (prebuiltThumb || !storagePath) return null;
-    return buildSupabaseRenderImagePublicUrl({
-      storagePath,
-      width: thumbWidth,
-      quality: thumbQuality,
-    });
-  }, [prebuiltThumb, storagePath, thumbWidth, thumbQuality]);
 
   const cachedSignedThumb = storagePath
     ? peekChatImageThumbnailUrl(
@@ -116,10 +107,7 @@ export function SmartChatImage({
       )
     : null;
 
-  const initialThumb =
-    cachedSignedThumb ??
-    prebuiltThumb ??
-    publicRenderThumb;
+  const initialThumb = cachedSignedThumb ?? prebuiltThumb;
 
   const [thumbUri, setThumbUri] = useState<string | null>(initialThumb);
   const [thumbState, setThumbState] = useState<LoadState>(() => {
@@ -131,7 +119,6 @@ export function SmartChatImage({
   );
   const [fullState, setFullState] = useState<LoadState>("idle");
   const [modalVisible, setModalVisible] = useState(false);
-  const [publicFailed, setPublicFailed] = useState(false);
   const [prebuiltFailed, setPrebuiltFailed] = useState(false);
 
   const inFlightRef = useRef<string | null>(null);
@@ -142,7 +129,6 @@ export function SmartChatImage({
   // state so we never show another row's URL or skip `createSignedUrl` incorrectly.
   useEffect(() => {
     fullLightboxGenRef.current += 1;
-    setPublicFailed(false);
     setPrebuiltFailed(false);
     if (!storagePath) {
       setFullUri(null);
@@ -173,14 +159,13 @@ export function SmartChatImage({
     const instant =
       fromPeek ??
       cachedSignedThumb ??
-      (!prebuiltFailed ? prebuiltThumb : null) ??
-      (!publicFailed ? publicRenderThumb : null);
+      (!prebuiltFailed ? prebuiltThumb : null);
 
-    if (instant && !isSupabasePublicRenderImageUrl(instant)) {
+    if (instant) {
       setThumbUri(instant);
       setThumbState("ready");
       void Image.prefetch(instant, "memory-disk").catch(() => {});
-    } else if (!instant) {
+    } else {
       setThumbState("loading");
     }
 
@@ -194,16 +179,25 @@ export function SmartChatImage({
       thumbHeight,
       thumbQuality,
       THUMB_RESIZE,
-    ).then((url) => {
+    ).then(async (url) => {
       if (cancelled || inFlightRef.current !== key) return;
       inFlightRef.current = null;
       if (url) {
         setThumbUri(url);
         setThumbState("ready");
         void Image.prefetch(url, "memory-disk").catch(() => {});
-      } else if (!instant || isSupabasePublicRenderImageUrl(instant)) {
-        setThumbState("error");
+        return;
       }
+      if (Platform.OS === "web") {
+        const blob = await tryChatDocumentBlobObjectUrl(storagePath);
+        if (cancelled) return;
+        if (blob?.url) {
+          setThumbUri(blob.url);
+          setThumbState("ready");
+          return;
+        }
+      }
+      if (!instant) setThumbState("error");
     });
     return () => {
       cancelled = true;
@@ -215,8 +209,6 @@ export function SmartChatImage({
     thumbHeight,
     thumbQuality,
     prebuiltThumb,
-    publicRenderThumb,
-    publicFailed,
     prebuiltFailed,
     cachedSignedThumb,
   ]);
@@ -224,12 +216,23 @@ export function SmartChatImage({
   const onThumbError = useCallback(() => {
     if (prebuiltThumb && thumbUri === prebuiltThumb && !prebuiltFailed) {
       setPrebuiltFailed(true);
+      setThumbState("loading");
       return;
     }
-    if (publicRenderThumb && thumbUri === publicRenderThumb && !publicFailed) {
-      setPublicFailed(true);
+    if (Platform.OS === "web" && storagePath) {
+      setThumbState("loading");
+      void tryChatDocumentBlobObjectUrl(storagePath).then((blob) => {
+        if (blob?.url) {
+          setThumbUri(blob.url);
+          setThumbState("ready");
+        } else {
+          setThumbState("error");
+        }
+      });
+      return;
     }
-  }, [prebuiltThumb, publicRenderThumb, thumbUri, publicFailed, prebuiltFailed]);
+    setThumbState("error");
+  }, [prebuiltThumb, thumbUri, prebuiltFailed, storagePath]);
 
   const placeholderSource = useMemo(() => {
     if (thin.thumbhash) return { thumbhash: thin.thumbhash };
@@ -254,24 +257,6 @@ export function SmartChatImage({
     setFullState("loading");
     setFullUri(null);
 
-    // Thumbnail already proved `…/render/image/public/…` works — reuse CDN for lightbox
-    // instead of hammering Storage `createSignedUrl` (reduces API / imgproxy pressure).
-    const thumbUsedPublicCdn =
-      Boolean(publicRenderThumb && thumbUri === publicRenderThumb && !publicFailed);
-    const publicFull =
-      thumbUsedPublicCdn &&
-      buildSupabaseRenderImagePublicUrl({
-        storagePath,
-        width: FULL_DISPLAY_MAX_EDGE,
-        quality: FULL_DISPLAY_QUALITY,
-      });
-    if (publicFull) {
-      if (gen !== fullLightboxGenRef.current) return;
-      setFullUri(publicFull);
-      setFullState("ready");
-      return;
-    }
-
     const transformed = await resolveChatImageFullDisplayUrl(storagePath);
     if (gen !== fullLightboxGenRef.current) return;
     if (transformed) {
@@ -287,7 +272,7 @@ export function SmartChatImage({
     } else {
       setFullState("error");
     }
-  }, [storagePath, publicRenderThumb, thumbUri, publicFailed]);
+  }, [storagePath]);
 
   const { width: windowW, height: windowH } = useWindowDimensions();
   const insets = useSafeAreaInsets();

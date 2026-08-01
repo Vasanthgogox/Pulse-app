@@ -441,6 +441,20 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         return;
       }
 
+      // Abort if there is no valid session. Bootstrap fans out to ~5 calls plus
+      // one get_shared_ledger_entries per integrated partner; without this guard
+      // a token gap (SIGNED_OUT → SIGNED_IN, or a failed refresh while React
+      // context still holds the previous orgId) turns into a burst of 401s.
+      // Leaves any already-hydrated slices intact and stays retryable —
+      // bootstrappedOrgId is not set, so the next call proceeds.
+      const { data: { session } } = await supabase().auth.getSession();
+      if (!session) {
+        if (get().bootstrapStatus !== 'ready') {
+          set({ bootstrapStatus: 'idle', bootstrapError: 'no_session' });
+        }
+        return;
+      }
+
       globalBootstrapInFlightFor = orgId;
       set({ bootstrapStatus: 'loading', bootstrapError: null });
       const t0 = Date.now();

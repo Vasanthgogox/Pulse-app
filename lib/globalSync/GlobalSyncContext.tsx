@@ -19,6 +19,7 @@
 import React, { createContext, useCallback, useContext, useEffect, type ReactNode } from 'react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { queryKeys } from '@/lib/queryKeys';
 import { invalidateFleetDriverConnectionCaches } from '@/lib/invalidateFleetDriverConnectionCaches';
@@ -46,25 +47,37 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
   const orgCtx = useOptionalOrganization();
   const orgId = orgCtx?.currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
+  const { profile } = useAuth();
+  // Everything this provider fetches/subscribes to (salary requests across the
+  // org, shared-ledger notifications per linked partner, connection requests,
+  // Operations Island / Alert Registry / notification bell) is dispatcher-only
+  // UI. No screen under app/(driver)/ or features/drivers/ reads any slice of
+  // useGlobalSyncStore — confirmed by grep, not assumption. Driver sessions
+  // still resolve a valid orgId (their employer org), so without this gate the
+  // full business bootstrap (including a per-partner get_shared_ledger_entries
+  // fan-out) fires on every driver session for data no driver screen shows,
+  // and surfaces as console noise (esp. around app resume / token refresh)
+  // for work that was never going to render anywhere.
+  const isDriver = profile?.role === 'driver';
 
   // ── Bootstrap on org change ───────────────────────────────────────────────
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId || isDriver) return;
     void useGlobalSyncStore.getState().bootstrap(orgId);
     return () => {
       useGlobalSyncStore.getState().reset();
     };
-  }, [orgId]);
+  }, [orgId, isDriver]);
 
   const refresh = useCallback(() => {
-    if (!orgId) return;
+    if (!orgId || isDriver) return;
     void useGlobalSyncStore.getState().bootstrap(orgId, { force: true });
-  }, [orgId]);
+  }, [orgId, isDriver]);
 
   // ── Unified Realtime Multiplexer ──────────────────────────────────────────
   // Single channel, three table listeners, zero SELECT queries after bootstrap.
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId || isDriver) return;
 
     return subscribeSharedPostgresChanges(
       `global_sync:${orgId}`,
@@ -187,7 +200,7 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
         useGlobalSyncStore.getState().routeRealtimeEvent(table, eventType, row, orgId);
       },
     );
-  }, [orgId, queryClient]);
+  }, [orgId, queryClient, isDriver]);
 
   return (
     <GlobalSyncContext.Provider value={{ refresh }}>

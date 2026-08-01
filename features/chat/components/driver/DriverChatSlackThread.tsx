@@ -584,7 +584,10 @@ export function DriverChatSlackThread({
 
     setUploading(true);
     try {
-      const { storagePath } = await compressAndUploadChatImage(localUri, conversationId);
+      const { storagePath, thumbUrl } = await compressAndUploadChatImage(
+        localUri,
+        conversationId,
+      );
       const persisted = await chatService.sendChatMessage({
         conversationId,
         organizationId,
@@ -598,6 +601,7 @@ export function DriverChatSlackThread({
           document_type: "Photo",
           storage_path: storagePath,
           mime_type: "image/jpeg",
+          ...(thumbUrl ? { thumb_url: thumbUrl } : {}),
         },
       });
       queryClient.setQueryData<InfiniteData<DriverChatMessagesPage>>(

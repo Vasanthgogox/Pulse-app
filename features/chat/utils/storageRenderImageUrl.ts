@@ -1,59 +1,50 @@
 /**
- * Supabase Storage **render** URLs (CDN / imgproxy) — never hit Postgres.
- * Use for thin chat thumbnails when the bucket is public or URL is wrapped with a token.
+ * Guards for chat image URLs taken from message metadata.
+ *
+ * Every chat bucket is private, so any `/public/` Storage URL returns
+ * 400 NoSuchBucket. Older messages may still carry one in `metadata.thumb_url`;
+ * these predicates keep such URLs from ever reaching `<Image>`.
  *
  * @see https://supabase.com/docs/guides/storage/serving/image-transformations
  */
-import { getSupabaseBaseUrl } from "@/lib/supabase";
-import { normalizeTripDocumentsStoragePath } from "./resolveChatDocumentUrl.util";
 
 /** Default bucket for trip chat uploads after path normalization. */
 export const TRIP_CHAT_IMAGE_BUCKET = "trip-documents" as const;
 
-/** Public render URLs 403 on RLS-gated buckets — never use as first-paint chat previews. */
+/**
+ * Any public Storage URL — both `/object/public/…` and `/render/image/public/…`.
+ * Both 400 on the private chat buckets, so neither is usable as a first paint.
+ */
 export function isSupabasePublicRenderImageUrl(url: string | null | undefined): boolean {
-  return /\/storage\/v1\/render\/image\/public\//i.test(String(url ?? "").trim());
+  const u = String(url ?? "").trim();
+  return /\/storage\/v1\/(object|render\/image)\/public\//i.test(u);
 }
 
-/** HTTPS URLs safe to pass directly to `<Image>` (signed/object URLs, not public render). */
+/** True for imgproxy URLs, which return 403 FeatureNotEnabled on this tenant. */
+export function isSupabaseRenderTransformUrl(url: string | null | undefined): boolean {
+  return /\/storage\/v1\/render\/image\//i.test(String(url ?? "").trim());
+}
+
+/** HTTPS URLs safe to pass directly to `<Image>` — signed object URLs only. */
 export function isDirectChatImageHttpUrl(url: string | null | undefined): boolean {
   const u = String(url ?? "").trim();
   if (!/^https?:\/\//i.test(u)) return false;
-  return !isSupabasePublicRenderImageUrl(u);
-}
-
-/**
- * Builds: `{SUPABASE_URL}/storage/v1/render/image/public/{bucket}/{objectPath}?width=&quality=`
- * Object path segments are encoded; slashes preserved between segments.
- */
-export function buildSupabaseRenderImagePublicUrl(params: {
-  storagePath: string;
-  bucket?: string;
-  width: number;
-  quality: number;
-}): string | null {
-  const base = getSupabaseBaseUrl();
-  if (!base) return null;
-  const raw = String(params.storagePath ?? "").trim();
-  if (/^https?:\/\//i.test(raw)) return appendImageTransformQuery(raw, params.width, params.quality);
-  const path = normalizeTripDocumentsStoragePath(raw);
-  if (!path) return null;
-  const bucket = params.bucket ?? TRIP_CHAT_IMAGE_BUCKET;
-  const encodedPath = path
-    .split("/")
-    .filter(Boolean)
-    .map((seg) => encodeURIComponent(seg))
-    .join("/");
-  const root = base.replace(/\/+$/, "");
-  const w = Math.max(16, Math.round(params.width));
-  const q = Math.min(100, Math.max(1, Math.round(params.quality)));
-  return `${root}/storage/v1/render/image/public/${encodeURIComponent(bucket)}/${encodedPath}?width=${w}&quality=${q}`;
+  if (isSupabasePublicRenderImageUrl(u)) return false;
+  return !isSupabaseRenderTransformUrl(u);
 }
 
 /** Ensures transformation query params exist (WhatsApp-style thin fetches). */
 export function appendImageTransformQuery(url: string, width: number, quality: number): string {
   const u = String(url ?? "").trim();
   if (!u.startsWith("http")) return u;
+  // Mutating signed URLs breaks the signature → 403 + endless spinner.
+  if (
+    /[?&]token=/i.test(u) ||
+    /\/object\/sign\//i.test(u) ||
+    /\/render\/image\/sign\//i.test(u)
+  ) {
+    return u;
+  }
   try {
     const parsed = new URL(u);
     if (!parsed.searchParams.has("width")) {

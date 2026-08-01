@@ -16,6 +16,7 @@ jest.mock('@/lib/supabase', () => ({
 
 import {
   resolveChatDocumentStorageUrl,
+  resolveChatImageFullDisplayUrl,
   resolveChatImageThumbnail,
   tryChatDocumentBlobObjectUrl,
 } from '../resolveChatDocumentUrl.util';
@@ -54,7 +55,7 @@ describe('in-flight request dedup — concurrent calls for the same path share o
     ]);
   });
 
-  it('resolveChatImageThumbnail: concurrent calls for the same transform key share one createSignedUrl call', async () => {
+  it('resolveChatImageThumbnail: concurrent calls for the same path share one createSignedUrl call', async () => {
     let resolveSignedUrl: (v: unknown) => void;
     mockCreateSignedUrl.mockReturnValue(
       new Promise((resolve) => {
@@ -77,19 +78,50 @@ describe('in-flight request dedup — concurrent calls for the same path share o
     expect(results).toEqual(['https://signed.example/thumb.jpg', 'https://signed.example/thumb.jpg']);
   });
 
-  it('resolveChatImageThumbnail: a different transform key (e.g. different width) is not deduped against a different one', async () => {
+  it('resolveChatImageThumbnail: every on-screen size collapses to one signed URL per object', async () => {
     mockCreateSignedUrl.mockResolvedValue({
       data: { signedUrl: 'https://signed.example/thumb.jpg' },
       error: null,
     });
 
     const path = 'trip_chat/conv-3/img.jpg';
-    await Promise.all([
+    const results = await Promise.all([
       resolveChatImageThumbnail(path, 300, 300, 70, 'cover'),
       resolveChatImageThumbnail(path, 800, 800, 70, 'cover'),
     ]);
 
-    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(2);
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([
+      'https://signed.example/thumb.jpg',
+      'https://signed.example/thumb.jpg',
+    ]);
+  });
+
+  it('never requests an imgproxy transform (403 FeatureNotEnabled on this tenant)', async () => {
+    mockCreateSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://signed.example/thumb.jpg' },
+      error: null,
+    });
+
+    await resolveChatImageThumbnail('f16/chat/photo.jpg', 300, 300, 70, 'cover');
+    await resolveChatImageFullDisplayUrl('f16/lr/receipt.jpg', 1280, 80);
+
+    expect(mockCreateSignedUrl).toHaveBeenCalled();
+    for (const args of mockCreateSignedUrl.mock.calls) {
+      expect(args[2]).toBeUndefined();
+    }
+  });
+
+  it('returns null rather than a public URL when signing fails (public URLs 400 on private buckets)', async () => {
+    mockCreateSignedUrl.mockResolvedValue({ data: null, error: { message: 'denied' } });
+    mockGetPublicUrl.mockReturnValue({
+      data: { publicUrl: 'https://pub.example/storage/v1/object/public/trip-documents/x.jpg' },
+    });
+
+    const url = await resolveChatDocumentStorageUrl('f16/chat/never-signed.jpg');
+
+    expect(url).toBeNull();
+    expect(mockGetPublicUrl).not.toHaveBeenCalled();
   });
 
   it('tryChatDocumentBlobObjectUrl: concurrent calls for the same path share one download', async () => {
@@ -109,11 +141,12 @@ describe('in-flight request dedup — concurrent calls for the same path share o
       tryChatDocumentBlobObjectUrl(path),
     ];
 
-    expect(mockDownload).toHaveBeenCalledTimes(3); // BUCKET_TRY_ORDER.length, all in the single shared attempt
+    // trip_chat/ paths only hit trip-documents (sequential, single bucket).
+    expect(mockDownload).toHaveBeenCalledTimes(1);
     resolveDownload!({ data: new Blob(['x']), error: null });
     const results = await Promise.all(calls);
 
-    expect(mockDownload).toHaveBeenCalledTimes(3);
+    expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(results[0]?.url).toBe('blob:mock-url');
     expect(results[1]?.url).toBe('blob:mock-url');
 

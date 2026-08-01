@@ -9,7 +9,6 @@ import {
 } from "@/features/chat/utils/resolveChatDocumentUrl.util";
 import {
   appendImageTransformQuery,
-  buildSupabaseRenderImagePublicUrl,
 } from "@/features/chat/utils/storageRenderImageUrl";
 import type { TripMessageRow } from "@/features/chat/types/chat.types";
 
@@ -102,15 +101,7 @@ export async function resolveChatGallerySlideUrl(
 
     const signedRaw = await resolveChatDocumentStorageUrl(path);
     if (signedRaw) return signedRaw;
-
-    if (!options?.signedOnly) {
-      const publicFull = buildSupabaseRenderImagePublicUrl({
-        storagePath: path,
-        width: FULL_EDGE,
-        quality: FULL_QUALITY,
-      });
-      if (publicFull) return publicFull;
-    }
+    // Never fall back to public render URLs — trip-documents is RLS-gated (403).
   }
 
   if (previewIsHttps && !options?.signedOnly) {
