@@ -24,9 +24,11 @@ import { useInputPlatform } from "@/components/mobile-input/useInputPlatform";
 import {
   appendIndianVehicleChar,
   deleteIndianVehicleLastChar,
+  getIndianVehicleAllowedNext,
   getIndianVehicleFormatHint,
   getIndianVehicleKeyboardKind,
   getIndianVehicleNormalizedLength,
+  getIndianVehicleSegmentGuide,
   INDIAN_VEHICLE_TOTAL_LENGTH,
 } from "@/lib/indianVehicleInput.util";
 
@@ -49,11 +51,13 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
     label = "Registration",
   }: IndianVehicleRegistrationKeypadFlowProps) {
     const normLen = getIndianVehicleNormalizedLength(value);
-    const keyboardKind = getIndianVehicleKeyboardKind(normLen);
+    const keyboardKind = getIndianVehicleKeyboardKind(value);
     const formatHint = useMemo(
-      () => getIndianVehicleFormatHint(normLen),
-      [normLen],
+      () => getIndianVehicleFormatHint(value),
+      [value],
     );
+    const segmentGuide = useMemo(() => getIndianVehicleSegmentGuide(value), [value]);
+    const allowedNext = useMemo(() => getIndianVehicleAllowedNext(value), [value]);
     const displayValue = value.trim();
     const showCursor = normLen < INDIAN_VEHICLE_TOTAL_LENGTH;
     const inputPlatform = useInputPlatform();
@@ -90,15 +94,15 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
           <Text style={styles.formatHint}>{formatHint}</Text>
 
           <View style={styles.formatMaskRow}>
-            {["AA", "00", "AA", "0000"].map((seg, i) => (
+            {segmentGuide.map((seg, i) => (
               <Text
-                key={seg}
+                key={`${seg.label}-${i}`}
                 style={[
                   styles.formatMaskSeg,
-                  normLen >= [2, 4, 6, 10][i] && styles.formatMaskSegDone,
+                  seg.done && styles.formatMaskSegDone,
                 ]}
               >
-                {seg}
+                {seg.label}
               </Text>
             ))}
           </View>
@@ -151,6 +155,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
               kind={keyboardKind}
               onKey={handleKey}
               normalizedLength={normLen}
+              atMaxLength={!allowedNext.letters && !allowedNext.digits}
               compact={groupTop}
             />
           </View>

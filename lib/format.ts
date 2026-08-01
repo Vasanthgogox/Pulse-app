@@ -109,10 +109,38 @@ export function formatRelative(dateStr: string): string {
   return `${Math.floor(diffDays / 365)} year(s) ago`;
 }
 /**
- * Indian vehicle registration format: XX NN LL NNNN (state 2 letters, district 2 digits, series 2 letters, number 1–4 digits).
- * Returns true if raw (alphanumeric only, any case) matches this pattern (full or partial while typing).
+ * Indian vehicle registration, standard civilian layout:
+ * XX NN LLL NNNN — state 2 letters, district 1–3 digits, series 0–3 letters, number 1–4 digits.
+ * Series is optional (older plates) and may be 1 letter (e.g. TN 01 C 2026), so the
+ * segments are variable-length, not the fixed 2-2-2-4 mask.
+ * Matches full or partial values while typing.
  */
-const INDIAN_VEHICLE_PARTIAL = /^([A-Z]{2})([0-9]{0,2})([A-Z]{0,2})([0-9]{0,4})$/;
+const INDIAN_VEHICLE_PARTIAL = /^([A-Z]{2})([0-9]*)([A-Z]{0,3})([0-9]{0,4})$/;
+
+/**
+ * Bharat (BH) series: NN BH NNNN LL — 2 digits (year), literal "BH", 4 digits, 1–2 letters.
+ * Starts with digits, so it can never match INDIAN_VEHICLE_PARTIAL.
+ */
+const BH_VEHICLE_PARTIAL = /^([0-9]{1,2})(BH?)?([0-9]{0,4})([A-Z]{0,2})$/;
+
+/** Split a normalized plate into display segments, or null if it is not an Indian layout. */
+function splitIndianVehicleSegments(normalized: string): string[] | null {
+  if (/^[0-9]/.test(normalized)) {
+    const bh = normalized.match(BH_VEHICLE_PARTIAL);
+    return bh ? ([bh[1], bh[2], bh[3], bh[4]].filter(Boolean) as string[]) : null;
+  }
+  const m = normalized.match(INDIAN_VEHICLE_PARTIAL);
+  if (!m) return null;
+  let district = m[2];
+  let number = m[4];
+  // Series-less plates arrive as one digit run (TN091234): the last 4 digits are
+  // the registration number, the rest is the district.
+  if (!m[3] && !number && district.length > 3) {
+    number = district.slice(-4);
+    district = district.slice(0, -4);
+  }
+  return [m[1], district, m[3], number].filter(Boolean) as string[];
+}
 
 /** Normalize vehicle number for matching (alphanumeric, uppercase, no spaces). Use when comparing trip.vehicle_display_number to vehicle.vehicle_number. */
 export function normalizeVehicleNumberForMatch(s: string | null | undefined): string {
@@ -133,9 +161,8 @@ export function formatIndianVehicleNumber(raw: string | null | undefined): strin
   if (!trimmed) return '';
   const normalized = normalizeRawVehicleInput(trimmed);
   if (!normalized) return trimmed;
-  const m = normalized.match(INDIAN_VEHICLE_PARTIAL);
-  if (!m) return trimmed;
-  const parts = [m[1], m[2], m[3], m[4]].filter(Boolean);
+  const parts = splitIndianVehicleSegments(normalized);
+  if (!parts) return trimmed;
   return parts.join(' ');
 }
 
@@ -163,9 +190,8 @@ export function formatMobileNumber(raw: string | null | undefined): string {
 export function formatIndianVehicleNumberInput(next: string): string {
   const normalized = normalizeRawVehicleInput(next);
   if (!normalized) return '';
-  const m = normalized.match(INDIAN_VEHICLE_PARTIAL);
-  if (!m) return normalized;
-  const parts = [m[1], m[2], m[3], m[4]].filter(Boolean);
+  const parts = splitIndianVehicleSegments(normalized);
+  if (!parts) return normalized;
   return parts.join(' ');
 }
 

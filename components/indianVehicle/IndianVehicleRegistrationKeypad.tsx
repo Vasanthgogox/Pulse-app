@@ -44,8 +44,10 @@ export interface IndianVehicleRegistrationKeypadProps {
   kind: IndianVehicleKeyboardKind;
   onKey: (key: IndianVehicleKeypadKey) => void;
   disabled?: boolean;
-  /** Current normalized plate length — disables input keys at max; gates delete at 0. */
+  /** Current normalized plate length — gates delete at 0. */
   normalizedLength?: number;
+  /** No legal next character (plate is at its maximum) — disables input keys. */
+  atMaxLength?: boolean;
   /** Denser keys + tighter chrome for the bounded desktop/tablet wizard card. */
   compact?: boolean;
 }
@@ -141,9 +143,11 @@ export const IndianVehicleRegistrationKeypad = memo(
     onKey,
     disabled = false,
     normalizedLength = 0,
+    atMaxLength,
     compact = false,
   }: IndianVehicleRegistrationKeypadProps) {
-    const atMax = normalizedLength >= INDIAN_VEHICLE_TOTAL_LENGTH;
+    const atMax =
+      atMaxLength ?? normalizedLength >= INDIAN_VEHICLE_TOTAL_LENGTH;
     const canDelete = normalizedLength > 0 && !disabled;
     const inputLocked = disabled || atMax;
 

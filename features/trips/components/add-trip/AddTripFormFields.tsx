@@ -55,7 +55,6 @@ import {
   applyIndianVehicleKeystroke,
   getIndianVehicleFormatHint,
   getIndianVehicleKeyboardType,
-  getIndianVehicleNormalizedLength,
 } from "@/lib/indianVehicleInput.util";
 import { validatePhone } from "@/lib/phoneValidation";
 import {
@@ -3336,9 +3335,7 @@ export function AddTripFormFields({
                             </Text>
                             <Text style={styles.phoneDigitHint}>
                               {getIndianVehicleFormatHint(
-                                getIndianVehicleNormalizedLength(
-                                  state.aggregateVehicleText,
-                                ),
+                                state.aggregateVehicleText,
                               )}
                             </Text>
                             <View
@@ -3357,9 +3354,7 @@ export function AddTripFormFields({
                               />
                               <TextInput
                                 key={getIndianVehicleKeyboardType(
-                                  getIndianVehicleNormalizedLength(
-                                    state.aggregateVehicleText,
-                                  ),
+                                  state.aggregateVehicleText,
                                 )}
                                 style={[
                                   ...iconFieldInputStyle,
@@ -3378,15 +3373,11 @@ export function AddTripFormFields({
                                   );
                                 }}
                                 keyboardType={getIndianVehicleKeyboardType(
-                                  getIndianVehicleNormalizedLength(
-                                    state.aggregateVehicleText,
-                                  ),
+                                  state.aggregateVehicleText,
                                 )}
                                 autoCapitalize={
                                   getIndianVehicleKeyboardType(
-                                    getIndianVehicleNormalizedLength(
-                                      state.aggregateVehicleText,
-                                    ),
+                                    state.aggregateVehicleText,
                                   ) === "number-pad"
                                     ? "none"
                                     : "characters"

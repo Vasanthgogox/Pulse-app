@@ -21,7 +21,7 @@ import {
   applyIndianVehicleKeystroke,
   getIndianVehicleFormatHint,
   getIndianVehicleKeyboardType,
-  getIndianVehicleNormalizedLength,
+  getIndianVehicleSegmentGuide,
 } from "@/lib/indianVehicleInput.util";
 
 export type IndianVehicleRegistrationInputProps = {
@@ -59,12 +59,12 @@ export const IndianVehicleRegistrationInput = memo(
     const inputRef = inputRefProp ?? localRef;
     const isWizard = variant === "wizard";
 
-    const normLen = getIndianVehicleNormalizedLength(value);
     const keyboardType = useMemo(
-      () => getIndianVehicleKeyboardType(normLen),
-      [normLen],
+      () => getIndianVehicleKeyboardType(value),
+      [value],
     );
-    const formatHint = useMemo(() => getIndianVehicleFormatHint(normLen), [normLen]);
+    const formatHint = useMemo(() => getIndianVehicleFormatHint(value), [value]);
+    const segmentGuide = useMemo(() => getIndianVehicleSegmentGuide(value), [value]);
 
     const handleChange = (raw: string) => {
       onChangeText(applyIndianVehicleKeystroke(raw));
@@ -94,15 +94,15 @@ export const IndianVehicleRegistrationInput = memo(
               {formatHint}
             </Text>
             <View style={styles.formatMaskRow}>
-              {["AA", "00", "AA", "0000"].map((seg, i) => (
+              {segmentGuide.map((seg, i) => (
                 <Text
-                  key={seg}
+                  key={`${seg.label}-${i}`}
                   style={[
                     styles.formatMaskSeg,
-                    normLen >= [2, 4, 6, 10][i] && styles.formatMaskSegDone,
+                    seg.done && styles.formatMaskSegDone,
                   ]}
                 >
-                  {seg}
+                  {seg.label}
                 </Text>
               ))}
             </View>
