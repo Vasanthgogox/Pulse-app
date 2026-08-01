@@ -40,7 +40,12 @@ export function useTripChatRoom(tripId: string | null, options?: { enabled?: boo
   });
 
   const conversationId = roomQuery.data?.id ?? null;
-  const threadQuery = useChatThreadRealtime(enabled ? conversationId : null);
+  // Pass the room's org so the message stream shares one org-scoped realtime
+  // channel instead of opening one per conversation.
+  const threadQuery = useChatThreadRealtime(
+    enabled ? conversationId : null,
+    roomQuery.data?.organization_id ?? null,
+  );
 
   const openRoom = useMutation({
     mutationFn: () => ensureTripChatRoom(tripId!),

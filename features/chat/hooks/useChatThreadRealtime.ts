@@ -46,7 +46,10 @@ function upsertMessage(
  * Loads the newest message page and keeps it live while the thread is open.
  * Pass `null` to park the hook (no subscription, no query).
  */
-export function useChatThreadRealtime(conversationId: string | null) {
+export function useChatThreadRealtime(
+  conversationId: string | null,
+  organizationId?: string | null,
+) {
   const qc = useQueryClient();
   // Buffer Realtime events that fire before the bootstrap cache exists.
   const pendingRef = useRef<ChatPlatformMessageRow[]>([]);
@@ -79,25 +82,38 @@ export function useChatThreadRealtime(conversationId: string | null) {
       pendingRef.current = [];
       return;
     }
+    // Org-scoped channel, conversation filtered client-side. A per-conversation
+    // filter opened one server-side subscription per open thread, and Realtime
+    // re-evaluates every active subscription's filter on each WAL poll — so poll
+    // cost scaled with conversation count, not message volume. When no org id is
+    // available yet, fall back to the conversation filter so the thread still works.
+    const scopeKey = organizationId
+      ? `chat_messages:org:${organizationId}`
+      : `chat_messages:conv:${conversationId}`;
+    const scopeFilter = organizationId
+      ? `organization_id=eq.${organizationId}`
+      : `conversation_id=eq.${conversationId}`;
     return subscribeSharedPostgresChanges(
-      `chat_messages:conv:${conversationId}`,
+      scopeKey,
       [
         {
           event: "INSERT",
           schema: "public",
           table: "chat_messages",
-          filter: `conversation_id=eq.${conversationId}`,
+          filter: scopeFilter,
         },
         {
           event: "UPDATE",
           schema: "public",
           table: "chat_messages",
-          filter: `conversation_id=eq.${conversationId}`,
+          filter: scopeFilter,
         },
       ],
       (payload) => {
         const row = payload.new as ChatPlatformMessageRow | null;
         if (!row?.id) return;
+        // Shared org channel fans out every conversation — keep only this thread's.
+        if (row.conversation_id !== conversationId) return;
         const current = qc.getQueryData<ChatPlatformMessageRow[]>(
           queryKeys.chatPlatform.messages(conversationId),
         );
@@ -112,7 +128,7 @@ export function useChatThreadRealtime(conversationId: string | null) {
         );
       },
     );
-  }, [conversationId, qc]);
+  }, [conversationId, organizationId, qc]);
 
   return query;
 }

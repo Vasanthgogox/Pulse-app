@@ -350,15 +350,19 @@ export function TripChatProvider({
   // ── Linked-org read-receipt UPDATEs (INSERT → active lane subscription) ─────
   useEffect(() => {
     if (!organizationId || !selfUid || linkedOrgIds.length === 0) return;
-    const unsubs = linkedOrgIds.map(hostOrgId =>
+    // One channel for ALL linked orgs via `in.(...)` — previously this opened one
+    // server-side subscription per linked org, and Realtime re-evaluates every
+    // subscription's filter on each WAL poll, so the poll cost scaled with the
+    // number of linked orgs regardless of message volume.
+    const unsubs = [
       subscribeSharedPostgresChanges(
-        `trip_messages:acks:linked:${hostOrgId}:for:${organizationId}`,
+        `trip_messages:acks:linked:for:${organizationId}`,
         [
           {
             event:  "UPDATE",
             schema: "public",
             table:  "trip_messages",
-            filter: `organization_id=eq.${hostOrgId}`,
+            filter: `organization_id=in.(${linkedOrgIds.join(',')})`,
           },
         ],
         (payload) => {
@@ -381,8 +385,8 @@ export function TripChatProvider({
             ackRafRef.current = requestAnimationFrame(() => { flushAckBatch(); });
           }
         },
-      )
-    );
+      ),
+    ];
     return () => { unsubs.forEach(u => u()); };
   }, [organizationId, selfUid, linkedOrgIds, flushAckBatch]);
 
