@@ -49,7 +49,15 @@ type LazyRouteErrorBoundaryProps = {
 type LazyRouteErrorBoundaryState = {
   hasError: boolean;
   errorMessage: string | null;
+  errorName: string | null;
 };
+
+/** Rebuild an Error that still carries `name`, which stale-chunk matching needs. */
+function toError(name: string | null, message: string): Error {
+  const err = new Error(message);
+  if (name) err.name = name;
+  return err;
+}
 
 class LazyRouteErrorBoundary extends Component<
   LazyRouteErrorBoundaryProps,
@@ -60,12 +68,17 @@ class LazyRouteErrorBoundary extends Component<
   state: LazyRouteErrorBoundaryState = {
     hasError: false,
     errorMessage: null,
+    errorName: null,
   };
 
   static getDerivedStateFromError(error: Error): Partial<LazyRouteErrorBoundaryState> {
     return {
       hasError: true,
       errorMessage: error?.message ?? "Failed to load screen.",
+      // Kept separate from the user-visible message so stale-chunk matching still
+      // works on retry: Metro's AsyncRequireError puts only the failing URL in
+      // `message`, and the paths below rebuild an Error from stored state.
+      errorName: error?.name ?? null,
     };
   }
 
@@ -79,8 +92,12 @@ class LazyRouteErrorBoundary extends Component<
   }
 
   private handleRetry = () => {
-    const msg = this.state.errorMessage;
-    if (msg && isStaleWebChunkError(new Error(msg)) && recoverStaleWebDeploy()) {
+    const { errorMessage: msg, errorName } = this.state;
+    if (
+      (msg || errorName) &&
+      isStaleWebChunkError(toError(errorName, msg ?? "")) &&
+      recoverStaleWebDeploy()
+    ) {
       return;
     }
     if (msg && __DEV__ && isStaleNativeBundleError(new Error(msg))) {
@@ -88,12 +105,12 @@ class LazyRouteErrorBoundary extends Component<
       return;
     }
     this.remountKey += 1;
-    this.setState({ hasError: false, errorMessage: null });
+    this.setState({ hasError: false, errorMessage: null, errorName: null });
   };
 
   render() {
     if (this.state.hasError) {
-      const err = new Error(this.state.errorMessage ?? "");
+      const err = toError(this.state.errorName, this.state.errorMessage ?? "");
       const staleWeb = isStaleWebChunkError(err);
       const staleBundle = isStaleNativeBundleError(err);
       if (staleWeb) {

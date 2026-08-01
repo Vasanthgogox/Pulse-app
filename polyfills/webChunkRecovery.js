@@ -24,7 +24,12 @@
   if (window.__qWebChunkRecoveryInstalled) return;
   window.__qWebChunkRecoveryInstalled = true;
 
-  var RELOAD_GUARD_KEY = 'pulse_deploy_reload_v1'; // shared with webDeployRecovery.ts
+  // Shared with webDeployRecovery.ts — the value is a COUNT, not a flag, and the
+  // budget/loop rules below must stay in sync with recoverStaleWebDeploy() there.
+  var RELOAD_GUARD_KEY = 'pulse_deploy_reload_v1';
+  var RELOAD_LAST_AT_KEY = 'pulse_deploy_reload_at_v1';
+  var MAX_RELOADS_PER_SESSION = 3;
+  var RELOAD_LOOP_WINDOW_MS = 10000;
 
   // True once a recovery reload has been triggered this pageview. Concurrent
   // stale-chunk rejections (e.g. NetworkScreen + TripsScreen rejecting in the
@@ -32,6 +37,9 @@
   // otherwise the 2nd+ rejection escapes to Sentry as noise (GX-PULSE-B).
   var recoveryInFlight = false;
 
+  // Takes the "name: message" pair, because Metro's AsyncRequireError carries
+  // only the failing URL in `message` — matching on message alone missed it and
+  // let the rejection escape to Sentry unrecovered (GX-PULSE-1M).
   function isStaleWebChunkError(msg) {
     if (!msg) return false;
     return (
@@ -51,18 +59,25 @@
   // triggered the reload or an earlier concurrent one already did.
   function recover() {
     if (recoveryInFlight) return true;
+    // Date.now is fine here — this is app runtime, not a workflow script.
+    var now = Date.now();
     try {
-      // A prior pageview already cache-busted and it still failed: don't loop.
-      // The error is real (chunk genuinely missing) and should reach Sentry.
-      if (sessionStorage.getItem(RELOAD_GUARD_KEY)) return false;
-      sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
+      // One deploy can strand several lazy chunks, so allow a small budget of
+      // reloads per session rather than a single one-shot. Bail once the budget
+      // is spent — the chunk is genuinely missing and should reach Sentry.
+      var count = Number(sessionStorage.getItem(RELOAD_GUARD_KEY) || '0') || 0;
+      if (count >= MAX_RELOADS_PER_SESSION) return false;
+      // Failing again moments after a reload means reloading is not fixing it.
+      var lastAt = Number(sessionStorage.getItem(RELOAD_LAST_AT_KEY) || '0') || 0;
+      if (lastAt && now - lastAt < RELOAD_LOOP_WINDOW_MS) return false;
+      sessionStorage.setItem(RELOAD_GUARD_KEY, String(count + 1));
+      sessionStorage.setItem(RELOAD_LAST_AT_KEY, String(now));
     } catch {
       return false;
     }
     recoveryInFlight = true;
     var url = new URL(window.location.href);
-    // Date.now is fine here — this is app runtime, not a workflow script.
-    url.searchParams.set('_cb', String(Date.now()));
+    url.searchParams.set('_cb', String(now));
     window.location.replace(url.toString());
     return true;
   }
@@ -81,7 +96,11 @@
         if (recover()) event.preventDefault();
         return;
       }
-      var message = (event.error && event.error.message) || event.message || '';
+      var err = event.error;
+      var message =
+        ((err && err.name) || '') +
+        ': ' +
+        ((err && err.message) || event.message || '');
       if (isStaleWebChunkError(message) && recover()) event.preventDefault();
     },
     true,
@@ -90,7 +109,10 @@
   window.addEventListener('unhandledrejection', function (event) {
     var reason = event.reason;
     var message =
-      (reason && reason.message) || (typeof reason === 'string' ? reason : '');
+      ((reason && reason.name) || '') +
+      ': ' +
+      ((reason && reason.message) ||
+        (typeof reason === 'string' ? reason : ''));
     if (isStaleWebChunkError(message) && recover()) {
       event.preventDefault();
     }
