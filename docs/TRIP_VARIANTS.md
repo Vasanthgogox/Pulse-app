@@ -17,8 +17,13 @@ There are **three ways a trip gets created**. That's it.
 2. **Awarded → Own Asset** — you win someone's load, you run it with your own truck
 3. **Awarded → Supplier** — you win someone's load, your supplier runs it
 
-The only thing that makes this confusing: **flow 3 creates two database rows, not one.**
-Everything strange about the schema comes back to that. See §4.
+Two things make this confusing, and both live in flow 3:
+
+- **It creates two database rows, not one.** Everything strange about the schema comes
+  back to that. See §4.
+- **It has two shapes that look identical in the data** — a supplier who *bid and won*
+  (pull) versus a partner you *handed it to* off your own list (push). Same field, same
+  row, opposite story. See §3.
 
 ---
 
@@ -33,6 +38,24 @@ Four words that get mixed up constantly.
 | **Asset** | You're moving it with your own driver and truck. |
 | **Aggregate** | Someone else is moving it for you. You're the middleman. |
 | **Mover** | The org that physically moves the goods. The one with the truck on the road. |
+
+### ⚠️ "Supplier" means two opposite things
+
+The word is overloaded and it is the #1 source of misreading this schema.
+
+| Sense | Means | Direction |
+|---|---|---|
+| **Supplier (awardee)** | The org that *bid on your load and won it* | they pulled it from you |
+| **Supplier (partner)** | A name in *your own* supplier list you hand work to | you pushed it to them |
+
+Both end up in `trips.supplier_id`. **The row looks identical either way.** To tell them
+apart you must compare against `indents.assigned_supplier_id` — see the PULL vs PUSH test
+in §3.
+
+Related: **your `suppliers` table is your private address book.** A row there is *your*
+record of a partner. If it has `linked_organization_id`, that partner is a real org on
+the app; if null, they're a contact who isn't. Two different orgs can each have a
+`suppliers` row pointing at the same company.
 
 **Asset vs Aggregate is decided by exactly one field.** From
 [driverUtils.util.ts:52](../features/drivers/utils/driverUtils.util.ts#L52):
@@ -132,6 +155,80 @@ what the client pays you and what you pay them.
 
 ---
 
+### Flow 3 has TWO different shapes — pull and push
+
+This is the single easiest thing to get wrong, because **both shapes write the same
+field** (`trips.supplier_id`) and the row looks identical afterwards. Only the human
+story differs.
+
+**Shape A — PULL (they won it).** You post a load. Orgs quote on it. One wins. The
+winner is written to `indents.assigned_supplier_id`, and the same org lands on
+`trips.supplier_id`. Nobody chose them off a list — they competed and beat the others.
+
+**Shape B — PUSH (you handed it down).** You *already own* the load — either you created
+it, or you won it from someone upstream. You open **Deploy load** and pick a name from
+**your own supplier list**. That name is written to `trips.supplier_id`.
+
+| | Shape A — PULL | Shape B — PUSH |
+|---|---|---|
+| Who picked whom | they bid, you awarded | you chose from your list |
+| Where the name came from | `direct_quotes` | your `suppliers` table |
+| Driver on the trip | usually set — came with the bid | **`null` by design** |
+| Tracking | real driver record, OTP | typed name + plain phone |
+| `assigned_supplier_id` | **equals** `trips.supplier_id` | unrelated or absent |
+
+**How to tell them apart in SQL** — the only reliable test:
+
+```sql
+-- PULL if the trip's supplier IS the org that won the indent; PUSH otherwise.
+select s.linked_organization_id = i.assigned_supplier_id as is_pull
+from trips t
+join indents i on i.id = t.indent_id
+left join suppliers s on s.id = t.supplier_id
+where t.id = '<trip-id>';
+```
+
+> **The database alone cannot tell you which happened** without this join. If you look
+> only at `trips.supplier_id`, a bidder who won and a partner you handed it to are
+> indistinguishable. Every mis-read of this schema starts here.
+
+**Live counts (verified):** 19 trips are **PULL**. **Zero** are PUSH. Ten more have a
+supplier but their indent was never awarded — all ten have `driver_id = null`, the
+signature of the push path. `trip_subcontracts` holds 2 rows. So the push path is
+**built and reachable in the UI but essentially unused in production.**
+
+---
+
+### The Deploy load wizard (Asset vs Aggregate)
+
+The 6-step **Deploy load** screen is where shape B happens. You reach it once a load is
+yours, and step 1 asks the only question that matters:
+
+- **Asset** → you run it. Your driver, your truck, picked from your roster.
+- **Aggregate** → you hand it to a partner. The list shown is **your own suppliers**.
+
+What the Aggregate branch actually writes
+([useStaffHandshake.ts:674-733](../features/network/hooks/useStaffHandshake.ts#L674-L733)):
+
+1. Creates **one** trip in **your** org from your winning quote.
+2. Sets `supplier_id` = the partner and `supplier_rate` = what you agreed to pay them.
+3. Inserts a `trip_subcontracts` row recording the same handoff separately.
+4. Marks the indent `completed`.
+
+**The driver is deliberately `null`.** The code passes `driverId: null` and instead
+collects a **typed name and a plain phone number** for tracking — no driver record, no
+roster entry, no OTP handshake. That is what the *"Assign later — add vehicle & driver
+phone on trip detail"* toggle refers to.
+
+> **So in a true Aggregate deploy, nobody owns a driver in the app.** It's a phone
+> number to call. Do not expect a `drivers` row.
+
+**The same org can appear in both roles.** Paperkraft has *bid on and won* nihas's loads
+(pull), and also sits in nihas's supplier dropdown as a partner he could hand work to
+(push). Same org, opposite direction. Judge by the join above, never by the name.
+
+---
+
 ## 4. Why flow 3 makes two rows
 
 This is the single most confusing part of the schema. Here's the whole thing.
@@ -201,6 +298,21 @@ middleman's `supplier_rate` matches the mover's `client_price` to the rupee:
 
 Note row 4 — nihas logs appears on **both sides** across different loads. Middleman on
 some, mover on others. That's normal, and it's why `operating_model` is `HYBRID`.
+
+**All five of these are PULL** (the mover bid and won). None came from the Deploy
+wizard's Aggregate list. Row 4 is a good worked example, because its name collision is
+exactly the trap §3 warns about:
+
+> **IND091 / TRP091 + TRP047.** nihas created a ₹55,000 Ramco Cement load
+> (Tiruvannamalai → Tenkasi). Paperkraft **quoted ₹49,500 and won it** — the bid already
+> carried their driver *Mani* and truck *TN 11 HH 2580*. nihas awarded it; TRP091 was
+> born in nihas's org with ₹5,500 margin. A day later TRP047 appeared in Paperkraft's
+> org as the `mover_asset` half.
+>
+> Paperkraft **also sits in nihas's supplier dropdown**, so this trip is easy to misread
+> as a push. It wasn't — `assigned_supplier_id` equals the trip's supplier, which is the
+> pull signature. The giveaway: a real driver record came with the bid. A push would
+> have left `driver_id` null.
 
 ### The two rows do NOT share a trip number
 
@@ -311,6 +423,13 @@ reassigning a driver mid-haul doesn't rewind the trip to `assigned`.
 `mover_asset` is **not a fourth flow**. It's the back half of flow 3, seen from the
 supplier's side.
 
+**Flow 3's two shapes** (see §3) — same row, different story:
+
+| Shape | Who chose | Driver | `assigned_supplier_id` | Live count |
+|---|---|---|---|---|
+| **PULL** — they bid & won | you awarded | usually set | **= `supplier_id`** | 19 |
+| **PUSH** — Deploy → Aggregate | you picked from your list | **null** | unrelated/absent | 0 |
+
 ### Useful queries
 
 ```sql
@@ -320,6 +439,17 @@ SELECT t.display_trip_id, o.name AS org, t.source,
 FROM trips t
 JOIN organizations o ON o.id = t.organization_id
 WHERE coalesce(t.source_indent_id, t.indent_id) = $1
+  AND t.deleted_at IS NULL;
+
+-- PULL or PUSH? (did they win it, or did you hand it to them?)
+SELECT t.display_trip_id,
+       CASE WHEN s.linked_organization_id = i.assigned_supplier_id
+            THEN 'PULL — they bid and won'
+            ELSE 'PUSH — handed to your own partner' END AS shape
+FROM trips t
+JOIN indents i ON i.id = t.indent_id
+LEFT JOIN suppliers s ON s.id = t.supplier_id
+WHERE t.supplier_id IS NOT NULL
   AND t.deleted_at IS NULL;
 
 -- Margin, excluding mover rows (which would double-count)
@@ -368,6 +498,17 @@ Stated plainly so nobody treats these as settled:
    built** — see [aggregation-subcontract-flow-KNOWLEDGE.md](aggregation-subcontract-flow-KNOWLEDGE.md),
    marked *"Proposal only. Nothing implemented."* Today the sub-supplier can't even see
    the trip: `trip_subcontracts` RLS only admits `viewer_org_id`.
+5. **Why the PUSH path has zero production trips.** The Deploy wizard's Aggregate branch
+   is fully built and reachable, but 19 of 19 supplier-linked awarded trips are PULL.
+   Unknown whether it's unused, used only in dev, or abandoned mid-rollout.
+6. **Whether a PUSH creates a mover row at all.** The RPC requires a driver, and the
+   Aggregate branch deliberately passes `driverId: null` — so on the face of it the
+   partner gets **no** `mover_asset` row and no expense shell. Not tested, because no
+   production PUSH trip exists to check. If the push path is ever adopted, verify this
+   first.
+7. **Whether PUSH and chained subcontracting are the same feature.** The Deploy wizard
+   writes `trip_subcontracts`, which is also the table the chaining proposal builds on.
+   Unclear whether the wizard is a first slice of that design or something separate.
 
 ---
 

@@ -32,7 +32,10 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { getClientsByOrganization, type ClientRow } from "@/features/clients/services/clients.service";
 import { ClientLaneSearchPicker } from "@/features/clients/components/ClientLaneSearchPicker";
 import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
-import { buildClientLanePrefill } from "@/features/clients/utils/clientLanePrefill.util";
+import {
+  buildClientLanePrefill,
+  repriceLaneForTons,
+} from "@/features/clients/utils/clientLanePrefill.util";
 import { useClientLaneRatesQuery } from "@/lib/queries/useClientLaneRatesQuery";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
@@ -794,6 +797,23 @@ export default function CreateIndentScreen() {
     setSelectedLaneId(null);
   }, []);
 
+  /**
+   * Weight drives the price on per-ton / per-kg contract lanes, so editing tons
+   * after picking a lane must re-derive client_price. Non-weight lanes and
+   * ad-hoc indents (no lane selected) just take the new weight.
+   */
+  const handleTonsChange = useCallback(
+    (value: string) => {
+      const tons = value.replace(/[^\d.]/g, "").slice(0, 12);
+      const lane = selectedLaneId
+        ? contractLanes.find((l) => l.id === selectedLaneId)
+        : undefined;
+      const repriced = lane ? repriceLaneForTons(lane, tons) : null;
+      update({ weight: tons, ...(repriced ? { client_price: repriced } : {}) });
+    },
+    [contractLanes, selectedLaneId, update],
+  );
+
   const indentWizardContextRow = useMemo(() => {
     if (!isMobileWizard || !selectedClientRow) return null;
     if (wizardStep === "route" || wizardStep === "client") return null;
@@ -1382,7 +1402,7 @@ export default function CreateIndentScreen() {
                 tons={form.weight}
                 onVehicleTypeChange={(value) => update({ vehicle_type: value })}
                 onLoadTypeChange={(value) => update({ load_type: value })}
-                onTonsChange={(value) => update({ weight: value })}
+                onTonsChange={handleTonsChange}
                 vehicleTypeError={Boolean(errors.vehicle_type)}
                 loadTypeError={Boolean(errors.load_type)}
                 tonsError={Boolean(errors.weight)}
@@ -1824,11 +1844,7 @@ export default function CreateIndentScreen() {
                           errors.weight && styles.inputError,
                         ]}
                         value={form.weight}
-                        onChangeText={(t) =>
-                          update({
-                            weight: t.replace(/[^\d.]/g, "").slice(0, 12),
-                          })
-                        }
+                        onChangeText={handleTonsChange}
                         ref={weightInputRef}
                         placeholder="Enter load weight in tons"
                         placeholderTextColor={Theme.placeholder}
@@ -2296,7 +2312,7 @@ export default function CreateIndentScreen() {
                     value={form.weight}
                     placeholder="e.g. 18.5"
                     onChangeText={(t) =>
-                      update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
+                      handleTonsChange(t)
                     }
                     hasError={Boolean(errors.weight)}
                     inputRef={weightInputRef}

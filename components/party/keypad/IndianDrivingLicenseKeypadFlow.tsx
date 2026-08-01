@@ -30,7 +30,7 @@ import {
   getIndianDlFormatHint,
   getIndianDlKeyboardKind,
   getIndianDlNormalizedLength,
-  INDIAN_DL_TOTAL_LENGTH,
+  INDIAN_DL_MAX_LENGTH,
 } from "@/lib/indianDrivingLicenseInput.util";
 
 const SEGMENT_LABELS = ["AA", "00", "0000", "0000000"] as const;
@@ -57,7 +57,7 @@ export const IndianDrivingLicenseKeypadFlow = memo(
       [normLen],
     );
     const displayValue = value.trim();
-    const showCursor = normLen < INDIAN_DL_TOTAL_LENGTH;
+    const showCursor = normLen < INDIAN_DL_MAX_LENGTH;
     const inputPlatform = useInputPlatform();
     const { width } = useWindowDimensions();
     const isDesktopWeb = Platform.OS === "web" && inputPlatform === "desktop";

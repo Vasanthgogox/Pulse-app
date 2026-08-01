@@ -26,7 +26,10 @@ import { useClientLaneRatesQuery } from "@/lib/queries/useClientLaneRatesQuery";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useLinkedClientOrgLocationsQuery } from "@/lib/queries/useLinkedClientOrgLocationsQuery";
 import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
-import { buildClientLanePrefill } from "@/features/clients/utils/clientLanePrefill.util";
+import {
+  buildClientLanePrefill,
+  repriceLaneForTons,
+} from "@/features/clients/utils/clientLanePrefill.util";
 
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
 import { CreateTripDesktopAllocationStep } from "./CreateTripDesktopAllocationStep";
@@ -226,6 +229,23 @@ export function CreateTripDesktopWizard({
     setSelectedLaneId(null);
   }, []);
 
+  /**
+   * Weight drives the price on per-ton / per-kg contract lanes, so editing tons
+   * after picking a lane must re-derive the client price.
+   */
+  const handleTonsChange = useCallback(
+    (value: string) => {
+      setters.setTons(value);
+      const lane = selectedLaneId
+        ? contractLanes.find((l) => l.id === selectedLaneId)
+        : undefined;
+      if (!lane) return;
+      const repriced = repriceLaneForTons(lane, value);
+      if (repriced) setters.setClientPrice(repriced);
+    },
+    [contractLanes, selectedLaneId, setters],
+  );
+
   const handleChangeLaneFromRoute = useCallback(() => {
     setSelectedLaneId(null);
     onRequestChangeLane?.();
@@ -329,7 +349,7 @@ export function CreateTripDesktopWizard({
           tons={state.tons}
           onVehicleTypeChange={setters.setVehicleType}
           onLoadTypeChange={setters.setLoadType}
-          onTonsChange={setters.setTons}
+          onTonsChange={handleTonsChange}
           vehicleTypeError={invalid("vehicleType")}
           loadTypeError={invalid("loadType")}
           tonsError={invalid("tons")}

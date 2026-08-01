@@ -35,31 +35,90 @@ export function isLaneCurrentlyValid(
   return true;
 }
 
-/** Prefer trip rate, then base, then MT×KM composite when both present. */
+function positive(n: number | null | undefined): number | null {
+  return n != null && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * How a lane's stored rate scales into a total sale amount.
+ *
+ * `per_ton` / `per_kg` are quoted per unit of WEIGHT — the stored rate must be
+ * multiplied by the load before it is a trip price. `per_km` is quoted per unit
+ * of DISTANCE. Everything else (`per_trip`, `fixed`, `spot`) is already a total.
+ *
+ * Keep the weight-based branch in sync with the `perTon` check in
+ * ClientProfileScreen — both must agree on which rate types scale.
+ */
+type LaneRateBasis = "weight" | "distance" | "total";
+
+function laneRateBasis(lane: ClientLaneRate): LaneRateBasis {
+  const type = lane.rate_type;
+  if (type === "per_ton" || type === "per_kg") return "weight";
+  if (type === "per_km") return "distance";
+  // `pricing_model` is a legacy free-text mirror of the same intent; honour it
+  // only when rate_type itself is not weight/distance-bearing.
+  if (lane.pricing_model === "per_ton") return "weight";
+  if (lane.pricing_model === "per_km") return "distance";
+  return "total";
+}
+
+/**
+ * Quantity the stored rate is multiplied by. Weight lanes bill per TON, so a
+ * `per_kg` rate is scaled to tonnes (×1000) to stay in the same unit as
+ * `default_load_tons` — the only weight the lane carries.
+ */
+function laneMultiplier(lane: ClientLaneRate, basis: LaneRateBasis): number | null {
+  if (basis === "weight") {
+    const tons = positive(lane.default_load_tons);
+    if (tons == null) return null;
+    return lane.rate_type === "per_kg" ? tons * 1000 : tons;
+  }
+  if (basis === "distance") return positive(lane.distance_km);
+  return 1;
+}
+
+/**
+ * Total sale amount for a lane, scaled by weight or distance where the rate
+ * type demands it. Returns null when no usable rate exists.
+ *
+ * A weight/distance lane with no load or distance recorded falls back to the
+ * raw rate — a visibly-too-low number the user can correct beats blocking the
+ * prefill entirely, and it matches the pre-scaling behaviour.
+ */
 export function resolveLaneSaleAmount(lane: ClientLaneRate): number | null {
-  if (lane.rate != null && Number.isFinite(lane.rate) && lane.rate > 0) {
-    return lane.rate;
+  const basis = laneRateBasis(lane);
+  const multiplier = laneMultiplier(lane, basis) ?? 1;
+
+  const unitRate =
+    positive(lane.rate) ??
+    positive(lane.base_rate) ??
+    (basis === "weight" ? positive(lane.per_mt_rate) : null) ??
+    (basis === "distance" ? positive(lane.per_km_rate) : null);
+
+  if (unitRate != null) {
+    return applyMinBilling(lane, unitRate * multiplier);
   }
-  if (lane.base_rate != null && Number.isFinite(lane.base_rate) && lane.base_rate > 0) {
-    return lane.base_rate;
-  }
-  if (
-    lane.per_mt_rate != null &&
-    lane.per_km_rate != null &&
-    lane.distance_km != null &&
-    Number.isFinite(lane.per_mt_rate) &&
-    Number.isFinite(lane.per_km_rate) &&
-    Number.isFinite(lane.distance_km)
-  ) {
-    // Without weight, use per-km × distance as a usable starting sale.
-    const approx = lane.per_km_rate * lane.distance_km;
-    return approx > 0 ? approx : null;
-  }
-  if (lane.per_km_rate != null && lane.distance_km != null) {
-    const approx = lane.per_km_rate * lane.distance_km;
-    return approx > 0 ? approx : null;
+
+  // No flat rate: fall back to the composite per-MT / per-KM columns.
+  const perMt = positive(lane.per_mt_rate);
+  const perKm = positive(lane.per_km_rate);
+  const tons = positive(lane.default_load_tons);
+  const km = positive(lane.distance_km);
+
+  const weightLeg = perMt != null && tons != null ? perMt * tons : null;
+  const distanceLeg = perKm != null && km != null ? perKm * km : null;
+
+  if (weightLeg != null || distanceLeg != null) {
+    return applyMinBilling(lane, (weightLeg ?? 0) + (distanceLeg ?? 0));
   }
   return null;
+}
+
+/** Contracted floor price — a scaled amount below it still bills at the floor. */
+function applyMinBilling(lane: ClientLaneRate, amount: number): number | null {
+  if (amount <= 0) return null;
+  const floor = positive(lane.min_billing);
+  return floor != null && floor > amount ? floor : amount;
 }
 
 export function buildClientLanePrefill(lane: ClientLaneRate): ClientLanePrefill {
@@ -86,11 +145,50 @@ export function buildClientLanePrefill(lane: ClientLaneRate): ClientLanePrefill 
   };
 }
 
+/**
+ * Client price for a weight-based lane at a user-entered tonnage, for when the
+ * load is changed after the lane was picked. Returns null when the lane is not
+ * weight-based (nothing to recompute) or the tonnage is unusable — callers keep
+ * the existing price in that case rather than clearing it.
+ */
+export function repriceLaneForTons(
+  lane: ClientLaneRate,
+  tonsInput: string | number | null | undefined,
+): string | null {
+  if (laneRateBasis(lane) !== "weight") return null;
+  const tons =
+    typeof tonsInput === "number"
+      ? tonsInput
+      : parseFloat(String(tonsInput ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(tons) || tons <= 0) return null;
+  const amount = resolveLaneSaleAmount({ ...lane, default_load_tons: tons });
+  return amount != null ? String(Math.round(amount)) : null;
+}
+
 export function lanePrimaryRateLabel(lane: ClientLaneRate): string {
+  const type = lane.rate_type?.replace(/_/g, " ") ?? "rate";
+  // Show the stored UNIT rate here — pairing the weight-scaled total with a
+  // "per ton" suffix would read as a far higher per-ton price than contracted.
+  const unit = positive(lane.rate) ?? positive(lane.base_rate);
+  if (unit != null) return `${formatINR(unit)} · ${type}`;
   const amount = resolveLaneSaleAmount(lane);
   if (amount == null) return "Rate TBD";
-  const type = lane.rate_type?.replace(/_/g, " ") ?? "rate";
   return `${formatINR(amount)} · ${type}`;
+}
+
+/**
+ * Human-readable breakdown of how the sale amount was derived, e.g.
+ * "₹3,140 × 30 t = ₹94,200". Null when the rate needs no scaling.
+ */
+export function laneSaleBreakdownLabel(lane: ClientLaneRate): string | null {
+  const basis = laneRateBasis(lane);
+  if (basis === "total") return null;
+  const multiplier = laneMultiplier(lane, basis);
+  const unit = positive(lane.rate) ?? positive(lane.base_rate);
+  const total = resolveLaneSaleAmount(lane);
+  if (multiplier == null || unit == null || total == null) return null;
+  const suffix = basis === "distance" ? "km" : lane.rate_type === "per_kg" ? "kg" : "t";
+  return `${formatINR(unit)} × ${multiplier}${suffix} = ${formatINR(total)}`;
 }
 
 export function laneValidityLabel(lane: ClientLaneRate): string {
