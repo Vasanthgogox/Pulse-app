@@ -124,9 +124,18 @@ Reports land in `scripts/marketplace/reports/gate3-*.json`.
 | 1 Publish | Feed · Story · Load Center · price · Open Market consistent |
 | 2 Competition | Visible · both bids · Network/Marketplace tags · still accepting bids |
 | 3 Award | Story closes · bids inactive · trip · execution · no stale Bid Now |
+| 3.5 Award Notification & Winner Journey | Winning supplier's entry point into execution — see **P0-4** below |
 | 4 Completion | Marketplace closes · trip complete · history · VBP groundwork |
 
 After each scenario: score **Discovery · Clarity · Confidence · Decision Making · Execution · Trust** (1–5) and answer **₹10 lakh trust?** Log in `VALIDATION_OBSERVATIONS.md`. Rank M2 via impact × effort matrix — not a dump of ideas.
+
+### P0-4 — Awarded supplier has no execution entry point ⭐⭐⭐⭐⭐
+
+**Confirmed by code inspection (not yet by walkthrough):** `useAwardQuote.ts` only toasts the awarding org; nothing notifies or pushes toward the winning supplier when `direct_quotes.status` becomes `accepted`, and no notification table/trigger exists for it anywhere in the migrations. A passive "Awarded"/"Claimed" tab already exists in Load Center, but nothing surfaces it to the winner proactively.
+
+**Symptoms:** award succeeds, winning supplier doesn't know, no obvious Assigned Loads entry point, Marketplace appears finished from the supplier's side, trip never starts unless the supplier happens to dig through tabs.
+
+**Do not fix reactively.** Run Scenario 3.5 first and record where real testers *actually* look for the award, unprompted. If several converge on the same surface (Dashboard, My Trips, etc.), that observation — not a guess — decides where the Marketplace → Execution Workspace handoff belongs. This is M2 input (`docs/MARKETPLACE_DOMAIN.md`'s Commerce Network / conversion UX track), not something to patch with a notification bolted onto the current architecture before the real landing spot is known.
 
 ---
 
