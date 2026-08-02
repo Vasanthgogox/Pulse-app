@@ -1,15 +1,17 @@
 # Platform Consumer Rule
 
-**Applies to:** Trip Operations Platform and Marketplace Platform (and any future domain resolvers).
+**Applies to:** Trip Operations Platform, Marketplace Platform, Scalability & Reliability Platform (and any future domain resolvers / platform engines).
 
 ## Rule
 
-**No UI component may derive business state directly if a domain resolver exists.**
+**No UI component may derive business state directly if a domain resolver exists.**  
+**No feature may invent synchronization, transport, or cache policy if the Scalability Platform owns it.**
 
-| Platform | Forbidden in UI | Required |
+| Platform | Forbidden in UI / feature code | Required |
 |----------|-----------------|----------|
 | Trip Operations | Interpret `trips.status` / invent stage, timing, or alerts | `deriveTripStage()`, `getStageMetadata()`, `computeTripStageMetrics()` / `computeJourneyMetrics()`, `evaluateOperationalAlerts()` |
 | Marketplace | Interpret `indents.status`, story clocks, or invent price / bid CTA / visibility | `resolveCommercialOpportunity()` → `CommercialOpportunity` |
+| Scalability & Reliability | Raw Supabase channels, custom polling/retry/throttle for sync, feature-owned invalidation policy | Shared registry (`lib/realtimeRegistry.ts`), merge-first cache rules, performance budgets in `docs/SCALABILITY_PLATFORM.md` |
 
 ## Design review signal
 
@@ -53,4 +55,5 @@ Once the Marketplace cross-surface consistency matrix passes: **feature-freeze M
 
 - Trip: `docs/TRIP_OPERATIONS_PLATFORM.md`
 - Marketplace: `docs/MARKETPLACE_DOMAIN.md`
+- Scalability: `docs/SCALABILITY_PLATFORM.md`
 - Product strategy: `docs/PRODUCT_STRATEGY.md`

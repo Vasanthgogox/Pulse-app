@@ -40,6 +40,9 @@ type RealtimeRegistryTelemetry = {
   staleSweeps: number;
   /** Teardowns cancelled by a reattach within the grace window. */
   graceReattaches: number;
+  /** Deliveries fanned out to listeners (P0 Platform Health). */
+  postgresDeliveries: number;
+  broadcastDeliveries: number;
 };
 
 const telemetry: RealtimeRegistryTelemetry = {
@@ -50,6 +53,8 @@ const telemetry: RealtimeRegistryTelemetry = {
   capBreaches: 0,
   staleSweeps: 0,
   graceReattaches: 0,
+  postgresDeliveries: 0,
+  broadcastDeliveries: 0,
 };
 let diagnosticsInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -91,6 +96,11 @@ function specsSignature(specs: PostgresChangeSpec[]): string {
 function emitToListeners(key: string, payload: any) {
   const entry = registry.get(key);
   if (!entry) return;
+  if (entry.specsSignature.startsWith("broadcast:")) {
+    telemetry.broadcastDeliveries += 1;
+  } else {
+    telemetry.postgresDeliveries += 1;
+  }
   for (const listener of entry.listeners) {
     try {
       listener(payload);
@@ -183,12 +193,51 @@ export function getRealtimeRegistryDiagnostics() {
   };
 }
 
+/** Lightweight channel inventory for Platform Health (key, refs, transport). */
+export function listRealtimeRegistryEntries(): Array<{
+  key: string;
+  refs: number;
+  transport: "broadcast" | "postgres_changes";
+  listenerCount: number;
+  ageMs: number;
+}> {
+  const now = Date.now();
+  const rows: Array<{
+    key: string;
+    refs: number;
+    transport: "broadcast" | "postgres_changes";
+    listenerCount: number;
+    ageMs: number;
+  }> = [];
+  registry.forEach((entry, key) => {
+    rows.push({
+      key,
+      refs: entry.refs,
+      transport: entry.specsSignature.startsWith("broadcast:")
+        ? "broadcast"
+        : "postgres_changes",
+      listenerCount: entry.listeners.size,
+      ageMs: now - entry.openedAt,
+    });
+  });
+  return rows.sort((a, b) => b.refs - a.refs || a.key.localeCompare(b.key));
+}
+
 export function installRealtimeDiagnosticsGlobalHook() {
   if (!__DEV__) return;
   const target = globalThis as typeof globalThis & {
     __REALTIME_DIAGNOSTICS__?: () => ReturnType<typeof getRealtimeRegistryDiagnostics>;
+    __PLATFORM_HEALTH__?: () => ReturnType<
+      typeof import("@/lib/platform/scalability").getPlatformHealthSnapshot
+    >;
   };
   target.__REALTIME_DIAGNOSTICS__ = getRealtimeRegistryDiagnostics;
+  // Lazy import avoids circular init with query client; only used from console.
+  target.__PLATFORM_HEALTH__ = () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getPlatformHealthSnapshot } = require("@/lib/platform/scalability");
+    return getPlatformHealthSnapshot();
+  };
 }
 
 export function startRealtimeDiagnosticsLogger() {

@@ -12,7 +12,10 @@ import {
   hubMobileChromeStyles as hubChrome,
 } from "@/components/hub";
 import type { HubGridPageSize } from "@/components/hub/hubGridCardLayout";
-import { HUB_GRID_DEFAULT_PAGE_SIZE } from "@/components/hub/hubGridCardLayout";
+import {
+  HUB_GRID_DEFAULT_PAGE_SIZE,
+  HUB_GRID_MIN_WIDTH,
+} from "@/components/hub/hubGridCardLayout";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import {
   CHAT_FILTER_MUTED,
@@ -206,7 +209,7 @@ function historyTripDueState(
 export default function TripsScreen() {
   const { width, height } = useWindowDimensions();
   /** Desktop card grid — hub ticket cards (4 per row), aligned with Load Center. */
-  const isLargeScreen = Platform.OS === "web" && width >= 1024;
+  const isLargeScreen = Platform.OS === "web" && width >= HUB_GRID_MIN_WIDTH;
   const isCompactWeb = Platform.OS === "web" && width < 1180;
   const isMobile = width < 560;
   // Use mobile layout behavior for narrow web widths as well.

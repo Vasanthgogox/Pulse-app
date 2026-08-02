@@ -165,7 +165,7 @@ function ImageMessageCard({ message, isOwn }: { message: TripMessageRow; isOwn: 
 
   return (
     <View style={sc.imageWrap}>
-      {/* OptimizedChatImage: CDN thumbnail (300×300 @ q70); lightbox prefers transform before raw URL. */}
+      {/* OptimizedChatImage: signed URL for RLS-gated trip-documents (no public CDN). */}
       <OptimizedChatImage message={message} storagePath={storagePath} isOwn={isOwn} />
     </View>
   );

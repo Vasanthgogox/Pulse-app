@@ -254,6 +254,8 @@ export const ROUTES = {
   PULSE_LOADS:   '/pulse-loads'   as const,
   /** DBA audit tool — web only. */
   DBA_AUDIT:     '/audit'          as const,
+  /** Scalability & Reliability Platform Health (P0 engineering homepage). */
+  PLATFORM_HEALTH: '/platform-health' as const,
   REACH: {
     /** Product home — Credits Balance, Reach Delivered, Active Campaigns,
      * Quick Actions, Recent Campaigns. The discovery entry point (Phase 2.2). */

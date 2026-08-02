@@ -133,6 +133,8 @@ export const Layout = {
   workspaceSplitMinWidth: 720,
   /** Workspace flex card — max width when detail panel is open. */
   workspaceCardMaxWidth: 960,
+  /** Detail sheet over a full-bleed map (live tracking): centered reading column. */
+  trackingSheetMaxWidth: 720,
   /**
    * Entity detail hero (Client / Supplier / Driver / Vehicle): one system of sizes so
    * financial + profile columns align everywhere. Prefer compact density when content is heavy.

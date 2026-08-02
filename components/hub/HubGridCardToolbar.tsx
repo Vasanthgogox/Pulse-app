@@ -358,6 +358,9 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: "100%",
     minWidth: 0,
+    // Cells stretch with the card (grid ~90px, stacked tablet card ~280px), so the
+    // amount has to sit in the middle of the chip instead of stranded on the left.
+    justifyContent: "center",
   },
   metricsRow: {
     flexDirection: "row",

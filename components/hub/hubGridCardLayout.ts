@@ -1,3 +1,16 @@
+/**
+ * Web: min viewport for the multi-column hub grid (trips + load center).
+ * Below this — phones **and tablets** — hubs stack one hub list card per row,
+ * so no width falls between the stacked card and the grid card.
+ */
+export const HUB_GRID_MIN_WIDTH = 1024;
+
+/**
+ * Web: min viewport where a stacked hub card is wide enough to also carry the
+ * finance toolbar (tablets). Phones keep the card body only.
+ */
+export const HUB_CARD_TOOLBAR_MIN_WIDTH = 768;
+
 /** Shared geometry for 4-column desktop hub cards (trips, indents). */
 export const HUB_GRID_CARD_MIN_HEIGHT = 200;
 export const HUB_GRID_ROUTE_MIN_HEIGHT = 30;
