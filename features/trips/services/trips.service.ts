@@ -637,6 +637,9 @@ const DRIVER_TRIP_FALLBACK_COLUMNS = [
   "organization_id",
   "completed_at",
   "indent_id",
+  // Needed to pair an awarded load's two rows so the driver's list shows the job
+  // once — see dedupeDriverTripsForDriverOrgs.
+  "source_indent_id",
   // NOTE: organization_name is deliberately NOT fetched here. `trips` has no such
   // column and embedding `organizations(name)` fails outright for drivers
   // ("permission denied for function is_org_member"), which would break the whole
@@ -647,7 +650,9 @@ const DRIVER_TRIP_FALLBACK_COLUMNS = [
 async function getTripsByDriverIdsFromTripsTable(
   driverIds: string[],
   opts?: PageOpts,
+  driverOrgIds?: Set<string>,
 ): Promise<{ error: Error | null; trips: DriverTripRow[]; hasMore?: boolean }> {
+  const orgIds = driverOrgIds ?? new Set<string>();
   const base = () =>
     supabase()
       .from("trips")
@@ -661,18 +666,86 @@ async function getTripsByDriverIdsFromTripsTable(
     if (error) return { error: new Error(error.message), trips: [] };
     const raw = ((data ?? []) as unknown as TripRow[]).map(tripRowToDriverTripRow);
     const hasMore = raw.length > limit;
+    const page = hasMore ? raw.slice(0, limit) : raw;
     return {
       error: null,
-      trips: hasMore ? raw.slice(0, limit) : raw,
+      trips: dedupeDriverTripsForDriverOrgs(page, orgIds),
       hasMore,
     };
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), trips: [] };
-  return {
-    error: null,
-    trips: ((data ?? []) as unknown as TripRow[]).map(tripRowToDriverTripRow),
+  const raw = ((data ?? []) as unknown as TripRow[]).map(tripRowToDriverTripRow);
+  return { error: null, trips: dedupeDriverTripsForDriverOrgs(raw, orgIds) };
+}
+
+/**
+ * Collapse an awarded load's two rows down to the one the DRIVER should see.
+ *
+ * An awarded load creates two trips (docs/TRIP_VARIANTS.md §4): the middleman's
+ * money row (`source = 'direct_quote'`, linked via `indent_id`) and the mover's
+ * work row (`source = 'mover_asset'`, linked via `source_indent_id`). The mover's
+ * driver is stamped on BOTH — on the middleman's row purely so the broker can
+ * track who is carrying its client's goods.
+ *
+ * Querying by `driver_id` alone therefore returns the same physical job twice,
+ * and the driver's history listed it as two trips (and would count it twice in
+ * any per-row earnings sum). Keep only rows owned by an org the driver actually
+ * belongs to; if a pair still survives (driver legitimately has rows in both
+ * orgs), prefer the `mover_asset` half — that's the one carrying their payout.
+ *
+ * Rows with no `organization_id` (the fallback cannot always supply one) are kept
+ * rather than dropped: losing a real trip is worse than showing an extra one.
+ *
+ * The org filter is applied PER LOAD, not globally, for the same reason. Some
+ * awarded loads have only the broker's row and no `mover_asset` half (verified:
+ * 2 drivers platform-wide are in exactly this state — their trip sits in an org
+ * they don't belong to). Filtering globally would erase their only trip. So a
+ * load falls back to its own rows when the org filter would leave it empty, and
+ * a driver never ends up with fewer loads than before — only fewer duplicates.
+ */
+function dedupeDriverTripsForDriverOrgs<
+  T extends {
+    organization_id?: string | null;
+    source?: string | null;
+    indent_id?: string | null;
+    source_indent_id?: string | null;
+  },
+>(rows: T[], driverOrgIds: Set<string>): T[] {
+  const isOwnOrg = (r: T): boolean => {
+    if (driverOrgIds.size === 0) return true;
+    const org = String(r.organization_id ?? "").trim();
+    return org === "" || driverOrgIds.has(org);
   };
+  const isMover = (r: T): boolean =>
+    String(r.source ?? "").trim().toLowerCase() === "mover_asset";
+
+  // Group by load so the choice is made within a load, never across loads.
+  const byLoad = new Map<string, T[]>();
+  const kept = new Set<T>();
+  for (const row of rows) {
+    const loadKey = String(row.source_indent_id ?? row.indent_id ?? "").trim();
+    if (loadKey === "") {
+      // Standalone trip (manual/local). Only the org filter applies.
+      if (isOwnOrg(row)) kept.add(row);
+      continue;
+    }
+    const bucket = byLoad.get(loadKey);
+    if (bucket == null) byLoad.set(loadKey, [row]);
+    else bucket.push(row);
+  }
+
+  for (const bucket of byLoad.values()) {
+    // Prefer rows in the driver's own org; if that leaves nothing, keep the
+    // load's rows anyway so the trip never disappears from the driver's history.
+    const own = bucket.filter(isOwnOrg);
+    const pool = own.length > 0 ? own : bucket;
+    // Within the surviving rows, the mover_asset half is the driver's own record.
+    kept.add(pool.find(isMover) ?? pool[0]);
+  }
+
+  // Rebuild in the caller's original order (created_at DESC).
+  return rows.filter((r) => kept.has(r));
 }
 
 /** Trips assigned to any of the given driver ids (driver app: user may have multiple driver rows across orgs). */
@@ -681,6 +754,23 @@ export async function getTripsByDriverIds(
   opts?: PageOpts,
 ): Promise<{ error: Error | null; trips: DriverTripRow[]; hasMore?: boolean }> {
   if (driverIds.length === 0) return { error: null, trips: [] };
+  // Orgs these driver rows belong to — used to drop other orgs' copies of the
+  // same load (see dedupeDriverTripsForDriverOrgs). Best-effort: if this read
+  // fails the set stays empty and no org filtering is applied, which is the
+  // pre-existing behavior.
+  const driverOrgIds = new Set<string>();
+  try {
+    const { data: driverRows } = await supabase()
+      .from("drivers")
+      .select("organization_id")
+      .in("id", driverIds);
+    for (const r of (driverRows ?? []) as { organization_id?: string | null }[]) {
+      const org = String(r.organization_id ?? "").trim();
+      if (org !== "") driverOrgIds.add(org);
+    }
+  } catch {
+    // leave driverOrgIds empty
+  }
   const base = () =>
     supabase()
       .from("trips_driver_view")
@@ -697,25 +787,28 @@ export async function getTripsByDriverIds(
     }
     const raw = (data ?? []) as DriverTripRow[];
     if (raw.length === 0) {
-      return getTripsByDriverIdsFromTripsTable(driverIds, opts);
+      return getTripsByDriverIdsFromTripsTable(driverIds, opts, driverOrgIds);
     }
+    // hasMore is computed from the RAW page (what the server had) so paging still
+    // advances correctly when dedupe removes rows from this page.
     const hasMore = raw.length > limit;
+    const page = hasMore ? raw.slice(0, limit) : raw;
     return {
       error: null,
-      trips: hasMore ? raw.slice(0, limit) : raw,
+      trips: dedupeDriverTripsForDriverOrgs(page, driverOrgIds),
       hasMore,
     };
   }
   const { data, error } = await base();
   if (error) {
-    const fallback = await getTripsByDriverIdsFromTripsTable(driverIds, opts);
+    const fallback = await getTripsByDriverIdsFromTripsTable(driverIds, opts, driverOrgIds);
     return fallback.error ? { error: new Error(error.message), trips: [] } : fallback;
   }
   const raw = (data ?? []) as DriverTripRow[];
   if (raw.length === 0) {
-    return getTripsByDriverIdsFromTripsTable(driverIds, opts);
+    return getTripsByDriverIdsFromTripsTable(driverIds, opts, driverOrgIds);
   }
-  return { error: null, trips: raw };
+  return { error: null, trips: dedupeDriverTripsForDriverOrgs(raw, driverOrgIds) };
 }
 
 /** Legacy driver screens: safe read via view, mapped to TripRow for UI. */
