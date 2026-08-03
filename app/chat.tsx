@@ -14,10 +14,11 @@
  */
 import { LazySuspenseInlineFallback } from '@/components/LazySuspenseFallback';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLoadingStuck } from '@/lib/hooks/useLoadingStuck';
 import { useMemberAccess } from '@/lib/useMemberAccess';
 import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { lazy, Suspense, useEffect } from 'react';
+import { Redirect, useLocalSearchParams } from 'expo-router';
+import { lazy, Suspense } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 
 const ChatRouteContent = lazy(
@@ -26,27 +27,28 @@ const ChatRouteContent = lazy(
 
 export default function ChatRoute() {
   const { profile } = useAuth();
-  const router = useRouter();
   const params = useLocalSearchParams<{ tripId?: string }>();
   const { can: canSurface, isLoading: accessLoading } = useMemberAccess();
   const isDriver = (profile as { role?: string })?.role === 'driver';
+  const accessStuck = useLoadingStuck(accessLoading);
 
-  useEffect(() => {
-    // Drivers that land here (e.g. after a refresh that lost nav state) should see
-    // their own driver-chat view, not the dispatcher Pulse Chat.
-    if ((profile as { role?: string })?.role === 'driver') {
-      const dest = params.tripId
-        ? `/(driver)/chat?tripId=${encodeURIComponent(params.tripId)}`
-        : '/(driver)/chat';
-      router.replace(dest as Parameters<typeof router.replace>[0]);
-    }
-  }, [profile, params.tripId, router]);
+  // Drivers must leave BEFORE the surface gate below. `(driver)` is a group
+  // segment, so `/(driver)/chat` and `/chat` are the same browser URL — a driver
+  // re-entering chat can land on this dispatcher file. The `accessLoading` gate
+  // waits on ActiveWorkspaceContext, which never resolves for a driver, so
+  // gating first would splash forever with no exit. Redirect during render
+  // (not in an effect) so no dispatcher-only provider ever mounts.
+  if (isDriver) {
+    const dest = params.tripId
+      ? `/(driver)/chat?tripId=${encodeURIComponent(params.tripId)}`
+      : '/(driver)/chat';
+    return <Redirect href={dest as '/'} />;
+  }
 
-  // If driver role, the useEffect above redirects; render nothing while it fires.
-  if (isDriver) return null;
-
-  // Surfaces hydrate async — deciding before they land would bounce permitted members.
-  if (accessLoading) {
+  // Surfaces hydrate async — deciding before they land would bounce permitted
+  // members. `accessStuck` keeps a never-resolving workspace from becoming an
+  // inescapable splash: fall through to the denied view instead of waiting.
+  if (accessLoading && !accessStuck) {
     return <LazySuspenseInlineFallback message="Loading chat…" />;
   }
 

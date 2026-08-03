@@ -72,6 +72,14 @@ export function useDriverChat() {
   return ctx;
 }
 
+/**
+ * Non-throwing variant for shared chrome (e.g. DriverHeader) that may render
+ * before/outside the provider — returns undefined instead of crashing.
+ */
+export function useOptionalDriverChat() {
+  return useContext(DriverChatContext);
+}
+
 export function DriverChatProvider({
   children,
   isActive = true,

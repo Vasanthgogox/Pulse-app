@@ -4,9 +4,11 @@ import Typography from '@/constants/Typography';
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { DriverHeaderTripOpsButtons } from '@/components/driver/DriverHeaderTripOpsButtons';
 import { useOptionalLanguage } from '@/contexts/LanguageContext';
+import { useOptionalDriverChat } from '@/features/chat/contexts/DriverChatContext';
 import { ROUTES } from '@/lib/routes';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
+import { MessageSquare } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { Image, Platform, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
 import Animated, {
@@ -46,6 +48,13 @@ type Props = {
   onPressOtpClaim?: () => void;
   onPressNotifications?: () => void;
   onPressLanguage?: () => void;
+  onPressChat?: () => void;
+  /**
+   * Unread trip messages. Omit to read live from DriverChatContext — every
+   * DriverHeader renders inside the driver shell, so the provider is always
+   * present. Pass a number only to override (e.g. tests).
+   */
+  chatUnreadCount?: number;
   /** Active trip for header expense / odometer shortcuts. */
   hasActiveTrip?: boolean;
   showExpenseOps?: boolean;
@@ -63,6 +72,8 @@ export function DriverHeader({
   variant = 'default',
   onPressNotifications,
   onPressLanguage,
+  onPressChat,
+  chatUnreadCount,
   hasActiveTrip = false,
   showExpenseOps = true,
   showOdometerOps = true,
@@ -79,6 +90,10 @@ export function DriverHeader({
 
   const title =
     variant === 'assigned' ? driverName : `Welcome, ${driverName}`;
+
+  const driverChat = useOptionalDriverChat();
+  const unreadCount =
+    chatUnreadCount ?? driverChat?.getTotalUnreadCount() ?? 0;
 
   const ringPulse = useSharedValue(1);
 
@@ -213,6 +228,45 @@ export function DriverHeader({
           />
         ) : null}
 
+        {/* Trip-message inbox. Only entry point for drivers with no active trip —
+            the per-trip Chat buttons live on trip cards, which aren't rendered
+            when the driver is idle. */}
+        <TouchableOpacity
+          onPress={onPressChat ?? (() => router.push('/(driver)/chat'))}
+          style={[
+            styles.notificationBtn,
+            { backgroundColor: colors.whiteMuted, borderColor: colors.border },
+          ]}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={
+            unreadCount > 0
+              ? `Trip messages, ${unreadCount} unread`
+              : 'Trip messages'
+          }
+          accessibilityHint="Opens your trip conversations"
+        >
+          {/* lucide MessageSquare — matches DriverChatScreen's own icon and the
+              stroke weight of the rest of the driver shell. */}
+          <MessageSquare
+            size={Layout.driverHeaderActionIconSize}
+            color={colors.text}
+            strokeWidth={2.25}
+          />
+          {unreadCount > 0 ? (
+            <View
+              style={[
+                styles.chatBadge,
+                { backgroundColor: colors.emerald, borderColor: colors.surface },
+              ]}
+            >
+              <Text style={styles.chatBadgeText}>
+                {unreadCount > 99 ? '99+' : String(unreadCount)}
+              </Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+
         <TouchableOpacity
           onPress={onPressNotifications ?? (() => router.push('/(driver)/notifications'))}
           style={[
@@ -328,6 +382,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#fff',
+    lineHeight: 11,
   },
 });
 
