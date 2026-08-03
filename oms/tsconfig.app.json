@@ -25,5 +25,9 @@
       "@pulse-platform/*": ["../lib/platform/*"]
     }
   },
-    "include": ["src", "../lib/platform/**/*.ts", "../lib/suite/suiteProductModule.ts"]
+    "include": [
+      "src",
+      "../lib/platform/index.ts",
+      "../lib/suite/suiteProductModule.ts"
+    ]
 }

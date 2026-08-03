@@ -8,12 +8,12 @@ import {
   getRealtimeHealth,
   getRealtimeRegistryDiagnostics,
   listRealtimeRegistryEntries,
-} from "@/lib/realtimeRegistry";
-import { getQueryCacheMetrics } from "@/lib/platform/scalability/queryCacheMetrics";
+} from "../../realtimeRegistry";
+import { getQueryCacheMetrics } from "./queryCacheMetrics";
 import {
   PLATFORM_SUCCESS_TARGETS,
   SUBSCRIPTION_BUDGETS,
-} from "@/lib/platform/scalability/performanceBudgets";
+} from "./performanceBudgets";
 
 export type PlatformHealthSnapshot = {
   capturedAt: string;

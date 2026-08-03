@@ -5,15 +5,15 @@ export {
   PLATFORM_SUCCESS_TARGETS,
   type SubscriptionBudgetSurface,
   type ActionDbBudgetKey,
-} from "@/lib/platform/scalability/performanceBudgets";
+} from "./performanceBudgets";
 export {
   getQueryCacheMetrics,
   recordInvalidateQueries,
   recordSetQueryData,
   recordRefetchQueries,
   recordInvalidationStorm,
-} from "@/lib/platform/scalability/queryCacheMetrics";
+} from "./queryCacheMetrics";
 export {
   getPlatformHealthSnapshot,
   type PlatformHealthSnapshot,
-} from "@/lib/platform/scalability/platformHealth";
+} from "./platformHealth";
