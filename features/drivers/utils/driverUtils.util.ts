@@ -156,11 +156,60 @@ export interface DriverTripEarnings {
 export function tripEarningsDetailForDriver(
   trip: TripWithSupplier | null | undefined,
   payoutTerms?: DriverTripPayoutTerms | null,
+  driverOrgIds?: Iterable<string> | null,
 ): DriverTripEarnings {
   const none = { amount: 0, basis: "none" as const, isEstimated: false };
   if (!trip) return none;
 
+  /**
+   * A driver is paid by their EMPLOYER, never by their employer's customer.
+   *
+   * An indent-based awarded load creates two trip rows (docs/TRIP_VARIANTS.md §4):
+   * the middleman's money row and the mover's own work row. The mover's driver is
+   * stamped on BOTH — on the middleman's row only so the broker can track who is
+   * carrying its client's goods. Computing earnings from that row pays the driver
+   * twice for one job, off the broker's larger prices.
+   *
+   * Worked example (live): alishek is PR logistics' driver. PR was awarded ITS
+   * Logistics' load. Earnings must come from PR's row only (1,900) — never from
+   * ITS's row, which previously contributed a phantom 2,750, and after that field
+   * was zeroed fell through to the 10% legacy guess for an even worse 3,800.
+   *
+   * So: when the caller tells us which orgs the driver actually belongs to, any
+   * trip owned by a different org earns nothing. Returning `none` here is what
+   * stops the fallbacks below from inventing a number — zeroing
+   * `driver_commission` alone is not enough, because rule 4 treats 0 as "unset".
+   *
+   * Omitting `driverOrgIds` preserves the old behavior for callers that have no
+   * driver context; trips with no `organization_id` are never excluded.
+   */
   const commission = Number(trip.driver_commission ?? 0) || 0;
+
+  if (driverOrgIds != null) {
+    const owned = new Set<string>();
+    for (const id of driverOrgIds) {
+      const v = String(id ?? "").trim();
+      if (v !== "") owned.add(v);
+    }
+    const tripOrg = String(
+      (trip as TripWithSupplier & { organization_id?: string | null }).organization_id ?? "",
+    ).trim();
+    const isForeignOrg = owned.size > 0 && tripOrg !== "" && !owned.has(tripOrg);
+    /**
+     * Foreign-org row earns nothing — EXCEPT when it carries an explicit
+     * `driver_commission`. Verified live: 3 drivers have a broker row whose paired
+     * mover_asset row was never created (the known gap where
+     * _ensure_mover_asset_trip does not run). Two of those sit at 0 and are
+     * correctly dropped; Mani's carries 4,500 and is the only record of that job's
+     * pay. Suppressing it would silently erase real money owed, which is worse
+     * than showing it on the broker's row. An explicit figure was set by a human
+     * or by the completion trigger against that specific row — honour it.
+     *
+     * The phantom double-count this fix targets is gone either way: those rows
+     * were zeroed, so they take the `return none` branch.
+     */
+    if (isForeignOrg && commission <= 0) return none;
+  }
   if (commission > 0) {
     return {
       amount: Math.round(commission),
@@ -231,8 +280,9 @@ export function tripEarningsDetailForDriver(
 export function tripEarningsForDriver(
   trip: TripWithSupplier | null | undefined,
   payoutTerms?: DriverTripPayoutTerms | null,
+  driverOrgIds?: Iterable<string> | null,
 ): number {
-  return tripEarningsDetailForDriver(trip, payoutTerms).amount;
+  return tripEarningsDetailForDriver(trip, payoutTerms, driverOrgIds).amount;
 }
 
 export function isAssignedNotStarted(status: string) {

@@ -85,8 +85,18 @@ function isCompleted(status: string) {
 }
 
 /** Trip earnings for driver: 0 for aggregate (offline payment), else driver_commission / commission% of client_price / 10% supplier_rate. */
-function tripEarnings(t: tripsService.TripRow, payoutTerms?: { commissionPercent?: number | null; commissionPerKm?: number | null } | null): number {
-  return tripEarningsForDriver(t, payoutTerms ?? undefined);
+/**
+ * `driverOrgIds` scopes earnings to the driver's OWN employer(s). On an awarded
+ * indent the driver sits on both the middleman's row and their employer's row;
+ * only the employer pays them. Without this the wallet counted the broker's row
+ * too — see tripEarningsDetailForDriver.
+ */
+function tripEarnings(
+  t: tripsService.TripRow,
+  payoutTerms?: { commissionPercent?: number | null; commissionPerKm?: number | null } | null,
+  driverOrgIds?: Iterable<string> | null,
+): number {
+  return tripEarningsForDriver(t, payoutTerms ?? undefined, driverOrgIds);
 }
 
 /** Active fleet row, including reconnect when accept cleared invite but left_at was stale server-side. */
@@ -367,6 +377,19 @@ export default function DriverWalletScreen() {
     (t: tripsService.TripRow) =>
       payoutTermsMap.get(`${String(t.driver_id ?? '')}:${String(t.organization_id ?? '')}`) ?? null,
     [payoutTermsMap],
+  );
+
+  /**
+   * Orgs this driver actually works for. Earnings are scoped to these so a
+   * middleman's copy of an awarded trip never contributes a payout — the driver is
+   * paid by their employer only.
+   */
+  const driverOrgIds = useMemo(
+    () =>
+      linkedDrivers
+        .map((d) => String(d.organization_id ?? '').trim())
+        .filter((id) => id !== ''),
+    [linkedDrivers],
   );
 
   const receivedLedgerEntries = useMemo(() => {
@@ -974,8 +997,8 @@ export default function DriverWalletScreen() {
 
     const pending = visibleTrips.filter((t) => (receivedByTripId[t.id] ?? 0) === 0);
     const received = visibleTrips.filter((t) => (receivedByTripId[t.id] ?? 0) > 0);
-    const pendingSum = pending.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t)), 0);
-    const receivedSum = received.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t)), 0);
+    const pendingSum = pending.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t), driverOrgIds), 0);
+    const receivedSum = received.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t), driverOrgIds), 0);
     const list =
       transactionFilter === 'pending'
         ? pending
@@ -1181,7 +1204,7 @@ export default function DriverWalletScreen() {
           String(trip.organization_id ?? '') === String(fleet.orgId) &&
           String(trip.driver_id ?? '') === String(fleet.driverId),
       );
-      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip, payoutTermsForTrip(trip)), 0));
+      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip, payoutTermsForTrip(trip), driverOrgIds), 0));
       // Received for trip progress = only verified settlements.
       const received = Math.round(
         ledgerEntries
@@ -1523,7 +1546,7 @@ export default function DriverWalletScreen() {
           String(trip.organization_id ?? '') === orgId &&
           String(trip.driver_id ?? '') === String(d.id),
       );
-      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip, payoutTermsForTrip(trip)), 0));
+      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip, payoutTermsForTrip(trip), driverOrgIds), 0));
       const received = Math.round(
         ledgerEntries
           .filter(
@@ -1597,7 +1620,7 @@ export default function DriverWalletScreen() {
           String(t.organization_id ?? '') === orgId &&
           String(t.driver_id ?? '') === String(d.id),
       );
-      const earned = Math.round(fleetTrips.reduce((sum, t) => sum + tripEarnings(t, payoutTermsForTrip(t)), 0));
+      const earned = Math.round(fleetTrips.reduce((sum, t) => sum + tripEarnings(t, payoutTermsForTrip(t), driverOrgIds), 0));
       return {
         driverId: d.id,
         orgId,
@@ -1849,7 +1872,7 @@ export default function DriverWalletScreen() {
       const tripId = trip.id;
       setMarkFleetTripLoadingId(tripId);
       try {
-        const earnings = Math.round(tripEarnings(trip, payoutTermsForTrip(trip)));
+        const earnings = Math.round(tripEarnings(trip, payoutTermsForTrip(trip), driverOrgIds));
         if (earnings <= 0) {
           Alert.alert('No earnings', 'Trip earnings could not be calculated. Please check trip details.');
           return;
@@ -2015,7 +2038,7 @@ export default function DriverWalletScreen() {
 
       const tripDisplay = getDriverTripDisplayNumber(trip, driverTripNumberById);
       const roundedAmount = Math.round(amount);
-      const expectedAmt = Math.round(tripEarnings(trip, payoutTermsForTrip(trip)));
+      const expectedAmt = Math.round(tripEarnings(trip, payoutTermsForTrip(trip), driverOrgIds));
       const writeOffAmt = expectedAmt > roundedAmount ? expectedAmt - roundedAmount : 0;
       if (sourceLedger) {
         setSettledSuccessState({
@@ -2050,7 +2073,7 @@ export default function DriverWalletScreen() {
       setMarkPaidConfirmState({
         trip,
         amount,
-        expectedAmount: shortfall?.expectedAmount ?? Math.round(tripEarnings(trip, payoutTermsForTrip(trip))),
+        expectedAmount: shortfall?.expectedAmount ?? Math.round(tripEarnings(trip, payoutTermsForTrip(trip), driverOrgIds)),
         writeOffAmount: shortfall?.writeOffAmount ?? 0,
         hasPaymentShortfall: shortfall?.hasPaymentShortfall ?? false,
         sourceLedger: sourceLedger ?? null,
