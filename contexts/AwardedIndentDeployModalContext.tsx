@@ -1,6 +1,5 @@
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { AwardedIndentDeployModal } from "@/features/indents/components/AwardedIndentDeployModal";
-import { AwardedIndentDeployPeek } from "@/features/indents/components/AwardedIndentDeployPeek";
 import { buildPendingAwardedDeployQueue } from "@/features/indents/utils/pendingAwardedDeploy.util";
 import {
   clearDeploySnooze,
@@ -15,6 +14,7 @@ import {
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import {
+  isAwardedDeployOpsSurfacePath,
   isIndentDeployFlowPath,
   parseIndentIdFromDeployFlowPath,
   ROUTES,
@@ -36,7 +36,10 @@ const CONNECTION_INVITE_DEFER_AFTER_MINIMIZE_MS = 3000;
 
 export type AwardedIndentDeployModalContextValue = {
   pendingDeployCount: number;
-  /** Awards collapsed to the bottom peek (still in queue). */
+  /**
+   * @deprecated Peek no longer auto-follows navigation (inbox pattern).
+   * Always 0 unless an explicit expand path reintroduces a transient peek.
+   */
   minimizedDeployCount: number;
   /** When true, connection invitation modals must not show (deploy sheet expanded). */
   blocksConnectionInvitations: boolean;
@@ -105,20 +108,13 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   /** Later-snooze timestamps (ms) persisted across restarts, keyed by indent id. */
   const [snoozeByIndentId, setSnoozeByIndentId] = useState<Record<string, number>>({});
   const [snoozesLoaded, setSnoozesLoaded] = useState(false);
-  /** Indents the user collapsed via the drag-to-minimize gesture — an
-   *  in-session-only "not now", distinct from the persisted Later snooze. */
-  const [sessionCollapsedIndentIds, setSessionCollapsedIndentIds] = useState<Set<string>>(
-    new Set(),
-  );
   const [queueViewIndex, setQueueViewIndex] = useState(0);
   const [dismissedForSession, setDismissedForSession] = useState(false);
-  const [minimized, setMinimized] = useState(false);
   const [inviteDeferralActive, setInviteDeferralActive] = useState(false);
   const inviteDeferralTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Set when user taps Assign — keeps deploy cards hidden until allocation route ends. */
   const [deployFlowIndentId, setDeployFlowIndentId] = useState<string | null>(null);
-  /** Ticks periodically so a snooze cooldown expiring mid-session re-evaluates
-   *  visibility without requiring a data refetch or app foreground. */
+  /** Ticks so overdue escalation can re-evaluate without a data refetch. */
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -197,8 +193,7 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     }
   }, [onDeployFlowScreen, deployFlowPathIndentId]);
 
-  // Snoozed items stay in the visible queue — a persisted Later demotes an
-  // award to the peek for the cooldown window, it does not hide it outright.
+  // Queue stays intact; "Later" / minimize / leave-ops only demotes interrupt level.
   const visibleQueue = pendingQueue;
 
   useEffect(() => {
@@ -214,14 +209,6 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
 
   const deployFlowActive = onDeployFlowScreen || deployFlowIndentId != null;
 
-  const activeIndentCollapsed =
-    activeItem != null && sessionCollapsedIndentIds.has(activeItem.indent.id);
-
-  // Explicit visibility decision for the active item: a brand-new award (no
-  // snooze record) always gets the full modal; a snoozed one only escalates
-  // back once the cooldown expires or it has gone severely overdue since the
-  // user last saw it. Foreground/background has no bearing on any of this —
-  // only pendingQueue contents (data) and nowMs (cooldown expiry) do.
   const activeSnoozeDecision = useMemo(() => {
     if (!activeItem) return "full_modal" as const;
     return decideDeployVisibility({
@@ -231,55 +218,35 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     });
   }, [activeItem, snoozeByIndentId, nowMs]);
 
-  // Tapping the peek to expand is an explicit user action — it should always
-  // reveal the full modal, even mid-cooldown, so "expand" never feels stuck.
+  /** Explicit expand from Claimed / badge — only way back after inbox-quiet. */
   const [explicitlyExpandedIndentId, setExplicitlyExpandedIndentId] = useState<string | null>(
     null,
   );
   const activeIndentExplicitlyExpanded =
     activeItem != null && explicitlyExpandedIndentId === activeItem.indent.id;
 
-  const activeIndentSnoozedToPeek =
-    activeSnoozeDecision === "peek" && !activeIndentExplicitlyExpanded;
+  const activeIndentInboxQuiet =
+    activeSnoozeDecision === "quiet" && !activeIndentExplicitlyExpanded;
+
+  /**
+   * Inbox pattern (how Slack / Gmail / merchant apps do action-required):
+   * 1) First time on an ops surface → one full modal
+   * 2) Later / minimize / leave Trips → quiet forever for that award
+   * 3) Reminder lives on Loads badge + Claimed list — never stalks redirects
+   */
+  const onOpsSurface = isAwardedDeployOpsSurfacePath(pathname);
 
   const hasPendingDeploy = Boolean(activeItem) && !deployFlowActive;
   const showExpandedDeployModal =
-    hasPendingDeploy && !minimized && !activeIndentCollapsed && !activeIndentSnoozedToPeek;
-  const showMinimizedPeek =
-    hasPendingDeploy && (minimized || activeIndentCollapsed || activeIndentSnoozedToPeek);
+    onOpsSurface && hasPendingDeploy && !activeIndentInboxQuiet;
 
   const blocksConnectionInvitations = showExpandedDeployModal;
   const deferConnectionInvitations = inviteDeferralActive;
 
-  const handleMinimize = useCallback(() => {
-    if (activeItem) {
-      const indentId = activeItem.indent.id;
-      setSessionCollapsedIndentIds((prev) => new Set(prev).add(indentId));
-    }
-    setMinimized(true);
-    startInviteDeferral();
-  }, [activeItem, startInviteDeferral]);
-
-  const handleExpand = useCallback(() => {
-    if (activeItem) {
-      const indentId = activeItem.indent.id;
-      setSessionCollapsedIndentIds((prev) => {
-        if (!prev.has(indentId)) return prev;
-        const next = new Set(prev);
-        next.delete(indentId);
-        return next;
-      });
-      setExplicitlyExpandedIndentId(indentId);
-    }
-    setMinimized(false);
-    clearInviteDeferral();
-  }, [activeItem, clearInviteDeferral]);
-
-  const handleLater = useCallback(() => {
+  /** Persist inbox-quiet for the whole pending queue (one dismiss covers all). */
+  const markQueueInboxQuiet = useCallback(() => {
     if (!orgId || visibleQueue.length === 0) return;
     const snoozedAtMs = Date.now();
-    // One Later dismisses every pending award popup for the cooldown window —
-    // otherwise the next queue item immediately reopens the full modal.
     setSnoozeByIndentId((prev) => {
       const next = { ...prev };
       for (const item of visibleQueue) {
@@ -288,43 +255,98 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
       return next;
     });
     for (const item of visibleQueue) {
-      saveDeploySnooze(orgId, item.indent.id, snoozedAtMs);
+      void saveDeploySnooze(orgId, item.indent.id, snoozedAtMs);
     }
-    setSessionCollapsedIndentIds(new Set());
-    setMinimized(false);
     setExplicitlyExpandedIndentId(null);
   }, [orgId, visibleQueue]);
+
+  // Leaving Trips/Loads = "not now" — don't re-pop when they come back.
+  const prevPathOpsRef = useRef(onOpsSurface);
+  useEffect(() => {
+    const wasOps = prevPathOpsRef.current;
+    prevPathOpsRef.current = onOpsSurface;
+    if (wasOps && !onOpsSurface && visibleQueue.length > 0 && !deployFlowActive) {
+      markQueueInboxQuiet();
+      startInviteDeferral();
+    }
+  }, [
+    onOpsSurface,
+    visibleQueue.length,
+    deployFlowActive,
+    markQueueInboxQuiet,
+    startInviteDeferral,
+  ]);
+
+  const handleMinimize = useCallback(() => {
+    markQueueInboxQuiet();
+    startInviteDeferral();
+  }, [markQueueInboxQuiet, startInviteDeferral]);
+
+  const handleExpand = useCallback(() => {
+    if (!activeItem || !orgId) return;
+    const indentId = activeItem.indent.id;
+    void clearDeploySnooze(orgId, indentId);
+    setSnoozeByIndentId((prev) => {
+      if (!(indentId in prev)) return prev;
+      const next = { ...prev };
+      delete next[indentId];
+      return next;
+    });
+    setExplicitlyExpandedIndentId(indentId);
+    clearInviteDeferral();
+  }, [activeItem, orgId, clearInviteDeferral]);
+
+  const handleLater = useCallback(() => {
+    markQueueInboxQuiet();
+    startInviteDeferral();
+  }, [markQueueInboxQuiet, startInviteDeferral]);
 
   const handleAssign = useCallback(() => {
     if (!activeItem) return;
     const indentId = activeItem.indent.id;
+    markQueueInboxQuiet();
     setDeployFlowIndentId(indentId);
     router.push(
       ROUTES.indentAllocation(indentId) as import("expo-router").Href,
     );
-  }, [activeItem, router]);
+  }, [activeItem, router, markQueueInboxQuiet]);
 
   const handleViewLoad = useCallback(() => {
     if (!activeItem) return;
     const indentId = activeItem.indent.id;
+    markQueueInboxQuiet();
     setDeployFlowIndentId(indentId);
     router.push(ROUTES.indentDetail(indentId) as import("expo-router").Href);
-  }, [activeItem, router]);
+  }, [activeItem, router, markQueueInboxQuiet]);
 
   const presentNextDeploy = useCallback(() => {
     clearInviteDeferral();
     setDismissedForSession(false);
-    setSessionCollapsedIndentIds(new Set());
     setQueueViewIndex(0);
     setDeployFlowIndentId(null);
-    setMinimized(false);
-    setExplicitlyExpandedIndentId(null);
-  }, [clearInviteDeferral]);
+    // Explicit "show me again" from product surfaces — clear quiet for queue.
+    if (orgId && visibleQueue.length > 0) {
+      const firstId = visibleQueue[0]?.indent.id ?? null;
+      for (const item of visibleQueue) {
+        void clearDeploySnooze(orgId, item.indent.id);
+      }
+      setSnoozeByIndentId((prev) => {
+        const next = { ...prev };
+        for (const item of visibleQueue) {
+          delete next[item.indent.id];
+        }
+        return next;
+      });
+      setExplicitlyExpandedIndentId(firstId);
+    } else {
+      setExplicitlyExpandedIndentId(null);
+    }
+  }, [clearInviteDeferral, orgId, visibleQueue]);
 
   const value = useMemo(
     (): AwardedIndentDeployModalContextValue => ({
       pendingDeployCount: pendingQueue.length,
-      minimizedDeployCount: showMinimizedPeek ? visibleQueue.length : 0,
+      minimizedDeployCount: 0,
       blocksConnectionInvitations,
       deferConnectionInvitations,
       presentNextDeploy,
@@ -336,8 +358,6 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
       handleExpand,
       pendingQueue.length,
       presentNextDeploy,
-      showMinimizedPeek,
-      visibleQueue.length,
     ],
   );
 
@@ -345,25 +365,16 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     <AwardedIndentDeployModalContext.Provider value={value}>
       {children}
       {canDeployAwarded && visibleQueue.length > 0 ? (
-        <>
-          <AwardedIndentDeployModal
-            visible={showExpandedDeployModal}
-            items={visibleQueue}
-            pageIndex={queueViewIndex}
-            onPageChange={setQueueViewIndex}
-            onAssign={handleAssign}
-            onLater={handleLater}
-            onMinimize={handleMinimize}
-            onViewLoad={handleViewLoad}
-          />
-          {showMinimizedPeek ? (
-            <AwardedIndentDeployPeek
-              items={visibleQueue}
-              pageIndex={queueViewIndex}
-              onExpand={handleExpand}
-            />
-          ) : null}
-        </>
+        <AwardedIndentDeployModal
+          visible={showExpandedDeployModal}
+          items={visibleQueue}
+          pageIndex={queueViewIndex}
+          onPageChange={setQueueViewIndex}
+          onAssign={handleAssign}
+          onLater={handleLater}
+          onMinimize={handleMinimize}
+          onViewLoad={handleViewLoad}
+        />
       ) : null}
     </AwardedIndentDeployModalContext.Provider>
   );

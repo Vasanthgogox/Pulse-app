@@ -36,6 +36,7 @@ import {
 import Layout from "@/constants/Layout";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import Theme from "@/constants/Theme";
+import { useOptionalAwardedIndentDeployModal } from "@/contexts/AwardedIndentDeployModalContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
     getIndentDisplayNumber,
@@ -151,6 +152,8 @@ export function LoadCenterView({
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
+  const pendingDeployCount =
+    useOptionalAwardedIndentDeployModal()?.pendingDeployCount ?? 0;
 
   const scrollRef = useRef<FlashListRef<IndentRow>>(null);
 
@@ -320,6 +323,10 @@ export function LoadCenterView({
     setShowPostModal(true);
   }, [onShareToNetwork, shareablePulseIndent]);
 
+  /** Claimed tab: prefer action-needed deploy count so quiet-mode badge stays honest. */
+  const claimedTabCount =
+    pendingDeployCount > 0 ? pendingDeployCount : awardedLoads.length;
+
   const mainLoadTabs = useMemo(
     () =>
       [
@@ -336,10 +343,10 @@ export function LoadCenterView({
         {
           key: "AWARDED" as const,
           label: "Claimed",
-          count: awardedLoads.length,
+          count: claimedTabCount,
         },
       ] as const,
-    [hirePartnerLoads.length, findWorkLoads.length, awardedLoads.length],
+    [hirePartnerLoads.length, findWorkLoads.length, claimedTabCount],
   );
 
   const driverProfileById = useMemo(() => {
@@ -1290,7 +1297,7 @@ export function LoadCenterView({
             {
               key: "AWARDED",
               label: "Claimed",
-              count: awardedLoads.length,
+              count: claimedTabCount,
             },
           ]}
           activeMainTab={loadSubTab}

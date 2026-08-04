@@ -28,7 +28,7 @@ export type AwardedIndentDeployModalProps = {
   onPageChange: (index: number) => void;
   onAssign: () => void;
   onLater: () => void;
-  /** Collapse to bottom peek — trip stays in queue (unlike Later). */
+  /** Dismiss to inbox-quiet (Loads badge / Claimed) — same outcome as Later. */
   onMinimize: () => void;
   onViewLoad?: () => void;
 };

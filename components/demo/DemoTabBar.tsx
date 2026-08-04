@@ -46,6 +46,7 @@ import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistry
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
+import { useOptionalAwardedIndentDeployModal } from "@/contexts/AwardedIndentDeployModalContext";
 import { useTabBarActiveLoadCount } from "@/lib/hooks/useTabBarActiveLoadCount";
 import {
     resolveTabBarLayoutPlatform,
@@ -247,10 +248,14 @@ export function DemoTabBar({
     const t = setTimeout(() => setLoadsBadgeReady(true), 2800);
     return () => clearTimeout(t);
   }, [isDesktopWebEarly]);
-  const activeLoadCount = useTabBarActiveLoadCount(
+  const loadHubCount = useTabBarActiveLoadCount(
     orgId,
     !isDesktopWebEarly && loadsBadgeReady,
   );
+  /** Ensure quiet-mode pending deploys still surface on the Loads dock badge. */
+  const pendingDeployCount =
+    useOptionalAwardedIndentDeployModal()?.pendingDeployCount ?? 0;
+  const activeLoadCount = Math.max(loadHubCount, pendingDeployCount);
   // External-store-driven counts; chat providers publish into the signal.
   const messageUnreadCount = useSyncExternalStore(
     subscribeChatUnreadSignal,

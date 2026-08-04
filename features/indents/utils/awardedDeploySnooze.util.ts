@@ -1,16 +1,18 @@
 /**
- * Persisted "Later" snooze for the awarded-indent deploy modal.
+ * Persisted "seen / not now" state for the awarded-indent deploy interrupt.
  *
- * A snoozed award should stay collapsed to the low-friction peek across app
- * foreground/background and app restarts — only cooldown expiry or a truly
- * overdue-and-ignored trip should bring back the full-screen modal.
+ * Pattern (Slack / Gmail / merchant apps): interrupt once, then retreat to an
+ * inbox (Loads badge + Claimed list). Do not re-pop the modal when the user
+ * navigates back to Trips — that feels stalky.
+ *
+ * Overdue escalation is the only automatic re-interrupt (forgotten load).
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-/** How long "Later" holds an award to the peek before it's eligible to re-escalate. */
+/** Kept for callers / docs; cooldown no longer re-opens the modal by itself. */
 export const DEPLOY_SNOOZE_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-/** Pickup lateness threshold past which an ignored award re-escalates even during cooldown. */
+/** Pickup lateness past which an ignored award may interrupt once more. */
 export const DEPLOY_OVERDUE_ESCALATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const STORAGE_KEY_PREFIX = "awarded_deploy_snooze_v1";
@@ -37,12 +39,11 @@ async function writeSnoozeMap(orgId: string, map: SnoozeMap): Promise<void> {
   try {
     await AsyncStorage.setItem(storageKey(orgId), JSON.stringify(map));
   } catch {
-    // Best-effort persistence — a failed write just means this snooze
-    // behaves like the old session-only behavior until next success.
+    // Best-effort persistence
   }
 }
 
-/** Load all snooze timestamps for an org, keyed by indent id. */
+/** Load all "inbox quiet" timestamps for an org, keyed by indent id. */
 export async function loadDeploySnoozes(orgId: string): Promise<Record<string, number>> {
   const map = await readSnoozeMap(orgId);
   const result: Record<string, number> = {};
@@ -52,14 +53,18 @@ export async function loadDeploySnoozes(orgId: string): Promise<Record<string, n
   return result;
 }
 
-/** Record that the user tapped "Later" on this indent right now. */
-export async function saveDeploySnooze(orgId: string, indentId: string, nowMs: number): Promise<void> {
+/** Record that the user acknowledged / dismissed this indent (inbox quiet). */
+export async function saveDeploySnooze(
+  orgId: string,
+  indentId: string,
+  nowMs: number,
+): Promise<void> {
   const map = await readSnoozeMap(orgId);
   map[indentId] = { snoozedAtMs: nowMs };
   await writeSnoozeMap(orgId, map);
 }
 
-/** Clear a snooze — used once a trip exists for the indent or the award is gone. */
+/** Clear quiet state — trip created, award gone, or user explicitly re-opens. */
 export async function clearDeploySnooze(orgId: string, indentId: string): Promise<void> {
   const map = await readSnoozeMap(orgId);
   if (!(indentId in map)) return;
@@ -67,11 +72,12 @@ export async function clearDeploySnooze(orgId: string, indentId: string): Promis
   await writeSnoozeMap(orgId, map);
 }
 
-export type DeployVisibilityDecision = "full_modal" | "peek";
+export type DeployVisibilityDecision = "full_modal" | "quiet";
 
 /**
- * Decide whether a snoozed award should re-escalate to the full modal.
- * Not snoozed at all → caller treats it as a new award (full modal).
+ * Decide interrupt level for a pending award.
+ * - Never snoozed → full modal (first interrupt)
+ * - Acknowledged → quiet (badge / Claimed only), unless severely overdue
  */
 export function decideDeployVisibility(params: {
   snoozedAtMs: number | undefined;
@@ -81,18 +87,12 @@ export function decideDeployVisibility(params: {
   const { snoozedAtMs, pickupDateIso, nowMs } = params;
   if (snoozedAtMs == null) return "full_modal";
 
-  const cooldownExpired = nowMs - snoozedAtMs >= DEPLOY_SNOOZE_COOLDOWN_MS;
-  if (cooldownExpired) return "full_modal";
-
   const pickupMs = pickupDateIso ? new Date(pickupDateIso).getTime() : NaN;
   const severelyOverdueSinceSnooze =
     Number.isFinite(pickupMs) &&
     nowMs - pickupMs >= DEPLOY_OVERDUE_ESCALATION_MS &&
-    // Only escalate if the overdue threshold was crossed *after* the user
-    // already saw and dismissed it — otherwise every already-ignored old
-    // award re-escalates the instant cooldown math allows it.
     snoozedAtMs - pickupMs < DEPLOY_OVERDUE_ESCALATION_MS;
   if (severelyOverdueSinceSnooze) return "full_modal";
 
-  return "peek";
+  return "quiet";
 }

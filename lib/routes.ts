@@ -393,6 +393,47 @@ export function parseIndentIdFromDeployFlowPath(
   );
 }
 
+/**
+ * Surfaces where the awarded-deploy interrupt (full modal or bottom peek) may appear.
+ * Everywhere else: quiet — Loads tab badge / Claimed list only (no stalking overlay).
+ *
+ * Ops home bases: Trips hub, Load Center (`/pulse-loads`), trip detail, legacy indents.
+ * Excludes Finance, Chat, Network connections, Settings, profile, wizards.
+ */
+export function isAwardedDeployOpsSurfacePath(
+  pathname: string | null | undefined,
+): boolean {
+  if (!pathname) return false;
+  const path = (pathname.split("?")[0] ?? "").replace(/\/+$/, "") || "/";
+
+  if (path.includes("/chat")) return false;
+  if (path.includes("/finance")) return false;
+  if (path.includes("/profile") || path.includes("/workspace")) return false;
+  if (path.includes("/resources") || path.includes("/report")) return false;
+  // Network connections / hub — not Load Center
+  if (
+    path === "/network" ||
+    path.endsWith("/network") ||
+    path.includes("/network/")
+  ) {
+    return false;
+  }
+
+  if (path === "/pulse-loads" || path.endsWith("/pulse-loads")) return true;
+  if (path === "/indents" || path.endsWith("/indents")) return true;
+  if (
+    path === "/trips" ||
+    path.endsWith("/trips") ||
+    path.includes("/(tabs)/trips")
+  ) {
+    return true;
+  }
+  // Trip detail intentionally excluded — working a trip should not re-interrupt;
+  // Loads badge + Claimed remain the reminder home base.
+
+  return false;
+}
+
 /** Navigate to fuel/toll/other entry screen for editing an existing line item (`fuel:uuid`, etc.). */
 export function tripExpenseEntryEditRoute(tripId: string, costEventId: string): string | null {
   const [kind, sourceId] = costEventId.split(":");
