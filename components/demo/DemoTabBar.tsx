@@ -252,7 +252,7 @@ export function DemoTabBar({
     orgId,
     !isDesktopWebEarly && loadsBadgeReady,
   );
-  /** Ensure quiet-mode pending deploys still surface on the Loads dock badge. */
+  /** Quiet-mode pending deploys → badge on mobile Loads dock only. */
   const pendingDeployCount =
     useOptionalAwardedIndentDeployModal()?.pendingDeployCount ?? 0;
   const activeLoadCount = Math.max(loadHubCount, pendingDeployCount);

@@ -3,7 +3,7 @@ import {
   DEPLOY_OVERDUE_ESCALATION_MS,
 } from "@/features/indents/utils/awardedDeploySnooze.util";
 
-describe("decideDeployVisibility (inbox pattern)", () => {
+describe("decideDeployVisibility", () => {
   const nowMs = Date.UTC(2026, 7, 4, 12, 0, 0);
 
   it("shows full modal for a brand-new award", () => {
@@ -16,29 +16,29 @@ describe("decideDeployVisibility (inbox pattern)", () => {
     ).toBe("full_modal");
   });
 
-  it("stays quiet after dismiss — no re-interrupt on revisit", () => {
+  it("demotes to peek after Later (bottom card)", () => {
     expect(
       decideDeployVisibility({
         snoozedAtMs: nowMs - 60_000,
         pickupDateIso: new Date(nowMs + 86_400_000).toISOString(),
         nowMs,
       }),
-    ).toBe("quiet");
+    ).toBe("peek");
   });
 
-  it("does not re-open after cooldown alone", () => {
+  it("keeps peek after cooldown alone (no modal re-pop)", () => {
     expect(
       decideDeployVisibility({
         snoozedAtMs: nowMs - 5 * 60 * 60 * 1000,
         pickupDateIso: new Date(nowMs + 86_400_000).toISOString(),
         nowMs,
       }),
-    ).toBe("quiet");
+    ).toBe("peek");
   });
 
-  it("re-escalates only when severely overdue after dismiss", () => {
+  it("re-escalates only when severely overdue after Later", () => {
     const pickupMs = nowMs - DEPLOY_OVERDUE_ESCALATION_MS - 1_000;
-    const snoozedAtMs = pickupMs + 60_000; // dismissed before overdue threshold
+    const snoozedAtMs = pickupMs + 60_000;
     expect(
       decideDeployVisibility({
         snoozedAtMs,

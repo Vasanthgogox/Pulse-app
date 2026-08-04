@@ -28,7 +28,7 @@ export type AwardedIndentDeployModalProps = {
   onPageChange: (index: number) => void;
   onAssign: () => void;
   onLater: () => void;
-  /** Dismiss to inbox-quiet (Loads badge / Claimed) — same outcome as Later. */
+  /** Collapse to bottom peek — same outcome as Later. */
   onMinimize: () => void;
   onViewLoad?: () => void;
 };

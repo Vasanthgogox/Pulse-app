@@ -1,18 +1,17 @@
 /**
- * Persisted "seen / not now" state for the awarded-indent deploy interrupt.
+ * Persisted "Later" state for the awarded-indent deploy interrupt.
  *
- * Pattern (Slack / Gmail / merchant apps): interrupt once, then retreat to an
- * inbox (Loads badge + Claimed list). Do not re-pop the modal when the user
- * navigates back to Trips — that feels stalky.
- *
- * Overdue escalation is the only automatic re-interrupt (forgotten load).
+ * - First award → full modal (ops surfaces only)
+ * - Later / minimize → bottom peek on Trips / Load Center
+ * - Peek does NOT follow onto Finance / Chat (route allowlist)
+ * - Overdue escalation may re-open the full modal for forgotten loads
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-/** Kept for callers / docs; cooldown no longer re-opens the modal by itself. */
+/** How long "Later" holds an award to the peek before overdue rules may escalate. */
 export const DEPLOY_SNOOZE_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-/** Pickup lateness past which an ignored award may interrupt once more. */
+/** Pickup lateness past which an ignored award may interrupt with the full modal again. */
 export const DEPLOY_OVERDUE_ESCALATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const STORAGE_KEY_PREFIX = "awarded_deploy_snooze_v1";
@@ -43,7 +42,7 @@ async function writeSnoozeMap(orgId: string, map: SnoozeMap): Promise<void> {
   }
 }
 
-/** Load all "inbox quiet" timestamps for an org, keyed by indent id. */
+/** Load all Later timestamps for an org, keyed by indent id. */
 export async function loadDeploySnoozes(orgId: string): Promise<Record<string, number>> {
   const map = await readSnoozeMap(orgId);
   const result: Record<string, number> = {};
@@ -53,7 +52,7 @@ export async function loadDeploySnoozes(orgId: string): Promise<Record<string, n
   return result;
 }
 
-/** Record that the user acknowledged / dismissed this indent (inbox quiet). */
+/** Record that the user tapped Later / minimized (demote to peek). */
 export async function saveDeploySnooze(
   orgId: string,
   indentId: string,
@@ -64,7 +63,7 @@ export async function saveDeploySnooze(
   await writeSnoozeMap(orgId, map);
 }
 
-/** Clear quiet state — trip created, award gone, or user explicitly re-opens. */
+/** Clear Later state — trip created, award gone, or user expands the peek. */
 export async function clearDeploySnooze(orgId: string, indentId: string): Promise<void> {
   const map = await readSnoozeMap(orgId);
   if (!(indentId in map)) return;
@@ -72,12 +71,12 @@ export async function clearDeploySnooze(orgId: string, indentId: string): Promis
   await writeSnoozeMap(orgId, map);
 }
 
-export type DeployVisibilityDecision = "full_modal" | "quiet";
+export type DeployVisibilityDecision = "full_modal" | "peek";
 
 /**
  * Decide interrupt level for a pending award.
- * - Never snoozed → full modal (first interrupt)
- * - Acknowledged → quiet (badge / Claimed only), unless severely overdue
+ * - Never snoozed → full modal
+ * - Later → peek (bottom card), unless severely overdue
  */
 export function decideDeployVisibility(params: {
   snoozedAtMs: number | undefined;
@@ -94,5 +93,5 @@ export function decideDeployVisibility(params: {
     snoozedAtMs - pickupMs < DEPLOY_OVERDUE_ESCALATION_MS;
   if (severelyOverdueSinceSnooze) return "full_modal";
 
-  return "quiet";
+  return "peek";
 }
