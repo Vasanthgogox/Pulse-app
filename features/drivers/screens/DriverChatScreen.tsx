@@ -5,6 +5,7 @@ import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import { DriverChatSlackInbox } from "@/features/chat/components/driver/DriverChatSlackInbox";
 import { DriverChatSlackThread } from "@/features/chat/components/driver/DriverChatSlackThread";
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
+import { useLoadingStuck } from "@/lib/hooks/useLoadingStuck";
 import { preloadDriverChatThread } from "@/lib/preloadDriverChatWarmup";
 import type { TripConversation } from "@/features/chat/types/chat.types";
 import { useAuth } from "@/contexts/AuthContext";
@@ -123,6 +124,31 @@ export default function DriverChatScreen() {
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
   const resolvedOrgId = selectedConv?.organization_id ?? pendingConvOrgId;
 
+  // A deep-linked trip that has produced neither a thread nor an error is still
+  // resolving. If that never completes, the render below would splash forever.
+  const awaitingTripThread = Boolean(
+    normalizedTripId && !tripThreadError && !(selectedId && resolvedOrgId),
+  );
+  const tripThreadStuck = useLoadingStuck(awaitingTripThread);
+
+  // TEMP PROBE — remove once the back->reopen hang is confirmed fixed.
+  if (__DEV__) {
+    console.log('[probe:driverChat]', {
+      normalizedTripId,
+      isLoading,
+      convCount: conversations.length,
+      hasTripInConvs: conversations.some(
+        (c) => String(c.trip_id) === normalizedTripId,
+      ),
+      selectedId,
+      resolvedOrgId,
+      openingTripThread,
+      tripThreadError,
+      awaitingTripThread,
+      tripThreadStuck,
+    });
+  }
+
   const handleSend = async () => {
     const text = messageInput.trim();
     if (!text || !selectedId || !resolvedOrgId) return;
@@ -173,6 +199,33 @@ export default function DriverChatScreen() {
     screenPadding,
   ];
 
+  const renderDeadEnd = (message: string) => (
+    <View style={[...rootStyle, { paddingHorizontal: 24 }]}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", gap: 16 }}>
+        <MessageSquare size={40} color="#e2e8f0" />
+        <Text style={{ fontSize: 15, color: "#475569", textAlign: "center" }}>
+          {message}
+        </Text>
+        <TouchableOpacity
+          onPress={() =>
+            router.canGoBack() ? router.back() : router.replace("/(driver)/chat")
+          }
+          style={{
+            marginTop: 4,
+            backgroundColor: "#0f172a",
+            paddingHorizontal: 22,
+            paddingVertical: 12,
+            borderRadius: 12,
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>Go back</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   if (normalizedTripId) {
     if (openingTripThread) {
       return (
@@ -181,32 +234,7 @@ export default function DriverChatScreen() {
         </View>
       );
     }
-    if (tripThreadError) {
-      return (
-        <View style={[...rootStyle, { paddingHorizontal: 24 }]}>
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center", gap: 16 }}>
-            <MessageSquare size={40} color="#e2e8f0" />
-            <Text style={{ fontSize: 15, color: "#475569", textAlign: "center" }}>
-              {tripThreadError}
-            </Text>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={{
-                marginTop: 4,
-                backgroundColor: "#0f172a",
-                paddingHorizontal: 22,
-                paddingVertical: 12,
-                borderRadius: 12,
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-            >
-              <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>Go back</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
+    if (tripThreadError) return renderDeadEnd(tripThreadError);
 
     if (selectedId && resolvedOrgId) {
       return (
@@ -223,6 +251,13 @@ export default function DriverChatScreen() {
           })}
         </View>
       );
+    }
+
+    // Last-resort wait: no thread, no error, nothing in flight. Reachable only
+    // if an upstream state never settles. Never leave the driver here silently —
+    // surface an exit rather than an endless splash.
+    if (tripThreadStuck) {
+      return renderDeadEnd("Could not open chat for this trip.");
     }
 
     return (

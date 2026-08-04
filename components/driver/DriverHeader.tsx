@@ -4,7 +4,6 @@ import Typography from '@/constants/Typography';
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { DriverHeaderTripOpsButtons } from '@/components/driver/DriverHeaderTripOpsButtons';
 import { useOptionalLanguage } from '@/contexts/LanguageContext';
-import { useOptionalDriverChat } from '@/features/chat/contexts/DriverChatContext';
 import { ROUTES } from '@/lib/routes';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
@@ -49,12 +48,6 @@ type Props = {
   onPressNotifications?: () => void;
   onPressLanguage?: () => void;
   onPressChat?: () => void;
-  /**
-   * Unread trip messages. Omit to read live from DriverChatContext — every
-   * DriverHeader renders inside the driver shell, so the provider is always
-   * present. Pass a number only to override (e.g. tests).
-   */
-  chatUnreadCount?: number;
   /** Active trip for header expense / odometer shortcuts. */
   hasActiveTrip?: boolean;
   showExpenseOps?: boolean;
@@ -73,7 +66,6 @@ export function DriverHeader({
   onPressNotifications,
   onPressLanguage,
   onPressChat,
-  chatUnreadCount,
   hasActiveTrip = false,
   showExpenseOps = true,
   showOdometerOps = true,
@@ -90,10 +82,6 @@ export function DriverHeader({
 
   const title =
     variant === 'assigned' ? driverName : `Welcome, ${driverName}`;
-
-  const driverChat = useOptionalDriverChat();
-  const unreadCount =
-    chatUnreadCount ?? driverChat?.getTotalUnreadCount() ?? 0;
 
   const ringPulse = useSharedValue(1);
 
@@ -239,32 +227,23 @@ export function DriverHeader({
           ]}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel={
-            unreadCount > 0
-              ? `Trip messages, ${unreadCount} unread`
-              : 'Trip messages'
-          }
+          accessibilityLabel="Trip messages"
           accessibilityHint="Opens your trip conversations"
         >
           {/* lucide MessageSquare — matches DriverChatScreen's own icon and the
-              stroke weight of the rest of the driver shell. */}
+              stroke weight of the rest of the driver shell.
+
+              No unread badge here on purpose: trip_conversations only tracks
+              `unread_dispatcher_count`, which the DB increments for messages
+              where sender_role NOT IN ('dispatcher','system') — i.e. the
+              DISPATCHER's unread count, not the driver's. Showing it here read
+              as "1 unread" while the driver had nothing new to open. A real
+              driver-side badge needs a driver unread source first. */}
           <MessageSquare
             size={Layout.driverHeaderActionIconSize}
             color={colors.text}
             strokeWidth={2.25}
           />
-          {unreadCount > 0 ? (
-            <View
-              style={[
-                styles.chatBadge,
-                { backgroundColor: colors.emerald, borderColor: colors.surface },
-              ]}
-            >
-              <Text style={styles.chatBadgeText}>
-                {unreadCount > 99 ? '99+' : String(unreadCount)}
-              </Text>
-            </View>
-          ) : null}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -382,24 +361,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  chatBadge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#fff',
-    lineHeight: 11,
   },
 });
 

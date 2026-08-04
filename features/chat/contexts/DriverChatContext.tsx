@@ -33,8 +33,27 @@ import { getLinkedDriversForCurrentUser } from '@/features/drivers/services/driv
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import { preloadDriverChatConversations } from '@/lib/preloadDriverChatWarmup';
 
+/**
+ * Accepts either a full `TripRow` or a `trips_driver_view` row — the driver path
+ * can only read the view (see getDriverTripById use below). The view names its
+ * location columns `pickup_address` / `dropoff_address` and omits the
+ * trip_code/display_trip_id family, so read both spellings and let the
+ * operational-display helper fall back to trip_number.
+ */
+type MinimalTripSource = {
+  trip_number?: string | null;
+  driver_display_trip_id?: string | null;
+  trip_operational_code?: string | null;
+  trip_code?: string | null;
+  display_trip_id?: string | null;
+  pickup_area?: string | null;
+  drop_location?: string | null;
+  pickup_address?: string | null;
+  dropoff_address?: string | null;
+};
+
 function buildMinimalDriverTripConversation(
-  trip: TripRow,
+  trip: MinimalTripSource,
   row: TripConversationRow,
 ): TripConversation {
   const perDriver = trip.driver_display_trip_id?.trim();
@@ -47,8 +66,8 @@ function buildMinimalDriverTripConversation(
   return {
     ...row,
     trip_number: operational !== "—" ? operational : perDriver || trip.trip_number || '',
-    pickup_area: trip.pickup_area ?? '',
-    drop_location: trip.drop_location ?? '',
+    pickup_area: trip.pickup_area ?? trip.pickup_address ?? '',
+    drop_location: trip.drop_location ?? trip.dropoff_address ?? '',
     messages: [],
   };
 }
@@ -159,7 +178,14 @@ export function DriverChatProvider({
         return { convId: cachedConv.id, orgId: cachedConv.organization_id };
       }
 
-      const { error, trip } = await tripsService.getTripById(id);
+      // MUST use the driver-safe view, not getTripById. getTripById embeds
+      // `indents!trips_indent_id_fkey(...)`, and a driver has no RLS read on
+      // `indents` — PostgREST then drops the whole row, so the trip comes back
+      // null with NO error even though the driver can read `trips` itself. That
+      // made a driver's own trip look nonexistent and surfaced as
+      // "Could not open chat for this trip." trips_driver_view exposes the
+      // driver_id / organization_id needed here without any join.
+      const { error, trip } = await tripsService.getDriverTripById(id);
       if (error || !trip?.driver_id || !trip.organization_id) return null;
       const assignedDriverId = String(trip.driver_id);
       if (!resolvedDriverIds.some((d) => String(d) === assignedDriverId)) return null;
