@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   backBtnText: {
     fontSize: 10,
     fontWeight: "900",
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 1.2,
   },
 });

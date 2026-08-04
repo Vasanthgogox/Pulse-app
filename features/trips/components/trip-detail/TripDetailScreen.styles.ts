@@ -6167,7 +6167,7 @@ export const styles = StyleSheet.create({
   financeAdjustmentsBtnText: {
     fontSize: 9,
     fontWeight: "800",
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
     letterSpacing: 0.9,
   },

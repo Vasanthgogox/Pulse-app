@@ -301,9 +301,9 @@ export function TripChatRoomSheet({
           accessibilityLabel="Send message"
         >
           {sending ? (
-            <ActivityIndicator size="small" color={Theme.textOnDark} />
+            <ActivityIndicator size="small" color={Theme.buttonPrimaryText} />
           ) : (
-            <Feather name="send" size={18} color={Theme.textOnDark} />
+            <Feather name="send" size={18} color={Theme.buttonPrimaryText} />
           )}
         </Pressable>
       </View>

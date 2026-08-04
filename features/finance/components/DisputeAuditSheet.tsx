@@ -350,7 +350,7 @@ export function DisputeAuditSheet({
                   disabled={submitting || !canRaiseDispute}
                 >
                   {submitting ? (
-                    <LoadingIndicator size="small" color={Theme.textOnDark} />
+                    <LoadingIndicator size="small" color={Theme.buttonPrimaryText} />
                   ) : (
                     <Text style={styles.submitBtnText}>Raise dispute</Text>
                   )}
@@ -493,6 +493,6 @@ const styles = StyleSheet.create({
   submitBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
   },
 });

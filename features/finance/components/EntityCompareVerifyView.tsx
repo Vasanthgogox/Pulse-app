@@ -1268,7 +1268,7 @@ export function EntityCompareVerifyView({
                 activeOpacity={0.8}
               >
                 {requestInviteLoading && !onRequestInvite && !onRequestConnection ? (
-                  <LoadingIndicator size="small" color={Theme.textOnDark} />
+                  <LoadingIndicator size="small" color={Theme.buttonPrimaryText} />
                 ) : (
                   <Text style={styles.notIntegratedBtnText}>
                     Request shared ledger
@@ -2157,7 +2157,7 @@ const styles = StyleSheet.create({
   notIntegratedBtnText: {
     fontSize: 12,
     fontWeight: "600",
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
   },
   notIntegratedBtnSecondary: {
     backgroundColor: Theme.surfaceLight,

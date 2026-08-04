@@ -205,6 +205,6 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: "900",
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
   },
 });

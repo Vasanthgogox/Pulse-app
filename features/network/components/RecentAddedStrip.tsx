@@ -191,7 +191,7 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                         hitSlop={4}
                       >
                         {busy ? (
-                          <LoadingIndicator size="small" color={Theme.textOnDark} />
+                          <LoadingIndicator size="small" color={Theme.buttonPrimaryText} />
                         ) : (
                           <Text style={styles.connectBtnText}>Send invite</Text>
                         )}
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
   connectBtnText: {
     fontSize: 10,
     fontWeight: "900",
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.3,
   },
 });

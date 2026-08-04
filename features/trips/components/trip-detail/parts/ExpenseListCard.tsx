@@ -201,7 +201,7 @@ const elStyles = StyleSheet.create({
   addBtnText: {
     fontSize: 10,
     fontWeight: "800",
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },

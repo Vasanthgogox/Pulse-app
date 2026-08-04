@@ -1305,7 +1305,7 @@ export function IndentDetailScreen({
                 disabled={sharingDraft}
               >
                 {sharingDraft ? (
-                  <LoadingIndicator size="small" color={Theme.textOnDark} />
+                  <LoadingIndicator size="small" color={Theme.buttonPrimaryText} />
                 ) : (
                   <Text style={styles.shareConfirmShareText}>Share now</Text>
                 )}
@@ -1868,7 +1868,7 @@ const styles = StyleSheet.create({
   },
   broadcastBtnText: {
     ...indentReviewHubText.buttonLabel,
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
   },
   broadcastLockedPill: {
     flexDirection: "row",
@@ -2144,7 +2144,7 @@ const styles = StyleSheet.create({
   shareConfirmShareText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
   },
   modalContent: {

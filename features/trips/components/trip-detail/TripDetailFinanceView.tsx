@@ -3476,7 +3476,7 @@ const styles = StyleSheet.create({
   assignmentActionBtnText: {
     fontSize: 9,
     fontWeight: "700",
-    color: Theme.textOnDark,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
