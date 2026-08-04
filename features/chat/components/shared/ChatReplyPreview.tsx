@@ -11,6 +11,10 @@ export type ReplyPreviewData = {
 
 function summarizeReplyContent(data: ReplyPreviewData): string {
   const t = data.messageType ?? "text";
+  if (t === "story") {
+    const raw = (data.content ?? "").trim();
+    return raw ? `Story · ${raw.length > 80 ? raw.slice(0, 80) + "…" : raw}` : "Story";
+  }
   if (t === "image") return "📷 Image";
   if (t === "document_share" || t === "document_upload") return "📎 Document";
   if (t === "status_change") return "🔄 Status update";

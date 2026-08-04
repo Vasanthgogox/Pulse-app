@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { setNetworkUnreadCount } from "@/lib/chatUnreadSignal";
+import { networkMetadataToReplyPreview } from "@/features/network/utils/storyReplyPreview.util";
 import * as chatService from "../services/chat.service";
 import type {
   NetworkConversation,
@@ -30,6 +31,13 @@ export interface DirectMessage {
   content: string;
   timestamp: string;
   isRead: boolean;
+  /** WhatsApp-style quoted preview (e.g. replied-to story). */
+  replyPreview?: {
+    messageId: string;
+    senderName: string;
+    content: string;
+    messageType?: string | null;
+  } | null;
 }
 
 export interface IntegratedChat {
@@ -153,6 +161,7 @@ function toIntegratedChat(
       content: m.content,
       timestamp: m.created_at,
       isRead: m.is_read_by_other,
+      replyPreview: networkMetadataToReplyPreview(m.metadata),
     })),
     lastActivity: conv.last_message_at ? formatRelativeTime(conv.last_message_at) : "No messages",
     unreadCount: conv.unread_count,

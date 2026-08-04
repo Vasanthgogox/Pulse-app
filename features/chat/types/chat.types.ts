@@ -380,6 +380,8 @@ export interface NetworkMessageRow {
   is_read_by_other: boolean;
   read_at: string | null;
   created_at: string;
+  /** Extensible payload (e.g. reply_to_story for WhatsApp-style story quotes). */
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface NetworkConversation extends NetworkConversationRow {

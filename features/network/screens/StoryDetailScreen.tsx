@@ -18,6 +18,7 @@ import {
   StoryMobilePopupShell,
   useStoryPhonePopup,
 } from "@/features/network/components/StoryMobilePopupShell";
+import { StoryMessageSheet } from "@/features/network/components/StoryMessageSheet";
 import { StoryViewersSheet } from "@/features/network/components/StoryViewersSheet";
 import { BidSheet } from "@/features/network/components/bidding/BidSheet";
 import { StoryOwnerBidsSheet } from "@/features/network/components/bidding/StoryOwnerBidsSheet";
@@ -488,6 +489,20 @@ export default function StoryDetailScreen() {
     router.back();
   }, [post, isOwnPost, isDeletingCurrent, myOrgId, afterPostDeleted, router, activeCampaignForPost, markSourceDeletedMutation]);
 
+  const [showMessageSheet, setShowMessageSheet] = useState(false);
+
+  const handleOpenMessage = useCallback(() => {
+    if (!post || !myOrgId || isOwnPost) return;
+    const partnerOrgId = (post.organization_id ?? "").trim();
+    if (!partnerOrgId) {
+      Alert.alert("Message", "Could not find this organization.");
+      return;
+    }
+    // Stay on the story — navigating to /chat loads ChatScreen (~3k modules)
+    // and freezes the browser ("Page Unresponsive") on web.
+    setShowMessageSheet(true);
+  }, [post, myOrgId, isOwnPost]);
+
   const handleShareWhatsApp = useCallback(async () => {
     if (!post || !myOrgId) return;
     const storyUrl = buildPulseStoryPublicUrl(post.id, myOrgId, post.type);
@@ -820,15 +835,22 @@ export default function StoryDetailScreen() {
               { backgroundColor: color },
               pressed && styles.authorizeBtnSolidPressed,
             ]}
-            onPress={() => router.back()}
+            onPress={handleOpenMessage}
           >
             <MessageSquare size={16} color={Theme.textOnPrimary} />
-            <Text style={[styles.authorizeBtnText, styles.authorizeBtnTextOnFill]}>Contact & message</Text>
+            <Text style={[styles.authorizeBtnText, styles.authorizeBtnTextOnFill]}>
+              Contact & message
+            </Text>
           </Pressable>
         )}
 
         {!isOwnPost && (canBidOnLoad || canContactVehicle) && (
-          <Pressable style={styles.messageGhost} onPress={() => router.back()}>
+          <Pressable
+            style={styles.messageGhost}
+            onPress={handleOpenMessage}
+            accessibilityRole="button"
+            accessibilityLabel="Message poster"
+          >
             <MessageSquare size={16} color={INK} />
             <Text style={styles.messageGhostText}>Message</Text>
           </Pressable>
@@ -855,6 +877,27 @@ export default function StoryDetailScreen() {
           setBidPost(null);
           setEditBidMode(false);
         }}
+      />
+
+      <StoryMessageSheet
+        visible={showMessageSheet}
+        partnerOrgId={(post?.organization_id ?? "").trim()}
+        partnerOrgName={(post?.org_name ?? "").trim() || "Partner"}
+        story={
+          post
+            ? {
+                postId: post.id,
+                storyType: post.type,
+                title:
+                  post.vehicle_type?.trim() ||
+                  post.content?.trim() ||
+                  (isLoad ? "Load broadcast" : "Story"),
+                origin: post.origin,
+                destination: post.destination,
+              }
+            : null
+        }
+        onClose={() => setShowMessageSheet(false)}
       />
 
       <StoryViewersSheet

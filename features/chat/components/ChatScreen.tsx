@@ -1172,6 +1172,8 @@ export function ChatScreen() {
   const params = useLocalSearchParams<{
     tab?: string | string[];
     conversationId?: string | string[];
+    partnerOrgId?: string | string[];
+    partnerOrgName?: string | string[];
     openDetail?: string | string[];
     ts?: string | string[];
   }>();
@@ -2169,6 +2171,85 @@ export function ChatScreen() {
     params.openDetail,
     params.ts,
     params.tab,
+  ]);
+
+  // Story / Network DM entry: open (or create) by partner org without waiting
+  // on conversation create before navigation.
+  useEffect(() => {
+    const tabParamRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
+    const partnerOrgIdParam = Array.isArray(params.partnerOrgId)
+      ? params.partnerOrgId[0]
+      : params.partnerOrgId;
+    const partnerOrgNameParam = Array.isArray(params.partnerOrgName)
+      ? params.partnerOrgName[0]
+      : params.partnerOrgName;
+    const openDetailParam = Array.isArray(params.openDetail)
+      ? params.openDetail[0]
+      : params.openDetail;
+    const tsParam = Array.isArray(params.ts) ? params.ts[0] : params.ts;
+    const convIdParam = Array.isArray(params.conversationId)
+      ? params.conversationId[0]
+      : params.conversationId;
+
+    if (convIdParam) return;
+    if (String(tabParamRaw ?? "").toLowerCase() !== "network") return;
+    const partnerOrgId = (partnerOrgIdParam ?? "").trim();
+    if (!partnerOrgId) return;
+
+    const deepLinkKey = `network-partner:${partnerOrgId}:${tsParam ?? "no-ts"}`;
+    if (deepLinkAppliedRef.current === deepLinkKey) return;
+
+    const existing = netChats.find((c) => c.partnerId === partnerOrgId);
+    if (existing) {
+      deepLinkAppliedRef.current = deepLinkKey;
+      setActiveTab("network");
+      setSelectedNetId(existing.id);
+      setSelectedConvId(null);
+      markNetRead(existing.id);
+      if (openDetailParam === "1" && !isDesktop) setIsMobileDetail(true);
+      return;
+    }
+
+    if (netLoading) return;
+
+    deepLinkAppliedRef.current = deepLinkKey;
+    const partnerName =
+      (partnerOrgNameParam ?? "").trim() ||
+      netPartners.find((p) => p.org_id === partnerOrgId)?.name ||
+      "Partner";
+    const partyType =
+      netPartners.find((p) => p.org_id === partnerOrgId)?.party_type ?? "client";
+
+    void (async () => {
+      setInitiating(true);
+      try {
+        const convId = await initiateNetworkConversation({
+          org_id: partnerOrgId,
+          name: partnerName,
+          party_type: partyType,
+        });
+        if (!convId) return;
+        setActiveTab("network");
+        setSelectedNetId(convId);
+        setSelectedConvId(null);
+        if (openDetailParam === "1" && !isDesktop) setIsMobileDetail(true);
+      } finally {
+        setInitiating(false);
+      }
+    })();
+  }, [
+    initiateNetworkConversation,
+    isDesktop,
+    markNetRead,
+    netChats,
+    netLoading,
+    netPartners,
+    params.conversationId,
+    params.openDetail,
+    params.partnerOrgId,
+    params.partnerOrgName,
+    params.tab,
+    params.ts,
   ]);
 
   useEffect(() => {
@@ -9734,6 +9815,7 @@ function NetworkDetailPanel({
                 selfUserId={selfUid}
                 reactions={netReactionsByMessageId[m.id] ?? null}
                 onReact={(emoji) => toggleNetReaction(m.id, emoji)}
+                replyPreview={m.replyPreview ?? null}
                 onReply={() =>
                   setNetReplyContext({
                     messageId: m.id,

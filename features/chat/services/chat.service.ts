@@ -8,7 +8,6 @@ import type {
   MessageSenderRole,
   MessageType,
   NetworkConversation,
-  NetworkConversationRow,
   NetworkMessageRow,
   NetworkPartner,
   TripConversation,
@@ -868,7 +867,7 @@ export async function getNetworkConversationsByOrg(
   if (!UUID_RE.test(orgId)) return [];
   const { data, error } = await supabase()
     .from("network_conversations")
-    .select(`*, network_messages(id, conversation_id, content, sender_org_id, sender_name, sender_user_id, created_at, is_read_by_other, read_at)`)
+    .select(`*, network_messages(id, conversation_id, content, sender_org_id, sender_name, sender_user_id, created_at, is_read_by_other, read_at, metadata)`)
     .or(`org_a_id.eq.${orgId},org_b_id.eq.${orgId}`)
     .order("last_message_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, referencedTable: "network_messages" })
@@ -959,41 +958,10 @@ export async function syncNetworkConversationsWithCache(
   }
 }
 
-export async function getOrCreateNetworkConversation(params: {
-  orgId: string;
-  orgName: string;
-  partnerOrgId: string;
-  partnerOrgName: string;
-}): Promise<NetworkConversationRow> {
-  const { orgId, orgName, partnerOrgId, partnerOrgName } = params;
-  // Canonical ordering ensures one row per pair
-  const [aId, bId] = [orgId, partnerOrgId].sort();
-  const [aName, bName] =
-    aId === orgId ? [orgName, partnerOrgName] : [partnerOrgName, orgName];
-
-  const { data: existing } = await supabase()
-    .from("network_conversations")
-    .select("id,org_a_id,org_b_id,org_a_name,org_b_name,last_message_at,last_message_preview,unread_count_a,unread_count_b,created_at,updated_at")
-    .eq("org_a_id", aId)
-    .eq("org_b_id", bId)
-    .maybeSingle();
-
-  if (existing) return existing;
-
-  const { data, error } = await supabase()
-    .from("network_conversations")
-    .insert({
-      org_a_id: aId,
-      org_b_id: bId,
-      org_a_name: aName,
-      org_b_name: bName,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-}
+export {
+  getOrCreateNetworkConversation,
+  sendNetworkMessage,
+} from "./networkConversation.service";
 
 export async function getNetworkMessagesByConversation(
   conversationId: string,
@@ -1006,7 +974,7 @@ export async function getNetworkMessagesByConversation(
   let query = supabase()
     .from("network_messages")
     .select(
-      "id, conversation_id, content, sender_org_id, sender_name, sender_user_id, created_at, is_read_by_other, read_at",
+      "id, conversation_id, content, sender_org_id, sender_name, sender_user_id, created_at, is_read_by_other, read_at, metadata",
     )
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
@@ -1019,32 +987,6 @@ export async function getNetworkMessagesByConversation(
   const { data, error } = await query;
   if (error) throw error;
   return [...(data ?? [])].reverse() as NetworkMessageRow[];
-}
-
-export async function sendNetworkMessage(params: {
-  conversationId: string;
-  senderOrgId: string;
-  senderUserId: string | null;
-  senderName: string;
-  content: string;
-}): Promise<NetworkMessageRow> {
-  const { conversationId, senderOrgId, senderUserId, senderName, content } =
-    params;
-
-  const { data, error } = await supabase()
-    .from("network_messages")
-    .insert({
-      conversation_id: conversationId,
-      sender_org_id: senderOrgId,
-      sender_user_id: senderUserId,
-      sender_name: senderName,
-      content,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
 }
 
 /** Idempotent: inserts `feedback_request` rows for each party thread when missing (DB trigger may have been skipped). */
