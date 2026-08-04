@@ -2373,7 +2373,7 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   viewModeTextActive: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   tableUtilityBtn: {
     flexDirection: "row",
@@ -2567,7 +2567,7 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   pageSizeTextActive: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   listContent: { padding: 16, paddingBottom: 40 },
   listContainerMobile: { gap: 12 },
@@ -2789,7 +2789,7 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   filterChipTextActive: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
 
   blocked: {
@@ -2814,5 +2814,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
   },
-  blockedBtnText: { color: "#fff", fontWeight: "700" },
+  blockedBtnText: { color: Theme.buttonPrimaryText, fontWeight: "700" },
 });

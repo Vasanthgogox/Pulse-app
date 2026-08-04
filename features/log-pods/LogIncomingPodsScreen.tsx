@@ -1637,7 +1637,7 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   viewModeTextActive: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   tableWrap: {
     backgroundColor: Theme.cardWhite,

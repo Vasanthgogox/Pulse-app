@@ -3394,7 +3394,7 @@ const styles = StyleSheet.create({
   sharedBtnPrimaryText: {
     fontSize: 10,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.6,
   },
   sharedBtnSecondary: {

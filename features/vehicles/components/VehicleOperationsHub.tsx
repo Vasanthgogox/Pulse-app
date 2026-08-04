@@ -683,6 +683,6 @@ const styles = StyleSheet.create({
   emptyCtaText: {
     fontSize: 12,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
 });

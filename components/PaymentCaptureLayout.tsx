@@ -76,7 +76,7 @@ export function PaymentCaptureLayout({
       {/* Dark blue header with contact info */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <FontAwesome name="arrow-left" size={20} color={Theme.textOnPrimary} />
+          <FontAwesome name="arrow-left" size={20} color={Theme.buttonPrimaryText} />
         </TouchableOpacity>
 
         <View style={styles.contactInfo}>
@@ -96,12 +96,12 @@ export function PaymentCaptureLayout({
         <View style={styles.headerActions}>
           {onCallPress && (
             <TouchableOpacity onPress={onCallPress} style={styles.headerIcon}>
-              <FontAwesome name="phone" size={20} color={Theme.textOnPrimary} />
+              <FontAwesome name="phone" size={20} color={Theme.buttonPrimaryText} />
             </TouchableOpacity>
           )}
           {onMenuPress && (
             <TouchableOpacity onPress={onMenuPress} style={styles.headerIcon}>
-              <FontAwesome name="ellipsis-v" size={20} color={Theme.textOnPrimary} />
+              <FontAwesome name="ellipsis-v" size={20} color={Theme.buttonPrimaryText} />
             </TouchableOpacity>
           )}
         </View>
@@ -245,12 +245,12 @@ const styles = StyleSheet.create({
   contactName: {
     fontSize: 18,
     fontWeight: '700',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     marginBottom: 2,
   },
   settingsLink: {
     fontSize: 12,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     opacity: 0.9,
   },
   headerActions: {

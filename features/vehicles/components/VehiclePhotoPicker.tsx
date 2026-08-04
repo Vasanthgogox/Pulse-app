@@ -121,12 +121,12 @@ export const VehiclePhotoPicker = memo(function VehiclePhotoPicker({
         ]}
       >
         {uploading ? (
-          <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+          <ActivityIndicator size="small" color={Theme.buttonPrimaryText} />
         ) : (
           <Feather
             name={showPhoto ? "edit-2" : "plus"}
             size={Math.round(size * 0.14)}
-            color={Theme.textOnPrimary}
+            color={Theme.buttonPrimaryText}
           />
         )}
       </View>

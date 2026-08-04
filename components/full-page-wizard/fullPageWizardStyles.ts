@@ -760,7 +760,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderColor: Theme.borderMedium,
   },
   submitBtnInkText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontSize: 14,
     fontWeight: "700",
   },

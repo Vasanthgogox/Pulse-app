@@ -1716,7 +1716,7 @@ export default function DriverDashboard() {
               anchor={{ x: 0.5, y: 0.5 }}
             >
               <View style={styles.customMapMarkerTruck}>
-                <FontAwesome name="truck" size={14} color={Theme.textOnPrimary} />
+                <FontAwesome name="truck" size={14} color={Theme.buttonPrimaryText} />
               </View>
               <Callout tooltip>
                 <View

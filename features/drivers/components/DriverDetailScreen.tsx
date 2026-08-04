@@ -3886,7 +3886,7 @@ const styles = StyleSheet.create({
   driverRequestBtnPayText: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 1,
   },
   driverRequestBtnReject: {

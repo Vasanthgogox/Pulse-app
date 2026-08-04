@@ -263,10 +263,10 @@ export function NetworkDesktopWorkspaceProfileModal({
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                <ActivityIndicator size="small" color={Theme.buttonPrimaryText} />
               ) : (
                 <>
-                  <Save size={14} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                  <Save size={14} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
                   <Text style={modalStyles.saveText}>Save</Text>
                 </>
               )}
@@ -373,5 +373,5 @@ const modalStyles = StyleSheet.create({
     gap: 6,
   },
   saveBtnDisabled: { opacity: 0.7 },
-  saveText: { fontSize: 13, fontWeight: "700", color: Theme.textOnPrimary },
+  saveText: { fontSize: 13, fontWeight: "700", color: Theme.buttonPrimaryText },
 });

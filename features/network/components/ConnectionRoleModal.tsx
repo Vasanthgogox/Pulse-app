@@ -170,7 +170,7 @@ function RoleOption({
         <Text style={styles.optionDesc}>{description}</Text>
       </View>
       <View style={[styles.radio, selected && styles.radioSelected]}>
-        {selected ? <Check size={12} color={Theme.textOnPrimary} strokeWidth={4} /> : null}
+        {selected ? <Check size={12} color={Theme.buttonPrimaryText} strokeWidth={4} /> : null}
       </View>
     </Pressable>
   );

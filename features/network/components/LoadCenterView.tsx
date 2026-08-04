@@ -1630,7 +1630,7 @@ export function LoadCenterView({
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>
             <View style={styles.successIconWrap}>
-              <FontAwesome name="check" size={16} color={Theme.textOnPrimary} />
+              <FontAwesome name="check" size={16} color={Theme.buttonPrimaryText} />
             </View>
             <Text style={styles.successTag}>Success</Text>
             <Text style={styles.successTitle}>{successMsg || "Success"}</Text>

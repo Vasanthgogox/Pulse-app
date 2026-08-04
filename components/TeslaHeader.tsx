@@ -231,7 +231,11 @@ export function TeslaHeader({
             accessibilityLabel="Add"
             accessibilityRole="button"
           >
-            <FontAwesome name="plus" size={16} color={Theme.textOnPrimary} />
+            <FontAwesome
+              name="plus"
+              size={16}
+              color={isDark ? Theme.textOnPrimary : Theme.buttonPrimaryText}
+            />
           </TouchableOpacity>
         )}
         {onNetworkClick != null && (

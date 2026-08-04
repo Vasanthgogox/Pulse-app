@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   previewTitle: {
-    color: "#fff",
+    color: Theme.textOnPrimary,
     fontSize: 14,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  rowUnreadText: { color: "#fff", fontSize: 9, fontWeight: "900" },
+  rowUnreadText: { color: Theme.buttonPrimaryText, fontSize: 9, fontWeight: "900" },
   itemTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   itemTitle: {
     flex: 1,

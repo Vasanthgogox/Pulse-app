@@ -591,7 +591,7 @@ function EmptyMembers({ onInvite }: { onInvite?: () => void }) {
           onPress={onInvite}
           style={({ pressed }) => [styles.emptyInviteBtn, pressed && { opacity: 0.8 }]}
         >
-          <UserPlus2 size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
+          <UserPlus2 size={14} color={Theme.buttonPrimaryText} strokeWidth={2.2} />
           <Text style={styles.emptyInviteBtnText}>Invite Member</Text>
         </Pressable>
       )}
@@ -613,7 +613,7 @@ function EmptyPending({ onInvite }: { onInvite?: () => void }) {
           onPress={onInvite}
           style={({ pressed }) => [styles.emptyInviteBtn, pressed && { opacity: 0.8 }]}
         >
-          <UserPlus2 size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
+          <UserPlus2 size={14} color={Theme.buttonPrimaryText} strokeWidth={2.2} />
           <Text style={styles.emptyInviteBtnText}>Invite member</Text>
         </Pressable>
       ) : null}

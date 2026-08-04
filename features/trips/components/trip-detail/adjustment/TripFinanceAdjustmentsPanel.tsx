@@ -360,7 +360,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                       accessibilityRole="button"
                       accessibilityLabel={`Edit ${cnDnLabel(adj.impact)}`}
                     >
-                      <Feather name="edit-2" size={11} color={Theme.textOnPrimary} />
+                      <Feather name="edit-2" size={11} color={Theme.buttonPrimaryText} />
                       <Text style={styles.rowActionBtnTextPrimary}>
                         Edit {cnDnLabel(adj.impact)}
                       </Text>

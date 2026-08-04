@@ -3774,7 +3774,7 @@ const styles = StyleSheet.create({
   pendingActionBtnTxt: {
     fontSize: 9,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -3886,14 +3886,14 @@ const styles = StyleSheet.create({
   },
   chipDot: { width: 7, height: 7, borderRadius: 4 },
   chipTxt: { fontSize: 11, fontWeight: "600", color: Theme.textMuted },
-  chipTxtOn: { color: Theme.textOnPrimary },
+  chipTxtOn: { color: Theme.buttonPrimaryText },
   chipCnt: {
     fontSize: 10,
     fontWeight: "600",
     color: Theme.textSecondary,
     opacity: 0.85,
   },
-  chipCntOn: { color: Theme.textOnPrimary, opacity: 0.85 },
+  chipCntOn: { color: Theme.buttonPrimaryText, opacity: 0.85 },
   gridHeader: {
     flexDirection: "row",
     justifyContent: "space-between",

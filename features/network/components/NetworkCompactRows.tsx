@@ -200,10 +200,10 @@ export function DiscoverCompactRow({
               accessibilityLabel={`Send request to ${org.name}`}
             >
               {loading ? (
-                <LoadingIndicator size={12} color={Theme.textOnPrimary} />
+                <LoadingIndicator size={12} color={Theme.buttonPrimaryText} />
               ) : (
                 <>
-                  <UserPlus size={13} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                  <UserPlus size={13} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
                   <Text style={styles.connectBtnText}>Connect</Text>
                 </>
               )}

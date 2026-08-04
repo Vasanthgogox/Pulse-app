@@ -2448,7 +2448,7 @@ const styles = StyleSheet.create({
     color: Theme.text,
   },
   filterChipTextActive: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   sectionBlock: {
     gap: 10,

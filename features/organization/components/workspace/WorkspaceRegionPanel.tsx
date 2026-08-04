@@ -89,7 +89,7 @@ function RegionPickerBody({
             </View>
             {selected ? (
               <View style={styles.checkWrap}>
-                <Check size={12} color={Theme.textOnPrimary} strokeWidth={2.6} />
+                <Check size={12} color={Theme.buttonPrimaryText} strokeWidth={2.6} />
               </View>
             ) : (
               <Globe2 size={14} color={Theme.textMuted} strokeWidth={1.8} />

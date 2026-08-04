@@ -615,7 +615,7 @@ export function LiveTrackingModal({
                       accessibilityRole="button"
                       accessibilityLabel="Open driver location in maps"
                     >
-                      <Navigation size={14} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                      <Navigation size={14} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
                       <Text style={styles.driverCardNavBtnText}>Navigate</Text>
                     </Pressable>
                   ) : null}
@@ -1296,7 +1296,7 @@ const styles = StyleSheet.create({
   driverCardNavBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   routeSection: {
     marginBottom: 14,

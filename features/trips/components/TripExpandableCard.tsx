@@ -650,7 +650,7 @@ const styles = StyleSheet.create({
   stagePillText: {
     fontSize: 7,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.5,
   },
   cardRef: {

@@ -2079,7 +2079,7 @@ export function EntityCompareVerifyView({
                   {actionLoading ? (
                     <LoadingIndicator
                       size="small"
-                      color={Theme.textOnPrimary}
+                      color={Theme.buttonPrimaryText}
                     />
                   ) : (
                     <Text style={styles.modalBtnPrimaryText}>
@@ -2982,7 +2982,7 @@ const styles = StyleSheet.create({
   modalBtnPrimaryText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   confirmModalOverlay: {
     flex: 1,
@@ -3039,7 +3039,7 @@ const styles = StyleSheet.create({
   confirmModalConfirmText: {
     fontSize: 12,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   emptyTable: {
     paddingVertical: 32,

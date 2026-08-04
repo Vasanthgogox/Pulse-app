@@ -143,7 +143,7 @@ export function AddCommodityTypeScreen({ kind, onClose }: AddCommodityTypeScreen
         activeOpacity={0.9}
       >
         {saving ? (
-          <ActivityIndicator color={Theme.textOnPrimary} size="small" />
+          <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
         ) : (
           <Text style={styles.saveBtnText}>Save & use</Text>
         )}

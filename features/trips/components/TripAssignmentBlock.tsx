@@ -3648,7 +3648,7 @@ const styles = StyleSheet.create({
     color: "#0f172a",
   },
   assignFlowTileTextSel: {
-    color: "#ffffff",
+    color: Theme.buttonPrimaryText,
   },
   assignFlowCardTitle: {
     fontSize: 16,

@@ -1108,7 +1108,7 @@ const styles = StyleSheet.create({
   mobileNetworkActionBadgeText: {
     fontSize: 7,
     fontWeight: "900",
-    color: "#ffffff",
+    color: Theme.buttonPrimaryText,
   },
   mobileNetworkSwitch: {
     width: 64,

@@ -730,5 +730,5 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
   },
-  bidCtaText: { fontSize: 16, fontWeight: '900', color: '#fff', letterSpacing: -0.3 },
+  bidCtaText: { fontSize: 16, fontWeight: '900', color: Theme.buttonPrimaryText, letterSpacing: -0.3 },
 });

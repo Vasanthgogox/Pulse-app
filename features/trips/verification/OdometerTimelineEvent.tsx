@@ -12,7 +12,7 @@ export function OdometerTimelineEvent({
   return (
     <View style={styles.wrap}>
       <View style={styles.icon}>
-        <FontAwesome name="dashboard" size={11} color={Theme.textOnPrimary} />
+        <FontAwesome name="dashboard" size={11} color={Theme.buttonPrimaryText} />
       </View>
       <View style={styles.body}>
         <Text style={styles.label}>{label}</Text>

@@ -529,7 +529,7 @@ export function LedgerTransactionListView({
                   <FontAwesome
                     name="plus"
                     size={18}
-                    color={Theme.textOnPrimary}
+                    color={Theme.buttonPrimaryText}
                   />
                 </TouchableOpacity>
               )}
@@ -2580,7 +2580,7 @@ const styles = StyleSheet.create({
   fiscalExpandedExportText: {
     fontSize: 9,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
   },
   streamRows: {

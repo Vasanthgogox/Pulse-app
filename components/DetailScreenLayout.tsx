@@ -69,7 +69,7 @@ export function DetailScreenLayout({
       {/* Dark blue header */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <FontAwesome name="arrow-left" size={20} color={Theme.textOnPrimary} />
+          <FontAwesome name="arrow-left" size={20} color={Theme.buttonPrimaryText} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{title}</Text>
         <View style={styles.headerSpacer} />
@@ -170,7 +170,7 @@ export function DetailScreenLayout({
         <View style={[styles.actionBar, { paddingBottom: insets.bottom }]}>
           {onDownloadPress && (
             <TouchableOpacity style={styles.downloadButton} onPress={onDownloadPress}>
-              <FontAwesome name="download" size={18} color={Theme.textOnPrimary} style={styles.actionIcon} />
+              <FontAwesome name="download" size={18} color={Theme.buttonPrimaryText} style={styles.actionIcon} />
               <Text style={styles.actionButtonText}>Download</Text>
             </TouchableOpacity>
           )}
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 20,
     fontWeight: '700',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textAlign: 'center',
   },
   headerSpacer: {

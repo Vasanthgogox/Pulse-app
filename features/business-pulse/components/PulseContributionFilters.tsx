@@ -99,6 +99,6 @@ const styles = StyleSheet.create({
     color: Theme.text,
   },
   ledgerChipTextActive: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
 });

@@ -454,7 +454,7 @@ export default function DriverStoriesScreen() {
               onPress={() => void submitRecommend()}
             >
               {recommendMutation.isPending ? (
-                <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                <ActivityIndicator size="small" color={Theme.buttonPrimaryText} />
               ) : (
                 <Text style={styles.sheetSubmitText}>Send to Fleet Owner</Text>
               )}

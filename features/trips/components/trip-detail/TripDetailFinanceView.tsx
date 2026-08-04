@@ -4646,7 +4646,7 @@ const styles = StyleSheet.create({
   provisionConfirmTxt: {
     fontSize: 10,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
   },
   inlineAdjustmentWrap: {

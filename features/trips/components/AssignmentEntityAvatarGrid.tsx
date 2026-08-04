@@ -250,7 +250,7 @@ export function AssignmentEntityAvatarGrid({
                               <FontAwesome
                                 name="check"
                                 size={9}
-                                color={Theme.textOnPrimary}
+                                color={Theme.buttonPrimaryText}
                               />
                             </View>
                           ) : null}

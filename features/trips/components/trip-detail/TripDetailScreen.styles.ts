@@ -2735,7 +2735,7 @@ export const neoStyles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
   },
   provisionConfirmOkText: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.8,
@@ -4533,7 +4533,7 @@ export const styles = StyleSheet.create({
   refInlineSaveBtnTxt: {
     fontSize: 10,
     fontWeight: "900",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 1,
     textTransform: "uppercase",
   },

@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   tabLabelActive: {
-    color: "#ffffff",
+    color: Theme.buttonPrimaryText,
   },
   loading: {
     flex: 1,

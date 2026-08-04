@@ -1146,7 +1146,7 @@ const styles = StyleSheet.create({
   previewBannerText: {
     fontSize: 12,
     fontWeight: "500",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.5,
   },
   sectionTitle: {
@@ -1271,7 +1271,7 @@ const styles = StyleSheet.create({
   actionBtnPrimaryText: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   actionBtnSecondary: {
     backgroundColor: Theme.surface,

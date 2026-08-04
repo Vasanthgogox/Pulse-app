@@ -797,7 +797,7 @@ export function EditProfileModal({
                     accessibilityLabel="Edit profile photo"
                     accessibilityRole="button"
                   >
-                    <Edit3 size={14} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                    <Edit3 size={14} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
                   </TouchableOpacity>
                 </View>
 

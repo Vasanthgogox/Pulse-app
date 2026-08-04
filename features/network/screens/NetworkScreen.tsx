@@ -3402,7 +3402,7 @@ const styles = StyleSheet.create({
   headerBadgeText: {
     fontSize: 7,
     fontWeight: "900",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.6,
   },
   headerIcon: {

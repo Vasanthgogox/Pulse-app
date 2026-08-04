@@ -62,7 +62,7 @@ export default function TeamScreen() {
             onPress={handleInvite}
             style={({ pressed }) => [styles.inviteBtn, pressed && { opacity: 0.8 }]}
           >
-            <UserPlus2 size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
+            <UserPlus2 size={16} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
             <Text style={styles.inviteBtnText}>Invite</Text>
           </Pressable>
         ) : (

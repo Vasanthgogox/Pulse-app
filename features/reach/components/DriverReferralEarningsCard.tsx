@@ -188,7 +188,7 @@ export function DriverReferralEarningsCard({ userId, earnings }: Props) {
                     onPress={() => void requestWithdrawal(bal)}
                   >
                     {withdrawMutation.isPending ? (
-                      <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                      <ActivityIndicator size="small" color={Theme.buttonPrimaryText} />
                     ) : (
                       <Text style={styles.orgWithdrawBtnText}>Request {formatINR(bal.available)}</Text>
                     )}

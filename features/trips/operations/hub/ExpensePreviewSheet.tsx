@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   actionPrimaryText: {
     fontSize: 13,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   actionSecondaryText: {
     fontSize: 13,

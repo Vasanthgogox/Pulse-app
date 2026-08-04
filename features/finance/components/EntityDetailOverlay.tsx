@@ -5664,7 +5664,7 @@ const styles = StyleSheet.create({
   tripStatementActionBtnPrimaryText: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   tripStatementActionBtnSecondary: {
     backgroundColor: Theme.surface,
@@ -5733,7 +5733,7 @@ const styles = StyleSheet.create({
   driverRequestBtnPayText: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 1,
   },
   driverRequestBtnReject: {

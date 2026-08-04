@@ -2214,6 +2214,6 @@ const styles = StyleSheet.create({
   modalDoneText: {
     fontSize: 15,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
 });

@@ -94,7 +94,7 @@ function LanguagePickerBody({
                 </View>
                 {selected ? (
                   <View style={styles.checkWrap}>
-                    <Check size={12} color={Theme.textOnPrimary} strokeWidth={2.6} />
+                    <Check size={12} color={Theme.buttonPrimaryText} strokeWidth={2.6} />
                   </View>
                 ) : null}
               </Pressable>

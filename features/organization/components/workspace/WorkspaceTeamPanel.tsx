@@ -52,7 +52,7 @@ export function WorkspaceTeamPanel({ onBack }: Props) {
               onPress={handleInvite}
               style={({ pressed }) => [styles.inviteBtn, pressed && { opacity: 0.85 }]}
             >
-              <UserPlus2 size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
+              <UserPlus2 size={16} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
               <Text style={styles.inviteBtnText}>Invite</Text>
             </Pressable>
           </View>

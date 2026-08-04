@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   queueBadgeText: {
     fontSize: 9,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   route: {
     fontSize: 11,
