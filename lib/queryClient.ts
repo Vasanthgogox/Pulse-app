@@ -120,6 +120,18 @@ function attachDevObserver(client: QueryClient): void {
 }
 
 /**
+ * Best-effort human-readable message for anything thrown. Supabase/PostgREST
+ * reject with a plain `{code, details, hint, message}` object rather than an
+ * Error, and `String(obj)` on those collapses to "[object Object]".
+ */
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  const message = (error as { message?: unknown } | null)?.message;
+  if (typeof message === 'string' && message) return message;
+  return String(error ?? '');
+}
+
+/**
  * Aborted fetches are not failures — TanStack cancels in-flight requests when a
  * screen unmounts mid-navigation, and Safari surfaces that as `AbortError: Fetch
  * is aborted`. Reporting them created pure Sentry noise (GX-PULSE-1E / 1F).
@@ -130,11 +142,52 @@ function isAbortError(error: unknown): boolean {
   }
   const name = (error as { name?: unknown } | null)?.name;
   if (name === 'AbortError' || name === 'CanceledError') return true;
-  const message =
-    error instanceof Error ? error.message : String(error ?? '');
-  return /\bAbortError\b|Fetch is aborted|The operation was aborted|signal is aborted/i.test(
-    message,
+  // Supabase surfaces aborts as a plain {code, details, hint, message} object.
+  // `String()` on those yields "[object Object]", hiding the abort text, so read
+  // `message`/`hint` off the object before falling back (GX-PULSE-1Y).
+  const message = extractErrorMessage(error);
+  const hint = (error as { hint?: unknown } | null)?.hint;
+  const haystack = typeof hint === 'string' ? `${message} ${hint}` : message;
+  return /\bAbortError\b|Fetch is aborted|The operation was aborted|signal is aborted|was aborted/i.test(
+    haystack,
   );
+}
+
+/**
+ * A rehydrated query whose observer never mounted has no queryFn, so TanStack
+ * fails it with "Missing queryFn". This is a cache-restore artifact, not a
+ * request failure: the persister writes every successful key (6h maxAge), and on
+ * cold start keys whose screen isn't mounted get restored without a fn. Nothing
+ * is broken — the query refetches normally once its screen mounts (GX-PULSE-1Z).
+ */
+function isMissingQueryFnError(error: unknown): boolean {
+  return /^Missing queryFn\b/.test(extractErrorMessage(error));
+}
+
+/**
+ * Supabase/PostgREST rejects with a plain object ({message, code, details,
+ * hint}), not an Error. `String(obj)` on those yields "[object Object]", which
+ * collapses every distinct failure into one unreadable Sentry group with no
+ * message and no stack (GX-PULSE-1X). Lift the real message out, and keep the
+ * PostgREST code so the group stays diagnosable.
+ */
+function toReportableError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  if (error && typeof error === 'object') {
+    const { message, code, details, hint } = error as Record<string, unknown>;
+    if (typeof message === 'string' && message) {
+      const err = new Error(code ? `[${String(code)}] ${message}` : message);
+      if (details) (err as { details?: unknown }).details = details;
+      if (hint) (err as { hint?: unknown }).hint = hint;
+      return err;
+    }
+    try {
+      return new Error(JSON.stringify(error));
+    } catch {
+      // Circular or non-serializable — fall through to String().
+    }
+  }
+  return new Error(String(error));
 }
 
 export function makeQueryClient() {
@@ -142,8 +195,9 @@ export function makeQueryClient() {
     queryCache: new QueryCache({
       onError: (error, query) => {
         if (isAbortError(error)) return;
+        if (isMissingQueryFnError(error)) return;
         logger.error('[query] fetch failed', {
-          error: error instanceof Error ? error : new Error(String(error)),
+          error: toReportableError(error),
           queryKey: JSON.stringify(query.queryKey),
         });
       },
@@ -152,7 +206,7 @@ export function makeQueryClient() {
       onError: (error) => {
         if (isAbortError(error)) return;
         logger.error('[mutation] failed', {
-          error: error instanceof Error ? error : new Error(String(error)),
+          error: toReportableError(error),
         });
       },
     }),
