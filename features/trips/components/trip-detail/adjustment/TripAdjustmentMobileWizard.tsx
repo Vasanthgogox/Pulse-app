@@ -12,15 +12,35 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  AlertTriangle,
   ArrowDownLeft,
+  ArrowLeftRight,
   ArrowRight,
   ArrowUpRight,
-  Check,
   ChevronLeft,
-  Minus,
-  Plus,
+  Clock,
+  Droplets,
+  FileText,
+  Gift,
+  MoreHorizontal,
+  Package,
+  PackageMinus,
+  ShieldAlert,
+  Timer,
+  Truck,
+  Wallet,
+  type LucideIcon,
 } from "lucide-react-native";
 
+import { SmartInput } from "@/components/mobile-input";
+import {
+  OperationalBottomActionBar,
+  OperationalButton,
+} from "@/components/operational";
+import { partyMobileWizardStyles as shell } from "@/components/party/partyMobileWizardStyles";
+import Layout from "@/constants/Layout";
+import { LedgerSyncPalette } from "@/constants/LedgerSyncPalette";
+import Theme from "@/constants/Theme";
 import { TripAdjustmentReviewTicket } from "@/features/trips/components/trip-detail/adjustment/TripAdjustmentReviewTicket";
 import { ProvisionCnDnImpactTag } from "@/features/trips/components/trip-detail/adjustment/ProvisionCnDnImpactTag";
 import {
@@ -31,13 +51,12 @@ import {
   resolveAdjustmentInitialStepIndex,
   type TripAdjustmentWizardStep,
 } from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentFlow.util";
-import { partyMobileWizardStyles as shell } from "@/components/party/partyMobileWizardStyles";
-import Theme from "@/constants/Theme";
 import {
   getAdjustmentReasonOptions,
   type TripAdjustmentImpact,
   type TripAdjustmentType,
 } from "@/features/trips/services/tripAdjustments";
+import { formatLedgerAmountInput } from "@/lib/format";
 
 export interface TripAdjustmentMobileWizardProps {
   entryContextLabel?: string | null;
@@ -73,10 +92,42 @@ function parseAmount(raw: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+const PAGE_PAD = Layout.screenPaddingHorizontal;
 const WIZARD_REVIEW_MAX_WIDTH = 480;
 
+const REASON_VISUAL: Record<string, { icon: LucideIcon; color: string; tint: string }> = {
+  "Loading Charges": { icon: Package, color: Theme.primary, tint: "#eff6ff" },
+  "Unloading Charges": { icon: PackageMinus, color: "#0f766e", tint: "#ecfdf5" },
+  "Late Delivery": { icon: Clock, color: "#d97706", tint: "#fffbeb" },
+  "Damages / Missing": { icon: AlertTriangle, color: Theme.teslaRed, tint: "#fff1f2" },
+  "Fuel Escalation": { icon: Droplets, color: "#0369a1", tint: "#e0f2fe" },
+  Detention: { icon: Timer, color: "#7c3aed", tint: "#f5f3ff" },
+  "Pass Debit": { icon: ArrowLeftRight, color: Theme.primary, tint: "#eff6ff" },
+  "Damage to cargo": { icon: AlertTriangle, color: Theme.teslaRed, tint: "#fff1f2" },
+  "Missing / shortage": { icon: PackageMinus, color: "#b45309", tint: "#fffbeb" },
+  "Late delivery": { icon: Clock, color: "#d97706", tint: "#fffbeb" },
+  "Policy / safety violation": { icon: ShieldAlert, color: Theme.teslaRed, tint: "#fff1f2" },
+  "Advance recovery": { icon: Wallet, color: "#0f766e", tint: "#ecfdf5" },
+  "Trip tip": { icon: Gift, color: Theme.darkGreen, tint: "#dcfce7" },
+  "Loading / unloading help": { icon: Package, color: Theme.primary, tint: "#eff6ff" },
+  "Detention allowance": { icon: Timer, color: "#7c3aed", tint: "#f5f3ff" },
+  "Performance bonus": { icon: Gift, color: Theme.darkGreen, tint: "#dcfce7" },
+  "Reimbursement top-up": { icon: Wallet, color: "#0369a1", tint: "#e0f2fe" },
+  Other: { icon: MoreHorizontal, color: Theme.textMuted, tint: "#f1f5f9" },
+};
+
+function reasonVisual(label: string) {
+  return (
+    REASON_VISUAL[label] ?? {
+      icon: FileText,
+      color: Theme.primary,
+      tint: "#eff6ff",
+    }
+  );
+}
+
 function stepMeta(
-  step: TripAdjustmentWizardStep,
+  step: TripAdjustmentWizardStep | "otherReason",
   type: TripAdjustmentType,
   isAssetDriverCost?: boolean,
   isEditing?: boolean,
@@ -126,15 +177,15 @@ function stepMeta(
       };
     case "review":
       return isEditing
-        ? { title: "Review & update", hint: "Confirm changes before updating this note." }
-        : { title: "Review & save", hint: "Confirm details on your ticket before saving." };
+        ? { title: "Confirm update", hint: "Authorize changes before updating this note." }
+        : { title: "Confirm sync", hint: "Authorize this provision to post it to your books." };
     default:
       return { title: "Provision" };
   }
 }
 
 function canAdvanceStep(
-  step: TripAdjustmentWizardStep,
+  step: TripAdjustmentWizardStep | "otherReason",
   props: TripAdjustmentMobileWizardProps,
 ): boolean {
   switch (step) {
@@ -221,6 +272,8 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
       ? props.otherReason.trim() || "Other"
       : props.reason.trim();
   const amountNum = parseAmount(props.amountStr);
+  const accent = props.type === "revenue" ? Theme.primary : "#0f766e";
+  const entityTitle = props.isEditing ? "EDIT PROVISION" : "PROVISION ADJUST";
 
   const handleBack = useCallback(() => {
     if (otherReasonMode) {
@@ -280,10 +333,10 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   const renderLane = () => (
     <View style={styles.choiceCol}>
       <Pressable
-        style={[styles.laneCard, props.type === "revenue" && styles.laneCardActiveRev]}
+        style={[styles.directionCard, props.type === "revenue" && styles.directionCardActiveIn]}
         onPress={() => props.onTypeChange("revenue")}
       >
-        <View style={[styles.laneIcon, { backgroundColor: "#ede9fe" }]}>
+        <View style={[styles.directionIcon, { backgroundColor: "#ede9fe" }]}>
           <ArrowUpRight size={22} color={Theme.primary} strokeWidth={2.4} />
         </View>
         <View style={styles.laneTextCol}>
@@ -292,10 +345,10 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
         </View>
       </Pressable>
       <Pressable
-        style={[styles.laneCard, props.type === "cost" && styles.laneCardActiveCost]}
+        style={[styles.directionCard, props.type === "cost" && styles.directionCardActiveOut]}
         onPress={() => props.onTypeChange("cost")}
       >
-        <View style={[styles.laneIcon, { backgroundColor: "#ccfbf1" }]}>
+        <View style={[styles.directionIcon, { backgroundColor: "#ccfbf1" }]}>
           <ArrowDownLeft size={22} color="#0f766e" strokeWidth={2.4} />
         </View>
         <View style={styles.laneTextCol}>
@@ -309,11 +362,11 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   const renderImpact = () => (
     <View style={styles.choiceCol}>
       <Pressable
-        style={[styles.impactCard, props.impact === "minus" && styles.impactCardCn]}
+        style={[styles.directionCard, props.impact === "minus" && styles.impactCardCn]}
         onPress={() => props.onImpactChange("minus")}
       >
-        <View style={[styles.laneIcon, { backgroundColor: "#dcfce7" }]}>
-          <Minus size={22} color={Theme.darkGreen} strokeWidth={2.6} />
+        <View style={[styles.directionIcon, { backgroundColor: "#dcfce7" }]}>
+          <ArrowDownLeft size={22} color={Theme.darkGreen} strokeWidth={2.6} />
         </View>
         <View style={styles.laneTextCol}>
           <Text style={styles.laneTitle}>
@@ -330,11 +383,11 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
         </View>
       </Pressable>
       <Pressable
-        style={[styles.impactCard, props.impact === "plus" && styles.impactCardDn]}
+        style={[styles.directionCard, props.impact === "plus" && styles.impactCardDn]}
         onPress={() => props.onImpactChange("plus")}
       >
-        <View style={[styles.laneIcon, { backgroundColor: "#fee2e2" }]}>
-          <Plus size={22} color={Theme.teslaRed} strokeWidth={2.6} />
+        <View style={[styles.directionIcon, { backgroundColor: "#fee2e2" }]}>
+          <ArrowUpRight size={22} color={Theme.teslaRed} strokeWidth={2.6} />
         </View>
         <View style={styles.laneTextCol}>
           <Text style={styles.laneTitle}>
@@ -354,77 +407,195 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   );
 
   const renderProtocol = () => (
-    <View style={styles.chipGrid}>
-      {FINANCE_PROTOCOL_CHIPS.map((chip) => (
-        <Pressable
-          key={chip}
-          style={styles.protocolChip}
-          onPress={() => applyProtocolChip(chip)}
-        >
-          <Text style={styles.protocolChipText}>{chip}</Text>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.captureScroll}
+    >
+      <View style={styles.captureSectionCard}>
+        <View style={styles.captureSectionHead}>
+          <View style={[styles.captureSectionIcon, styles.captureSectionIconType]}>
+            <Truck size={15} color={Theme.primary} strokeWidth={2.2} />
+          </View>
+          <View style={styles.captureSectionHeadText}>
+            <Text style={styles.captureSectionEyebrow}>Protocol</Text>
+            <Text style={styles.captureSectionHint}>What kind of charge is this?</Text>
+          </View>
+        </View>
+        <View style={styles.iconGrid}>
+          {FINANCE_PROTOCOL_CHIPS.map((chip) => {
+            const visual = reasonVisual(chip);
+            const Icon = visual.icon;
+            return (
+              <Pressable
+                key={chip}
+                style={styles.typeTile}
+                onPress={() => applyProtocolChip(chip)}
+              >
+                <View style={[styles.typeIconWrap, { backgroundColor: visual.tint }]}>
+                  <Icon size={22} color={visual.color} strokeWidth={2.2} />
+                </View>
+                <Text style={styles.typeTileLabel} numberOfLines={2}>
+                  {chip}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Pressable style={styles.protocolSkip} onPress={handleAdvance}>
+          <Text style={styles.protocolSkipText}>Enter manually →</Text>
         </Pressable>
-      ))}
-      <Pressable style={styles.protocolSkip} onPress={handleAdvance}>
-        <Text style={styles.protocolSkipText}>Enter manually →</Text>
-      </Pressable>
-    </View>
+      </View>
+    </ScrollView>
   );
 
-  const renderAmount = () => (
-    <View style={styles.amountBlock}>
-      <View style={styles.amountRow}>
-        <Text style={styles.currency}>₹</Text>
-        <TextInput
-          style={styles.amountInput}
-          value={props.amountStr}
-          onChangeText={props.onAmountChange}
-          placeholder="0"
-          placeholderTextColor={Theme.textMuted}
-          keyboardType="numeric"
-          maxLength={14}
-          autoFocus
-        />
+  const amountHint = isAssetDriverCost
+    ? props.impact === "plus"
+      ? "Adds to revised driver trip cost (tip or allowance)."
+      : "Reduces revised driver trip cost (deduction from salary)."
+    : `${props.impact === "plus" ? "Debit note increases" : "Credit note reduces"} ${
+        props.type === "revenue" ? "sale" : "supplier cost"
+      }.`;
+
+  const renderAmountFullPage = () => (
+    <View style={styles.amountFullPage}>
+      <View style={[styles.amountTopBar, { paddingTop: insets.top + 4 }]}>
+        <Pressable
+          style={styles.amountBackBtn}
+          onPress={handleBack}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <ChevronLeft size={20} color="#0f172a" strokeWidth={2.5} />
+        </Pressable>
+        <View style={styles.amountTopBarDetail}>
+          <View style={shell.titleRow}>
+            <View style={shell.liveDot} />
+            <Text style={styles.entityTitleCompact}>{entityTitle}</Text>
+          </View>
+          {props.entryContextLabel ? (
+            <Text style={styles.subtitleCompact} numberOfLines={1}>
+              {props.entryContextLabel}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.amountBackBtn} />
       </View>
-      <Text style={styles.amountHint}>
-        {isAssetDriverCost
-          ? props.impact === "plus"
-            ? "Adds to revised driver trip cost (tip or allowance)."
-            : "Reduces revised driver trip cost (deduction from salary)."
-          : `${props.impact === "plus" ? "Debit note increases" : "Credit note reduces"} ${
-              props.type === "revenue" ? "sale" : "supplier cost"
-            }.`}
-      </Text>
+
+      <View style={styles.tripDirectStepBand}>
+        <View style={styles.tripDirectProgressRow}>
+          {steps.map((id, i) => (
+            <View
+              key={id}
+              style={[
+                styles.tripDirectProgressDot,
+                i <= stepIndex && styles.tripDirectProgressDotActive,
+              ]}
+            />
+          ))}
+        </View>
+        <Text style={styles.twoStepFlowLabel}>
+          Step {stepIndex + 1} of {steps.length} · Amount
+        </Text>
+      </View>
+
+      <ScrollView
+        style={styles.amountFullPageScroll}
+        contentContainerStyle={styles.amountFullPageScrollContent}
+        keyboardShouldPersistTaps="always"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.amountHeroCenter}>
+          <View style={styles.amountHeroInputWrap}>
+            <SmartInput
+              type="currency"
+              value={amountNum}
+              onChange={(_, numeric) => {
+                props.onAmountChange(formatLedgerAmountInput(numeric));
+              }}
+              label="Provision amount"
+              submitLabel="Apply"
+              variant="hero"
+              heroAccentColor={accent}
+              placeholder="0"
+              required={false}
+              validation={{ min: 0, max: 100000000 }}
+            />
+          </View>
+          <Text style={styles.amountMetaHintCentered}>{amountHint}</Text>
+        </View>
+      </ScrollView>
+
+      <OperationalBottomActionBar>
+        <OperationalButton
+          intent="bottomSticky"
+          label="Continue"
+          onPress={handleAdvance}
+          disabled={!canAdvance}
+          density="high"
+          fullWidth
+        />
+      </OperationalBottomActionBar>
     </View>
   );
 
   const renderReason = () => (
-    <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-      <View style={styles.chipGrid}>
-        {reasonOptions.map((r) => (
-          <Pressable
-            key={r}
-            style={[styles.reasonChip, props.reason === r && styles.reasonChipActive]}
-            onPress={() => {
-              props.onReasonChange(r);
-              if (r === "Other") {
-                props.onOtherReasonChange("");
-                setOtherReasonMode(true);
-              } else {
-                props.onOtherReasonChange("");
-                setOtherReasonMode(false);
-              }
-            }}
-          >
-            <Text
-              style={[
-                styles.reasonChipText,
-                props.reason === r && styles.reasonChipTextActive,
-              ]}
-            >
-              {r}
-            </Text>
-          </Pressable>
-        ))}
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.captureScroll}
+    >
+      <View style={styles.captureSectionCard}>
+        <View style={styles.captureSectionHead}>
+          <View style={[styles.captureSectionIcon, styles.captureSectionIconType]}>
+            <FileText size={15} color={Theme.primary} strokeWidth={2.2} />
+          </View>
+          <View style={styles.captureSectionHeadText}>
+            <Text style={styles.captureSectionEyebrow}>Reason</Text>
+            <Text style={styles.captureSectionHint}>What kind of adjustment is this?</Text>
+          </View>
+        </View>
+        <View style={styles.iconGrid}>
+          {reasonOptions.map((r) => {
+            const selected = props.reason === r;
+            const visual = reasonVisual(r);
+            const Icon = visual.icon;
+            return (
+              <Pressable
+                key={r}
+                style={[
+                  styles.typeTile,
+                  selected && { borderColor: visual.color, backgroundColor: visual.tint },
+                ]}
+                onPress={() => {
+                  props.onReasonChange(r);
+                  if (r === "Other") {
+                    props.onOtherReasonChange("");
+                    setOtherReasonMode(true);
+                  } else {
+                    props.onOtherReasonChange("");
+                    setOtherReasonMode(false);
+                  }
+                }}
+              >
+                <View style={styles.typeIconWrap}>
+                  <Icon
+                    size={22}
+                    color={selected ? visual.color : Theme.textMuted}
+                    strokeWidth={2.2}
+                  />
+                </View>
+                <Text
+                  style={[styles.typeTileLabel, selected && { color: visual.color }]}
+                  numberOfLines={2}
+                >
+                  {r}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
       {props.reason === "Other" ? (
         <Pressable style={styles.otherReasonLink} onPress={() => setOtherReasonMode(true)}>
@@ -439,22 +610,36 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   );
 
   const renderOtherReason = () => (
-    <View style={styles.otherReasonPage}>
-      <TextInput
-        style={styles.otherReasonInput}
-        value={props.otherReason}
-        onChangeText={props.onOtherReasonChange}
-        placeholder="e.g. Shortage at unloading, rate mismatch…"
-        placeholderTextColor={Theme.textMuted}
-        maxLength={120}
-        multiline
-        autoFocus
-        textAlignVertical="top"
-      />
-      <Text style={styles.otherReasonHint}>
-        This appears on the provision line and audit trail.
-      </Text>
-    </View>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.captureScroll}
+    >
+      <View style={styles.captureSectionCard}>
+        <View style={styles.captureSectionHead}>
+          <View style={[styles.captureSectionIcon, styles.captureSectionIconRef]}>
+            <MoreHorizontal size={15} color={Theme.primary} strokeWidth={2.2} />
+          </View>
+          <View style={styles.captureSectionHeadText}>
+            <Text style={styles.captureSectionEyebrow}>Other reason</Text>
+            <Text style={styles.captureSectionHint}>
+              This appears on the provision line and audit trail.
+            </Text>
+          </View>
+        </View>
+        <TextInput
+          style={styles.captureReferenceInput}
+          value={props.otherReason}
+          onChangeText={props.onOtherReasonChange}
+          placeholder="e.g. Shortage at unloading, rate mismatch…"
+          placeholderTextColor={Theme.textMuted}
+          maxLength={120}
+          multiline
+          autoFocus
+          textAlignVertical="top"
+        />
+      </View>
+    </ScrollView>
   );
 
   const renderReview = () => (
@@ -492,7 +677,7 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
       case "protocol":
         return renderProtocol();
       case "amount":
-        return renderAmount();
+        return null;
       case "reason":
         return renderReason();
       case "review":
@@ -502,7 +687,6 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
     }
   })();
 
-  const entityTitle = props.isEditing ? "EDIT PROVISION" : "PROVISION ADJUST";
   const advanceLabel =
     currentStep === "review"
       ? props.submitting
@@ -510,31 +694,37 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
           ? "Updating…"
           : "Saving…"
         : props.isEditing
-          ? "Update"
-          : "Save"
+          ? "Save Changes"
+          : "Confirm Sync"
       : "Continue";
+
+  if (currentStep === "amount" && !otherReasonMode) {
+    return <View style={styles.amountFullPageShell}>{renderAmountFullPage()}</View>;
+  }
 
   return (
     <KeyboardAvoidingView
-      style={shell.root}
+      style={[shell.root, styles.wizardRoot]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={[shell.root, { paddingTop: insets.top }]}>
+      <View style={[shell.root, styles.wizardRoot, { paddingTop: insets.top }]}>
         <View style={[shell.topBar, styles.topBarCompact]}>
           <Pressable style={shell.backBtn} onPress={handleBack} hitSlop={12}>
             <ChevronLeft size={20} color="#0f172a" strokeWidth={2.5} />
           </Pressable>
-          <View style={shell.progressRow}>
-            {steps.map((id, i) => (
-              <View
-                key={id}
-                style={[
-                  shell.progressDot,
-                  i <= stepIndex && shell.progressDotActive,
-                  i <= stepIndex && styles.progressDotActiveCompact,
-                ]}
-              />
-            ))}
+          <View style={styles.mobileHeaderCenter}>
+            <View style={shell.progressRow}>
+              {steps.map((id, i) => (
+                <View
+                  key={id}
+                  style={[
+                    shell.progressDot,
+                    i <= stepIndex && shell.progressDotActive,
+                    i <= stepIndex && styles.progressDotActiveCompact,
+                  ]}
+                />
+              ))}
+            </View>
           </View>
           <View style={shell.backBtnSpacer} />
         </View>
@@ -563,10 +753,21 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
                 </Text>
               ) : null}
             </View>
-            <Text style={[shell.stepTitle, styles.stepTitleCompact]}>{title}</Text>
-            {hint ? (
-              <Text style={[shell.stepHint, styles.stepHintCompact]}>{hint}</Text>
-            ) : null}
+            {effectiveStep !== "review" ? (
+              <>
+                <Text style={[shell.stepTitle, styles.stepTitleCompact]}>{title}</Text>
+                {hint ? (
+                  <Text style={[shell.stepHint, styles.stepHintCompact]}>{hint}</Text>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <Text style={[shell.stepTitle, styles.stepTitleCompact]}>{title}</Text>
+                {hint ? (
+                  <Text style={[shell.stepHint, styles.stepHintCompact]}>{hint}</Text>
+                ) : null}
+              </>
+            )}
           </View>
           {body}
         </View>
@@ -575,8 +776,8 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
           style={[
             shell.footer,
             styles.footerCompact,
+            styles.footerAboveBrowserChrome,
             effectiveStep === "review" && styles.footerReview,
-            Platform.OS === "web" && effectiveStep === "review" && styles.footerReviewWeb,
             { paddingBottom: insets.bottom + 12 },
           ]}
         >
@@ -584,14 +785,13 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
             <View style={styles.footerReviewInner}>
               <Pressable
                 style={[
-                  styles.saveBtn,
-                  (!props.canSubmit || props.submitting) && styles.saveBtnDisabled,
+                  styles.confirmSyncBtn,
+                  (!props.canSubmit || props.submitting) && styles.confirmSyncBtnDisabled,
                 ]}
                 onPress={handleAdvance}
                 disabled={!props.canSubmit || props.submitting}
               >
-                <Check size={18} color="#fff" strokeWidth={2.8} />
-                <Text style={styles.saveBtnText}>{advanceLabel}</Text>
+                <Text style={styles.confirmSyncBtnText}>{advanceLabel}</Text>
               </Pressable>
             </View>
           ) : (
@@ -613,9 +813,36 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
 });
 
 const styles = StyleSheet.create({
-  topBarCompact: { paddingHorizontal: 12, paddingBottom: 4 },
-  bodyCompact: { paddingHorizontal: 16, paddingTop: 0 },
-  footerCompact: { paddingHorizontal: 16, paddingTop: 4 },
+  wizardRoot: {
+    flex: 1,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  topBarCompact: { paddingHorizontal: PAGE_PAD, paddingBottom: 2 },
+  bodyCompact: {
+    paddingHorizontal: PAGE_PAD,
+    paddingTop: 0,
+    flex: 1,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  footerCompact: { paddingHorizontal: PAGE_PAD, paddingTop: 2 },
+  footerAboveBrowserChrome: Platform.select({
+    web: {
+      flexShrink: 0,
+      backgroundColor: "#fff",
+    },
+    default: {},
+  }),
+  mobileHeaderCenter: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
   stepHeader: { marginBottom: 10, gap: 4 },
   compactContext: { gap: 2, marginBottom: 4 },
   entityTitleCompact: {
@@ -627,16 +854,17 @@ const styles = StyleSheet.create({
   },
   subtitleCompact: {
     fontSize: 12,
-    fontStyle: "italic",
+    fontWeight: "600",
     color: Theme.textMuted,
+    marginTop: 2,
   },
   stepTitleCompact: { fontSize: 20, letterSpacing: -0.3 },
   stepHintCompact: { fontSize: 12, marginBottom: 0, lineHeight: 17 },
   progressDotActiveCompact: { width: 18, height: 6, borderRadius: 3 },
   fabCompact: { width: 48, height: 48, borderRadius: 24 },
   footerHintCompact: { fontSize: 9 },
-  choiceCol: { gap: 10 },
-  laneCard: {
+  choiceCol: { gap: 8 },
+  directionCard: {
     borderWidth: 1,
     borderColor: "#e2e8f0",
     borderRadius: 14,
@@ -646,23 +874,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  laneCardActiveRev: {
+  directionCardActiveIn: {
     borderColor: Theme.primary,
     backgroundColor: "rgba(99,102,241,0.08)",
   },
-  laneCardActiveCost: {
+  directionCardActiveOut: {
     borderColor: "#0f766e",
     backgroundColor: "rgba(15,118,110,0.08)",
-  },
-  impactCard: {
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: "#f8fafc",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
   },
   impactCardCn: {
     borderColor: Theme.darkGreen,
@@ -672,7 +890,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.teslaRed,
     backgroundColor: "rgba(232,33,39,0.08)",
   },
-  laneIcon: {
+  directionIcon: {
     width: 44,
     height: 44,
     borderRadius: 14,
@@ -682,27 +900,107 @@ const styles = StyleSheet.create({
   laneTextCol: { flex: 1, minWidth: 0 },
   laneTitle: { fontSize: 15, fontWeight: "800", color: "#0f172a" },
   laneSub: { fontSize: 12, color: Theme.textMuted, marginTop: 2 },
-  chipGrid: {
+  captureScroll: {
+    paddingBottom: 12,
+    gap: 12,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  captureSectionCard: {
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 14,
+    gap: 12,
+  },
+  captureSectionHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  captureSectionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  captureSectionIconType: {
+    backgroundColor: "#eff6ff",
+  },
+  captureSectionIconRef: {
+    backgroundColor: "#eff6ff",
+  },
+  captureSectionHeadText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  captureSectionEyebrow: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+    letterSpacing: -0.1,
+  },
+  captureSectionHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 16,
+  },
+  captureReferenceInput: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0f172a",
+    backgroundColor: "#f8fafc",
+    width: "100%",
+    minWidth: 0,
+    minHeight: 120,
+  },
+  iconGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+    width: "100%",
+    alignSelf: "stretch",
   },
-  protocolChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+  typeTile: {
+    width: "47%",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 8,
     backgroundColor: "#fff",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 68,
   },
-  protocolChipText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#0f172a",
+  typeIconWrap: {
+    minHeight: 28,
+    width: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  typeTileLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textAlign: "center",
   },
   protocolSkip: {
     width: "100%",
-    paddingVertical: 10,
+    paddingVertical: 6,
     alignItems: "center",
   },
   protocolSkipText: {
@@ -710,61 +1008,107 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.primary,
   },
-  amountBlock: { gap: 8 },
-  amountRow: {
+  amountFullPageShell: {
+    flex: 1,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+    backgroundColor: Theme.screenBackground,
+  },
+  amountFullPage: {
+    flex: 1,
+    width: "100%",
+    minWidth: 0,
+    backgroundColor: Theme.screenBackground,
+  },
+  amountFullPageScroll: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    minWidth: 0,
+  },
+  amountFullPageScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: PAGE_PAD,
+    paddingTop: 6,
+    paddingBottom: 8,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+    gap: 8,
+  },
+  amountTopBar: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    paddingHorizontal: PAGE_PAD,
+    paddingBottom: 8,
+    width: "100%",
+    minWidth: 0,
+    backgroundColor: Theme.cardWhite,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: LedgerSyncPalette.border,
+  },
+  amountBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 16,
-    backgroundColor: "#f8fafc",
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    backgroundColor: Theme.surfaceForm,
   },
-  currency: {
-    fontSize: 28,
-    fontWeight: "300",
-    color: "#0f172a",
-    marginRight: 6,
+  amountTopBarDetail: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
-  amountInput: {
-    fontSize: 32,
+  tripDirectStepBand: {
+    paddingHorizontal: PAGE_PAD,
+    paddingBottom: 8,
+    gap: 6,
+    alignItems: "center",
+  },
+  tripDirectProgressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  tripDirectProgressDot: {
+    width: 28,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#e2e8f0",
+  },
+  tripDirectProgressDotActive: {
+    backgroundColor: LedgerSyncPalette.indigo,
+  },
+  twoStepFlowLabel: {
+    fontSize: 11,
     fontWeight: "700",
-    color: "#0f172a",
-    minWidth: 100,
-    padding: 0,
-    textAlign: "center",
+    color: LedgerSyncPalette.indigo,
+    letterSpacing: 0.3,
+    marginTop: 2,
   },
-  amountHint: {
+  amountHeroCenter: {
+    width: "100%",
+    alignItems: "center",
+    gap: 10,
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  amountHeroInputWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  amountMetaHintCentered: {
     fontSize: 12,
     color: Theme.textMuted,
     textAlign: "center",
     lineHeight: 17,
-  },
-  reasonChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#fff",
-  },
-  reasonChipActive: {
-    borderColor: Theme.primary,
-    backgroundColor: "rgba(99,102,241,0.1)",
-  },
-  reasonChipText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textMuted,
-  },
-  reasonChipTextActive: {
-    color: Theme.primary,
-    fontWeight: "800",
+    paddingHorizontal: 8,
   },
   otherReasonLink: {
-    marginTop: 12,
     paddingVertical: 10,
     alignItems: "center",
   },
@@ -772,27 +1116,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: Theme.primary,
-  },
-  otherReasonPage: {
-    flex: 1,
-    gap: 10,
-  },
-  otherReasonInput: {
-    minHeight: 120,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#0f172a",
-    backgroundColor: "#fff",
-  },
-  otherReasonHint: {
-    fontSize: 12,
-    color: Theme.textMuted,
-    lineHeight: 17,
   },
   reviewScroll: {
     paddingBottom: 8,
@@ -824,34 +1147,25 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     width: "100%",
   },
-  footerReviewWeb: {
-    flexShrink: 0,
-    backgroundColor: Theme.screenBackground,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-  },
   footerReviewInner: {
     width: "100%",
     maxWidth: WIZARD_REVIEW_MAX_WIDTH,
     alignSelf: "center",
   },
-  saveBtn: {
+  confirmSyncBtn: {
     alignSelf: "stretch",
-    flexDirection: "row",
+    backgroundColor: Theme.primary,
+    paddingVertical: 13,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     minHeight: 48,
   },
-  saveBtnDisabled: { opacity: 0.45 },
-  saveBtnText: {
-    fontSize: 15,
+  confirmSyncBtnDisabled: { opacity: 0.55 },
+  confirmSyncBtnText: {
+    fontSize: 14,
     fontWeight: "800",
-    color: Theme.buttonPrimaryText,
+    color: Theme.textOnDark,
+    letterSpacing: 0.2,
   },
 });
