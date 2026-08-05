@@ -21,6 +21,7 @@ import {
   resolveAvatarPublicUrl,
 } from "@/lib/avatarUpload";
 import { LEDGER_PAGE_SIZE, toRange, type PageOpts } from "@/lib/pagination";
+import { AUTH_TIMEOUT_MS, withTimeout } from "@/lib/authEngine";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { VALIDATION, dateISO } from "@/lib/validation";
@@ -1238,15 +1239,18 @@ export async function createLedgerEntry(
   ).slice(0, 10);
   const dateErr = dateISO()(rawDate);
   const date = dateErr ? new Date().toISOString().slice(0, 10) : rawDate;
-  if (enriched.contact_type && !enriched.contact_id) {
+  const contactIdTrimmed = normalizePartyName(enriched.contact_id);
+  if (enriched.contact_type && !contactIdTrimmed) {
     return {
-      error: new Error("Missing contact_id for ledger contact_type entry."),
+      error: new Error(
+        "Pick a customer/supplier before confirming sync. This trip has no linked party id.",
+      ),
       row: null,
     };
   }
   const normalizedContactType = (enriched.contact_type ??
     null) as LedgerContactType | null;
-  const normalizedContactId = normalizePartyName(enriched.contact_id);
+  const normalizedContactId = contactIdTrimmed;
   const fallbackPartyName =
     normalizePartyName(enriched.party_name || "—") || "—";
   const usePassthroughTrip = ledgerWriteHasUiTripContext(entry);
@@ -1362,19 +1366,29 @@ export async function createLedgerEntry(
     amount_in: isCashIn ? amountIn : 0,
     amount_out: isCashIn ? 0 : amountOut,
     transaction_date: date,
-    contact_id: enriched.contact_id ?? null,
+    contact_id: normalizedContactId || null,
     contact_type: enriched.contact_type ?? null,
     ledger_entity_type: enriched.ledger_entity_type ?? null,
     ledger_flow_type: enriched.ledger_flow_type ?? null,
     ledger_category: enriched.ledger_category ?? null,
   };
 
-  const {
-    data: { user: authUser },
-  } = await supabase().auth.getUser();
+  // Prefer getSession (local) over getUser (network). Never block Confirm Sync
+  // if auth is slow — insert without created_by rather than hang the spinner.
+  let createdBy: string | null = null;
+  try {
+    const { data } = await withTimeout(
+      supabase().auth.getSession(),
+      AUTH_TIMEOUT_MS,
+      { jitter: false },
+    );
+    createdBy = data.session?.user?.id ?? null;
+  } catch {
+    createdBy = null;
+  }
   const insertPayload = {
     ...payload,
-    ...(authUser?.id ? { created_by: authUser.id } : {}),
+    ...(createdBy ? { created_by: createdBy } : {}),
   };
 
   let { data, error } = await supabase()
@@ -1456,15 +1470,18 @@ export async function updateLedgerEntry(
     ? new Date().toISOString().slice(0, 10)
     : rawDate;
   const isCashIn = amountIn > 0;
-  if (enriched.contact_type && !enriched.contact_id) {
+  const contactIdTrimmed = normalizePartyName(enriched.contact_id);
+  if (enriched.contact_type && !contactIdTrimmed) {
     return {
-      error: new Error("Missing contact_id for ledger contact_type entry."),
+      error: new Error(
+        "Pick a customer/supplier before confirming sync. This trip has no linked party id.",
+      ),
       row: null,
     };
   }
   const normalizedContactType = (enriched.contact_type ??
     null) as LedgerContactType | null;
-  const normalizedContactId = normalizePartyName(enriched.contact_id);
+  const normalizedContactId = contactIdTrimmed;
   const fallbackPartyName =
     normalizePartyName(enriched.party_name || "—") || "—";
   const usePassthroughTrip = ledgerWriteHasUiTripContext(entry);
@@ -1536,7 +1553,7 @@ export async function updateLedgerEntry(
     amount_in: isCashIn ? amountIn : 0,
     amount_out: isCashIn ? 0 : amountOut,
     transaction_date: date,
-    contact_id: enriched.contact_id ?? null,
+    contact_id: normalizedContactId || null,
     contact_type: enriched.contact_type ?? null,
     ledger_entity_type: enriched.ledger_entity_type ?? null,
     ledger_flow_type: enriched.ledger_flow_type ?? null,

@@ -52,7 +52,6 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Platform,
   StyleSheet,
   Text,
@@ -60,6 +59,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { showAppAlert } from "@/lib/appAlert";
 import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 
 /** TripOption with organization_id and driver_display_name for entity filtering. */
@@ -825,7 +825,9 @@ export default function LedgerSyncScreen() {
 
       const { error } = await doCreate;
       if (error) {
-        Alert.alert(t("error"), error.message);
+        // In-app alert (non-blocking). RN Alert.alert → window.alert behind the
+        // recon Modal freezes Confirm Sync loading on iPad Safari.
+        showAppAlert(t("error"), error.message);
         throw new Error(error.message);
       }
 

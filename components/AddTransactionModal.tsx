@@ -40,6 +40,7 @@ import {
     isIntegratedSupplierRow,
     isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
+import { showAppAlert } from "@/lib/appAlert";
 import { formatIndianVehicleNumber, formatINR, formatLedgerAmountInput } from "@/lib/format";
 import {
     buildMissionTripPendingChips,
@@ -1945,7 +1946,9 @@ export function AddTransactionModal({
           (c) => (c.name || "").trim().toLowerCase() === cname,
         );
         if (byName.length >= 1) return byName;
-        return [{ id: "", name: selectedTrip.client_name || "Unknown client" }];
+        // Never invent a blank-id party — Confirm Sync would hang/fail with
+        // "Missing contact_id" while the UI still looked selected (iPad bug).
+        // Fall through to the full customers list so the user picks a real client.
       }
     }
     if (type === "out" && selectedTrip) {
@@ -2297,11 +2300,45 @@ export function AddTransactionModal({
     !(isDriverPayment && driverPaymentType === "salary");
   const hasValidTrip = !tripRequired || selectedTripIds.length > 0;
 
+  // Trip-locked cash IN with no resolvable client_id (e.g. name-only "nihas logs")
+  // must show a party picker — otherwise Confirm Sync submits a blank contact_id.
+  const tripLockedCashInNeedsPartyPick = useMemo(() => {
+    if (!tripLocked || type !== "in" || !selectedTrip) return false;
+    const lid = (selectedTrip as { organization_id?: string | null })
+      .organization_id;
+    const isIntegrated = isCrossOrgIntegrationTrip(
+      {
+        organization_id: selectedTrip.organization_id ?? "",
+        indent_id: selectedTrip.indent_id ?? null,
+        supplier_id: selectedTrip.supplier_id ?? null,
+      },
+      viewerOrgId,
+    );
+    if (isIntegrated && lid != null) {
+      const localCid =
+        (linkedClientIdByOrgId instanceof Map
+          ? linkedClientIdByOrgId.get(lid)
+          : linkedClientIdByOrgId?.[lid]) ?? null;
+      if (localCid && String(localCid).trim()) return false;
+    }
+    const tripCid = (selectedTrip.client_id ?? "").trim();
+    return !tripCid;
+  }, [
+    tripLocked,
+    type,
+    selectedTrip,
+    viewerOrgId,
+    linkedClientIdByOrgId,
+  ]);
+
   // Party required: user must select a party (incl. Misc when no other option).
-  // When tripLocked, party is derived from trip on submit — no party field shown.
+  // When tripLocked with a linked client, party is derived — no party field shown.
+  // Reject blank ids (legacy synthetic `{ id: "" }` options must not enable Confirm Sync).
+  const hasValidPartyId =
+    typeof effectivePartyId === "string" && effectivePartyId.trim().length > 0;
   const hasValidParty =
-    tripLocked ||
-    (effectivePartyId != null &&
+    (tripLocked && !tripLockedCashInNeedsPartyPick) ||
+    (hasValidPartyId &&
       (effectivePartyId !== "misc" ||
         (type === "in" && safeClients.length === 0) ||
         (type === "out" &&
@@ -2868,9 +2905,11 @@ export function AddTransactionModal({
   useEffect(() => {
     if (!visible || isPartyLocked) return;
     if (type === "in" && selectedTrip && partyOptions.length === 1) {
-      const firstId = partyOptions[0].id;
+      const firstId = (partyOptions[0].id ?? "").trim();
       const currentInList =
-        partyId != null && partyOptions.some((c) => c.id === partyId);
+        partyId != null &&
+        partyId.trim().length > 0 &&
+        partyOptions.some((c) => c.id === partyId);
       if (!currentInList && firstId) setPartyId(firstId);
       return;
     }
@@ -2878,7 +2917,7 @@ export function AddTransactionModal({
       type === "out" &&
       selectedTrip &&
       partyOptions.length === 1 &&
-      partyOptions[0].id &&
+      (partyOptions[0].id ?? "").trim() &&
       partyId !== partyOptions[0].id
     ) {
       setPartyId(partyOptions[0].id);
@@ -3102,6 +3141,13 @@ export function AddTransactionModal({
 
   const commitLedgerSubmit = () => {
     if (!canSubmit) return;
+    if (
+      !tripLocked &&
+      (typeof effectivePartyId !== "string" || !effectivePartyId.trim())
+    ) {
+      // Defensive: blank synthetic party ids must never reach createLedgerEntry.
+      return;
+    }
     const flowGuard = ledgerLockedPartyFlowGuard(
       type,
       ledgerLockedEntityType,
@@ -3146,9 +3192,31 @@ export function AddTransactionModal({
             defaultPartyName ??
             null;
         } else {
-          derivedContactId = selectedTrip.client_id ?? null;
-          derivedContactType = derivedContactId ? "client" : null;
+          const tripCid = (selectedTrip.client_id ?? "").trim() || null;
+          derivedContactId = tripCid;
+          derivedContactType = tripCid ? "client" : null;
           derivedPartyName = selectedTrip.client_name ?? null;
+        }
+        // Trip has name-only client (no id): use the party picker selection.
+        if (
+          !derivedContactId &&
+          partyId &&
+          partyId.trim() &&
+          safeClients.some((c) => c.id === partyId)
+        ) {
+          derivedContactId = partyId;
+          derivedContactType = "client";
+          derivedPartyName =
+            safeClients.find((c) => c.id === partyId)?.name ??
+            selectedTrip.client_name ??
+            null;
+        }
+        if (type === "in" && !derivedContactId) {
+          showAppAlert(
+            "Customer required",
+            "This trip has no linked customer. Choose a customer in the party picker, then confirm sync.",
+          );
+          return;
         }
       } else {
         let localSid: string | null = resolveLocalSupplierPartyIdFromTrip(
@@ -5209,7 +5277,8 @@ export function AddTransactionModal({
           ]}
         >
           <View style={styles.ledgerV2Col}>
-            {!tripLocked && !isPartyLocked ? (
+            {(!tripLocked || tripLockedCashInNeedsPartyPick) &&
+            !isPartyLocked ? (
               <TouchableOpacity
                 style={styles.syncPartyRow}
                 onPress={() => {
@@ -5352,7 +5421,10 @@ export function AddTransactionModal({
                 partyId={partyId}
                 onPartySelect={setPartyId}
                 partyOptions={ledgerWizardPartyOptions}
-                partyLocked={isPartyLocked || tripLocked}
+                partyLocked={
+                  isPartyLocked ||
+                  (tripLocked && !tripLockedCashInNeedsPartyPick)
+                }
                 partyDisplayName={effectivePartyName}
                 partyAvatarUrl={ledgerPartyVisual.partyAvatarUrl}
                 partyAvatarSeed={ledgerPartyVisual.partyAvatarSeed}
@@ -5750,8 +5822,9 @@ export function AddTransactionModal({
               )}
             </View>
 
-            {/* Party: hidden when tripLocked (party derived from trip). */}
-            {!tripLocked && !isPartyLocked ? (
+            {/* Party: hidden when tripLocked with a linked client (derived). */}
+            {(!tripLocked || tripLockedCashInNeedsPartyPick) &&
+            !isPartyLocked ? (
               <TouchableOpacity
                 style={[styles.fieldBlockFull, showPartyPicker && styles.fieldBlockOpen]}
                 onPress={() => {
