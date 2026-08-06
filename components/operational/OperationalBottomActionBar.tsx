@@ -26,8 +26,9 @@ export const OperationalBottomActionBar = memo(function OperationalBottomActionB
       style={[
         styles.bar,
         {
+          // Keep a real thumb band even when RN web reports inset 0.
           paddingBottom: reserveSafeArea
-            ? Math.max(bottomInset, space[3])
+            ? Math.max(bottomInset, space[4])
             : space[3],
           paddingHorizontal: layout.screenPaddingX,
         },
@@ -41,9 +42,11 @@ export const OperationalBottomActionBar = memo(function OperationalBottomActionB
 
 const styles = StyleSheet.create({
   bar: {
+    flexShrink: 0,
     paddingTop: space[3],
     backgroundColor: colors.canvas,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderSubtle,
+    zIndex: 2,
   },
 });

@@ -7,10 +7,14 @@ import { space } from "@/design-system/spacing";
 export const operationsEntryStyles = StyleSheet.create({
   screen: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: Theme.screenBackground,
   },
   scroll: {
     flex: 1,
+    // RN Web: without minHeight 0, ScrollView grows with content and
+    // pushes the sticky footer below the overflow:hidden root clip.
+    minHeight: 0,
   },
   content: {
     paddingHorizontal: layout.screenPaddingX,

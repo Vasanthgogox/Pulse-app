@@ -187,6 +187,7 @@ import {
   inferCoordsFromLocationName,
   protocolSupplierChipAdjustment,
   provisionLineMetaLabel,
+  resolveTripSupplierDisplayName,
   splitLocationPrimarySecondary,
 } from "./tripDetail.helpers";
 import {
@@ -1746,9 +1747,16 @@ export default function TripDetailScreen({
     String(trip.client_name ?? "").trim() ||
     awaitingDataLabel;
   const supplierNameForParty =
-    detail.partnerName?.trim() ||
-    String(tripExtra.supplier_name ?? "").trim() ||
-    awaitingDataLabel;
+    resolveTripSupplierDisplayName({
+      partnerName: detail.partnerName,
+      supplierPartyName: detail.supplierPartyRes?.name,
+      tripSupplierName: tripExtra.supplier_name,
+      clientName:
+        detail.displayClientName?.trim() ||
+        String(trip.client_name ?? "").trim() ||
+        null,
+      ledgerEntries,
+    }) || awaitingDataLabel;
   const clientNameCard = clientNameForParty.toUpperCase();
   const supplierName = supplierNameForParty.toUpperCase();
   const isIntegratedTrip = Boolean(trip.indent_id);
@@ -2382,10 +2390,12 @@ export default function TripDetailScreen({
   );
 
   const showOdometerVerification = isAssetExecutionTrip(trip);
+  const expenseHubDensity = isDesktop ? "comfortable" : "compact";
   const odometerPreviewEl = showOdometerVerification ? (
     <TripOdometerPreviewCard
       trip={trip}
       compact
+      density={expenseHubDensity}
       onRecordStart={() => openOdometerVerification("start")}
       onRecordEnd={() => openOdometerVerification("end")}
     />
@@ -3376,6 +3386,7 @@ export default function TripDetailScreen({
                 <TripExpensesScreen
                   trip={trip}
                   embedded
+                  density={expenseHubDensity}
                   onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
                   onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
                   onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)}
@@ -4548,6 +4559,7 @@ export default function TripDetailScreen({
                     <TripExpensesScreen
                       trip={trip}
                       embedded
+                      density={expenseHubDensity}
                       onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
                       onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
                       onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)}
@@ -5416,9 +5428,7 @@ export default function TripDetailScreen({
         partyLabel={
           showFinanceProvisionPanel === "client"
             ? (detail.displayClientName ?? trip.client_name ?? "Client")
-            : isAssetTripFinance
-              ? provisionCostPartyName
-              : (detail.partnerName ?? trip.supplier_name ?? "Supplier")
+            : provisionCostPartyName
         }
         clientName={clientNameForParty}
         clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
@@ -5479,7 +5489,7 @@ export default function TripDetailScreen({
             trip
               ? `${getTripDisplayNumber(trip, currentOrganization?.id)} · ${
                   detail.adjustmentModalPreset?.type === "cost"
-                    ? (detail.partnerName ?? trip.supplier_name ?? "Supplier")
+                    ? provisionCostPartyName
                     : (detail.displayClientName ?? trip.client_name ?? "Client")
                 }`
               : null

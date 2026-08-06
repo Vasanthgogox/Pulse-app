@@ -11,6 +11,67 @@ import {
   type TripAdjustmentType,
 } from "../../services/tripAdjustments";
 
+/** Minimal ledger shape for supplier party-name fallback (Finance Hub payable label). */
+export type TripSupplierNameLedgerEntry = {
+  contact_type?: string | null;
+  party_name?: string | null;
+  amount_out?: number | null;
+};
+
+function isUsableSupplierDisplayName(
+  value: string | null | undefined,
+  clientName?: string | null,
+): value is string {
+  const v = (value ?? "").trim();
+  if (!v || v === "—" || v === "-") return false;
+  const lc = v.toLowerCase();
+  if (
+    lc === "supplier" ||
+    lc === "partner" ||
+    lc === "awaiting data" ||
+    lc === "aggregate supplier" ||
+    lc === "asset / own vehicle" ||
+    lc === "own vehicle"
+  ) {
+    return false;
+  }
+  const clientLc = (clientName ?? "").trim().toLowerCase();
+  if (clientLc && lc === clientLc) return false;
+  return true;
+}
+
+/**
+ * Resolve supplier display name for Finance Hub / Journey Log.
+ * Prefer trip/party fields, then supplier ledger `party_name` (same idea as
+ * Trips Hub + TripDetailFinanceView) so payable does not show "Awaiting data"
+ * after a supplier payout was already recorded.
+ */
+export function resolveTripSupplierDisplayName(opts: {
+  partnerName?: string | null;
+  supplierPartyName?: string | null;
+  tripSupplierName?: string | null;
+  clientName?: string | null;
+  ledgerEntries?: TripSupplierNameLedgerEntry[] | null;
+}): string | null {
+  const clientName = opts.clientName ?? null;
+  for (const candidate of [
+    opts.partnerName,
+    opts.supplierPartyName,
+    opts.tripSupplierName,
+  ]) {
+    if (isUsableSupplierDisplayName(candidate, clientName)) {
+      return candidate.trim();
+    }
+  }
+  for (const tx of opts.ledgerEntries ?? []) {
+    if (tx.contact_type !== "supplier") continue;
+    if (isUsableSupplierDisplayName(tx.party_name, clientName)) {
+      return String(tx.party_name).trim();
+    }
+  }
+  return null;
+}
+
 /** Revenue additions + supplier credits (cost −) improve simplified net. */
 export function adjustmentsCountingAsIncome(
   adjustments: TripAdjustment[] | null | undefined,

@@ -1,4 +1,5 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { DriverUnifiedExpenseEntryScreen } from "@/features/trips/operations/shared/DriverUnifiedExpenseEntryScreen";
 import {
@@ -8,9 +9,10 @@ import {
 import { OtherExpenseEntryScreen } from "@/features/trips/operations/other/OtherExpenseEntryScreen";
 import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
 import { ROUTES } from "@/lib/routes";
-import { type Href, Redirect, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { type Href, Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function readParam(value: string | string[] | undefined): string {
   if (typeof value === "string") return value;
@@ -18,7 +20,96 @@ function readParam(value: string | string[] | undefined): string {
   return "";
 }
 
+function TripLoadError({
+  message,
+  onRetry,
+  onBack,
+}: {
+  message: string;
+  onRetry?: () => void;
+  onBack: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 24,
+        paddingTop: insets.top,
+        paddingBottom: insets.bottom,
+        backgroundColor: Theme.screenBackground,
+        gap: 12,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 16,
+          fontWeight: "800",
+          color: Theme.textBody,
+          textAlign: "center",
+        }}
+      >
+        Couldn’t open expense
+      </Text>
+      <Text
+        style={{
+          fontSize: 14,
+          fontWeight: "500",
+          color: Theme.textMuted,
+          textAlign: "center",
+          lineHeight: 20,
+        }}
+      >
+        {message}
+      </Text>
+      <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+        {onRetry ? (
+          <Pressable
+            onPress={onRetry}
+            accessibilityRole="button"
+            accessibilityLabel="Retry"
+            style={{
+              minHeight: 44,
+              paddingHorizontal: 16,
+              borderRadius: 12,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: Theme.primary,
+            }}
+          >
+            <Text style={{ color: Theme.textOnDark, fontWeight: "700", fontSize: 14 }}>
+              Retry
+            </Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={onBack}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={{
+            minHeight: 44,
+            paddingHorizontal: 16,
+            borderRadius: 12,
+            alignItems: "center",
+            justifyContent: "center",
+            borderWidth: 1,
+            borderColor: Theme.borderMedium,
+            backgroundColor: Theme.whiteMuted,
+          }}
+        >
+          <Text style={{ color: Theme.textBody, fontWeight: "700", fontSize: 14 }}>
+            Go back
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export default function TripOtherExpenseEntryRoute() {
+  const router = useRouter();
   const params = useLocalSearchParams<{
     id?: string | string[];
     entryId?: string | string[];
@@ -33,14 +124,20 @@ export default function TripOtherExpenseEntryRoute() {
   const [trip, setTrip] = useState<TripRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  useEffect(() => {
+  const loadTrip = useCallback(() => {
     let mounted = true;
     if (!tripId) {
       setLoading(false);
       setError("Trip not found.");
-      return;
+      setTrip(null);
+      return () => {
+        mounted = false;
+      };
     }
+    setLoading(true);
+    setError(null);
     void getTripById(tripId).then((res) => {
       if (!mounted) return;
       setTrip(res.trip ?? null);
@@ -52,13 +149,19 @@ export default function TripOtherExpenseEntryRoute() {
     };
   }, [tripId]);
 
+  useEffect(() => {
+    return loadTrip();
+  }, [loadTrip, reloadKey]);
+
   return useMemo(() => {
     if (loading) return <CenteredLoadingView message="Loading expense entry..." />;
     if (error || !trip) {
       return (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <Text style={{ color: "#64748b", fontSize: 14 }}>{error ?? "Trip not found"}</Text>
-        </View>
+        <TripLoadError
+          message={error ?? "Trip not found"}
+          onRetry={tripId ? () => setReloadKey((k) => k + 1) : undefined}
+          onBack={() => router.back()}
+        />
       );
     }
 
@@ -90,5 +193,15 @@ export default function TripOtherExpenseEntryRoute() {
         initialCategory={initialCategory}
       />
     );
-  }, [entryId, error, initialCategory, initialKind, loading, profile?.role, trip, tripId]);
+  }, [
+    entryId,
+    error,
+    initialCategory,
+    initialKind,
+    loading,
+    profile?.role,
+    router,
+    trip,
+    tripId,
+  ]);
 }

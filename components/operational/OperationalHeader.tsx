@@ -54,8 +54,9 @@ export const OperationalHeader = memo(function OperationalHeader({
   const insets = useSafeAreaInsets();
   const d = useOperationalDensity(densityTier);
   const isDark = variant === 'stack';
-  const fg = isDark ? colors.textOnBrand : colors.textPrimary;
-  const fgMuted = isDark ? 'rgba(248,250,252,0.72)' : colors.textSecondary;
+  // Dark stack headers need light ink — never `textOnBrand` (brown for pastel pills).
+  const fg = isDark ? '#f8fafc' : colors.textPrimary;
+  const fgMuted = isDark ? 'rgba(248,250,252,0.78)' : colors.textSecondary;
 
   const topPad = skipSafeAreaTop ? space[4] : insets.top + space[4];
 

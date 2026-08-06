@@ -23,6 +23,8 @@ type Props = {
   onRecordEnd: () => void;
   /** Tighter card when nested under trip detail tabs. */
   compact?: boolean;
+  /** Desktop trip detail — larger type/touch targets than mobile compact. */
+  density?: "compact" | "comfortable";
 };
 
 function odometerReading(km: number | null): string {
@@ -35,10 +37,12 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
   onRecordStart,
   onRecordEnd,
   compact = false,
+  density = "compact",
 }: Props) {
   const qc = useQueryClient();
   const verificationQuery = useTripVerification(trip.id);
   const gpsEstimate = useGPSDistanceEstimate(trip);
+  const comfortable = density === "comfortable";
 
   useFocusEffect(
     useCallback(() => {
@@ -88,49 +92,106 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
         : "Record start & end";
 
   return (
-    <View style={[styles.card, compact && styles.cardCompact]}>
-      <View style={[styles.header, compact && styles.headerCompact]}>
+    <View
+      style={[
+        styles.card,
+        compact && styles.cardCompact,
+        comfortable && styles.cardComfortable,
+      ]}
+    >
+      <View
+        style={[
+          styles.header,
+          compact && styles.headerCompact,
+          comfortable && styles.headerComfortable,
+        ]}
+      >
         <View style={styles.headerLeft}>
-          <View style={[styles.iconWrap, compact && styles.iconWrapCompact]}>
+          <View
+            style={[
+              styles.iconWrap,
+              compact && styles.iconWrapCompact,
+              comfortable && styles.iconWrapComfortable,
+            ]}
+          >
             <Feather
               name="navigation"
-              size={compact ? 10 : 12}
+              size={comfortable ? 16 : compact ? 10 : 12}
               color={Theme.primary}
             />
           </View>
-          <Text style={[styles.title, compact && styles.titleCompact]}>
+          <Text
+            style={[
+              styles.title,
+              compact && styles.titleCompact,
+              comfortable && styles.titleComfortable,
+            ]}
+          >
             Odometer
           </Text>
         </View>
-        <VerificationStatusChip state={metrics.state} compact={compact} />
+        <VerificationStatusChip
+          state={metrics.state}
+          compact={compact && !comfortable}
+        />
       </View>
 
-      <View style={compact ? styles.compactBody : undefined}>
-      <View style={[styles.readingsRow, compact && styles.readingsRowCompact]}>
+      <View
+        style={[
+          compact ? styles.compactBody : undefined,
+          comfortable && styles.compactBodyComfortable,
+        ]}
+      >
+      <View
+        style={[
+          styles.readingsRow,
+          compact && styles.readingsRowCompact,
+          comfortable && styles.readingsRowComfortable,
+        ]}
+      >
         <Pressable
           style={({ pressed }) => [
             styles.readingCell,
             compact && styles.readingCellCompact,
+            comfortable && styles.readingCellComfortable,
             pressed && styles.readingCellPressed,
           ]}
           onPress={onRecordStart}
           accessibilityRole="button"
           accessibilityLabel="Record start odometer"
         >
-          <Text style={[styles.readingLabel, compact && styles.readingLabelCompact]}>
+          <Text
+            style={[
+              styles.readingLabel,
+              compact && styles.readingLabelCompact,
+              comfortable && styles.readingLabelComfortable,
+            ]}
+          >
             Start
           </Text>
-          <Text style={[styles.readingValue, compact && styles.readingValueCompact]}>
+          <Text
+            style={[
+              styles.readingValue,
+              compact && styles.readingValueCompact,
+              comfortable && styles.readingValueComfortable,
+            ]}
+          >
             {odometerReading(metrics.startKm)}
           </Text>
           {compact && metrics.startKm == null ? (
-            <Text style={styles.tapHint}>Tap to set</Text>
+            <Text style={[styles.tapHint, comfortable && styles.tapHintComfortable]}>
+              Tap to set
+            </Text>
           ) : null}
         </Pressable>
         <View style={styles.readingSep} />
         {compact ? (
-          <View style={styles.readingMid}>
-            <Feather name="chevrons-right" size={10} color={Theme.textMuted} />
+          <View style={[styles.readingMid, comfortable && styles.readingMidComfortable]}>
+            <Feather
+              name="chevrons-right"
+              size={comfortable ? 16 : 10}
+              color={Theme.textMuted}
+            />
           </View>
         ) : null}
         {compact ? <View style={styles.readingSep} /> : null}
@@ -138,38 +199,64 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
           style={({ pressed }) => [
             styles.readingCell,
             compact && styles.readingCellCompact,
+            comfortable && styles.readingCellComfortable,
             pressed && styles.readingCellPressed,
           ]}
           onPress={onRecordEnd}
           accessibilityRole="button"
           accessibilityLabel="Record end odometer"
         >
-          <Text style={[styles.readingLabel, compact && styles.readingLabelCompact]}>
+          <Text
+            style={[
+              styles.readingLabel,
+              compact && styles.readingLabelCompact,
+              comfortable && styles.readingLabelComfortable,
+            ]}
+          >
             End
           </Text>
-          <Text style={[styles.readingValue, compact && styles.readingValueCompact]}>
+          <Text
+            style={[
+              styles.readingValue,
+              compact && styles.readingValueCompact,
+              comfortable && styles.readingValueComfortable,
+            ]}
+          >
             {odometerReading(metrics.endKm)}
           </Text>
           {compact && metrics.endKm == null ? (
-            <Text style={styles.tapHint}>Tap to set</Text>
+            <Text style={[styles.tapHint, comfortable && styles.tapHintComfortable]}>
+              Tap to set
+            </Text>
           ) : null}
         </Pressable>
       </View>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, comfortable && styles.footerComfortable]}>
         {loading ? (
           <ActivityIndicator size="small" color={Theme.primary} />
         ) : (
-          <View style={[styles.footerIcon, hasWarn && styles.footerIconWarn]}>
+          <View
+            style={[
+              styles.footerIcon,
+              comfortable && styles.footerIconComfortable,
+              hasWarn && styles.footerIconWarn,
+            ]}
+          >
             <Feather
               name={hasWarn ? "alert-circle" : "activity"}
-              size={10}
+              size={comfortable ? 14 : 10}
               color={hasWarn ? Theme.warning : Theme.primary}
             />
           </View>
         )}
         <Text
-          style={[styles.meta, compact && styles.metaCompact, hasWarn && styles.metaWarn]}
+          style={[
+            styles.meta,
+            compact && styles.metaCompact,
+            comfortable && styles.metaComfortable,
+            hasWarn && styles.metaWarn,
+          ]}
           numberOfLines={1}
         >
           {loading
@@ -357,5 +444,71 @@ const styles = StyleSheet.create({
   metaWarn: {
     color: Theme.warning,
     fontWeight: "500",
+  },
+  cardComfortable: {
+    marginBottom: 12,
+    borderRadius: 16,
+    width: "100%",
+  },
+  headerComfortable: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  iconWrapComfortable: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+  },
+  titleComfortable: {
+    fontSize: 13,
+    letterSpacing: 0.9,
+  },
+  compactBodyComfortable: {
+    paddingBottom: 14,
+    gap: 10,
+  },
+  readingsRowComfortable: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    borderRadius: 12,
+  },
+  readingCellComfortable: {
+    minHeight: 72,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  readingLabelComfortable: {
+    fontSize: 11,
+    letterSpacing: 0.8,
+    lineHeight: 14,
+  },
+  readingValueComfortable: {
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.3,
+  },
+  tapHintComfortable: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  readingMidComfortable: {
+    width: 36,
+  },
+  footerComfortable: {
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingTop: 4,
+    paddingBottom: 4,
+  },
+  footerIconComfortable: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+  },
+  metaComfortable: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

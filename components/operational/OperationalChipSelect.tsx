@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import Theme from "@/constants/Theme";
 import { colors } from "@/design-system/colors";
 import { radius } from "@/design-system/radius";
 import { space } from "@/design-system/spacing";
@@ -148,8 +149,9 @@ const styles = StyleSheet.create({
     borderRadius: 7,
   },
   chipActive: {
-    backgroundColor: "#eef2ff",
-    borderColor: colors.brand,
+    // Soft brand wash + ink rim/label — never pastel text on pastel fill.
+    backgroundColor: Theme.brandBlueSoft,
+    borderColor: Theme.buttonPrimaryBorder,
   },
   chipPressed: {
     opacity: 0.9,
@@ -166,7 +168,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   chipTextActive: {
-    color: colors.brand,
+    color: Theme.buttonPrimaryText,
     fontWeight: "800",
   },
 });

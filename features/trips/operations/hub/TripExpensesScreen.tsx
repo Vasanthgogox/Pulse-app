@@ -197,9 +197,11 @@ function needsUserAction(event: TripCostEvent): boolean {
 function StatusChip({
   event,
   isDriverViewer = false,
+  comfortable = false,
 }: {
   event: TripCostEvent;
   isDriverViewer?: boolean;
+  comfortable?: boolean;
 }) {
   const tone = statusTone(event);
   const chipStyle =
@@ -220,9 +222,16 @@ function StatusChip({
           : styles.chipDotGood;
 
   return (
-    <View style={[styles.chip, chipStyle]}>
-      <View style={[styles.chipDot, dotStyle]} />
-      <Text style={[styles.chipText, tone === "settled" && styles.chipTextOnSolid]} numberOfLines={1}>
+    <View style={[styles.chip, comfortable && styles.chipComfortable, chipStyle]}>
+      <View style={[styles.chipDot, comfortable && styles.chipDotComfortable, dotStyle]} />
+      <Text
+        style={[
+          styles.chipText,
+          comfortable && styles.chipTextComfortable,
+          tone === "settled" && styles.chipTextOnSolid,
+        ]}
+        numberOfLines={1}
+      >
         {isDriverViewer ? driverEventStatusLabel(event) : eventStatusLabel(event)}
       </Text>
     </View>
@@ -232,6 +241,7 @@ function StatusChip({
 type ExpenseRowProps = {
   event: TripCostEvent;
   embedded: boolean;
+  comfortable: boolean;
   iconMd: number;
   loadingAction: boolean;
   isDriverViewer: boolean;
@@ -247,6 +257,7 @@ type ExpenseRowProps = {
 const ExpenseRow = memo(function ExpenseRow({
   event,
   embedded,
+  comfortable,
   iconMd,
   loadingAction,
   isDriverViewer,
@@ -271,80 +282,125 @@ const ExpenseRow = memo(function ExpenseRow({
       style={[
         styles.row,
         embedded && styles.rowEmbedded,
+        comfortable && styles.rowComfortable,
         showActions && styles.rowNeedsAction,
-        { borderLeftColor: visual.rail, borderLeftWidth: 3 },
+        { borderLeftColor: visual.rail, borderLeftWidth: comfortable ? 4 : 3 },
       ]}
     >
       <Pressable
-        style={styles.rowMain}
+        style={[styles.rowMain, comfortable && styles.rowMainComfortable]}
         onPress={() => onPreview(event)}
         accessibilityRole="button"
         accessibilityLabel={`View ${toCategoryLabel(event)} expense`}
       >
-        <View style={[styles.rowAvatar, { backgroundColor: visual.bg }]}>
+        <View
+          style={[
+            styles.rowAvatar,
+            comfortable && styles.rowAvatarComfortable,
+            { backgroundColor: visual.bg },
+          ]}
+        >
           <Feather name={visual.icon} size={iconMd} color={visual.fg} />
         </View>
         <View style={styles.rowBody}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
+          <Text
+            style={[styles.rowTitle, comfortable && styles.rowTitleComfortable]}
+            numberOfLines={1}
+          >
             {toCategoryLabel(event)}
           </Text>
           {hint ? (
-            <Text style={styles.rowHint} numberOfLines={2}>
+            <Text
+              style={[styles.rowHint, comfortable && styles.rowHintComfortable]}
+              numberOfLines={2}
+            >
               {hint}
             </Text>
           ) : null}
         </View>
-        <View style={styles.rowRight}>
+        <View style={[styles.rowRight, comfortable && styles.rowRightComfortable]}>
           <Text
             style={[
               styles.rowAmount,
+              comfortable && styles.rowAmountComfortable,
               tone === "settled" && styles.rowAmountSettled,
             ]}
           >
             {inr(event.amount)}
           </Text>
-          <StatusChip event={event} isDriverViewer={isDriverViewer} />
+          <StatusChip
+            event={event}
+            isDriverViewer={isDriverViewer}
+            comfortable={comfortable}
+          />
           <Feather name="chevron-right" size={iconMd} color={Theme.textMuted} />
         </View>
       </Pressable>
 
       {editable ? (
         <Pressable
-          style={({ pressed }) => [styles.rowEditLink, pressed && styles.editBtnPressed]}
+          style={({ pressed }) => [
+            styles.rowEditLink,
+            comfortable && styles.rowEditLinkComfortable,
+            pressed && styles.editBtnPressed,
+          ]}
           onPress={() => onEdit?.(event)}
           disabled={loadingAction}
           accessibilityRole="button"
           accessibilityLabel={`Edit ${toCategoryLabel(event)}`}
         >
           <Feather name="edit-2" size={iconMd} color={Theme.primary} />
-          <Text style={styles.rowEditLinkText}>Edit</Text>
+          <Text
+            style={[
+              styles.rowEditLinkText,
+              comfortable && styles.rowEditLinkTextComfortable,
+            ]}
+          >
+            Edit
+          </Text>
         </Pressable>
       ) : null}
 
       {showActions ? (
-        <View style={styles.actions}>
+        <View style={[styles.actions, comfortable && styles.actionsComfortable]}>
           {showDriverActions ? (
             <>
               <Pressable
                 style={({ pressed }) => [
                   styles.actionBtn,
+                  comfortable && styles.actionBtnComfortable,
                   styles.actionBtnPrimary,
                   pressed && styles.actionBtnPressed,
                 ]}
                 onPress={() => void onRemindRequest(event)}
                 disabled={loadingAction}
               >
-                <Text style={styles.actionBtnTextPrimary}>Remind fleet</Text>
+                <Text
+                  style={[
+                    styles.actionBtnTextPrimary,
+                    comfortable && styles.actionBtnTextComfortable,
+                  ]}
+                >
+                  Remind fleet
+                </Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [
                   styles.actionBtn,
+                  comfortable && styles.actionBtnComfortable,
                   pressed && styles.actionBtnSecondaryPressed,
                 ]}
                 onPress={() => void onCancelRequest(event)}
                 disabled={loadingAction}
               >
-                <Text style={styles.actionBtnText}>Cancel request</Text>
+                <Text
+                  style={[
+                    styles.actionBtnText,
+                    comfortable && styles.actionBtnTextComfortable,
+                  ]}
+                >
+                  Cancel request
+                </Text>
               </Pressable>
             </>
           ) : canApproveAndPostToLedger(event) ? (
@@ -352,13 +408,19 @@ const ExpenseRow = memo(function ExpenseRow({
               <Pressable
                 style={({ pressed }) => [
                   styles.actionBtn,
+                  comfortable && styles.actionBtnComfortable,
                   styles.actionBtnPrimary,
                   pressed && styles.actionBtnPressed,
                 ]}
                 onPress={() => void onApprove(event)}
                 disabled={loadingAction}
               >
-                <Text style={styles.actionBtnTextPrimary}>
+                <Text
+                  style={[
+                    styles.actionBtnTextPrimary,
+                    comfortable && styles.actionBtnTextComfortable,
+                  ]}
+                >
                   {approveAndPostButtonLabel(event)}
                 </Text>
               </Pressable>
@@ -366,12 +428,20 @@ const ExpenseRow = memo(function ExpenseRow({
                 <Pressable
                   style={({ pressed }) => [
                     styles.actionBtn,
+                    comfortable && styles.actionBtnComfortable,
                     pressed && styles.actionBtnSecondaryPressed,
                   ]}
                   onPress={() => void onReject(event)}
                   disabled={loadingAction}
                 >
-                  <Text style={styles.actionBtnText}>Reject</Text>
+                  <Text
+                    style={[
+                      styles.actionBtnText,
+                      comfortable && styles.actionBtnTextComfortable,
+                    ]}
+                  >
+                    Reject
+                  </Text>
                 </Pressable>
               ) : null}
             </>
@@ -381,6 +451,7 @@ const ExpenseRow = memo(function ExpenseRow({
             <Pressable
               style={({ pressed }) => [
                 styles.actionBtn,
+                comfortable && styles.actionBtnComfortable,
                 styles.actionBtnPrimary,
                 styles.actionBtnFull,
                 pressed && styles.actionBtnPressed,
@@ -388,7 +459,14 @@ const ExpenseRow = memo(function ExpenseRow({
               onPress={() => void onMarkSettled(event)}
               disabled={loadingAction}
             >
-              <Text style={styles.actionBtnTextPrimary}>Mark reimbursed</Text>
+              <Text
+                style={[
+                  styles.actionBtnTextPrimary,
+                  comfortable && styles.actionBtnTextComfortable,
+                ]}
+              >
+                Mark reimbursed
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -401,6 +479,7 @@ export function TripExpensesScreen({
   trip,
   onBack,
   embedded = false,
+  density = "compact",
   onAddFuel,
   onAddToll,
   onAddOtherExpense,
@@ -412,6 +491,8 @@ export function TripExpensesScreen({
   trip: TripRow;
   onBack?: () => void;
   embedded?: boolean;
+  /** Desktop trip detail uses `comfortable` so type/actions stay readable. */
+  density?: "compact" | "comfortable";
   onAddFuel?: () => void;
   onAddToll?: () => void;
   onAddOtherExpense?: () => void;
@@ -425,6 +506,7 @@ export function TripExpensesScreen({
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
+  const comfortable = density === "comfortable";
   const isDriverViewer = profile?.role === "driver";
   const [listFilter, setListFilter] = useState<ListFilter>(isDriverViewer ? "action" : "all");
   const driverDefaultTabSetRef = useRef(false);
@@ -740,10 +822,10 @@ export function TripExpensesScreen({
     return events;
   }, [actionNeededEvents, events, listFilter]);
 
-  const iconSm = embedded ? 10 : 12;
-  const iconMd = embedded ? 11 : 14;
-  const iconLg = embedded ? 14 : 16;
-  const iconEmpty = embedded ? 18 : 22;
+  const iconSm = comfortable ? 14 : embedded ? 10 : 12;
+  const iconMd = comfortable ? 18 : embedded ? 11 : 14;
+  const iconLg = comfortable ? 20 : embedded ? 14 : 16;
+  const iconEmpty = comfortable ? 28 : embedded ? 18 : 22;
 
   const quickActions = [
     { key: "fuel", label: "Fuel", icon: "droplet" as const, onPress: onAddFuel },
@@ -764,34 +846,85 @@ export function TripExpensesScreen({
       style={[
         styles.container,
         embedded ? styles.containerEmbedded : null,
+        comfortable && styles.containerComfortable,
         { paddingTop: embedded ? 0 : insets.top + 10 },
       ]}
     >
       {!embedded && onBack ? (
         <Pressable style={styles.backBtn} onPress={onBack}>
-          <Text style={styles.backBtnText}>← Back</Text>
+          <Text style={[styles.backBtnText, comfortable && styles.backBtnTextComfortable]}>
+            ← Back
+          </Text>
         </Pressable>
       ) : null}
 
-      <View style={[styles.toolbar, embedded && styles.toolbarEmbedded]}>
-          <View style={[styles.hubShell, embedded && styles.hubShellEmbedded]}>
+      <View
+        style={[
+          styles.toolbar,
+          embedded && styles.toolbarEmbedded,
+          comfortable && styles.toolbarComfortable,
+        ]}
+      >
+          <View
+            style={[
+              styles.hubShell,
+              embedded && styles.hubShellEmbedded,
+              comfortable && styles.hubShellComfortable,
+            ]}
+          >
             {!isDriverViewer ? (
             <View style={styles.ledgerHero}>
-              <View style={styles.ledgerAccent} />
-              <View style={styles.ledgerHeroBody}>
+              <View
+                style={[styles.ledgerAccent, comfortable && styles.ledgerAccentComfortable]}
+              />
+              <View
+                style={[
+                  styles.ledgerHeroBody,
+                  comfortable && styles.ledgerHeroBodyComfortable,
+                ]}
+              >
                 <View style={styles.ledgerHeroTop}>
-                  <View style={styles.ledgerHeroIcon}>
-                    <Feather name="book-open" size={11} color={Theme.primary} />
+                  <View
+                    style={[
+                      styles.ledgerHeroIcon,
+                      comfortable && styles.ledgerHeroIconComfortable,
+                    ]}
+                  >
+                    <Feather
+                      name="book-open"
+                      size={comfortable ? 16 : 11}
+                      color={Theme.primary}
+                    />
                   </View>
                   <View style={styles.summaryLeft}>
-                    <Text style={styles.summaryLabel}>Posted to ledger</Text>
-                    <Text style={styles.summaryValue}>{inr(postedCostInr)}</Text>
+                    <Text
+                      style={[
+                        styles.summaryLabel,
+                        comfortable && styles.summaryLabelComfortable,
+                      ]}
+                    >
+                      Posted to ledger
+                    </Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        comfortable && styles.summaryValueComfortable,
+                      ]}
+                    >
+                      {inr(postedCostInr)}
+                    </Text>
                   </View>
                 </View>
                 {vehicleLabel ? (
                   <View style={styles.vehicleRow}>
                     <Feather name="truck" size={iconSm} color={Theme.textMuted} />
-                    <Text style={styles.vehicleRowText} numberOfLines={1}>
+                    <Text
+                      style={[
+                        styles.vehicleRowText,
+                        comfortable && styles.vehicleRowTextComfortable,
+                      ]}
+                      numberOfLines={1}
+                    >
                       {vehicleLabel}
                     </Text>
                   </View>
@@ -799,17 +932,39 @@ export function TripExpensesScreen({
                 {hasSummaryAlerts ? (
                   <View style={styles.summaryAlerts}>
                     {pendingPostCount > 0 ? (
-                      <View style={styles.alertPill}>
+                      <View
+                        style={[
+                          styles.alertPill,
+                          comfortable && styles.alertPillComfortable,
+                        ]}
+                      >
                         <Feather name="clock" size={iconSm} color={Theme.warning} />
-                        <Text style={styles.alertPillText}>
+                        <Text
+                          style={[
+                            styles.alertPillText,
+                            comfortable && styles.alertPillTextComfortable,
+                          ]}
+                        >
                           {pendingPostCount} awaiting post
                         </Text>
                       </View>
                     ) : null}
                     {reimbursementDueInr > 0 ? (
-                      <View style={[styles.alertPill, styles.alertPillDue]}>
+                      <View
+                        style={[
+                          styles.alertPill,
+                          styles.alertPillDue,
+                          comfortable && styles.alertPillComfortable,
+                        ]}
+                      >
                         <Feather name="credit-card" size={iconSm} color="#7c3aed" />
-                        <Text style={[styles.alertPillText, styles.alertPillDueText]}>
+                        <Text
+                          style={[
+                            styles.alertPillText,
+                            styles.alertPillDueText,
+                            comfortable && styles.alertPillTextComfortable,
+                          ]}
+                        >
                           {inr(reimbursementDueInr)} to reimburse
                         </Text>
                       </View>
@@ -820,18 +975,53 @@ export function TripExpensesScreen({
             </View>
             ) : (
               <View style={styles.driverSummaryHero}>
-                <View style={styles.ledgerAccent} />
-                <View style={styles.ledgerHeroBody}>
+                <View
+                  style={[styles.ledgerAccent, comfortable && styles.ledgerAccentComfortable]}
+                />
+                <View
+                  style={[
+                    styles.ledgerHeroBody,
+                    comfortable && styles.ledgerHeroBodyComfortable,
+                  ]}
+                >
                   <View style={styles.ledgerHeroTop}>
-                    <View style={styles.ledgerHeroIcon}>
-                      <Feather name="clock" size={11} color={Theme.primary} />
+                    <View
+                      style={[
+                        styles.ledgerHeroIcon,
+                        comfortable && styles.ledgerHeroIconComfortable,
+                      ]}
+                    >
+                      <Feather
+                        name="clock"
+                        size={comfortable ? 16 : 11}
+                        color={Theme.primary}
+                      />
                     </View>
                     <View style={styles.summaryLeft}>
-                      <Text style={styles.summaryLabel}>Expenses</Text>
-                      <Text style={styles.summaryValue}>{inr(driverExpensesInr)}</Text>
+                      <Text
+                        style={[
+                          styles.summaryLabel,
+                          comfortable && styles.summaryLabelComfortable,
+                        ]}
+                      >
+                        Expenses
+                      </Text>
+                      <Text
+                        style={[
+                          styles.summaryValue,
+                          comfortable && styles.summaryValueComfortable,
+                        ]}
+                      >
+                        {inr(driverExpensesInr)}
+                      </Text>
                     </View>
                   </View>
-                  <Text style={styles.driverSummaryHint}>
+                  <Text
+                    style={[
+                      styles.driverSummaryHint,
+                      comfortable && styles.driverSummaryHintComfortable,
+                    ]}
+                  >
                     {actionNeededEvents.length > 0
                       ? `${actionNeededEvents.length} request${actionNeededEvents.length === 1 ? "" : "s"} awaiting fleet approval`
                       : reimbursementDueInr > 0
@@ -846,27 +1036,55 @@ export function TripExpensesScreen({
               <Pressable
                 style={({ pressed }) => [
                   styles.addExpenseBtn,
+                  comfortable && styles.addExpenseBtnComfortable,
                   pressed && styles.addExpenseBtnPressed,
                 ]}
                 onPress={onAddExpense}
                 accessibilityRole="button"
                 accessibilityLabel="Add expense"
               >
-                <View style={styles.addExpenseBtnIcon}>
-                  <Feather name="plus" size={14} color="#fff" />
+                <View
+                  style={[
+                    styles.addExpenseBtnIcon,
+                    comfortable && styles.addExpenseBtnIconComfortable,
+                  ]}
+                >
+                  <Feather name="plus" size={comfortable ? 18 : 14} color="#fff" />
                 </View>
                 <View style={styles.addExpenseBtnCopy}>
-                  <Text style={styles.addExpenseBtnTitle}>Add expense</Text>
-                  <Text style={styles.addExpenseBtnSub} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.addExpenseBtnTitle,
+                      comfortable && styles.addExpenseBtnTitleComfortable,
+                    ]}
+                  >
+                    Add expense
+                  </Text>
+                  <Text
+                    style={[
+                      styles.addExpenseBtnSub,
+                      comfortable && styles.addExpenseBtnSubComfortable,
+                    ]}
+                    numberOfLines={1}
+                  >
                     Fuel, toll, parking & other trip costs
                   </Text>
                 </View>
-                <Feather name="chevron-right" size={16} color={Theme.textMuted} />
+                <Feather
+                  name="chevron-right"
+                  size={comfortable ? 20 : 16}
+                  color={Theme.textMuted}
+                />
               </Pressable>
             ) : null}
 
             {quickActions.length > 0 ? (
-              <View style={styles.quickActionsRow}>
+              <View
+                style={[
+                  styles.quickActionsRow,
+                  comfortable && styles.quickActionsRowComfortable,
+                ]}
+              >
                 {quickActions.map((action) => {
                   const accent =
                     QUICK_ACTION_STYLE[action.key] ?? QUICK_ACTION_STYLE.other;
@@ -875,6 +1093,7 @@ export function TripExpensesScreen({
                       key={action.key}
                       style={({ pressed }) => [
                         styles.quickTile,
+                        comfortable && styles.quickTileComfortable,
                         pressed && styles.quickTilePressed,
                       ]}
                       onPress={() => action.onPress?.()}
@@ -884,15 +1103,27 @@ export function TripExpensesScreen({
                       <View
                         style={[
                           styles.quickTileIcon,
+                          comfortable && styles.quickTileIconComfortable,
                           {
                             backgroundColor: accent.bg,
                             borderColor: accent.ring,
                           },
                         ]}
                       >
-                        <Feather name={action.icon} size={14} color={accent.fg} />
+                        <Feather
+                          name={action.icon}
+                          size={comfortable ? 20 : 14}
+                          color={accent.fg}
+                        />
                       </View>
-                      <Text style={styles.quickTileLabel}>{action.label}</Text>
+                      <Text
+                        style={[
+                          styles.quickTileLabel,
+                          comfortable && styles.quickTileLabelComfortable,
+                        ]}
+                      >
+                        {action.label}
+                      </Text>
                     </Pressable>
                   );
                 })}
@@ -900,11 +1131,24 @@ export function TripExpensesScreen({
             ) : null}
           </View>
 
-          <View style={[styles.controlDeck, embedded && styles.controlDeckEmbedded]}>
-            <View style={[styles.segmentTrack, embedded && styles.segmentTrackEmbedded]}>
+          <View
+            style={[
+              styles.controlDeck,
+              embedded && styles.controlDeckEmbedded,
+              comfortable && styles.controlDeckComfortable,
+            ]}
+          >
+            <View
+              style={[
+                styles.segmentTrack,
+                embedded && styles.segmentTrackEmbedded,
+                comfortable && styles.segmentTrackComfortable,
+              ]}
+            >
             <Pressable
               style={({ pressed }) => [
                 styles.segmentBtn,
+                comfortable && styles.segmentBtnComfortable,
                 listFilter === "all" ? styles.segmentBtnActive : null,
                 pressed && styles.segmentBtnPressed,
               ]}
@@ -913,6 +1157,7 @@ export function TripExpensesScreen({
               <Text
                 style={[
                   styles.segmentBtnText,
+                  comfortable && styles.segmentBtnTextComfortable,
                   listFilter === "all" ? styles.segmentBtnTextActive : null,
                 ]}
               >
@@ -921,12 +1166,14 @@ export function TripExpensesScreen({
               <View
                 style={[
                   styles.segmentCount,
+                  comfortable && styles.segmentCountComfortable,
                   listFilter === "all" ? styles.segmentCountActive : null,
                 ]}
               >
                 <Text
                   style={[
                     styles.segmentCountText,
+                    comfortable && styles.segmentCountTextComfortable,
                     listFilter === "all" ? styles.segmentCountTextActive : null,
                   ]}
                 >
@@ -937,6 +1184,7 @@ export function TripExpensesScreen({
             <Pressable
               style={({ pressed }) => [
                 styles.segmentBtn,
+                comfortable && styles.segmentBtnComfortable,
                 listFilter === "action" ? styles.segmentBtnActive : null,
                 pressed && styles.segmentBtnPressed,
               ]}
@@ -945,6 +1193,7 @@ export function TripExpensesScreen({
               <Text
                 style={[
                   styles.segmentBtnText,
+                  comfortable && styles.segmentBtnTextComfortable,
                   listFilter === "action" ? styles.segmentBtnTextActive : null,
                 ]}
               >
@@ -953,6 +1202,7 @@ export function TripExpensesScreen({
               <View
                 style={[
                   styles.segmentCount,
+                  comfortable && styles.segmentCountComfortable,
                   listFilter === "action" ? styles.segmentCountActive : null,
                   actionNeededEvents.length > 0 && listFilter !== "action"
                     ? styles.segmentCountHighlight
@@ -962,6 +1212,7 @@ export function TripExpensesScreen({
                 <Text
                   style={[
                     styles.segmentCountText,
+                    comfortable && styles.segmentCountTextComfortable,
                     listFilter === "action" ? styles.segmentCountTextActive : null,
                     actionNeededEvents.length > 0 && listFilter !== "action"
                       ? styles.segmentCountTextHighlight
@@ -979,21 +1230,38 @@ export function TripExpensesScreen({
               style={({ pressed }) => [
                 styles.driverPayBanner,
                 embedded && styles.driverPayBannerEmbedded,
+                comfortable && styles.driverPayBannerComfortable,
                 pressed && styles.driverPayBannerPressed,
               ]}
               onPress={() => onRecordDriverPayment?.()}
             >
               <View style={styles.driverPayAccent} />
-              <View style={styles.driverPayIconWrap}>
+              <View
+                style={[
+                  styles.driverPayIconWrap,
+                  comfortable && styles.driverPayIconWrapComfortable,
+                ]}
+              >
                 <Feather name="credit-card" size={iconMd} color={Theme.primary} />
               </View>
               <View style={styles.driverPayBannerText}>
-                <Text style={styles.driverPayBannerTitle}>
+                <Text
+                  style={[
+                    styles.driverPayBannerTitle,
+                    comfortable && styles.driverPayBannerTitleComfortable,
+                  ]}
+                >
                   {reimbursementDueInr > 0
                     ? `${inr(reimbursementDueInr)} due to driver`
                     : "Record driver payment"}
                 </Text>
-                <Text style={styles.driverPayBannerSub} numberOfLines={2}>
+                <Text
+                  style={[
+                    styles.driverPayBannerSub,
+                    comfortable && styles.driverPayBannerSubComfortable,
+                  ]}
+                  numberOfLines={2}
+                >
                   Mark reimbursed on each expense is not cash. Post payout in Finance.
                 </Text>
               </View>
@@ -1007,35 +1275,40 @@ export function TripExpensesScreen({
         style={styles.list}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: embedded ? 16 : insets.bottom + 24 },
+          comfortable && styles.listContentComfortable,
+          { paddingBottom: embedded ? (comfortable ? 28 : 16) : insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
       >
         {summaryQuery.isError ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Could not load expenses</Text>
-            <Text style={styles.empty}>
+          <View style={[styles.emptyCard, comfortable && styles.emptyCardComfortable]}>
+            <Text style={[styles.emptyTitle, comfortable && styles.emptyTitleComfortable]}>
+              Could not load expenses
+            </Text>
+            <Text style={[styles.empty, comfortable && styles.emptyComfortable]}>
               {summaryQuery.error instanceof Error
                 ? summaryQuery.error.message
                 : "Pull to refresh or go back and try again."}
             </Text>
           </View>
         ) : summaryQuery.isLoading ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Loading expenses…</Text>
+          <View style={[styles.emptyCard, comfortable && styles.emptyCardComfortable]}>
+            <Text style={[styles.emptyTitle, comfortable && styles.emptyTitleComfortable]}>
+              Loading expenses…
+            </Text>
           </View>
         ) : displayedEvents.length === 0 ? (
-          <View style={styles.emptyCard}>
+          <View style={[styles.emptyCard, comfortable && styles.emptyCardComfortable]}>
             <Feather
               name={listFilter === "action" ? "check-circle" : "inbox"}
               size={iconEmpty}
               color={Theme.textMuted}
             />
-            <Text style={styles.emptyTitle}>
+            <Text style={[styles.emptyTitle, comfortable && styles.emptyTitleComfortable]}>
               {listFilter === "action" ? "All caught up" : "No expenses yet"}
             </Text>
-            <Text style={styles.empty}>
+            <Text style={[styles.empty, comfortable && styles.emptyComfortable]}>
               {listFilter === "action"
                 ? isDriverViewer
                   ? "No reimbursement requests waiting on fleet right now."
@@ -1048,24 +1321,54 @@ export function TripExpensesScreen({
               <Pressable
                 style={({ pressed }) => [
                   styles.emptyAddBtn,
+                  comfortable && styles.emptyAddBtnComfortable,
                   pressed && styles.addExpenseBtnPressed,
                 ]}
                 onPress={onAddExpense}
                 accessibilityRole="button"
                 accessibilityLabel="Add expense"
               >
-                <Feather name="plus" size={14} color="#fff" />
-                <Text style={styles.emptyAddBtnText}>Add expense</Text>
+                <Feather name="plus" size={comfortable ? 16 : 14} color="#fff" />
+                <Text
+                  style={[
+                    styles.emptyAddBtnText,
+                    comfortable && styles.emptyAddBtnTextComfortable,
+                  ]}
+                >
+                  Add expense
+                </Text>
               </Pressable>
             ) : null}
           </View>
         ) : (
           <>
             {!summaryQuery.isLoading && displayedEvents.length > 0 ? (
-              <View style={styles.listSectionHead}>
-                <Text style={styles.listSectionTitle}>Line items</Text>
-                <View style={styles.listSectionBadge}>
-                  <Text style={styles.listSectionBadgeText}>
+              <View
+                style={[
+                  styles.listSectionHead,
+                  comfortable && styles.listSectionHeadComfortable,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.listSectionTitle,
+                    comfortable && styles.listSectionTitleComfortable,
+                  ]}
+                >
+                  Line items
+                </Text>
+                <View
+                  style={[
+                    styles.listSectionBadge,
+                    comfortable && styles.listSectionBadgeComfortable,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.listSectionBadgeText,
+                      comfortable && styles.listSectionBadgeTextComfortable,
+                    ]}
+                  >
                     {displayedEvents.length}
                   </Text>
                 </View>
@@ -1076,6 +1379,7 @@ export function TripExpensesScreen({
                 key={event.id}
                 event={event}
                 embedded={embedded}
+                comfortable={comfortable}
                 iconMd={iconMd}
                 loadingAction={loadingAction}
                 isDriverViewer={isDriverViewer}
@@ -1844,5 +2148,270 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textAlign: "center",
     lineHeight: 12,
+  },
+  // ── Desktop comfortable density ───────────────────────────────────────────
+  containerComfortable: {
+    width: "100%",
+  },
+  toolbarComfortable: {
+    gap: 12,
+    marginBottom: 12,
+  },
+  hubShellComfortable: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    overflow: "hidden",
+  },
+  ledgerAccentComfortable: {
+    width: 4,
+    top: 12,
+    bottom: 12,
+  },
+  ledgerHeroBodyComfortable: {
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    paddingLeft: 20,
+    gap: 10,
+  },
+  ledgerHeroIconComfortable: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+  },
+  summaryLabelComfortable: {
+    fontSize: 12,
+    letterSpacing: 0.9,
+  },
+  summaryValueComfortable: {
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.5,
+  },
+  vehicleRowTextComfortable: {
+    fontSize: 13,
+  },
+  alertPillComfortable: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  alertPillTextComfortable: {
+    fontSize: 12,
+  },
+  driverSummaryHintComfortable: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  addExpenseBtnComfortable: {
+    marginHorizontal: 14,
+    marginTop: 14,
+    marginBottom: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    minHeight: 64,
+    borderRadius: 14,
+    gap: 14,
+  },
+  addExpenseBtnIconComfortable: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+  },
+  addExpenseBtnTitleComfortable: {
+    fontSize: 16,
+  },
+  addExpenseBtnSubComfortable: {
+    fontSize: 13,
+  },
+  quickActionsRowComfortable: {
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  quickTileComfortable: {
+    gap: 8,
+    paddingVertical: 12,
+    minHeight: 88,
+    borderRadius: 12,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+  },
+  quickTileIconComfortable: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  quickTileLabelComfortable: {
+    fontSize: 12,
+    letterSpacing: 0.4,
+  },
+  controlDeckComfortable: {
+    gap: 12,
+  },
+  segmentTrackComfortable: {
+    padding: 4,
+    gap: 4,
+    borderRadius: 12,
+  },
+  segmentBtnComfortable: {
+    gap: 8,
+    paddingVertical: 10,
+    minHeight: 44,
+    borderRadius: 10,
+  },
+  segmentBtnTextComfortable: {
+    fontSize: 13,
+  },
+  segmentCountComfortable: {
+    minWidth: 24,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  segmentCountTextComfortable: {
+    fontSize: 12,
+  },
+  driverPayBannerComfortable: {
+    gap: 12,
+    padding: 16,
+    paddingLeft: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#ede9fe",
+  },
+  driverPayIconWrapComfortable: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+  },
+  driverPayBannerTitleComfortable: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  driverPayBannerSubComfortable: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  listContentComfortable: {
+    gap: 10,
+    paddingTop: 4,
+  },
+  listSectionHeadComfortable: {
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  listSectionTitleComfortable: {
+    fontSize: 12,
+  },
+  listSectionBadgeComfortable: {
+    minWidth: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  listSectionBadgeTextComfortable: {
+    fontSize: 12,
+  },
+  rowComfortable: {
+    padding: 16,
+    paddingLeft: 14,
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+  },
+  rowMainComfortable: {
+    gap: 12,
+    minHeight: 48,
+  },
+  rowAvatarComfortable: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+  },
+  rowTitleComfortable: {
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: 0.3,
+  },
+  rowHintComfortable: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  rowRightComfortable: {
+    gap: 6,
+    maxWidth: 180,
+  },
+  rowAmountComfortable: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  rowEditLinkComfortable: {
+    paddingHorizontal: 4,
+    paddingBottom: 4,
+    marginTop: 0,
+    minHeight: 36,
+  },
+  rowEditLinkTextComfortable: {
+    fontSize: 13,
+  },
+  chipComfortable: {
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    maxWidth: 180,
+    borderRadius: 8,
+  },
+  chipDotComfortable: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  chipTextComfortable: {
+    fontSize: 11,
+  },
+  actionsComfortable: {
+    gap: 10,
+    paddingTop: 12,
+  },
+  actionBtnComfortable: {
+    minWidth: 140,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 44,
+    borderRadius: 10,
+  },
+  actionBtnTextComfortable: {
+    fontSize: 13,
+  },
+  emptyCardComfortable: {
+    padding: 28,
+    gap: 10,
+    borderRadius: 16,
+  },
+  emptyTitleComfortable: {
+    fontSize: 16,
+  },
+  emptyComfortable: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  emptyAddBtnComfortable: {
+    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    minHeight: 44,
+    borderRadius: 12,
+    gap: 8,
+  },
+  emptyAddBtnTextComfortable: {
+    fontSize: 14,
+  },
+  backBtnTextComfortable: {
+    fontSize: 15,
   },
 });

@@ -21,6 +21,27 @@ export const TRIP_OTHER_EXPENSE_OPTIONS: TripOtherExpenseOption[] = [
   { value: "misc", label: "Other" },
 ];
 
+/** High-frequency categories shown first; rest behind “More”. */
+export const PRIMARY_OTHER_EXPENSE_CATEGORY_VALUES: TripOtherExpenseCategory[] = [
+  "parking",
+  "challan",
+  "loading",
+  "unloading",
+  "detention",
+  "food",
+];
+
+export function splitOtherExpenseOptions(options = TRIP_OTHER_EXPENSE_OPTIONS): {
+  primary: TripOtherExpenseOption[];
+  more: TripOtherExpenseOption[];
+} {
+  const primarySet = new Set(PRIMARY_OTHER_EXPENSE_CATEGORY_VALUES);
+  return {
+    primary: options.filter((opt) => primarySet.has(opt.value)),
+    more: options.filter((opt) => !primarySet.has(opt.value)),
+  };
+}
+
 export function otherExpenseCategoryToCostCategory(
   category: TripOtherExpenseCategory,
 ): TripCostCategory {

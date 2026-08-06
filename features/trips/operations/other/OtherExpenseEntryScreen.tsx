@@ -1,38 +1,36 @@
-import { SmartInput } from "@/components/mobile-input";
+import { SmartInput, triggerFeedback } from "@/components/mobile-input";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { OperationalBottomActionBar } from "@/components/operational";
-import { PaymentModeLogo } from "@/components/ledger/paymentModeLogos";
+import {
+  OperationalBottomActionBar,
+  OperationalButton,
+  OperationalChipSelect,
+  OperationalHeader,
+  Surface,
+} from "@/components/operational";
 import Layout from "@/constants/Layout";
-import { LedgerSyncPalette } from "@/constants/LedgerSyncPalette";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { useWebLayoutWidth } from "@/lib/useWebLayoutWidth";
 import { useRouter } from "expo-router";
 import {
   Banknote,
-  Building2,
-  Car,
-  ChevronLeft,
+  Check,
+  ChevronDown,
+  ChevronUp,
   CircleParking,
-  CircleQuestionMark,
-  Clock,
-  CreditCard,
-  Fuel,
-  TriangleAlert,
-  Hash,
   MoreHorizontal,
   Package,
   PackageOpen,
   Scale,
   Ticket,
   Timer,
-  Truck,
-  User,
+  TriangleAlert,
   Utensils,
   Wrench,
   type LucideIcon,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -60,7 +58,11 @@ import {
   defaultPaymentOwnerForActor,
   paymentOwnerOptionsForActor,
 } from "../shared/operationsEntryOptions";
-import { TRIP_OTHER_EXPENSE_OPTIONS } from "../shared/tripOtherExpenseCategories";
+import {
+  TRIP_OTHER_EXPENSE_OPTIONS,
+  formatOtherExpenseCategoryLabel,
+  splitOtherExpenseOptions,
+} from "../shared/tripOtherExpenseCategories";
 import { DriverExpenseCategorySwitch } from "../shared/DriverExpenseCategorySwitch";
 import { DriverExpenseChipSelect } from "../shared/DriverExpenseChipSelect";
 import {
@@ -83,133 +85,54 @@ import {
   useRegisterExpenseBillPreview,
 } from "../shared/useExpenseBillCapture";
 import { ExpenseBillPhotoScan } from "@/features/trips/operations/shared/ExpenseBillPhotoScan";
+import { operationsEntryStyles as opsStyles } from "../shared/operationsEntryScreen.styles";
 
-const PAGE_PAD = Layout.screenPaddingHorizontal;
+const PRIMARY_OWNER_VALUES: OperationalPaymentOwner[] = [
+  "organization",
+  "driver",
+  "supplier",
+];
 
-type TileVisual = { icon: LucideIcon; color: string; tint: string };
-
-const CATEGORY_VISUAL: Record<TripOtherExpenseCategory, TileVisual> = {
-  parking: { icon: CircleParking, color: "#2563eb", tint: "#dbeafe" },
-  challan: { icon: TriangleAlert, color: Theme.teslaRed, tint: "#fff1f2" },
-  loading: { icon: Package, color: Theme.primary, tint: "#eff6ff" },
-  unloading: { icon: PackageOpen, color: "#0f766e", tint: "#ecfdf5" },
-  detention: { icon: Timer, color: "#7c3aed", tint: "#f5f3ff" },
-  maintenance: { icon: Wrench, color: "#b45309", tint: "#fffbeb" },
-  fastag: { icon: Ticket, color: "#4D3636", tint: "#e0e7ff" },
-  advance: { icon: Banknote, color: Theme.darkGreen, tint: "#dcfce7" },
-  food: { icon: Utensils, color: "#ea580c", tint: "#ffedd5" },
-  weighbridge: { icon: Scale, color: "#0369a1", tint: "#e0f2fe" },
-  misc: { icon: MoreHorizontal, color: Theme.textMuted, tint: "#f1f5f9" },
+const CATEGORY_ICON: Record<TripOtherExpenseCategory, LucideIcon> = {
+  parking: CircleParking,
+  challan: TriangleAlert,
+  loading: Package,
+  unloading: PackageOpen,
+  detention: Timer,
+  maintenance: Wrench,
+  fastag: Ticket,
+  advance: Banknote,
+  food: Utensils,
+  weighbridge: Scale,
+  misc: MoreHorizontal,
 };
 
-const OWNER_VISUAL: Record<OperationalPaymentOwner, TileVisual> = {
-  organization: { icon: Building2, color: Theme.primary, tint: "#eff6ff" },
-  driver: { icon: User, color: "#0f766e", tint: "#ecfdf5" },
-  supplier: { icon: Truck, color: "#b45309", tint: "#fffbeb" },
-  fleet_card: { icon: CreditCard, color: "#ea580c", tint: "#ffedd5" },
-  fastag: { icon: Ticket, color: "#4D3636", tint: "#e0e7ff" },
-  cash_advance: { icon: Banknote, color: Theme.darkGreen, tint: "#dcfce7" },
-  credit_vendor: { icon: Clock, color: "#64748b", tint: "#f1f5f9" },
-  unknown: { icon: CircleQuestionMark, color: Theme.textMuted, tint: "#f1f5f9" },
-};
-
-const MODE_LEDGER_ID: Partial<Record<OperationalPaymentMode, string>> = {
-  cash: "CASH",
-  fastag: "FASTAG",
-  card: "FUEL_CARD",
-  credit: "CREDIT",
-};
-
-const MODE_VISUAL: Record<OperationalPaymentMode, TileVisual> = {
-  cash: { icon: Banknote, color: "#16a34a", tint: "#dcfce7" },
-  fastag: { icon: Ticket, color: "#4D3636", tint: "#e0e7ff" },
-  card: { icon: CreditCard, color: "#ea580c", tint: "#ffedd5" },
-  credit: { icon: Clock, color: "#64748b", tint: "#f1f5f9" },
-  pending: { icon: Clock, color: "#d97706", tint: "#fffbeb" },
-  unknown: { icon: CircleQuestionMark, color: Theme.textMuted, tint: "#f1f5f9" },
-};
-
-function CaptureSection({
-  eyebrow,
-  hint,
-  icon: Icon,
-  iconTone = "type",
-  children,
-}: {
-  eyebrow: string;
-  hint?: string;
-  icon: LucideIcon;
-  iconTone?: "type" | "mode" | "ref";
-  children: ReactNode;
-}) {
-  return (
-    <View style={styles.captureSectionCard}>
-      <View style={styles.captureSectionHead}>
-        <View
-          style={[
-            styles.captureSectionIcon,
-            iconTone === "mode" && styles.captureSectionIconMode,
-            iconTone === "ref" && styles.captureSectionIconRef,
-            iconTone === "type" && styles.captureSectionIconType,
-          ]}
-        >
-          <Icon
-            size={15}
-            color={iconTone === "mode" ? Theme.darkGreen : Theme.primary}
-            strokeWidth={2.2}
-          />
-        </View>
-        <View style={styles.captureSectionHeadText}>
-          <Text style={styles.captureSectionEyebrow}>{eyebrow}</Text>
-          {hint ? <Text style={styles.captureSectionHint}>{hint}</Text> : null}
-        </View>
-      </View>
-      {children}
-    </View>
-  );
-}
-
-function OptionTile({
-  label,
-  selected,
-  visual,
-  modeLogoId,
+function RevealToggle({
+  expanded,
+  labelWhenCollapsed,
+  labelWhenExpanded,
   onPress,
-  columns = 3,
+  compact,
 }: {
-  label: string;
-  selected: boolean;
-  visual: TileVisual;
-  modeLogoId?: string;
+  expanded: boolean;
+  labelWhenCollapsed: string;
+  labelWhenExpanded: string;
   onPress: () => void;
-  columns?: 2 | 3;
+  compact?: boolean;
 }) {
-  const Icon = visual.icon;
+  const Chevron = expanded ? ChevronUp : ChevronDown;
   return (
     <Pressable
       onPress={onPress}
-      style={[
-        styles.tile,
-        columns === 2 && styles.tileTwoCol,
-        selected && { borderColor: visual.color, backgroundColor: visual.tint },
-      ]}
+      style={[styles.revealToggle, compact && styles.revealToggleCompact]}
       accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={label}
+      accessibilityState={{ expanded }}
+      hitSlop={8}
     >
-      <View style={styles.tileIconWrap}>
-        {modeLogoId ? (
-          <PaymentModeLogo modeId={modeLogoId} size={28} />
-        ) : (
-          <Icon size={22} color={selected ? visual.color : Theme.textMuted} strokeWidth={2.2} />
-        )}
-      </View>
-      <Text
-        style={[styles.tileLabel, selected && { color: visual.color }]}
-        numberOfLines={2}
-      >
-        {label}
+      <Text style={[styles.revealToggleText, compact && styles.revealToggleTextCompact]}>
+        {expanded ? labelWhenExpanded : labelWhenCollapsed}
       </Text>
+      <Chevron size={compact ? 14 : 16} color={Theme.primary} strokeWidth={2.4} />
     </Pressable>
   );
 }
@@ -236,14 +159,22 @@ export function OtherExpenseEntryScreen({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const layoutWidth = useWebLayoutWidth();
+  const isDesktop = layoutWidth >= Layout.webDesktopMinWidth;
   const { profile } = useAuth();
   const isDriver = profile?.role === "driver";
   const saveExpense = useSaveTripOtherExpense();
   const updateExpense = useUpdateTripOtherExpense();
   const isEditing = !!entryId?.trim();
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [loadingEntry, setLoadingEntry] = useState(isEditing);
   const [amountInr, setAmountInr] = useState<number>(0);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [showMoreCategories, setShowMoreCategories] = useState(false);
+  const [showMoreOwners, setShowMoreOwners] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [saveFlash, setSaveFlash] = useState<string | null>(null);
   const [internalCategory, setInternalCategory] = useState<TripOtherExpenseCategory>(() =>
     parseDriverExpenseCategoryParam(
       expenseCategoryProp ?? initialCategory ?? undefined,
@@ -267,14 +198,35 @@ export function OtherExpenseEntryScreen({
   );
   const [paymentMode, setPaymentMode] = useState<OperationalPaymentMode>("cash");
 
+  const applyCategorySideEffects = useCallback((category: TripOtherExpenseCategory) => {
+    if (category === "fastag") {
+      setPaymentMode("fastag");
+      setPaymentOwner((prev) => (prev === "unknown" ? "fastag" : prev));
+    }
+  }, []);
+
+  const handleSelectCategory = useCallback(
+    (category: TripOtherExpenseCategory) => {
+      setExpenseCategory(category);
+      applyCategorySideEffects(category);
+    },
+    [applyCategorySideEffects, setExpenseCategory],
+  );
+
   const handleOcrPreview = useCallback(
     (result: ExpenseReceiptOcrResult) => {
       return previewOtherReceiptOcr(
         result,
         { amountInr, expenseCategory, description, locationName, notes, paymentMode },
         {
-          setAmountInr,
-          setExpenseCategory,
+          setAmountInr: (value) => {
+            setAmountInr(value);
+            if (value > 0) setAmountError(null);
+          },
+          setExpenseCategory: (category) => {
+            setExpenseCategory(category);
+            applyCategorySideEffects(category);
+          },
           setDescription,
           setLocationName,
           setNotes,
@@ -282,7 +234,16 @@ export function OtherExpenseEntryScreen({
         },
       );
     },
-    [amountInr, description, expenseCategory, locationName, notes, paymentMode, setExpenseCategory],
+    [
+      amountInr,
+      applyCategorySideEffects,
+      description,
+      expenseCategory,
+      locationName,
+      notes,
+      paymentMode,
+      setExpenseCategory,
+    ],
   );
 
   const ownedBillCapture = useExpenseBillCapture({
@@ -320,6 +281,43 @@ export function OtherExpenseEntryScreen({
     [profile?.role],
   );
 
+  const { primary: primaryCategories, more: moreCategories } = useMemo(
+    () => splitOtherExpenseOptions(TRIP_OTHER_EXPENSE_OPTIONS),
+    [],
+  );
+
+  const primaryOwners = useMemo(
+    () => paymentOwnerOptions.filter((opt) => PRIMARY_OWNER_VALUES.includes(opt.value)),
+    [paymentOwnerOptions],
+  );
+  const moreOwners = useMemo(
+    () => paymentOwnerOptions.filter((opt) => !PRIMARY_OWNER_VALUES.includes(opt.value)),
+    [paymentOwnerOptions],
+  );
+
+  const selectedInMoreCategories = moreCategories.some((opt) => opt.value === expenseCategory);
+  const selectedInMoreOwners = moreOwners.some((opt) => opt.value === paymentOwner);
+
+  // Desktop: show full taxonomies. Mobile: progressive disclosure to stay compact.
+  const visibleCategories = isDesktop || showMoreCategories || selectedInMoreCategories
+    ? [...primaryCategories, ...moreCategories]
+    : primaryCategories;
+  const visibleOwners = isDesktop || showMoreOwners || selectedInMoreOwners
+    ? [...primaryOwners, ...moreOwners]
+    : primaryOwners;
+
+  const hasOptionalDetails =
+    description.trim().length > 0 ||
+    locationName.trim().length > 0 ||
+    notes.trim().length > 0;
+
+  const saving = saveExpense.isPending || updateExpense.isPending;
+  const CategoryIcon = CATEGORY_ICON[expenseCategory] ?? MoreHorizontal;
+  const ownerLabel =
+    paymentOwnerOptions.find((o) => o.value === paymentOwner)?.label ?? paymentOwner;
+  const modeLabel =
+    PAYMENT_MODE_OPTIONS.find((o) => o.value === paymentMode)?.label ?? paymentMode;
+
   useEffect(() => {
     if (isEditing || isCategoryControlled) return;
     setInternalCategory(parseDriverExpenseCategoryParam(initialCategory ?? undefined));
@@ -352,6 +350,13 @@ export function OtherExpenseEntryScreen({
       setNotes(entry.notes ?? "");
       setPaymentOwner(entry.payment_owner ?? "organization");
       setPaymentMode(entry.payment_mode ?? "cash");
+      if (
+        entry.description?.trim() ||
+        entry.location_name?.trim() ||
+        entry.notes?.trim()
+      ) {
+        setShowDetails(true);
+      }
       const receiptPath = entry.receipt_storage_path?.trim();
       if (receiptPath) {
         void getDocumentViewUrl(receiptPath).then((url) => {
@@ -375,13 +380,30 @@ export function OtherExpenseEntryScreen({
     }
   }, [isEditing, profile?.role]);
 
-  const saving = saveExpense.isPending || updateExpense.isPending;
+  useEffect(() => {
+    return () => {
+      if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+    };
+  }, []);
+
+  const finishSave = useCallback(
+    (message: string) => {
+      triggerFeedback("apply");
+      setSaveFlash(message);
+      leaveTimerRef.current = setTimeout(() => {
+        router.back();
+      }, 450);
+    },
+    [router],
+  );
 
   const handleSave = async () => {
     if (amountInr <= 0) {
-      Alert.alert("Amount required", "Enter the expense amount before saving.");
+      setAmountError("Enter the expense amount before saving.");
+      triggerFeedback("error");
       return;
     }
+    setAmountError(null);
     const payload = {
       tripId: trip.id,
       expenseCategory,
@@ -398,13 +420,14 @@ export function OtherExpenseEntryScreen({
     try {
       if (isEditing && entryId?.trim()) {
         await updateExpense.mutateAsync({ ...payload, entryId: entryId.trim() });
+        finishSave("Expense updated");
       } else {
         await saveExpense.mutateAsync({
           ...payload,
           actorRole: profile?.role ?? null,
         });
+        finishSave("Expense saved");
       }
-      router.back();
     } catch (e) {
       Alert.alert(
         isEditing ? "Could not update expense" : "Could not save expense",
@@ -419,288 +442,373 @@ export function OtherExpenseEntryScreen({
 
   if (isDriver) {
     return (
-      <DriverExpenseEntryLayout
-        category="other"
-        title={isEditing ? "Edit expense" : "Log expense"}
-        subtitle={contextLine}
-        isEditing={isEditing}
-        saving={saving}
-        onBack={() => router.back()}
-        onSave={handleSave}
-        billScan={billScan}
-        onApplyBillScan={applyPendingUpdates}
-        onDismissBillScan={dismissPendingUpdates}
-        onReviewBillScan={reopenOcrReview}
-        attachment={{
-          uri: photoUri,
-          busy: saving || scanning,
-          label: "Receipt",
-          onAttach: handleCapture,
-          onRemove: handleRemovePhoto,
-        }}
-      >
-        <DriverExpenseSection title="Amount">
-          <SmartInput
-            type="currency"
-            value={amountInr}
-            onChange={(_, numeric) => setAmountInr(numeric)}
-            label="Expense amount"
-            submitLabel="Apply"
-            variant="field"
-            density="compact"
-            placeholder="Enter amount"
-            required={false}
-            validation={{ min: 0, max: 1000000 }}
-          />
-        </DriverExpenseSection>
+      <View style={styles.screen}>
+        {saveFlash ? (
+          <View style={[styles.saveToast, { top: insets.top + 8 }]} accessibilityRole="alert">
+            <Check size={14} color={Theme.textOnPrimary} strokeWidth={2.6} />
+            <Text style={styles.saveToastText}>{saveFlash}</Text>
+          </View>
+        ) : null}
+        <DriverExpenseEntryLayout
+          category="other"
+          title={isEditing ? "Edit expense" : "Log expense"}
+          subtitle={contextLine}
+          isEditing={isEditing}
+          saving={saving}
+          saveDisabled={amountInr <= 0 || !!saveFlash}
+          onBack={() => router.back()}
+          onSave={handleSave}
+          billScan={billScan}
+          onApplyBillScan={applyPendingUpdates}
+          onDismissBillScan={dismissPendingUpdates}
+          onReviewBillScan={reopenOcrReview}
+          attachment={{
+            uri: photoUri,
+            busy: saving || scanning,
+            label: "Receipt",
+            onAttach: handleCapture,
+            onRemove: handleRemovePhoto,
+          }}
+        >
+          <DriverExpenseSection title="Amount">
+            <SmartInput
+              type="currency"
+              value={amountInr}
+              onChange={(_, numeric) => {
+                setAmountInr(numeric);
+                if (numeric > 0) setAmountError(null);
+              }}
+              label="Expense amount"
+              submitLabel="Apply"
+              variant="field"
+              density="compact"
+              placeholder="Enter amount"
+              required={false}
+              validation={{ min: 0, max: 1000000 }}
+            />
+            {amountError ? <Text style={styles.inlineError}>{amountError}</Text> : null}
+          </DriverExpenseSection>
 
-        <DriverExpenseSection title="Category & payment">
-          <DriverExpenseCategorySwitch
-            tripId={trip.id}
-            formKind="other"
-            otherCategory={expenseCategory}
-            onOtherCategoryChange={setExpenseCategory}
-            onCategoryNavChange={onCategoryNavChange}
-            lockCategorySwitch={lockCategorySwitch}
-          />
-          <DriverExpenseFieldDivider />
-          <DriverExpenseChipSelect
-            label="Payment mode"
-            options={PAYMENT_MODE_OPTIONS}
-            value={paymentMode}
-            onChange={setPaymentMode}
-            columns={3}
-            visualGroup="payment_mode"
-          />
-        </DriverExpenseSection>
+          <DriverExpenseSection title="Category & payment">
+            <DriverExpenseCategorySwitch
+              tripId={trip.id}
+              formKind="other"
+              otherCategory={expenseCategory}
+              onOtherCategoryChange={handleSelectCategory}
+              onCategoryNavChange={onCategoryNavChange}
+              lockCategorySwitch={lockCategorySwitch}
+            />
+            <DriverExpenseFieldDivider />
+            <DriverExpenseChipSelect
+              label="Payment mode"
+              options={PAYMENT_MODE_OPTIONS}
+              value={paymentMode}
+              onChange={setPaymentMode}
+              columns={3}
+              visualGroup="payment_mode"
+            />
+          </DriverExpenseSection>
 
-        <DriverExpenseSection title="Details">
-          <View>
-            <DriverExpenseFieldLabel>Description (optional)</DriverExpenseFieldLabel>
-            <DriverExpenseTextInput
-              value={description}
-              onChangeText={setDescription}
-              placeholder="What was this for?"
+          <DriverExpenseSection>
+            <RevealToggle
+              compact
+              expanded={showDetails || hasOptionalDetails}
+              labelWhenCollapsed="Add details (optional)"
+              labelWhenExpanded="Hide details"
+              onPress={() => setShowDetails((v) => !v)}
             />
-          </View>
-          <View>
-            <DriverExpenseFieldLabel>Location (optional)</DriverExpenseFieldLabel>
-            <DriverExpenseTextInput
-              value={locationName}
-              onChangeText={setLocationName}
-              placeholder="Plaza, yard, city"
-            />
-          </View>
-          <View>
-            <DriverExpenseFieldLabel>Notes (optional)</DriverExpenseFieldLabel>
-            <DriverExpenseTextInput
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              placeholder="Short note"
-            />
-          </View>
-        </DriverExpenseSection>
-      </DriverExpenseEntryLayout>
+            {showDetails || hasOptionalDetails ? (
+              <View style={styles.driverDetailsStack}>
+                <View>
+                  <DriverExpenseFieldLabel>Description (optional)</DriverExpenseFieldLabel>
+                  <DriverExpenseTextInput
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="What was this for?"
+                  />
+                </View>
+                <View>
+                  <DriverExpenseFieldLabel>Location (optional)</DriverExpenseFieldLabel>
+                  <DriverExpenseTextInput
+                    value={locationName}
+                    onChangeText={setLocationName}
+                    placeholder="Plaza, yard, city"
+                  />
+                </View>
+                <View>
+                  <DriverExpenseFieldLabel>Notes (optional)</DriverExpenseFieldLabel>
+                  <DriverExpenseTextInput
+                    value={notes}
+                    onChangeText={setNotes}
+                    multiline
+                    placeholder="Short note"
+                  />
+                </View>
+              </View>
+            ) : null}
+          </DriverExpenseSection>
+        </DriverExpenseEntryLayout>
+      </View>
     );
   }
 
-  return (
-    <View style={styles.screen}>
-      <View style={[styles.topBar, { paddingTop: insets.top + 4 }]}>
-        <Pressable
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <ChevronLeft size={20} color={LedgerSyncPalette.ink} strokeWidth={2.5} />
-        </Pressable>
-        <View style={styles.topBarMain}>
-          <View style={styles.titleRow}>
-            <View style={styles.liveDot} />
-            <Text style={styles.kicker}>
-              {isEditing ? "EDIT EXPENSE" : "OTHER EXPENSE"}
-            </Text>
-          </View>
-          <Text style={styles.routeLine} numberOfLines={1}>
-            {contextLine}
-          </Text>
-        </View>
-        <View style={styles.backBtn} />
+  const amountBlock = (
+    <Surface elevation={1} density="high" style={opsStyles.card}>
+      <SmartInput
+        type="currency"
+        value={amountInr}
+        onChange={(_, numeric) => {
+          setAmountInr(numeric);
+          if (numeric > 0) setAmountError(null);
+        }}
+        label="Expense amount"
+        submitLabel="Apply"
+        variant={isDesktop ? "hero" : "field"}
+        density="compact"
+        heroAccentColor={Theme.primary}
+        placeholder="0"
+        required={false}
+        validation={{ min: 0, max: 1000000 }}
+      />
+      {amountError ? <Text style={styles.inlineError}>{amountError}</Text> : null}
+    </Surface>
+  );
+
+  const classifyBlock = (
+    <Surface elevation={1} density="high" style={opsStyles.card}>
+      <OperationalChipSelect
+        label="Category"
+        options={visibleCategories}
+        value={expenseCategory}
+        onChange={handleSelectCategory}
+        density="compact"
+      />
+      {!isDesktop && moreCategories.length > 0 && !selectedInMoreCategories ? (
+        <RevealToggle
+          compact
+          expanded={showMoreCategories}
+          labelWhenCollapsed={`More (${moreCategories.length})`}
+          labelWhenExpanded="Fewer"
+          onPress={() => setShowMoreCategories((v) => !v)}
+        />
+      ) : null}
+
+      <View style={opsStyles.divider} />
+
+      <OperationalChipSelect
+        label="Paid by"
+        options={visibleOwners}
+        value={paymentOwner}
+        onChange={setPaymentOwner}
+        density="compact"
+      />
+      {!isDesktop && moreOwners.length > 0 && !selectedInMoreOwners ? (
+        <RevealToggle
+          compact
+          expanded={showMoreOwners}
+          labelWhenCollapsed={`More payers (${moreOwners.length})`}
+          labelWhenExpanded="Fewer"
+          onPress={() => setShowMoreOwners((v) => !v)}
+        />
+      ) : null}
+
+      <View style={opsStyles.divider} />
+
+      <OperationalChipSelect
+        label="Payment mode"
+        options={PAYMENT_MODE_OPTIONS}
+        value={paymentMode}
+        onChange={setPaymentMode}
+        density="compact"
+      />
+      {expenseCategory === "fastag" && paymentMode === "fastag" ? (
+        <Text style={opsStyles.metaHint}>
+          Matched to FASTag — change only if paid another way.
+        </Text>
+      ) : (
+        <Text style={opsStyles.metaHint}>
+          Operational log — not a commercial adjustment.
+        </Text>
+      )}
+    </Surface>
+  );
+
+  const detailsFields = (
+    <View style={opsStyles.fieldStack}>
+      <View>
+        <Text style={opsStyles.fieldLabel}>Description (optional)</Text>
+        <TextInput
+          style={opsStyles.input}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="What was this for?"
+          placeholderTextColor={Theme.textMuted}
+        />
       </View>
+      <View style={isDesktop ? styles.desktopFieldRow : undefined}>
+        <View style={isDesktop ? styles.desktopFieldCell : undefined}>
+          <Text style={opsStyles.fieldLabel}>Location (optional)</Text>
+          <TextInput
+            style={opsStyles.input}
+            value={locationName}
+            onChangeText={setLocationName}
+            placeholder="Plaza, yard, city"
+            placeholderTextColor={Theme.textMuted}
+          />
+        </View>
+        <View style={isDesktop ? styles.desktopFieldCell : undefined}>
+          <Text style={opsStyles.fieldLabel}>Notes (optional)</Text>
+          <TextInput
+            style={[opsStyles.input, opsStyles.notes]}
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            placeholder="Short note"
+            placeholderTextColor={Theme.textMuted}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  const detailsBlock = (
+    <Surface elevation={1} density="high" style={opsStyles.card}>
+      {isDesktop ? (
+        <>
+          <Text style={styles.desktopSectionLabel}>Details</Text>
+          {detailsFields}
+        </>
+      ) : (
+        <>
+          <RevealToggle
+            compact
+            expanded={showDetails || hasOptionalDetails}
+            labelWhenCollapsed="Add details (optional)"
+            labelWhenExpanded="Hide details"
+            onPress={() => setShowDetails((v) => !v)}
+          />
+          {showDetails || hasOptionalDetails ? detailsFields : null}
+        </>
+      )}
+    </Surface>
+  );
+
+  const receiptBlock = (
+    <View style={opsStyles.photoWrap}>
+      <ExpenseBillPhotoScan
+        label="Expense Receipt"
+        uri={photoUri}
+        scan={billScan}
+        scanning={scanning}
+        busy={saving}
+        onAttach={handleCapture}
+        onRetake={handleCapture}
+        onRemove={handleRemovePhoto}
+        onRescanPhoto={handleCapture}
+        onApplyPending={applyPendingUpdates}
+        onDismissPending={dismissPendingUpdates}
+        onReviewOcr={reopenOcrReview}
+      />
+    </View>
+  );
+
+  const summaryCard = (
+    <View style={styles.summaryCard}>
+      <View style={styles.summaryIcon}>
+        <CategoryIcon size={18} color={Theme.primary} strokeWidth={2.2} />
+      </View>
+      <View style={styles.summaryCopy}>
+        <Text style={styles.summaryEyebrow}>Logging</Text>
+        <Text style={styles.summaryTitle} numberOfLines={1}>
+          {formatOtherExpenseCategoryLabel(expenseCategory)}
+        </Text>
+        <Text style={styles.summaryMeta} numberOfLines={1}>
+          {ownerLabel} · {modeLabel}
+        </Text>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={[styles.screen, isDesktop && styles.screenDesktop]}>
+      {saveFlash ? (
+        <View style={[styles.saveToast, { top: insets.top + 8 }]} accessibilityRole="alert">
+          <Check size={14} color={Theme.textOnPrimary} strokeWidth={2.6} />
+          <Text style={styles.saveToastText}>{saveFlash}</Text>
+        </View>
+      ) : null}
+
+      <OperationalHeader
+        title={isEditing ? "Edit expense" : "Other expense"}
+        subtitle={contextLine}
+        onBack={() => router.back()}
+        density={isDesktop ? "medium" : "high"}
+      />
 
       <ScrollView
-        style={styles.scroll}
+        style={opsStyles.scroll}
         contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + 88 },
+          isDesktop ? styles.desktopContent : opsStyles.content,
+          { paddingBottom: insets.bottom + (isDesktop ? 96 : 76) },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.pageTitle}>
-          {isEditing ? "Update trip expense" : "Log trip expense"}
-        </Text>
-        <Text style={styles.pageHint}>
-          Parking, challan, loading, detention, and other trip costs — not commercial adjustments.
-        </Text>
-
-        <CaptureSection eyebrow="Amount" hint="What did this cost?" icon={Banknote} iconTone="mode">
-          <SmartInput
-            type="currency"
-            value={amountInr}
-            onChange={(_, numeric) => setAmountInr(numeric)}
-            label="Expense amount"
-            submitLabel="Apply"
-            variant="hero"
-            heroAccentColor={Theme.primary}
-            placeholder="0"
-            required={false}
-            validation={{ min: 0, max: 1000000 }}
-          />
-        </CaptureSection>
-
-        <CaptureSection
-          eyebrow="Category"
-          hint="What kind of expense is this?"
-          icon={Car}
-          iconTone="type"
-        >
-          <View style={styles.tileGrid}>
-            {TRIP_OTHER_EXPENSE_OPTIONS.map((opt) => (
-              <OptionTile
-                key={opt.value}
-                label={opt.label}
-                selected={expenseCategory === opt.value}
-                visual={CATEGORY_VISUAL[opt.value]}
-                onPress={() => setExpenseCategory(opt.value)}
-              />
-            ))}
-          </View>
-        </CaptureSection>
-
-        <CaptureSection
-          eyebrow="Paid by"
-          hint="Who funded this cost?"
-          icon={User}
-          iconTone="type"
-        >
-          <View style={styles.tileGrid}>
-            {paymentOwnerOptions.map((opt) => (
-              <OptionTile
-                key={opt.value}
-                label={opt.label}
-                selected={paymentOwner === opt.value}
-                visual={OWNER_VISUAL[opt.value]}
-                onPress={() => setPaymentOwner(opt.value)}
-              />
-            ))}
-          </View>
-        </CaptureSection>
-
-        <CaptureSection
-          eyebrow="Payment mode"
-          hint="How this money moved"
-          icon={Fuel}
-          iconTone="mode"
-        >
-          <View style={styles.tileGrid}>
-            {PAYMENT_MODE_OPTIONS.map((opt) => (
-              <OptionTile
-                key={opt.value}
-                label={opt.label}
-                selected={paymentMode === opt.value}
-                visual={MODE_VISUAL[opt.value]}
-                modeLogoId={MODE_LEDGER_ID[opt.value]}
-                onPress={() => setPaymentMode(opt.value)}
-              />
-            ))}
-          </View>
-        </CaptureSection>
-
-        <CaptureSection
-          eyebrow="Details"
-          hint="Optional context for audit"
-          icon={Hash}
-          iconTone="ref"
-        >
-          <View style={styles.fieldStack}>
-            <View>
-              <Text style={styles.fieldLabel}>DESCRIPTION (OPTIONAL)</Text>
-              <TextInput
-                style={styles.input}
-                value={description}
-                onChangeText={setDescription}
-                placeholder="What was this for?"
-                placeholderTextColor={Theme.textMuted}
-              />
+        {isDesktop ? (
+          <View style={styles.desktopShell}>
+            <View style={styles.desktopIntro}>
+              <Text style={styles.desktopTitle}>
+                {isEditing ? "Update trip expense" : "Log trip expense"}
+              </Text>
+              <Text style={styles.desktopHint}>
+                Capture amount, classify the cost, and attach a receipt — same flow as mobile,
+                arranged for the desk.
+              </Text>
             </View>
-            <View>
-              <Text style={styles.fieldLabel}>LOCATION (OPTIONAL)</Text>
-              <TextInput
-                style={styles.input}
-                value={locationName}
-                onChangeText={setLocationName}
-                placeholder="Plaza, yard, city"
-                placeholderTextColor={Theme.textMuted}
-              />
-            </View>
-            <View>
-              <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
-              <TextInput
-                style={[styles.input, styles.notes]}
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                placeholder="Short note"
-                placeholderTextColor={Theme.textMuted}
-              />
+
+            <View style={styles.desktopGrid}>
+              <View style={styles.desktopRail}>
+                {amountBlock}
+                {summaryCard}
+                {receiptBlock}
+              </View>
+              <View style={styles.desktopMain}>
+                {classifyBlock}
+                {detailsBlock}
+              </View>
             </View>
           </View>
-        </CaptureSection>
-
-        <View style={styles.photoWrap}>
-          <ExpenseBillPhotoScan
-            label="Expense Receipt"
-            uri={photoUri}
-            scan={billScan}
-            scanning={scanning}
-            busy={saving}
-            onAttach={handleCapture}
-            onRetake={handleCapture}
-            onRemove={handleRemovePhoto}
-            onRescanPhoto={handleCapture}
-            onApplyPending={applyPendingUpdates}
-            onDismissPending={dismissPendingUpdates}
-            onReviewOcr={reopenOcrReview}
-          />
-        </View>
+        ) : (
+          <>
+            {amountBlock}
+            {classifyBlock}
+            {detailsBlock}
+            {receiptBlock}
+          </>
+        )}
       </ScrollView>
 
       <OperationalBottomActionBar>
-        <View style={styles.footer}>
-          <Pressable
-            style={styles.footerBackBtn}
+        <View style={opsStyles.footer}>
+          <OperationalButton
+            intent="utility"
+            label="Cancel"
             onPress={() => router.back()}
-            disabled={saving}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel"
-          >
-            <Text style={styles.footerBackText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.confirmBtn, saving && styles.confirmBtnDisabled]}
+            density="high"
+            disabled={saving || !!saveFlash}
+            style={opsStyles.footerBtn}
+          />
+          <OperationalButton
+            intent="bottomSticky"
+            label={
+              saving ? "Saving…" : isEditing ? "Save changes" : "Save expense"
+            }
             onPress={handleSave}
-            disabled={saving}
-            accessibilityRole="button"
-            accessibilityLabel={isEditing ? "Update" : "Save"}
-          >
-            <Text style={styles.confirmBtnText}>
-              {saving ? "Saving…" : isEditing ? "Save Changes" : "Confirm Sync"}
-            </Text>
-          </Pressable>
+            loading={saving}
+            density="high"
+            disabled={amountInr <= 0 || !!saveFlash}
+            style={opsStyles.footerBtn}
+          />
         </View>
       </OperationalBottomActionBar>
     </View>
@@ -710,228 +818,162 @@ export function OtherExpenseEntryScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: Theme.screenBackground,
   },
-  topBar: {
-    flexDirection: "row",
+  screenDesktop: {
+    backgroundColor: Theme.analyticsCanvas,
+  },
+  desktopContent: {
+    paddingHorizontal: 28,
+    paddingTop: 20,
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: PAGE_PAD,
-    paddingBottom: 10,
-    backgroundColor: Theme.cardWhite,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LedgerSyncPalette.border,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.surfaceForm,
-  },
-  topBarMain: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Theme.positive,
-  },
-  kicker: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-    color: Theme.positive,
-    textTransform: "uppercase",
-  },
-  routeLine: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textMuted,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: PAGE_PAD,
-    paddingTop: 14,
-    gap: 12,
-  },
-  pageTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: LedgerSyncPalette.ink,
-    letterSpacing: -0.4,
-  },
-  pageHint: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    lineHeight: 18,
-    marginTop: -4,
-    marginBottom: 2,
-  },
-  captureSectionCard: {
+  desktopShell: {
     width: "100%",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e6edf5",
-    padding: 14,
-    gap: 12,
+    maxWidth: 1080,
+    gap: 18,
   },
-  captureSectionHead: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  captureSectionIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  captureSectionIconType: {
-    backgroundColor: "#eff6ff",
-  },
-  captureSectionIconMode: {
-    backgroundColor: "#ecfdf5",
-  },
-  captureSectionIconRef: {
-    backgroundColor: "#eff6ff",
-  },
-  captureSectionHeadText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  captureSectionEyebrow: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#0f172a",
-    letterSpacing: -0.1,
-  },
-  captureSectionHint: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    lineHeight: 16,
-  },
-  tileGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    width: "100%",
-  },
-  tile: {
-    width: "31.2%",
-    flexGrow: 0,
-    flexShrink: 0,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
-    backgroundColor: "#fff",
-    alignItems: "center",
+  desktopIntro: {
     gap: 6,
-    minHeight: 76,
-  },
-  tileTwoCol: {
-    width: "47.5%",
-  },
-  tileIconWrap: {
-    minHeight: 28,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tileLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textAlign: "center",
-  },
-  fieldStack: {
-    gap: 12,
-  },
-  fieldLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    letterSpacing: 0.6,
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0f172a",
-    backgroundColor: "#f8fafc",
-    minHeight: 44,
-  },
-  notes: {
-    minHeight: 72,
-    textAlignVertical: "top",
-  },
-  photoWrap: {
     marginBottom: 4,
   },
-  footer: {
+  desktopTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: Theme.textBody,
+    letterSpacing: -0.5,
+  },
+  desktopHint: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 20,
+    maxWidth: 560,
+  },
+  desktopGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    alignItems: "flex-start",
+    gap: 16,
     width: "100%",
   },
-  footerBackBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fafc",
+  desktopRail: {
+    width: 360,
     flexShrink: 0,
-    minHeight: 48,
+    gap: 12,
   },
-  footerBackText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: LedgerSyncPalette.ink,
-  },
-  confirmBtn: {
+  desktopMain: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: Theme.primary,
-    paddingVertical: 13,
+    gap: 12,
+  },
+  desktopFieldRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  desktopFieldCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  summaryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
     borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.cardWhite,
+  },
+  summaryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 48,
+    backgroundColor: Theme.brandBlueSoft,
   },
-  confirmBtnDisabled: {
-    opacity: 0.55,
+  summaryCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
-  confirmBtnText: {
-    fontSize: 14,
+  summaryEyebrow: {
+    fontSize: 10,
     fontWeight: "800",
-    color: Theme.textOnDark,
-    letterSpacing: 0.2,
+    letterSpacing: 0.8,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  summaryTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.textBody,
+  },
+  summaryMeta: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textRouteCard,
+  },
+  desktopSectionLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    marginBottom: 2,
+  },
+  revealToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 4,
+    minHeight: 36,
+    paddingVertical: 4,
+  },
+  revealToggleCompact: {
+    minHeight: 32,
+    paddingVertical: 2,
+  },
+  revealToggleText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.primary,
+  },
+  revealToggleTextCompact: {
+    fontSize: 11,
+  },
+  driverDetailsStack: {
+    gap: 10,
+    marginTop: 6,
+  },
+  inlineError: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.teslaRed,
+    lineHeight: 14,
+  },
+  saveToast: {
+    position: "absolute",
+    alignSelf: "center",
+    zIndex: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: Theme.darkGreen,
+    shadowColor: Theme.textBody,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  saveToastText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
   },
 });

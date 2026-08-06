@@ -18,6 +18,7 @@ import {
 import { openTripLedgerEntryChooser } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
+import { resolveTripSupplierDisplayName } from "../tripDetail.helpers";
 import { useTripRatings } from "./useTripRatings";
 import {
     getLinkedOrgProfileForSupplier,
@@ -739,6 +740,26 @@ export function useTripDetail({
         trip ? getTripDisplayNumber(trip) : undefined,
       ),
     [transactions, trip],
+  );
+
+  /** Prefer linked supplier name; fall back to supplier ledger party_name. */
+  const resolvedPartnerName = useMemo(
+    () =>
+      resolveTripSupplierDisplayName({
+        partnerName,
+        supplierPartyName: supplierPartyRes?.name,
+        tripSupplierName: trip?.supplier_name,
+        clientName: displayClientName ?? trip?.client_name,
+        ledgerEntries: tripLedgerEntries,
+      }),
+    [
+      partnerName,
+      supplierPartyRes?.name,
+      trip?.supplier_name,
+      displayClientName,
+      trip?.client_name,
+      tripLedgerEntries,
+    ],
   );
 
   const { data: tripSubcontracts = [] } = useTripSubcontractsQuery(
@@ -1753,7 +1774,7 @@ export function useTripDetail({
       displayClientName: displayClientName ?? null,
       clientIdFromContext: clientIdFromContext ?? null,
       clientNameFromContext: clientNameFromContext ?? null,
-      partnerName: partnerName ?? null,
+      partnerName: resolvedPartnerName ?? partnerName ?? null,
       driverDisplayName: driverName,
       labels: {
         addTransaction: t("addEntry"),
@@ -1765,6 +1786,7 @@ export function useTripDetail({
     router,
     clientIdFromContext,
     clientNameFromContext,
+    resolvedPartnerName,
     partnerName,
     displayClientName,
     driverName,
@@ -1801,7 +1823,8 @@ export function useTripDetail({
     if (entryContext === "supplier" && trip.supplier_id) {
       params.set("partyContext", "suppliers");
       params.set("partyId", trip.supplier_id);
-      if (partnerName) params.set("partyName", partnerName);
+      const supplierLabel = resolvedPartnerName ?? partnerName;
+      if (supplierLabel) params.set("partyName", supplierLabel);
     } else if (entryContext === "client" && (clientIdFromContext ?? trip.client_id)) {
       params.set("partyContext", "customers");
       params.set("partyId", clientIdFromContext ?? trip.client_id ?? "");
@@ -1818,6 +1841,7 @@ export function useTripDetail({
     canAddFinanceEntry,
     tripLedgerEntries,
     entryContext,
+    resolvedPartnerName,
     partnerName,
     clientIdFromContext,
     clientNameFromContext,
@@ -2025,7 +2049,11 @@ export function useTripDetail({
       out.push({
         type: "supplier",
         name:
-          supplierPartyRes.name ?? partnerName ?? trip.supplier_name ?? t("supplier"),
+          resolvedPartnerName ??
+          supplierPartyRes.name ??
+          partnerName ??
+          trip.supplier_name ??
+          t("supplier"),
         integrated: supplierPartyRes.integrated,
         counterpartyEntries: entries,
         ourTotal: paidToSupplier,
@@ -2071,6 +2099,7 @@ export function useTripDetail({
     tripDisputeByType,
     reconcileLoadingByType,
     displayClientName,
+    resolvedPartnerName,
     partnerName,
     driverName,
     paidToDriver,
@@ -2667,7 +2696,7 @@ export function useTripDetail({
     displayVehicleFromInput,
     setDisplayVehicleFromInput,
     driverLinked,
-    partnerName,
+    partnerName: resolvedPartnerName ?? partnerName,
     clientAvatarUri,
     supplierAvatarUri,
     clientPartyAvatarFields,

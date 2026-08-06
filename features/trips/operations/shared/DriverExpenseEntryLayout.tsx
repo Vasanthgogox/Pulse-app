@@ -82,6 +82,8 @@ type Props = {
   saving: boolean;
   onBack: () => void;
   onSave: () => void;
+  /** When true, primary save stays disabled (e.g. amount still empty). */
+  saveDisabled?: boolean;
   skipLabel?: string;
   hint?: string | null;
   syncHint?: string | null;
@@ -101,6 +103,7 @@ export function DriverExpenseEntryLayout({
   saving,
   onBack,
   onSave,
+  saveDisabled = false,
   skipLabel = "Cancel",
   hint,
   syncHint,
@@ -342,9 +345,14 @@ export function DriverExpenseEntryLayout({
           <Text style={[ops.skipText, { color: colors.textMuted }]}>{skipLabel}</Text>
         </Pressable>
         <Pressable
-          style={[ops.saveBtn, { backgroundColor: colors.emeraldDark }]}
+          style={[
+            ops.saveBtn,
+            { backgroundColor: colors.emeraldDark },
+            (saving || saveDisabled) && { opacity: 0.5 },
+          ]}
           onPress={onSave}
-          disabled={saving}
+          disabled={saving || saveDisabled}
+          accessibilityState={{ disabled: saving || saveDisabled }}
         >
           {saving ? (
             <ActivityIndicator color="#fff" size="small" />
