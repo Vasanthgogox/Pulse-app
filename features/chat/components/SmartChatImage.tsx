@@ -8,6 +8,7 @@
  * - **expo-image** disk+memory cache + optional **blurhash** / data-URI placeholder to avoid layout jump.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { recordImageOpened, recordImageOpenFailed } from "@/lib/chatPerf";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
@@ -244,6 +245,7 @@ export function SmartChatImage({
   }, [thin.blurhash, thin.thumbhash, thin.thumbDataUri, thumbWidth, thumbHeight]);
 
   const loadFullSize = useCallback(async () => {
+    recordImageOpened();
     const gen = ++fullLightboxGenRef.current;
     const instant = peekChatImageFullDisplayUrl(storagePath, FULL_DISPLAY_MAX_EDGE, FULL_DISPLAY_QUALITY);
     if (instant) {
@@ -270,6 +272,7 @@ export function SmartChatImage({
       setFullUri(raw);
       setFullState("ready");
     } else {
+      recordImageOpenFailed();
       setFullState("error");
     }
   }, [storagePath]);

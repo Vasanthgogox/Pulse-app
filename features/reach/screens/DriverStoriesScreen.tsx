@@ -8,14 +8,21 @@
  * driver wallet (driver_ledger), one tap away.
  *
  * Employed drivers recommend to their fleet owner (earning the campaign's
- * Driver Incentive on conversion); invited drivers are nudged to join their fleet;
- * independent drivers see the load with direct-bid guidance.
+ * Driver Incentive on conversion); invited drivers are nudged to join their
+ * fleet; independent drivers (no organization to bid through) submit a direct
+ * bid as themselves via driver_direct_bids / submit_driver_direct_bid — no
+ * recommendation reward, they're already the bidder. Award/acceptance of a
+ * direct bid (what a shipper does with it) is a separate, not-yet-built
+ * surface; this screen only covers submission and status.
  */
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
+import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import {
   getDriverFleetMemberships,
   recordDriverReachEvent,
@@ -25,6 +32,7 @@ import {
 } from '@/features/reach/services/driverReferrals.service';
 import { DriverReferralEarningsCard } from '@/features/reach/components/DriverReferralEarningsCard';
 import {
+  driverStoryCta,
   resolveDriverParticipation,
   type DriverParticipation,
 } from '@/features/reach/utils/driverParticipation';
@@ -32,6 +40,7 @@ import {
   useDriverReachStoriesQuery,
   useDriverRewardEarningsQuery,
   useRecommendReachCampaignMutation,
+  useSubmitDriverDirectBidMutation,
 } from '@/lib/queries/useReachCampaignsQuery';
 import { formatINR } from '@/lib/format';
 import { queryKeys } from '@/lib/queryKeys';
@@ -52,6 +61,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Pressable,
   RefreshControl,
@@ -110,16 +120,21 @@ export default function DriverStoriesScreen() {
 
   const { user } = useAuth();
   const userId = user?.uid ?? null;
+  const { avatarUri } = useDriverAvatarUri();
 
   const storiesQ = useDriverReachStoriesQuery(userId);
   const earningsQ = useDriverRewardEarningsQuery(userId);
   const recommendMutation = useRecommendReachCampaignMutation();
+  const bidMutation = useSubmitDriverDirectBidMutation();
 
   const [participation, setParticipation] = useState<DriverParticipation>({ mode: 'independent' });
   const [recommendTarget, setRecommendTarget] = useState<DriverReachStoryRow | null>(null);
   const [reason, setReason] = useState<ReachReferralReason>('truck_available');
   const [suggestedRateText, setSuggestedRateText] = useState('');
   const [note, setNote] = useState('');
+  const [bidTarget, setBidTarget] = useState<DriverReachStoryRow | null>(null);
+  const [bidAmountText, setBidAmountText] = useState('');
+  const [bidNote, setBidNote] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +186,34 @@ export default function DriverStoriesScreen() {
     }
   };
 
+  const openBid = (story: DriverReachStoryRow) => {
+    setBidAmountText('');
+    setBidNote('');
+    setBidTarget(story);
+  };
+
+  const submitBid = async () => {
+    if (!bidTarget) return;
+    const amount = parseFloat(bidAmountText);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert('Enter a bid amount', 'Enter how much you want to bid for this load.');
+      return;
+    }
+    const { error } = await bidMutation.mutateAsync({
+      postId: bidTarget.post_id,
+      amount,
+      note: bidNote.trim() || undefined,
+    });
+    if (error) {
+      Alert.alert("Couldn't submit bid", error.message);
+      return;
+    }
+    setBidTarget(null);
+    if (userId) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.reach.driverStories(userId) });
+    }
+  };
+
   if (storiesQ.isLoading) {
     return <CenteredLoadingView message="Loading boosted stories…" />;
   }
@@ -179,6 +222,42 @@ export default function DriverStoriesScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + Layout.driverHeaderTopOffset,
+            paddingHorizontal: Layout.driverHeaderHorizontalPadding,
+            paddingBottom: Layout.driverHeaderBottomPadding,
+            backgroundColor: colors.surface,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.headerLeft}>
+          <TouchableOpacity
+            onPress={() => router.push('/(driver)/profile')}
+            style={styles.avatarBtn}
+            activeOpacity={0.8}
+          >
+            <View
+              style={[
+                styles.avatarCircle,
+                { borderColor: colors.border, backgroundColor: colors.emeraldMuted },
+              ]}
+            >
+              <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+            </View>
+          </TouchableOpacity>
+          <View style={styles.headerTextWrap}>
+            <DriverBrandMark color={colors.textMuted} />
+            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>
+              Stories
+            </Text>
+          </View>
+        </View>
+      </View>
+
       <LinearGradient
         colors={[HERO_FROM, HERO_TO]}
         start={{ x: 0, y: 0 }}
@@ -364,12 +443,41 @@ export default function DriverStoriesScreen() {
                       Join your fleet to participate
                     </Text>
                   </View>
-                ) : participation.mode === 'independent' && story.referral_status == null ? (
+                ) : participation.mode === 'independent' &&
+                  (story.direct_bid_status === 'accepted' || story.direct_bid_status === 'rejected') ? (
                   <View style={[styles.infoPill, { borderColor: colors.border }]}>
                     <Text style={[styles.infoPillText, { color: colors.textMuted }]}>
-                      Direct bidding runs through your organization's Pulse account
+                      {story.direct_bid_status === 'accepted'
+                        ? `Bid accepted — ${formatINR(story.direct_bid_amount ?? 0)}`
+                        : 'Bid not accepted this time'}
                     </Text>
                   </View>
+                ) : participation.mode === 'independent' && story.direct_bid_status === 'pending' ? (
+                  <TouchableOpacity
+                    style={styles.recommendBtn}
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      setBidAmountText(String(story.direct_bid_amount ?? ''));
+                      setBidNote('');
+                      setBidTarget(story);
+                    }}
+                  >
+                    <Text style={styles.recommendBtnText}>
+                      Bid sent — {formatINR(story.direct_bid_amount ?? 0)}
+                    </Text>
+                    <Text style={styles.recommendBtnHint}>Tap to update</Text>
+                  </TouchableOpacity>
+                ) : participation.mode === 'independent' ? (
+                  <TouchableOpacity
+                    style={styles.recommendBtn}
+                    activeOpacity={0.88}
+                    onPress={() => openBid(story)}
+                  >
+                    <Text style={styles.recommendBtnText}>{driverStoryCta(participation, story.reward_amount).label}</Text>
+                    <Text style={styles.recommendBtnHint}>
+                      {driverStoryCta(participation, story.reward_amount).badge}
+                    </Text>
+                  </TouchableOpacity>
                 ) : null}
               </View>
             );
@@ -462,12 +570,109 @@ export default function DriverStoriesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Direct bid sheet (independent drivers) ── */}
+      <Modal
+        visible={bidTarget != null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBidTarget(null)}
+      >
+        <View style={styles.sheetOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setBidTarget(null)} />
+          <View style={[styles.sheet, { backgroundColor: cardBg, paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: colors.text }]}>Bid on this load</Text>
+              <Pressable onPress={() => setBidTarget(null)} hitSlop={10}>
+                <X size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
+            {bidTarget ? (
+              <Text style={[styles.sheetStoryLine, { color: colors.textMuted }]} numberOfLines={1}>
+                {bidTarget.snapshot_origin} → {bidTarget.snapshot_destination}
+              </Text>
+            ) : null}
+
+            <Text style={[styles.sheetLabel, { color: colors.textMuted }]}>YOUR BID (₹)</Text>
+            <TextInput
+              style={[styles.sheetInput, { borderColor: colors.border, color: colors.text }]}
+              value={bidAmountText}
+              onChangeText={setBidAmountText}
+              keyboardType="number-pad"
+              placeholder="e.g. 18500"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={[styles.sheetLabel, { color: colors.textMuted }]}>NOTE (OPTIONAL)</Text>
+            <TextInput
+              style={[styles.sheetInput, styles.sheetNoteInput, { borderColor: colors.border, color: colors.text }]}
+              value={bidNote}
+              onChangeText={setBidNote}
+              placeholder="Anything the shipper should know"
+              placeholderTextColor={colors.textMuted}
+              multiline
+            />
+
+            <TouchableOpacity
+              style={[styles.sheetSubmit, bidMutation.isPending && styles.sheetSubmitDisabled]}
+              disabled={bidMutation.isPending}
+              activeOpacity={0.88}
+              onPress={() => void submitBid()}
+            >
+              {bidMutation.isPending ? (
+                <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+              ) : (
+                <Text style={styles.sheetSubmitText}>Submit Bid</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Layout.driverHeaderGap,
+    flex: 1,
+    minWidth: 0,
+  },
+  headerTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  avatarBtn: { padding: 2 },
+  avatarCircle: {
+    width: Layout.driverHeaderAvatarSize,
+    height: Layout.driverHeaderAvatarSize,
+    borderRadius: Layout.driverHeaderAvatarSize / 2,
+    borderWidth: 2,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+    borderRadius: Layout.driverHeaderAvatarSize / 2,
+  },
+  welcomeTitle: {
+    ...Typography.headerTitle,
+    textTransform: 'none',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
   hero: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingBottom: 18,

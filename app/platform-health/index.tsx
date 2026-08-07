@@ -78,6 +78,7 @@ export default function PlatformHealthScreen() {
 
   const rt = snap?.realtime;
   const cache = snap?.cache;
+  const chat = snap?.chat;
 
   return (
     <ScrollView
@@ -133,6 +134,39 @@ export default function PlatformHealthScreen() {
 
       <Section title="Database">
         <Text style={styles.note}>{snap?.database.note}</Text>
+      </Section>
+
+      <Section title="Chat Warnings">
+        {(chat?.warnings.length ?? 0) === 0 ? (
+          <Text style={styles.note}>No anomalies — all clear.</Text>
+        ) : (
+          chat!.warnings.map((w) => (
+            <View key={w} style={styles.warningRow}>
+              <Text style={styles.warningText}>⚠ {w}</Text>
+            </View>
+          ))
+        )}
+        <Text style={styles.note}>
+          Watch lines only — nothing here auto-fixes. Cross-check against
+          docs/CHAT_MIGRATION_DISCOVERIES_2026.md before acting.
+        </Text>
+      </Section>
+
+      <Section title="Chat">
+        <MetricRow label="Open threads" value={chat?.openThreads ?? 0} />
+        <MetricRow label="Realtime channels" value={chat?.realtimeChannels ?? 0} />
+        <MetricRow label="mark_conversation_read calls" value={chat?.markConversationReadCalls ?? 0} />
+        <MetricRow label="mark_messages_seen calls" value={chat?.markMessagesSeenCalls ?? 0} />
+        <MetricRow label="Images opened" value={chat?.imagesOpened ?? 0} />
+        <MetricRow label="Images failed" value={chat?.imagesFailed ?? 0} />
+        <MetricRow
+          label="Avg chat open time"
+          value={chat?.avgChatOpenMs != null ? `${chat.avgChatOpenMs}ms` : "—"}
+        />
+        <Text style={styles.note}>
+          Session counters — reset on reload. Observation only, per
+          docs/CHAT_MIGRATION_DISCOVERIES_2026.md.
+        </Text>
       </Section>
 
       <Section title="Active channels">
@@ -238,6 +272,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: Theme.textMuted,
+  },
+  warningRow: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: "rgba(217, 119, 6, 0.1)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(217, 119, 6, 0.35)",
+  },
+  warningText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#92400e",
+    lineHeight: 16,
   },
   channelRow: {
     gap: 2,

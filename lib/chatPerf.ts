@@ -49,3 +49,40 @@ export function clear(): void {
   _log.length = 0;
   _starts.clear();
 }
+
+// ── Chat health counters (Platform Health "Chat" section) ────────────────────
+// Session-lifetime counts, not persisted — reset on reload. Observation only;
+// nothing here changes behavior. @see docs/CHAT_MIGRATION_DISCOVERIES_2026.md Finding 2.
+
+const _chatCounters = {
+  markConversationReadCalls: 0,
+  markMessagesSeenCalls: 0,
+  imagesOpened: 0,
+  imagesFailed: 0,
+};
+
+export function recordMarkConversationRead(): void {
+  _chatCounters.markConversationReadCalls += 1;
+}
+
+export function recordMarkMessagesSeen(): void {
+  _chatCounters.markMessagesSeenCalls += 1;
+}
+
+export function recordImageOpened(): void {
+  _chatCounters.imagesOpened += 1;
+}
+
+/** Full-size resolve failed (both the display-size and raw signed-URL calls came back empty). */
+export function recordImageOpenFailed(): void {
+  _chatCounters.imagesFailed += 1;
+}
+
+export function getChatHealthCounters(): typeof _chatCounters & {
+  avgChatOpenMs: number | null;
+} {
+  return {
+    ..._chatCounters,
+    avgChatOpenMs: getAverageDuration('thread_load'),
+  };
+}

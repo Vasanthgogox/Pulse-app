@@ -99,7 +99,8 @@ export type LoadCenterHubMobileIndentCardProps = {
   initialsColorSeed?: string;
   /** Shown on Done → Converted to trips (driver + vehicle from linked trip). */
   tripAllocation?: LoadCenterTripAllocation | null;
-  onPress: () => void;
+  /** Opens indent detail. Omit on desktop kanban — CTAs handle navigation. */
+  onPress?: () => void;
   /** Footer slot (share / pulse / CTA) — rendered outside the pressable body. */
   actions?: ReactNode;
   /** Tighter padding for 4-column desktop grid cards. */
@@ -335,16 +336,21 @@ export function LoadCenterHubMobileIndentCard({
       >
         <Pressable
           onPress={onPress}
+          disabled={!onPress}
           style={({ pressed }) => [
             styles.body,
             !fillGrid && dense && styles.bodyDense,
             !fillGrid && !dense && styles.bodyComfort,
             fillGrid && styles.bodyGridPad,
             fillGrid && styles.bodyGrid,
-            pressed && styles.bodyPressed,
+            Boolean(onPress) && pressed && styles.bodyPressed,
           ]}
-          accessibilityRole="button"
-          accessibilityLabel={`${indentNo} ${displayName}, ${asLabel(origin)} to ${asLabel(dest)}`}
+          accessibilityRole={onPress ? "button" : undefined}
+          accessibilityLabel={
+            onPress
+              ? `${indentNo} ${displayName}, ${asLabel(origin)} to ${asLabel(dest)}`
+              : undefined
+          }
         >
           <View style={[styles.head, fillGrid && styles.headGrid]}>
             <View style={styles.headLeft}>
@@ -548,19 +554,20 @@ const styles = StyleSheet.create({
   },
   cardGridElevated: {
     borderRadius: 14,
-    borderColor: "rgba(15, 23, 42, 0.06)",
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
     backgroundColor: Theme.cardWhite,
     ...Platform.select({
       web: {
         boxShadow:
-          "0 8px 24px rgba(15, 23, 42, 0.07), 0 1px 4px rgba(15, 23, 42, 0.04)",
+          "0 1px 0 rgba(255,255,255,0.9) inset, 0 10px 28px rgba(15, 23, 42, 0.10), 0 2px 6px rgba(15, 23, 42, 0.05)",
       } as ViewStyle,
       default: {
-        shadowColor: "#0f172a",
+        shadowColor: Theme.shadow,
         shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.07,
-        shadowRadius: 12,
-        elevation: 2,
+        shadowOpacity: 0.12,
+        shadowRadius: 14,
+        elevation: 4,
       },
     }),
   },
@@ -630,22 +637,23 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   brand: {
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: 13,
+    lineHeight: 16,
     letterSpacing: -0.1,
-    fontWeight: "500",
+    fontWeight: "800",
     fontStyle: "normal",
     color: REF.ink,
     includeFontPadding: false,
   },
   brandHub: {
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: "800",
   },
   sourcePill: {
     alignSelf: "flex-start",
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 999,
     flexShrink: 1,
     maxWidth: "100%",
@@ -659,9 +667,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.accentBrown,
   },
   sourcePillText: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.35,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.25,
     textTransform: "uppercase",
     includeFontPadding: false,
   },
@@ -679,13 +687,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headMeta: {
-    fontSize: 10,
-    lineHeight: 15,
-    fontWeight: "500",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "600",
     color: REF.muted,
     textAlign: "right",
     textTransform: "uppercase",
-    letterSpacing: 0.25,
+    letterSpacing: 0.2,
     flexShrink: 0,
     includeFontPadding: false,
   },
@@ -736,10 +744,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.borderLight,
   },
   allocationLabel: {
-    fontSize: 7,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textMuted,
-    letterSpacing: 0.35,
+    letterSpacing: 0.25,
     textTransform: "uppercase",
     marginBottom: 2,
   },
@@ -747,7 +755,7 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   allocationValue: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.1,
@@ -783,36 +791,36 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   refLine: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 11,
+    lineHeight: 14,
     letterSpacing: 0.05,
   },
   refLineHub: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 11,
+    lineHeight: 14,
   },
   refId: {
-    fontSize: 9,
-    fontWeight: "500",
+    fontSize: 11,
+    fontWeight: "600",
     color: REF.inkMid,
-    lineHeight: 12,
+    lineHeight: 14,
     fontVariant: ["tabular-nums"],
   },
   refIdHub: {
-    fontSize: 9,
-    fontWeight: "500",
+    fontSize: 11,
+    fontWeight: "600",
     color: REF.inkMid,
   },
   refMuted: {
-    fontSize: 9,
-    fontWeight: "400",
+    fontSize: 11,
+    fontWeight: "500",
     color: REF.muted,
-    lineHeight: 12,
+    lineHeight: 14,
     fontVariant: ["tabular-nums"],
   },
   refMutedHub: {
-    fontSize: 9,
-    fontWeight: "400",
+    fontSize: 11,
+    fontWeight: "500",
     color: REF.muted,
   },
   partyRow: {
@@ -899,16 +907,16 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   stubKicker: {
-    fontSize: 8,
-    fontWeight: "500",
+    fontSize: 10,
+    fontWeight: "600",
     color: REF.muted,
-    letterSpacing: 0.25,
+    letterSpacing: 0.2,
     textTransform: "uppercase",
     flexShrink: 1,
   },
   stubKickerHub: {
-    fontSize: 8,
-    fontWeight: "500",
+    fontSize: 10,
+    fontWeight: "600",
     color: REF.muted,
   },
   stubAmountRow: {
@@ -926,8 +934,8 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   stubCurrencyGrid: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 15,
   },
   stubAmount: {
     fontSize: 16,
@@ -939,12 +947,12 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   stubAmountGrid: {
-    fontSize: 14,
-    lineHeight: 16,
-    fontWeight: "600",
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: "700",
   },
   stubReference: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textMuted,
     textAlign: "right",
@@ -954,27 +962,27 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     maxWidth: "52%",
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: "400",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "500",
     color: REF.muted,
     textAlign: "right",
   },
   stubCaptionHub: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "500",
     color: REF.inkMid,
   },
   statusPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 6,
     flexShrink: 0,
   },
   statusPillText: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.4,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.25,
     textTransform: "uppercase",
   },
   statusPending: { backgroundColor: "#F1F5F9" },

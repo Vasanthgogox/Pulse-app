@@ -39,6 +39,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
+import { recordMarkMessagesSeen } from '@/lib/chatPerf';
 import {
   fetchChatBootstrapPayload,
   fetchConversationHistory,
@@ -447,6 +448,7 @@ export function enqueueReadReceiptsDebounced(
       if (!pending?.size) return;
       const ids = [...pending];
       useChatStore.getState().patchReadReceiptsOptimistic(conversationId, ids);
+      if (markMessagesSeenInvoker) recordMarkMessagesSeen();
       void markMessagesSeenInvoker?.(conversationId, ids);
     }, debounceMs),
   );
@@ -1902,7 +1904,13 @@ export const useChatStore = create<ChatState>()(
     },
 
     // ── markRead ──────────────────────────────────────────────────────────────
-    // Zeros the unread badge for a party lane. No DB call.
+    // Zeros the unread badge for a party lane and mirrors the server-side bulk
+    // mark_conversation_read onto event_stream (is_read=true for inbound rows).
+    // Without the event_stream patch, useMarkSeen's viewability check still sees
+    // is_read=false on these rows (only patchReadReceiptsOptimistic touched that
+    // field before), so scrolling the thread right after open re-fires
+    // mark_messages_seen for messages mark_conversation_read already covered —
+    // two RPCs doing the same job for the same rows. No DB call here either way.
 
     markRead: (convId) => {
       const { trips, convToTrip, convToParty } = get();
@@ -1916,12 +1924,20 @@ export const useChatStore = create<ChatState>()(
 
       const updatedParty = { ...party, unreadCount: 0 };
       const updatedParties = { ...entry.parties, [partyType]: updatedParty };
+      const readAt = new Date().toISOString();
+      const event_stream = entry.event_stream.map((e) => {
+        if (e.conversation_id !== convId) return e;
+        if (e.sender_role === "dispatcher") return e;
+        if (e.is_read) return e;
+        return { ...e, is_read: true, read_at: e.read_at ?? readAt };
+      });
       set({
         trips: {
           ...trips,
           [tripId]: {
             ...entry,
             parties:     updatedParties,
+            event_stream,
             totalUnread: sumHubVisibleUnread({ ...entry, parties: updatedParties }),
           },
         },

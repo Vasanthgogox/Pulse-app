@@ -496,25 +496,35 @@ export function TripChatProvider({
   const markTripThreadsRead = useCallback(async (tripId: string) => {
     const tid = (tripId ?? "").trim();
     if (!tid) return;
-    const { convToTrip } = useChatStore.getState();
+    const { trips, convToTrip, convToParty } = useChatStore.getState();
     const convIds = Object.keys(convToTrip).filter((cid) => convToTrip[cid] === tid);
     if (convIds.length === 0) {
       if (__DEV__) console.warn("[TripChat] markTripThreadsRead: no conv ids for trip", tid);
       return;
     }
+
+    // Only hit the DB for lanes that still have unread — opening a trip used to
+    // Promise.all mark_conversation_read across every lane (often 3+) even when
+    // unread was already 0. That RPC was timing out (API 504s) and starving chat.
+    const toMark = convIds.filter((cid) => {
+      const partyType = convToParty[cid];
+      if (!partyType) return false;
+      const unread = trips[tid]?.parties[partyType]?.unreadCount ?? 0;
+      return unread > 0;
+    });
+
     for (const cid of convIds) {
       clearReadReceiptDebouncerForConversation(cid);
       useChatStore.getState().markRead(cid);
     }
-    const settled = await Promise.allSettled(
-      convIds.map((cid) => chatService.markConversationRead(cid)),
-    );
-    if (__DEV__) {
-      settled.forEach((r, i) => {
-        if (r.status === "rejected") {
-          console.warn("[TripChat] markConversationRead failed", convIds[i], r.reason);
-        }
-      });
+
+    // Serialize — never fan out parallel UPDATEs for the same trip open.
+    for (const cid of toMark) {
+      try {
+        await chatService.markConversationRead(cid);
+      } catch (e) {
+        if (__DEV__) console.warn("[TripChat] markConversationRead failed", cid, e);
+      }
     }
   }, []);
 

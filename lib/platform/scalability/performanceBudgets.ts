@@ -43,3 +43,18 @@ export const PLATFORM_SUCCESS_TARGETS = {
   failedRealtimeDeliveries: 0,
   hiddenScreenSubscriptions: 0,
 } as const;
+
+/**
+ * Anomaly thresholds for the /platform-health "Chat" warnings panel —
+ * observation only, not an auto-remediation trigger. Crossing one of these
+ * flags something to look at during the manual-validation window; it does not
+ * fire a fix. @see docs/CHAT_MIGRATION_DISCOVERIES_2026.md
+ */
+export const CHAT_HEALTH_WARNING_THRESHOLDS = {
+  /** mark_messages_seen firing this many times more than mark_conversation_read
+   *  suggests the two read-tracking paths are duplicating work (Finding 2). */
+  markSeenToMarkReadRatio: 3,
+  maxRealtimeChannels: 40,
+  maxAvgChatOpenMs: 2000,
+  maxImageFailureRatePct: 5,
+} as const;

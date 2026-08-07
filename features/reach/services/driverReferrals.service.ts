@@ -1,9 +1,15 @@
 /**
- * Boost V2 driver referral pipeline (reach_referrals). Drivers never bid
- * directly with the shipper: they recommend a boosted load to their fleet
- * owner; the reward releases only when the recommendation converts
- * (approve → bid → trip awarded → trip starts). All writes go through
- * SECURITY DEFINER RPCs; reads are RLS-scoped (driver, fleet org, campaign org).
+ * Boost V2 driver referral pipeline (reach_referrals). An employed driver
+ * (active fleet membership) never bids directly with the shipper: they
+ * recommend a boosted load to their fleet owner; the reward releases only
+ * when the recommendation converts (approve → bid → trip awarded → trip
+ * starts). An independent driver (no fleet membership, so no organization to
+ * bid through) instead submits a direct bid as themselves — see
+ * driver_direct_bids / submitDriverDirectBid below; that path has no
+ * recommendation reward since they're already the bidder, and award/
+ * acceptance is a separate, not-yet-built surface (submission + status only
+ * today). All writes go through SECURITY DEFINER RPCs; reads are RLS-scoped
+ * (driver, fleet org, campaign org).
  */
 import { supabase } from '@/lib/supabase';
 
@@ -14,6 +20,12 @@ export type ReachDriverReferralStatus =
   | 'bid_submitted'
   | 'rewarded'
   | 'expired';
+
+/** Status of an independent driver's direct bid on a boosted story
+ * (driver_direct_bids). 'accepted'/'rejected' are reserved for a future
+ * award/acceptance surface — not yet built, so today a bid only ever shows
+ * 'pending' or 'withdrawn'. */
+export type DriverDirectBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
 
 /** Structured driver intent — WHY the driver recommends this load. */
 export type ReachReferralReason =
@@ -110,6 +122,10 @@ export interface DriverReachStoryRow {
   referral_reward_amount: number | null;
   recommended_at: string | null;
   rewarded_at: string | null;
+  /** Underlying marketplace post — needed for the independent-driver direct-bid path. */
+  post_id: string;
+  direct_bid_status: DriverDirectBidStatus | null;
+  direct_bid_amount: number | null;
 }
 
 /** Driver Story tab feed — the authenticated driver's boosted stories. */
@@ -120,6 +136,25 @@ export async function getDriverReachStories(): Promise<{
   const { data, error } = await supabase().rpc('get_driver_reach_stories');
   if (error) return { error: new Error(error.message), stories: [] };
   return { error: null, stories: (data ?? []) as DriverReachStoryRow[] };
+}
+
+/** Independent driver bids on a boosted story as themselves — no
+ * organization required (submit_driver_direct_bid). Submitting again while
+ * still 'pending' updates the amount/note in place. Award/acceptance is not
+ * yet built; this only records the bid and its status. */
+export async function submitDriverDirectBid(
+  postId: string,
+  amount: number,
+  note?: string,
+): Promise<{ error: Error | null; bidId: string | null }> {
+  const { data, error } = await supabase().rpc('submit_driver_direct_bid', {
+    p_post_id: postId,
+    p_amount: amount,
+    p_note: note?.trim() || null,
+  });
+  if (error) return { error: new Error(error.message), bidId: null };
+  const bidId = (data as { bid_id?: string } | null)?.bid_id ?? null;
+  return { error: null, bidId };
 }
 
 /** Driver-channel impression/view logging — best-effort, deduped per day

@@ -1,5 +1,5 @@
 import type { RatedType, RatingRow } from "@/features/ratings/types";
-import { markStart, markEnd } from "@/lib/chatPerf";
+import { markStart, markEnd, recordMarkConversationRead } from "@/lib/chatPerf";
 import { supabase } from "@/lib/supabase";
 import type {
   ChatTripFlow,
@@ -760,13 +760,36 @@ export async function sendChatMessage(params: {
   throw rpcError ?? new Error("Trip chat RPC did not return a message.");
 }
 
+/** Coalesce concurrent mark-read RPCs + skip re-hits after a recent success. */
+const markReadInFlight = new Map<string, Promise<void>>();
+const markReadCoolUntil = new Map<string, number>();
+const MARK_READ_COOLDOWN_MS = 30_000;
+
 export async function markConversationRead(
   conversationId: string,
 ): Promise<void> {
-  const { error } = await supabase().rpc("mark_conversation_read", {
-    p_conversation_id: conversationId,
+  const id = String(conversationId ?? "").trim();
+  if (!id) return;
+
+  const coolUntil = markReadCoolUntil.get(id) ?? 0;
+  if (Date.now() < coolUntil) return;
+
+  const pending = markReadInFlight.get(id);
+  if (pending) return pending;
+
+  const request = (async () => {
+    recordMarkConversationRead();
+    const { error } = await supabase().rpc("mark_conversation_read", {
+      p_conversation_id: id,
+    });
+    if (error) throw error;
+    markReadCoolUntil.set(id, Date.now() + MARK_READ_COOLDOWN_MS);
+  })().finally(() => {
+    markReadInFlight.delete(id);
   });
-  if (error) throw error;
+
+  markReadInFlight.set(id, request);
+  return request;
 }
 
 export async function getMessagesByConversation(

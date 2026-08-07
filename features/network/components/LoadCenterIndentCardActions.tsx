@@ -526,7 +526,8 @@ export type GetLoadIndentCardActionsProps = LoadCenterIndentCardActionsLayout & 
   onIndentPress: (load: IndentRow) => void;
   onShareIndent: (load: IndentRow) => void;
   onOpenBidModal: (load: IndentRow) => void;
-  onGoToClaimed: () => void;
+  /** Bids Won (accepted, not yet done): open allocate vehicle/driver. */
+  onAllocate: (load: IndentRow) => void;
 };
 
 function compactGetLoadCtaLabel(label: string, dense?: boolean): string {
@@ -536,8 +537,8 @@ function compactGetLoadCtaLabel(label: string, dense?: boolean): string {
       return "Update";
     case "View details":
       return "Details";
-    case "View claimed":
-      return "Claimed";
+    case "Allocate":
+      return "Allocate";
     case "New quote":
       return "Rebid";
     default:
@@ -555,7 +556,7 @@ export function GetLoadIndentCardActions({
   onIndentPress,
   onShareIndent,
   onOpenBidModal,
-  onGoToClaimed,
+  onAllocate,
   dense,
   style,
 }: GetLoadIndentCardActionsProps) {
@@ -565,7 +566,7 @@ export function GetLoadIndentCardActions({
         onIndentPress(load);
         return;
       }
-      onGoToClaimed();
+      onAllocate(load);
       return;
     }
     onOpenBidModal(load);
@@ -838,28 +839,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   statusChipLine1: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     letterSpacing: 0.2,
-    lineHeight: 11,
+    lineHeight: 12,
   },
   statusChipLine1Dense: {
-    fontSize: 8,
-    lineHeight: 10,
+    fontSize: 10,
+    lineHeight: 12,
   },
   statusChipLine2: {
-    fontSize: 7,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.2,
-    lineHeight: 9,
+    lineHeight: 12,
   },
   statusChipLine2Dense: {
-    fontSize: 7,
-    lineHeight: 8,
+    fontSize: 10,
+    lineHeight: 12,
   },
   shareBtn: {
     width: 44,
@@ -900,13 +901,13 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   pulseBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.pulseIndigo,
     letterSpacing: 0.1,
   },
   pulseBtnTextDense: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.05,
   },
@@ -933,15 +934,15 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   primaryBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     color: Theme.buttonDarkText,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
     textAlign: "center",
   },
   primaryBtnTextDense: {
-    fontSize: 8,
+    fontSize: 11,
     letterSpacing: 0.2,
   },
   pendingChip: {

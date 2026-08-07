@@ -9,10 +9,11 @@ import { preloadDriverChatThread } from "@/lib/preloadDriverChatWarmup";
 import type { TripConversation } from "@/features/chat/types/chat.types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocalSearchParams, useRouter, useSegments } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import Layout from "@/constants/Layout";
 import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Text, TouchableOpacity, View } from "react-native";
 import { MessageSquare } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,6 +25,21 @@ export default function DriverChatScreen() {
   const { profile } = useAuth();
   const segments = useSegments();
   const isDriverChatRoute = segments[segments.length - 1] === "chat";
+
+  // "chat" is a Tabs.Screen (see app/(driver)/_layout.tsx) — React Navigation tabs
+  // never unmount on tab-switch, so this screen stays mounted after its first open.
+  // Re-opening the same trip pushes the same tripId param again, so normalizedTripId
+  // never changes value and the trip-resolution effect below has no dependency
+  // change to react to. onBack (below) clears selectedId on the way out; without a
+  // focus-driven re-trigger, nothing restores it on the next open and the render
+  // falls into its terminal loading branch forever. focusTick forces that effect to
+  // re-evaluate on every re-focus regardless of whether the route params changed.
+  const [focusTick, setFocusTick] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setFocusTick((t) => t + 1);
+    }, []),
+  );
 
   const driverTabBarClearance = useMemo(() => {
     if (isDriverChatRoute) return 0;
@@ -89,7 +105,9 @@ export default function DriverChatScreen() {
     }
 
     // Wait for inbox bootstrap before hitting ensure RPC (avoids duplicate work).
-    if (isLoading) return;
+    if (isLoading) {
+      return;
+    }
 
     let cancelled = false;
     setOpeningTripThread(true);
@@ -118,7 +136,9 @@ export default function DriverChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [normalizedTripId, conversations, isLoading, queryClient]);
+    // focusTick: re-run on every re-focus of this (permanently-mounted tab) screen —
+    // see the comment above the useFocusEffect that drives it.
+  }, [normalizedTripId, conversations, isLoading, queryClient, focusTick]);
 
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
   const resolvedOrgId = selectedConv?.organization_id ?? pendingConvOrgId;
