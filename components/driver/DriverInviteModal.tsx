@@ -2,30 +2,30 @@ import Theme from '@/constants/Theme';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import type { DriverInviteRow } from '@/features/drivers/services/drivers.service';
 import { buildDriverInviteSalaryLines } from '@/features/drivers/utils/driverInviteOffer.util';
-import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
-import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
+import { resolveDriverOrgAvatarUri } from '@/features/drivers/utils/resolveDriverOrgAvatar.util';
+import { useOrgBrandingByIds } from '@/lib/hooks/useOrgBrandingByIds';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  ArrowRight,
-  Briefcase,
-  Check,
-  MapPin,
-  Percent,
-  Sparkles,
-  Wallet,
+    ArrowRight,
+    Briefcase,
+    Check,
+    MapPin,
+    Percent,
+    Sparkles,
+    Wallet,
 } from 'lucide-react-native';
 import React, { useMemo } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -67,20 +67,20 @@ export function DriverInviteModal({
 }: Props) {
   const insets = useSafeAreaInsets();
   const colors = useDriverThemeColors();
+  const orgId = invite.from_organization_id ?? '';
+  const brandingById = useOrgBrandingByIds([orgId]);
 
   const orgLogoUri = useMemo(
     () =>
-      resolvePartyDisplayUri({
-        organizationImageUrl: invite.from_org_logo_url ?? null,
-        organizationAvatarSeed: invite.from_org_avatar_seed ?? null,
-        avatarUrl: invite.from_org_avatar_url ?? null,
-        avatarSeed: null,
-      }) ??
-      getFleetAvatarUriForOrg(
-        invite.from_organization_id ?? '',
-        invite.from_org_name ?? '',
-      ),
-    [invite],
+      resolveDriverOrgAvatarUri({
+        orgId,
+        orgName: invite.from_org_name,
+        branding: brandingById[orgId],
+        logoUrl: invite.from_org_logo_url,
+        avatarSeed: invite.from_org_avatar_seed,
+        avatarUrl: invite.from_org_avatar_url,
+      }),
+    [invite, orgId, brandingById],
   );
 
   const salaryLines = buildDriverInviteSalaryLines(invite);

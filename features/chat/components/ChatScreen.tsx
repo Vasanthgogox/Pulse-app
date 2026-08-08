@@ -8846,15 +8846,15 @@ function TripConversationDetailLoaded({
         />
       );
     }
-    if (m.message_type === "document_share") {
-      return <DocumentShareCard message={m} isOwn={isMessageFromSelf(m)} />;
-    }
     if (m.is_deleted) {
       return (
         <View style={s.deletedMsgWrap}>
           <Text style={s.deletedMsgText}>This message was deleted.</Text>
         </View>
       );
+    }
+    if (m.message_type === "document_share") {
+      return <DocumentShareCard message={m} isOwn={isMessageFromSelf(m)} />;
     }
     const own = isMessageFromSelf(m);
     const peerLabel =

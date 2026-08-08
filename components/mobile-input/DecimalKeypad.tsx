@@ -43,6 +43,8 @@ interface DecimalKeypadProps {
   size?: 'default' | 'compact';
   /** Phone dial: bottom row is blank · 0 · delete (no decimal column). */
   layout?: 'decimal' | 'phone';
+  /** Key / delete haptics. Off for signup / OTP entry where vibration interrupts typing. */
+  hapticsEnabled?: boolean;
 }
 
 export const DecimalKeypad = memo(function DecimalKeypad({
@@ -51,6 +53,7 @@ export const DecimalKeypad = memo(function DecimalKeypad({
   variant = 'default',
   size = 'default',
   layout = 'decimal',
+  hapticsEnabled = true,
 }: DecimalKeypadProps) {
   const isApple = variant === 'apple';
   const isPay = variant === 'pay';
@@ -64,6 +67,8 @@ export const DecimalKeypad = memo(function DecimalKeypad({
         : KEY_H_PAY
       : KEY_H;
   const keyTextSize = isApple ? 28 : isCompact ? 22 : 26;
+  /** Quiet signup pads: almost no dim; other pads keep a light press cue. */
+  const keyActiveOpacity = !hapticsEnabled ? 0.92 : isApple ? 0.45 : 0.55;
   const deleteIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -79,21 +84,23 @@ export const DecimalKeypad = memo(function DecimalKeypad({
   }, []);
 
   const handleDeleteLongPress = useCallback(() => {
-    triggerFeedback('delete');
+    if (hapticsEnabled) triggerFeedback('delete');
     deleteTimeoutRef.current = setTimeout(() => {
       deleteIntervalRef.current = setInterval(() => {
         onKey('⌫');
-        triggerFeedback('delete');
+        if (hapticsEnabled) triggerFeedback('delete');
       }, LONG_PRESS_DELETE_INTERVAL_MS);
     }, LONG_PRESS_DELETE_DELAY_MS);
-  }, [onKey]);
+  }, [onKey, hapticsEnabled]);
 
   const handleKey = useCallback(
     (key: KeypadKey) => {
-      triggerFeedback(key === '⌫' ? 'delete' : 'keyPress');
+      if (hapticsEnabled) {
+        triggerFeedback(key === '⌫' ? 'delete' : 'keyPress');
+      }
       onKey(key);
     },
-    [onKey],
+    [onKey, hapticsEnabled],
   );
 
   const keyBase = (isSpecial: boolean) => [
@@ -124,7 +131,7 @@ export const DecimalKeypad = memo(function DecimalKeypad({
           onLongPress={handleDeleteLongPress}
           onPressOut={stopRapidDelete}
           delayLongPress={LONG_PRESS_DELETE_DELAY_MS}
-          activeOpacity={isApple ? 0.45 : 0.55}
+          activeOpacity={keyActiveOpacity}
           accessibilityRole="button"
           accessibilityLabel="Delete last digit"
           accessibilityHint="Hold to delete multiple digits"
@@ -151,7 +158,7 @@ export const DecimalKeypad = memo(function DecimalKeypad({
         key={key}
         style={keyBase(isSpecial)}
         onPress={() => handleKey(key)}
-        activeOpacity={isApple ? 0.45 : 0.55}
+        activeOpacity={keyActiveOpacity}
         accessibilityRole="button"
         accessibilityLabel={`Key ${key}`}
       >

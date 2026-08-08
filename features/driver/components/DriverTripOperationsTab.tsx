@@ -83,6 +83,9 @@ export function DriverTripOperationsTab({
       void queryClient.invalidateQueries({
         queryKey: queryKeys.trips.operationsSummary(trip.id),
       });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.trips.verification(trip.id),
+      });
     }, [queryClient, trip.id]),
   );
 

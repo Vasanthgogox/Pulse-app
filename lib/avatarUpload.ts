@@ -5,6 +5,7 @@
  * to upload/update their own path: {user_id}/avatar.jpg
  */
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
+import { getUser2DAvatarUriForSeed } from '@/constants/UserAvatars';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { supabase } from '@/lib/supabase';
@@ -26,6 +27,13 @@ const SIGNED_URL_NOT_FOUND_CACHE_MS = 5 * 60 * 1000;
 const signedAvatarUrlCache = new Map<string, { url: string | null; expiresAt: number }>();
 // Deduplicates concurrent calls for the same path (thundering-herd guard)
 const inFlightAvatarRequests = new Map<string, Promise<string | null>>();
+
+/** Driver: driver-* cartoons; user-*: same 2D pool as business PartyAvatar. */
+function driverDisplayPresetUri(seed: string): string {
+  const s = seed.trim();
+  if (s.startsWith('user-')) return getUser2DAvatarUriForSeed(s);
+  return getAvatarUriForSeed(s);
+}
 
 function base64ToUint8Array(base64: string): Uint8Array {
   const normalized = base64.replace(/\s/g, '');
@@ -596,7 +604,7 @@ export function useDriverAvatarUri(): { avatarUri: string; loading: boolean } {
   const { avatarSeed: contextSeed, setAvatarSeed, previewUri, setPreviewUri } = useDriverAvatar();
   const profileSeed = profile?.avatar_seed?.trim() ?? '';
   const effectiveSeed = profileSeed || contextSeed;
-  const presetUri = getAvatarUriForSeed(effectiveSeed);
+  const presetUri = driverDisplayPresetUri(effectiveSeed);
   const storedPhoto = profile?.avatar_url?.trim() ?? '';
   const [avatarUri, setAvatarUri] = useState<string>(presetUri);
   const [loading, setLoading] = useState(false);
@@ -623,8 +631,9 @@ export function useDriverAvatarUri(): { avatarUri: string; loading: boolean } {
 
     setLoading(true);
     const signed = await resolveDriverAvatarDisplayUrl(storedPhoto, profile?.uid);
-    // Never fall back to a preset while a stored photo path exists — that caused stale avatars.
-    setAvatarUri(signed ?? (storedPhoto ? '' : presetUri));
+    // Never leave an empty URI while a photo path exists — map markers fall back
+    // to driver-1 and look “wrong.” Prefer signed URL, else preset until re-resolve.
+    setAvatarUri(signed ?? presetUri);
     if (signed) setPreviewUri(null);
     setLoading(false);
   }, [storedPhoto, presetUri, profile?.uid, setPreviewUri]);

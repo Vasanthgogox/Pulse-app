@@ -255,29 +255,52 @@ export async function updateOrganizationLogo(
   orgId: string,
   logoPath: string | null,
 ): Promise<{ error: Error | null }> {
+  const normalizedPath =
+    logoPath == null ? null : String(logoPath).trim() || null;
+
   const { error: rpcError } = await supabase().rpc("update_organization_logo", {
     p_org_id: orgId,
-    p_logo_url: logoPath,
+    p_logo_url: normalizedPath,
   });
 
-  if (!rpcError) return { error: null };
-
-  if (!isMissingRpcError(rpcError)) {
+  if (rpcError && !isMissingRpcError(rpcError)) {
     return { error: new Error(rpcError.message) };
   }
 
-  const { data, error } = await supabase()
-    .from("organizations")
-    .update({ logo_url: logoPath })
-    .eq("id", orgId)
-    .select("id")
-    .maybeSingle();
+  if (rpcError && isMissingRpcError(rpcError)) {
+    const { data, error } = await supabase()
+      .from("organizations")
+      .update({ logo_url: normalizedPath })
+      .eq("id", orgId)
+      .select("id")
+      .maybeSingle();
 
-  if (error) return { error: new Error(error.message) };
-  if (!data) {
+    if (error) return { error: new Error(error.message) };
+    if (!data) {
+      return {
+        error: new Error(
+          "Could not save workspace logo. Apply the latest database migration or ask an admin to fix workspace ownership.",
+        ),
+      };
+    }
+  }
+
+  // Confirm write landed — storage upload can succeed while the RPC is rejected,
+  // which previously left the UI showing only a one-session local preview.
+  const { data: verify, error: verifyError } = await supabase()
+    .from("organizations")
+    .select("logo_url")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (verifyError) {
+    return { error: new Error(verifyError.message) };
+  }
+  const saved = (verify?.logo_url ?? "").trim() || null;
+  const expected = normalizedPath;
+  if (saved !== expected) {
     return {
       error: new Error(
-        "Could not save workspace logo. Apply the latest database migration or ask an admin to fix workspace ownership.",
+        "Logo upload did not save to the organisation. Try again as workspace owner/admin.",
       ),
     };
   }

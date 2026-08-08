@@ -4,7 +4,7 @@ import {
   OdometerStartEndScreen,
   type VerificationSide,
 } from "@/features/trips/verification";
-import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
+import { getAccessibleTripById, type TripRow } from "@/features/trips/services/trips.service";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
@@ -33,7 +33,7 @@ export default function TripVerificationRoute() {
       return;
     }
     setLoading(true);
-    void getTripById(tripId).then((res) => {
+    void getAccessibleTripById(tripId).then((res) => {
       if (!mounted) return;
       setTrip(res.trip ?? null);
       setError(res.error ? res.error.message : res.trip ? null : "Trip not found.");

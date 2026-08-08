@@ -16,6 +16,8 @@ export const TRIP_SHEET_TOP_RADIUS = 28;
 
 /** Shared sizing — assignment card + active flow stages (incl. POD). */
 export const TRIP_SHEET_BTN_HEIGHT = 44;
+/** Matches EST. EARNINGS wallet plate (`heroIconWrap` 34×34). */
+export const HERO_SIDE_ICON_SIZE = 34;
 export const TRIP_SHEET_HERO_PAD = {
   top: 16,
   horizontal: 18,
@@ -106,7 +108,8 @@ export function HeroAssignerBlock({
             organizationAvatarSeed={assigner.orgAvatarSeed}
             avatarUrl={assigner.orgAvatarUrl}
             entityType="client"
-            size={30}
+            size={HERO_SIDE_ICON_SIZE}
+            shape="rounded"
             style={sheetStyles.heroAvatarFlex}
             borderStyle={sheetStyles.heroAvatarBorder}
           />

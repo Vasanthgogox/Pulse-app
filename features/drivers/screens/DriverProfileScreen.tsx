@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import * as driversService from '@/features/drivers/services/drivers.service';
 import * as tripsService from '@/features/trips/services/trips.service';
+import { getVehicleById } from '@/features/vehicles/services/vehicles.service';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
@@ -79,11 +80,6 @@ const CAREER_ROADMAP = [
   { tier: 'Legend', minTrips: 5000, dot: Theme.driverEmeraldDark },
 ] as const;
 
-function isCompleted(status: string) {
-  const s = (status || '').toLowerCase();
-  return s === 'completed' || s === 'delivered' || s === 'done';
-}
-
 function formatShortDate(iso?: string | null) {
   if (!iso) return '—';
   try {
@@ -117,6 +113,12 @@ export default function DriverProfileScreen() {
     isVerified: boolean;
     verifiedDocs: number;
     requiredDocs: number;
+  } | null>(null);
+  const [assignedVehicleLabel, setAssignedVehicleLabel] = useState<string | null>(null);
+  const [assignedVehicleMeta, setAssignedVehicleMeta] = useState<{
+    model?: string | null;
+    type?: string | null;
+    brand?: string | null;
   } | null>(null);
 
   const scrollBottomPad = driverTabBarScrollInset(insets.bottom);
@@ -158,6 +160,9 @@ export default function DriverProfileScreen() {
           return;
         }
         return tripsService.getDriverUiTripsByDriverIds(allRows.map((d) => d.id)).then((tRes) => {
+          if (tRes.error) {
+            console.warn('[profile] getDriverUiTripsByDriverIds:', tRes.error.message);
+          }
           setTrips(tRes.trips ?? []);
         });
       })
@@ -250,9 +255,50 @@ export default function DriverProfileScreen() {
     void loadKycSummary();
   }, [loadKycSummary]);
 
-  const tripsCount = useMemo(() => trips.filter((t) => isCompleted(t.status)).length, [trips]);
+  const primaryDriver = drivers[0] ?? null;
+  const primaryDriverId = primaryDriver?.id ?? null;
 
-  const primaryDriverId = drivers[0]?.id ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    const orgId = String(primaryDriver?.organization_id ?? '').trim();
+    const vehicleId = String(primaryDriver?.assigned_vehicle_id ?? '').trim();
+    if (!orgId || !vehicleId) {
+      setAssignedVehicleLabel(null);
+      setAssignedVehicleMeta(null);
+      return;
+    }
+    void getVehicleById(orgId, vehicleId).then((res) => {
+      if (cancelled) return;
+      const v = res.vehicle;
+      if (!v) {
+        setAssignedVehicleLabel(null);
+        setAssignedVehicleMeta(null);
+        return;
+      }
+      setAssignedVehicleLabel((v.vehicle_number ?? '').trim() || null);
+      setAssignedVehicleMeta({
+        model: v.vehicle_model,
+        type: v.vehicle_type,
+        brand: v.vehicle_brand,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryDriver?.organization_id, primaryDriver?.assigned_vehicle_id]);
+
+  const tripsCount = useMemo(
+    () => trips.filter((t) => tripsService.isTripCompleted(t)).length,
+    [trips],
+  );
+
+  const tripVehicleLabel = useMemo(() => {
+    for (const t of trips) {
+      const num = (t.vehicle_display_number ?? '').trim();
+      if (num) return num;
+    }
+    return null;
+  }, [trips]);
 
   useEffect(() => {
     if (!primaryDriverId) {
@@ -293,8 +339,6 @@ export default function DriverProfileScreen() {
     return nextLevelConfig ? 0 : 100;
   }, [nextLevelConfig, tripsCount]);
 
-  const primaryDriver = drivers[0] ?? null;
-
   let activeRoadIdx = 0;
   for (let i = CAREER_ROADMAP.length - 1; i >= 0; i--) {
     if (tripsCount >= CAREER_ROADMAP[i].minTrips) {
@@ -314,25 +358,33 @@ export default function DriverProfileScreen() {
       )
     : 100;
 
+  const fleetOrgName =
+    (primaryDriver?.organizations as { name?: string } | null | undefined)?.name?.trim() ||
+    'Fleet';
+  const plateLabel = assignedVehicleLabel || tripVehicleLabel;
+  const modelParts = [
+    assignedVehicleMeta?.brand?.trim(),
+    assignedVehicleMeta?.model?.trim() || assignedVehicleMeta?.type?.trim(),
+  ].filter(Boolean);
   const vehicleDisplay = {
-    model: 'Fleet vehicle',
-    plate: primaryDriver ? 'Tap for details' : '—',
-    fleetId: primaryDriver?.organization_id?.slice(0, 8)?.toUpperCase() ?? 'FLEET',
+    model: modelParts.length > 0 ? modelParts.join(' ') : plateLabel ? 'Assigned vehicle' : 'No vehicle assigned',
+    plate: plateLabel || (primaryDriver ? 'Not linked yet' : '—'),
+    fleetId: fleetOrgName.slice(0, 18).toUpperCase(),
     assignedOn: formatShortDate(primaryDriver?.created_at),
-    supervisor: 'Fleet supervisor',
+    supervisor: fleetOrgName,
     odometer: '—',
     fuel: '—',
     engineTemp: '—',
     specs: [
-      { label: 'Engine', value: '—' },
-      { label: 'Power', value: '—' },
-      { label: 'Torque', value: '—' },
-      { label: 'GVW', value: '—' },
+      { label: 'Type', value: assignedVehicleMeta?.type?.trim() || '—' },
+      { label: 'Brand', value: assignedVehicleMeta?.brand?.trim() || '—' },
+      { label: 'Model', value: assignedVehicleMeta?.model?.trim() || '—' },
+      { label: 'Plate', value: plateLabel || '—' },
     ] as { label: string; value: string }[],
     health: [
-      { label: 'Tire pressure', value: 'OK', color: Theme.driverEmerald },
-      { label: 'Brake lining', value: '—', color: Theme.driverEmerald },
-      { label: 'Oil life', value: '—', color: '#f43f5e' },
+      { label: 'Assignment', value: plateLabel ? 'Linked' : 'Pending', color: Theme.driverEmerald },
+      { label: 'Fleet', value: fleetOrgName, color: Theme.driverEmerald },
+      { label: 'Status', value: primaryDriver ? 'Active' : '—', color: Theme.driverEmerald },
     ] as { label: string; value: string; color: string }[],
   };
 
@@ -620,7 +672,7 @@ export default function DriverProfileScreen() {
                             </Text>
                           </View>
                         )}
-                        <View style={styles.camOverlay}>
+                        <View style={styles.camOverlay} pointerEvents="none">
                           <Camera size={18} color="#fff" />
                         </View>
                       </View>
@@ -789,7 +841,13 @@ export default function DriverProfileScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <View style={[styles.statBox, { backgroundColor: colors.surface, borderColor: cardBorder }]}>
+                  <TouchableOpacity
+                    style={[styles.statBox, { backgroundColor: colors.surface, borderColor: cardBorder }]}
+                    onPress={() => router.push('/(driver)/trip-history')}
+                    activeOpacity={0.88}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open trip history"
+                  >
                     <View style={styles.blueIconSm}>
                       <History size={18} color="#3b82f6" />
                     </View>
@@ -797,7 +855,7 @@ export default function DriverProfileScreen() {
                       {loadingTrips ? '–' : tripsCount}
                     </Text>
                     <Text style={[styles.statLbl, { color: muted }]}>TRIPS</Text>
-                  </View>
+                  </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity style={[styles.signOutCard, { backgroundColor: colors.surface, borderColor: cardBorder }]} onPress={handleSignOut} activeOpacity={0.85}>
@@ -813,9 +871,12 @@ export default function DriverProfileScreen() {
 
       <EditProfileModal
         visible={showEditProfileModal}
+        layout="driver"
+        avatarPresetStyle="user-2d"
+        heroSubtitle={`${currentLevelConfig.tier} · ${currentLevelConfig.name}`}
         onClose={() => {
           setShowEditProfileModal(false);
-          refreshSession();
+          void refreshSession();
         }}
         initialFullName={profile?.full_name ?? profile?.displayName ?? ''}
         initialPhone={profile?.phone ?? ''}
@@ -824,7 +885,7 @@ export default function DriverProfileScreen() {
         onPhotoUpdated={async (payload) => {
           if (payload?.avatarUri?.trim()) {
             setPreviewUri(payload.avatarUri.trim());
-          } else {
+          } else if (payload && !payload.avatarUri) {
             setPreviewUri(null);
           }
           if (payload?.avatarPath) {

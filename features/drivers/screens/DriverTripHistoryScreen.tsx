@@ -1,4 +1,5 @@
 import { DriverBrandMark } from "@/components/driver/DriverBrandMark";
+import { TripListAssignerRow } from "@/components/driver/TripListAssignerRow";
 import {
     driverBodyPrimary,
     driverBodySecondary,
@@ -11,32 +12,34 @@ import {
     useDriverTheme,
     useDriverThemeColors,
 } from "@/contexts/DriverThemeContext";
+import {
+    buildDriverTripNumberMap,
+    getDriverTripDisplayNumber,
+} from "@/features/driver/utils/driverTripSequence.util";
+import * as driversService from "@/features/drivers/services/drivers.service";
+import { isAggregateTrip, isRosterTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
-import { useDriverAvatarUri } from "@/lib/avatarUpload";
-import { TripListAssignerRow } from "@/components/driver/TripListAssignerRow";
+import * as tripsService from "@/features/trips/services/trips.service";
 import {
     buildAssignerDisplayForTrip,
     buildJobCardAssignerPayload,
+    findDriverInviteForTripOrgs,
     humanizeAssignerDisplayName,
     resolveAssignerUserId,
     type JobCardAssignerPayload,
 } from "@/features/trips/utils/driverAssignerDisplay.util";
-import {
-  buildDriverTripNumberMap,
-  getDriverTripDisplayNumber,
-} from "@/features/driver/utils/driverTripSequence.util";
-import { isAggregateTrip, isRosterTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
+import { DriverSelfAvatar } from "@/components/driver/DriverSelfAvatar";
+import { useDriverAvatarUri } from "@/lib/avatarUpload";
+import { fetchOrgBrandingByIds } from "@/lib/orgBrandingFetch";
 import { supabase } from "@/lib/supabase";
-import * as driversService from "@/features/drivers/services/drivers.service";
-import * as tripsService from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
-import { type Href, useRouter } from "expo-router";
+import { FlashList } from "@shopify/flash-list";
+import { useRouter, type Href } from "expo-router";
 import {
     MapPinned,
     Search as SearchIcon,
 } from "lucide-react-native";
-import { FlashList } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AppState,
@@ -300,6 +303,12 @@ export default function DriverTripsScreen() {
   const [organizationLogoById, setOrganizationLogoById] = useState<
     Record<string, string>
   >({});
+  const [organizationAvatarSeedById, setOrganizationAvatarSeedById] = useState<
+    Record<string, string>
+  >({});
+  const [organizationAvatarUrlById, setOrganizationAvatarUrlById] = useState<
+    Record<string, string>
+  >({});
   const [loading, setLoading] = useState(true);
   const [, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -431,6 +440,8 @@ export default function DriverTripsScreen() {
           setAssignerTripOrgNameByTripId({});
           setAssignerTripOrgIdByTripId({});
           setOrganizationLogoById({});
+          setOrganizationAvatarSeedById({});
+          setOrganizationAvatarUrlById({});
         }
         return;
       }
@@ -446,6 +457,8 @@ export default function DriverTripsScreen() {
         const orgByTrip: Record<string, string> = {};
         const orgIdByTrip: Record<string, string> = {};
         const logosFromRpc: Record<string, string> = {};
+        const seedsFromRpc: Record<string, string> = {};
+        const avatarUrlsFromRpc: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
@@ -453,6 +466,8 @@ export default function DriverTripsScreen() {
           assigning_organization_name?: string | null;
           assigning_organization_id?: string | null;
           assigning_organization_logo_url?: string | null;
+          assigning_organization_avatar_seed?: string | null;
+          assigning_organization_avatar_url?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : "";
           const dn = normalizeAssignerName(row.display_name ?? "");
@@ -460,11 +475,15 @@ export default function DriverTripsScreen() {
           const orgName = String(row.assigning_organization_name ?? "").trim();
           const orgId = String(row.assigning_organization_id ?? "").trim();
           const logo = String(row.assigning_organization_logo_url ?? "").trim();
+          const seed = String(row.assigning_organization_avatar_seed ?? "").trim();
+          const avatarUrl = String(row.assigning_organization_avatar_url ?? "").trim();
           if (tid && dn) byTrip[tid] = dn;
           if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
           if (tid && orgName) orgByTrip[tid] = orgName;
           if (tid && orgId) orgIdByTrip[tid] = orgId;
           if (orgId && logo) logosFromRpc[orgId] = logo;
+          if (orgId && seed) seedsFromRpc[orgId] = seed;
+          if (orgId && avatarUrl) avatarUrlsFromRpc[orgId] = avatarUrl;
         }
         rpcOrgIdByTrip = orgIdByTrip;
         setAssignerDisplayByTripId(byTrip);
@@ -473,6 +492,12 @@ export default function DriverTripsScreen() {
         setAssignerTripOrgIdByTripId(orgIdByTrip);
         if (Object.keys(logosFromRpc).length > 0) {
           setOrganizationLogoById((prev) => ({ ...prev, ...logosFromRpc }));
+        }
+        if (Object.keys(seedsFromRpc).length > 0) {
+          setOrganizationAvatarSeedById((prev) => ({ ...prev, ...seedsFromRpc }));
+        }
+        if (Object.keys(avatarUrlsFromRpc).length > 0) {
+          setOrganizationAvatarUrlById((prev) => ({ ...prev, ...avatarUrlsFromRpc }));
         }
       }
 
@@ -574,26 +599,28 @@ export default function DriverTripsScreen() {
       const organizationIds = Array.from(
         new Set(
           [
-            ...trips.map((trip) => String(trip.organization_id ?? "").trim()),
+            ...trips.flatMap((trip) => [
+              String(trip.organization_id ?? "").trim(),
+              String(trip.supplier_id ?? "").trim(),
+            ]),
             ...Object.values(rpcOrgIdByTrip),
           ].filter((id) => id.length > 0),
         ),
       );
       if (organizationIds.length > 0) {
-        const { data: orgRows, error: orgError } = await supabase()
-          .from("organizations")
-          .select("id, logo_url")
-          .in("id", organizationIds);
-        if (!cancelled && !orgError) {
+        const branding = await fetchOrgBrandingByIds(organizationIds);
+        if (!cancelled && Object.keys(branding).length > 0) {
           const logosById: Record<string, string> = {};
-          for (const row of (orgRows ?? []) as Array<{
-            id: string;
-            logo_url?: string | null;
-          }>) {
-            const logo = String(row.logo_url ?? "").trim();
-            if (logo) logosById[row.id] = logo;
+          const seedsById: Record<string, string> = {};
+          const urlsById: Record<string, string> = {};
+          for (const [orgId, row] of Object.entries(branding)) {
+            if (row.logoUrl) logosById[orgId] = row.logoUrl;
+            if (row.avatarSeed) seedsById[orgId] = row.avatarSeed;
+            if (row.avatarUrl) urlsById[orgId] = row.avatarUrl;
           }
           setOrganizationLogoById((prev) => ({ ...prev, ...logosById }));
+          setOrganizationAvatarSeedById((prev) => ({ ...prev, ...seedsById }));
+          setOrganizationAvatarUrlById((prev) => ({ ...prev, ...urlsById }));
         }
       }
     };
@@ -675,20 +702,12 @@ export default function DriverTripsScreen() {
           organizationNamesById,
         },
       );
-      const inviteForTrip =
-        invites.find(
-          (i) =>
-            (i.from_organization_id ?? "").trim() ===
-            (trip.organization_id ?? "").trim(),
-        ) ??
-        (trip.supplier_id
-          ? invites.find(
-              (i) =>
-                (i.from_organization_id ?? "").trim() ===
-                (trip.supplier_id ?? "").trim(),
-            )
-          : undefined) ??
-        null;
+      const inviteForTrip = findDriverInviteForTripOrgs(invites, [
+        assignerDisplay.effectiveAssignerOrgId,
+        trip.supplier_id,
+        trip.organization_id,
+      ]);
+      const orgId = (assignerDisplay.effectiveAssignerOrgId ?? "").trim();
       byTrip[tid] = buildJobCardAssignerPayload(
         trip,
         assignerDisplay,
@@ -699,7 +718,11 @@ export default function DriverTripsScreen() {
           isAggregate: isAggregateTrip(trip),
           isRoster: isRosterTrip(trip),
         },
-        organizationLogoById[assignerDisplay.effectiveAssignerOrgId] ?? null,
+        organizationLogoById[orgId] ?? null,
+        {
+          seed: organizationAvatarSeedById[orgId] ?? null,
+          url: organizationAvatarUrlById[orgId] ?? null,
+        },
       );
     }
     return byTrip;
@@ -715,6 +738,8 @@ export default function DriverTripsScreen() {
     invites,
     organizationNamesById,
     organizationLogoById,
+    organizationAvatarSeedById,
+    organizationAvatarUrlById,
   ]);
 
   const getEarning = (trip: tripsService.TripRow) => {
@@ -964,17 +989,7 @@ export default function DriverTripsScreen() {
             style={styles.avatarBtn}
             activeOpacity={0.8}
           >
-            <View
-              style={[
-                styles.avatarCircle,
-                {
-                  borderColor: colors.border,
-                  backgroundColor: colors.emeraldMuted,
-                },
-              ]}
-            >
-              <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
-            </View>
+            <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <DriverBrandMark color={colors.textMuted} />

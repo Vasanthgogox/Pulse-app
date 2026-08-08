@@ -6,7 +6,7 @@ import {
   parseDriverExpenseKindParam,
 } from "@/features/trips/operations/shared/driverExpenseCategoryNav.util";
 import { OtherExpenseEntryScreen } from "@/features/trips/operations/other/OtherExpenseEntryScreen";
-import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
+import { getAccessibleTripById, type TripRow } from "@/features/trips/services/trips.service";
 import { ROUTES } from "@/lib/routes";
 import { type Href, Redirect, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -41,7 +41,7 @@ export default function TripOtherExpenseEntryRoute() {
       setError("Trip not found.");
       return;
     }
-    void getTripById(tripId).then((res) => {
+    void getAccessibleTripById(tripId).then((res) => {
       if (!mounted) return;
       setTrip(res.trip ?? null);
       setError(res.error ? res.error.message : res.trip ? null : "Trip not found.");

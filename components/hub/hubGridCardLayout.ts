@@ -12,7 +12,7 @@ export const HUB_GRID_MIN_WIDTH = 1024;
 export const HUB_CARD_TOOLBAR_MIN_WIDTH = 768;
 
 /** Shared geometry for 4-column desktop hub cards (trips, indents). */
-export const HUB_GRID_CARD_MIN_HEIGHT = 200;
+export const HUB_GRID_CARD_MIN_HEIGHT = 188;
 export const HUB_GRID_ROUTE_MIN_HEIGHT = 30;
 /** Client/org avatar in hub ticket card header (mobile list + desktop grid). */
 export const HUB_CARD_HEAD_AVATAR = 40;

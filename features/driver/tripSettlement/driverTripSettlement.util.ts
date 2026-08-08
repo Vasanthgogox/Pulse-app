@@ -1,6 +1,6 @@
 import {
   isAggregateTrip,
-  tripEarningsForDriver,
+  tripEarningsDetailForDriver,
   type DriverTripPayoutTerms,
 } from "@/features/drivers/utils/driverUtils.util";
 import { getDriverTripDisplayNumber } from "@/features/driver/utils/driverTripSequence.util";
@@ -25,6 +25,8 @@ export type DriverTripSettlementView = {
   amount: number;
   /** Trip commission / expected driver earning */
   expectedAmount: number;
+  /** True when expectedAmount has no agreed commission/salary terms behind it — a legacy 10% guess, not a real figure. */
+  isEstimated: boolean;
   /** Fleet-marked amount before driver verifies (if any) */
   fleetMarkedAmount: number | null;
   /** Verified settlement amount (if settled) */
@@ -240,7 +242,9 @@ export function buildDriverTripSettlementView(input: {
   const from = trip.pickup_area?.trim() || "Unknown origin";
   const to = trip.drop_location?.trim() || "Unknown destination";
   const isSalary = isAggregateTrip(trip);
-  const expectedAmount = Math.round(tripEarningsForDriver(trip, payoutTerms));
+  const earningsDetail = tripEarningsDetailForDriver(trip, payoutTerms);
+  const expectedAmount = Math.round(earningsDetail.amount);
+  const isEstimated = earningsDetail.isEstimated;
 
   if (isSalary) {
     return {
@@ -249,6 +253,7 @@ export function buildDriverTripSettlementView(input: {
       statusTone: "info",
       amount: 0,
       expectedAmount,
+      isEstimated,
       fleetMarkedAmount: null,
       receivedAmount: null,
       outstandingAmount: 0,
@@ -280,6 +285,7 @@ export function buildDriverTripSettlementView(input: {
       statusTone: "muted",
       amount: expectedAmount,
       expectedAmount,
+      isEstimated,
       fleetMarkedAmount: null,
       receivedAmount: null,
       outstandingAmount: expectedAmount,
@@ -361,6 +367,7 @@ export function buildDriverTripSettlementView(input: {
     statusTone,
     amount,
     expectedAmount,
+    isEstimated,
     fleetMarkedAmount,
     receivedAmount: isSettled ? receivedAmt : null,
     outstandingAmount: paymentDiff.outstandingAmount,
@@ -383,8 +390,11 @@ export function buildDriverTripSettlementView(input: {
       trip.created_at ??
       null,
     transactionId: activeLedger?.id ?? trip.id,
-    canRequestPayment: status === "pending" || status === "action_required",
-    canMarkAsPaid: status === "pending" || status === "action_required",
+    // A trip with no agreed commission/salary terms has nothing real to claim —
+    // don't let the legacy 10% guess become the basis of an actual payment
+    // request or mark-as-paid action.
+    canRequestPayment: (status === "pending" || status === "action_required") && !isEstimated,
+    canMarkAsPaid: (status === "pending" || status === "action_required") && !isEstimated,
     canVerifyFleetPayment: status === "fleet_marked",
     canShareReceipt: status === "settled",
   };

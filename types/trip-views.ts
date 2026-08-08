@@ -70,6 +70,17 @@ export type DriverTripRow = {
   trip_number?: string | null;
   indent_id?: string | null;
   source_indent_id?: string | null;
+  /** Asset vs market — drives driver expense / odometer capabilities. */
+  trip_payout_mode?: string | null;
+  start_odometer_km?: number | null;
+  end_odometer_km?: number | null;
+  odometer_distance_km?: number | null;
+  gps_distance_km?: number | null;
+  distance_discrepancy_km?: number | null;
+  distance_source?: string | null;
+  odometer_verification_state?: string | null;
+  odometer_notes?: string | null;
+  odometer_updated_at?: string | null;
 };
 
 /** Map supplier view row → legacy TripRow for screens not yet migrated off TripRow. */
@@ -143,6 +154,16 @@ export function tripRowToDriverTripRow(
     | 'source'
     | 'completed_at'
     | 'indent_id'
+    | 'trip_payout_mode'
+    | 'start_odometer_km'
+    | 'end_odometer_km'
+    | 'odometer_distance_km'
+    | 'gps_distance_km'
+    | 'distance_discrepancy_km'
+    | 'distance_source'
+    | 'odometer_verification_state'
+    | 'odometer_notes'
+    | 'odometer_updated_at'
   >,
 ): DriverTripRow {
   return {
@@ -182,6 +203,16 @@ export function tripRowToDriverTripRow(
     completed_at: row.completed_at ?? null,
     trip_number: row.trip_number ?? null,
     indent_id: row.indent_id ?? null,
+    trip_payout_mode: row.trip_payout_mode ?? null,
+    start_odometer_km: row.start_odometer_km ?? null,
+    end_odometer_km: row.end_odometer_km ?? null,
+    odometer_distance_km: row.odometer_distance_km ?? null,
+    gps_distance_km: row.gps_distance_km ?? null,
+    distance_discrepancy_km: row.distance_discrepancy_km ?? null,
+    distance_source: row.distance_source ?? null,
+    odometer_verification_state: row.odometer_verification_state ?? null,
+    odometer_notes: row.odometer_notes ?? null,
+    odometer_updated_at: row.odometer_updated_at ?? null,
   };
 }
 
@@ -230,5 +261,15 @@ export function driverRowToTripRow(row: DriverTripRow): TripRow {
     driver_id: row.driver_id ?? null,
     load_type: null,
     completed_at: row.completed_at ?? null,
+    trip_payout_mode: row.trip_payout_mode ?? null,
+    start_odometer_km: row.start_odometer_km ?? null,
+    end_odometer_km: row.end_odometer_km ?? null,
+    odometer_distance_km: row.odometer_distance_km ?? null,
+    gps_distance_km: row.gps_distance_km ?? null,
+    distance_discrepancy_km: row.distance_discrepancy_km ?? null,
+    distance_source: row.distance_source ?? null,
+    odometer_verification_state: row.odometer_verification_state ?? null,
+    odometer_notes: row.odometer_notes ?? null,
+    odometer_updated_at: row.odometer_updated_at ?? null,
   };
 }

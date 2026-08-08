@@ -416,7 +416,7 @@ const TRIP_EMBED_FIELDS_FULL =
 const TRIP_EMBED_FIELDS_LEGACY =
   "organization_id, trip_operational_code, trip_code, trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 
-const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata, reactions, reply_to_id, reply_to_preview, edited_at )`;
+const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata, reactions, reply_to_id, reply_to_preview, edited_at, is_deleted )`;
 /** Newest N rows per conversation embed. Keep low — bulk loads (13+ convos × limit) can spike CPU/RAM. */
 const TRIP_MESSAGES_EMBED_RECENT = 20;
 
@@ -835,7 +835,7 @@ export async function getMessagesByConversation(
 
   let query = supabase()
     .from("trip_messages")
-    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at,sender_avatar_seed,is_delivered,delivered_at,reactions,reply_to_id,reply_to_preview,edited_at")
+    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at,sender_avatar_seed,is_delivered,delivered_at,reactions,reply_to_id,reply_to_preview,edited_at,is_deleted")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -1458,10 +1458,11 @@ async function fetchDriverInboxPreviewMessages(
   const { data, error } = await supabase()
     .from("trip_messages")
     .select(
-      "id,conversation_id,message_type,metadata,created_at",
+      "id,conversation_id,message_type,metadata,created_at,is_deleted",
     )
     .in("conversation_id", conversationIds)
     .in("message_type", DRIVER_INBOX_PREVIEW_MEDIA_TYPES)
+    .eq("is_deleted", false)
     .order("created_at", { ascending: false })
     .limit(rowCap);
 
@@ -2228,4 +2229,32 @@ export async function deleteChatMessage(messageId: string): Promise<void> {
     .update({ is_deleted: true })
     .eq("id", messageId);
   if (error) throw error;
+}
+
+/**
+ * Soft-delete chat media that referenced a trip document / stage photo path.
+ * Used when the driver removes POD/LR (or similar) from the job card so chat
+ * does not keep trying to load a deleted storage object.
+ */
+export async function softDeleteTripChatByStoragePath(params: {
+  tripId: string;
+  storagePath: string;
+}): Promise<{ error: Error | null; deletedCount: number }> {
+  const tripId = String(params.tripId ?? "").trim();
+  const storagePath = String(params.storagePath ?? "").trim();
+  if (!tripId || !storagePath) {
+    return { error: null, deletedCount: 0 };
+  }
+  const { data, error } = await supabase().rpc(
+    "soft_delete_trip_chat_by_storage_path",
+    {
+      p_trip_id: tripId,
+      p_storage_path: storagePath,
+    },
+  );
+  if (error) {
+    return { error: new Error(error.message), deletedCount: 0 };
+  }
+  const deletedCount = typeof data === "number" ? data : Number(data ?? 0) || 0;
+  return { error: null, deletedCount };
 }

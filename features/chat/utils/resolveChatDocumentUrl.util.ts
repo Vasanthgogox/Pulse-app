@@ -292,6 +292,30 @@ export function peekChatImageFullDisplayUrl(
 }
 
 /**
+ * Drop signed/blob caches for a path after the object is removed from Storage.
+ * Prevents chat from painting a cached URL that then 404s forever.
+ */
+export function invalidateChatDocumentUrlCaches(storagePath: string): void {
+  const path = normalizeTripDocumentsStoragePath(String(storagePath ?? '').trim());
+  if (!path || /^https?:\/\//i.test(path)) return;
+  signedUrlCache.delete(path);
+  inFlightSignedUrl.delete(path);
+  inFlightBlobUrl.delete(path);
+  preferredBucketByPath.delete(path);
+  const blob = blobUrlCache.get(path);
+  if (blob) {
+    blobUrlCache.delete(path);
+    try {
+      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(blob);
+      }
+    } catch {
+      /* noop */
+    }
+  }
+}
+
+/**
  * Web fallback when signed URLs fail CORS on `<Image>` — same-origin fetch via JS often succeeds for viewing.
  */
 export async function fetchSignedUrlAsObjectUrl(

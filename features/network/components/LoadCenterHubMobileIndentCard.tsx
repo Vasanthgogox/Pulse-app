@@ -204,62 +204,76 @@ export function LoadCenterHubMobileIndentCard({
           </Text>
         </Text>
       </View>
-      <View style={[styles.stubRow, fillGrid && styles.stubRowGrid]}>
-        <Text
-          style={[styles.stubVehicle, hubTicket && styles.stubVehicleHub]}
-          numberOfLines={2}
-        >
-          {leftFooterLabel}
-        </Text>
+      <View style={[styles.stubStack, fillGrid && styles.stubStackGrid]}>
         {heroAmount ? (
-          <View style={styles.stubCommerce}>
-            <View style={styles.stubCommerceTop}>
+          <>
+            <View style={styles.stubKickerRow}>
               <Text
-                style={[styles.stubKicker, hubTicket && styles.stubKickerHub]}
+                style={[styles.stubVehicle, hubTicket && styles.stubVehicleHub]}
                 numberOfLines={1}
               >
-                {commerce?.kicker ?? "Target rate"}
+                {leftFooterLabel}
               </Text>
-              {statusStyles ? (
-                <View style={[styles.statusPill, statusStyles.pill]}>
-                  <Text style={[styles.statusPillText, statusStyles.text]}>
-                    {quoteStatusNorm === "accepted"
-                      ? "Awarded"
-                      : quoteStatusNorm === "rejected"
-                        ? "Rejected"
-                        : quoteStatusNorm === "countered"
-                          ? "Countered"
-                          : "Pending"}
-                  </Text>
-                </View>
+              <View style={styles.stubCommerceTop}>
+                <Text
+                  style={[styles.stubKicker, hubTicket && styles.stubKickerHub]}
+                  numberOfLines={1}
+                >
+                  {commerce?.kicker ?? "Target rate"}
+                </Text>
+                {statusStyles ? (
+                  <View style={[styles.statusPill, statusStyles.pill]}>
+                    <Text style={[styles.statusPillText, statusStyles.text]}>
+                      {quoteStatusNorm === "accepted"
+                        ? "Awarded"
+                        : quoteStatusNorm === "rejected"
+                          ? "Rejected"
+                          : quoteStatusNorm === "countered"
+                            ? "Countered"
+                            : "Pending"}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            <View style={styles.stubAmountBlock}>
+              <View style={styles.stubAmountRow}>
+                <Text style={[styles.stubCurrency, fillGrid && styles.stubCurrencyGrid]}>
+                  ₹
+                </Text>
+                <Text
+                  style={[styles.stubAmount, fillGrid && styles.stubAmountGrid]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  {heroAmount}
+                </Text>
+              </View>
+              {referenceTarget ? (
+                <Text style={styles.stubReference} numberOfLines={1}>
+                  {`${referenceLabel} · ₹ ${referenceTarget}`}
+                </Text>
               ) : null}
             </View>
-            <View style={styles.stubAmountRow}>
-              <Text style={[styles.stubCurrency, fillGrid && styles.stubCurrencyGrid]}>
-                ₹
-              </Text>
+          </>
+        ) : (
+          <View style={[styles.stubRow, fillGrid && styles.stubRowGrid]}>
+            <View style={styles.stubLeft}>
               <Text
-                style={[styles.stubAmount, fillGrid && styles.stubAmountGrid]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.75}
+                style={[styles.stubVehicle, hubTicket && styles.stubVehicleHub]}
+                numberOfLines={2}
               >
-                {heroAmount}
+                {leftFooterLabel}
               </Text>
             </View>
-            {referenceTarget ? (
-              <Text style={styles.stubReference} numberOfLines={1}>
-                {`${referenceLabel} · ₹ ${referenceTarget}`}
-              </Text>
-            ) : null}
+            <Text
+              style={[styles.stubCaption, hubTicket && styles.stubCaptionHub]}
+              numberOfLines={2}
+            >
+              {rightCaption ?? rightFooterLabel}
+            </Text>
           </View>
-        ) : (
-          <Text
-            style={[styles.stubCaption, hubTicket && styles.stubCaptionHub]}
-            numberOfLines={2}
-          >
-            {rightCaption ?? rightFooterLabel}
-          </Text>
         )}
       </View>
     </View>
@@ -575,21 +589,21 @@ const styles = StyleSheet.create({
   bodyComfort: {
     paddingHorizontal: indentReviewHubLayout.hubCardPaddingComfort,
     paddingTop: indentReviewHubLayout.hubCardPaddingComfort,
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   bodyDense: {
     paddingHorizontal: indentReviewHubLayout.hubCardPaddingDense,
     paddingTop: indentReviewHubLayout.hubCardPaddingDense,
-    paddingBottom: 8,
+    paddingBottom: 10,
   },
   bodyGridPad: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
+    paddingHorizontal: 12,
+    paddingTop: 12,
   },
   bodyGrid: {
     flex: 1,
     flexDirection: "column",
-    paddingBottom: 10,
+    paddingBottom: 8,
   },
   actionsSlot: {
     marginTop: "auto",
@@ -617,7 +631,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 14,
     minHeight: HUB_CARD_HEAD_AVATAR,
   },
   headGrid: {
@@ -634,13 +648,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     justifyContent: "center",
-    gap: 3,
+    gap: 4,
   },
   brand: {
-    fontSize: 13,
-    lineHeight: 16,
-    letterSpacing: -0.1,
-    fontWeight: "800",
+    fontSize: 14,
+    lineHeight: 17,
+    letterSpacing: -0.15,
+    fontWeight: "700",
     fontStyle: "normal",
     color: REF.ink,
     includeFontPadding: false,
@@ -648,7 +662,7 @@ const styles = StyleSheet.create({
   brandHub: {
     fontSize: 13,
     lineHeight: 16,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   sourcePill: {
     alignSelf: "flex-start",
@@ -667,9 +681,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.accentBrown,
   },
   sourcePillText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
-    letterSpacing: 0.25,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
     includeFontPadding: false,
   },
@@ -687,13 +701,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headMeta: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: "600",
     color: REF.muted,
     textAlign: "right",
     textTransform: "uppercase",
-    letterSpacing: 0.2,
+    letterSpacing: 0.35,
     flexShrink: 0,
     includeFontPadding: false,
   },
@@ -766,7 +780,7 @@ const styles = StyleSheet.create({
   route: {
     width: "100%",
     maxWidth: "100%",
-    marginBottom: 2,
+    marginBottom: 4,
   },
   routeDense: {
     marginBottom: 0,
@@ -779,8 +793,8 @@ const styles = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: REF.hairline,
-    marginTop: 10,
-    marginBottom: 8,
+    marginTop: 12,
+    marginBottom: 10,
   },
   dividerGrid: {
     marginTop: HUB_GRID_DIVIDER_MARGIN_TOP,
@@ -789,10 +803,11 @@ const styles = StyleSheet.create({
   },
   refRow: {
     minWidth: 0,
+    marginBottom: 2,
   },
   refLine: {
     fontSize: 11,
-    lineHeight: 14,
+    lineHeight: 15,
     letterSpacing: 0.05,
   },
   refLineHub: {
@@ -803,7 +818,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: REF.inkMid,
-    lineHeight: 14,
+    lineHeight: 15,
     fontVariant: ["tabular-nums"],
   },
   refIdHub: {
@@ -815,7 +830,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: REF.muted,
-    lineHeight: 14,
+    lineHeight: 15,
     fontVariant: ["tabular-nums"],
   },
   refMutedHub: {
@@ -865,54 +880,89 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   stubDense: {},
+  stubStack: {
+    minWidth: 0,
+    marginTop: 8,
+    gap: 2,
+  },
+  stubStackGrid: {
+    marginTop: 4,
+    flexShrink: 0,
+  },
+  /** Single row: left meta + YOUR BID / status — shared vertical center. */
+  stubKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    minWidth: 0,
+    minHeight: 18,
+  },
+  stubAmountBlock: {
+    alignItems: "flex-end",
+    gap: 0,
+    minWidth: 0,
+    marginTop: 1,
+  },
   stubRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 10,
-    marginTop: 4,
+    gap: 12,
     minWidth: 0,
   },
   stubRowGrid: {
-    marginTop: 2,
     minHeight: HUB_GRID_PARTY_MIN_HEIGHT + 8,
     flexShrink: 0,
+  },
+  stubLeft: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: "42%",
   },
   stubVehicle: {
     flex: 1,
     minWidth: 0,
     maxWidth: "46%",
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: "400",
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "600",
     color: REF.muted,
-    alignSelf: "center",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    includeFontPadding: false,
   },
   stubVehicleHub: {
     fontSize: 9,
-    fontWeight: "500",
+    lineHeight: 14,
+    fontWeight: "600",
     color: REF.inkMid,
+    letterSpacing: 0.25,
   },
   stubCommerce: {
     flex: 1,
     minWidth: 0,
     alignItems: "flex-end",
-    gap: 2,
+    gap: 3,
   },
   stubCommerceTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 6,
-    maxWidth: "100%",
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: "58%",
   },
   stubKicker: {
     fontSize: 10,
+    lineHeight: 14,
     fontWeight: "600",
     color: REF.muted,
-    letterSpacing: 0.2,
+    letterSpacing: 0.35,
     textTransform: "uppercase",
     flexShrink: 1,
+    includeFontPadding: false,
   },
   stubKickerHub: {
     fontSize: 10,
@@ -921,30 +971,32 @@ const styles = StyleSheet.create({
   },
   stubAmountRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "baseline",
     justifyContent: "flex-end",
     gap: 2,
     maxWidth: "100%",
   },
   stubCurrency: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    color: REF.muted,
-    lineHeight: 16,
-    marginBottom: 1,
+    color: REF.inkMid,
+    lineHeight: 18,
+    includeFontPadding: false,
   },
   stubCurrencyGrid: {
     fontSize: 12,
-    lineHeight: 15,
+    lineHeight: 16,
   },
   stubAmount: {
-    fontSize: 16,
-    fontWeight: "600",
-    lineHeight: 18,
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 20,
+    letterSpacing: -0.3,
     color: REF.ink,
     flexShrink: 1,
     textAlign: "right",
     fontVariant: ["tabular-nums"],
+    includeFontPadding: false,
   },
   stubAmountGrid: {
     fontSize: 15,
@@ -953,10 +1005,14 @@ const styles = StyleSheet.create({
   },
   stubReference: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
+    lineHeight: 12,
     color: Theme.textMuted,
     textAlign: "right",
+    letterSpacing: 0.05,
+    marginTop: 1,
     fontVariant: ["tabular-nums"],
+    includeFontPadding: false,
   },
   stubCaption: {
     flex: 1,
@@ -974,21 +1030,22 @@ const styles = StyleSheet.create({
     color: REF.inkMid,
   },
   statusPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
     flexShrink: 0,
   },
   statusPillText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
-    letterSpacing: 0.25,
+    letterSpacing: 0.3,
     textTransform: "uppercase",
+    includeFontPadding: false,
   },
-  statusPending: { backgroundColor: "#F1F5F9" },
-  statusPendingText: { color: "#475569" },
-  statusAwarded: { backgroundColor: "#FEF3C7" },
-  statusAwardedText: { color: "#B45309" },
+  statusPending: { backgroundColor: Theme.surface },
+  statusPendingText: { color: Theme.textPrimaryDark },
+  statusAwarded: { backgroundColor: Theme.accentBrownWash },
+  statusAwardedText: { color: Theme.accentBrownDeep },
   statusRejected: { backgroundColor: "#FEE2E2" },
   statusRejectedText: { color: "#B91C1C" },
   statusCountered: { backgroundColor: Theme.warningMuted },

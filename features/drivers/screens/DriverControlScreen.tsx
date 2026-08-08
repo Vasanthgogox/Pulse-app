@@ -16,12 +16,17 @@ import {
     useTripControl
 } from "@/features/drivers/hooks/useTripControl";
 import { computeDriverTripEstEarningsInr } from "@/features/finance/selectors/assetTripProvisionSelectors";
+import { DriverSelfAvatar } from "@/components/driver/DriverSelfAvatar";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
     buildDriverTripNumberMap,
     getDriverTripDisplayNumber,
 } from "@/features/driver/utils/driverTripSequence.util";
-import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
+import {
+  isAggregateTrip,
+  resolveDriverTripPayoutTerms,
+  tripEarningsDetailForDriver,
+} from "@/features/drivers/utils/driverUtils.util";
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { ROUTES } from "@/lib/routes";
@@ -339,6 +344,14 @@ export default function DriverControlScreen() {
   const employerOrgIdSet = useMemo(() => {
     const set = new Set<string>();
     linkedDriversFull.forEach((d) => {
+      // tracking_only rows are phone-assignment stubs an Aggregate-mode org creates
+      // to assign an open/marketplace trip directly to an independent driver — not
+      // real fleet employment (no salary/commission terms are ever attached to
+      // them). Treating that org as an "employer" here is the same class of bug
+      // already guarded against everywhere else this distinction matters
+      // (DriverWalletScreen, drivers.service.ts, aggregateDrivers.ts, etc.) —
+      // this screen was the one place still missing the filter.
+      if (d.tracking_only === true) return;
       const orgId = String(d.organization_id ?? '');
       if (orgId) set.add(orgId);
     });
@@ -368,11 +381,18 @@ export default function DriverControlScreen() {
     if (!controlCurrentEmployer || !trip) return;
     setAttributeLoading(true);
     try {
-      const earnings = Math.round(tripEarningsForDriver(trip));
-      if (earnings <= 0) {
-        Alert.alert('No earnings', 'Trip earnings could not be calculated.');
+      const earningsDetail = tripEarningsDetailForDriver(trip);
+      // A trip with no agreed commission/salary terms has nothing real to
+      // request — don't let the legacy 10% guess become the amount on an
+      // actual salary_request the fleet owner reviews.
+      if (earningsDetail.amount <= 0 || earningsDetail.isEstimated) {
+        Alert.alert(
+          'No agreed rate',
+          'This trip has no agreed commission or salary terms on file, so an amount cannot be requested automatically. Ask your fleet to set terms first.',
+        );
         return;
       }
+      const earnings = Math.round(earningsDetail.amount);
       const tripDate = trip.pickup_date ?? trip.started_at ?? trip.created_at ?? '';
       const tripDateStr = tripDate
         ? new Date(tripDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -429,17 +449,7 @@ export default function DriverControlScreen() {
               style={styles.avatarBtn}
               activeOpacity={0.8}
             >
-              <View
-                style={[
-                  styles.avatarCircle,
-                  {
-                    borderColor: colors.border,
-                    backgroundColor: colors.emeraldMuted,
-                  },
-                ]}
-              >
-                <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
-              </View>
+              <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
             </TouchableOpacity>
             <View style={styles.headerTextWrap}>
               <DriverBrandMark color={colors.textMuted} />
@@ -490,19 +500,29 @@ export default function DriverControlScreen() {
       : step === "lr"
         ? STEPS.findIndex((s) => s.id === "transit")
         : stepIndex;
-  const tripIsAggregate = isAggregateTrip(trip);
-  const commission = tripIsAggregate
-    ? 0
-    : computeDriverTripEstEarningsInr(trip, {
-        payableAmount:
-          acceptedOffer?.payableAmount ?? tripDriver?.payable_amount ?? null,
-        commissionPercent:
-          acceptedOffer?.commissionPercent ??
-          tripDriver?.commission_percent ??
-          null,
-        commissionPerKm:
-          acceptedOffer?.commissionPerKm ?? tripDriver?.commission_per_km ?? null,
-      });
+  // isAggregateTrip() only catches supplier-mediated aggregate trips
+  // (trip.supplier_id set). A direct open-trip assigned straight to an
+  // independent driver has no supplier_id, but tripDriver here is the
+  // phone-assignment stub (tracking_only) an Aggregate-mode org creates just to
+  // assign that trip — never a real employment row with salary/commission terms.
+  // Without this check, an org that has never configured any driver pay ends up
+  // shown as this driver's "employer" with a fabricated earnings estimate.
+  const tripIsAggregate = isAggregateTrip(trip) || tripDriver?.tracking_only === true;
+  const payoutOffer = {
+    payableAmount: acceptedOffer?.payableAmount ?? tripDriver?.payable_amount ?? null,
+    commissionPercent:
+      acceptedOffer?.commissionPercent ?? tripDriver?.commission_percent ?? null,
+    commissionPerKm:
+      acceptedOffer?.commissionPerKm ?? tripDriver?.commission_per_km ?? null,
+  };
+  // A drivers row existing is not enough on its own (same rule as the
+  // tracking_only fix above) — an org that never configured pay must not produce
+  // a number that looks payable just because the legacy 10% fallback returns one.
+  const { hasAgreedPayoutTerms } = resolveDriverTripPayoutTerms(trip, payoutOffer);
+  const commission =
+    tripIsAggregate || !hasAgreedPayoutTerms
+      ? 0
+      : computeDriverTripEstEarningsInr(trip, payoutOffer);
   const effectiveEta =
     trip.estimated_duration?.trim() || routeMetricsFallback?.estimated_duration || null;
   const effectiveDistance = trip.distance ?? routeMetricsFallback?.distance ?? null;
@@ -556,17 +576,7 @@ export default function DriverControlScreen() {
             style={styles.avatarBtn}
             activeOpacity={0.8}
           >
-            <View
-              style={[
-                styles.avatarCircle,
-                {
-                  borderColor: colors.border,
-                  backgroundColor: colors.emeraldMuted,
-                },
-              ]}
-            >
-              <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
-            </View>
+            <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <DriverBrandMark color={colors.textMuted} />
@@ -869,7 +879,7 @@ export default function DriverControlScreen() {
                 </View>
               </View>
             ) : null}
-            {step === "completed" && !tripIsAggregate && (
+            {step === "completed" && !tripIsAggregate && hasAgreedPayoutTerms && (
               <View style={[styles.cardRow, { borderTopColor: colors.border }]}>
                 <View style={styles.cardFlexMinWidth}>
                   <Text
@@ -1633,7 +1643,7 @@ export default function DriverControlScreen() {
                   <Text
                     style={[styles.earningsAmount, { color: colors.emerald }]}
                   >
-                    {tripIsAggregate
+                    {tripIsAggregate || !hasAgreedPayoutTerms
                       ? "—"
                       : formatINR(Math.max(0, Number(commission ?? 0) || 0))}
                   </Text>

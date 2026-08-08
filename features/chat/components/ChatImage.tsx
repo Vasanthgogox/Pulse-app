@@ -14,8 +14,9 @@ import {
 } from "@/features/chat/utils/storageRenderImageUrl";
 import { extractThinImagePayload } from "@/features/chat/utils/thinImageMetadata";
 import { Image } from "expo-image";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, View, type ImageStyle, type StyleProp } from "react-native";
+import { Platform, StyleSheet, Text, View, type ImageStyle, type StyleProp } from "react-native";
 import type { TripMessageRow } from "../types/chat.types";
 import {
   normalizeTripDocumentsStoragePath,
@@ -239,7 +240,8 @@ export function ChatImage({
   if (loadError) {
     return (
       <View style={[s.placeholder, thumbnail && s.thumbnailPlaceholder, style as object]}>
-        <LoadingIndicator size="small" color="#94a3b8" />
+        <FontAwesome name="image" size={thumbnail ? 16 : 22} color="#94a3b8" />
+        {!thumbnail ? <Text style={s.removedText}>Photo unavailable</Text> : null}
       </View>
     );
   }
@@ -278,5 +280,11 @@ const s = StyleSheet.create({
   thumbnailPlaceholder: {
     width: 80,
     height: 80,
+  },
+  removedText: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#94a3b8",
   },
 });

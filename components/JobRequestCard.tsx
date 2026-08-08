@@ -20,10 +20,10 @@ import {
   Sparkles,
   Wallet,
 } from "lucide-react-native";
-import React, { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
+  Alert,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -32,18 +32,11 @@ import {
   type TextInputProps,
 } from "react-native";
 
-const HOLD_DURATION_MS = 1500;
 const OTP_LENGTH = 6;
-const HOLD_PRESS_RETENTION = 100;
 
 const EMERALD = Theme.driverEmerald;
 const EMERALD_DARK = Theme.driverEmeraldDark;
 const MINT = "rgba(167,243,208,0.92)";
-
-const holdBtnWebStyle = {
-  touchAction: "none" as "none" | "auto" | "manipulation",
-  userSelect: "none" as "none" | "auto" | "text" | "contain" | "all",
-};
 
 export interface JobRequestCardProps {
   pickup: string;
@@ -61,7 +54,6 @@ export interface JobRequestCardProps {
   earningsAmountColor?: string;
   primaryTextColor?: string;
   mutedTextColor?: string;
-  holdTrackColor?: string;
   errorMessage?: string | null;
   otpMode?: boolean;
   otpValue?: string;
@@ -113,14 +105,10 @@ export function JobRequestCard({
   otpKeyboardInset = 0,
 }: JobRequestCardProps) {
   const [isAccepted, setIsAccepted] = useState(false);
-  const [holdProgress, setHoldProgress] = useState(0);
-  const [isHolding, setIsHolding] = useState(false);
-  const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const holdStartRef = useRef(0);
   const acceptedOnceRef = useRef(false);
   const otpInputRef = useRef<TextInput | null>(null);
 
-  const holdResetKey = useMemo(
+  const assignmentResetKey = useMemo(
     () =>
       assignmentId != null && String(assignmentId).length > 0
         ? `id:${String(assignmentId)}`
@@ -130,14 +118,8 @@ export function JobRequestCard({
 
   useEffect(() => {
     setIsAccepted(false);
-    setHoldProgress(0);
-    setIsHolding(false);
     acceptedOnceRef.current = false;
-    if (holdTimerRef.current) {
-      clearInterval(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-  }, [holdResetKey]);
+  }, [assignmentResetKey]);
 
   useEffect(() => {
     if (!otpMode) {
@@ -145,44 +127,33 @@ export function JobRequestCard({
     }
   }, [otpMode]);
 
-  const completeAccept = () => {
+  const completeAccept = useCallback(() => {
     if (acceptedOnceRef.current || disabled) return;
     acceptedOnceRef.current = true;
-    setIsHolding(false);
-    setHoldProgress(100);
     setIsAccepted(true);
     onAccept();
-  };
+  }, [disabled, onAccept]);
 
-  const startHold = () => {
+  /** Same proceed/back pattern as POD complete delivery. */
+  const requestAcceptConfirm = useCallback(() => {
     if (disabled || isAccepted) return;
-    if (holdTimerRef.current) {
-      clearInterval(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    setIsHolding(true);
-    setHoldProgress(0);
-    holdStartRef.current = Date.now();
-    holdTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - holdStartRef.current;
-      const pct = Math.min((elapsed / HOLD_DURATION_MS) * 100, 100);
-      setHoldProgress(pct);
-      if (pct >= 100) {
-        if (holdTimerRef.current) clearInterval(holdTimerRef.current);
-        holdTimerRef.current = null;
+    const title = "Accept trip?";
+    const message = "Take this assignment and start the mission.";
+    if (Platform.OS === "web") {
+      const w =
+        typeof globalThis !== "undefined"
+          ? (globalThis as { confirm?: (msg: string) => boolean }).confirm
+          : undefined;
+      if (typeof w === "function" && w(`${title}\n\n${message}`)) {
         completeAccept();
       }
-    }, 20);
-  };
-
-  const cancelHold = () => {
-    if (holdTimerRef.current) {
-      clearInterval(holdTimerRef.current);
-      holdTimerRef.current = null;
+      return;
     }
-    setHoldProgress(0);
-    setIsHolding(false);
-  };
+    Alert.alert(title, message, [
+      { text: "Back", style: "cancel" },
+      { text: "Proceed", onPress: () => completeAccept() },
+    ]);
+  }, [completeAccept, disabled, isAccepted]);
 
   const shellStyle =
     variant === "page" || edgeToEdge
@@ -421,44 +392,33 @@ export function JobRequestCard({
                       </Text>
                     </TouchableOpacity>
                   ) : null}
-                  <Pressable
-                    onPressIn={startHold}
-                    onPressOut={cancelHold}
-                    onLongPress={completeAccept}
-                    delayLongPress={HOLD_DURATION_MS}
-                    pressRetentionOffset={HOLD_PRESS_RETENTION}
-                    android_ripple={{ color: "transparent" }}
+                  <TouchableOpacity
+                    onPress={requestAcceptConfirm}
                     style={[
-                      styles.holdBtn,
-                      onDecline != null && !isAccepted ? styles.holdBtnFlex : styles.holdBtnFull,
+                      styles.acceptBtn,
+                      onDecline != null && !isAccepted ? styles.acceptBtnFlex : styles.acceptBtnFull,
                       disabled && styles.btnDisabled,
-                      Platform.OS === "web" && holdBtnWebStyle,
                     ]}
-                    disabled={disabled}
+                    disabled={disabled || isAccepted}
+                    activeOpacity={0.9}
+                    accessibilityRole="button"
+                    accessibilityLabel="Accept trip"
                   >
                     <LinearGradient
                       colors={[EMERALD, EMERALD_DARK]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
-                      style={styles.holdGradient}
+                      style={styles.acceptGradient}
                     >
-                      <View
-                        style={[
-                          styles.holdFill,
-                          { width: `${holdProgress}%` },
-                        ]}
-                      />
-                      <Text style={styles.holdLabel} numberOfLines={1}>
+                      <Text style={styles.acceptLabel} numberOfLines={1}>
                         {isAccepted
                           ? requireOtp
                             ? "Accepted! Enter OTP"
                             : "Accepted!"
-                          : isHolding
-                            ? "Keep holding…"
-                            : "Hold to accept"}
+                          : "Accept trip"}
                       </Text>
                     </LinearGradient>
-                  </Pressable>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -644,36 +604,27 @@ const styles = StyleSheet.create({
     ...sheetStyles.bodyLinkText,
     fontWeight: "600",
   },
-  holdBtn: {
+  acceptBtn: {
     minHeight: TRIP_SHEET_BTN_HEIGHT,
     borderRadius: 10,
     overflow: "hidden",
   },
-  holdBtnFlex: {
+  acceptBtnFlex: {
     flex: 1.55,
   },
-  holdBtnFull: {
+  acceptBtnFull: {
     flex: 1,
   },
-  holdGradient: {
+  acceptGradient: {
     flex: 1,
     minHeight: TRIP_SHEET_BTN_HEIGHT,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 12,
   },
-  holdFill: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: "rgba(255,255,255,0.22)",
-    borderRadius: 12,
-  },
-  holdLabel: {
+  acceptLabel: {
     ...sheetStyles.bodyBtnText,
     color: "#fff",
-    zIndex: 1,
   },
   btnDisabled: {
     opacity: 0.65,

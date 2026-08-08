@@ -1,17 +1,7 @@
 /**
  * Presentation-only mission info block for DriverTripFlowCard's active-trip
- * view. DriverTripFlowCard remains the workflow owner (state, optimistic
- * updates, handlers, uploads, gestures) — this component owns none of that,
- * only the hero + destination section DriverTripFlowCard passes it data for.
- *
- * Deliberately does NOT show Journey Health tiers or a Timeline — those are
- * dispatch-facing platform concepts. `guidanceMessage` is pre-translated,
- * action-oriented copy (see driverAlertGuidance.util.ts) and only rendered
- * when the caller has something worth telling the driver.
- *
- * Navigate lives outside this component, directly above DriverTripFlowCard's
- * primary CTA — an always-available secondary action next to the button that
- * actually advances the trip, not buried in an info card.
+ * view. Hero chrome matches JobRequestCard (flush edges, shared sheet pads)
+ * so assign → active → complete stay visually aligned.
  */
 import Theme from '@/constants/Theme';
 import { PartyAvatar } from '@/components/PartyAvatar';
@@ -19,19 +9,17 @@ import {
   FLOW_EMERALD,
   FLOW_EMERALD_DARK,
   FLOW_MINT,
+  HERO_SIDE_ICON_SIZE,
   HeroAssignerBlock,
   HeroKindBadge,
   TRIP_SHEET_BODY_PAD,
   TRIP_SHEET_HERO_PAD,
 } from '@/components/driver/DriverTripSheetLayout';
 import type { JobCardAssignerPayload } from '@/features/trips/utils/driverAssignerDisplay.util';
-import { AlertTriangle, Route, Wallet } from 'lucide-react-native';
+import { AlertTriangle, Navigation, Route, Wallet } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-
-/** Hero sits slightly wider than the body content, matching the sheet spec. */
-const HERO_INSET = 10;
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export interface MissionCardLayoutProps {
   title: string;
@@ -53,10 +41,12 @@ export interface MissionCardLayoutProps {
   customerName?: string | null;
   /** trip.vehicle_display_number — already on the trip row. */
   vehicleNumber?: string | null;
-  /** e.g. "At pickup for 12 min" — from computeTripStageMetrics(), only while a dwell is running. Replaces the distance caption when set, since a stationary driver isn't covering distance. */
+  /** e.g. "At pickup for 12 min" — from computeTripStageMetrics(), only while a dwell is running. */
   dwellLabel?: string | null;
   /** Action-oriented translation of Operational Alerts; null when nothing worth surfacing. */
   guidanceMessage?: string | null;
+  /** Compact external-nav action — sits top-right of DELIVER TO / PICKUP AT. */
+  onNavigate?: (() => void) | null;
 }
 
 export function MissionCardLayout({
@@ -75,11 +65,14 @@ export function MissionCardLayout({
   vehicleNumber = null,
   dwellLabel = null,
   guidanceMessage = null,
+  onNavigate = null,
 }: MissionCardLayoutProps) {
   const showCustomerVehicleRow = !!(customerName?.trim() || vehicleNumber?.trim());
 
-  const destinationHeading = target === 'pickup' ? 'PICKUP AT' : target === 'drop' ? 'DELIVER TO' : null;
-  const destinationLabel = target === 'pickup' ? pickupLabel : target === 'drop' ? dropLabel : null;
+  const destinationHeading =
+    target === 'pickup' ? 'PICKUP AT' : target === 'drop' ? 'DELIVER TO' : null;
+  const destinationLabel =
+    target === 'pickup' ? pickupLabel : target === 'drop' ? dropLabel : null;
 
   const progressFraction =
     remainingKm != null && routeTotalKm != null && routeTotalKm > 0
@@ -94,70 +87,108 @@ export function MissionCardLayout({
 
   return (
     <>
-      <View style={styles.heroWrap}>
-        <LinearGradient
-          colors={[FLOW_EMERALD_DARK, FLOW_EMERALD]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.flowHero}
-        >
-          <View style={styles.heroTopRow}>
-            <View style={styles.heroEyebrowRow}>
-              <Route size={13} color={FLOW_MINT} strokeWidth={2.5} />
-              <Text style={styles.heroEyebrow}>{title.toUpperCase()}</Text>
-            </View>
-            {assignedBy ? (
-              <HeroKindBadge kind={assignedBy.kind} label={assignedBy.kindLabel} />
-            ) : null}
+      <LinearGradient
+        colors={[FLOW_EMERALD_DARK, FLOW_EMERALD]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.flowHero}
+      >
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroEyebrowRow}>
+            <Route size={12} color={FLOW_MINT} strokeWidth={2.5} />
+            <Text style={styles.heroEyebrow} numberOfLines={1}>
+              {title.toUpperCase()}
+            </Text>
           </View>
-          <View style={styles.heroMainRow}>
-            <View style={[styles.heroEarningsBlock, !showHeroAssigner && styles.heroEarningsBlockFull]}>
-              <View style={styles.heroIconWrap}>
-                <Wallet size={16} color={FLOW_EMERALD} strokeWidth={2.2} />
-              </View>
-              <View style={styles.heroTextBlock}>
-                <Text style={styles.heroAmount} numberOfLines={1}>
-                  {earnings}
-                </Text>
-                <Text style={styles.heroAmountLabel}>EST. EARNINGS</Text>
-              </View>
+          {assignedBy ? (
+            <HeroKindBadge kind={assignedBy.kind} label={assignedBy.kindLabel} />
+          ) : null}
+        </View>
+        <View style={styles.heroMainRow}>
+          <View
+            style={[
+              styles.heroEarningsBlock,
+              !showHeroAssigner && styles.heroEarningsBlockFull,
+            ]}
+          >
+            <View style={styles.heroIconWrap}>
+              <Wallet size={16} color={FLOW_EMERALD} strokeWidth={2.2} />
             </View>
-            {showHeroAssigner && assignedBy ? (
-              <>
-                <View style={styles.heroColDivider} />
-                <HeroAssignerBlock assigner={assignedBy} />
-              </>
-            ) : null}
+            <View style={styles.heroTextBlock}>
+              <Text style={styles.heroAmount} numberOfLines={1}>
+                {earnings}
+              </Text>
+              <Text style={styles.heroAmountLabel}>EST. EARNINGS</Text>
+            </View>
           </View>
-        </LinearGradient>
-      </View>
+          {showHeroAssigner && assignedBy ? (
+            <>
+              <View style={styles.heroColDivider} />
+              <HeroAssignerBlock assigner={assignedBy} />
+            </>
+          ) : null}
+        </View>
+      </LinearGradient>
 
       <View style={styles.contentWrap}>
         {destinationHeading && destinationLabel ? (
           <View style={styles.destinationBlock}>
-            <Text style={[styles.destinationHeading, { color: Theme.textMuted }]}>{destinationHeading}</Text>
-            <Text style={[styles.destinationLabel, { color: Theme.textPrimaryDark }]} numberOfLines={2}>
-              {destinationLabel}
-            </Text>
+            <View style={styles.destinationTopRow}>
+              <View style={styles.destinationTextCol}>
+                <Text style={[styles.destinationHeading, { color: Theme.textMuted }]}>
+                  {destinationHeading}
+                </Text>
+                <Text
+                  style={[styles.destinationLabel, { color: Theme.textPrimaryDark }]}
+                  numberOfLines={2}
+                >
+                  {destinationLabel}
+                </Text>
+              </View>
+              {onNavigate ? (
+                <Pressable
+                  onPress={onNavigate}
+                  style={({ pressed }) => [
+                    styles.navigateChip,
+                    pressed && { opacity: 0.88 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open navigation"
+                  hitSlop={8}
+                >
+                  <Navigation size={12} color={FLOW_EMERALD} strokeWidth={2.4} />
+                  <Text style={styles.navigateChipText}>Navigate</Text>
+                </Pressable>
+              ) : null}
+            </View>
 
             {progressFraction != null ? (
               <View style={styles.progressBarTrack}>
                 <View
                   style={[
                     styles.progressBarFill,
-                    { width: `${progressFraction * 100}%`, backgroundColor: FLOW_EMERALD },
+                    {
+                      width: `${progressFraction * 100}%`,
+                      backgroundColor: FLOW_EMERALD,
+                    },
                   ]}
                 />
                 <View
                   style={[
                     styles.progressBarDot,
-                    { left: `${progressFraction * 100}%`, borderColor: FLOW_EMERALD },
+                    {
+                      left: `${progressFraction * 100}%`,
+                      borderColor: FLOW_EMERALD,
+                    },
                   ]}
                 />
               </View>
             ) : null}
 
-            <Text style={[styles.destinationCaption, { color: Theme.textMuted }]} numberOfLines={1}>
+            <Text
+              style={[styles.destinationCaption, { color: Theme.textMuted }]}
+              numberOfLines={1}
+            >
               {caption}
             </Text>
           </View>
@@ -167,14 +198,25 @@ export function MissionCardLayout({
           <View style={styles.metaRow}>
             {customerName?.trim() ? (
               <View style={styles.metaLine}>
-                <PartyAvatar name={customerName} entityType="client" size={16} style={styles.metaAvatar} />
-                <Text style={[styles.metaValue, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
+                <PartyAvatar
+                  name={customerName}
+                  entityType="client"
+                  size={16}
+                  style={styles.metaAvatar}
+                />
+                <Text
+                  style={[styles.metaValue, { color: Theme.textPrimaryDark }]}
+                  numberOfLines={1}
+                >
                   {customerName}
                 </Text>
               </View>
             ) : null}
             {vehicleNumber?.trim() ? (
-              <Text style={[styles.metaSubValue, { color: Theme.textMuted }]} numberOfLines={1}>
+              <Text
+                style={[styles.metaSubValue, { color: Theme.textMuted }]}
+                numberOfLines={1}
+              >
                 {vehicleNumber}
               </Text>
             ) : null}
@@ -182,9 +224,14 @@ export function MissionCardLayout({
         ) : null}
 
         {guidanceMessage ? (
-          <View style={[styles.guidanceBanner, { backgroundColor: Theme.accentGoldMuted }]}>
+          <View
+            style={[styles.guidanceBanner, { backgroundColor: Theme.accentGoldMuted }]}
+          >
             <AlertTriangle size={12} color={Theme.accentGold} strokeWidth={2.2} />
-            <Text style={[styles.guidanceText, { color: Theme.accentGoldPressed }]} numberOfLines={2}>
+            <Text
+              style={[styles.guidanceText, { color: Theme.accentGoldPressed }]}
+              numberOfLines={2}
+            >
               {guidanceMessage}
             </Text>
           </View>
@@ -195,82 +242,100 @@ export function MissionCardLayout({
 }
 
 const styles = StyleSheet.create({
-  heroWrap: {
-    paddingHorizontal: HERO_INSET,
-  },
-  contentWrap: {
-    paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
-    paddingTop: 16,
-    gap: 12,
-  },
+  /** Flush to sheet edges — same hero width as JobRequestCard. */
   flowHero: {
-    borderRadius: 16,
     paddingTop: TRIP_SHEET_HERO_PAD.top,
     paddingHorizontal: TRIP_SHEET_HERO_PAD.horizontal,
     paddingBottom: TRIP_SHEET_HERO_PAD.bottom,
-    gap: 12,
+    gap: 10,
+  },
+  contentWrap: {
+    paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
+    paddingTop: TRIP_SHEET_BODY_PAD.top,
+    gap: TRIP_SHEET_BODY_PAD.gap,
   },
   heroTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   heroEyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 5,
+    flex: 1,
+    minWidth: 0,
   },
   heroEyebrow: {
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 1.1,
-    color: '#fff',
+    letterSpacing: 0.9,
+    color: FLOW_MINT,
+    textTransform: 'uppercase',
+    flexShrink: 1,
   },
   heroMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
   },
   heroEarningsBlock: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
+    gap: 6,
+    minWidth: 0,
   },
   heroEarningsBlockFull: {
     flex: 1,
   },
   heroIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: HERO_SIDE_ICON_SIZE,
+    height: HERO_SIDE_ICON_SIZE,
+    borderRadius: 10,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   heroTextBlock: {
+    flex: 1,
+    minWidth: 0,
     gap: 1,
   },
   heroAmount: {
-    fontSize: 19,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '900',
     color: '#fff',
-    letterSpacing: -0.3,
-    lineHeight: 23,
+    letterSpacing: -0.25,
+    lineHeight: 20,
   },
   heroAmountLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.72)',
-    letterSpacing: 0.5,
+    fontSize: 7,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    color: FLOW_MINT,
   },
   heroColDivider: {
     width: StyleSheet.hairlineWidth,
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    marginHorizontal: 12,
+    height: HERO_SIDE_ICON_SIZE,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    alignSelf: 'center',
+    flexShrink: 0,
   },
   destinationBlock: {
     gap: 0,
+  },
+  destinationTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  destinationTextCol: {
+    flex: 1,
+    minWidth: 0,
   },
   destinationHeading: {
     fontSize: 11,
@@ -283,6 +348,26 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.4,
     lineHeight: 26,
+  },
+  navigateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(4,120,87,0.35)',
+    flexShrink: 0,
+    marginTop: 2,
+    maxWidth: 118,
+  },
+  navigateChipText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: FLOW_EMERALD,
+    letterSpacing: 0.1,
   },
   progressBarTrack: {
     height: 4,
@@ -313,6 +398,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    minWidth: 0,
   },
   metaLine: {
     flexDirection: 'row',
@@ -320,6 +406,7 @@ const styles = StyleSheet.create({
     gap: 6,
     minWidth: 0,
     flexShrink: 1,
+    flex: 1,
   },
   metaAvatar: {
     flexShrink: 0,
@@ -328,6 +415,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     flexShrink: 1,
+    minWidth: 0,
   },
   metaSubValue: {
     fontSize: 11,
@@ -336,16 +424,18 @@ const styles = StyleSheet.create({
   },
   guidanceBanner: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 10,
+    alignItems: 'flex-start',
+    gap: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
+    borderRadius: 10,
+    minWidth: 0,
   },
   guidanceText: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
   },
 });

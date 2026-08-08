@@ -1,6 +1,8 @@
+import { DriverSelfAvatar } from '@/components/driver/DriverSelfAvatar';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
+import { resolveDriverOrgAvatarUri } from '@/features/drivers/utils/resolveDriverOrgAvatar.util';
+import { useOrgBrandingByIds } from '@/lib/hooks/useOrgBrandingByIds';
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
@@ -147,6 +149,19 @@ export default function DriverRequestsScreen() {
   const pendingInvites = invites.filter((i) => i.status === 'pending');
   const resolvedInvites = invites.filter((i) => i.status !== 'pending');
   const acceptedInvites = resolvedInvites.filter((i) => i.status === 'accepted');
+
+  const inviteOrgIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          invites
+            .map((i) => String(i.from_organization_id ?? '').trim())
+            .filter(Boolean),
+        ),
+      ),
+    [invites],
+  );
+  const orgBrandingById = useOrgBrandingByIds(inviteOrgIds);
 
   const activeLinkedDrivers = useMemo(
     () => linkedDrivers.filter((d) => !d.left_at),
@@ -846,13 +861,7 @@ export default function DriverRequestsScreen() {
       <View style={[styles.header, { paddingTop: insets.top + Layout.driverHeaderTopOffset, backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={() => router.push('/(driver)/profile')} style={styles.avatarBtn} activeOpacity={0.8}>
-            <View style={[styles.avatarCircle, { borderColor: colors.border, backgroundColor: colors.emeraldMuted }]}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-              ) : (
-                <FontAwesome name="user" size={14} color={colors.text} />
-              )}
-            </View>
+            <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <DriverBrandMark color={colors.textMuted} />
@@ -1097,13 +1106,17 @@ export default function DriverRequestsScreen() {
                         >
                           <Image
                             source={{
-                              uri: resolveOrgAvatarUri(
-                                inv.from_organization_id,
-                                inv.from_org_name ?? 'Organisation',
-                                inv.from_org_logo_url,
-                                inv.from_org_avatar_seed,
-                                inv.from_org_avatar_url,
-                              ),
+                              uri: resolveDriverOrgAvatarUri({
+                                orgId: inv.from_organization_id,
+                                orgName: inv.from_org_name ?? 'Organisation',
+                                branding:
+                                  orgBrandingById[
+                                    String(inv.from_organization_id ?? '')
+                                  ],
+                                logoUrl: inv.from_org_logo_url,
+                                avatarSeed: inv.from_org_avatar_seed,
+                                avatarUrl: inv.from_org_avatar_url,
+                              }),
                             }}
                             style={styles.cardIconImage}
                             resizeMode="cover"

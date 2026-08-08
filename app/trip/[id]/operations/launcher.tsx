@@ -1,6 +1,6 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ROUTES } from "@/lib/routes";
-import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
+import { getAccessibleTripById, type TripRow } from "@/features/trips/services/trips.service";
 import { Redirect, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
@@ -26,7 +26,7 @@ export default function TripExpenseLauncherRoute() {
       setError("Trip not found.");
       return;
     }
-    void getTripById(tripId).then((res) => {
+    void getAccessibleTripById(tripId).then((res) => {
       if (!mounted) return;
       setTrip(res.trip ?? null);
       setError(res.error ? res.error.message : res.trip ? null : "Trip not found.");

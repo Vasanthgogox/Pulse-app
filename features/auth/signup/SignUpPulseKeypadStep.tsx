@@ -424,6 +424,7 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
             variant="pay"
             size="compact"
             layout="phone"
+            hapticsEnabled={false}
           />
         </View>
       ) : null}

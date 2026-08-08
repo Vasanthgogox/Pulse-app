@@ -182,6 +182,10 @@ export function LoadCenterView({
   const [expandedKanbanMode, setExpandedKanbanMode] = useState<
     "give" | "get" | null
   >(null);
+  /** Indent detail opened from a kanban column expand (stays on that page). */
+  const [kanbanDetailIndentId, setKanbanDetailIndentId] = useState<string | null>(
+    null,
+  );
   const [creatorOrgProfileMap, setCreatorOrgProfileMap] = useState<
     Record<string, { avatarUrl?: string; avatarSeed?: string }>
   >({});
@@ -285,8 +289,6 @@ export function LoadCenterView({
     insets.top,
     contentTopPadding,
   ]);
-  /** Narrow / grid cards: stack bid meta + actions so CTAs stay aligned and tappable. */
-  const compactIndentFooter = width < 520;
 
   useEffect(() => {
     if (!highlightedIndentId || useGridLayout) return;
@@ -636,6 +638,34 @@ export function LoadCenterView({
     getLoadKanbanColumnsWithOpps,
   ]);
 
+  const kanbanStageNeighbors = useMemo(() => {
+    if (!expandedKanbanColumnId || !expandedKanbanMode) {
+      return { previous: null, next: null };
+    }
+    const cols =
+      expandedKanbanMode === "give"
+        ? giveLoadKanbanColumns
+        : getLoadKanbanColumnsWithOpps;
+    const idx = cols.findIndex((c) => c.id === expandedKanbanColumnId);
+    if (idx < 0) return { previous: null, next: null };
+    const prev = idx > 0 ? cols[idx - 1] : null;
+    const next = idx < cols.length - 1 ? cols[idx + 1] : null;
+    const toNav = (col: LoadCenterKanbanColumn) => ({
+      id: col.id,
+      label: col.label,
+      count: col.loads.length + (col.countExtra ?? 0),
+    });
+    return {
+      previous: prev ? toNav(prev) : null,
+      next: next ? toNav(next) : null,
+    };
+  }, [
+    expandedKanbanColumnId,
+    expandedKanbanMode,
+    giveLoadKanbanColumns,
+    getLoadKanbanColumnsWithOpps,
+  ]);
+
   const openKanbanColumn = useCallback(
     (mode: "give" | "get", column: LoadCenterKanbanColumn) => {
       setExpandedKanbanMode(mode);
@@ -645,15 +675,48 @@ export function LoadCenterView({
   );
 
   const closeKanbanColumn = useCallback(() => {
+    setKanbanDetailIndentId(null);
     setExpandedKanbanColumnId(null);
     setExpandedKanbanMode(null);
   }, []);
+
+  const handleCardIndentPress = useCallback(
+    (indent: IndentRow) => {
+      if (expandedKanbanColumnId != null) {
+        setKanbanDetailIndentId(indent.id);
+        return;
+      }
+      onIndentPress(indent);
+    },
+    [expandedKanbanColumnId, onIndentPress],
+  );
+
+  const handleKanbanEditIndent = useCallback(
+    (indent: IndentRow) => {
+      setKanbanDetailIndentId(null);
+      closeKanbanColumn();
+      router.push(
+        `/create-indent?draftId=${encodeURIComponent(indent.id)}` as import("expo-router").Href,
+      );
+    },
+    [closeKanbanColumn, router],
+  );
 
   useEffect(() => {
     closeKanbanColumn();
   }, [loadSubTab, closeKanbanColumn]);
 
   const awardModal = useAwardQuote({ orgId, queryClient, invalidateIndents, onSuccess: triggerSuccess, connectedSupplierOrgIds });
+
+  const navigateKanbanStage = useCallback(
+    (columnId: string) => {
+      setKanbanDetailIndentId(null);
+      setBidLoad(null);
+      awardModal.close();
+      setExpandedKanbanColumnId(columnId);
+    },
+    [awardModal.close],
+  );
 
   const openIndentAllocation = useCallback(
     (load: IndentRow) => {
@@ -1014,14 +1077,14 @@ export function LoadCenterView({
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
           tripAllocation={tripAllocationForLoad(load.id)}
-          onPress={() => onIndentPress(load)}
+          onPress={() => handleCardIndentPress(load)}
           actions={
             <LoadCenterIndentCardFooter>
               <ClaimedIndentCardActions
                 load={load}
                 isDone={isDone}
                 assigning={tripDeployment.assigningTripId === load.id}
-                onIndentPress={onIndentPress}
+                onIndentPress={handleCardIndentPress}
                 onShareIndent={handleShareIndent}
                 onAssignDeploy={openIndentAllocation}
               />
@@ -1036,7 +1099,7 @@ export function LoadCenterView({
       handleShareIndent,
       openIndentAllocation,
       myQuotes,
-      onIndentPress,
+      handleCardIndentPress,
       tripAllocationForLoad,
       tripDeployment.assigningTripId,
     ],
@@ -1124,7 +1187,7 @@ export function LoadCenterView({
           onPress={
             layout.fillGrid && !isMobileView
               ? undefined
-              : () => onIndentPress(load)
+              : () => handleCardIndentPress(load)
           }
           dense={layout.dense}
           fillGrid={layout.fillGrid}
@@ -1144,7 +1207,7 @@ export function LoadCenterView({
                   }
                   awardedAmount={awardedAmount}
                   onShareToNetwork={onShareToNetwork}
-                  onIndentPress={onIndentPress}
+                  onIndentPress={handleCardIndentPress}
                   onShareIndent={handleShareIndent}
                   onBroadcastDraft={handleBroadcastDraft}
                   onOpenAwardModal={awardModal.open}
@@ -1164,7 +1227,7 @@ export function LoadCenterView({
       indentIdsWithTrip,
       isMobileView,
       linkedOrgByOrganizationId,
-      onIndentPress,
+      handleCardIndentPress,
       onShareToNetwork,
       quoteCounts,
       statusFilterTab,
@@ -1191,10 +1254,11 @@ export function LoadCenterView({
   const renderGiveLoadListCard = useCallback(
     (load: IndentRow) =>
       renderGiveLoadHubCard(load, {
-        dense: compactIndentFooter,
+        // Comfort toolbar: same 32px row height as status/share, readable labels.
+        dense: false,
         withActions: true,
       }),
-    [compactIndentFooter, renderGiveLoadHubCard],
+    [renderGiveLoadHubCard],
   );
 
   const renderGetLoadHubCard = useCallback(
@@ -1277,7 +1341,7 @@ export function LoadCenterView({
           openIndentAllocation(load);
           return;
         }
-        onIndentPress(load);
+        handleCardIndentPress(load);
       };
 
       return (
@@ -1311,7 +1375,7 @@ export function LoadCenterView({
                   ctaLabel={ctaLabel}
                   quoteVariant={quoteVariant}
                   quoteAmount={quoteAmount}
-                  onIndentPress={onIndentPress}
+                  onIndentPress={handleCardIndentPress}
                   onShareIndent={handleShareIndent}
                   onOpenBidModal={setBidLoad}
                   onAllocate={openIndentAllocation}
@@ -1330,7 +1394,7 @@ export function LoadCenterView({
       handleShareIndent,
       indentIdsWithTrip,
       myQuoteByIndentId,
-      onIndentPress,
+      handleCardIndentPress,
       openIndentAllocation,
       statusFilterTab,
       tripAllocationForLoad,
@@ -1355,10 +1419,11 @@ export function LoadCenterView({
   const renderGetLoadListCard = useCallback(
     (load: IndentRow) =>
       renderGetLoadHubCard(load, {
-        dense: compactIndentFooter,
+        // Comfort toolbar: same 32px row height as status/share, readable labels.
+        dense: false,
         withActions: true,
       }),
-    [compactIndentFooter, renderGetLoadHubCard],
+    [renderGetLoadHubCard],
   );
 
   const renderClaimedGridCard = useCallback(
@@ -1397,7 +1462,7 @@ export function LoadCenterView({
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
           tripAllocation={tripAllocationForLoad(load.id)}
-          onPress={() => onIndentPress(load)}
+          onPress={() => handleCardIndentPress(load)}
           dense
           fillGrid
           actions={
@@ -1406,7 +1471,7 @@ export function LoadCenterView({
                 load={load}
                 isDone={isDone}
                 assigning={tripDeployment.assigningTripId === load.id}
-                onIndentPress={onIndentPress}
+                onIndentPress={handleCardIndentPress}
                 onShareIndent={handleShareIndent}
                 onAssignDeploy={openIndentAllocation}
                 dense
@@ -1422,7 +1487,7 @@ export function LoadCenterView({
       handleShareIndent,
       openIndentAllocation,
       myQuotes,
-      onIndentPress,
+      handleCardIndentPress,
       tripAllocationForLoad,
       tripDeployment.assigningTripId,
     ],
@@ -1966,15 +2031,58 @@ export function LoadCenterView({
             : renderGiveLoadGridCard
         }
         highlightedIndentId={highlightedIndentId}
-      />
+        detailIndentId={kanbanDetailIndentId}
+        onCloseDetail={() => setKanbanDetailIndentId(null)}
+        onEditIndent={handleKanbanEditIndent}
+        previousStage={kanbanStageNeighbors.previous}
+        nextStage={kanbanStageNeighbors.next}
+        onNavigateStage={navigateKanbanStage}
+      >
+        <AwardModal
+          visible={awardModal.isOpen}
+          award={awardModal}
+          onViewIndent={handleCardIndentPress}
+          insets={insets}
+        />
+        <BidModal
+          visible={bidLoad !== null}
+          load={bidLoad}
+          orgId={orgId}
+          myQuoteByIndentId={myQuoteByIndentId}
+          onClose={() => setBidLoad(null)}
+          onSuccess={triggerSuccess}
+          localBidHistoryByIndentId={localBidHistoryByIndentId}
+          onUpdateLocalBidHistory={(indentId, entry) => {
+            setLocalBidHistoryByIndentId((prev) => {
+              const prior = prev[indentId] ?? [];
+              const alreadyExists = prior.some(
+                (row) =>
+                  Number(row.amount) === Number(entry.amount) &&
+                  row.updatedAt === entry.updatedAt,
+              );
+              if (alreadyExists) return prev;
+              return {
+                ...prev,
+                [indentId]: [entry, ...prior].slice(0, 10),
+              };
+            });
+          }}
+          queryClient={queryClient}
+          invalidateIndents={invalidateIndents}
+          refetchMyQuotes={refetchMyQuotes}
+          refetchMarketIndents={refetchMarketIndents}
+          insets={insets}
+        />
+      </LoadCenterKanbanColumnModal>
 
-      {/* Offer Hub modal — list quotes, select one, Award */}
-      <AwardModal
-        visible={awardModal.isOpen}
-        award={awardModal}
-        onViewIndent={onIndentPress}
-        insets={insets}
-      />
+      {expandedKanbanColumn == null ? (
+        <AwardModal
+          visible={awardModal.isOpen}
+          award={awardModal}
+          onViewIndent={onIndentPress}
+          insets={insets}
+        />
+      ) : null}
 
       <FindNetworkVehiclesDrawer
         visible={findMarketplaceMode != null}
@@ -1985,36 +2093,37 @@ export function LoadCenterView({
         clientOrgIds={connectedClientOrgIds}
       />
 
-      {/* Submit Registry Bid modal (reference) */}
-      <BidModal
-        visible={bidLoad !== null}
-        load={bidLoad}
-        orgId={orgId}
-        myQuoteByIndentId={myQuoteByIndentId}
-        onClose={() => setBidLoad(null)}
-        onSuccess={triggerSuccess}
-        localBidHistoryByIndentId={localBidHistoryByIndentId}
-        onUpdateLocalBidHistory={(indentId, entry) => {
-          setLocalBidHistoryByIndentId((prev) => {
-            const prior = prev[indentId] ?? [];
-            const alreadyExists = prior.some(
-              (row) =>
-                Number(row.amount) === Number(entry.amount) &&
-                row.updatedAt === entry.updatedAt,
-            );
-            if (alreadyExists) return prev;
-            return {
-              ...prev,
-              [indentId]: [entry, ...prior].slice(0, 10),
-            };
-          });
-        }}
-        queryClient={queryClient}
-        invalidateIndents={invalidateIndents}
-        refetchMyQuotes={refetchMyQuotes}
-        refetchMarketIndents={refetchMarketIndents}
-        insets={insets}
-      />
+      {expandedKanbanColumn == null ? (
+        <BidModal
+          visible={bidLoad !== null}
+          load={bidLoad}
+          orgId={orgId}
+          myQuoteByIndentId={myQuoteByIndentId}
+          onClose={() => setBidLoad(null)}
+          onSuccess={triggerSuccess}
+          localBidHistoryByIndentId={localBidHistoryByIndentId}
+          onUpdateLocalBidHistory={(indentId, entry) => {
+            setLocalBidHistoryByIndentId((prev) => {
+              const prior = prev[indentId] ?? [];
+              const alreadyExists = prior.some(
+                (row) =>
+                  Number(row.amount) === Number(entry.amount) &&
+                  row.updatedAt === entry.updatedAt,
+              );
+              if (alreadyExists) return prev;
+              return {
+                ...prev,
+                [indentId]: [entry, ...prior].slice(0, 10),
+              };
+            });
+          }}
+          queryClient={queryClient}
+          invalidateIndents={invalidateIndents}
+          refetchMyQuotes={refetchMyQuotes}
+          refetchMarketIndents={refetchMarketIndents}
+          insets={insets}
+        />
+      ) : null}
 
     </View>
     </HubScreenShell>

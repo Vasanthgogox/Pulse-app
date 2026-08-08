@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalDriverInviteModal } from '@/contexts/DriverInviteModalContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { DriverSelfAvatar } from '@/components/driver/DriverSelfAvatar';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import {
     buildBulkTripClaimWhatsappMessage,
@@ -36,8 +37,8 @@ import {
   deriveDriverPaymentMode,
   extractDriverPaymentUtr,
 } from "@/features/driver/tripSettlement/driverTripSettlement.util";
-import { getFleetAvatarUriForOrg, resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
-import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
+import { resolveDriverOrgAvatarUri } from '@/features/drivers/utils/resolveDriverOrgAvatar.util';
+import { fetchOrgBrandingByIds, type OrgBrandingRow } from '@/lib/orgBrandingFetch';
 import { buildDriverInviteSalaryLines } from '@/features/drivers/utils/driverInviteOffer.util';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/features/drivers/services/drivers.service';
@@ -178,6 +179,9 @@ export default function DriverWalletScreen() {
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);
   const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
+  const [fetchedOrgBrandingById, setFetchedOrgBrandingById] = useState<
+    Record<string, OrgBrandingRow>
+  >({});
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
   const [salaryRequests, setSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1159,20 +1163,58 @@ export default function DriverWalletScreen() {
     return map;
   }, [linkedDrivers, invites, orgNameFromTrips]);
 
-  /** org_id → { logoUrl, avatarUrl, avatarSeed } sourced from invite rows (org owner profile via RPC). */
+  /** org_id → branding (invite RPC fields + org owner logo/seed/url from DB). */
   const orgAvatarById = useMemo(() => {
-    const map: Record<string, { logoUrl: string | null; avatarUrl: string | null; avatarSeed: string | null }> = {};
+    const map: Record<
+      string,
+      { logoUrl: string | null; avatarUrl: string | null; avatarSeed: string | null }
+    > = {};
+    for (const [orgId, row] of Object.entries(fetchedOrgBrandingById)) {
+      map[orgId] = {
+        logoUrl: row.logoUrl,
+        avatarUrl: row.avatarUrl,
+        avatarSeed: row.avatarSeed,
+      };
+    }
     invites.forEach((i) => {
       const orgId = String(i.from_organization_id ?? '');
-      if (!orgId || map[orgId]) return;
+      if (!orgId) return;
+      const prev = map[orgId];
+      const inviteLogo = (i.from_org_logo_url ?? '').trim();
+      const inviteUrl = (i.from_org_avatar_url ?? '').trim();
+      const inviteSeed = (i.from_org_avatar_seed ?? '').trim();
+      // Prefer invite branding when present; never let empty invite strings wipe
+      // owner seed/logo fetched via get_org_branding_for_driver.
       map[orgId] = {
-        logoUrl: i.from_org_logo_url ?? null,
-        avatarUrl: i.from_org_avatar_url ?? null,
-        avatarSeed: i.from_org_avatar_seed ?? null,
+        logoUrl: inviteLogo || prev?.logoUrl || null,
+        avatarUrl: inviteUrl || prev?.avatarUrl || null,
+        avatarSeed: inviteSeed || prev?.avatarSeed || null,
       };
     });
     return map;
-  }, [invites]);
+  }, [invites, fetchedOrgBrandingById]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const orgIds = [
+      ...invites.map((i) => String(i.from_organization_id ?? '').trim()),
+      ...trips.flatMap((t) => [
+        String(t.organization_id ?? '').trim(),
+        String(t.supplier_id ?? '').trim(),
+      ]),
+      ...linkedDrivers.map((d) => String(d.organization_id ?? '').trim()),
+    ].filter((id) => id.length > 0);
+    if (orgIds.length === 0) {
+      setFetchedOrgBrandingById({});
+      return;
+    }
+    void fetchOrgBrandingByIds(orgIds).then((map) => {
+      if (!cancelled) setFetchedOrgBrandingById(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [invites, trips, linkedDrivers]);
 
   const fleetCards = useMemo(() => {
     return salaryRequestOrgOptions.map((fleet) => {
@@ -2082,9 +2124,7 @@ export default function DriverWalletScreen() {
             style={styles.avatarBtn}
             activeOpacity={0.8}
           >
-            <View style={[styles.avatarCircle, { borderColor: colors.border, backgroundColor: colors.emeraldMuted }]}>
-              <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
-            </View>
+            <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <DriverBrandMark color={colors.textMuted} />
@@ -2449,7 +2489,7 @@ export default function DriverWalletScreen() {
                     ]}
                   >
                     <Image
-                      source={{ uri: (() => { const a = orgAvatarById[String(currentEmployer.orgId ?? '')]; return resolveOrgAvatarUri(String(currentEmployer.orgId ?? ''), currentEmployer.orgName, a?.logoUrl, a?.avatarSeed, a?.avatarUrl); })() }}
+                      source={{ uri: (() => { const oid = String(currentEmployer.orgId ?? ''); const a = orgAvatarById[oid]; return resolveDriverOrgAvatarUri({ orgId: oid, orgName: currentEmployer.orgName, branding: a }); })() }}
                       style={styles.fleetCardLogoImage}
                       resizeMode="cover"
                     />
@@ -2590,7 +2630,14 @@ export default function DriverWalletScreen() {
                 <View style={{ gap: 10 }}>
                   {pendingWalletInvites.map((inv) => {
                     const orgName = inv.from_org_name?.trim() || 'Fleet';
-                    const logoUri = resolveOrgAvatarUri(inv.from_organization_id ?? '', orgName, inv.from_org_logo_url, inv.from_org_avatar_seed, inv.from_org_avatar_url);
+                    const logoUri = resolveDriverOrgAvatarUri({
+                      orgId: inv.from_organization_id,
+                      orgName,
+                      branding: orgAvatarById[String(inv.from_organization_id ?? '')],
+                      logoUrl: inv.from_org_logo_url,
+                      avatarSeed: inv.from_org_avatar_seed,
+                      avatarUrl: inv.from_org_avatar_url,
+                    });
                     const salaryLines = buildDriverInviteSalaryLines(inv);
                     const isBusy = walletInviteActionId === inv.id;
                     return (
@@ -2889,13 +2936,11 @@ export default function DriverWalletScreen() {
                         >
                           {(() => {
                             const orgAvatar = orgAvatarById[past.orgId];
-                            const uri =
-                              resolvePartyDisplayUri({
-                                organizationImageUrl: orgAvatar?.logoUrl,
-                                organizationAvatarSeed: orgAvatar?.avatarSeed,
-                                avatarUrl: orgAvatar?.avatarUrl,
-                                avatarSeed: null,
-                              }) ?? getFleetAvatarUriForOrg(past.orgId, past.orgName);
+                            const uri = resolveDriverOrgAvatarUri({
+                              orgId: past.orgId,
+                              orgName: past.orgName,
+                              branding: orgAvatar,
+                            });
                             return (
                               <Image
                                 source={{ uri }}
@@ -2997,13 +3042,11 @@ export default function DriverWalletScreen() {
                         );
                         const orgId = String(item.trip.organization_id ?? '');
                         const orgAvatar = orgAvatarById[orgId];
-                        const fleetAvatarUri =
-                          resolvePartyDisplayUri({
-                            organizationImageUrl: orgAvatar?.logoUrl,
-                            organizationAvatarSeed: orgAvatar?.avatarSeed,
-                            avatarUrl: orgAvatar?.avatarUrl,
-                            entityType: 'client',
-                          }) ?? getFleetAvatarUriForOrg(orgId, providerShort);
+                        const fleetAvatarUri = resolveDriverOrgAvatarUri({
+                          orgId,
+                          orgName: providerShort,
+                          branding: orgAvatar,
+                        });
                         // Attribution state for this specific trip:
                         //   pending  = driver sent it to fleet owner, awaiting approval
                         //   approved = fleet owner approved it (counts as fleet trip)
@@ -3066,10 +3109,11 @@ export default function DriverWalletScreen() {
                                               resizeMode="cover"
                                             />
                                             <Image
-                                              source={{ uri: getFleetAvatarUriForOrg(
-                                                String(currentEmployer?.orgId ?? ''),
-                                                currentEmployer?.orgName ?? 'Fleet',
-                                              ) }}
+                                              source={{ uri: resolveDriverOrgAvatarUri({
+                                                orgId: currentEmployer?.orgId,
+                                                orgName: currentEmployer?.orgName ?? 'Fleet',
+                                                branding: orgAvatarById[String(currentEmployer?.orgId ?? '')],
+                                              }) }}
                                               style={[styles.tripsAttributedAvatar, styles.tripsAttributedAvatarBack]}
                                               resizeMode="cover"
                                             />
@@ -3684,13 +3728,11 @@ export default function DriverWalletScreen() {
                         salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === cashOrgId)?.orgName ??
                         'Fleet';
                       const cashOrgAvatar = orgAvatarById[cashOrgId];
-                      const fleetAvatarUri =
-                        resolvePartyDisplayUri({
-                          organizationImageUrl: cashOrgAvatar?.logoUrl,
-                          organizationAvatarSeed: cashOrgAvatar?.avatarSeed,
-                          avatarUrl: cashOrgAvatar?.avatarUrl,
-                          entityType: 'client',
-                        }) ?? getFleetAvatarUriForOrg(cashOrgId, fleetName);
+                      const fleetAvatarUri = resolveDriverOrgAvatarUri({
+                        orgId: cashOrgId,
+                        orgName: fleetName,
+                        branding: cashOrgAvatar,
+                      });
                       const ledger = latestCreditLedgerByTripId[trip.id];
                       const paymentMode = derivePaymentMode(ledger?.description) ?? '—';
                       const utr = extractUtr(ledger?.description) ?? '—';

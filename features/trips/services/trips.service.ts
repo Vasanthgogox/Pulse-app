@@ -531,6 +531,26 @@ export async function getTripRowByIdLight(
   return { error: null, trip: normalizeTripRowWithIndent(data as TripRow) };
 }
 
+/**
+ * Trip load for shared ops/verification routes used by both office and drivers.
+ *
+ * Prefer the light `trips` select (no indent embeds — those fail under driver
+ * indent RLS and surface as "Trip not found"). Fall back to `trips_driver_view`
+ * when the row is invisible on `trips`.
+ */
+export async function getAccessibleTripById(
+  tripId: string,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const light = await getTripRowByIdLight(tripId);
+  if (light.error) return light;
+  if (light.trip) return light;
+
+  const driver = await getDriverTripById(tripId);
+  if (driver.error) return { error: driver.error, trip: null };
+  if (driver.trip) return { error: null, trip: driverRowToTripRow(driver.trip) };
+  return { error: null, trip: null };
+}
+
 /** Latest trip row for an indent (direct-quote / Staff Handshake recovery). */
 export async function getTripByIndentId(
   indentId: string,

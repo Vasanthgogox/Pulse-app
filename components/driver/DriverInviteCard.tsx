@@ -1,8 +1,9 @@
 import Theme from '@/constants/Theme';
-import { resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
+import { resolveDriverOrgAvatarUri } from '@/features/drivers/utils/resolveDriverOrgAvatar.util';
 import type { DriverInviteRow } from '@/features/drivers/services/drivers.service';
+import { useOrgBrandingByIds } from '@/lib/hooks/useOrgBrandingByIds';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type InviteCardColors = {
@@ -38,12 +39,19 @@ export function DriverInviteCard({
   onClose,
   acceptLabel = 'Accept Invite',
 }: Props) {
-  const orgLogo = resolveOrgAvatarUri(
-    invite.from_organization_id ?? '',
-    invite.from_org_name ?? '',
-    invite.from_org_logo_url,
-    invite.from_org_avatar_seed,
-    invite.from_org_avatar_url ?? fallbackAvatarUri,
+  const orgId = invite.from_organization_id ?? '';
+  const brandingById = useOrgBrandingByIds([orgId]);
+  const orgLogo = useMemo(
+    () =>
+      resolveDriverOrgAvatarUri({
+        orgId,
+        orgName: invite.from_org_name,
+        branding: brandingById[orgId],
+        logoUrl: invite.from_org_logo_url,
+        avatarSeed: invite.from_org_avatar_seed,
+        avatarUrl: invite.from_org_avatar_url ?? fallbackAvatarUri,
+      }),
+    [invite, orgId, brandingById, fallbackAvatarUri],
   );
 
   return (

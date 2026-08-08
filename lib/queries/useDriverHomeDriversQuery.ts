@@ -52,6 +52,12 @@ export function useDriverHomeDriversQuery(userId: string | null) {
     [query.data],
   );
 
+  /** Employer / roster fleet row — never promote OTP tracking stubs as "my employer". */
+  const employerLinkedDrivers = useMemo(
+    () => activeLinkedDrivers.filter((d) => d.tracking_only !== true),
+    [activeLinkedDrivers],
+  );
+
   const driverIdsKey = useMemo(
     () =>
       activeLinkedDrivers
@@ -78,7 +84,7 @@ export function useDriverHomeDriversQuery(userId: string | null) {
     refetch: query.refetch,
     drivers: query.data ?? EMPTY_DRIVERS,
     activeLinkedDrivers,
-    primaryDriver: activeLinkedDrivers[0] ?? null,
+    primaryDriver: employerLinkedDrivers[0] ?? null,
     driverIdsKey,
     refreshLinkedDrivers,
   };

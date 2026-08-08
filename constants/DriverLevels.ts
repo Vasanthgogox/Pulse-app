@@ -1,38 +1,34 @@
 /**
  * Driver pilot levels and preset avatars (reference: Qu Tactical Hub).
  * Used for Pilot Card, Rank Path Progression, and onboarding.
- * Preset avatars are 10 bundled driver icons in assets/drivers/.
+ *
+ * IMPORTANT: Do NOT statically import `UserAvatars` here. Map markers import
+ * `resolveDriverAvatarImageSource` from this module — eagerly requiring all
+ * 64+ user avatar PNGs on that path blanks Expo Go maps (react-native-maps).
+ * User catalog is loaded lazily only when resolving a `user-*` seed.
  */
 
-import { Asset } from 'expo-asset';
-import { Image, Platform, type ImageSourcePropType } from 'react-native';
+import { type ImageSourcePropType } from 'react-native';
+import {
+  getPresetAvatarUri,
+  type PresetAvatar,
+} from '@/constants/presetAvatar';
 
-function absolutizeWebUri(uri: string): string {
-  if (
-    typeof window !== 'undefined' &&
-    uri.startsWith('/') &&
-    !uri.startsWith('//')
-  ) {
-    return `${window.location.origin}${uri}`;
-  }
-  return uri;
-}
+export type { PresetAvatar } from '@/constants/presetAvatar';
+export { getPresetAvatarUri } from '@/constants/presetAvatar';
 
 export const DEFAULT_DRIVER_AVATAR_SEED = 'driver-1';
 
 export const LEVELS_CONFIG = [
-  { level: 1, name: 'Initiate', goalText: 'Complete Signup', type: 'signup', target: 1, reward: 'Access Hub', tier: 'Bronze' },
-  { level: 2, name: 'Novice', goalText: 'Complete 2 Trips', type: 'trips', target: 2, reward: 'Standard Trips', tier: 'Bronze' },
-  { level: 3, name: 'Verified', goalText: 'Verify Identity', type: 'verification', target: 1, reward: 'Silver Status', tier: 'Silver' },
-  { level: 4, name: 'Trusted', goalText: 'Earn 2 Five-Star Ratings', type: 'ratings', target: 2, reward: 'Priority Support', tier: 'Silver' },
-  { level: 5, name: 'Navigator', goalText: 'Complete 10 Trips', type: 'trips', target: 10, reward: 'Grid Boost', tier: 'Silver' },
-  { level: 6, name: 'Veteran', goalText: 'Complete 25 Trips', type: 'trips', target: 25, reward: 'Tier-1 Settlements', tier: 'Silver' },
-  { level: 7, name: 'Elite', goalText: 'Get 10 Five-Star Ratings', type: 'ratings', target: 10, reward: 'Hot Request Lock', tier: 'Silver' },
-  { level: 8, name: 'Gold', goalText: 'Get 20 Five-Star Ratings', type: 'ratings', target: 20, reward: 'Gold Yield (+5%)', tier: 'Gold' },
+  { level: 1, name: 'Initiate', goalText: 'Complete Signup', type: 'signup', target: 1, privilege: 'Access Hub', tier: 'Bronze' },
+  { level: 2, name: 'Novice', goalText: 'Complete 2 Trips', type: 'trips', target: 2, privilege: 'Standard Trips', tier: 'Bronze' },
+  { level: 3, name: 'Verified', goalText: 'Verify Identity', type: 'verification', target: 1, privilege: 'Silver Status', tier: 'Silver' },
+  { level: 4, name: 'Trusted', goalText: 'Earn 2 Five-Star Ratings', type: 'ratings', target: 2, privilege: 'Priority Support', tier: 'Silver' },
+  { level: 5, name: 'Navigator', goalText: 'Complete 10 Trips', type: 'trips', target: 10, privilege: 'Grid Boost', tier: 'Silver' },
+  { level: 6, name: 'Veteran', goalText: 'Complete 25 Trips', type: 'trips', target: 25, privilege: 'Tier-1 Settlements', tier: 'Silver' },
+  { level: 7, name: 'Elite', goalText: 'Get 10 Five-Star Ratings', type: 'ratings', target: 10, privilege: 'Hot Request Lock', tier: 'Silver' },
+  { level: 8, name: 'Gold', goalText: 'Get 20 Five-Star Ratings', type: 'ratings', target: 20, privilege: 'Gold Yield (+5%)', tier: 'Gold' },
 ] as const;
-
-/** Preset avatar: bundled image (require) and seed for persistence. */
-export type PresetAvatar = { name: string; seed: string; image: ImageSourcePropType };
 
 const driver1 = require('../assets/drivers/driver-1.png');
 const driver2 = require('../assets/drivers/driver-2.png');
@@ -45,7 +41,7 @@ const driver8 = require('../assets/drivers/driver-8.png');
 const driver9 = require('../assets/drivers/driver-9.png');
 const driver10 = require('../assets/drivers/driver-10.png');
 
-/** All driver preset avatars (bundled in assets/drivers). */
+/** Core driver mascot presets (bundled in assets/drivers). */
 export const DRIVER_PRESET_AVATARS: PresetAvatar[] = [
   { name: 'Happy Captain', seed: 'driver-1', image: driver1 },
   { name: 'Trusty Veteran', seed: 'driver-2', image: driver2 },
@@ -59,104 +55,81 @@ export const DRIVER_PRESET_AVATARS: PresetAvatar[] = [
   { name: 'Friendly Fellow', seed: 'driver-10', image: driver10 },
 ];
 
-/** All presets shown in driver profile avatar picker. */
+/**
+ * Default catalog for profile pickers / hash fallbacks = driver mascots only.
+ * Signup / expanded pickers should use `getSignupPresetAvatars()`.
+ */
 export const ALL_PRESET_AVATARS: PresetAvatar[] = DRIVER_PRESET_AVATARS;
 
-/** URI for a preset (from bundled asset). Works on native and react-native-web. */
-export function getPresetAvatarUri(av: PresetAvatar): string {
-  const source = av.image as ImageSourcePropType;
-  if (!source) return '';
+let signupCatalogCache: PresetAvatar[] | null = null;
 
-  if (typeof source === 'number') {
-    try {
-      const asset = Asset.fromModule(source);
-      const uri = (asset?.uri ?? asset?.localUri ?? '').trim();
-      if (uri) return absolutizeWebUri(uri);
-    } catch {
-      // fall through
-    }
-  }
+/** Drivers + full `assets/avatars` catalog (lazy — safe for signup UI, not map markers). */
+export function getSignupPresetAvatars(): PresetAvatar[] {
+  if (signupCatalogCache) return signupCatalogCache;
+  // Lazy require keeps UserAvatars PNGs off the map-marker import graph.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { USER_2D_AVATARS } = require('@/constants/UserAvatars') as typeof import('@/constants/UserAvatars');
+  signupCatalogCache = [
+    ...DRIVER_PRESET_AVATARS,
+    ...USER_2D_AVATARS.map(({ name, seed, image }) => ({ name, seed, image })),
+  ];
+  return signupCatalogCache;
+}
 
-  if (typeof source === 'object' && source !== null && !Array.isArray(source)) {
-    if ('uri' in source) {
-      const uri = typeof source.uri === 'string' ? source.uri.trim() : '';
-      if (uri) return absolutizeWebUri(uri);
-    }
-    const mod = source as { default?: unknown };
-    if (typeof mod.default === 'string' && mod.default.trim()) {
-      return absolutizeWebUri(mod.default.trim());
-    }
-    if (typeof mod.default === 'number') {
-      try {
-        const asset = Asset.fromModule(mod.default);
-        const uri = (asset?.uri ?? asset?.localUri ?? '').trim();
-        if (uri) return absolutizeWebUri(uri);
-      } catch {
-        // fall through
-      }
-    }
-  }
-
-  // resolveAssetSource is native-only — undefined on react-native-web.
-  if (
-    Platform.OS !== 'web' &&
-    typeof Image.resolveAssetSource === 'function'
-  ) {
-    const resolved = Image.resolveAssetSource(source);
-    if (resolved?.uri) {
-      return absolutizeWebUri(resolved.uri.trim());
-    }
-  }
-
-  return '';
+function findPresetForSeed(seed?: string | null): PresetAvatar {
+  const s = (seed ?? '').trim();
+  const fromDrivers = DRIVER_PRESET_AVATARS.find((av) => av.seed === s);
+  if (fromDrivers) return fromDrivers;
+  // Do NOT call getSignupPresetAvatars() here — map markers share this path and
+  // loading 64+ user PNGs blanks Expo Go react-native-maps. Signup UI must call
+  // getSignupPresetAvatars() directly.
+  return DRIVER_PRESET_AVATARS[0]!;
 }
 
 /** Bundled `require()` source for a driver preset seed (preferred for `<Image source={…} />`). */
 export function getPresetImageSourceForSeed(
   seed?: string | null,
 ): ImageSourcePropType {
-  return getDriverPresetForSeed(seed).image;
+  return findPresetForSeed(seed).image;
 }
 
 /** Resolve stored avatarSeed to display URI. */
 export function getAvatarUriForSeed(seed: string): string {
-  const preset = ALL_PRESET_AVATARS.find((av) => av.seed === seed);
-  return preset ? getPresetAvatarUri(preset) : getPresetAvatarUri(ALL_PRESET_AVATARS[0]);
+  return getPresetAvatarUri(findPresetForSeed(seed));
 }
 
 /** Preset row for a driver seed (falls back to driver-1). */
 export function getDriverPresetForSeed(seed?: string | null): PresetAvatar {
-  const s = (seed ?? '').trim();
-  return ALL_PRESET_AVATARS.find((av) => av.seed === s) ?? ALL_PRESET_AVATARS[0]!;
+  return findPresetForSeed(seed);
 }
 
-/** Image source for driver UI: uploaded photo URL or bundled preset (`assets/drivers` or legacy `user-N`). */
+/** Image source for driver UI: uploaded photo URL or bundled preset. */
 export function resolveDriverAvatarImageSource(
   avatarUri?: string | null,
   avatarSeed?: string | null,
 ): ImageSourcePropType {
   const trimmed = avatarUri?.trim();
-  if (trimmed && (trimmed.startsWith('http') || trimmed.startsWith('data:'))) {
-    return { uri: trimmed };
+  if (trimmed) {
+    if (
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('data:') ||
+      trimmed.startsWith('file:') ||
+      trimmed.startsWith('blob:')
+    ) {
+      return { uri: trimmed };
+    }
   }
-  const seed = (avatarSeed ?? '').trim();
-  if (seed.startsWith('user-')) {
-    const { getUser2DPresetImageSourceForSeed } =
-      require('./UserAvatars') as typeof import('./UserAvatars');
-    return getUser2DPresetImageSourceForSeed(seed);
-  }
-  return getDriverPresetForSeed(avatarSeed).image;
+  const s = (avatarSeed ?? '').trim();
+  const driver = DRIVER_PRESET_AVATARS.find((av) => av.seed === s);
+  if (driver) return driver.image;
+  // user-* seeds: never pull UserAvatars on this hot path (Expo Go map blank).
+  return DRIVER_PRESET_AVATARS[0]!.image;
 }
 
-/** Display URI for map markers / web img src (bundled driver or legacy user presets). */
+/** Display URI for map markers / web img src. */
 export function resolveDriverAvatarUriForSeed(seed?: string | null): string {
-  const s = (seed ?? '').trim();
-  if (s.startsWith('user-')) {
-    const { getUser2DAvatarUriForSeed } =
-      require('./UserAvatars') as typeof import('./UserAvatars');
-    return getUser2DAvatarUriForSeed(s);
-  }
-  return getPresetAvatarUri(getDriverPresetForSeed(seed));
+  return getPresetAvatarUri(findPresetForSeed(seed));
 }
 
 /** @deprecated Use getAvatarUriForSeed. Kept for compatibility. */

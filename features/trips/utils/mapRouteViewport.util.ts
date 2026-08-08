@@ -49,6 +49,34 @@ export function boundsFromCoordinates(
   };
 }
 
+/**
+ * Expand geographic bounds by a fraction of their span (plus a floor) so
+ * fitToCoordinates / fitBounds zooms out further — short legs otherwise
+ * pin to max zoom even with large edge padding.
+ */
+export function inflateMapBounds(
+  bounds: { ne: MapCoordinate; sw: MapCoordinate },
+  spanFactor = 0.55,
+  minPadDeg = 0.035,
+): { ne: MapCoordinate; sw: MapCoordinate } {
+  const midLat = (bounds.ne.latitude + bounds.sw.latitude) / 2;
+  const midLng = (bounds.ne.longitude + bounds.sw.longitude) / 2;
+  const halfLat = Math.abs(bounds.ne.latitude - bounds.sw.latitude) / 2;
+  const halfLng = Math.abs(bounds.ne.longitude - bounds.sw.longitude) / 2;
+  const padLat = Math.max(halfLat * spanFactor, minPadDeg);
+  const padLng = Math.max(halfLng * spanFactor, minPadDeg);
+  return {
+    ne: {
+      latitude: midLat + halfLat + padLat,
+      longitude: midLng + halfLng + padLng,
+    },
+    sw: {
+      latitude: midLat - halfLat - padLat,
+      longitude: midLng - halfLng - padLng,
+    },
+  };
+}
+
 export function latLngTuplesToCoordinates(
   tuples: [number, number][],
 ): MapCoordinate[] {

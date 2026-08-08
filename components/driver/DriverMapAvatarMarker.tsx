@@ -171,7 +171,7 @@ const styles = withWebSafeShadows(
     avatarShell: {
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#fff',
+      backgroundColor: Theme.driverEmerald,
       shadowColor: '#0f172a',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.28,

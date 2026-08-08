@@ -19,6 +19,7 @@ import {
     assignerPrimarySecondaryForDriver,
     buildAssignerDisplayForTrip,
     buildJobCardAssignerPayload,
+    findDriverInviteForTripOrgs,
     resolveAssignerUserId,
     type JobCardAssignerPayload,
 } from '@/features/trips/utils/driverAssignerDisplay.util';
@@ -39,6 +40,7 @@ import {
 } from '@/features/drivers/utils/driverUtils.util';
 import { formatINR } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
+import { fetchOrgBrandingByIds } from '@/lib/orgBrandingFetch';
 import * as driversService from '@/features/drivers/services/drivers.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -89,6 +91,9 @@ export default function DriverNotificationsScreen() {
   const [assignerTripOrgNameByTripId, setAssignerTripOrgNameByTripId] = useState<
     Record<string, string>
   >({});
+  const [assignerTripOrgIdByTripId, setAssignerTripOrgIdByTripId] = useState<
+    Record<string, string>
+  >({});
   const [assignerNamesByUserId, setAssignerNamesByUserId] = useState<
     Record<string, string>
   >({});
@@ -96,6 +101,15 @@ export default function DriverNotificationsScreen() {
     Record<string, string>
   >({});
   const [organizationNamesById, setOrganizationNamesById] = useState<
+    Record<string, string>
+  >({});
+  const [organizationLogoById, setOrganizationLogoById] = useState<
+    Record<string, string>
+  >({});
+  const [organizationAvatarSeedById, setOrganizationAvatarSeedById] = useState<
+    Record<string, string>
+  >({});
+  const [organizationAvatarUrlById, setOrganizationAvatarUrlById] = useState<
     Record<string, string>
   >({});
   const [notifyOnlyAfterMission, setNotifyOnlyAfterMission] = useState(false);
@@ -237,7 +251,11 @@ export default function DriverNotificationsScreen() {
           setAssignerOrgNameByUserId({});
           setAssignerDisplayByTripId({});
           setAssignerTripOrgNameByTripId({});
+          setAssignerTripOrgIdByTripId({});
           setOrganizationNamesById({});
+          setOrganizationLogoById({});
+          setOrganizationAvatarSeedById({});
+          setOrganizationAvatarUrlById({});
         }
         return;
       }
@@ -250,26 +268,59 @@ export default function DriverNotificationsScreen() {
         { p_trip_ids: tripIdsForRpc },
       );
       const rpcAssignerUserIdByTrip: Record<string, string> = {};
+      const rpcOrgIdByTrip: Record<string, string> = {};
       if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
         const byTrip: Record<string, string> = {};
         const orgByTrip: Record<string, string> = {};
+        const logosById: Record<string, string> = {};
+        const namesById: Record<string, string> = {};
+        const seedsById: Record<string, string> = {};
+        const avatarUrlsById: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
           assigner_user_id?: string | null;
           assigning_organization_name?: string | null;
+          assigning_organization_id?: string | null;
+          assigning_organization_logo_url?: string | null;
+          assigning_organization_avatar_seed?: string | null;
+          assigning_organization_avatar_url?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : '';
           const dn = String(row.display_name ?? '').trim();
           const uid = String(row.assigner_user_id ?? '').trim();
           const orgName = String(row.assigning_organization_name ?? '').trim();
+          const orgId = String(row.assigning_organization_id ?? '').trim();
+          const logo = String(row.assigning_organization_logo_url ?? '').trim();
+          const seed = String(row.assigning_organization_avatar_seed ?? '').trim();
+          const avatarUrl = String(row.assigning_organization_avatar_url ?? '').trim();
           if (tid && dn) byTrip[tid] = dn;
           if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
           if (tid && orgName) orgByTrip[tid] = orgName;
+          if (tid && orgId) {
+            rpcOrgIdByTrip[tid] = orgId;
+            if (orgName) namesById[orgId] = orgName;
+            if (logo) logosById[orgId] = logo;
+            if (seed) seedsById[orgId] = seed;
+            if (avatarUrl) avatarUrlsById[orgId] = avatarUrl;
+          }
         }
         setAssignerDisplayByTripId(byTrip);
         setRpcAssignerUserIdByTripId(rpcAssignerUserIdByTrip);
         setAssignerTripOrgNameByTripId(orgByTrip);
+        setAssignerTripOrgIdByTripId(rpcOrgIdByTrip);
+        if (Object.keys(namesById).length > 0) {
+          setOrganizationNamesById((prev) => ({ ...prev, ...namesById }));
+        }
+        if (Object.keys(logosById).length > 0) {
+          setOrganizationLogoById((prev) => ({ ...prev, ...logosById }));
+        }
+        if (Object.keys(seedsById).length > 0) {
+          setOrganizationAvatarSeedById((prev) => ({ ...prev, ...seedsById }));
+        }
+        if (Object.keys(avatarUrlsById).length > 0) {
+          setOrganizationAvatarUrlById((prev) => ({ ...prev, ...avatarUrlsById }));
+        }
       }
 
       const userIds = Array.from(
@@ -286,18 +337,23 @@ export default function DriverNotificationsScreen() {
       );
       const organizationIds = Array.from(
         new Set(
-          trips
-            .flatMap((trip) => {
+          [
+            ...trips.flatMap((trip) => {
               const tripMeta = trip as tripsService.TripRow &
                 Record<string, string | number | boolean | null | undefined>;
               return [
                 (trip.organization_id ?? '').trim(),
+                (trip.supplier_id ?? '').trim(),
                 (
-                  (tripMeta.from_organization_id as string | null | undefined) ?? ''
+                  (tripMeta.from_organization_id as string | null | undefined) ??
+                  ''
                 ).trim(),
                 ((tripMeta.from_org_id as string | null | undefined) ?? '').trim(),
               ];
-            })
+            }),
+            ...Object.values(rpcOrgIdByTrip),
+          ]
+            .map((id) => String(id ?? '').trim())
             .filter((id) => id.length > 0),
         ),
       );
@@ -392,9 +448,24 @@ export default function DriverNotificationsScreen() {
           const byId: Record<string, string> = {};
           for (const row of
             (data ?? []) as Array<{ id: string; name?: string | null }>) {
-            byId[row.id] = (row.name ?? '').trim();
+            const name = (row.name ?? '').trim();
+            if (name) byId[row.id] = name;
           }
-          setOrganizationNamesById(byId);
+          setOrganizationNamesById((prev) => ({ ...prev, ...byId }));
+        }
+        const branding = await fetchOrgBrandingByIds(organizationIds);
+        if (!cancelled && Object.keys(branding).length > 0) {
+          const logosById: Record<string, string> = {};
+          const seedsById: Record<string, string> = {};
+          const urlsById: Record<string, string> = {};
+          for (const [orgId, row] of Object.entries(branding)) {
+            if (row.logoUrl) logosById[orgId] = row.logoUrl;
+            if (row.avatarSeed) seedsById[orgId] = row.avatarSeed;
+            if (row.avatarUrl) urlsById[orgId] = row.avatarUrl;
+          }
+          setOrganizationLogoById((prev) => ({ ...prev, ...logosById }));
+          setOrganizationAvatarSeedById((prev) => ({ ...prev, ...seedsById }));
+          setOrganizationAvatarUrlById((prev) => ({ ...prev, ...urlsById }));
         }
       } else if (!cancelled) {
         setOrganizationNamesById({});
@@ -432,12 +503,7 @@ export default function DriverNotificationsScreen() {
 
   const rowsWithMeta = useMemo((): DriverNotificationRow[] =>
       mergedIncomingTrips.map((trip) => {
-        const {
-          assignedByOrgName,
-          assignerPersonDisplay,
-          assignerLinePrimary,
-          assignerLineSecondary,
-        } = buildAssignerDisplayForTrip(
+        const assignerDisplay = buildAssignerDisplayForTrip(
           trip,
           invites,
           driver?.organization_id,
@@ -447,22 +513,32 @@ export default function DriverNotificationsScreen() {
             assignerOrgNameByUserId,
             assignerDisplayByTripId,
             assignerTripOrgNameByTripId,
+            assignerTripOrgIdByTripId,
             organizationNamesById: mergedOrganizationNamesById,
           },
         );
+        const {
+          assignedByOrgName,
+          assignerPersonDisplay,
+          assignerLinePrimary,
+          assignerLineSecondary,
+        } = assignerDisplay;
 
         const requiresOtp =
           !isRosterTrip(trip) &&
           (pendingOtpTripsRequiringOtp.some((t) => t.id === trip.id) ||
             (isAggregateTrip(trip) && isAssignedNotStarted(trip.status)));
 
+        const inviteForTrip = findDriverInviteForTripOrgs(invites, [
+          assignerDisplay.effectiveAssignerOrgId,
+          trip.supplier_id,
+          trip.organization_id,
+        ]);
         const acceptedInviteForTrip =
-          invites.find(
-            (i) =>
-              (i.from_organization_id ?? '').trim() ===
-                (trip.organization_id ?? '').trim() &&
-              String(i.status ?? '').toLowerCase() === 'accepted',
-          ) ?? null;
+          inviteForTrip &&
+          String(inviteForTrip.status ?? '').toLowerCase() === 'accepted'
+            ? inviteForTrip
+            : null;
         const commissionForTrip = computeDriverTripEstEarningsInr(trip, {
           payableAmount:
             acceptedInviteForTrip?.payable_amount ?? driver?.payable_amount ?? null,
@@ -476,28 +552,10 @@ export default function DriverNotificationsScreen() {
             null,
         });
 
-        const inviteForTrip =
-          invites.find(
-            (i) =>
-              (i.from_organization_id ?? '').trim() ===
-              (trip.organization_id ?? '').trim(),
-          ) ??
-          (trip.supplier_id
-            ? invites.find(
-                (i) =>
-                  (i.from_organization_id ?? '').trim() ===
-                  (trip.supplier_id ?? '').trim(),
-              )
-            : undefined) ??
-          null;
-
+        const orgId = (assignerDisplay.effectiveAssignerOrgId ?? '').trim();
         const assignerPayload = buildJobCardAssignerPayload(
           trip,
-          {
-            assignerLinePrimary,
-            assignerLineSecondary,
-            assignedByOrgName,
-          },
+          assignerDisplay,
           driver?.organization_id ?? null,
           inviteForTrip,
           {
@@ -505,7 +563,11 @@ export default function DriverNotificationsScreen() {
             isAggregate: isAggregateTrip(trip),
             isRoster: isRosterTrip(trip),
           },
-          inviteForTrip?.from_org_logo_url ?? null,
+          organizationLogoById[orgId] ?? null,
+          {
+            seed: organizationAvatarSeedById[orgId] ?? null,
+            url: organizationAvatarUrlById[orgId] ?? null,
+          },
         );
 
         return {
@@ -531,7 +593,11 @@ export default function DriverNotificationsScreen() {
       assignerOrgNameByUserId,
       assignerDisplayByTripId,
       assignerTripOrgNameByTripId,
+      assignerTripOrgIdByTripId,
       mergedOrganizationNamesById,
+      organizationLogoById,
+      organizationAvatarSeedById,
+      organizationAvatarUrlById,
       effectiveAssignmentActorByTripId,
     ],
   );
