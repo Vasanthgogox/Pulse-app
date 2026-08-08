@@ -45,6 +45,11 @@ export interface SignUpPulseShellProps {
   marketingTag?: string;
   marketingTitle?: string;
   marketingOutcomeLines?: readonly string[];
+  /**
+   * When true, body does not add bottom safe-area padding — child docks
+   * (e.g. numeric keypad) own the home-indicator inset themselves.
+   */
+  edgeToEdgeBody?: boolean;
 }
 
 export const SignUpPulseShell = memo(function SignUpPulseShell({
@@ -60,6 +65,7 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
   marketingTag,
   marketingTitle,
   marketingOutcomeLines,
+  edgeToEdgeBody = false,
 }: SignUpPulseShellProps) {
   const insets = useSafeAreaInsets();
   const stepIndex = Math.min(Math.max(currentStepIndex, 0), stepLabels.length - 1);
@@ -114,7 +120,15 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
         <View style={styles.headerSpacer} />
       </View>
 
-      <View style={[styles.body, { paddingBottom: hideProgress ? Math.max(insets.bottom, 8) : 0 }]}>
+      <View
+        style={[
+          styles.body,
+          {
+            paddingBottom:
+              edgeToEdgeBody || !hideProgress ? 0 : Math.max(insets.bottom, 8),
+          },
+        ]}
+      >
         {children}
       </View>
 

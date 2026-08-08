@@ -19,7 +19,7 @@ import { SignUpOtpBoxes } from '@/features/auth/signup/SignUpOtpBoxes';
 import { SignUpPulseKeypadStep } from '@/features/auth/signup/SignUpPulseKeypadStep';
 import { formatSignupPhoneDisplay } from '@/features/auth/signup/signUpKeypad.util';
 import { DRIVER_SIGNUP } from '@/features/auth/signup/signUpDriverTheme';
-import { DRIVER_SIGNUP_LOTTIE } from '@/features/auth/signup/signUpDriverLottieAssets';
+import { DRIVER_SIGNUP_HERO_MASCOT } from '@/features/auth/signup/signUpDriverLottieAssets';
 import { createPulseSignUpTextStyles } from '@/features/auth/signup/signUpTypography';
 import { showAppAlert } from '@/lib/appAlert';
 import { formatMobileNumber } from '@/lib/format';
@@ -174,7 +174,7 @@ export default function DriverSignInScreen() {
       onBack={handleBack}
       stepLabels={['Phone', 'Verify']}
       currentStepIndex={step}
-      hideProgress={step === 0}
+      hideProgress
       bodyMode="keypad"
       trustMode="driver"
       isDesktop={isDesktop}
@@ -182,7 +182,7 @@ export default function DriverSignInScreen() {
       {step === 0 ? (
         <SignUpPulseKeypadStep
           theme={DRIVER_SIGNUP}
-          heroLottie={DRIVER_SIGNUP_LOTTIE.phone}
+          heroMascotId={DRIVER_SIGNUP_HERO_MASCOT.phone}
           title={STEP_CONTENT[0].title}
           subtitle={STEP_CONTENT[0].subtitle}
           value={phone}
@@ -216,7 +216,7 @@ export default function DriverSignInScreen() {
       ) : (
         <SignUpPulseKeypadStep
           theme={DRIVER_SIGNUP}
-          heroLottie={DRIVER_SIGNUP_LOTTIE.verify}
+          heroMascotId={DRIVER_SIGNUP_HERO_MASCOT.verify}
           centeredLayout
           title={STEP_CONTENT[1].title}
           subtitle={otpSubtitle}

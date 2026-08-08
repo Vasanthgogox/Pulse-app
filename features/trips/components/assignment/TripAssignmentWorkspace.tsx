@@ -202,11 +202,16 @@ export function TripAssignmentWorkspace({
                 </Text>
               )}
               <View style={aws.tripTitleRow}>
-                <Text style={aws.tripCode} numberOfLines={1}>
+                <Text
+                  style={[aws.tripCode, phone && aws.tripCodePhone]}
+                  numberOfLines={1}
+                >
                   {tripLabel}
                 </Text>
-                <View style={aws.statusPill}>
-                  <Text style={aws.statusPillText}>{statusLabel}</Text>
+                <View style={[aws.statusPill, phone && aws.statusPillPhone]}>
+                  <Text style={aws.statusPillText} numberOfLines={1}>
+                    {statusLabel}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -221,15 +226,17 @@ export function TripAssignmentWorkspace({
                 </Text>
               </View>
             ) : null}
-            <TouchableOpacity
-              style={[aws.activityBtn, phone && aws.iconBtn]}
-              onPress={() => setShowAuditDrawer(true)}
-              activeOpacity={0.85}
-              accessibilityLabel="Activity"
-            >
-              <FontAwesome name="history" size={12} color={Theme.textMuted} />
-              {wide ? <Text style={aws.activityBtnText}>Activity</Text> : null}
-            </TouchableOpacity>
+            {!phone ? (
+              <TouchableOpacity
+                style={[aws.activityBtn, compact && aws.iconBtn]}
+                onPress={() => setShowAuditDrawer(true)}
+                activeOpacity={0.85}
+                accessibilityLabel="Activity"
+              >
+                <FontAwesome name="history" size={12} color={Theme.textMuted} />
+                {wide ? <Text style={aws.activityBtnText}>Activity</Text> : null}
+              </TouchableOpacity>
+            ) : null}
             {!compact ? (
               <>
                 <TouchableOpacity style={aws.iconBtn} activeOpacity={0.85}>
@@ -255,80 +262,80 @@ export function TripAssignmentWorkspace({
         keyboardDismissMode="on-drag"
         nestedScrollEnabled
       >
-        {/* Dark route hero */}
+        {/* Dark route hero — matches desktop: route + metrics only */}
         <View style={[aws.hero, compact && aws.heroMobile]}>
           <View style={[aws.heroRow, compact && aws.heroRowMobile]}>
             <View style={[aws.heroRouteBlock, compact && aws.heroRouteBlockMobile]}>
-              <View style={[aws.heroMetaRow, compact && aws.heroMetaRowMobile]}>
-                <View style={[aws.heroMetaItem, compact && aws.heroMetaItemMobile]}>
-                  <View style={aws.heroMetaIcon}>
-                    <FontAwesome name="briefcase" size={10} color={Theme.primaryLight} />
+              {!phone ? (
+                <View style={[aws.heroMetaRow, compact && aws.heroMetaRowMobile]}>
+                  <View style={[aws.heroMetaItem, compact && aws.heroMetaItemMobile]}>
+                    <View style={aws.heroMetaIcon}>
+                      <FontAwesome name="briefcase" size={10} color={Theme.primaryLight} />
+                    </View>
+                    <Text style={aws.heroMetaLabel} numberOfLines={1}>
+                      CLIENT: <Text style={aws.heroMetaValue}>{clientName}</Text>
+                    </Text>
                   </View>
-                  <Text style={aws.heroMetaLabel} numberOfLines={1}>
-                    CLIENT: <Text style={aws.heroMetaValue}>{clientName}</Text>
-                  </Text>
+                  <View style={[aws.heroMetaItem, compact && aws.heroMetaItemMobile]}>
+                    <View style={aws.heroMetaIcon}>
+                      <FontAwesome
+                        name="user"
+                        size={10}
+                        color={Theme.networkHubListCardOnlineDot}
+                      />
+                    </View>
+                    <Text style={aws.heroMetaLabel} numberOfLines={1}>
+                      SUPPLIER: <Text style={aws.heroMetaValue}>{supplierName}</Text>
+                    </Text>
+                  </View>
                 </View>
-                <View style={[aws.heroMetaItem, compact && aws.heroMetaItemMobile]}>
-                  <View style={aws.heroMetaIcon}>
-                    <FontAwesome
-                      name="user"
-                      size={10}
-                      color={Theme.networkHubListCardOnlineDot}
-                    />
-                  </View>
-                  <Text style={aws.heroMetaLabel} numberOfLines={1}>
-                    SUPPLIER: <Text style={aws.heroMetaValue}>{supplierName}</Text>
+              ) : null}
+
+              <View style={[aws.routeRow, phone && aws.routeRowPhone]}>
+                <View
+                  style={[
+                    aws.routeEndpoint,
+                    phone && aws.routeEndpointPhone,
+                  ]}
+                >
+                  <Text
+                    style={[aws.routeCity, phone && aws.routeCityMobile]}
+                    numberOfLines={1}
+                  >
+                    {origin}
                   </Text>
+                  <Text style={aws.routeSub}>ORIGIN</Text>
+                </View>
+                <View style={[aws.routeCenter, phone && aws.routeCenterPhone]}>
+                  <View style={[aws.routeLine, phone && aws.routeLinePhone]}>
+                    <View style={aws.routeLineFill} />
+                    <View style={[aws.routeDot, phone && aws.routeDotPhone]}>
+                      <Text style={[aws.routeDotText, phone && { fontSize: 10 }]}>
+                        {driverInitial}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <View
+                  style={[
+                    aws.routeEndpoint,
+                    aws.routeEndpointEnd,
+                    phone && aws.routeEndpointPhone,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      aws.routeCity,
+                      aws.routeCityEnd,
+                      phone && aws.routeCityMobile,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {destination}
+                  </Text>
+                  <Text style={[aws.routeSub, aws.routeSubEnd]}>DESTINATION</Text>
                 </View>
               </View>
-
-              {compact ? (
-                <View style={aws.routeStackMobile}>
-                  <View style={aws.routeEndpointMobileStack}>
-                    <Text style={[aws.routeCity, aws.routeCityMobile]} numberOfLines={1}>
-                      {origin}
-                    </Text>
-                    <Text style={aws.routeSub}>ORIGIN</Text>
-                  </View>
-                  <View style={aws.routeCenterMobile}>
-                    <View style={aws.routeLineMobile}>
-                      <View style={aws.routeLineFillMobile} />
-                      <View style={aws.routeDot}>
-                        <Text style={aws.routeDotText}>{driverInitial}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={aws.routeEndpointMobileStack}>
-                    <Text style={[aws.routeCity, aws.routeCityMobile]} numberOfLines={1}>
-                      {destination}
-                    </Text>
-                    <Text style={aws.routeSub}>DESTINATION</Text>
-                  </View>
-                </View>
-              ) : (
-                <View style={aws.routeRow}>
-                  <View style={aws.routeEndpoint}>
-                    <Text style={aws.routeCity} numberOfLines={1}>
-                      {origin}
-                    </Text>
-                    <Text style={aws.routeSub}>ORIGIN</Text>
-                  </View>
-                  <View style={aws.routeCenter}>
-                    <View style={aws.routeLine}>
-                      <View style={aws.routeLineFill} />
-                      <View style={aws.routeDot}>
-                        <Text style={aws.routeDotText}>{driverInitial}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={[aws.routeEndpoint, aws.routeEndpointEnd]}>
-                    <Text style={[aws.routeCity, aws.routeCityEnd]} numberOfLines={1}>
-                      {destination}
-                    </Text>
-                    <Text style={[aws.routeSub, aws.routeSubEnd]}>DESTINATION</Text>
-                  </View>
-                </View>
-              )}
             </View>
 
             <View style={[aws.metricsBox, compact && aws.metricsBoxMobile]}>
@@ -364,19 +371,25 @@ export function TripAssignmentWorkspace({
               {/* Driver panel */}
               <View style={[aws.panel, compact && aws.panelMobile]}>
                 <View style={[aws.panelHeader, compact && aws.panelHeaderMobile]}>
-                  <View style={aws.panelHeaderLeft}>
-                    <View style={aws.panelIconDriver}>
-                      <FontAwesome
-                        name="user"
-                        size={16}
-                        color={Theme.networkHubListCardConnectedText}
-                      />
-                    </View>
+                  <View style={[aws.panelHeaderLeft, phone && aws.panelHeaderLeftPhone]}>
+                    {!phone ? (
+                      <View style={aws.panelIconDriver}>
+                        <FontAwesome
+                          name="user"
+                          size={16}
+                          color={Theme.networkHubListCardConnectedText}
+                        />
+                      </View>
+                    ) : null}
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={aws.panelTitle}>Driver assignment</Text>
-                      <Text style={aws.panelSub}>
-                        Edit contact & DL or swap assigned driver
+                      <Text style={aws.panelTitle} numberOfLines={1}>
+                        Driver assignment
                       </Text>
+                      {!phone ? (
+                        <Text style={aws.panelSub}>
+                          Edit contact & DL or swap assigned driver
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                   <View style={[aws.actionToggle, compact && aws.actionToggleMobile]}>
@@ -384,64 +397,98 @@ export function TripAssignmentWorkspace({
                       style={[
                         aws.actionBtn,
                         compact && aws.actionBtnMobile,
+                        phone && aws.actionBtnPhone,
                         driverAction === "EDIT" && aws.actionBtnActive,
                       ]}
                       onPress={() => onDriverActionChange("EDIT")}
                       activeOpacity={0.85}
                     >
-                      <FontAwesome
-                        name="pencil"
-                        size={11}
-                        color={
-                          driverAction === "EDIT"
-                            ? Theme.textPrimaryDark
-                            : Theme.textSecondary
-                        }
-                      />
+                      {!phone ? (
+                        <FontAwesome
+                          name="pencil"
+                          size={11}
+                          color={
+                            driverAction === "EDIT"
+                              ? Theme.textPrimaryDark
+                              : Theme.textSecondary
+                          }
+                        />
+                      ) : null}
                       <Text
                         style={[
                           aws.actionBtnText,
+                          phone && aws.actionBtnTextPhone,
                           driverAction === "EDIT" && aws.actionBtnTextActive,
                         ]}
+                        numberOfLines={1}
                       >
-                        Edit details
+                        {phone ? "Edit" : "Edit details"}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
                         aws.actionBtn,
                         compact && aws.actionBtnMobile,
+                        phone && aws.actionBtnPhone,
                         driverAction === "SWAP" && aws.actionBtnSwapDriver,
                       ]}
                       onPress={() => onDriverActionChange("SWAP")}
                       activeOpacity={0.85}
                     >
-                      <FontAwesome
-                        name="refresh"
-                        size={11}
-                        color={
-                          driverAction === "SWAP"
-                            ? Theme.cardWhite
-                            : Theme.textSecondary
-                        }
-                      />
+                      {!phone ? (
+                        <FontAwesome
+                          name="refresh"
+                          size={11}
+                          color={
+                            driverAction === "SWAP"
+                              ? Theme.cardWhite
+                              : Theme.textSecondary
+                          }
+                        />
+                      ) : null}
                       <Text
                         style={[
                           aws.actionBtnText,
+                          phone && aws.actionBtnTextPhone,
                           driverAction === "SWAP" && aws.actionBtnTextOnDark,
                         ]}
+                        numberOfLines={1}
                       >
-                        {fulfillmentMode === "ASSET" ? "Swap driver" : "New driver"}
+                        {phone
+                          ? fulfillmentMode === "ASSET"
+                            ? "Swap"
+                            : "New"
+                          : fulfillmentMode === "ASSET"
+                            ? "Swap driver"
+                            : "New driver"}
                       </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 <View style={[aws.panelBody, compact && aws.panelBodyMobile]}>
-                  <View style={[aws.snapshot, compact && aws.snapshotMobile]}>
+                  <View
+                    style={[
+                      aws.snapshot,
+                      compact && aws.snapshotMobile,
+                      phone && aws.snapshotPhoneStack,
+                    ]}
+                  >
                     <View style={aws.snapshotLeft}>
-                      <View style={aws.snapshotAvatarDriver}>
-                        <Text style={aws.snapshotAvatarText}>{driverInitial}</Text>
+                      <View
+                        style={[
+                          aws.snapshotAvatarDriver,
+                          phone && aws.snapshotAvatarPhone,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            aws.snapshotAvatarText,
+                            phone && aws.snapshotAvatarTextPhone,
+                          ]}
+                        >
+                          {driverInitial}
+                        </Text>
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={aws.snapshotEyebrow}>Driver</Text>
@@ -455,32 +502,47 @@ export function TripAssignmentWorkspace({
                         ) : null}
                       </View>
                     </View>
-                    <View style={aws.snapshotBadgeWrap}>
+                    <View
+                      style={[
+                        aws.snapshotBadgeWrap,
+                        phone && aws.snapshotBadgeWrapPhone,
+                      ]}
+                    >
                       <View style={aws.badgeOk}>
-                        <Text style={aws.badgeOkText}>DL validated</Text>
+                        <Text style={aws.badgeOkText} numberOfLines={1}>
+                          DL validated
+                        </Text>
                       </View>
                     </View>
                   </View>
-                  <View style={aws.fieldsArea}>{driverPanelBody}</View>
+                  <View style={[aws.fieldsArea, phone && aws.fieldsAreaPhone]}>
+                    {driverPanelBody}
+                  </View>
                 </View>
               </View>
 
               {/* Vehicle panel */}
               <View style={[aws.panel, compact && aws.panelMobile]}>
                 <View style={[aws.panelHeader, compact && aws.panelHeaderMobile]}>
-                  <View style={aws.panelHeaderLeft}>
-                    <View style={aws.panelIconVehicle}>
-                      <FontAwesome
-                        name="truck"
-                        size={16}
-                        color={Theme.assignmentVehicleAccent}
-                      />
-                    </View>
+                  <View style={[aws.panelHeaderLeft, phone && aws.panelHeaderLeftPhone]}>
+                    {!phone ? (
+                      <View style={aws.panelIconVehicle}>
+                        <FontAwesome
+                          name="truck"
+                          size={16}
+                          color={Theme.assignmentVehicleAccent}
+                        />
+                      </View>
+                    ) : null}
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={aws.panelTitle}>Vehicle assignment</Text>
-                      <Text style={aws.panelSub}>
-                        Edit RC, Fastag, specs, or swap truck
+                      <Text style={aws.panelTitle} numberOfLines={1}>
+                        Vehicle assignment
                       </Text>
+                      {!phone ? (
+                        <Text style={aws.panelSub}>
+                          Edit RC, Fastag, specs, or swap truck
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                   <View style={[aws.actionToggle, compact && aws.actionToggleMobile]}>
@@ -488,84 +550,129 @@ export function TripAssignmentWorkspace({
                       style={[
                         aws.actionBtn,
                         compact && aws.actionBtnMobile,
+                        phone && aws.actionBtnPhone,
                         vehicleAction === "EDIT" && aws.actionBtnActive,
                       ]}
                       onPress={() => onVehicleActionChange("EDIT")}
                       activeOpacity={0.85}
                     >
-                      <FontAwesome
-                        name="pencil"
-                        size={11}
-                        color={
-                          vehicleAction === "EDIT"
-                            ? Theme.textPrimaryDark
-                            : Theme.textSecondary
-                        }
-                      />
+                      {!phone ? (
+                        <FontAwesome
+                          name="pencil"
+                          size={11}
+                          color={
+                            vehicleAction === "EDIT"
+                              ? Theme.textPrimaryDark
+                              : Theme.textSecondary
+                          }
+                        />
+                      ) : null}
                       <Text
                         style={[
                           aws.actionBtnText,
+                          phone && aws.actionBtnTextPhone,
                           vehicleAction === "EDIT" && aws.actionBtnTextActive,
                         ]}
+                        numberOfLines={1}
                       >
-                        Edit specs
+                        {phone ? "Edit" : "Edit specs"}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
                         aws.actionBtn,
                         compact && aws.actionBtnMobile,
+                        phone && aws.actionBtnPhone,
                         vehicleAction === "SWAP" && aws.actionBtnSwapVehicle,
                       ]}
                       onPress={() => onVehicleActionChange("SWAP")}
                       activeOpacity={0.85}
                     >
-                      <FontAwesome
-                        name="refresh"
-                        size={11}
-                        color={
-                          vehicleAction === "SWAP"
-                            ? Theme.cardWhite
-                            : Theme.textSecondary
-                        }
-                      />
+                      {!phone ? (
+                        <FontAwesome
+                          name="refresh"
+                          size={11}
+                          color={
+                            vehicleAction === "SWAP"
+                              ? Theme.cardWhite
+                              : Theme.textSecondary
+                          }
+                        />
+                      ) : null}
                       <Text
                         style={[
                           aws.actionBtnText,
+                          phone && aws.actionBtnTextPhone,
                           vehicleAction === "SWAP" && aws.actionBtnTextOnDark,
                         ]}
+                        numberOfLines={1}
                       >
-                        {fulfillmentMode === "ASSET" ? "Swap truck" : "New truck"}
+                        {phone
+                          ? fulfillmentMode === "ASSET"
+                            ? "Swap"
+                            : "New"
+                          : fulfillmentMode === "ASSET"
+                            ? "Swap truck"
+                            : "New truck"}
                       </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 <View style={[aws.panelBody, compact && aws.panelBodyMobile]}>
-                  <View style={[aws.snapshot, compact && aws.snapshotMobile]}>
+                  <View
+                    style={[
+                      aws.snapshot,
+                      compact && aws.snapshotMobile,
+                      phone && aws.snapshotPhoneStack,
+                    ]}
+                  >
                     <View style={aws.snapshotLeft}>
-                      <View style={aws.snapshotAvatarVehicle}>
-                        <FontAwesome name="truck" size={18} color={Theme.cardWhite} />
+                      <View
+                        style={[
+                          aws.snapshotAvatarVehicle,
+                          phone && aws.snapshotAvatarPhone,
+                        ]}
+                      >
+                        <FontAwesome
+                          name="truck"
+                          size={phone ? 14 : 18}
+                          color={Theme.cardWhite}
+                        />
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={aws.snapshotEyebrow}>Vehicle · RC verified</Text>
+                        <Text style={aws.snapshotEyebrow}>
+                          {phone ? "Vehicle" : "Vehicle · RC verified"}
+                        </Text>
                         <Text style={aws.snapshotName} numberOfLines={1}>
                           {vehicleDisplayLabel || "Unassigned"}
                         </Text>
                         {vehicleCategory ? (
-                          <Text style={[aws.snapshotMeta, { fontFamily: undefined }]} numberOfLines={1}>
+                          <Text
+                            style={[aws.snapshotMeta, { fontFamily: undefined }]}
+                            numberOfLines={1}
+                          >
                             {vehicleCategory}
                           </Text>
                         ) : null}
                       </View>
                     </View>
-                    <View style={aws.snapshotBadgeWrap}>
+                    <View
+                      style={[
+                        aws.snapshotBadgeWrap,
+                        phone && aws.snapshotBadgeWrapPhone,
+                      ]}
+                    >
                       <View style={aws.badgeBlue}>
-                        <Text style={aws.badgeBlueText}>GPS connected</Text>
+                        <Text style={aws.badgeBlueText} numberOfLines={1}>
+                          {phone ? "RC verified" : "GPS connected"}
+                        </Text>
                       </View>
                     </View>
                   </View>
-                  <View style={aws.fieldsArea}>{vehiclePanelBody}</View>
+                  <View style={[aws.fieldsArea, phone && aws.fieldsAreaPhone]}>
+                    {vehiclePanelBody}
+                  </View>
                 </View>
               </View>
             </View>
@@ -580,12 +687,16 @@ export function TripAssignmentWorkspace({
                     color={Theme.assignmentVehicleAccent}
                   />
                   <Text style={[aws.auditTitle, compact && aws.auditTitleMobile]}>
-                    {compact
-                      ? "Dispatch audit & governance"
-                      : "Dispatch audit log & change governance"}
+                    {phone
+                      ? "Dispatch audit"
+                      : compact
+                        ? "Dispatch audit & governance"
+                        : "Dispatch audit log & change governance"}
                   </Text>
                 </View>
-                <Text style={aws.auditId}>Manifest ID: {tripLabel}</Text>
+                {!phone ? (
+                  <Text style={aws.auditId}>Manifest ID: {tripLabel}</Text>
+                ) : null}
               </View>
 
               <View style={[aws.auditGrid, compact && aws.auditGridMobile]}>
@@ -596,13 +707,17 @@ export function TripAssignmentWorkspace({
                       {CHANGE_REASONS.find((r) => r.value === changeReason)?.label}
                     </Text>
                   </View>
-                  <View style={aws.reasonChips}>
+                  <View style={[aws.reasonChips, phone && aws.reasonChipsPhone]}>
                     {CHANGE_REASONS.map((r) => {
                       const active = changeReason === r.value;
                       return (
                         <TouchableOpacity
                           key={r.value}
-                          style={[aws.reasonChip, active && aws.reasonChipActive]}
+                          style={[
+                            aws.reasonChip,
+                            phone && aws.reasonChipPhone,
+                            active && aws.reasonChipActive,
+                          ]}
                           onPress={() => onChangeReasonChange(r.value)}
                           activeOpacity={0.85}
                         >
@@ -627,7 +742,11 @@ export function TripAssignmentWorkspace({
                     style={[aws.input, compact && aws.inputMobile]}
                     value={changeRemarks}
                     onChangeText={onChangeRemarksChange}
-                    placeholder="Add operational notes for compliance record…"
+                    placeholder={
+                      phone
+                        ? "Operational notes…"
+                        : "Add operational notes for compliance record…"
+                    }
                     placeholderTextColor={Theme.textMuted}
                     multiline={compact}
                     numberOfLines={compact ? 3 : 1}
@@ -650,12 +769,27 @@ export function TripAssignmentWorkspace({
                       size={14}
                       color={Theme.networkHubListCardOnlineDot}
                     />
-                    <Text style={aws.confirmBtnText}>
-                      {confirmLoading ? "Saving…" : confirmLabel}
+                    <Text
+                      style={[aws.confirmBtnText, phone && aws.confirmBtnTextPhone]}
+                      numberOfLines={2}
+                    >
+                      {confirmLoading
+                        ? "Saving…"
+                        : phone
+                          ? confirmLabel.length > 28
+                            ? "Confirm & update"
+                            : confirmLabel
+                          : confirmLabel}
                     </Text>
                   </TouchableOpacity>
                   {confirmHint ? (
-                    <Text style={[aws.infoBody, { marginTop: 8, color: Theme.textMuted }]}>
+                    <Text
+                      style={[
+                        aws.infoBody,
+                        { marginTop: 8, color: Theme.textMuted },
+                        phone && aws.confirmHintPhone,
+                      ]}
+                    >
                       {confirmHint}
                     </Text>
                   ) : null}

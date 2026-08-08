@@ -2564,11 +2564,11 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
     alignItems: "stretch",
   },
-  /** Desktop load grid — 3 cards per row. */
+  /** Desktop load grid — 4 cards per row (aligns with Trips hub + column modal). */
   gridCardWrap: {
-    width: "33.333%",
-    maxWidth: "33.333%",
-    flexBasis: "33.333%",
+    width: "25%",
+    maxWidth: "25%",
+    flexBasis: "25%",
     paddingHorizontal: 4,
     marginBottom: 12,
     alignSelf: "stretch",

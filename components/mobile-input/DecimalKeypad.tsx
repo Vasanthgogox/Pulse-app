@@ -33,8 +33,8 @@ const LONG_PRESS_DELETE_DELAY_MS = 400;
 
 const KEY_H = 64;
 const KEY_H_PAY = 56;
-/** Dense wizard pad — leaves room for Continue above the keys. */
-const KEY_H_PAY_COMPACT = 34;
+/** Dense wizard / signup pad — leaves room for Continue above the keys. */
+const KEY_H_PAY_COMPACT = 40;
 
 interface DecimalKeypadProps {
   onKey: (key: KeypadKey) => void;
@@ -237,9 +237,10 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 0,
     paddingHorizontal: 0,
-    gap: 8,
+    gap: 10,
     borderTopWidth: 0,
     width: '100%',
+    alignSelf: 'stretch',
   },
   gridPayCompact: {
     paddingTop: 0,
@@ -258,10 +259,10 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   rowPay: {
-    gap: 8,
+    gap: 10,
   },
   rowCompact: {
-    gap: 3,
+    gap: 8,
   },
   key: {
     flex: 1,
@@ -299,13 +300,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
     elevation: 1,
   },
   keyPayCompact: {

@@ -15,6 +15,8 @@ import type { AnimationObject } from 'lottie-react-native';
 import { GoogleBrandIcon } from '@/features/auth/components/GoogleBrandIcon';
 
 import { HubPromoHeroLottie } from '@/components/hub/HubPromoLottie';
+import { PulseMascotBanner } from '@/components/PulseMascotBanner';
+import type { PulseMascotIllustrationId } from '@/lib/pulseMascotIllustrations';
 
 import { DecimalKeypad } from '@/components/mobile-input/DecimalKeypad';
 import { applyKeypadPress, type KeypadKey } from '@/components/mobile-input/keypad';
@@ -24,9 +26,14 @@ import { useSignupKeypadInput } from '@/lib/onboarding/useSignupKeypadInput';
 
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
+import Layout from '@/constants/Layout';
+
 import { DESKTOP_BREAKPOINT } from './signUpConstants';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
 import { createPulseSignUpTextStyles, SIGNUP_ERROR_COLOR } from './signUpTypography';
+
+/** Single horizontal inset for the docked keypad tray (edge-to-edge chrome). */
+const KEYPAD_DOCK_INSET = Layout.screenPaddingHorizontal;
 
 export interface SignUpPulseKeypadStepProps {
   title: string;
@@ -56,6 +63,11 @@ export interface SignUpPulseKeypadStepProps {
   centeredLayout?: boolean;
   /** Optional hero animation above the title (driver / activation steps). */
   heroLottie?: AnimationObject;
+  /**
+   * Soft watermark-style Pulse mascot above the title (assets/illustrations).
+   * Wins over `heroLottie` when both are set.
+   */
+  heroMascotId?: PulseMascotIllustrationId;
 }
 
 export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
@@ -84,6 +96,7 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   theme = PULSE_SIGNUP,
   centeredLayout = false,
   heroLottie,
+  heroMascotId,
 }: SignUpPulseKeypadStepProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -285,7 +298,24 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
 
   const formBody = (
     <View style={[styles.formBody, centeredLayout && styles.centeredStack]}>
-      {heroLottie ? (
+      {heroMascotId ? (
+        <View
+          style={[
+            styles.heroWrap,
+            styles.heroWatermarkWrap,
+            styles.heroWrapCentered,
+          ]}
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          <PulseMascotBanner
+            id={heroMascotId}
+            maxHeight={isDesktop ? 120 : 104}
+            style={styles.heroWatermark}
+          />
+        </View>
+      ) : heroLottie ? (
         <View style={[styles.heroWrap, centeredLayout && styles.heroWrapCentered]}>
           <HubPromoHeroLottie
             source={heroLottie}
@@ -380,7 +410,12 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
         <View
           style={[
             styles.keypadDock,
-            { paddingBottom: Math.max(insets.bottom, Platform.OS === 'web' ? 6 : 10) },
+            {
+              paddingBottom: Math.max(
+                insets.bottom,
+                Platform.OS === 'web' ? 8 : 10,
+              ),
+            },
           ]}
         >
           <DecimalKeypad
@@ -466,6 +501,13 @@ function createStyles(theme: SignUpTheme, isDesktop: boolean) {
     heroWrap: {
       alignItems: 'flex-start',
       marginBottom: mobile ? 12 : 14,
+    },
+    heroWatermarkWrap: {
+      width: '100%',
+      maxWidth: mobile ? 280 : 300,
+    },
+    heroWatermark: {
+      opacity: 0.42,
     },
     heroWrapCentered: {
       alignItems: 'center',
@@ -710,7 +752,9 @@ function createStyles(theme: SignUpTheme, isDesktop: boolean) {
     googleText: mobile ? text.googleMobile : text.google,
     accessoryDock: {
       flexShrink: 0,
-      paddingHorizontal: 20,
+      alignSelf: 'stretch',
+      width: '100%',
+      paddingHorizontal: KEYPAD_DOCK_INSET,
       paddingTop: 4,
       paddingBottom: 6,
       borderTopWidth: StyleSheet.hairlineWidth,
@@ -722,15 +766,32 @@ function createStyles(theme: SignUpTheme, isDesktop: boolean) {
       paddingTop: 8,
       borderTopWidth: StyleSheet.hairlineWidth,
     },
+    /** Full-bleed tray — equal side inset only once (keys share it via flex). */
     keypadDock: {
       flexShrink: 0,
+      alignSelf: 'stretch',
+      width: '100%',
       backgroundColor: theme.keypadTray,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.border,
+      borderTopWidth: 0,
       borderTopLeftRadius: PULSE_SIGNUP_RADIUS.keypadTray,
       borderTopRightRadius: PULSE_SIGNUP_RADIUS.keypadTray,
-      paddingTop: 6,
-      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingHorizontal: KEYPAD_DOCK_INSET,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.06,
+          shadowRadius: 12,
+        },
+        android: { elevation: 6 },
+        default: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
+        },
+      }),
     },
   });
 }

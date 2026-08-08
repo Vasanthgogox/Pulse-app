@@ -1,10 +1,11 @@
 /**
  * Full-page modal listing all indent cards for a Load Center kanban column.
- * Desktop: wide centered column (~1040). Mobile: full-bleed with screen padding.
- * Tap a card uses the same renderer as the board (opens indent detail).
+ * Full-bleed width; cards lay out 4 / 2 / 1 across (desktop / tablet / phone).
+ * Uses the same grid card renderer as the board (dense + fillGrid).
  */
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
+import { HUB_GRID_MIN_WIDTH } from "@/components/hub/hubGridCardLayout";
 import type { IndentRow } from "@/features/indents";
 import type {
   LoadCenterKanbanColumn,
@@ -24,11 +25,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/** Desktop content rail — wide but still readable. */
-const DESKTOP_CONTENT_MAX = 1040;
-const DESKTOP_BREAKPOINT = 768;
-const DESKTOP_SIDE_PAD = 28;
+const TABLET_BREAKPOINT = 720;
+const DESKTOP_SIDE_PAD = 20;
 const MOBILE_SIDE_PAD = Layout.screenPaddingHorizontal;
+const GRID_GAP = 12;
 
 export type LoadCenterKanbanColumnModalProps = {
   visible: boolean;
@@ -37,6 +37,12 @@ export type LoadCenterKanbanColumnModalProps = {
   renderCard: (load: IndentRow) => ReactNode;
   highlightedIndentId?: string | null;
 };
+
+function columnCountForWidth(width: number): 1 | 2 | 4 {
+  if (width >= HUB_GRID_MIN_WIDTH) return 4;
+  if (width >= TABLET_BREAKPOINT) return 2;
+  return 1;
+}
 
 export function LoadCenterKanbanColumnModal({
   visible,
@@ -47,20 +53,25 @@ export function LoadCenterKanbanColumnModal({
 }: LoadCenterKanbanColumnModalProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const isDesktop = width >= DESKTOP_BREAKPOINT;
+  const isDesktop = width >= TABLET_BREAKPOINT;
   const sidePad = isDesktop ? DESKTOP_SIDE_PAD : MOBILE_SIDE_PAD;
+  const columns = columnCountForWidth(width);
 
-  const contentMaxStyle = useMemo(
-    () =>
-      isDesktop
-        ? {
-            width: "100%" as const,
-            maxWidth: DESKTOP_CONTENT_MAX,
-            alignSelf: "center" as const,
-          }
-        : { width: "100%" as const, alignSelf: "stretch" as const },
-    [isDesktop],
-  );
+  const cellStyle = useMemo(() => {
+    if (columns === 1) {
+      return styles.cardCellOne;
+    }
+    const pct = columns === 4 ? "25%" : "50%";
+    return {
+      width: pct as `${number}%`,
+      maxWidth: pct as `${number}%`,
+      flexBasis: pct as `${number}%`,
+      paddingHorizontal: GRID_GAP / 2,
+      marginBottom: GRID_GAP,
+      alignSelf: "stretch" as const,
+      minWidth: 0,
+    };
+  }, [columns]);
 
   const tabs = column?.tabs ?? [];
   const hasTabs = tabs.length > 0;
@@ -91,13 +102,13 @@ export function LoadCenterKanbanColumnModal({
         style={[
           styles.root,
           {
-            paddingTop: Math.max(insets.top, isDesktop ? 16 : 12),
+            paddingTop: Math.max(insets.top, isDesktop ? 12 : 12),
             paddingBottom: Math.max(insets.bottom, 12),
           },
         ]}
       >
         <View style={[styles.headerBand, { paddingHorizontal: sidePad }]}>
-          <View style={[styles.headerInner, contentMaxStyle]}>
+          <View style={styles.headerInner}>
             <View style={styles.headerLeft}>
               <View
                 style={[styles.accent, { backgroundColor: column.accent }]}
@@ -140,7 +151,7 @@ export function LoadCenterKanbanColumnModal({
 
         {hasTabs ? (
           <View style={[styles.subTabBand, { paddingHorizontal: sidePad }]}>
-            <View style={[styles.subTabRow, contentMaxStyle]}>
+            <View style={styles.subTabRow}>
               {tabs.map((tab) => {
                 const on = tab.id === (activeTab?.id ?? "");
                 return (
@@ -181,41 +192,40 @@ export function LoadCenterKanbanColumnModal({
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingHorizontal: sidePad,
-              paddingTop: isDesktop ? 20 : 14,
-              paddingBottom: isDesktop ? 36 : 28,
+              paddingHorizontal: sidePad - (columns > 1 ? GRID_GAP / 2 : 0),
+              paddingTop: isDesktop ? 16 : 14,
+              paddingBottom: isDesktop ? 32 : 28,
             },
           ]}
           showsVerticalScrollIndicator
         >
-          <View
-            style={[
-              styles.listColumn,
-              contentMaxStyle,
-              { gap: isDesktop ? 14 : 12 },
-            ]}
-          >
-            {visibleLoads.length === 0 ? (
-              <View style={styles.empty}>
-                <View style={styles.emptyIcon}>
-                  <FontAwesome name="inbox" size={16} color={Theme.textMuted} />
-                </View>
-                <Text style={styles.emptyText}>No loads in this stage</Text>
+          {visibleLoads.length === 0 ? (
+            <View style={styles.empty}>
+              <View style={styles.emptyIcon}>
+                <FontAwesome name="inbox" size={16} color={Theme.textMuted} />
               </View>
-            ) : (
-              visibleLoads.map((load) => (
+              <Text style={styles.emptyText}>No loads in this stage</Text>
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.grid,
+                columns === 1 && styles.gridStack,
+              ]}
+            >
+              {visibleLoads.map((load) => (
                 <View
                   key={load.id}
                   style={[
-                    styles.cardWrap,
+                    cellStyle,
                     highlightedIndentId === load.id && styles.cardHighlighted,
                   ]}
                 >
-                  {renderCard(load)}
+                  <View style={styles.cardFill}>{renderCard(load)}</View>
                 </View>
-              ))
-            )}
-          </View>
+              ))}
+            </View>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -226,18 +236,21 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Theme.surfaceGray,
+    width: "100%",
   },
   headerBand: {
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     paddingBottom: 14,
+    width: "100%",
   },
   headerInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+    width: "100%",
   },
   headerLeft: {
     flex: 1,
@@ -313,11 +326,13 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
     paddingTop: 12,
     paddingBottom: 12,
+    width: "100%",
   },
   subTabRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    width: "100%",
   },
   subTab: {
     flex: 1,
@@ -369,22 +384,36 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+    width: "100%",
   },
   scrollContent: {
     flexGrow: 1,
+    width: "100%",
     ...Platform.select({
       web: { boxSizing: "border-box" } as object,
       default: {},
     }),
   },
-  listColumn: {
-    gap: 14,
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "stretch",
     width: "100%",
   },
-  cardWrap: {
+  gridStack: {
+    flexDirection: "column",
+  },
+  cardCellOne: {
     width: "100%",
     alignSelf: "stretch",
-    borderRadius: 14,
+    marginBottom: GRID_GAP,
+    minWidth: 0,
+  },
+  cardFill: {
+    flex: 1,
+    width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
   },
   cardHighlighted: {
     borderWidth: 2,
