@@ -3,7 +3,6 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import {
   OperationalBottomActionBar,
   OperationalButton,
-  OperationalChipSelect,
   OperationalHeader,
   Surface,
 } from "@/components/operational";
@@ -382,28 +381,31 @@ export function OtherExpenseEntryScreen({
         </Surface>
 
         <Surface elevation={1} density="high" style={s.card}>
-          <OperationalChipSelect
+          <DriverExpenseChipSelect
             label="Category"
             options={categoryOptions}
             value={expenseCategory}
             onChange={setExpenseCategory}
-            density="compact"
+            columns={2}
+            visualGroup="other_category"
           />
           <View style={s.divider} />
-          <OperationalChipSelect
+          <DriverExpenseChipSelect
             label="Paid by"
             options={paymentOwnerOptions}
             value={paymentOwner}
             onChange={setPaymentOwner}
-            density="compact"
+            columns={3}
+            visualGroup="payment_owner"
           />
           <View style={s.divider} />
-          <OperationalChipSelect
+          <DriverExpenseChipSelect
             label="Payment mode"
             options={PAYMENT_MODE_OPTIONS}
             value={paymentMode}
             onChange={setPaymentMode}
-            density="compact"
+            columns={3}
+            visualGroup="payment_mode"
           />
           <Text style={s.metaHint}>
             Parking, challan, loading, detention, and other trip costs — not commercial adjustments.

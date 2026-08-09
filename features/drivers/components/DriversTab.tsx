@@ -30,7 +30,7 @@ import { useDriversQuery } from '@/lib/queries/useDriversQuery';
 import { useTripsQuery } from '@/lib/queries/useTripsQuery';
 import { usePaginatedScroll } from '@/lib/usePaginatedScroll';
 import {
-  excludeTrackingOnlyDrivers,
+  filterActiveFleetRelationshipDrivers,
   type DriverRow,
   type DriverOffer,
 } from '../services/drivers.service';
@@ -115,9 +115,9 @@ export function DriversTab({
   );
 
   const driversRaw = isControlled ? (driversProp ?? []) : driversFromQuery;
-  /** Party roster only — never show one-time assign-by-phone (tracking_only) stubs. */
+  /** Party roster only — active fleet relationship (active_employee/independent). driversRaw may come from a controlled prop, not just useDriversQuery, so this is not always redundant. */
   const drivers = useMemo(
-    () => excludeTrackingOnlyDrivers(driversRaw),
+    () => filterActiveFleetRelationshipDrivers(driversRaw),
     [driversRaw],
   );
   const trips = isControlled ? (tripsProp ?? []) : tripsFromQuery;

@@ -2,6 +2,7 @@ import {
   isAggregateExecutionTrip,
   isAssetExecutionTrip,
 } from "@/features/trips/domain/tripExecutionModel";
+import { isActiveFleetRelationshipDriver } from "@/features/drivers/services/drivers.service";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import type { PulseDataset } from "@/features/business-pulse/types";
 import { applyPulseFilters } from "@/features/business-pulse/selectors/pulseSelectors";
@@ -35,7 +36,7 @@ export function restrictToAssetExecution(scoped: PulseScopedData): PulseScopedDa
     suppliers: scoped.suppliers.filter((row) => supplierIds.has(row.id)),
     vehicles: scoped.vehicles.filter((row) => vehicleIds.has(row.id)),
     drivers: scoped.drivers.filter(
-      (row) => driverIds.has(row.id) && row.tracking_only !== true,
+      (row) => driverIds.has(row.id) && isActiveFleetRelationshipDriver(row),
     ),
     vehicleLedger: scoped.vehicleLedger.filter(
       (row) =>

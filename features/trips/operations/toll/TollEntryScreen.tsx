@@ -3,7 +3,6 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import {
   OperationalBottomActionBar,
   OperationalButton,
-  OperationalChipSelect,
   OperationalHeader,
   Surface,
 } from "@/components/operational";
@@ -350,7 +349,7 @@ export function TollEntryScreen({
         </Surface>
 
         <Surface elevation={1} density="high" style={s.card}>
-          <OperationalChipSelect
+          <DriverExpenseChipSelect
             label="Entry type"
             options={[
               { value: "actual", label: "Actual" },
@@ -358,23 +357,26 @@ export function TollEntryScreen({
             ]}
             value={isEstimated ? "estimated" : "actual"}
             onChange={(v) => setIsEstimated(v === "estimated")}
-            density="compact"
+            columns={2}
+            visualGroup="toll_entry"
           />
           <View style={s.divider} />
-          <OperationalChipSelect
+          <DriverExpenseChipSelect
             label="Paid by"
             options={paymentOwnerOptions}
             value={paymentOwner}
             onChange={setPaymentOwner}
-            density="compact"
+            columns={3}
+            visualGroup="payment_owner"
           />
           <View style={s.divider} />
-          <OperationalChipSelect
+          <DriverExpenseChipSelect
             label="Payment mode"
             options={PAYMENT_MODE_OPTIONS}
             value={paymentMode}
             onChange={setPaymentMode}
-            density="compact"
+            columns={3}
+            visualGroup="payment_mode"
           />
         </Surface>
 

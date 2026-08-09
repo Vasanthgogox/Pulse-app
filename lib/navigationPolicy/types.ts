@@ -15,7 +15,9 @@ export type Experience =
   | 'public_content'
   | 'public_process'
   | 'driver'
-  | 'org';
+  | 'org'
+  /** Authenticated driver or org — shared stacks (e.g. trip odometer / expense entry). */
+  | 'shared';
 
 /** Opaque grant strings (capability-compatible). */
 export type Grant = string;

@@ -128,4 +128,18 @@ export const DRIVER_POLICIES: readonly PolicyRecord[] = [
     priority: 80,
     onDeny: { type: 'experience_home', experience: 'driver' },
   },
+  {
+    id: 'driver.expense-capture',
+    pattern: '/(driver)/expense-capture',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
+  {
+    id: 'driver.general-expense',
+    pattern: '/(driver)/general-expense',
+    experience: 'driver',
+    priority: 90,
+    onDeny: { type: 'experience_home', experience: 'driver' },
+  },
 ];

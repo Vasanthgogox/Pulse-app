@@ -12,16 +12,15 @@ import {
   TRIP_SHEET_BODY_PAD,
   TRIP_SHEET_BTN_HEIGHT,
 } from '@/components/driver/DriverTripSheetLayout';
+import { DriverDocumentGalleryPreview } from '@/features/driver/components/DriverDocumentGalleryPreview';
 import type * as tripDocumentsService from '@/features/trips/services/tripDocuments.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, ChevronLeft, ChevronRight, Route } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ChevronLeft, Route } from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
-  FlatList,
   Image,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -29,10 +28,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -148,28 +144,17 @@ export function DriverPodCompletionPage({
   onConfirmAction,
 }: DriverPodCompletionPageProps) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
   const copy = VARIANT_COPY[variant];
   const canComplete = documents.length >= 1 || skipped;
   const flowSteps = copy.steps;
   const pulse = useSharedValue(0);
-  const swipeHint = useSharedValue(0);
 
   /** Index into `documents` while gallery is open; null = closed. */
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  const [previewResolvingId, setPreviewResolvingId] = useState<string | null>(null);
-  const [previewFailedIds, setPreviewFailedIds] = useState<Record<string, boolean>>({});
-  const [hasSwipedPreview, setHasSwipedPreview] = useState(false);
-  const galleryRef = useRef<FlatList<tripDocumentsService.TripDocumentRow>>(null);
-  const thumbStripRef = useRef<ScrollView>(null);
 
   const closePreview = useCallback(() => {
     setPreviewIndex(null);
-    setPreviewResolvingId(null);
-    setPreviewFailedIds({});
-    setHasSwipedPreview(false);
-    swipeHint.value = 0;
-  }, [swipeHint]);
+  }, []);
 
   useEffect(() => {
     if (!visible) closePreview();
@@ -194,89 +179,13 @@ export function DriverPodCompletionPage({
     transform: [{ scale: 1 + pulse.value * 0.012 }],
   }));
 
-  const swipeHintStyle = useAnimatedStyle(() => ({
-    opacity: swipeHint.value,
-    transform: [{ translateX: (1 - swipeHint.value) * -6 }],
-  }));
-
-  const ensurePreviewUrl = useCallback(
-    async (doc: tripDocumentsService.TripDocumentRow) => {
-      if (viewUrls[doc.id]) return viewUrls[doc.id];
-      setPreviewResolvingId(doc.id);
-      try {
-        const url = await onResolvePreview(doc);
-        if (!url) {
-          setPreviewFailedIds((prev) => ({ ...prev, [doc.id]: true }));
-          return null;
-        }
-        setPreviewFailedIds((prev) => {
-          if (!prev[doc.id]) return prev;
-          const next = { ...prev };
-          delete next[doc.id];
-          return next;
-        });
-        return url;
-      } catch {
-        setPreviewFailedIds((prev) => ({ ...prev, [doc.id]: true }));
-        return null;
-      } finally {
-        setPreviewResolvingId((cur) => (cur === doc.id ? null : cur));
-      }
-    },
-    [onResolvePreview, viewUrls],
-  );
-
   const openPreview = useCallback(
-    async (doc: tripDocumentsService.TripDocumentRow) => {
+    (doc: tripDocumentsService.TripDocumentRow) => {
       const idx = documents.findIndex((d) => d.id === doc.id);
-      const nextIndex = idx >= 0 ? idx : 0;
-      setPreviewIndex(nextIndex);
-      setHasSwipedPreview(false);
-      if (documents.length > 1) {
-        swipeHint.value = withSequence(
-          withTiming(1, { duration: 280 }),
-          withTiming(1, { duration: 1400 }),
-          withTiming(0, { duration: 420 }),
-        );
-      }
-      await ensurePreviewUrl(doc);
+      setPreviewIndex(idx >= 0 ? idx : 0);
     },
-    [documents, ensurePreviewUrl, swipeHint],
+    [documents],
   );
-
-  // Prefetch current + neighbours whenever the gallery page changes.
-  useEffect(() => {
-    if (previewIndex == null) return;
-    const targets = [previewIndex - 1, previewIndex, previewIndex + 1]
-      .filter((i) => i >= 0 && i < documents.length)
-      .map((i) => documents[i])
-      .filter(Boolean);
-    for (const doc of targets) {
-      void ensurePreviewUrl(doc);
-    }
-  }, [previewIndex, documents, ensurePreviewUrl]);
-
-  // Keep index valid if the list shrinks (delete while open).
-  useEffect(() => {
-    if (previewIndex == null) return;
-    if (documents.length === 0) {
-      closePreview();
-      return;
-    }
-    if (previewIndex >= documents.length) {
-      setPreviewIndex(documents.length - 1);
-    }
-  }, [documents.length, previewIndex, closePreview]);
-
-  // Keep thumbnail strip scrolled to the active doc.
-  useEffect(() => {
-    if (previewIndex == null || documents.length < 2) return;
-    const thumbW = 56;
-    thumbStripRef.current?.scrollTo({
-      x: Math.max(0, previewIndex * (thumbW + 8) - windowWidth / 2 + thumbW),
-      animated: true,
-    });
-  }, [previewIndex, documents.length, windowWidth]);
 
   const requestConfirmAction = useCallback(() => {
     if (actionBusy) return;
@@ -308,110 +217,6 @@ export function DriverPodCompletionPage({
   ]);
 
   const previewOpen = previewIndex != null;
-  const activeDoc =
-    previewIndex != null && previewIndex >= 0 && previewIndex < documents.length
-      ? documents[previewIndex]
-      : null;
-  const activeUrl = activeDoc ? viewUrls[activeDoc.id] ?? null : null;
-  const canGoPrev = previewIndex != null && previewIndex > 0;
-  const canGoNext =
-    previewIndex != null && previewIndex < documents.length - 1;
-
-  const goToPreviewIndex = useCallback(
-    (index: number, animated = true) => {
-      if (index < 0 || index >= documents.length) return;
-      setPreviewIndex(index);
-      galleryRef.current?.scrollToIndex({ index, animated });
-      if (!hasSwipedPreview) {
-        setHasSwipedPreview(true);
-        swipeHint.value = withTiming(0, { duration: 200 });
-      }
-    },
-    [documents.length, hasSwipedPreview, swipeHint],
-  );
-
-  const onGalleryScrollEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const x = e.nativeEvent.contentOffset.x;
-      const next = Math.round(x / Math.max(windowWidth, 1));
-      if (next === previewIndex) return;
-      if (next < 0 || next >= documents.length) return;
-      setPreviewIndex(next);
-      if (!hasSwipedPreview) {
-        setHasSwipedPreview(true);
-        swipeHint.value = withTiming(0, { duration: 200 });
-      }
-    },
-    [documents.length, hasSwipedPreview, previewIndex, swipeHint, windowWidth],
-  );
-
-  const galleryGetItemLayout = useCallback(
-    (_: unknown, index: number) => ({
-      length: windowWidth,
-      offset: windowWidth * index,
-      index,
-    }),
-    [windowWidth],
-  );
-
-  const renderGalleryItem = useCallback(
-    ({ item }: { item: tripDocumentsService.TripDocumentRow }) => {
-      const url = viewUrls[item.id];
-      const failed = !!previewFailedIds[item.id];
-      const loading = !url && !failed && previewResolvingId === item.id;
-      return (
-        <View style={[styles.galleryPage, { width: windowWidth }]}>
-          <View style={styles.galleryFrame}>
-            {url ? (
-              <Image
-                source={{ uri: url }}
-                style={styles.previewImage}
-                resizeMode="contain"
-                onError={() =>
-                  setPreviewFailedIds((prev) => ({ ...prev, [item.id]: true }))
-                }
-              />
-            ) : (
-              <View style={styles.previewBody}>
-                {failed ? (
-                  <>
-                    <Text style={styles.previewFallbackText}>
-                      Preview not available.
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.previewBrowserBtn}
-                      onPress={() => void ensurePreviewUrl(item)}
-                    >
-                      <Text style={styles.previewBrowserBtnText}>Retry</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <LoadingIndicator size="large" color={FLOW_EMERALD} />
-                    <Text style={styles.previewLoadingText}>
-                      {loading ? 'Loading…' : 'Opening…'}
-                    </Text>
-                  </>
-                )}
-              </View>
-            )}
-          </View>
-        </View>
-      );
-    },
-    [
-      ensurePreviewUrl,
-      previewFailedIds,
-      previewResolvingId,
-      viewUrls,
-      windowWidth,
-    ],
-  );
-
-  const previewCounterLabel = useMemo(() => {
-    if (previewIndex == null || documents.length === 0) return '';
-    return `${previewIndex + 1} / ${documents.length}`;
-  }, [documents.length, previewIndex]);
 
   return (
     <Modal
@@ -610,7 +415,7 @@ export function DriverPodCompletionPage({
                 return (
                   <View key={doc.id} style={styles.fileRow}>
                     <Pressable
-                      onPress={() => void openPreview(doc)}
+                      onPress={() => openPreview(doc)}
                       style={styles.fileThumbWrap}
                       accessibilityLabel={`View ${doc.file_name || 'POD'}`}
                     >
@@ -637,7 +442,7 @@ export function DriverPodCompletionPage({
                       <Text style={styles.fileMeta}>Ready</Text>
                     </View>
                     <TouchableOpacity
-                      onPress={() => void openPreview(doc)}
+                      onPress={() => openPreview(doc)}
                       style={styles.fileIconBtn}
                       accessibilityLabel="View POD"
                       hitSlop={4}
@@ -721,171 +526,16 @@ export function DriverPodCompletionPage({
           )}
         </View>
 
-        {previewOpen && previewIndex != null ? (
-          <View style={styles.previewLayer}>
-            <View style={styles.previewBackdrop} />
-            <View
-              style={[
-                styles.previewSheet,
-                {
-                  paddingBottom: Math.max(insets.bottom, 10),
-                  paddingTop: Math.max(insets.top, 8),
-                },
-              ]}
-            >
-              <View style={styles.previewTopBar}>
-                <TouchableOpacity
-                  style={styles.previewClose}
-                  onPress={closePreview}
-                  activeOpacity={0.85}
-                  accessibilityLabel="Close preview"
-                >
-                  <FontAwesome name="times" size={14} color="#fff" />
-                  <Text style={styles.previewCloseText}>Close</Text>
-                </TouchableOpacity>
-                <View style={styles.previewCounterPill}>
-                  <Text style={styles.previewCounterText}>{previewCounterLabel}</Text>
-                </View>
-                {activeUrl ? (
-                  <TouchableOpacity
-                    style={styles.previewOpenBtn}
-                    onPress={() => void Linking.openURL(activeUrl)}
-                    accessibilityLabel="Open in browser"
-                  >
-                    <FontAwesome name="external-link" size={12} color={FLOW_MINT} />
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.previewOpenBtnGhost} />
-                )}
-              </View>
-
-              <Text style={styles.previewFileName} numberOfLines={1}>
-                {activeDoc?.file_name || (variant === 'lr' ? 'Attachment' : 'POD')}
-              </Text>
-
-              <View style={styles.galleryWrap}>
-                <FlatList
-                  key={`gallery-${documents.map((d) => d.id).join('|')}`}
-                  ref={galleryRef}
-                  data={documents}
-                  horizontal
-                  pagingEnabled
-                  bounces
-                  decelerationRate="fast"
-                  showsHorizontalScrollIndicator={false}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderGalleryItem}
-                  getItemLayout={galleryGetItemLayout}
-                  initialScrollIndex={Math.min(previewIndex, Math.max(0, documents.length - 1))}
-                  onMomentumScrollEnd={onGalleryScrollEnd}
-                  onScrollToIndexFailed={({ index }) => {
-                    requestAnimationFrame(() => {
-                      galleryRef.current?.scrollToIndex({ index, animated: false });
-                    });
-                  }}
-                />
-
-                {documents.length > 1 ? (
-                  <>
-                    <TouchableOpacity
-                      style={[
-                        styles.navChevron,
-                        styles.navChevronLeft,
-                        !canGoPrev && styles.navChevronDisabled,
-                      ]}
-                      disabled={!canGoPrev}
-                      onPress={() => goToPreviewIndex((previewIndex ?? 0) - 1)}
-                      accessibilityLabel="Previous document"
-                    >
-                      <ChevronLeft size={22} color="#fff" strokeWidth={2.4} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.navChevron,
-                        styles.navChevronRight,
-                        !canGoNext && styles.navChevronDisabled,
-                      ]}
-                      disabled={!canGoNext}
-                      onPress={() => goToPreviewIndex((previewIndex ?? 0) + 1)}
-                      accessibilityLabel="Next document"
-                    >
-                      <ChevronRight size={22} color="#fff" strokeWidth={2.4} />
-                    </TouchableOpacity>
-                  </>
-                ) : null}
-
-                {documents.length > 1 && !hasSwipedPreview ? (
-                  <Animated.View
-                    pointerEvents="none"
-                    style={[styles.swipeHint, swipeHintStyle]}
-                  >
-                    <ChevronLeft size={14} color="#fff" strokeWidth={2.5} />
-                    <Text style={styles.swipeHintText}>Swipe</Text>
-                    <ChevronRight size={14} color="#fff" strokeWidth={2.5} />
-                  </Animated.View>
-                ) : null}
-              </View>
-
-              {documents.length > 1 ? (
-                <View style={styles.dotsRow}>
-                  {documents.map((doc, i) => (
-                    <Pressable
-                      key={doc.id}
-                      onPress={() => goToPreviewIndex(i)}
-                      hitSlop={6}
-                      style={[
-                        styles.dot,
-                        i === previewIndex ? styles.dotActive : null,
-                      ]}
-                    />
-                  ))}
-                </View>
-              ) : null}
-
-              {documents.length > 1 ? (
-                <ScrollView
-                  ref={thumbStripRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.thumbStripContent}
-                  style={styles.thumbStrip}
-                >
-                  {documents.map((doc, i) => {
-                    const thumb = viewUrls[doc.id];
-                    const active = i === previewIndex;
-                    return (
-                      <Pressable
-                        key={doc.id}
-                        onPress={() => goToPreviewIndex(i)}
-                        style={[
-                          styles.thumbChip,
-                          active && styles.thumbChipActive,
-                        ]}
-                      >
-                        {thumb ? (
-                          <Image
-                            source={{ uri: thumb }}
-                            style={styles.thumbImage}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View style={styles.thumbFallback}>
-                            <FontAwesome
-                              name="file-image-o"
-                              size={12}
-                              color="rgba(255,255,255,0.55)"
-                            />
-                          </View>
-                        )}
-                        {active ? <View style={styles.thumbActiveBar} /> : null}
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              ) : null}
-            </View>
-          </View>
-        ) : null}
+        <DriverDocumentGalleryPreview
+          visible={previewOpen}
+          asOverlay
+          documents={documents}
+          viewUrls={viewUrls}
+          initialIndex={previewIndex ?? 0}
+          onClose={closePreview}
+          onResolvePreview={onResolvePreview}
+          fallbackLabel={variant === 'lr' ? 'Attachment' : 'POD'}
+        />
       </View>
     </Modal>
   );
@@ -1247,222 +897,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   btnDisabled: { opacity: 0.7 },
-  previewLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 40,
-    elevation: 40,
-  },
-  previewBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(6, 18, 14, 0.94)',
-  },
-  previewSheet: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-start',
-  },
-  previewTopBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    gap: 10,
-  },
-  previewClose: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minHeight: 40,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  previewCloseText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  previewCounterPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(16,185,129,0.22)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,243,208,0.45)',
-  },
-  previewCounterText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: FLOW_MINT,
-    letterSpacing: 0.4,
-  },
-  previewOpenBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  previewOpenBtnGhost: {
-    width: 40,
-    height: 40,
-  },
-  previewFileName: {
-    marginTop: 8,
-    marginHorizontal: 18,
-    fontSize: 12,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.72)',
-    textAlign: 'center',
-  },
-  galleryWrap: {
-    flex: 1,
-    marginTop: 10,
-    justifyContent: 'center',
-  },
-  galleryPage: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  galleryFrame: {
-    flex: 1,
-    maxHeight: '100%',
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#0b1220',
-    borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.35)',
-  },
-  navChevron: {
-    position: 'absolute',
-    top: '46%',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(16,185,129,0.88)',
-    zIndex: 5,
-  },
-  navChevronLeft: {
-    left: 10,
-  },
-  navChevronRight: {
-    right: 10,
-  },
-  navChevronDisabled: {
-    opacity: 0.28,
-  },
-  swipeHint: {
-    position: 'absolute',
-    alignSelf: 'center',
-    bottom: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  swipeHintText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.28)',
-  },
-  dotActive: {
-    width: 16,
-    backgroundColor: FLOW_EMERALD,
-  },
-  thumbStrip: {
-    maxHeight: 64,
-    marginBottom: 4,
-  },
-  thumbStripContent: {
-    paddingHorizontal: 16,
-    gap: 8,
-    alignItems: 'center',
-  },
-  thumbChip: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  thumbChipActive: {
-    borderColor: FLOW_EMERALD,
-  },
-  thumbImage: {
-    width: '100%',
-    height: '100%',
-  },
-  thumbFallback: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  thumbActiveBar: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    bottom: 4,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: FLOW_EMERALD,
-  },
-  previewBody: {
-    flex: 1,
-    minHeight: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    padding: 16,
-  },
-  previewLoadingText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
-  },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#0b1220',
-  },
-  previewFallbackText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
-  },
-  previewBrowserBtn: {
-    backgroundColor: FLOW_EMERALD,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  previewBrowserBtnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
 });

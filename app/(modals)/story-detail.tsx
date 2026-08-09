@@ -12,6 +12,8 @@ import {
   type StoryClosedReason,
   type StoryPreviewRow,
 } from '@/features/network/services/posts.service';
+import { getDriverReachStories } from '@/features/reach/services/driverReferrals.service';
+import { DriverPulseStoryViewer } from '@/features/reach/screens/DriverPulseStoryViewer';
 import { ROUTES } from '@/lib/routes';
 import { useMemberAccess } from '@/lib/useMemberAccess';
 import { useQuery } from '@tanstack/react-query';
@@ -179,12 +181,13 @@ function PreviewShell({
 }
 
 export default function StoryDetailRoute() {
-  const { user, status } = useAuth();
+  const { user, status, profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const { can: canSurface, isLoading: accessLoading } = useMemberAccess();
   const router = useRouter();
   const params = useLocalSearchParams<{ postId?: string; orgId?: string; storyType?: string; queue?: string }>();
   const myOrgId = currentOrganization?.id ?? '';
+  const isDriver = profile?.role === 'driver';
 
   const previewQ = useQuery({
     queryKey: ['q', 'posts', 'story-preview', params.postId],
@@ -195,6 +198,21 @@ export default function StoryDetailRoute() {
     enabled: Boolean(params.postId),
     staleTime: 30_000,
   });
+
+  const driverStoriesQ = useQuery({
+    queryKey: ['q', 'reach', 'driver-stories', 'story-detail', user?.uid],
+    queryFn: async () => {
+      const { stories } = await getDriverReachStories();
+      return stories;
+    },
+    enabled: Boolean(isDriver && user?.uid && params.postId),
+    staleTime: 30_000,
+  });
+
+  const driverStory = useMemo(() => {
+    if (!params.postId || !driverStoriesQ.data) return null;
+    return driverStoriesQ.data.find((s) => s.post_id === params.postId) ?? null;
+  }, [driverStoriesQ.data, params.postId]);
 
   const storyClosed =
     !previewQ.isLoading &&
@@ -207,7 +225,8 @@ export default function StoryDetailRoute() {
     enabled:
       Boolean(params.postId) &&
       storyClosed &&
-      !(myOrgId && previewQ.data?.organization_id === myOrgId),
+      !(myOrgId && previewQ.data?.organization_id === myOrgId) &&
+      !isDriver,
     staleTime: 30_000,
   });
 
@@ -221,7 +240,12 @@ export default function StoryDetailRoute() {
       );
       return connected;
     },
-    enabled: Boolean(user) && status !== 'restoring' && Boolean(myOrgId) && Boolean(previewQ.data),
+    enabled:
+      Boolean(user) &&
+      status !== 'restoring' &&
+      Boolean(myOrgId) &&
+      Boolean(previewQ.data) &&
+      !isDriver,
     staleTime: 30_000,
   });
 
@@ -247,6 +271,17 @@ export default function StoryDetailRoute() {
   const isOwnStory = Boolean(
     myOrgId && preview && preview.organization_id === myOrgId,
   );
+
+  if (isDriver && params.postId) {
+    return (
+      <DriverPulseStoryViewer
+        postId={params.postId}
+        story={driverStory}
+        shipperName={driverStory?.org_name ?? preview?.org_name}
+        onClose={() => router.back()}
+      />
+    );
+  }
 
   if (storyClosed && !isOwnStory) {
     if (closedInfoQ.isLoading) {

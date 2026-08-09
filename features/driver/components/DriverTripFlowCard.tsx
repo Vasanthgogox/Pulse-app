@@ -573,11 +573,11 @@ export function DriverTripFlowCard({
     async (doc: tripDocumentsService.TripDocumentRow): Promise<string | null> => {
       const cached = podViewUrls[doc.id];
       if (cached) return cached;
-      const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
+      const url = await tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path);
       if (url) {
         setPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
       }
-      return url ?? null;
+      return url;
     },
     [podViewUrls],
   );
@@ -607,11 +607,11 @@ export function DriverTripFlowCard({
     async (doc: tripDocumentsService.TripDocumentRow): Promise<string | null> => {
       const cached = lrViewUrls[doc.id];
       if (cached) return cached;
-      const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
+      const url = await tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path);
       if (url) {
         setLrViewUrls((prev) => ({ ...prev, [doc.id]: url }));
       }
-      return url ?? null;
+      return url;
     },
     [lrViewUrls],
   );
@@ -864,7 +864,11 @@ export function DriverTripFlowCard({
     lrDocuments.forEach((doc) => {
       if (lrViewUrlsRequestedRef.current.has(doc.id)) return;
       lrViewUrlsRequestedRef.current.add(doc.id);
-      tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
+      tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path).then((url) => {
+        if (!url) {
+          setLrDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+          return;
+        }
         setLrViewUrls((prev) => (prev[doc.id] ? prev : { ...prev, [doc.id]: url }));
       });
     });
@@ -875,7 +879,11 @@ export function DriverTripFlowCard({
     podDocuments.forEach((doc) => {
       if (podViewUrlsRequestedRef.current.has(doc.id)) return;
       podViewUrlsRequestedRef.current.add(doc.id);
-      tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
+      tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path).then((url) => {
+        if (!url) {
+          setPodDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+          return;
+        }
         setPodViewUrls((prev) => (prev[doc.id] ? prev : { ...prev, [doc.id]: url }));
       });
     });

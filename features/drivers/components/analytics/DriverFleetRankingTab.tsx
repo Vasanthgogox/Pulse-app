@@ -56,7 +56,10 @@ import {
   computeDriverCommissionForTrip,
   type DriverOfferForAggregation,
 } from "@/features/finance";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import {
+  isActiveFleetRelationshipDriver,
+  type DriverRow,
+} from "@/features/drivers/services/drivers.service";
 import type { TripRow } from "@/features/trips/services/trips.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,8 +145,8 @@ function buildFleetRows(
   }
 
   return drivers
-    // Exclude tracking-only drivers (assigned-by-phone helpers).
-    .filter((d) => !d.tracking_only && !d.left_at)
+    // Fleet-relationship membership only (active_employee/independent), not compensation.
+    .filter((d) => isActiveFleetRelationshipDriver(d) && !d.left_at)
     .map<FleetRow>((d) => {
       const driverTrips = tripsByDriver.get(d.id) ?? [];
       const offer = offerToFinanceShape(offers[d.id]);

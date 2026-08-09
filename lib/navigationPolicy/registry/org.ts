@@ -349,7 +349,8 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
   {
     id: 'org.trip-verification',
     pattern: '/trip/:id/verification',
-    experience: 'org',
+    // Driver Operations + office trip detail both open this stack.
+    experience: 'shared',
     priority: 90,
     grants: { anyOf: ['dispatch', 'dispatch_for_own_fleet'] },
     onDeny: { type: 'sign_in' },
@@ -358,7 +359,7 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
   {
     id: 'org.trip-ops-expenses',
     pattern: '/trip/:id/operations/expenses',
-    experience: 'org',
+    experience: 'shared',
     priority: 90,
     grants: { anyOf: ['finance_view', 'finance_manage', 'dispatch', 'dispatch_for_own_fleet'] },
     onDeny: { type: 'sign_in' },
@@ -367,7 +368,7 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
   {
     id: 'org.trip-ops-fuel',
     pattern: '/trip/:id/operations/fuel',
-    experience: 'org',
+    experience: 'shared',
     priority: 90,
     grants: { anyOf: ['finance_view', 'finance_manage', 'dispatch', 'dispatch_for_own_fleet'] },
     onDeny: { type: 'sign_in' },
@@ -376,7 +377,7 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
   {
     id: 'org.trip-ops-toll',
     pattern: '/trip/:id/operations/toll',
-    experience: 'org',
+    experience: 'shared',
     priority: 90,
     grants: { anyOf: ['finance_view', 'finance_manage', 'dispatch', 'dispatch_for_own_fleet'] },
     onDeny: { type: 'sign_in' },
@@ -385,7 +386,7 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
   {
     id: 'org.trip-ops-other',
     pattern: '/trip/:id/operations/other',
-    experience: 'org',
+    experience: 'shared',
     priority: 90,
     grants: { anyOf: ['finance_view', 'finance_manage', 'dispatch', 'dispatch_for_own_fleet'] },
     onDeny: { type: 'sign_in' },
@@ -394,7 +395,7 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
   {
     id: 'org.trip-ops-launcher',
     pattern: '/trip/:id/operations/launcher',
-    experience: 'org',
+    experience: 'shared',
     priority: 90,
     grants: { anyOf: ['finance_view', 'finance_manage', 'dispatch', 'dispatch_for_own_fleet'] },
     onDeny: { type: 'sign_in' },
@@ -661,11 +662,9 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
   {
     id: 'org.modal-story-detail',
     pattern: '/story-detail',
-    experience: 'org',
-    // Intentionally ungated: this is also the public broadcast share link, so
-    // anonymous visitors must reach the preview. The `sales.network.stories`
-    // check lives in the route, which downgrades ungranted members to that same
-    // preview instead of the bidding screen.
+    // Public share link + driver/org viewers. Route gate handles sales grant
+    // and driver Pulse preview branch.
+    experience: 'public_content',
     priority: 100,
     onDeny: { type: 'sign_in' },
   },

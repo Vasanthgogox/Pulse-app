@@ -72,6 +72,11 @@ export const ROUTES = {
 
   DRIVER_ROOT: '/(driver)' as const,
 
+  /** Driver expense mode chooser (active trip vs general). */
+  driverExpenseCapture: () => '/(driver)/expense-capture' as const,
+  /** Device-local general expense (no trip) + WhatsApp share. */
+  driverGeneralExpense: () => '/(driver)/general-expense' as const,
+
   /** Full-screen Pulse Chat (root stack — preferred entry). */
   CHAT: '/chat' as const,
 

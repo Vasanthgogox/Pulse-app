@@ -1,13 +1,13 @@
-import React, { memo, useRef, useCallback } from 'react';
+import Theme from '@/constants/Theme';
+import { Delete } from 'lucide-react-native';
+import React, { memo, useCallback, useRef } from 'react';
 import {
-  View,
+  Platform,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Platform,
+  View,
 } from 'react-native';
-import { Delete } from 'lucide-react-native';
-import Theme from '@/constants/Theme';
 import { triggerFeedback } from './feedback';
 import type { KeypadKey } from './keypad';
 
@@ -32,18 +32,23 @@ const LONG_PRESS_DELETE_INTERVAL_MS = 60;
 const LONG_PRESS_DELETE_DELAY_MS = 400;
 
 const KEY_H = 64;
-const KEY_H_PAY = 56;
-/** Dense wizard / signup pad — leaves room for Continue above the keys. */
+const KEY_H_PAY = 54;
 const KEY_H_PAY_COMPACT = 40;
+
+/**
+ * Shared with FullscreenNumericEntry so the → FAB sits in the same
+ * 3-column grid as the pay keys (equal left/right margins + gutters).
+ */
+export const PAY_KEYPAD_INSET = 16;
+/** Half-gutter on each key cell → 10px visual gap between keys. */
+export const PAY_KEYPAD_CELL_PAD = 5;
 
 interface DecimalKeypadProps {
   onKey: (key: KeypadKey) => void;
   showDecimal?: boolean;
   variant?: 'default' | 'pay' | 'apple';
   size?: 'default' | 'compact';
-  /** Phone dial: bottom row is blank · 0 · delete (no decimal column). */
   layout?: 'decimal' | 'phone';
-  /** Key / delete haptics. Off for signup / OTP entry where vibration interrupts typing. */
   hapticsEnabled?: boolean;
 }
 
@@ -66,8 +71,7 @@ export const DecimalKeypad = memo(function DecimalKeypad({
         ? KEY_H_PAY_COMPACT
         : KEY_H_PAY
       : KEY_H;
-  const keyTextSize = isApple ? 28 : isCompact ? 22 : 26;
-  /** Quiet signup pads: almost no dim; other pads keep a light press cue. */
+  const keyTextSize = isApple ? 28 : isCompact ? 22 : 24;
   const keyActiveOpacity = !hapticsEnabled ? 0.92 : isApple ? 0.45 : 0.55;
   const deleteIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,20 +107,51 @@ export const DecimalKeypad = memo(function DecimalKeypad({
     [onKey, hapticsEnabled],
   );
 
+  const renderPayKey = (key: KeypadKey, options?: { blank?: boolean }) => {
+    if (options?.blank) {
+      return <View key="blank" style={styles.payCell} />;
+    }
+
+    if (key === '.' && !showDecimal) {
+      return <View key="dot-disabled" style={styles.payCell} />;
+    }
+
+    const isBackspace = key === '⌫';
+
+    return (
+      <View key={key} style={styles.payCell}>
+        <TouchableOpacity
+          style={[styles.payKeyFace, { height: keyHeight }]}
+          onPress={() => handleKey(isBackspace ? '⌫' : key)}
+          onLongPress={isBackspace ? handleDeleteLongPress : undefined}
+          onPressOut={isBackspace ? stopRapidDelete : undefined}
+          delayLongPress={isBackspace ? LONG_PRESS_DELETE_DELAY_MS : undefined}
+          activeOpacity={keyActiveOpacity}
+          accessibilityRole="button"
+          accessibilityLabel={isBackspace ? 'Delete last digit' : `Key ${key}`}
+        >
+          {isBackspace ? (
+            <View style={styles.payIconWrap}>
+              <Delete size={22} color={Theme.textSecondary} strokeWidth={2.2} />
+            </View>
+          ) : (
+            <Text style={[styles.payKeyText, { fontSize: keyTextSize }]}>{key}</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const keyBase = (isSpecial: boolean) => [
     styles.key,
     { height: keyHeight, minHeight: Math.min(44, keyHeight) },
     isApple && styles.keyApple,
-    isPay && styles.keyPay,
-    isPay && isCompact && styles.keyPayCompact,
-    isPay && isSpecial && styles.keyPaySpecial,
     !isPay && !isApple && isSpecial && styles.keySpecial,
   ];
 
   const rowGapStyle = [
     styles.row,
     isApple && styles.rowApple,
-    isPay && styles.rowPay,
     isCompact && !isApple && !isPay && styles.rowCompact,
   ];
 
@@ -139,15 +174,7 @@ export const DecimalKeypad = memo(function DecimalKeypad({
           {isApple ? (
             <Delete size={24} color={Theme.textPrimaryDark} strokeWidth={2} />
           ) : (
-            <Text
-              style={[
-                styles.keyText,
-                styles.keyTextBackspace,
-                { fontSize: isCompact ? 18 : 20 },
-              ]}
-            >
-              ⌫
-            </Text>
+            <Delete size={22} color={Theme.textSecondary} strokeWidth={2.1} />
           )}
         </TouchableOpacity>
       );
@@ -176,17 +203,35 @@ export const DecimalKeypad = memo(function DecimalKeypad({
     );
   };
 
+  if (isPay) {
+    const digitRows = isPhoneLayout ? PHONE_ROWS : ROWS.slice(0, 3);
+
+    return (
+      <View style={[styles.gridPay, isCompact && styles.gridPayCompact]}>
+        {digitRows.map((row, rowIdx) => (
+          <View key={rowIdx} style={styles.payRow}>
+            {row.map((key) => renderPayKey(key))}
+          </View>
+        ))}
+        <View style={styles.payRow}>
+          {isPhoneLayout ? (
+            <>
+              {renderPayKey('0', { blank: true })}
+              {renderPayKey('0')}
+              {renderPayKey('⌫')}
+            </>
+          ) : (
+            ROWS[3]!.map((key) => renderPayKey(key))
+          )}
+        </View>
+      </View>
+    );
+  }
+
   const rows = isPhoneLayout ? PHONE_ROWS : ROWS.slice(0, 3);
 
   return (
-    <View
-      style={[
-        styles.grid,
-        isApple && styles.gridApple,
-        isPay && !isApple && styles.gridPay,
-        isPay && isCompact && styles.gridPayCompact,
-      ]}
-    >
+    <View style={[styles.grid, isApple && styles.gridApple]}>
       {rows.map((row, rowIdx) => (
         <View key={rowIdx} style={rowGapStyle}>
           {row.map((key) => renderDigitKey(key, false))}
@@ -240,21 +285,60 @@ const styles = StyleSheet.create({
     backgroundColor: APPLE_KEYPAD_BG,
   },
   gridPay: {
-    backgroundColor: Theme.surfaceGray,
-    paddingTop: 0,
-    paddingBottom: 0,
-    paddingHorizontal: 0,
-    gap: 10,
-    borderTopWidth: 0,
     width: '100%',
     alignSelf: 'stretch',
+    backgroundColor: Theme.surfaceGray,
+    paddingHorizontal: PAY_KEYPAD_INSET - PAY_KEYPAD_CELL_PAD,
+    paddingTop: PAY_KEYPAD_CELL_PAD,
+    paddingBottom: Math.max(10, PAY_KEYPAD_CELL_PAD + 4),
   },
   gridPayCompact: {
-    paddingTop: 0,
-    paddingBottom: 0,
-    gap: 8,
     backgroundColor: 'transparent',
-    borderTopWidth: 0,
+    paddingBottom: PAY_KEYPAD_CELL_PAD,
+  },
+  payRow: {
+    flexDirection: 'row',
+    width: '100%',
+  },
+  payCell: {
+    flex: 1,
+    minWidth: 0,
+    padding: PAY_KEYPAD_CELL_PAD,
+  },
+  payKeyFace: {
+    width: '100%',
+    borderRadius: 14,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(148,163,184,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 2,
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
+  },
+  payIconWrap: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  payKeyText: {
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    textAlign: 'center',
+    ...Platform.select({
+      ios: { fontVariant: ['tabular-nums'] },
+      android: { includeFontPadding: false, textAlignVertical: 'center' },
+      default: {},
+    }),
   },
   row: {
     flexDirection: 'row',
@@ -264,9 +348,6 @@ const styles = StyleSheet.create({
   },
   rowApple: {
     gap: 7,
-  },
-  rowPay: {
-    gap: 10,
   },
   rowCompact: {
     gap: 8,
@@ -303,35 +384,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
-  keyPay: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  keyPayCompact: {
-    borderRadius: 12,
-  },
-  keyPaySpecial: {
-    backgroundColor: Theme.cardWhite,
-  },
   keySpecial: {
     backgroundColor: Theme.surfaceGray,
   },
   keyDisabled: {
     backgroundColor: 'transparent',
     opacity: 0,
-  },
-  keyTextDisabled: {
-    color: Theme.textMuted,
-    fontWeight: '400',
   },
   keyText: {
     fontWeight: '500',
@@ -353,8 +411,5 @@ const styles = StyleSheet.create({
   },
   keyTextSpecial: {
     color: Theme.textBody,
-  },
-  keyTextBackspace: {
-    color: Theme.textSecondary,
   },
 });

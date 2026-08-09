@@ -43,10 +43,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Alert,
-  Image,
-  Linking,
-  Modal,
-  Pressable,
   ScrollView,
   Share,
   StyleSheet,
@@ -76,8 +72,8 @@ import {
 } from "@/features/driver/tripHistory/tripHistoryDetail.util";
 import { tripHistoryDetailStyles as styles } from "@/features/driver/tripHistory/tripHistoryDetail.styles";
 import { TripDetailSettlementPanel } from "@/features/driver/components/TripDetailSettlementPanel";
+import { DriverDocumentGalleryPreview } from "@/features/driver/components/DriverDocumentGalleryPreview";
 import { useTripVerificationSync } from "@/features/trips/verification";
-import { useTripOperationsSync } from "@/features/trips/operations";
 import { DriverTripOperationsTab } from "@/features/driver/components/DriverTripOperationsTab";
 import { useRegisterDriverContextTrip } from "@/contexts/DriverTripOpsContext";
 
@@ -127,7 +123,6 @@ export function DriverTripHistoryDetailScreen({
   const isDark = theme === "dark";
   const router = useRouter();
   useTripVerificationSync();
-  const operationsSync = useTripOperationsSync();
   const [trip, setTrip] = useState<tripsService.TripRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
@@ -139,16 +134,14 @@ export function DriverTripHistoryDetailScreen({
     Record<string, { distance: number; estimated_duration: string }>
   >({});
   const [detailTab, setDetailTab] = useState<"journey" | "operations" | "settlement">(
-    initialTab ?? "journey",
+    initialTab ?? (initialSelectedExpenseId ? "settlement" : "journey"),
   );
   const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
   const [detailPodDocuments, setDetailPodDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
   const [detailPodLoading, setDetailPodLoading] = useState(false);
   const [detailPodViewUrls, setDetailPodViewUrls] = useState<Record<string, string>>({});
   const detailPodUrlRequestedRef = useRef<Set<string>>(new Set());
-  const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
-  const [podPreviewLoading, setPodPreviewLoading] = useState(false);
-  const [podPreviewError, setPodPreviewError] = useState(false);
+  const [podPreviewIndex, setPodPreviewIndex] = useState<number | null>(null);
 
   useRegisterDriverContextTrip(trip);
 
@@ -237,9 +230,7 @@ export function DriverTripHistoryDetailScreen({
       setDetailPodDocuments([]);
       setDetailPodViewUrls({});
       detailPodUrlRequestedRef.current.clear();
-      setPodPreviewUrl(null);
-      setPodPreviewLoading(false);
-      setPodPreviewError(false);
+      setPodPreviewIndex(null);
       return;
     }
     const tid = trip.id;
@@ -262,11 +253,41 @@ export function DriverTripHistoryDetailScreen({
     detailPodDocuments.forEach((doc) => {
       if (detailPodUrlRequestedRef.current.has(doc.id)) return;
       detailPodUrlRequestedRef.current.add(doc.id);
-      tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
+      tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path).then((url) => {
+        if (!url) {
+          // Drop deleted / missing storage objects so they never become empty gallery cells.
+          setDetailPodDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+          return;
+        }
         setDetailPodViewUrls((prev) => (prev[doc.id] ? prev : { ...prev, [doc.id]: url }));
       });
     });
   }, [detailPodDocuments]);
+
+  const resolveDetailPodPreview = useCallback(
+    async (doc: tripDocumentsService.TripDocumentRow): Promise<string | null> => {
+      const cached = detailPodViewUrls[doc.id];
+      if (cached) return cached;
+      const url = await tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path);
+      if (!url) return null;
+      setDetailPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
+      return url;
+    },
+    [detailPodViewUrls],
+  );
+
+  const handleUnusablePodDocument = useCallback(
+    (doc: tripDocumentsService.TripDocumentRow) => {
+      setDetailPodDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      setDetailPodViewUrls((prev) => {
+        if (!prev[doc.id]) return prev;
+        const next = { ...prev };
+        delete next[doc.id];
+        return next;
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!trip) return;
@@ -927,26 +948,7 @@ export function DriverTripHistoryDetailScreen({
                               {name}
                             </Text>
                             <TouchableOpacity
-                              onPress={async () => {
-                                setPodPreviewError(false);
-                                const cached = detailPodViewUrls[doc.id];
-                                if (cached) {
-                                  setPodPreviewUrl(cached);
-                                  return;
-                                }
-                                setPodPreviewLoading(true);
-                                setPodPreviewUrl(null);
-                                const url =
-                                  await tripDocumentsService.getDocumentViewUrl(
-                                    doc.storage_path,
-                                  );
-                                setDetailPodViewUrls((prev) => ({
-                                  ...prev,
-                                  [doc.id]: url,
-                                }));
-                                setPodPreviewLoading(false);
-                                setPodPreviewUrl(url);
-                              }}
+                              onPress={() => setPodPreviewIndex(index)}
                               activeOpacity={0.85}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             >
@@ -1023,17 +1025,17 @@ export function DriverTripHistoryDetailScreen({
 
               {detailTab === "operations" && trip ? (
                 <View style={{ marginBottom: 12 }}>
-                  <DriverTripOperationsTab
-                    trip={trip}
-                    operationsSync={operationsSync}
-                    initialSelectedExpenseId={initialSelectedExpenseId}
-                  />
+                  <DriverTripOperationsTab trip={trip} />
                 </View>
               ) : null}
 
               {detailTab === "settlement" ? (
                 <>
-                  <TripDetailSettlementPanel trip={selectedTrip} />
+                  <TripDetailSettlementPanel
+                    trip={selectedTrip}
+                    isFleetLinked={isTripHistoryFleet}
+                    initialSelectedExpenseId={initialSelectedExpenseId}
+                  />
                 </>
               ) : null}
             </ScrollView>
@@ -1077,103 +1079,16 @@ export function DriverTripHistoryDetailScreen({
               </View>
             ) : null}
 
-            <Modal
-              visible={!!podPreviewUrl || podPreviewLoading}
-              transparent
-              animationType="fade"
-              onRequestClose={() => {
-                setPodPreviewUrl(null);
-                setPodPreviewLoading(false);
-                setPodPreviewError(false);
-              }}
-            >
-              <Pressable
-                style={[
-                  styles.podPreviewBackdrop,
-                  { paddingTop: insets.top, paddingBottom: insets.bottom },
-                ]}
-                onPress={() => {
-                  setPodPreviewUrl(null);
-                  setPodPreviewLoading(false);
-                  setPodPreviewError(false);
-                }}
-              >
-                <Pressable style={styles.podPreviewInner} onPress={() => {}}>
-                  <TouchableOpacity
-                    style={[
-                      styles.podPreviewClose,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    onPress={() => {
-                      setPodPreviewUrl(null);
-                      setPodPreviewLoading(false);
-                      setPodPreviewError(false);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <FontAwesome name="times" size={18} color={colors.text} />
-                    <Text style={{ color: colors.text, fontWeight: "700", marginLeft: 8 }}>
-                      Close
-                    </Text>
-                  </TouchableOpacity>
-                  {podPreviewLoading ? (
-                    <View style={styles.podPreviewImageBox}>
-                      <LoadingIndicator size="large" color={colors.emerald} />
-                      <Text style={{ color: colors.textMuted, marginTop: 12 }}>
-                        Loading…
-                      </Text>
-                    </View>
-                  ) : podPreviewUrl ? (
-                    <>
-                      <Image
-                        source={{ uri: podPreviewUrl }}
-                        style={styles.podPreviewImage}
-                        resizeMode="contain"
-                        onError={() => setPodPreviewError(true)}
-                        onLoad={() => setPodPreviewError(false)}
-                      />
-                      {podPreviewError ? (
-                        <View
-                          style={[
-                            styles.podPreviewFallback,
-                            {
-                              backgroundColor: colors.surface,
-                              borderColor: colors.border,
-                            },
-                          ]}
-                        >
-                          <Text style={{ color: colors.textMuted, textAlign: "center" }}>
-                            Preview not available. Open in browser to view.
-                          </Text>
-                          <TouchableOpacity
-                            style={{
-                              marginTop: 14,
-                              backgroundColor: colors.emerald,
-                              paddingVertical: 12,
-                              paddingHorizontal: 20,
-                              borderRadius: 12,
-                              flexDirection: "row",
-                              alignItems: "center",
-                              gap: 8,
-                            }}
-                            onPress={() => void Linking.openURL(podPreviewUrl)}
-                            activeOpacity={0.85}
-                          >
-                            <FontAwesome name="external-link" size={16} color="#fff" />
-                            <Text style={{ color: "#fff", fontWeight: "700" }}>
-                              Open in browser
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : null}
-                    </>
-                  ) : null}
-                </Pressable>
-              </Pressable>
-            </Modal>
+            <DriverDocumentGalleryPreview
+              visible={podPreviewIndex != null}
+              documents={detailPodDocuments}
+              viewUrls={detailPodViewUrls}
+              initialIndex={podPreviewIndex ?? 0}
+              onClose={() => setPodPreviewIndex(null)}
+              onResolvePreview={resolveDetailPodPreview}
+              onUnusableDocument={handleUnusablePodDocument}
+              fallbackLabel="POD"
+            />
     </View>
   );
 }

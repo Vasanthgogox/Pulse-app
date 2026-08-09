@@ -29,7 +29,10 @@ type DriverTripOpsContextValue = {
   hasTargetTrip: boolean;
   showExpenseOps: boolean;
   showOdometerOps: boolean;
+  /** Short route/label for the expense capture card. */
+  activeTripSummary: string | null;
   openExpense: () => void;
+  openTripExpense: () => void;
   openOdometer: () => void;
   registerContextTrip: (trip: tripsService.TripRow | null) => void;
 };
@@ -108,39 +111,34 @@ export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
     setContextTrip(trip);
   }, []);
 
-  const alertPickTrip = useCallback(() => {
+  const alertNoActiveTrip = useCallback(() => {
     Alert.alert(
-      "No trip selected",
-      "Accept or start a trip on Dashboard, or open a trip from History to add expenses and odometer readings.",
+      "No active trip",
+      "Accept or start a delivery to log expenses for that trip.",
       [
         {
           text: "Open History",
           onPress: () => router.push("/(driver)/trip-history" as never),
         },
-        { text: "Cancel", style: "cancel" },
+        { text: "OK", style: "cancel" },
       ],
     );
   }, [router]);
 
-  const openExpense = useCallback(() => {
+  const openTripExpense = useCallback(() => {
     if (!targetTrip?.id) {
-      alertPickTrip();
+      alertNoActiveTrip();
       return;
     }
-    if (!caps.showExpense) {
-      Alert.alert(
-        "Expense not available",
-        "This trip type does not support in-app expense logging.",
-        [{ text: "OK" }],
-      );
-      return;
-    }
+    // Always attach to the active / context trip while delivery is incomplete.
     router.push(ROUTES.tripOtherExpenseEntry(targetTrip.id) as never);
-  }, [alertPickTrip, caps.showExpense, router, targetTrip?.id]);
+  }, [alertNoActiveTrip, router, targetTrip?.id]);
+
+  const openExpense = openTripExpense;
 
   const openOdometer = useCallback(() => {
     if (!targetTrip?.id) {
-      alertPickTrip();
+      alertNoActiveTrip();
       return;
     }
     if (!caps.showOdometer) {
@@ -152,22 +150,32 @@ export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
       return;
     }
     baseOps.openOdometer();
-  }, [alertPickTrip, baseOps, caps.showOdometer, targetTrip?.id]);
+  }, [alertNoActiveTrip, baseOps, caps.showOdometer, targetTrip?.id]);
+
+  const activeTripSummary = useMemo(() => {
+    if (!targetTrip?.id) return null;
+    const from = targetTrip.pickup_area?.trim() || "Origin";
+    const to = targetTrip.drop_location?.trim() || "Destination";
+    return `${from} → ${to}`;
+  }, [targetTrip]);
 
   const value = useMemo<DriverTripOpsContextValue>(
     () => ({
       hasTargetTrip: Boolean(targetTrip?.id),
-      showExpenseOps: caps.showExpense,
+      showExpenseOps: Boolean(targetTrip?.id),
       showOdometerOps: caps.showOdometer,
+      activeTripSummary,
       openExpense,
+      openTripExpense,
       openOdometer,
       registerContextTrip,
     }),
     [
-      caps.showExpense,
+      activeTripSummary,
       caps.showOdometer,
       openExpense,
       openOdometer,
+      openTripExpense,
       registerContextTrip,
       targetTrip?.id,
     ],

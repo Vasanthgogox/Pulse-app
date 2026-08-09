@@ -18,6 +18,7 @@ import {
 import { useOptionalDriverAvatar } from "@/contexts/DriverAvatarContext";
 import { DriverDailySummaryCard } from "@/features/driver/components/DriverDailySummaryCard";
 import { DriverDashboardMapPreview } from "@/features/driver/components/DriverDashboardMapPreview";
+import { DriverExpenseCaptureFab } from "@/features/driver/components/DriverExpenseCaptureFab";
 import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -128,7 +129,8 @@ import Constants from "expo-constants";
 import { isExpoGo } from "@/lib/expoGoMaps";
 import * as ExpoLocation from "expo-location";
 import { startForegroundPositionWatch } from "@/lib/safeForegroundPositionWatch";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
+import { ROUTES } from "@/lib/routes";
 import {
   Fragment,
   useCallback,
@@ -514,6 +516,8 @@ export default function DriverRadarScreen() {
   const fullLeafletRef = useRef<LeafletMapRef | null>(null);
   const nativeMapZoomRef = useRef(DRIVER_MAP_MY_LOCATION_ZOOM);
   const bottomSheetRef = useRef<BottomSheet | null>(null);
+  /** Tracks sheet top Y so expense FAB floats above the job card as it minimizes. */
+  const missionSheetAnimatedPosition = useSharedValue(0);
   const sheetOperationActiveRef = useRef(false);
   /** True while an in-progress mission sheet is mounted — skip resume invalidate (camera/POD). */
   const hasActiveMissionRef = useRef(false);
@@ -5569,6 +5573,7 @@ export default function DriverRadarScreen() {
                       ? 0
                       : 1
               }
+              animatedPosition={missionSheetAnimatedPosition}
               enablePanDownToClose={false}
               enableHandlePanningGesture={
                 !shouldUseStaticMapSheetCard || canMinimizeMissionSheet
@@ -5772,6 +5777,22 @@ export default function DriverRadarScreen() {
                 </BottomSheetScrollView>
               )}
             </BottomSheet>
+
+            {(activeMission?.id ||
+              (effectiveFirstIncoming &&
+                acceptedTripId &&
+                String(effectiveFirstIncoming.id).toLowerCase() ===
+                  String(acceptedTripId).toLowerCase())) ? (
+              <DriverExpenseCaptureFab
+                animatedSheetTop={missionSheetAnimatedPosition}
+                onPress={() => {
+                  const tripId =
+                    activeMission?.id ?? effectiveFirstIncoming?.id ?? null;
+                  if (!tripId) return;
+                  router.push(ROUTES.tripOtherExpenseEntry(tripId) as Href);
+                }}
+              />
+            ) : null}
           </KeyboardAvoidingView>
         </GestureHandlerRootView>
       ) : null}

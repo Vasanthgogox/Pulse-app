@@ -17,6 +17,7 @@ import {
     getDriverTripDisplayNumber,
 } from "@/features/driver/utils/driverTripSequence.util";
 import * as driversService from "@/features/drivers/services/drivers.service";
+import * as salaryRequestsService from "@/features/drivers/services/salaryRequests.service";
 import { isAggregateTrip, isRosterTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import * as tripsService from "@/features/trips/services/trips.service";
@@ -35,7 +36,7 @@ import { supabase } from "@/lib/supabase";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
-import { useRouter, type Href } from "expo-router";
+import { useRouter, useLocalSearchParams, type Href } from "expo-router";
 import {
     MapPinned,
     Search as SearchIcon,
@@ -319,6 +320,20 @@ export default function DriverTripsScreen() {
   const [pressedCardId, setPressedCardId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [tripView, setTripView] = useState<"active" | "history">("active");
+  const [tripsSubTab, setTripsSubTab] = useState<"all" | "fleet" | "open" | "attributed">("all");
+  const [salaryRequests, setSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
+  const historyParams = useLocalSearchParams<{ type?: string }>();
+
+  useEffect(() => {
+    const type =
+      typeof historyParams.type === "string"
+        ? historyParams.type
+        : historyParams.type?.[0];
+    if (type === "all" || type === "fleet" || type === "open" || type === "attributed") {
+      setTripsSubTab(type);
+      if (type !== "all") setTripView("history");
+    }
+  }, [historyParams.type]);
 
   const fetch = useCallback(() => {
     if (!profile?.uid) {
@@ -338,11 +353,13 @@ export default function DriverTripsScreen() {
       const activeDriver = drivers.find((d) => !d.left_at) ?? drivers[0] ?? null;
       if (drivers.length > 0) {
         setDriver(activeDriver);
+        const driverIds = drivers.map((d) => d.id);
         Promise.all([
-          tripsService.getDriverUiTripsByDriverIds(drivers.map((d) => d.id)),
+          tripsService.getDriverUiTripsByDriverIds(driverIds),
           driversService.getDriverInvitesReceived(),
+          salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
         ])
-          .then(([tRes, invitesRes]) => {
+          .then(([tRes, invitesRes, salaryRes]) => {
             if (cancelled) return;
             if (tRes.error && __DEV__) {
               console.warn("[trip-history] getDriverUiTripsByDriverIds:", tRes.error.message);
@@ -352,6 +369,7 @@ export default function DriverTripsScreen() {
             }
             setTrips(tRes.error ? [] : (tRes.trips ?? []));
             setInvites(invitesRes.error ? [] : (invitesRes.invites ?? []));
+            setSalaryRequests(salaryRes.error ? [] : (salaryRes.requests ?? []));
             setLoading(false);
             initialLoadDoneRef.current = true;
             isRefreshingRef.current = false;
@@ -362,6 +380,7 @@ export default function DriverTripsScreen() {
             if (__DEV__) console.warn("[trip-history] trips/invites fetch failed:", e);
             setTrips([]);
             setInvites([]);
+            setSalaryRequests([]);
             setLoading(false);
             initialLoadDoneRef.current = true;
             isRefreshingRef.current = false;
@@ -370,6 +389,7 @@ export default function DriverTripsScreen() {
       } else {
         setTrips([]);
         setInvites([]);
+        setSalaryRequests([]);
         setLoading(false);
         initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
@@ -677,7 +697,7 @@ export default function DriverTripsScreen() {
       if (acceptedInviteOrgIds.has(tripOrgId)) return true;
       return linkedDriverRows.some((row) => {
         if (String(row.organization_id ?? "").trim() !== tripOrgId) return false;
-        return row.tracking_only !== true;
+        return driversService.isActiveFleetRelationshipDriver(row);
       });
     },
     [acceptedInviteOrgIds, salaryRelationshipOrgIds, linkedDriverRows],
@@ -752,12 +772,37 @@ export default function DriverTripsScreen() {
     () => buildDriverTripNumberMap(trips),
     [trips],
   );
+  const fleetAttributedApprovedTripIds = useMemo(() => {
+    const set = new Set<string>();
+    salaryRequests.forEach((r) => {
+      const status = String(r.status ?? "").toLowerCase();
+      if (
+        r.request_type === "trip_based" &&
+        (status === "approved" || status === "paid")
+      ) {
+        (r.trip_ids ?? []).forEach((id) => set.add(id));
+      }
+    });
+    return set;
+  }, [salaryRequests]);
+
   const filteredTrips = useMemo(() => {
     let list = [...trips];
 
     list = list.filter((trip) =>
       tripView === "history" ? isCompleted(trip.status) : !isCompleted(trip.status),
     );
+
+    // Type filters (fleet / open / attributed) apply to History only —
+    // Active shows every in-progress trip.
+    if (tripView === "history" && tripsSubTab !== "all") {
+      list = list.filter((trip) => {
+        const isFleet = isFleetDispatchedTrip(trip);
+        if (tripsSubTab === "fleet") return isFleet;
+        if (tripsSubTab === "open") return !isFleet;
+        return fleetAttributedApprovedTripIds.has(trip.id);
+      });
+    }
 
     const q = searchQuery.trim().toLowerCase();
     if (q) {
@@ -784,7 +829,15 @@ export default function DriverTripsScreen() {
     });
 
     return list;
-  }, [trips, tripView, searchQuery, driverTripNumberById]);
+  }, [
+    trips,
+    tripView,
+    tripsSubTab,
+    searchQuery,
+    driverTripNumberById,
+    isFleetDispatchedTrip,
+    fleetAttributedApprovedTripIds,
+  ]);
   const historyTripsCount = useMemo(
     () => trips.filter((trip) => isCompleted(trip.status)).length,
     [trips],
@@ -793,7 +846,34 @@ export default function DriverTripsScreen() {
     () => trips.filter((trip) => !isCompleted(trip.status)).length,
     [trips],
   );
-  const poolCountForTab = tripView === "history" ? historyTripsCount : activeTripsCount;
+  const tripsInHistoryView = useMemo(
+    () => trips.filter((trip) => isCompleted(trip.status)),
+    [trips],
+  );
+  const fleetTripsCount = useMemo(
+    () => tripsInHistoryView.filter((trip) => isFleetDispatchedTrip(trip)).length,
+    [tripsInHistoryView, isFleetDispatchedTrip],
+  );
+  const openTripsCount = useMemo(
+    () => tripsInHistoryView.filter((trip) => !isFleetDispatchedTrip(trip)).length,
+    [tripsInHistoryView, isFleetDispatchedTrip],
+  );
+  const attributedTripsCount = useMemo(
+    () =>
+      tripsInHistoryView.filter((trip) => fleetAttributedApprovedTripIds.has(trip.id))
+        .length,
+    [tripsInHistoryView, fleetAttributedApprovedTripIds],
+  );
+  const poolCountForTab =
+    tripView === "active"
+      ? activeTripsCount
+      : tripsSubTab === "all"
+        ? historyTripsCount
+        : tripsSubTab === "fleet"
+          ? fleetTripsCount
+          : tripsSubTab === "open"
+            ? openTripsCount
+            : attributedTripsCount;
 
   const renderItem = ({ item }: { item: tripsService.TripRow }) => {
     const completed = isCompleted(item.status);
@@ -1009,7 +1089,9 @@ export default function DriverTripsScreen() {
           TRIPS.
         </Text>
         <Text style={[styles.creditsSubtitle, { color: colors.textMuted }]}>
-          Trip history & route archive
+          {tripView === "active"
+            ? "In-progress trips"
+            : "Completed trips · fleet / open / attributed"}
         </Text>
       </View>
       <View
@@ -1031,7 +1113,7 @@ export default function DriverTripsScreen() {
             <SearchIcon size={16} color={colors.textMuted} strokeWidth={2} />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search trip IDs, routes…"
+              placeholder="Search trips..."
               placeholderTextColor={colors.placeholder}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -1132,9 +1214,125 @@ export default function DriverTripsScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {tripView === "history" ? (
+          <View
+            style={[
+              styles.tripsSubTabRow,
+              {
+                backgroundColor: isDark ? colors.surfaceElevated : "rgba(248,250,252,0.9)",
+                borderColor: isDark ? colors.borderSubtle : "rgba(226,232,240,0.9)",
+              },
+            ]}
+          >
+            {(
+              [
+                {
+                  id: "all" as const,
+                  label: "All",
+                  icon: "list" as const,
+                  count: historyTripsCount,
+                },
+                {
+                  id: "fleet" as const,
+                  label: "Fleet",
+                  icon: "building" as const,
+                  count: fleetTripsCount,
+                },
+                {
+                  id: "open" as const,
+                  label: "Open",
+                  icon: "road" as const,
+                  count: openTripsCount,
+                },
+                {
+                  id: "attributed" as const,
+                  label: "Attributed",
+                  icon: "check-circle" as const,
+                  count: attributedTripsCount,
+                },
+              ] as const
+            ).map((tab) => {
+              const active = tripsSubTab === tab.id;
+              const accent =
+                tab.id === "fleet"
+                  ? colors.emerald
+                  : tab.id === "open"
+                    ? Theme.textPrimaryDark
+                    : tab.id === "attributed"
+                      ? Theme.warning
+                      : colors.emerald;
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[
+                    styles.tripsSubTabBtn,
+                    active && [
+                      styles.tripsSubTabBtnActive,
+                      {
+                        backgroundColor:
+                          tab.id === "fleet"
+                            ? isDark
+                              ? "rgba(4,120,87,0.18)"
+                              : Theme.driverEmeraldMuted
+                            : tab.id === "open"
+                              ? isDark
+                                ? "rgba(15,23,42,0.16)"
+                                : "rgba(15,23,42,0.06)"
+                              : tab.id === "attributed"
+                                ? isDark
+                                  ? "rgba(245,158,11,0.18)"
+                                  : "rgba(245,158,11,0.10)"
+                                : isDark
+                                  ? "rgba(4,120,87,0.14)"
+                                  : Theme.driverEmeraldMuted,
+                        borderColor:
+                          tab.id === "fleet"
+                            ? isDark
+                              ? "rgba(4,120,87,0.35)"
+                              : Theme.driverEmeraldBorderSoft
+                            : tab.id === "open"
+                              ? isDark
+                                ? "rgba(148,163,184,0.35)"
+                                : "rgba(148,163,184,0.45)"
+                              : tab.id === "attributed"
+                                ? isDark
+                                  ? "rgba(245,158,11,0.35)"
+                                  : "rgba(245,158,11,0.24)"
+                                : isDark
+                                  ? "rgba(4,120,87,0.28)"
+                                  : Theme.driverEmeraldBorderSoft,
+                      },
+                    ],
+                  ]}
+                  onPress={() => setTripsSubTab(tab.id)}
+                  activeOpacity={0.85}
+                >
+                  <FontAwesome
+                    name={tab.icon}
+                    size={10}
+                    color={active ? accent : colors.textMuted}
+                  />
+                  <Text
+                    style={[
+                      styles.tripsSubTabText,
+                      { color: active ? accent : colors.textMuted },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
+
         <View style={styles.toolbarFooter}>
           <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
             Showing {filteredTrips.length} of {poolCountForTab}
+            {" · "}
+            {tripView === "active" ? "Active" : "History"}
           </Text>
           {searchQuery.trim().length > 0 ? (
             <TouchableOpacity
@@ -1209,17 +1407,17 @@ export default function DriverTripsScreen() {
               </View>
             ) : (
               <View style={styles.empty}>
-                <FontAwesome
-                  name="history"
-                  size={40}
-                  color={colors.tabInactive}
-                />
+                <FontAwesome name="search" size={36} color={colors.tabInactive} />
                 <Text style={[styles.emptyText, { color: colors.textMuted }]}>
                   {trips.length === 0
-                    ? "No trips completed yet"
-                    : tripView === "history" && activeTripsCount > 0 && historyTripsCount === 0
-                      ? "History lists delivered & completed trips only. Open Active for trips in progress."
-                      : "No trips found"}
+                    ? "No trips yet"
+                    : tripsSubTab === "fleet"
+                      ? "No fleet trips found"
+                      : tripsSubTab === "open"
+                        ? "No open trips found"
+                        : tripsSubTab === "attributed"
+                          ? "No attributed trips found"
+                          : "No trips found"}
                 </Text>
               </View>
             )
@@ -1316,6 +1514,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     gap: 8,
+  },
+  tripsSubTabRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 4,
+  },
+  tripsSubTabBtn: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "transparent",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: 4,
+  },
+  tripsSubTabBtnActive: {
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  tripsSubTabText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
   searchWrap: {
     flex: 1,

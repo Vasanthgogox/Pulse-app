@@ -27,6 +27,7 @@ import { useSignupKeypadInput } from '@/lib/onboarding/useSignupKeypadInput';
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
 import Layout from '@/constants/Layout';
+import Theme from '@/constants/Theme';
 
 import { DESKTOP_BREAKPOINT } from './signUpConstants';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
@@ -422,7 +423,6 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
             onKey={handleKey}
             showDecimal={false}
             variant="pay"
-            size="compact"
             layout="phone"
             hapticsEnabled={false}
           />
@@ -767,17 +767,17 @@ function createStyles(theme: SignUpTheme, isDesktop: boolean) {
       paddingTop: 8,
       borderTopWidth: StyleSheet.hairlineWidth,
     },
-    /** Full-bleed tray — equal side inset only once (keys share it via flex). */
+    /** Full-bleed tray — pay keypad owns horizontal inset via PAY_KEYPAD_*. */
     keypadDock: {
       flexShrink: 0,
       alignSelf: 'stretch',
       width: '100%',
-      backgroundColor: theme.keypadTray,
+      backgroundColor: Theme.surfaceGray,
       borderTopWidth: 0,
       borderTopLeftRadius: PULSE_SIGNUP_RADIUS.keypadTray,
       borderTopRightRadius: PULSE_SIGNUP_RADIUS.keypadTray,
-      paddingTop: 12,
-      paddingHorizontal: KEYPAD_DOCK_INSET,
+      paddingTop: 0,
+      overflow: 'hidden',
       ...Platform.select({
         ios: {
           shadowColor: '#000',

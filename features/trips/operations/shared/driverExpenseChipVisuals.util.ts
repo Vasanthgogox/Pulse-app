@@ -4,6 +4,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Banknote,
+  Building2,
   CircleDot,
   Clock,
   CreditCard,
@@ -19,12 +20,19 @@ import {
   Receipt,
   Scale,
   SquareParking,
+  Truck,
+  UserRound,
   UtensilsCrossed,
   Wallet,
   Wrench,
 } from "lucide-react-native";
 
-import type { FuelType, OperationalPaymentMode, TripOtherExpenseCategory } from "../types";
+import type {
+  FuelType,
+  OperationalPaymentMode,
+  OperationalPaymentOwner,
+  TripOtherExpenseCategory,
+} from "../types";
 
 export type DriverChipVisual = {
   Icon: LucideIcon;
@@ -202,6 +210,57 @@ const TOLL_ENTRY_VISUALS: Record<"actual" | "estimated", DriverChipVisual> = {
   },
 };
 
+const PAYMENT_OWNER_VISUALS: Record<OperationalPaymentOwner, DriverChipVisual> = {
+  organization: {
+    Icon: Building2,
+    tint: "#0369a1",
+    tintBg: "rgba(14,165,233,0.12)",
+    activeTintBg: "rgba(4,120,87,0.18)",
+  },
+  driver: {
+    Icon: UserRound,
+    tint: "#047857",
+    tintBg: "rgba(16,185,129,0.12)",
+    activeTintBg: "rgba(4,120,87,0.18)",
+  },
+  supplier: {
+    Icon: Truck,
+    tint: "#7c3aed",
+    tintBg: "rgba(139,92,246,0.12)",
+    activeTintBg: "rgba(4,120,87,0.18)",
+  },
+  fleet_card: {
+    Icon: CreditCard,
+    tint: "#0f766e",
+    tintBg: "rgba(20,184,166,0.12)",
+    activeTintBg: "rgba(4,120,87,0.18)",
+  },
+  fastag: {
+    Icon: Radio,
+    tint: "#4D3636",
+    tintBg: "rgba(99,102,241,0.12)",
+    activeTintBg: "rgba(4,120,87,0.18)",
+  },
+  cash_advance: {
+    Icon: Banknote,
+    tint: "#15803d",
+    tintBg: "rgba(34,197,94,0.12)",
+    activeTintBg: "rgba(4,120,87,0.18)",
+  },
+  credit_vendor: {
+    Icon: Receipt,
+    tint: "#7c3aed",
+    tintBg: "rgba(139,92,246,0.12)",
+    activeTintBg: "rgba(4,120,87,0.18)",
+  },
+  unknown: {
+    Icon: HelpCircle,
+    tint: "#64748b",
+    tintBg: "rgba(100,116,139,0.1)",
+    activeTintBg: "rgba(4,120,87,0.18)",
+  },
+};
+
 const DEFAULT_VISUAL: DriverChipVisual = {
   Icon: Layers,
   tint: "#64748b",
@@ -223,6 +282,10 @@ export function visualForPaymentMode(value: OperationalPaymentMode): DriverChipV
   return PAYMENT_MODE_VISUALS[value] ?? DEFAULT_VISUAL;
 }
 
+export function visualForPaymentOwner(value: OperationalPaymentOwner): DriverChipVisual {
+  return PAYMENT_OWNER_VISUALS[value] ?? DEFAULT_VISUAL;
+}
+
 export function visualForFuelType(value: FuelType): DriverChipVisual {
   return FUEL_TYPE_VISUALS[value] ?? DEFAULT_VISUAL;
 }
@@ -237,6 +300,7 @@ export function resolveDriverChipVisual(
     | "other_category"
     | "driver_expense_category"
     | "payment_mode"
+    | "payment_owner"
     | "fuel_type"
     | "toll_entry",
 ): DriverChipVisual {
@@ -247,6 +311,8 @@ export function resolveDriverChipVisual(
       return visualForDriverExpenseCategory(value);
     case "payment_mode":
       return visualForPaymentMode(value as OperationalPaymentMode);
+    case "payment_owner":
+      return visualForPaymentOwner(value as OperationalPaymentOwner);
     case "fuel_type":
       return visualForFuelType(value as FuelType);
     case "toll_entry":

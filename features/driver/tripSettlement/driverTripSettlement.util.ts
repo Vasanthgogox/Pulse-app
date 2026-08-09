@@ -27,6 +27,19 @@ export type DriverTripSettlementView = {
   expectedAmount: number;
   /** True when expectedAmount has no agreed commission/salary terms behind it — a legacy 10% guess, not a real figure. */
   isEstimated: boolean;
+  /** Trip org matches a linked employer — earnings / commission block applies. */
+  isFleetLinked: boolean;
+  /**
+   * Agreed commission (trip_commission / per_km / %) with a positive amount.
+   * Salary trips and estimated guesses are false.
+   */
+  commissionApplies: boolean;
+  /** Show the primary estimated/salary/earning row when fleet-linked and there is something to show. */
+  showEstimatedEarning: boolean;
+  /** Bonus + positive adjustment credits for this trip (excludes settlement / reimbursements). */
+  otherIncomeAmount: number;
+  /** Deduction ledger total for this trip (absolute INR). */
+  deductionsAmount: number;
   /** Fleet-marked amount before driver verifies (if any) */
   fleetMarkedAmount: number | null;
   /** Verified settlement amount (if settled) */
@@ -53,6 +66,39 @@ export type DriverTripSettlementView = {
   canVerifyFleetPayment: boolean;
   canShareReceipt: boolean;
 };
+
+/** Other income = non-settlement trip credits (bonus / positive adjustment). */
+export function sumTripOtherIncome(
+  entries: DriverLedgerRow[],
+  tripId: string,
+): number {
+  const tid = tripId.trim();
+  if (!tid) return 0;
+  let total = 0;
+  for (const entry of entries) {
+    if (String(entry.trip_id ?? "").trim() !== tid) continue;
+    const type = String(entry.type ?? "").toLowerCase();
+    if (type !== "bonus" && type !== "adjustment") continue;
+    const amt = Math.round(Number(entry.amount) || 0);
+    if (amt > 0) total += amt;
+  }
+  return total;
+}
+
+export function sumTripLedgerDeductions(
+  entries: DriverLedgerRow[],
+  tripId: string,
+): number {
+  const tid = tripId.trim();
+  if (!tid) return 0;
+  let total = 0;
+  for (const entry of entries) {
+    if (String(entry.trip_id ?? "").trim() !== tid) continue;
+    if (String(entry.type ?? "").toLowerCase() !== "deduction") continue;
+    total += Math.abs(Math.round(Number(entry.amount) || 0));
+  }
+  return total;
+}
 
 export function computeTripPaymentDifference(input: {
   expectedAmount: number;
@@ -229,6 +275,8 @@ export function buildDriverTripSettlementView(input: {
   driverTripNumberById: Record<string, string>;
   tripCompleted: boolean;
   payoutTerms?: DriverTripPayoutTerms | null;
+  /** Employer org matches trip org (history Fleet Trips rule). Defaults to true when omitted for back-compat. */
+  isFleetLinked?: boolean;
 }): DriverTripSettlementView {
   const {
     trip,
@@ -238,6 +286,7 @@ export function buildDriverTripSettlementView(input: {
     tripCompleted,
     payoutTerms,
   } = input;
+  const isFleetLinked = input.isFleetLinked !== false;
   const displayId = getDriverTripDisplayNumber(trip, driverTripNumberById);
   const from = trip.pickup_area?.trim() || "Unknown origin";
   const to = trip.drop_location?.trim() || "Unknown destination";
@@ -245,6 +294,26 @@ export function buildDriverTripSettlementView(input: {
   const earningsDetail = tripEarningsDetailForDriver(trip, payoutTerms);
   const expectedAmount = Math.round(earningsDetail.amount);
   const isEstimated = earningsDetail.isEstimated;
+  const commissionApplies =
+    isFleetLinked &&
+    !isSalary &&
+    !isEstimated &&
+    (earningsDetail.basis === "trip_commission" ||
+      earningsDetail.basis === "per_km" ||
+      earningsDetail.basis === "commission_percent") &&
+    expectedAmount > 0;
+  const showEstimatedEarning =
+    isFleetLinked && (isSalary || expectedAmount > 0 || isEstimated);
+  const otherIncomeAmount = sumTripOtherIncome(ledgerEntries, trip.id);
+  const deductionsAmount = sumTripLedgerDeductions(ledgerEntries, trip.id);
+
+  const earningsFlags = {
+    isFleetLinked,
+    commissionApplies,
+    showEstimatedEarning,
+    otherIncomeAmount,
+    deductionsAmount,
+  };
 
   if (isSalary) {
     return {
@@ -254,6 +323,7 @@ export function buildDriverTripSettlementView(input: {
       amount: 0,
       expectedAmount,
       isEstimated,
+      ...earningsFlags,
       fleetMarkedAmount: null,
       receivedAmount: null,
       outstandingAmount: 0,
@@ -286,6 +356,7 @@ export function buildDriverTripSettlementView(input: {
       amount: expectedAmount,
       expectedAmount,
       isEstimated,
+      ...earningsFlags,
       fleetMarkedAmount: null,
       receivedAmount: null,
       outstandingAmount: expectedAmount,
@@ -368,6 +439,7 @@ export function buildDriverTripSettlementView(input: {
     amount,
     expectedAmount,
     isEstimated,
+    ...earningsFlags,
     fleetMarkedAmount,
     receivedAmount: isSettled ? receivedAmt : null,
     outstandingAmount: paymentDiff.outstandingAmount,

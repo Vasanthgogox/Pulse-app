@@ -79,6 +79,8 @@ export function DriverExpenseCategorySwitch({
       onChange={handleChange}
       columns={2}
       visualGroup="driver_expense_category"
+      collapseAfterSelect
+      disabled={lockCategorySwitch}
     />
   );
 }

@@ -64,6 +64,10 @@ function experienceAllows(
   if (posture !== 'authenticated' || !principal) {
     return false;
   }
+  // Shared stacks (odometer / trip expenses) are used by both office and driver apps.
+  if (policyExperience === 'shared') {
+    return true;
+  }
   const pe = principalExperience(principal);
   return pe === policyExperience;
 }

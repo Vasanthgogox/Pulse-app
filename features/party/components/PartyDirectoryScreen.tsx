@@ -19,6 +19,7 @@ import {
   type PartyKind,
 } from "@/features/party/types/partyDirectory.types";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { isActiveFleetRelationshipDriver } from "@/features/drivers/services/drivers.service";
 import {
   canAccessPartyKind,
 } from "@/lib/capabilities";
@@ -128,7 +129,7 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
     () => ({
       customers: clientsQ.data?.length ?? 0,
       suppliers: suppliersQ.data?.length ?? 0,
-      drivers: (driversQ.data ?? []).filter((d) => !d.left_at && !d.tracking_only).length,
+      drivers: (driversQ.data ?? []).filter((d) => !d.left_at && isActiveFleetRelationshipDriver(d)).length,
       vehicles: vehiclesQ.data?.length ?? 0,
     }),
     [clientsQ.data, driversQ.data, suppliersQ.data, vehiclesQ.data],
@@ -175,7 +176,7 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
     }
     if (kind === "drivers") {
       return (driversQ.data ?? [])
-        .filter((d) => !d.left_at && !d.tracking_only)
+        .filter((d) => !d.left_at && isActiveFleetRelationshipDriver(d))
         .filter((d) => match((d.name ?? "").trim(), d.phone?.trim() ?? ""))
         .map((d) => ({
           id: d.id,

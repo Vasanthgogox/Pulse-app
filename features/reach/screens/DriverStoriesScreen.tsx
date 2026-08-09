@@ -30,6 +30,7 @@ import {
   type DriverReachStoryRow,
   type ReachReferralReason,
 } from '@/features/reach/services/driverReferrals.service';
+import { DriverPulseStoryViewer } from '@/features/reach/screens/DriverPulseStoryViewer';
 import { DriverReferralEarningsCard } from '@/features/reach/components/DriverReferralEarningsCard';
 import {
   driverStoryCta,
@@ -57,7 +58,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -135,6 +136,7 @@ export default function DriverStoriesScreen() {
   const [bidTarget, setBidTarget] = useState<DriverReachStoryRow | null>(null);
   const [bidAmountText, setBidAmountText] = useState('');
   const [bidNote, setBidNote] = useState('');
+  const [viewerStory, setViewerStory] = useState<DriverReachStoryRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,6 +168,70 @@ export default function DriverStoriesScreen() {
     setRecommendTarget(story);
   };
 
+  const openBid = (story: DriverReachStoryRow) => {
+    setBidAmountText('');
+    setBidNote('');
+    setBidTarget(story);
+  };
+
+  const openStoryViewer = (story: DriverReachStoryRow) => {
+    setViewerStory(story);
+    void recordDriverReachEvent(story.campaign_id, 'view');
+  };
+
+  const viewerFooterAction = useMemo(() => {
+    if (!viewerStory) return null;
+    if (viewerStory.referral_status === 'rewarded') {
+      return {
+        label: 'See earning in wallet',
+        onPress: () => {
+          setViewerStory(null);
+          router.push('/(driver)/wallet');
+        },
+      };
+    }
+    const canRecommend =
+      participation.mode === 'employed' &&
+      viewerStory.campaign_status === 'active' &&
+      viewerStory.referral_status == null &&
+      viewerStory.campaign_org_id !== participation.fleetOrgId;
+    if (canRecommend) {
+      const tip =
+        viewerStory.driver_reward_enabled &&
+        viewerStory.reward_amount > 0 &&
+        viewerStory.reward_available;
+      return {
+        label: 'Recommend to Fleet Owner',
+        hint: tip ? `Earn ${formatINR(viewerStory.reward_amount)} on conversion` : undefined,
+        onPress: () => {
+          setViewerStory(null);
+          openRecommend(viewerStory);
+        },
+      };
+    }
+    if (participation.mode === 'independent' && viewerStory.direct_bid_status !== 'accepted') {
+      const cta = driverStoryCta(participation, viewerStory.reward_amount);
+      const hasBid = viewerStory.direct_bid_status === 'pending';
+      return {
+        label: hasBid
+          ? `Update bid · ${formatINR(viewerStory.direct_bid_amount ?? 0)}`
+          : cta.label,
+        hint: hasBid ? 'Tap to revise your offer to the shipper' : cta.badge,
+        onPress: () => {
+          setViewerStory(null);
+          if (hasBid) {
+            setBidAmountText(String(viewerStory.direct_bid_amount ?? ''));
+            setBidNote('');
+            setBidTarget(viewerStory);
+          } else {
+            openBid(viewerStory);
+          }
+        },
+      };
+    }
+    return null;
+  }, [viewerStory, participation, router]);
+
   const submitRecommend = async () => {
     if (!recommendTarget || participation.mode !== 'employed') return;
     const rate = parseFloat(suggestedRateText);
@@ -184,12 +250,6 @@ export default function DriverStoriesScreen() {
     if (userId) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.reach.driverStories(userId) });
     }
-  };
-
-  const openBid = (story: DriverReachStoryRow) => {
-    setBidAmountText('');
-    setBidNote('');
-    setBidTarget(story);
   };
 
   const submitBid = async () => {
@@ -336,6 +396,11 @@ export default function DriverStoriesScreen() {
                 key={story.campaign_id}
                 style={[styles.storyCard, { backgroundColor: cardBg, borderColor: colors.border }]}
               >
+                <Pressable
+                  onPress={() => openStoryViewer(story)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Preview story from ${story.org_name}`}
+                >
                 <View style={styles.storyTopRow}>
                   <View style={styles.storyOrgRow}>
                     <View style={[styles.orgAvatar, { backgroundColor: isDark ? colors.surfaceElevated : Theme.surface }]}>
@@ -416,6 +481,9 @@ export default function DriverStoriesScreen() {
                     </Text>
                   </View>
                 ) : null}
+
+                <Text style={[styles.previewHint, { color: colors.textMuted }]}>Tap to preview Pulse story</Text>
+                </Pressable>
 
                 {story.referral_status === 'rewarded' ? (
                   <TouchableOpacity
@@ -629,6 +697,16 @@ export default function DriverStoriesScreen() {
           </View>
         </View>
       </Modal>
+
+      {viewerStory ? (
+        <DriverPulseStoryViewer
+          postId={viewerStory.post_id}
+          story={viewerStory}
+          shipperName={viewerStory.org_name}
+          onClose={() => setViewerStory(null)}
+          footerAction={viewerFooterAction}
+        />
+      ) : null}
     </View>
   );
 }
@@ -701,6 +779,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     gap: 10,
+  },
+  previewHint: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   storyTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
   storyOrgRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },

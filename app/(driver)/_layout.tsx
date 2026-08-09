@@ -74,6 +74,8 @@ function DriverTabsNavigator() {
       <Tabs.Screen name="passbook" options={{ title: 'Passbook', href: null }} />
       <Tabs.Screen name="salary-request" options={{ title: 'Salary Request', href: null }} />
       <Tabs.Screen name="pending-earnings" options={{ title: 'Pending Earnings', href: null }} />
+      <Tabs.Screen name="expense-capture" options={{ title: 'Capture expense', href: null }} />
+      <Tabs.Screen name="general-expense" options={{ title: 'General expense', href: null }} />
     </Tabs>
   );
 }

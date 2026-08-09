@@ -5,7 +5,10 @@
  * Linked-row sync is NOT in queryFn — see syncLinkedDriversForDriverHome (login / invite / refresh).
  */
 import type { DriverRow } from '@/features/drivers/services/drivers.service';
-import { getLinkedDriversForCurrentUser } from '@/features/drivers/services/drivers.service';
+import {
+  getLinkedDriversForCurrentUser,
+  isActiveFleetRelationshipDriver,
+} from '@/features/drivers/services/drivers.service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppStateIsActive } from '@/lib/hooks/useAppStateIsActive';
 import { queryKeys } from '@/lib/queryKeys';
@@ -54,7 +57,7 @@ export function useDriverHomeDriversQuery(userId: string | null) {
 
   /** Employer / roster fleet row — never promote OTP tracking stubs as "my employer". */
   const employerLinkedDrivers = useMemo(
-    () => activeLinkedDrivers.filter((d) => d.tracking_only !== true),
+    () => activeLinkedDrivers.filter(isActiveFleetRelationshipDriver),
     [activeLinkedDrivers],
   );
 

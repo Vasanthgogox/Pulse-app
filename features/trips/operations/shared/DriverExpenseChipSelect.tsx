@@ -1,9 +1,15 @@
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  LayoutChangeEvent,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
-
-import { DriverOpsEntryIcon } from "./driverOpsEntry.styles";
 
 import {
   resolveDriverChipVisual,
@@ -20,6 +26,7 @@ export type DriverExpenseChipGroup =
   | "other_category"
   | "driver_expense_category"
   | "payment_mode"
+  | "payment_owner"
   | "fuel_type"
   | "toll_entry"
   | "generic";
@@ -30,15 +37,25 @@ type Props<T extends string> = {
   options: ReadonlyArray<DriverExpenseChipOption<T>>;
   value: T;
   onChange: (value: T) => void;
-  /** Tile columns — 2 for categories, 3 for payment modes. Ignored for pill variant. */
+  /** Equal-width tile columns (2 for categories, 3 for payment). */
   columns?: 2 | 3;
   /** Auto-resolve Lucide icons + tints from value. */
   visualGroup?: DriverExpenseChipGroup;
-  /** Compact pill chips (default for driver expense log). */
-  variant?: "tile" | "pill";
-  density?: "default" | "compact";
+  /**
+   * After a pick, collapse to a single selected summary (Add Trip pattern).
+   * Tap summary / Change to expand and pick again. Default on.
+   */
+  collapseAfterSelect?: boolean;
+  /** Locked selection — summary only, no Change. */
+  disabled?: boolean;
 };
 
+const GRID_GAP = 8;
+
+/**
+ * Equal-width icon tiles + minimize-after-select summary.
+ * Shared by driver and business trip expense entry.
+ */
 export function DriverExpenseChipSelect<T extends string>({
   label,
   hint,
@@ -47,75 +64,154 @@ export function DriverExpenseChipSelect<T extends string>({
   onChange,
   columns = 3,
   visualGroup = "generic",
-  variant = "pill",
-  density = "compact",
+  collapseAfterSelect = true,
+  disabled = false,
 }: Props<T>) {
-  const isPill = variant === "pill";
-  const isCompact = density === "compact" || isPill;
-  const columnStyle = columns === 2 ? styles.tileHalf : styles.tileThird;
-  const iconSize = isPill ? DriverOpsEntryIcon.chipPill : isCompact ? 12 : DriverOpsEntryIcon.chip;
+  const [expanded, setExpanded] = useState(true);
+  const [gridWidth, setGridWidth] = useState(0);
+
+  useEffect(() => {
+    if (!collapseAfterSelect) setExpanded(true);
+  }, [collapseAfterSelect]);
+
+  const selected = useMemo(
+    () => options.find((option) => option.value === value) ?? options[0] ?? null,
+    [options, value],
+  );
+
+  const resolveVisual = useCallback(
+    (option: DriverExpenseChipOption<T> | null): DriverChipVisual | null => {
+      if (!option) return null;
+      if (option.visual) return option.visual;
+      if (visualGroup === "generic") return null;
+      return resolveDriverChipVisual(option.value, visualGroup);
+    },
+    [visualGroup],
+  );
+
+  const handleSelect = useCallback(
+    (next: T) => {
+      if (disabled) return;
+      onChange(next);
+      if (collapseAfterSelect) setExpanded(false);
+    },
+    [collapseAfterSelect, disabled, onChange],
+  );
+
+  const onGridLayout = useCallback((event: LayoutChangeEvent) => {
+    const next = Math.round(event.nativeEvent.layout.width);
+    setGridWidth((prev) => (prev === next ? prev : next));
+  }, []);
+
+  const tileWidth =
+    gridWidth > 0
+      ? Math.floor((gridWidth - GRID_GAP * (columns - 1)) / columns)
+      : undefined;
+
+  const selectedVisual = resolveVisual(selected);
+  const SelectedIcon = selectedVisual?.Icon;
+  const showCollapsed =
+    collapseAfterSelect && selected != null && (disabled || !expanded);
 
   return (
-    <View style={[styles.wrap, isCompact && styles.wrapCompact]}>
+    <View style={styles.wrap}>
       <View style={styles.labelRow}>
-        <Text style={[styles.label, isCompact && styles.labelCompact]}>{label}</Text>
+        <Text style={styles.label}>{label}</Text>
         <View style={styles.labelRule} />
       </View>
-      {hint ? <Text style={[styles.hint, isCompact && styles.hintCompact]}>{hint}</Text> : null}
-      <View style={[styles.grid, isPill && styles.gridPill, isCompact && !isPill && styles.gridCompact]}>
-        {options.map((option) => {
-          const active = option.value === value;
-          const visual =
-            option.visual ??
-            (visualGroup !== "generic"
-              ? resolveDriverChipVisual(option.value, visualGroup)
-              : null);
-          const Icon = visual?.Icon;
-          const iconColor = active ? Theme.driverEmeraldDark : visual?.tint ?? Theme.textSecondary;
-          const iconBg = active
-            ? visual?.activeTintBg ?? Theme.driverEmeraldMuted
-            : visual?.tintBg ?? "rgba(148,163,184,0.12)";
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
 
-          return (
-            <Pressable
-              key={option.value}
-              onPress={() => onChange(option.value)}
-              style={({ pressed }) => [
-                isPill ? styles.pill : styles.tile,
-                !isPill && columnStyle,
-                isCompact && !isPill && styles.tileCompact,
-                active && (isPill ? styles.pillActive : styles.tileActive),
-                pressed && !active && (isPill ? styles.pillPressed : styles.tilePressed),
+      {showCollapsed ? (
+        <Pressable
+          onPress={() => {
+            if (!disabled) setExpanded(true);
+          }}
+          style={({ pressed }) => [
+            styles.summaryRow,
+            pressed && !disabled && styles.summaryPressed,
+            disabled && styles.disabled,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}: ${selected?.label ?? ""}. Change`}
+          disabled={disabled}
+        >
+          {SelectedIcon ? (
+            <View
+              style={[
+                styles.summaryIconBadge,
+                {
+                  backgroundColor:
+                    selectedVisual?.tintBg ?? "rgba(148,163,184,0.14)",
+                },
               ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
             >
-              {active && !isPill ? <View style={styles.activeRing} pointerEvents="none" /> : null}
-              {Icon ? (
-                <View
-                  style={[
-                    isPill ? styles.pillIconBadge : styles.iconBadge,
-                    isCompact && !isPill && styles.iconBadgeCompact,
-                    { backgroundColor: iconBg },
-                  ]}
-                >
-                  <Icon size={iconSize} color={iconColor} strokeWidth={2} />
-                </View>
-              ) : null}
-              <Text
-                style={[
-                  isPill ? styles.pillText : styles.tileText,
-                  isCompact && !isPill && styles.tileTextCompact,
-                  active && (isPill ? styles.pillTextActive : styles.tileTextActive),
+              <SelectedIcon
+                size={16}
+                color={selectedVisual?.tint ?? Theme.textSecondary}
+                strokeWidth={2.1}
+              />
+            </View>
+          ) : null}
+          <View style={styles.summaryCopy}>
+            <Text style={styles.summaryTitle} numberOfLines={1}>
+              {selected?.label ?? "—"}
+            </Text>
+          </View>
+          {!disabled ? (
+            <View style={styles.changePill}>
+              <Text style={styles.changePillText}>Change</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      ) : (
+        <View style={styles.grid} onLayout={onGridLayout}>
+          {options.map((option) => {
+            const active = option.value === value;
+            const visual = resolveVisual(option);
+            const Icon = visual?.Icon;
+            const iconColor = active
+              ? Theme.driverEmeraldDark
+              : visual?.tint ?? Theme.textSecondary;
+            const iconBg = active
+              ? Theme.driverEmeraldMuted
+              : visual?.tintBg ?? "rgba(148,163,184,0.12)";
+
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => handleSelect(option.value)}
+                style={({ pressed }) => [
+                  styles.tile,
+                  tileWidth != null
+                    ? { width: tileWidth }
+                    : columns === 2
+                      ? styles.tileFallbackHalf
+                      : styles.tileFallback,
+                  columns === 2 ? styles.tileTall : null,
+                  active && styles.tileActive,
+                  pressed && !active && styles.tilePressed,
+                  disabled && styles.disabled,
                 ]}
-                numberOfLines={1}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active, disabled }}
+                disabled={disabled}
               >
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+                {Icon ? (
+                  <View style={[styles.iconBadge, { backgroundColor: iconBg }]}>
+                    <Icon size={15} color={iconColor} strokeWidth={2.1} />
+                  </View>
+                ) : null}
+                <Text
+                  style={[styles.tileText, active && styles.tileTextActive]}
+                  numberOfLines={1}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -124,23 +220,18 @@ const styles = StyleSheet.create({
   wrap: {
     gap: 8,
   },
-  wrapCompact: {
-    gap: 5,
-  },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
   label: {
     ...Typography.headerTitle,
-    fontSize: 9,
-    letterSpacing: 0.65,
-    color: Theme.textMuted,
-  },
-  labelCompact: {
-    fontSize: 8,
+    fontSize: 11,
     letterSpacing: 0.55,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    fontWeight: "700",
   },
   labelRule: {
     flex: 1,
@@ -148,41 +239,92 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.borderLight,
   },
   hint: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "500",
     color: Theme.textSecondary,
-    lineHeight: 14,
+    lineHeight: 16,
     marginTop: -2,
   },
-  hintCompact: {
-    fontSize: 9,
-    lineHeight: 12,
-    marginTop: -4,
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 52,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.28)",
+    backgroundColor: Theme.cardWhite,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
+  },
+  summaryPressed: {
+    backgroundColor: "rgba(248,250,252,1)",
+  },
+  summaryIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  summaryCopy: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  summaryKicker: {
+    display: "none",
+  },
+  summaryTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.1,
+  },
+  changePill: {
+    flexShrink: 0,
+    minHeight: 34,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(148,163,184,0.12)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(148,163,184,0.28)",
+  },
+  changePillText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 0.15,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-  },
-  gridCompact: {
-    gap: 6,
-  },
-  gridPill: {
-    gap: 5,
+    gap: GRID_GAP,
   },
   tile: {
-    position: "relative",
-    minHeight: 56,
+    minHeight: 68,
     paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.28)",
+    borderColor: "rgba(148,163,184,0.26)",
     backgroundColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    overflow: "hidden",
+    gap: 8,
     ...Platform.select({
       ios: {
         shadowColor: "#0f172a",
@@ -194,111 +336,50 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  tileCompact: {
-    minHeight: 44,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    borderRadius: 10,
-    gap: 4,
-  },
-  tileHalf: {
-    flexBasis: "47%",
+  /** Before first layout measure — keep roughly equal widths. */
+  tileFallback: {
     flexGrow: 1,
-    maxWidth: "48%",
-  },
-  tileThird: {
     flexBasis: "30%",
+    maxWidth: "32%",
+  },
+  tileFallbackHalf: {
     flexGrow: 1,
-    minWidth: 96,
+    flexBasis: "47%",
+    maxWidth: "48.5%",
+  },
+  tileTall: {
+    minHeight: 72,
   },
   tileActive: {
     backgroundColor: Theme.driverEmeraldMuted,
-    borderColor: Theme.driverEmeraldDark,
-    ...Platform.select({
-      ios: {
-        shadowColor: Theme.driverEmeraldDark,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 10,
-      },
-      android: { elevation: 2 },
-      default: {},
-    }),
+    borderColor: Theme.driverEmerald,
+    borderWidth: 1.5,
   },
   tilePressed: {
     opacity: 0.92,
     transform: [{ scale: 0.985 }],
   },
-  activeRing: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(4,120,87,0.22)",
-  },
   iconBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  iconBadgeCompact: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-  },
   tileText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     textAlign: "center",
-    lineHeight: 13,
-    letterSpacing: 0.05,
-  },
-  tileTextCompact: {
-    fontSize: 9,
-    lineHeight: 11,
+    lineHeight: 15,
+    letterSpacing: 0.1,
+    width: "100%",
   },
   tileTextActive: {
     color: Theme.driverEmeraldDark,
     fontWeight: "800",
   },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.32)",
-    backgroundColor: Theme.cardWhite,
-    maxWidth: "100%",
-  },
-  pillActive: {
-    backgroundColor: Theme.driverEmeraldMuted,
-    borderColor: Theme.driverEmeraldDark,
-  },
-  pillPressed: {
-    opacity: 0.9,
-  },
-  pillIconBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  pillText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    lineHeight: 12,
-    flexShrink: 1,
-  },
-  pillTextActive: {
-    color: Theme.driverEmeraldDark,
-    fontWeight: "800",
+  disabled: {
+    opacity: 0.55,
   },
 });

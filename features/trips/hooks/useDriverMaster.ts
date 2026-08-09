@@ -1,16 +1,19 @@
 import { useMemo } from 'react';
 import { useDriversQuery } from '@/lib/queries/useDriversQuery';
-import type { DriverRow } from '@/features/drivers/services/drivers.service';
+import {
+  isActiveFleetRelationshipDriver,
+  type DriverRow,
+} from '@/features/drivers/services/drivers.service';
 
 /**
- * Org driver master for reassignment pickers (excludes left + tracking-only rows).
+ * Org driver master for reassignment pickers (excludes left rows and non-fleet-relationship rows).
  */
 export function useDriverMaster(orgId: string | null) {
   const q = useDriversQuery(orgId);
 
   const drivers = useMemo(() => {
     const rows = q.data ?? [];
-    return rows.filter((d) => !d.left_at && d.tracking_only !== true) as DriverRow[];
+    return rows.filter((d) => !d.left_at && isActiveFleetRelationshipDriver(d)) as DriverRow[];
   }, [q.data]);
 
   return {
