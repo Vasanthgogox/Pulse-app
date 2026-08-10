@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
     width: '100%',
     minHeight: 280,
     alignItems: 'stretch',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
   },
   column: {
     flexGrow: 1,
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
     flexBasis: 0,
     maxWidth: 360,
     minWidth: 220,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: Theme.surfaceGray,
     borderRadius: 12,
     padding: 10,
     minHeight: 0,
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardContainer: {
-    marginBottom: 0,
+    marginBottom: 8,
   },
   timelineCard: {
     flexDirection: "row",
@@ -727,6 +727,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     minWidth: 0,
+    flexShrink: 1,
+    maxWidth: "52%",
     paddingTop: 4,
   },
   /** Amount — compact, regular weight; green / red from amountIn / amountOut. */
@@ -745,6 +747,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    maxWidth: "100%",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
