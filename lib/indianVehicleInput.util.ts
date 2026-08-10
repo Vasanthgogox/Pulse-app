@@ -73,10 +73,12 @@ export function getIndianVehicleSegmentGuide(
   }
 
   const seriesTyped = p.series.length;
+  // Always show series capacity as AA (1–3 letters allowed). Shrinking to a
+  // single "A" after the first letter made it look like only one was allowed.
   const guide = [
     { label: "AA", done: p.state.length === 2 },
     { label: "00", done: p.district.length >= 1 },
-    { label: seriesTyped > 0 ? "A".repeat(seriesTyped) : "AA", done: seriesTyped > 0 },
+    { label: "AA", done: seriesTyped > 0 },
     { label: "0000", done: p.number.length >= 1 },
   ];
   return guide;
@@ -168,9 +170,12 @@ function allowedNext(normalized: string): { letters: boolean; digits: boolean } 
 }
 
 /**
- * Which keypad to show. When both classes are legal (e.g. mid-district, where the
- * next key could be a series letter or another digit) we prefer letters, because
- * that is the branch the user cannot reach by continuing to type digits.
+ * Which keypad to show by default. When both classes are legal the other class
+ * stays reachable via the ABC/123 toggle (mobile) or the physical keyboard
+ * (desktop) — this only picks the primary pad.
+ *
+ * Prefer digits until the typical 2-digit district is filled; jumping to letters
+ * after a single district digit blocked plates like TN 09 CD 7788.
  */
 export function getIndianVehicleKeyboardKind(
   normalizedLenOrValue: number | string,
@@ -190,10 +195,18 @@ export function getIndianVehicleKeyboardKind(
   if (digits && !letters) return "numbers";
   if (!letters && !digits) return "numbers";
   const p = parsePlate(norm);
-  // Both legal: after the district, offer letters (series); elsewhere prefer digits.
-  return !p.bh && p.series.length === 0 && p.number.length === 0
-    ? "letters"
-    : "numbers";
+  if (p.bh) return digits ? "numbers" : "letters";
+  // Mid-district (0–1 digits so far): keep the number pad so TN 0 → 9 works.
+  if (p.series.length === 0 && p.number.length === 0 && p.district.length < 2) {
+    return "numbers";
+  }
+  // District looks complete, series not started: offer letters (series).
+  if (p.series.length === 0 && p.number.length === 0) {
+    return "letters";
+  }
+  // Series started (more letters still legal) or number phase: prefer digits,
+  // but letters remain allowed via toggle / physical keyboard.
+  return "numbers";
 }
 
 export function getIndianVehicleKeyboardType(
@@ -232,9 +245,17 @@ export function getIndianVehicleFormatHint(
   if (p.state.length < 2) return "Enter 2 letters (state code, e.g. TN)";
   if (p.district.length === 0) return "Enter district number (1–3 digits)";
   if (p.series.length === 0 && p.number.length === 0) {
+    if (p.district.length < 2) {
+      return "Enter more district digits, series letters, or the number";
+    }
     return "Enter series letters (optional) or the number";
   }
-  if (p.number.length === 0) return "Enter the registration number (1–4 digits)";
+  if (p.number.length === 0) {
+    if (p.series.length < 3) {
+      return "Enter more series letters (up to 3) or the number (1–4 digits)";
+    }
+    return "Enter the registration number (1–4 digits)";
+  }
   if (isIndianVehiclePlateValid(norm)) return "Looks good";
   return "Enter the registration number (1–4 digits)";
 }

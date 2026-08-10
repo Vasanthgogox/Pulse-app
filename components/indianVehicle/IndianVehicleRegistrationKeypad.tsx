@@ -2,7 +2,7 @@
  * Segment-aware Indian plate keypad — Apple iOS QWERTY / phone-pad chrome.
  * Non-functional keys (shift, space, mode toggle) render disabled for clear UX.
  */
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback } from "react";
 import {
   Platform,
   Pressable,
@@ -50,6 +50,12 @@ export interface IndianVehicleRegistrationKeypadProps {
   atMaxLength?: boolean;
   /** Denser keys + tighter chrome for the bounded desktop/tablet wizard card. */
   compact?: boolean;
+  /**
+   * When both letters and digits are legal next, enable ABC/123 so the user can
+   * finish a 2-digit district or a multi-letter series without being stuck.
+   */
+  canToggleMode?: boolean;
+  onToggleMode?: () => void;
 }
 
 type KeyVariant = "char" | "special" | "disabled";
@@ -137,6 +143,58 @@ function RowSpacer({ flex = 0.5 }: { flex?: number }) {
   return <View style={{ flex }} pointerEvents="none" accessibilityElementsHidden />;
 }
 
+function ModeFooter({
+  kind,
+  canToggleMode,
+  onToggleMode,
+  compact,
+}: {
+  kind: IndianVehicleKeyboardKind;
+  canToggleMode: boolean;
+  onToggleMode?: () => void;
+  compact: boolean;
+}) {
+  const modeToggleLabel = kind === "letters" ? "123" : "ABC";
+  return (
+    <View style={[styles.row, compact && styles.rowCompact]}>
+      <KeyCell
+        label={modeToggleLabel}
+        variant={canToggleMode ? "special" : "disabled"}
+        flex={1.25}
+        textStyle="utility"
+        compact={compact}
+        onPress={canToggleMode ? onToggleMode : undefined}
+        disabled={!canToggleMode}
+        accessibilityLabel={
+          canToggleMode
+            ? kind === "letters"
+              ? "Switch to numbers"
+              : "Switch to letters"
+            : kind === "letters"
+              ? "Numbers switch automatic for this field"
+              : "Letters switch automatic for this field"
+        }
+      />
+      <KeyCell
+        variant="disabled"
+        flex={3.8}
+        compact={compact}
+        accessibilityLabel="Space not used for plates"
+        style={styles.spaceKey}
+      />
+      <KeyCell
+        label="return"
+        variant="disabled"
+        flex={1.25}
+        textStyle="utility"
+        compact={compact}
+        accessibilityLabel="Return not used for plates"
+        style={styles.returnKey}
+      />
+    </View>
+  );
+}
+
 export const IndianVehicleRegistrationKeypad = memo(
   function IndianVehicleRegistrationKeypad({
     kind,
@@ -145,6 +203,8 @@ export const IndianVehicleRegistrationKeypad = memo(
     normalizedLength = 0,
     atMaxLength,
     compact = false,
+    canToggleMode = false,
+    onToggleMode,
   }: IndianVehicleRegistrationKeypadProps) {
     const atMax =
       atMaxLength ?? normalizedLength >= INDIAN_VEHICLE_TOTAL_LENGTH;
@@ -160,11 +220,6 @@ export const IndianVehicleRegistrationKeypad = memo(
         onKey(key);
       },
       [disabled, inputLocked, canDelete, onKey],
-    );
-
-    const modeToggleLabel = useMemo(
-      () => (kind === "letters" ? "123" : "ABC"),
-      [kind],
     );
 
     if (kind === "numbers") {
@@ -187,7 +242,11 @@ export const IndianVehicleRegistrationKeypad = memo(
               </View>
             ))}
             <View style={[styles.row, compact && styles.rowCompact]}>
-            <View style={[styles.numPadSpacer, compact && styles.numPadSpacerCompact]} pointerEvents="none" accessibilityElementsHidden />
+              <View
+                style={[styles.numPadSpacer, compact && styles.numPadSpacerCompact]}
+                pointerEvents="none"
+                accessibilityElementsHidden
+              />
               <KeyCell
                 label="0"
                 onPress={() => handlePress("0")}
@@ -205,6 +264,14 @@ export const IndianVehicleRegistrationKeypad = memo(
                 accessibilityLabel="Delete"
               />
             </View>
+            {canToggleMode ? (
+              <ModeFooter
+                kind={kind}
+                canToggleMode={canToggleMode}
+                onToggleMode={onToggleMode}
+                compact={compact}
+              />
+            ) : null}
           </View>
         </View>
       );
@@ -274,36 +341,12 @@ export const IndianVehicleRegistrationKeypad = memo(
             />
           </View>
 
-          <View style={[styles.row, compact && styles.rowCompact]}>
-            <KeyCell
-              label={modeToggleLabel}
-              variant="disabled"
-              flex={1.25}
-              textStyle="utility"
-              compact={compact}
-              accessibilityLabel={
-                kind === "letters"
-                  ? "Numbers switch automatic for this field"
-                  : "Letters switch automatic for this field"
-              }
-            />
-            <KeyCell
-              variant="disabled"
-              flex={3.8}
-              compact={compact}
-              accessibilityLabel="Space not used for plates"
-              style={styles.spaceKey}
-            />
-            <KeyCell
-              label="return"
-              variant="disabled"
-              flex={1.25}
-              textStyle="utility"
-              compact={compact}
-              accessibilityLabel="Return not used for plates"
-              style={styles.returnKey}
-            />
-          </View>
+          <ModeFooter
+            kind={kind}
+            canToggleMode={canToggleMode}
+            onToggleMode={onToggleMode}
+            compact={compact}
+          />
         </View>
       </View>
     );

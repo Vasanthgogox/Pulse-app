@@ -1,6 +1,9 @@
 import {
   appendIndianVehicleChar,
   applyIndianVehicleKeystroke,
+  getIndianVehicleAllowedNext,
+  getIndianVehicleFormatHint,
+  getIndianVehicleKeyboardKind,
   getIndianVehicleSegmentGuide,
   isIndianVehiclePlateValid,
 } from "@/lib/indianVehicleInput.util";
@@ -81,5 +84,34 @@ describe("Indian vehicle plate entry", () => {
   it("marks every segment done for a complete standard plate", () => {
     const guide = getIndianVehicleSegmentGuide("TN 01 CM 2026");
     expect(guide.every((s) => s.done)).toBe(true);
+  });
+
+  it("keeps the number pad after one district digit so TN 09… can be typed", () => {
+    expect(getIndianVehicleKeyboardKind("TN0")).toBe("numbers");
+    expect(getIndianVehicleAllowedNext("TN0")).toEqual({
+      letters: true,
+      digits: true,
+    });
+    expect(appendIndianVehicleChar("TN 0", "9")).toBe("TN 09");
+  });
+
+  it("still allows a second series letter after the first (not locked to one)", () => {
+    expect(getIndianVehicleAllowedNext("TN0I")).toEqual({
+      letters: true,
+      digits: true,
+    });
+    expect(appendIndianVehicleChar("TN 0 I", "M")).toBe("TN 0 IM");
+    expect(appendIndianVehicleChar("TN 0 I", "1")).toBe("TN 0 I 1");
+    expect(getIndianVehicleSegmentGuide("TN 0 I").map((s) => s.label)).toEqual([
+      "AA",
+      "00",
+      "AA",
+      "0000",
+    ]);
+    expect(getIndianVehicleFormatHint("TN 0 I")).toMatch(/series letters/i);
+  });
+
+  it("prefers letters once a typical 2-digit district is filled", () => {
+    expect(getIndianVehicleKeyboardKind("TN09")).toBe("letters");
   });
 });

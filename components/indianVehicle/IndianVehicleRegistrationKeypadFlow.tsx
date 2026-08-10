@@ -1,7 +1,7 @@
 /**
  * Full-page Indian plate entry: display + segment guide + custom keypad (no system keyboard).
  */
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -30,6 +30,7 @@ import {
   getIndianVehicleNormalizedLength,
   getIndianVehicleSegmentGuide,
   INDIAN_VEHICLE_TOTAL_LENGTH,
+  type IndianVehicleKeyboardKind,
 } from "@/lib/indianVehicleInput.util";
 
 export interface IndianVehicleRegistrationKeypadFlowProps {
@@ -51,13 +52,32 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
     label = "Registration",
   }: IndianVehicleRegistrationKeypadFlowProps) {
     const normLen = getIndianVehicleNormalizedLength(value);
-    const keyboardKind = getIndianVehicleKeyboardKind(value);
+    const preferredKind = getIndianVehicleKeyboardKind(value);
     const formatHint = useMemo(
       () => getIndianVehicleFormatHint(value),
       [value],
     );
     const segmentGuide = useMemo(() => getIndianVehicleSegmentGuide(value), [value]);
     const allowedNext = useMemo(() => getIndianVehicleAllowedNext(value), [value]);
+    const canToggleMode = allowedNext.letters && allowedNext.digits;
+    const [kindOverride, setKindOverride] = useState<IndianVehicleKeyboardKind | null>(
+      null,
+    );
+    const prevPreferredRef = useRef(preferredKind);
+
+    // Drop manual ABC/123 override when the segment preference moves on, or when
+    // that character class is no longer legal.
+    useEffect(() => {
+      if (prevPreferredRef.current !== preferredKind) {
+        prevPreferredRef.current = preferredKind;
+        setKindOverride(null);
+        return;
+      }
+      if (kindOverride === "letters" && !allowedNext.letters) setKindOverride(null);
+      if (kindOverride === "numbers" && !allowedNext.digits) setKindOverride(null);
+    }, [preferredKind, allowedNext.letters, allowedNext.digits, kindOverride]);
+
+    const keyboardKind: IndianVehicleKeyboardKind = kindOverride ?? preferredKind;
     const displayValue = value.trim();
     const showCursor = normLen < INDIAN_VEHICLE_TOTAL_LENGTH;
     const inputPlatform = useInputPlatform();
@@ -79,9 +99,18 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
       [onChangeText, value],
     );
 
+    const handleToggleMode = useCallback(() => {
+      setKindOverride((prev) => {
+        const current = prev ?? preferredKind;
+        return current === "letters" ? "numbers" : "letters";
+      });
+    }, [preferredKind]);
+
+    // Desktop: accept whichever classes are legal next — never lock out the
+    // other class when both district digits and series letters are valid.
     useIndianVehiclePhysicalKeypad({
       enabled: isDesktopWeb,
-      kind: keyboardKind,
+      allowed: allowedNext,
       onKey: handleKey,
     });
 
@@ -157,6 +186,8 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
               normalizedLength={normLen}
               atMaxLength={!allowedNext.letters && !allowedNext.digits}
               compact={groupTop}
+              canToggleMode={canToggleMode}
+              onToggleMode={handleToggleMode}
             />
           </View>
         )}
