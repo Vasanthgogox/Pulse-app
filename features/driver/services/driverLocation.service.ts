@@ -51,8 +51,22 @@ export async function reportDriverLocation(
     source,
     odometerKm,
     recordedAt,
-    addressLabel,
   } = params;
+  // Chat trigger uses address_label; without it the DB falls back to trip
+  // pickup/drop (e.g. Maharashtra on a MH→DL route while the phone is in Chennai).
+  let addressLabel =
+    typeof params.addressLabel === 'string' ? params.addressLabel.trim() : '';
+  if (!addressLabel && Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    try {
+      const { reverseGeocodeCityStateLabel } = await import(
+        '@/lib/reverseGeocodePlace.util'
+      );
+      const geo = await reverseGeocodeCityStateLabel(latitude, longitude);
+      if (geo?.trim()) addressLabel = geo.trim();
+    } catch {
+      // best-effort — insert still proceeds with coords
+    }
+  }
   const row: Record<string, unknown> = {
     driver_id: driverId,
     organization_id: organizationId,
@@ -68,8 +82,8 @@ export async function reportDriverLocation(
   if (typeof recordedAt === 'string' && recordedAt.trim() !== '') {
     row.recorded_at = recordedAt.trim();
   }
-  if (typeof addressLabel === 'string' && addressLabel.trim() !== '') {
-    row.address_label = addressLabel.trim();
+  if (addressLabel) {
+    row.address_label = addressLabel;
   }
   const { error } = await supabase().from('driver_locations').insert(row);
   if (error) {

@@ -720,12 +720,23 @@ export function TripPhoneAssignmentWizard({
                 }}
                 driverPanelBody={
                   <View style={{ gap: 12, flex: 1 }}>
-                    <View style={aws.sectionHintRow}>
-                      <Text style={aws.sectionHint}>Active driver record fields</Text>
-                      <Text style={aws.kycHint}>KYC verified</Text>
-                    </View>
-                    <View style={aws.fieldsGrid}>
-                      <View style={windowWidth < 720 ? aws.fieldFull : aws.fieldHalf}>
+                    {windowWidth >= 720 ? (
+                      <View style={aws.sectionHintRow}>
+                        <Text style={aws.sectionHint}>Active driver record fields</Text>
+                        <Text style={aws.kycHint}>KYC verified</Text>
+                      </View>
+                    ) : null}
+                    <View
+                      style={[
+                        aws.fieldsGrid,
+                        windowWidth < 720 && aws.fieldsGridPhone,
+                      ]}
+                    >
+                      <View
+                        style={
+                          windowWidth < 720 ? aws.fieldPhone : aws.fieldHalf
+                        }
+                      >
                         <Text style={aws.fieldLabel}>Driver full name *</Text>
                         <TextInput
                           style={aws.input}
@@ -736,10 +747,21 @@ export function TripPhoneAssignmentWizard({
                           autoCapitalize="words"
                         />
                       </View>
-                      <View style={windowWidth < 720 ? aws.fieldFull : aws.fieldHalf}>
-                        <Text style={aws.fieldLabel}>Mobile contact no. *</Text>
+                      <View
+                        style={
+                          windowWidth < 720 ? aws.fieldPhone : aws.fieldHalf
+                        }
+                      >
+                        <View style={aws.sectionHintRow}>
+                          <Text style={[aws.fieldLabel, { marginBottom: 0 }]}>
+                            Mobile contact no. *
+                          </Text>
+                          {windowWidth < 720 ? (
+                            <Text style={aws.kycHint}>KYC verified</Text>
+                          ) : null}
+                        </View>
                         <TextInput
-                          style={aws.input}
+                          style={[aws.input, { marginTop: 6 }]}
                           value={driverPhone}
                           onChangeText={handlePhoneChange}
                           placeholder="10-digit mobile number"
@@ -781,15 +803,32 @@ export function TripPhoneAssignmentWizard({
                 }
                 vehiclePanelBody={
                   <View style={{ gap: 12, flex: 1 }}>
-                    <View style={aws.sectionHintRow}>
-                      <Text style={aws.sectionHint}>Active vehicle record fields</Text>
-                      <Text style={aws.kycHintVehicle}>Telemetry linked</Text>
-                    </View>
-                    <View style={aws.fieldsGrid}>
-                      <View style={aws.fieldFull}>
-                        <Text style={aws.fieldLabel}>Registration no *</Text>
+                    {windowWidth >= 720 ? (
+                      <View style={aws.sectionHintRow}>
+                        <Text style={aws.sectionHint}>Active vehicle record fields</Text>
+                        <Text style={aws.kycHintVehicle}>Telemetry linked</Text>
+                      </View>
+                    ) : null}
+                    <View
+                      style={[
+                        aws.fieldsGrid,
+                        windowWidth < 720 && aws.fieldsGridPhone,
+                      ]}
+                    >
+                      <View style={windowWidth < 720 ? aws.fieldPhone : aws.fieldFull}>
+                        <View style={aws.sectionHintRow}>
+                          <Text style={[aws.fieldLabel, { marginBottom: 0 }]}>
+                            Registration no *
+                          </Text>
+                          {windowWidth < 720 ? (
+                            <Text style={aws.kycHintVehicle}>Telemetry linked</Text>
+                          ) : null}
+                        </View>
                         <TextInput
-                          style={[aws.input, { fontWeight: "800", letterSpacing: 0.6 }]}
+                          style={[
+                            aws.input,
+                            { fontWeight: "800", letterSpacing: 0.6, marginTop: 6 },
+                          ]}
                           value={vehiclePlate}
                           onChangeText={handleVehicleChange}
                           placeholder="XX NN LL NNNN"
@@ -797,7 +836,7 @@ export function TripPhoneAssignmentWizard({
                           autoCapitalize="characters"
                         />
                       </View>
-                      <View style={aws.fieldFull}>
+                      <View style={windowWidth < 720 ? aws.fieldPhone : aws.fieldFull}>
                         <Text style={aws.fieldLabel}>Vehicle category</Text>
                         <TextInput
                           style={[aws.input, { opacity: 0.85 }]}

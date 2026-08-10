@@ -175,6 +175,37 @@ describe('evaluateNavigationPolicy', () => {
     }
   });
 
+  it('authenticated driver + trip verification → soft allow (shared)', () => {
+    const d = evaluateNavigationPolicy({
+      rawPathname: '/trip/abc-trip/verification',
+      snapshot: snap({
+        sessionPosture: 'authenticated',
+        principal: buildPrincipal({ role: 'driver' }),
+      }),
+    });
+    expect(d.type).toBe('allow');
+    if (d.type === 'allow') {
+      expect(d.policyId).toBe('org.trip-verification');
+      expect(d.soft).toBe(true);
+      expect(d.reason).toBe('grants_soft_deny');
+    }
+  });
+
+  it('authenticated driver + trip other expense → soft allow (shared)', () => {
+    const d = evaluateNavigationPolicy({
+      rawPathname: '/trip/abc-trip/operations/other',
+      snapshot: snap({
+        sessionPosture: 'authenticated',
+        principal: buildPrincipal({ role: 'driver' }),
+      }),
+    });
+    expect(d.type).toBe('allow');
+    if (d.type === 'allow') {
+      expect(d.policyId).toBe('org.trip-ops-other');
+      expect(d.soft).toBe(true);
+    }
+  });
+
   it('authenticated + driver_signup_success → /driver-signup (not experience home)', () => {
     const d = evaluateNavigationPolicy({
       rawPathname: '/trips',

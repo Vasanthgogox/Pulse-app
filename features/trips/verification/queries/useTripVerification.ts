@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsOnline } from "@/contexts/NetworkContext";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
-import { getTripById } from "@/features/trips/services/trips.service";
+import { getAccessibleTripById } from "@/features/trips/services/trips.service";
 import { STALE } from "@/lib/queryClient";
 import { queryKeys } from "@/lib/queryKeys";
 import { toVerificationSnapshot } from "../selectors/verificationSelectors";
@@ -21,7 +21,7 @@ export function useTripVerification(tripId: string | null) {
   return useQuery({
     queryKey: tripId ? queryKeys.trips.verification(tripId) : ["q", "trips", "verification", "noop"],
     queryFn: async () => {
-      const res = await getTripById(tripId!);
+      const res = await getAccessibleTripById(tripId!);
       if (res.error || !res.trip) throw res.error ?? new Error("Trip not found");
       return toVerificationSnapshot(res.trip);
     },

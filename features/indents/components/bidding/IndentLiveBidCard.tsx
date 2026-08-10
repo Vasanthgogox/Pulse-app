@@ -25,7 +25,6 @@ import {
 } from "@/features/indents/utils/bidding/indentLiveBids.util";
 import {
   indentHubCardShadow,
-  indentReviewHubLayout,
   indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
 import type { IndentBidAlertInfo } from "@/features/indents/utils/bidding/indentBidAlert.util";
@@ -51,7 +50,7 @@ export interface IndentLiveBidCardProps {
   awarding?: boolean;
 }
 
-const AVATAR_SIZE = 40;
+const AVATAR_SIZE = 34;
 
 function stripCurrencyPrefix(formatted: string): string {
   return formatted.replace(/^[^\d,.-]+/, "").trim() || formatted;
@@ -167,6 +166,11 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
     ],
   );
 
+  const hasCardActions = Boolean(onCounterOffer || onAwardBid);
+  const selectedHint =
+    footerInsight?.recommendation ??
+    (isLowest ? "At or below your target" : "Ready to award from footer");
+
   const content = (
     <View
       style={[
@@ -178,7 +182,6 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
         isRejected && styles.cardRejected,
       ]}
     >
-      {/* Top: carrier + amount */}
       <View style={styles.topSection}>
         <View style={styles.avatarWrap}>
           <EntityAvatar
@@ -197,12 +200,14 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
             </Text>
             {isConnectedPartner ? (
               <View style={styles.partnerPill}>
-                <Text style={styles.partnerPillText}>VERIFIED VENDOR</Text>
+                <Text style={styles.partnerPillText}>Verified</Text>
               </View>
             ) : (
               <View style={[styles.partnerPill, styles.partnerPillMarket]}>
-                <Text style={[styles.partnerPillText, styles.partnerPillTextMarket]}>
-                  MARKET YET TO CONNECT
+                <Text
+                  style={[styles.partnerPillText, styles.partnerPillTextMarket]}
+                >
+                  Marketplace
                 </Text>
               </View>
             )}
@@ -250,6 +255,10 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
                   isAccepted && styles.statusTextAwarded,
                   isRejected && styles.statusTextRejected,
                   isCountered && styles.statusTextCountered,
+                  status === "pending" &&
+                    !isCountered &&
+                    selected &&
+                    styles.statusTextSelected,
                 ]}
               >
                 {statusLabel.toUpperCase()}
@@ -262,26 +271,35 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
         </View>
       </View>
 
-      {/* Metrics strip */}
-      {(targetRateInr > 0 || margin || vsTarget != null) ? (
+      {targetRateInr > 0 || margin || vsTarget != null ? (
         <View style={styles.metricsBar}>
           <View style={styles.metricCol}>
-            <Text style={styles.metricLabel}>TARGET RATE</Text>
-            <Text style={styles.metricValue}>
+            <Text style={styles.metricLabel}>Target rate</Text>
+            <Text style={styles.metricValue} numberOfLines={1}>
               {targetRateInr > 0
                 ? `₹ ${stripCurrencyPrefix(formatINR(targetRateInr))}`
                 : "—"}
             </Text>
             {isLowest && !isRejected ? (
-              <Text style={styles.metricHint}>
-                <FontAwesome name="check-circle" size={9} color={Theme.success} />{" "}
-                At / below target
-              </Text>
-            ) : null}
+              <View style={styles.metricHintRow}>
+                <FontAwesome
+                  name="check-circle"
+                  size={9}
+                  color={Theme.success}
+                />
+                <Text style={styles.metricHint} numberOfLines={1}>
+                  At / below
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.metricHintSpacer} />
+            )}
           </View>
 
+          <View style={styles.metricDivider} />
+
           <View style={styles.metricCol}>
-            <Text style={styles.metricLabel}>NET MARGIN</Text>
+            <Text style={styles.metricLabel}>Net margin</Text>
             <Text
               style={[
                 styles.metricValue,
@@ -289,15 +307,19 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
                   ? styles.metricPositive
                   : styles.metricNegative,
               ]}
+              numberOfLines={1}
             >
               {margin
-                ? `₹ ${stripCurrencyPrefix(formatINR(margin.marginInr))} [${margin.marginPct}%]`
+                ? `₹ ${stripCurrencyPrefix(formatINR(margin.marginInr))} · ${margin.marginPct}%`
                 : "—"}
             </Text>
+            <View style={styles.metricHintSpacer} />
           </View>
 
+          <View style={styles.metricDivider} />
+
           <View style={styles.metricCol}>
-            <Text style={styles.metricLabel}>VS TARGET</Text>
+            <Text style={styles.metricLabel}>Vs target</Text>
             <Text
               style={[
                 styles.metricValue,
@@ -305,6 +327,7 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
                   ? styles.metricPositive
                   : styles.metricNegative,
               ]}
+              numberOfLines={1}
             >
               {vsTarget == null
                 ? "—"
@@ -312,62 +335,68 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
                   ? `₹ ${stripCurrencyPrefix(formatINR(Math.abs(vsTarget)))} under`
                   : `₹ ${stripCurrencyPrefix(formatINR(vsTarget))} over`}
             </Text>
+            <View style={styles.metricHintSpacer} />
           </View>
         </View>
       ) : null}
 
-      {/* Selection action strip */}
       {selected && !disabled && !isAccepted && !isRejected ? (
-        <View style={styles.actionStrip}>
-          <View style={styles.actionLeft}>
-            <FontAwesome name="clock-o" size={12} color={Theme.driverPrimary} />
-            <Text style={styles.actionLeftText} numberOfLines={1}>
-              {isCountered
-                ? `Counter · ₹ ${stripCurrencyPrefix(formatINR(counterAmount!))}`
-                : "Ready to negotiate"}
-            </Text>
-          </View>
-          <View style={styles.actionBtns}>
-            {onCounterOffer ? (
-              <TouchableOpacity
-                style={styles.counterBtn}
-                onPress={(e) => {
-                  e.stopPropagation?.();
-                  onCounterOffer();
-                }}
-                activeOpacity={0.85}
-                accessibilityLabel="Counter offer"
-                hitSlop={Layout.touchTargetHitSlop}
-              >
-                <Text style={styles.counterBtnText}>Counter Offer</Text>
-              </TouchableOpacity>
-            ) : null}
-            {onAwardBid ? (
-              <TouchableOpacity
-                style={[styles.awardBtn, awarding && styles.awardBtnDisabled]}
-                onPress={(e) => {
-                  e.stopPropagation?.();
-                  if (!awarding) onAwardBid();
-                }}
-                activeOpacity={0.9}
-                disabled={awarding}
-                accessibilityLabel="Award bid"
-                hitSlop={Layout.touchTargetHitSlop}
-              >
-                <Text style={styles.awardBtnText}>
-                  {awarding ? "Awarding…" : "Award Bid"}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.actionReco} numberOfLines={1}>
-                {footerInsight?.recommendation ?? "Award from footer"}
+        hasCardActions ? (
+          <View style={styles.actionStrip}>
+            <View style={styles.actionLeft}>
+              <FontAwesome
+                name="check-circle"
+                size={13}
+                color={Theme.positive}
+              />
+              <Text style={styles.actionLeftText} numberOfLines={1}>
+                {isCountered
+                  ? `Counter · ₹ ${stripCurrencyPrefix(formatINR(counterAmount!))}`
+                  : "Selected"}
               </Text>
-            )}
+            </View>
+            <View style={styles.actionBtns}>
+              {onCounterOffer ? (
+                <TouchableOpacity
+                  style={styles.counterBtn}
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    onCounterOffer();
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Counter offer"
+                  hitSlop={Layout.touchTargetHitSlop}
+                >
+                  <Text style={styles.counterBtnText}>Counter</Text>
+                </TouchableOpacity>
+              ) : null}
+              {onAwardBid ? (
+                <TouchableOpacity
+                  style={[styles.awardBtn, awarding && styles.awardBtnDisabled]}
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    if (!awarding) onAwardBid();
+                  }}
+                  activeOpacity={0.9}
+                  disabled={awarding}
+                  accessibilityLabel="Award bid"
+                  hitSlop={Layout.touchTargetHitSlop}
+                >
+                  <Text style={styles.awardBtnText}>
+                    {awarding ? "Awarding…" : "Award"}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.selectedStrip}>
+            <FontAwesome name="check-circle" size={13} color={Theme.positive} />
+            <Text style={styles.selectedStripText}>{selectedHint}</Text>
+          </View>
+        )
       ) : null}
 
-      {/* Award / urgency alert */}
       {alertInfo ? (
         <View
           style={[
@@ -382,10 +411,10 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
             size={12}
             color={
               alertInfo.tone === "overdue"
-                ? "#DC2626"
+                ? Theme.teslaRed
                 : alertInfo.tone === "urgent"
-                  ? "#EA580C"
-                  : "#CA8A04"
+                  ? Theme.warning
+                  : Theme.accentGoldPressed
             }
           />
           <Text style={styles.alertText} numberOfLines={2}>
@@ -421,30 +450,32 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
 
 const styles = StyleSheet.create({
   pressable: {
-    marginBottom: 12,
+    marginBottom: 0,
+    width: "100%",
+    alignSelf: "stretch",
   },
   pressablePressed: {
-    opacity: 0.94,
-    transform: [{ translateY: -1 }],
+    opacity: 0.96,
+    transform: [{ translateY: -0.5 }],
   },
   card: {
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: "hidden",
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
   },
   cardSelected: {
     borderColor: Theme.positive,
-    borderWidth: 2,
+    borderWidth: 1.5,
     backgroundColor: Theme.cardWhite,
   },
   cardAwarded: {
-    borderColor: "#FDE68A",
+    borderColor: Theme.accentGold,
   },
   cardRejected: {
-    borderColor: "#FECACA",
-    opacity: 0.85,
+    borderColor: Theme.borderMedium,
+    opacity: 0.86,
   },
   cardDisabled: {
     opacity: 0.72,
@@ -452,21 +483,25 @@ const styles = StyleSheet.create({
   topSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: indentReviewHubLayout.summaryCardPadding,
+    gap: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   avatarWrap: {
     width: AVATAR_SIZE + 4,
     height: AVATAR_SIZE + 4,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
   },
   body: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: 5,
+    paddingRight: 6,
   },
   nameRow: {
     flexDirection: "row",
@@ -478,7 +513,7 @@ const styles = StyleSheet.create({
     ...indentReviewHubText.partyTitle,
     fontSize: 13,
     fontWeight: "900",
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
     color: Theme.textPrimaryDark,
     flexShrink: 1,
   },
@@ -493,7 +528,7 @@ const styles = StyleSheet.create({
   partnerPillText: {
     fontSize: 8,
     fontWeight: "800",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
     textTransform: "uppercase",
     color: Theme.positive,
   },
@@ -507,12 +542,12 @@ const styles = StyleSheet.create({
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 4,
+    gap: 5,
   },
   badge: {
     paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
     borderWidth: StyleSheet.hairlineWidth,
   },
   badgeRecommended: {
@@ -524,27 +559,29 @@ const styles = StyleSheet.create({
     borderColor: Theme.positiveMutedDarkBorder,
   },
   badgeTarget: {
-    backgroundColor: "#ECFEFF",
-    borderColor: "#A5F3FC",
+    backgroundColor: Theme.pulseIndigoWash,
+    borderColor: Theme.pulseIndigoRing,
   },
   badgeAwarded: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#FDE68A",
+    backgroundColor: Theme.accentGoldMuted,
+    borderColor: Theme.accentGold,
   },
   badgeText: {
     fontSize: 8,
     fontWeight: "800",
-    letterSpacing: 0.35,
+    letterSpacing: 0.3,
     textTransform: "uppercase",
   },
   badgeTextRecommended: { color: Theme.textRouteCard },
   badgeTextLowest: { color: Theme.positive },
-  badgeTextTarget: { color: "#0E7490" },
-  badgeTextAwarded: { color: "#B45309" },
+  badgeTextTarget: { color: Theme.driverPrimary },
+  badgeTextAwarded: { color: Theme.accentBrownDeep },
   amountCol: {
     alignItems: "flex-end",
+    justifyContent: "center",
     gap: 4,
     flexShrink: 0,
+    minWidth: 92,
   },
   amountHero: {
     flexDirection: "row",
@@ -552,15 +589,15 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   amountCurrency: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "800",
     color: Theme.textSecondary,
   },
   amount: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "900",
-    letterSpacing: -0.4,
-    maxWidth: 130,
+    letterSpacing: -0.35,
+    maxWidth: 124,
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
   },
@@ -571,7 +608,7 @@ const styles = StyleSheet.create({
   statusPill: {
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 5,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
@@ -581,12 +618,12 @@ const styles = StyleSheet.create({
     borderColor: Theme.positiveMutedDarkBorder,
   },
   statusPillAwarded: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#FDE68A",
+    backgroundColor: Theme.accentGoldMuted,
+    borderColor: Theme.accentGold,
   },
   statusPillRejected: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#FECACA",
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.borderMedium,
   },
   statusPillCountered: {
     backgroundColor: Theme.aggregatePillBg,
@@ -595,43 +632,53 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 8,
     fontWeight: "800",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
     color: Theme.textMuted,
   },
-  statusTextAwarded: { color: "#B45309" },
-  statusTextRejected: { color: "#B91C1C" },
+  statusTextSelected: { color: Theme.positive },
+  statusTextAwarded: { color: Theme.accentBrownDeep },
+  statusTextRejected: { color: Theme.teslaRed },
   statusTextCountered: { color: Theme.aggregatePillText },
   submittedText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textMuted,
   },
   metricsBar: {
     flexDirection: "row",
+    alignItems: "stretch",
     backgroundColor: Theme.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    paddingHorizontal: 14,
     paddingVertical: 10,
-    gap: 8,
+    paddingHorizontal: 4,
   },
   metricCol: {
     flex: 1,
     minWidth: 0,
+    paddingHorizontal: 10,
+    justifyContent: "flex-start",
+  },
+  metricDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    backgroundColor: Theme.borderLight,
+    marginVertical: 2,
   },
   metricLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.35,
     textTransform: "uppercase",
     color: Theme.textMuted,
-    marginBottom: 3,
+    marginBottom: 4,
   },
   metricValue: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.15,
   },
   metricPositive: {
     color: Theme.success,
@@ -639,18 +686,29 @@ const styles = StyleSheet.create({
   metricNegative: {
     color: Theme.teslaRed,
   },
+  metricHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+    minHeight: 14,
+  },
   metricHint: {
-    marginTop: 3,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.success,
+    flexShrink: 1,
+  },
+  metricHintSpacer: {
+    minHeight: 14,
+    marginTop: 4,
   },
   actionStrip: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
-    paddingHorizontal: 14,
+    gap: 10,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: Theme.positiveMuted,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -662,10 +720,10 @@ const styles = StyleSheet.create({
     gap: 6,
     flexShrink: 1,
     minWidth: 0,
-    maxWidth: "38%",
+    flex: 1,
   },
   actionLeftText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     flexShrink: 1,
@@ -676,17 +734,29 @@ const styles = StyleSheet.create({
     gap: 8,
     flexShrink: 0,
   },
-  actionReco: {
-    fontSize: 10,
+  selectedStrip: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: Theme.positiveMuted,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.positiveMutedDarkBorder,
+  },
+  selectedStripText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
     fontWeight: "600",
-    color: Theme.textMuted,
-    maxWidth: 120,
+    lineHeight: 17,
+    color: Theme.textPrimaryDark,
   },
   counterBtn: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     minHeight: 36,
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
@@ -701,7 +771,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     minHeight: 36,
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: Theme.driverPrimary,
     justifyContent: "center",
   },
@@ -726,16 +796,16 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   alertPanelOverdue: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#FECACA",
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.borderMedium,
   },
   alertPanelUrgent: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
+    backgroundColor: Theme.warningMuted,
+    borderColor: Theme.borderMedium,
   },
   alertPanelSoon: {
-    backgroundColor: "#FEFCE8",
-    borderColor: "#FEF08A",
+    backgroundColor: Theme.accentGoldMuted,
+    borderColor: Theme.accentGold,
   },
   alertText: {
     flex: 1,

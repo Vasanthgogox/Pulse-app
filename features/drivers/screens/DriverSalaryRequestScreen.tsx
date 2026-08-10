@@ -12,8 +12,13 @@ import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
-import { tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
-import { resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
+import { DriverSelfAvatar } from '@/components/driver/DriverSelfAvatar';
+import {
+  tripEarningsDetailForDriver,
+  tripEarningsForDriver,
+} from '@/features/drivers/utils/driverUtils.util';
+import { resolveDriverOrgAvatarUri } from '@/features/drivers/utils/resolveDriverOrgAvatar.util';
+import { useOrgBrandingByIds } from '@/lib/hooks/useOrgBrandingByIds';
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
@@ -364,16 +369,24 @@ export default function SalaryRequestScreen() {
 
   const effectiveSalaryOrg = salaryRequestOrg ?? (salaryRequestOrgOptions.length === 1 ? salaryRequestOrgOptions[0] : null);
 
+  const salaryOrgBrandingIds = useMemo(
+    () => salaryRequestOrgOptions.map((o) => String(o.orgId ?? '').trim()).filter(Boolean),
+    [salaryRequestOrgOptions],
+  );
+  const orgBrandingById = useOrgBrandingByIds(salaryOrgBrandingIds);
+
   const fleetHeroAvatarUri = useMemo(() => {
     if (!effectiveSalaryOrg) return '';
-    return resolveOrgAvatarUri(
-      String(effectiveSalaryOrg.orgId ?? ''),
-      effectiveSalaryOrg.orgName,
-      effectiveSalaryOrg.logoUrl,
-      effectiveSalaryOrg.ownerSeed,
-      effectiveSalaryOrg.ownerUrl,
-    );
-  }, [effectiveSalaryOrg]);
+    const orgId = String(effectiveSalaryOrg.orgId ?? '');
+    return resolveDriverOrgAvatarUri({
+      orgId,
+      orgName: effectiveSalaryOrg.orgName,
+      branding: orgBrandingById[orgId],
+      logoUrl: effectiveSalaryOrg.logoUrl,
+      avatarSeed: effectiveSalaryOrg.ownerSeed,
+      avatarUrl: effectiveSalaryOrg.ownerUrl,
+    });
+  }, [effectiveSalaryOrg, orgBrandingById]);
 
   const premiumCardBorder = isDark ? colors.emeraldBorder : 'rgba(16, 185, 129, 0.14)';
 
@@ -403,7 +416,13 @@ export default function SalaryRequestScreen() {
   const pendingTripsForSalaryOrg = useMemo(() => {
     if (!effectiveSalaryOrg) return [];
     return completedTrips.filter(
-      (t) => t.driver_id === effectiveSalaryOrg.driverId && (receivedByTripId[t.id] ?? 0) === 0
+      (t) =>
+        t.driver_id === effectiveSalaryOrg.driverId &&
+        (receivedByTripId[t.id] ?? 0) === 0 &&
+        // A trip with no agreed commission/salary terms has nothing real to
+        // request — excluded here (not just hidden) so the legacy 10% guess
+        // can't become the basis of an actual salary claim.
+        !tripEarningsDetailForDriver(t).isEstimated,
     );
   }, [effectiveSalaryOrg, completedTrips, receivedByTripId]);
 
@@ -958,17 +977,12 @@ export default function SalaryRequestScreen() {
             <Text style={[styles.headerTitle, styles.headerTitlePremium, { color: colors.text }]}>Salary request</Text>
           </View>
           <View style={[styles.headerSide, styles.headerSideAlignEnd]}>
-            <View
-              style={[
-                styles.headerAvatarRing,
-                { borderColor: colors.border, backgroundColor: colors.emeraldMuted },
-              ]}
-            >
-              <Image
-                source={{ uri: headerAvatarUri }}
-                style={styles.headerAvatarImage}
-                resizeMode="cover"
-                onError={() => setHeaderAvatarFailed(true)}
+            <View style={{ position: 'relative' }}>
+              <DriverSelfAvatar
+                size={36}
+                uri={headerAvatarUri}
+                seed={avatarSeed}
+                borderColor={colors.emerald}
               />
               {avatarUriLoading && Boolean(profile?.avatar_url?.trim()) && !headerAvatarFailed ? (
                 <View style={[styles.headerAvatarLoading, { backgroundColor: colors.surface }]}>
@@ -1036,7 +1050,14 @@ export default function SalaryRequestScreen() {
                           <View style={[styles.fleetAvatarRing, { borderColor: active ? colors.emerald : 'transparent' }]}>
                             <Image
                               source={{
-                                uri: resolveOrgAvatarUri(String(opt.orgId ?? ''), opt.orgName, opt.logoUrl, opt.ownerSeed, opt.ownerUrl),
+                                uri: resolveDriverOrgAvatarUri({
+                                  orgId: opt.orgId,
+                                  orgName: opt.orgName,
+                                  branding: orgBrandingById[String(opt.orgId ?? '')],
+                                  logoUrl: opt.logoUrl,
+                                  avatarSeed: opt.ownerSeed,
+                                  avatarUrl: opt.ownerUrl,
+                                }),
                               }}
                               style={styles.fleetAvatar}
                               resizeMode="cover"

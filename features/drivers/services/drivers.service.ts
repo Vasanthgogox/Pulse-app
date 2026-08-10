@@ -61,6 +61,10 @@ export interface DriverRow {
   left_at?: string | null;
   /** When true, driver was created only for aggregate trip tracking (assign-by-phone). Exclude from Drivers tab. */
   tracking_only?: boolean;
+  /** How this row originated. Write-once; never re-derived from current state. */
+  relationship_origin?: string | null;
+  /** Current primary relationship with this org (active_employee | independent | disconnected | superseded). Independent of compensation eligibility and trip assignment context. */
+  relationship_status?: string | null;
   /** Fixed salary amount for the driver (nullable). */
   payable_amount?: number | null;
   /** Commission percentage for the driver (nullable). */
@@ -108,6 +112,33 @@ export function excludeTrackingOnlyDrivers(drivers: DriverRow[]): DriverRow[] {
 /** @deprecated Prefer {@link excludeTrackingOnlyDrivers} */
 function excludeTrackingOnly(drivers: DriverRow[]): DriverRow[] {
   return excludeTrackingOnlyDrivers(drivers);
+}
+
+/**
+ * Fleet-relationship membership only (relationship_origin/relationship_status
+ * model — see docs/DRIVER_TRIP_COMPENSATION_MODEL.md and the tracking_only
+ * incident investigation). Explicit inclusion, not `!= null`: only
+ * active_employee and independent count as "in the fleet". disconnected,
+ * superseded, and NULL (legacy/unresolved rows, including the 33-row
+ * tracking_only incident cohort) are excluded.
+ *
+ * This is relationship membership ONLY. It is not a compensation-eligibility
+ * check (see resolveDriverTripPayoutTerms/tripEarningsDetailForDriver in
+ * driverUtils.util.ts) and not a trip-assignment-context check (see
+ * trip.supplier_id / isAggregate). Do not use this to gate earnings display.
+ */
+export function filterActiveFleetRelationshipDrivers(drivers: DriverRow[]): DriverRow[] {
+  return drivers.filter(isActiveFleetRelationshipDriver);
+}
+
+/** Single-row form of {@link filterActiveFleetRelationshipDrivers}, for call sites that check one row at a time (e.g. inside a compound trip-level condition) rather than filtering a list. */
+export function isActiveFleetRelationshipDriver(
+  d: Pick<DriverRow, "relationship_status">,
+): boolean {
+  return (
+    d.relationship_status === "active_employee" ||
+    d.relationship_status === "independent"
+  );
 }
 
 /**
@@ -388,6 +419,11 @@ export async function createDriver(
     payable_amount: data.payableAmount ?? null,
     commission_percent: data.commissionPercent ?? null,
     commission_per_km: data.commissionPerKm ?? null,
+    // Relationship provenance (see docs/DRIVER_TRIP_COMPENSATION_MODEL.md): this
+    // is a direct, no-invitation add — relationship_origin is write-once and must
+    // never be changed by any later event (e.g. invite acceptance).
+    relationship_origin: "manual_add",
+    relationship_status: "independent",
   };
   const { data: row, error } = await supabase()
     .from("drivers")
@@ -1391,6 +1427,12 @@ export async function ensureDriverRowByPhone(
     phone: normalized,
     user_id: options?.trackingOnly === true ? null : (match?.user_id ?? null),
     status: "offline",
+    // Relationship provenance: this row is created by a phone-based trip
+    // assignment regardless of whether tracking_only ends up true (aggregate
+    // stub) or false (direct/asset trip) — the creation mechanism is the same.
+    // relationship_origin is write-once and must never be changed later.
+    relationship_origin: "phone_assignment",
+    relationship_status: "independent",
   };
   if (options?.trackingOnly === true) insertPayload.tracking_only = true;
 

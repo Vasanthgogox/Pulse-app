@@ -1,9 +1,10 @@
-import { memo, type ReactNode } from 'react';
+import { memo, useMemo, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -16,6 +17,11 @@ import { SignUpBrandingStepLayout } from './SignUpBrandingStepLayout';
 import { PULSE_SIGNUP_RADIUS, type SignUpTheme } from '../signUpPulseTheme';
 import { PULSE_SIGNUP } from '../signUpPulseTheme';
 import { createPulseSignUpTextStyles } from '../signUpTypography';
+
+/** Fixed rows; columns grow sideways for horizontal swipe. */
+const AVATAR_CAROUSEL_ROWS = 5;
+const AVATAR_CELL = 56;
+const AVATAR_GAP = Platform.OS === 'web' ? 8 : 10;
 
 export interface SignUpPhotoPickerStepProps {
   title: string;
@@ -36,6 +42,76 @@ export interface SignUpPhotoPickerStepProps {
   skipLabel?: string;
   theme?: SignUpTheme;
 }
+
+function chunkIntoColumns<T>(items: readonly T[], rows: number): T[][] {
+  if (items.length === 0 || rows <= 0) return [];
+  const cols: T[][] = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const colIndex = Math.floor(i / rows);
+    if (!cols[colIndex]) cols[colIndex] = [];
+    cols[colIndex]!.push(items[i]!);
+  }
+  return cols;
+}
+
+const AvatarPresetCarousel = memo(function AvatarPresetCarousel({
+  presetAvatars,
+  selectedPresetSeed,
+  onPresetSelect,
+  styles,
+}: {
+  presetAvatars: readonly PresetAvatar[];
+  selectedPresetSeed?: string | null;
+  onPresetSelect: (seed: string) => void;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const columns = useMemo(
+    () => chunkIntoColumns(presetAvatars, AVATAR_CAROUSEL_ROWS),
+    [presetAvatars],
+  );
+
+  return (
+    <>
+      <View style={styles.gridLabelRow}>
+        <Text style={styles.gridLabel}>Or choose a preset</Text>
+        <Text style={styles.gridHint}>Swipe →</Text>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={Platform.OS === 'web'}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.carouselContent}
+        style={styles.carousel}
+        accessibilityLabel="Avatar presets, swipe sideways"
+      >
+        {columns.map((col, colIndex) => (
+          <View key={`col-${colIndex}`} style={styles.avatarCol}>
+            {col.map((av) => {
+              const selected = selectedPresetSeed === av.seed;
+              return (
+                <Pressable
+                  key={av.seed}
+                  onPress={() => onPresetSelect(av.seed)}
+                  style={[styles.gridItem, selected && styles.gridItemSelected]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={av.name}
+                >
+                  <Image
+                    source={av.image}
+                    style={styles.gridImage}
+                    resizeMode="cover"
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </ScrollView>
+    </>
+  );
+});
 
 export const SignUpPhotoPickerStep = memo(function SignUpPhotoPickerStep({
   title,
@@ -106,25 +182,12 @@ export const SignUpPhotoPickerStep = memo(function SignUpPhotoPickerStep({
       </Pressable>
 
       {presetAvatars && presetAvatars.length > 0 && onPresetSelect ? (
-        <>
-          <Text style={styles.gridLabel}>Or choose a preset</Text>
-          <View style={styles.gridWrap}>
-            {presetAvatars.map((av) => {
-              const selected = selectedPresetSeed === av.seed;
-              return (
-                <Pressable
-                  key={av.seed}
-                  onPress={() => onPresetSelect(av.seed)}
-                  style={[styles.gridItem, selected && styles.gridItemSelected]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                >
-                  <Image source={av.image} style={styles.gridImage} resizeMode="cover" />
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
+        <AvatarPresetCarousel
+          presetAvatars={presetAvatars}
+          selectedPresetSeed={selectedPresetSeed}
+          onPresetSelect={onPresetSelect}
+          styles={styles}
+        />
       ) : null}
     </SignUpBrandingStepLayout>
   );
@@ -183,23 +246,12 @@ export const SignUpPhotoPickerBody = memo(function SignUpPhotoPickerBody({
         )}
       </Pressable>
       {presetAvatars && presetAvatars.length > 0 && onPresetSelect ? (
-        <>
-          <Text style={styles.gridLabel}>Or choose a preset</Text>
-          <View style={styles.gridWrap}>
-            {presetAvatars.map((av) => {
-              const selected = selectedPresetSeed === av.seed;
-              return (
-                <Pressable
-                  key={av.seed}
-                  onPress={() => onPresetSelect(av.seed)}
-                  style={[styles.gridItem, selected && styles.gridItemSelected]}
-                >
-                  <Image source={av.image} style={styles.gridImage} resizeMode="cover" />
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
+        <AvatarPresetCarousel
+          presetAvatars={presetAvatars}
+          selectedPresetSeed={selectedPresetSeed}
+          onPresetSelect={onPresetSelect}
+          styles={styles}
+        />
       ) : null}
     </View>
   );
@@ -207,6 +259,8 @@ export const SignUpPhotoPickerBody = memo(function SignUpPhotoPickerBody({
 
 function createStyles(theme: SignUpTheme) {
   const text = createPulseSignUpTextStyles(theme);
+  const colHeight =
+    AVATAR_CELL * AVATAR_CAROUSEL_ROWS + AVATAR_GAP * (AVATAR_CAROUSEL_ROWS - 1);
 
   return StyleSheet.create({
     body: {
@@ -254,20 +308,45 @@ function createStyles(theme: SignUpTheme) {
       color: theme.primaryDark,
       fontWeight: '600',
     },
+    gridLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+      gap: 8,
+    },
     gridLabel: {
       ...text.fieldLabel,
-      marginBottom: 12,
+      marginBottom: 0,
+      flex: 1,
     },
-    gridWrap: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: Platform.OS === 'web' ? 8 : 10,
+    gridHint: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.muted,
+      letterSpacing: 0.2,
+    },
+    carousel: {
+      width: '100%',
+      maxHeight: colHeight + 4,
       marginBottom: 8,
     },
+    carouselContent: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: AVATAR_GAP,
+      paddingRight: 4,
+      paddingBottom: 4,
+    },
+    avatarCol: {
+      width: AVATAR_CELL,
+      height: colHeight,
+      gap: AVATAR_GAP,
+    },
     gridItem: {
-      width: Platform.OS === 'web' ? 56 : 56,
-      height: Platform.OS === 'web' ? 56 : 56,
-      borderRadius: Platform.OS === 'web' ? 14 : 14,
+      width: AVATAR_CELL,
+      height: AVATAR_CELL,
+      borderRadius: 14,
       overflow: 'hidden',
       borderWidth: 2,
       borderColor: theme.border,

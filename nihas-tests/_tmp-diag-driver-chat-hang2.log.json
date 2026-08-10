@@ -1,0 +1,33 @@
+{
+  "allDiag": [
+    "[1786116466244] [DIAG 2026-08-07T15:27:46.243Z] conversations query STATUS {driverIdsKey: , status: pending, fetchStatus: idle, isPending: true, isFetching: false}",
+    "[1786116466799] [DIAG 2026-08-07T15:27:46.798Z] conversations query STATUS {driverIdsKey: 4d04bec0-da1f-443c-ae19-97a913398a92, status: pending, fetchStatus: fetching, isPending: true, isFetching: true}",
+    "[1786116467901] [DIAG 2026-08-07T15:27:47.899Z] conversations query STATUS {driverIdsKey: 4d04bec0-da1f-443c-ae19-97a913398a92, status: success, fetchStatus: idle, isPending: false, isFetching: false}",
+    "[1786116472683] [DIAG 15:27:52.682] DriverChatScreen render [instance=1] ",
+    "[1786116472684] [DIAG 15:27:52.683] RENDER BRANCH decision [instance=1] {normalizedTripId: f1616486-f32c-455d-b3e9-1e88640f4f8b, openingTripThread: false, tripThreadError: null, selectedId: null, resolvedOrgId: null}",
+    "[1786116472684] [DIAG 15:27:52.683] RENDER BRANCH -> Loading (fallthrough: no selectedId/resolvedOrgId yet) [instance=1] {selectedId: null, resolvedOrgId: null}",
+    "[1786116472692] [DIAG 15:27:52.690] DriverChatScreen MOUNTED [instance=1] ",
+    "[1786116472692] [DIAG 15:27:52.691] Screen FOCUS [instance=1] ",
+    "[1786116472692] [DIAG 15:27:52.691] route params CHANGED [instance=1] {rawTripId: f1616486-f32c-455d-b3e9-1e88640f4f8b, normalizedTripId: f1616486-f32c-455d-b3e9-1e88640f4f8b}",
+    "[1786116472693] [DIAG 15:27:52.692] conversations query STATUS [instance=1] {isLoading: false, conversationsLen: 2}",
+    "[1786116472693] [DIAG 15:27:52.692] selectedId CHANGED [instance=1] {selectedId: null}",
+    "[1786116472693] [DIAG 15:27:52.692] openingTripThread CHANGED [instance=1] {openingTripThread: false}",
+    "[1786116472694] [DIAG 15:27:52.693] trip-resolution effect RAN [instance=1] {normalizedTripId: f1616486-f32c-455d-b3e9-1e88640f4f8b, isLoading: false, selectedId: null, conversationsLen: 2}",
+    "[1786116472694] [DIAG 15:27:52.693] branch: cached conversation found -> setSelectedId [instance=1] {convId: ee157400-7c2f-4577-a673-f00738b279e6}",
+    "[1786116472716] [DIAG 15:27:52.715] DriverChatScreen render [instance=1] ",
+    "[1786116472716] [DIAG 15:27:52.715] RENDER BRANCH decision [instance=1] {normalizedTripId: f1616486-f32c-455d-b3e9-1e88640f4f8b, openingTripThread: false, tripThreadError: null, selectedId: ee157400-7c2f-4577-a673-f00738b279e6, resolvedOrgId: aad4d03c-a05a-4d66-9fd2-78d87275186b}",
+    "[1786116472716] [DIAG 15:27:52.715] RENDER BRANCH -> Thread (trip route) [instance=1] {selectedId: ee157400-7c2f-4577-a673-f00738b279e6, resolvedOrgId: aad4d03c-a05a-4d66-9fd2-78d87275186b}",
+    "[1786116472734] [DIAG 2026-08-07T15:27:52.733Z] messages query STATUS {cid: ee157400-7c2f-4577-a673-f00738b279e6, status: pending, fetchStatus: fetching, isPending: true, isFetching: true}",
+    "[1786116472734] [DIAG 2026-08-07T15:27:52.733Z] realtime subscription CREATE {cid: ee157400-7c2f-4577-a673-f00738b279e6, orgId: aad4d03c-a05a-4d66-9fd2-78d87275186b, uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5}",
+    "[1786116472735] [DIAG 15:27:52.734] selectedId CHANGED [instance=1] {selectedId: ee157400-7c2f-4577-a673-f00738b279e6}",
+    "[1786116472736] [DIAG 15:27:52.734] trip-resolution effect RAN [instance=1] {normalizedTripId: f1616486-f32c-455d-b3e9-1e88640f4f8b, isLoading: false, selectedId: ee157400-7c2f-4577-a673-f00738b279e6, conversationsLen: 2}",
+    "[1786116472736] [DIAG 15:27:52.735] branch: cached conversation found -> setSelectedId [instance=1] {convId: ee157400-7c2f-4577-a673-f00738b279e6}",
+    "[1786116472747] [DIAG 15:27:52.736] DriverChatScreen render [instance=1] ",
+    "[1786116472747] [DIAG 15:27:52.736] RENDER BRANCH decision [instance=1] {normalizedTripId: f1616486-f32c-455d-b3e9-1e88640f4f8b, openingTripThread: false, tripThreadError: null, selectedId: ee157400-7c2f-4577-a673-f00738b279e6, resolvedOrgId: aad4d03c-a05a-4d66-9fd2-78d87275186b}",
+    "[1786116472747] [DIAG 15:27:52.736] RENDER BRANCH -> Thread (trip route) [instance=1] {selectedId: ee157400-7c2f-4577-a673-f00738b279e6, resolvedOrgId: aad4d03c-a05a-4d66-9fd2-78d87275186b}",
+    "[1786116472859] [DIAG 2026-08-07T15:27:52.857Z] messages query STATUS {cid: ee157400-7c2f-4577-a673-f00738b279e6, status: success, fetchStatus: idle, isPending: false, isFetching: false}",
+    "[1786116472990] [DIAG 2026-08-07T15:27:52.988Z] messages query STATUS {cid: ee157400-7c2f-4577-a673-f00738b279e6, status: success, fetchStatus: fetching, isPending: false, isFetching: true}",
+    "[1786116473112] [DIAG 2026-08-07T15:27:53.110Z] messages query STATUS {cid: ee157400-7c2f-4577-a673-f00738b279e6, status: success, fetchStatus: idle, isPending: false, isFetching: false}"
+  ],
+  "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByLabel('Trip chat', { exact: true }).first()\n    - locator resolved to <div tabindex=\"0\" aria-label=\"Trip chat\" class=\"css-view-g5y9jx r-transitionProperty-1i6wzkk r-userSelect-lrvibr r-cursor-1loqt21 r-touchAction-1otgn73 r-alignItems-1awozwy r-justifyContent-1777fci r-minHeight-2yi16 r-minWidth-1qi8awa r-borderRadius-6ncur5 r-borderWidth-rs99b7 r-height-1r8g8re r-width-1acpoxo\">…</div>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"css-view-g5y9jx r-alignItems-1awozwy r-paddingInline-3pj75a\">…</div> from <div>…</div> subtree intercepts pointer events\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"css-view-g5y9jx r-alignItems-1awozwy r-paddingInline-3pj75a\">…</div> from <div>…</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 100ms\n    53 × waiting for element to be visible, enabled and stable\n       - element is visible, enabled and stable\n       - scrolling into view if needed\n       - done scrolling\n       - <div class=\"css-view-g5y9jx r-alignItems-1awozwy r-paddingInline-3pj75a\">…</div> from <div>…</div> subtree intercepts pointer events\n     - retrying click action\n       - waiting 500ms\n"
+}

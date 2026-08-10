@@ -22,11 +22,12 @@ import {
   tripEarningsForDriver,
 } from '@/features/drivers/utils/driverUtils.util';
 import { buildCompensationSalaryLines, buildDriverInviteSalaryLines } from '@/features/drivers/utils/driverInviteOffer.util';
-import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
+import { resolveDriverOrgAvatarUri } from '@/features/drivers/utils/resolveDriverOrgAvatar.util';
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
 } from '@/features/driver/utils/driverTripSequence.util';
+import { useOrgBrandingByIds } from '@/lib/hooks/useOrgBrandingByIds';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/features/drivers/services/drivers.service';
 import * as salaryRequestsService from '@/features/drivers/services/salaryRequests.service';
@@ -268,6 +269,7 @@ export default function DriverPassbookDetailScreen() {
   const params = useLocalSearchParams<{ orgId: string; orgName?: string; from?: string }>();
   const orgId = typeof params.orgId === 'string' ? params.orgId : params.orgId?.[0] ?? '';
   const orgName = (typeof params.orgName === 'string' ? params.orgName : params.orgName?.[0]) ?? 'Fleet';
+  const orgBrandingById = useOrgBrandingByIds([orgId]);
   const from = typeof params.from === 'string' ? params.from : params.from?.[0] ?? 'dashboard';
 
   const handleBack = useCallback(() => {
@@ -376,6 +378,32 @@ export default function DriverPassbookDetailScreen() {
   const [expandedCashTripId, setExpandedCashTripId] = useState<string | null>(null);
   const [whatsAppReminderMessage, setWhatsAppReminderMessage] = useState<string | null>(null);
   const [markPaidLoadingTripId, setMarkPaidLoadingTripId] = useState<string | null>(null);
+
+  const inviteBranding = useMemo(() => {
+    const inv = invites.find(
+      (i) => String(i.from_organization_id ?? '').trim() === String(orgId).trim(),
+    );
+    return inv
+      ? {
+          logoUrl: inv.from_org_logo_url,
+          avatarSeed: inv.from_org_avatar_seed,
+          avatarUrl: inv.from_org_avatar_url,
+        }
+      : null;
+  }, [invites, orgId]);
+  const fleetOrgAvatarUri = useMemo(
+    () =>
+      resolveDriverOrgAvatarUri({
+        orgId,
+        orgName,
+        branding: orgBrandingById[orgId],
+        logoUrl: inviteBranding?.logoUrl,
+        avatarSeed: inviteBranding?.avatarSeed,
+        avatarUrl: inviteBranding?.avatarUrl,
+      }),
+    [orgId, orgName, orgBrandingById, inviteBranding],
+  );
+
   const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{
     trip: tripsService.TripRow;
     amount: number;
@@ -1008,7 +1036,7 @@ export default function DriverPassbookDetailScreen() {
             ]}
           >
             <Image
-              source={{ uri: getFleetAvatarUriForOrg(orgId, orgName) }}
+              source={{ uri: fleetOrgAvatarUri }}
               style={styles.fleetHeroIconImage}
               resizeMode="cover"
             />
@@ -1184,7 +1212,7 @@ export default function DriverPassbookDetailScreen() {
                       const hasFleetPending = !!fleetPendingLedger && item.status !== 'Settled';
                       const tripRef = item.id;
                       const providerShort = item.provider.split("'")[0];
-                      const fleetAvatarUri = getFleetAvatarUriForOrg(orgId, providerShort);
+                      const fleetAvatarUri = fleetOrgAvatarUri;
                       const from = item.from;
                       const to = item.to;
                       const pendingMode = derivePaymentMode(fleetPendingLedger?.description) ?? 'BANK TRANSFER';
@@ -1371,7 +1399,7 @@ export default function DriverPassbookDetailScreen() {
                       const isLastTrip = idx === trips.length - 1;
                       const txnExpanded = expandedCashTripId === `cash-${trip.id}`;
                       const fleetName = orgName;
-                      const fleetAvatarUri = getFleetAvatarUriForOrg(orgId, fleetName);
+                      const fleetAvatarUri = fleetOrgAvatarUri;
                       const ledger = latestCreditLedgerByTripId[trip.id];
                       const paymentMode = derivePaymentMode(ledger?.description) ?? '—';
                       const utr = extractUtr(ledger?.description) ?? '—';

@@ -2,7 +2,7 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { useAuth } from "@/contexts/AuthContext";
 import { FuelEntryScreen } from "@/features/trips/operations/fuel/FuelEntryScreen";
 import { driverExpenseEntryHref } from "@/features/trips/operations/shared/driverExpenseCategoryNav.util";
-import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
+import { getAccessibleTripById, type TripRow } from "@/features/trips/services/trips.service";
 import { type Href, Redirect, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
@@ -26,7 +26,7 @@ function TripFuelScreenRoute({
 
   useEffect(() => {
     let mounted = true;
-    void getTripById(tripId).then((res) => {
+    void getAccessibleTripById(tripId).then((res) => {
       if (!mounted) return;
       setTrip(res.trip ?? null);
       setError(res.error ? res.error.message : res.trip ? null : "Trip not found.");

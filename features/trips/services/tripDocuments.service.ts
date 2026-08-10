@@ -103,6 +103,10 @@ const SIGNED_URL_EXPIRY_SEC = 3600;
  * Get a URL to view a trip document (POD). Uses a signed URL so it works for private buckets.
  * Use for "View" in the app.
  */
+/**
+ * Get a URL to view a trip document (POD). Uses a signed URL so it works for private buckets.
+ * Use for "View" in the app.
+ */
 export async function getDocumentViewUrl(storagePath: string): Promise<string> {
   const { data, error } = await supabase()
     .storage
@@ -113,6 +117,31 @@ export async function getDocumentViewUrl(storagePath: string): Promise<string> {
     return publicData.publicUrl;
   }
   return data.signedUrl;
+}
+
+/**
+ * Strict preview URL — returns null when the storage object is missing/deleted.
+ * Prefer this for galleries so deleted files do not become empty pages.
+ */
+export async function tryGetDocumentViewUrl(
+  storagePath: string,
+): Promise<string | null> {
+  const { data, error } = await supabase()
+    .storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC);
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
+}
+
+/** True for real storage objects; false for folder markers / placeholders after delete. */
+export function isUsableStorageListObject(name: string | undefined | null): boolean {
+  if (!name) return false;
+  const n = name.trim();
+  if (!n || n.startsWith('.')) return false;
+  if (n === '.emptyFolderPlaceholder') return false;
+  // Real files have an extension; folder markers never do, but some placeholders do.
+  return /\.[A-Za-z0-9]+$/.test(n);
 }
 
 /**
@@ -175,7 +204,7 @@ export async function getDocumentsByTripId(
     'maintenance_invoice_photo',
   ];
 
-  const topLevelFiles = listData.filter((f) => f.name && /\./.test(f.name));
+  const topLevelFiles = listData.filter((f) => isUsableStorageListObject(f.name));
   const subFolderEntries = listData.filter(
     (f) => f.name && !f.name.includes('.') && KNOWN_SUBFOLDER_TYPES.includes(f.name as TripDocumentType),
   );
@@ -187,7 +216,10 @@ export async function getDocumentsByTripId(
         .storage
         .from(BUCKET)
         .list(`${tripId}/${entry.name}`, { limit: 50, sortBy: { column: "updated_at", order: "desc" } });
-      return { type: entry.name as TripDocumentType, files: sub?.filter((f) => f.name && /\./.test(f.name)) ?? [] };
+      return {
+        type: entry.name as TripDocumentType,
+        files: (sub ?? []).filter((f) => isUsableStorageListObject(f.name)),
+      };
     }),
   );
 

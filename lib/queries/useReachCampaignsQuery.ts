@@ -19,6 +19,7 @@ import {
   getReachReferralInbox,
   decideReachReferral,
   recommendReachCampaign,
+  submitDriverDirectBid,
   type RecommendReachCampaignInput,
 } from '@/features/reach/services/driverReferrals.service';
 import { createSalaryRequest } from '@/features/drivers/services/salaryRequests.service';
@@ -273,6 +274,17 @@ export function useRecommendReachCampaignMutation() {
         queryKey: queryKeys.reach.driverReferralsForFleetOrg(variables.fleetOrgId),
       });
     },
+  });
+}
+
+/** Independent driver's direct bid on a boosted story — no organization
+ * required. Caller invalidates queryKeys.reach.driverStories(userId) itself
+ * (same posture as the recommend flow in DriverStoriesScreen) since the
+ * userId isn't part of this mutation's input. */
+export function useSubmitDriverDirectBidMutation() {
+  return useMutation({
+    mutationFn: (input: { postId: string; amount: number; note?: string }) =>
+      submitDriverDirectBid(input.postId, input.amount, input.note),
   });
 }
 

@@ -1,9 +1,11 @@
 /**
  * Leaflet-shaped map for Expo Go using react-native-maps (MapLibre native is unavailable).
+ * When tiles grey out on device, fall back to WebView OSM (see LeafletMap.expoWebView).
  */
 import Theme from '@/constants/Theme';
 import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker';
 import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomControls';
+import { isExpoGo } from '@/lib/expoGoMaps';
 import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
 import { withAlpha } from '@/lib/color';
 import React, { useCallback, useImperativeHandle, useMemo, useRef } from 'react';
@@ -11,6 +13,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
+import {
+  ExpoGoWebLeafletMap,
+  shouldUseExpoGoWebMap,
+} from './LeafletMap.expoWebView';
 import type { LeafletLatLng, LeafletMapProps, LeafletMapRef, LeafletPolylineLayer } from './LeafletMap.types';
 
 /** Route outline (glow) opacity — was the "40" in the old `${color}40` hex-alpha-suffix concatenation (0x40/255 ≈ 0.25). Same constant as LeafletMap.web.tsx. */
@@ -58,6 +64,18 @@ function MarkerContent({
 }) {
   const role = tripMapMarkerRoleFromId(markerId);
   if (role === 'driver' || role === 'truck' || role === 'live') {
+    // Expo Go: custom Image markers frequently grey the entire MapView after
+    // heavy asset pressure. Use a light pin so tiles stay visible.
+    if (isExpoGo()) {
+      return (
+        <View
+          style={[
+            styles.expoGoYouDot,
+            { borderColor: isOnline ? Theme.darkGreen : Theme.teslaRed },
+          ]}
+        />
+      );
+    }
     return (
       <DriverMapAvatarMarker
         avatarUri={avatarUri}
@@ -218,6 +236,9 @@ export const LeafletMapRnMaps = React.forwardRef<
             latitudeDelta: initLatD,
             longitudeDelta: initLngD,
           }}
+          // Expo Go iOS: mutedStandard / custom styles often render grey tiles.
+          mapType="standard"
+          userInterfaceStyle="light"
           rotateEnabled={false}
           pitchEnabled={false}
           scrollEnabled={!interactionLocked}
@@ -315,6 +336,14 @@ const styles = withWebSafeShadows(
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
+  expoGoYouDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Theme.driverEmerald,
+    borderWidth: 3,
+    borderColor: Theme.darkGreen,
+  },
   pinMarkerWrap: {
     alignItems: 'center',
     minWidth: 72,
@@ -398,3 +427,14 @@ const styles = withWebSafeShadows(
 }),
 );
 
+
+
+/** Expo Go: prefer WebView OSM tiles (rn MapView often greys out on device). */
+export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
+  function LeafletMapExpoAware(props, ref) {
+    if (shouldUseExpoGoWebMap()) {
+      return <ExpoGoWebLeafletMap ref={ref} {...props} />;
+    }
+    return <LeafletMapRnMaps ref={ref} {...props} />;
+  },
+);

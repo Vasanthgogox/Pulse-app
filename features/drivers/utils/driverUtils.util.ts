@@ -285,6 +285,48 @@ export function tripEarningsForDriver(
   return tripEarningsDetailForDriver(trip, payoutTerms, driverOrgIds).amount;
 }
 
+export interface DriverTripPayoutOffer extends DriverTripPayoutTerms {
+  /** Monthly salary — tripEarningsDetailForDriver has no concept of this; checked separately. */
+  payableAmount?: number | null;
+}
+
+export interface DriverTripPayoutResolution {
+  /**
+   * True when a real per-trip commission basis (stored trip_commission, agreed
+   * per-km, or agreed commission %) or a monthly salary is on record. False for
+   * the legacy 10% guess, or when nothing is configured at all — a `drivers` row
+   * existing is never sufficient on its own.
+   */
+  hasAgreedPayoutTerms: boolean;
+  commissionDetail: DriverTripEarnings;
+  monthlyPayableAmount: number;
+}
+
+/**
+ * Whether a trip's driver-facing earnings figure is backed by something actually
+ * agreed, as opposed to `tripEarningsDetailForDriver`'s legacy 10%-of-price guess.
+ * Callers that display a hero "your earnings" number should gate on
+ * `hasAgreedPayoutTerms`, not on the amount being non-zero — the guess is also
+ * non-zero whenever the trip has a price, which is exactly what makes it unsafe
+ * to show as payable.
+ */
+export function resolveDriverTripPayoutTerms(
+  trip: TripWithSupplier | null | undefined,
+  offer?: DriverTripPayoutOffer | null,
+): DriverTripPayoutResolution {
+  const commissionDetail = tripEarningsDetailForDriver(trip, offer);
+  const hasRealCommissionBasis =
+    commissionDetail.basis === "trip_commission" ||
+    commissionDetail.basis === "per_km" ||
+    commissionDetail.basis === "commission_percent";
+  const monthlyPayableAmount = Number(offer?.payableAmount ?? 0) || 0;
+  return {
+    hasAgreedPayoutTerms: hasRealCommissionBasis || monthlyPayableAmount > 0,
+    commissionDetail,
+    monthlyPayableAmount,
+  };
+}
+
 export function isAssignedNotStarted(status: string) {
   const s = (status || "").toLowerCase();
   return s === "assigned" || s === "pending" || s === "scheduled";

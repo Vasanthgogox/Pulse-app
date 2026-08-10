@@ -18,8 +18,9 @@ import {
   type ViewStyle,
 } from "react-native";
 
-const TESLA_BLACK = "#1A1A1A";
-const FOOTER_BORDER = "#e8ecf0";
+const FOOTER_BORDER = "rgba(15, 23, 42, 0.06)";
+/** Expand 32px controls to a ~44pt touch target without growing the row. */
+const TOOLBAR_HIT_SLOP = { top: 6, bottom: 6, left: 6, right: 6 } as const;
 
 export function HubGridCardFooter({
   dense,
@@ -53,16 +54,18 @@ export function HubGridToolbarRow({
 }) {
   return (
     <View style={styles.denseRow}>
-      <View
-        style={[
-          styles.toolbarStatusSlot,
-          statusSlot === "wide" && styles.toolbarStatusSlotWide,
-          statusSlot === "amount" && styles.toolbarStatusSlotAmount,
-        ]}
-      >
-        {status}
+      <View style={styles.leadingCluster}>
+        <View
+          style={[
+            styles.toolbarStatusSlot,
+            statusSlot === "wide" && styles.toolbarStatusSlotWide,
+            statusSlot === "amount" && styles.toolbarStatusSlotAmount,
+          ]}
+        >
+          {status}
+        </View>
+        {share ?? <View style={styles.sharePlaceholder} />}
       </View>
-      {share ?? <View style={styles.sharePlaceholder} />}
       <View style={styles.ctaGroup}>
         <View style={styles.primarySlot}>{primary}</View>
         {trailing ? <View style={styles.trailingSlot}>{trailing}</View> : null}
@@ -86,6 +89,7 @@ export function HubGridShareButton({
       onPress={onPress}
       activeOpacity={0.88}
       accessibilityLabel={label}
+      hitSlop={TOOLBAR_HIT_SLOP}
     >
       {icon}
     </TouchableOpacity>
@@ -107,6 +111,7 @@ export function HubGridPrimaryButton({
       onPress={onPress}
       activeOpacity={0.9}
       disabled={disabled}
+      hitSlop={TOOLBAR_HIT_SLOP}
     >
       <Text
         style={styles.primaryBtnText}
@@ -224,11 +229,13 @@ const styles = StyleSheet.create({
   footer: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: FOOTER_BORDER,
+    backgroundColor: Theme.surface,
     paddingTop: 8,
-    paddingBottom: 10,
+    paddingBottom: 8,
     paddingHorizontal: 10,
     width: "100%",
     minWidth: 0,
+    justifyContent: "center",
   },
   footerDense: {
     paddingTop: 7,
@@ -237,14 +244,26 @@ const styles = StyleSheet.create({
     minHeight: HUB_GRID_TOOLBAR_ROW_HEIGHT + 16,
     justifyContent: "center",
     backgroundColor: Theme.surface,
-    borderTopColor: "rgba(15, 23, 42, 0.06)",
+    borderTopColor: FOOTER_BORDER,
   },
   denseRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "space-between",
+    gap: 8,
     width: "100%",
     minWidth: 0,
+    height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
+    ...Platform.select({
+      web: { columnGap: 8, rowGap: 0 } as ViewStyle,
+      default: {},
+    }),
+  },
+  leadingCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+    gap: 6,
     height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     ...Platform.select({
       web: { columnGap: 6 } as ViewStyle,
@@ -255,6 +274,7 @@ const styles = StyleSheet.create({
     width: HUB_GRID_TOOLBAR_STATUS_SLOT_W,
     flexShrink: 0,
     alignItems: "flex-start",
+    justifyContent: "center",
   },
   toolbarStatusSlotWide: {
     width: 64,
@@ -269,6 +289,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     overflow: "hidden",
     gap: 6,
+    height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     ...Platform.select({
       web: { columnGap: 6 } as ViewStyle,
       default: {},
@@ -278,10 +299,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     overflow: "hidden",
+    height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
+    justifyContent: "center",
   },
   trailingSlot: {
     flexShrink: 0,
     marginLeft: 2,
+    justifyContent: "center",
   },
   sharePlaceholder: {
     width: HUB_GRID_TOOLBAR_ROW_HEIGHT,
@@ -295,38 +319,41 @@ const styles = StyleSheet.create({
   primaryToolbarPlaceholder: {
     width: "100%",
     minHeight: HUB_GRID_TOOLBAR_ROW_HEIGHT,
+    height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     borderRadius: 8,
   },
   shareBtn: {
     width: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   primaryBtn: {
-    backgroundColor: TESLA_BLACK,
+    backgroundColor: Theme.accentBrown,
     flex: 1,
     minWidth: 0,
     maxWidth: "100%",
     minHeight: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
+    maxHeight: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     paddingHorizontal: 8,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    alignSelf: "stretch",
+    alignSelf: "center",
   },
   primaryBtnText: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.buttonDarkText,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
     textTransform: "uppercase",
-    letterSpacing: 0.2,
+    letterSpacing: 0.25,
+    includeFontPadding: false,
   },
   statusChip: {
     flexDirection: "row",

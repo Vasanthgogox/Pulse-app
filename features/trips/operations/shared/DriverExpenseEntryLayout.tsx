@@ -388,7 +388,6 @@ export function DriverExpenseSection({
     >
       {title ? (
         <View style={ops.sectionHeader}>
-          <View style={[ops.sectionAccent, { backgroundColor: colors.emeraldDark }]} />
           <Text style={[ops.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
         </View>
       ) : null}

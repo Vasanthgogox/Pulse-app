@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import { createStyles, text, view } from "@/lib/styles/createStyles";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
   IndentHubMedalGlyph,
@@ -79,6 +79,12 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
   );
 
   const showFilters = quotes.length > 1;
+  const savingsLabel =
+    vm.highestPendingAmount != null &&
+    vm.lowestPendingAmount != null &&
+    vm.highestPendingAmount > vm.lowestPendingAmount
+      ? `Saves ${formatINR(vm.highestPendingAmount - vm.lowestPendingAmount)} vs highest`
+      : null;
 
   return (
     <View style={styles.wrap}>
@@ -106,6 +112,7 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
                     styles.filterPillText,
                     active && styles.filterPillTextActive,
                   ]}
+                  numberOfLines={1}
                 >
                   {label}
                 </Text>
@@ -135,10 +142,12 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
           accessibilityLabel={`Select recommended bid from ${recommendedQuote.bidder_organization_name ?? "supplier"}`}
         >
           <View style={styles.recoHeader}>
-            <IndentHubGlyphSlot size={14}>
-              <IndentHubMedalGlyph size={14} />
-            </IndentHubGlyphSlot>
-            <Text style={styles.recoKicker}>Recommended</Text>
+            <View style={styles.recoKickerRow}>
+              <IndentHubGlyphSlot size={14}>
+                <IndentHubMedalGlyph size={14} />
+              </IndentHubGlyphSlot>
+              <Text style={styles.recoKicker}>Recommended</Text>
+            </View>
             <Text style={styles.recoMeta}>
               {vm.pendingCount} live bid{vm.pendingCount === 1 ? "" : "s"}
             </Text>
@@ -148,25 +157,27 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
               name={recommendedQuote.bidder_organization_name ?? "Supplier"}
               initialsColorSeed={recommendedQuote.bidder_organization_id}
               entityType="supplier"
-              size={36}
+              size={34}
               showIntegrationBadge={false}
             />
             <View style={styles.recoBody}>
               <Text style={styles.recoName} numberOfLines={1}>
-                {recommendedQuote.bidder_organization_name ?? "—"}
+                {(
+                  recommendedQuote.bidder_organization_name ?? "—"
+                ).toUpperCase()}
               </Text>
-              <Text style={styles.recoHint} numberOfLines={1}>
-                Lowest rate
-                {vm.highestPendingAmount != null &&
-                vm.lowestPendingAmount != null &&
-                vm.highestPendingAmount > vm.lowestPendingAmount
-                  ? ` · saves ${formatINR(vm.highestPendingAmount - vm.lowestPendingAmount)} vs highest`
-                  : ""}
+              <Text style={styles.recoHint} numberOfLines={2}>
+                Lowest rate{savingsLabel ? ` · ${savingsLabel}` : ""}
               </Text>
             </View>
-            <Text style={styles.recoAmount}>
-              {formatINR(Number(recommendedQuote.amount ?? 0))}
-            </Text>
+            <View style={styles.recoAmountCol}>
+              <Text style={styles.recoAmount}>
+                {formatINR(Number(recommendedQuote.amount ?? 0))}
+              </Text>
+              {selectedQuoteId === recommendedQuote.id ? (
+                <Text style={styles.recoSelectedLabel}>Selected</Text>
+              ) : null}
+            </View>
           </View>
         </Pressable>
       ) : vm.pendingCount >= 2 && filterTag === "ALL" ? (
@@ -239,25 +250,35 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
 const stylesDef = {
   wrap: view({
     marginBottom: 4,
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
+    gap: 10,
   }),
   filterRow: view({
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 10,
+    alignItems: "stretch",
+    gap: 4,
+    marginBottom: 0,
     padding: 4,
     borderRadius: 12,
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
   }),
   filterPill: view({
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
   }),
   filterPillActive: view({
     backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -268,6 +289,7 @@ const stylesDef = {
     fontSize: 11,
     fontWeight: "600",
     color: Theme.textMuted,
+    textAlign: "center",
   }),
   filterPillTextActive: text({
     color: Theme.textPrimaryDark,
@@ -279,11 +301,10 @@ const stylesDef = {
     gap: 8,
     paddingVertical: 28,
     paddingHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
-    marginBottom: 8,
   }),
   emptyFilterText: text({
     ...indentReviewHubText.bodyMuted,
@@ -291,59 +312,94 @@ const stylesDef = {
   }),
   compareHint: text({
     ...indentReviewHubText.bodyMuted,
-    marginBottom: 8,
     textAlign: "left",
+    paddingHorizontal: 2,
   }),
   recoStrip: view({
-    marginBottom: 10,
-    padding: 10,
-    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(99,102,241,0.22)",
-    backgroundColor: "rgba(99,102,241,0.06)",
-    gap: 8,
+    borderColor: Theme.positiveMutedDarkBorder,
+    backgroundColor: Theme.positiveMuted,
+    gap: 10,
+    width: "100%",
+    alignSelf: "stretch",
   }),
   recoStripPressed: view({
     opacity: 0.92,
   }),
   recoStripSelected: view({
     borderColor: Theme.positive,
-    backgroundColor: "rgba(21,128,61,0.06)",
+    borderWidth: 1.5,
+    backgroundColor: Theme.positiveMuted,
   }),
   recoHeader: view({
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  }),
+  recoKickerRow: view({
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
   }),
   recoKicker: text({
     ...indentReviewHubText.sectionTitle,
-    color: Theme.primary,
-    flex: 1,
+    color: Theme.positive,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    fontSize: 10,
+    fontWeight: "800",
   }),
   recoMeta: text({
     ...indentReviewHubText.bodyMuted,
     fontSize: 10,
+    flexShrink: 0,
   }),
   recoRow: view({
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   }),
   recoBody: view({
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 3,
+    paddingRight: 4,
   }),
   recoName: text({
     ...indentReviewHubText.partyTitle,
+    fontSize: 13,
+    letterSpacing: 0.2,
   }),
   recoHint: text({
     ...indentReviewHubText.bodyMuted,
     fontSize: 11,
+    lineHeight: 15,
+  }),
+  recoAmountCol: view({
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 3,
+    flexShrink: 0,
   }),
   recoAmount: text({
-    ...indentReviewHubText.freightGridValueLight,
+    fontSize: 15,
+    fontWeight: "900",
     color: Theme.textPrimaryDark,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: -0.2,
+  }),
+  recoSelectedLabel: text({
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: Theme.positive,
   }),
 };
 

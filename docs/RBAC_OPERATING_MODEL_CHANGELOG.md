@@ -24,6 +24,8 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | _(pending)_ | Part 3: per-member access page — Edit opens `/(modals)/member-permissions` (two-column: identity left, presets/domains right); replaces `MemberEditModal`; remove + transfer + role/domains save live on that page |
 | _(pending)_ | RBAC enhancements: zero-domain fallback → `restricted`, custom presets stored in `organizations.settings`, bulk role assignment, and removed hardcoded driver RBAC limits |
 | _(pending)_ | Fix: Team/Workspace surfaces were wrongly gated on `team_manage` (never emitted by org operating-model caps) — now available for any business org so owners can grant invite/audit/settings/KYC/notifications |
+| _(pending)_ | Fix: Driver Control screen treated an Aggregate-mode org that only ever assigned an open trip (via a `tracking_only` phone-assignment stub, no real fleet employment) as the driver's employer — fabricating an "Estimated earnings" figure and offering "Attribute to employer" with no salary/commission ever configured. Now excludes `tracking_only` rows from employer resolution and from the earnings-estimate gate, matching the pattern already used everywhere else `tracking_only` is checked (`DriverWalletScreen`, `drivers.service.ts`, `aggregateDrivers.ts`) |
+| _(pending)_ | Driver Stories: Pulse story preview (`DriverPulseStoryViewer` + `StoryBroadcastPreview`); `/story-detail` nav experience `public_content` so drivers can open market stories; bid-to-shipper footer banner |
 
 ---
 
@@ -132,6 +134,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `app/(tabs)/finance.tsx` | Wrapped in `<MemberDomainGate kind="finance">` |
 | `app/(tabs)/trips.tsx` | Wrapped in `<MemberDomainGate kind="tripops">` |
 | `app/(tabs)/network/index.tsx` | Wrapped in `<MemberDomainGate kind="sales">` |
+| `features/drivers/screens/DriverControlScreen.tsx` | `employerOrgIdSet` excludes `tracking_only` driver rows (open-trip phone stubs are not real employment); `tripIsAggregate` also true when `tripDriver.tracking_only === true`, not just when `trip.supplier_id` is set — fixes fabricated "Estimated earnings" / "Attribute to employer" for Aggregate-mode direct open-trip assignments |
 
 ---
 

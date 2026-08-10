@@ -4,6 +4,9 @@ import { Platform, StyleSheet } from "react-native";
 export const aws = StyleSheet.create({
   root: {
     flex: 1,
+    width: "100%",
+    maxWidth: "100%",
+    overflow: "hidden",
     backgroundColor: Theme.assignmentPageBg,
   },
   header: {
@@ -55,15 +58,22 @@ export const aws = StyleSheet.create({
   tripTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
+    gap: 8,
+    flexWrap: "nowrap",
+    minWidth: 0,
   },
   tripCode: {
     fontSize: 16,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.3,
+    flexShrink: 1,
+    minWidth: 0,
     fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
+  },
+  tripCodePhone: {
+    fontSize: 14,
+    letterSpacing: -0.2,
   },
   statusPill: {
     paddingHorizontal: 10,
@@ -72,6 +82,11 @@ export const aws = StyleSheet.create({
     backgroundColor: Theme.networkHubListCardConnectedBg,
     borderWidth: 1,
     borderColor: Theme.networkHubListCardConnectedBorder,
+    flexShrink: 0,
+  },
+  statusPillPhone: {
+    paddingHorizontal: 8,
+    maxWidth: 120,
   },
   statusPillText: {
     fontSize: 10,
@@ -122,13 +137,14 @@ export const aws = StyleSheet.create({
     textTransform: "uppercase",
   },
   main: {
-    flex: 1,
+    flexGrow: 1,
     maxWidth: 1280,
     width: "100%",
     alignSelf: "center",
     paddingHorizontal: 16,
     paddingVertical: 20,
     gap: 20,
+    overflow: "hidden",
   },
   hero: {
     backgroundColor: Theme.assignmentHeroBg,
@@ -510,7 +526,12 @@ export const aws = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     flex: 1,
-    minWidth: 160,
+    minWidth: 0,
+  },
+  panelHeaderLeftPhone: {
+    minWidth: 0,
+    flexGrow: 0,
+    width: "100%",
   },
   panelIconDriver: {
     width: 40,
@@ -586,6 +607,15 @@ export const aws = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: Theme.textSecondary,
+    flexShrink: 1,
+  },
+  actionBtnTextPhone: {
+    fontSize: 12,
+    textAlign: "center",
+  },
+  actionBtnPhone: {
+    paddingHorizontal: 6,
+    gap: 0,
   },
   actionBtnTextActive: {
     color: Theme.textPrimaryDark,
@@ -826,20 +856,21 @@ export const aws = StyleSheet.create({
   },
   actionToggleMobile: {
     alignSelf: "stretch",
+    width: "100%",
     justifyContent: "space-between",
   },
   actionBtnMobile: {
     flex: 1,
     justifyContent: "center",
     minHeight: 40,
+    paddingHorizontal: 8,
   },
   snapshotMobile: {
-    // Keep avatar + badge on one row for enterprise density
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     padding: 12,
-    minHeight: 68,
+    minHeight: 64,
   },
   panelBodyMobile: {
     padding: 14,
@@ -847,6 +878,7 @@ export const aws = StyleSheet.create({
   },
   dualGridMobile: {
     gap: 12,
+    width: "100%",
     ...Platform.select({
       web: {
         display: "flex" as unknown as undefined,
@@ -861,6 +893,8 @@ export const aws = StyleSheet.create({
   panelMobile: {
     minWidth: 0,
     width: "100%",
+    maxWidth: "100%",
+    flexBasis: "auto",
     borderRadius: 16,
     ...Platform.select({
       web: { height: "auto" },
@@ -871,14 +905,82 @@ export const aws = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     gap: 12,
+    maxWidth: "100%",
   },
   heroMobile: {
     padding: 14,
     borderRadius: 16,
+    overflow: "hidden",
   },
   routeCityMobile: {
-    fontSize: 17,
-    letterSpacing: 0.2,
+    fontSize: 15,
+    letterSpacing: 0.15,
+  },
+  routeRowPhone: {
+    gap: 6,
+    width: "100%",
+  },
+  routeEndpointPhone: {
+    maxWidth: "38%",
+    flex: 1,
+    minWidth: 0,
+  },
+  routeCenterPhone: {
+    width: 56,
+    flexShrink: 0,
+    paddingHorizontal: 0,
+  },
+  routeLinePhone: {
+    height: 24,
+  },
+  routeDotPhone: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+  },
+  snapshotAvatarPhone: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  snapshotAvatarTextPhone: {
+    fontSize: 15,
+  },
+  snapshotBadgeWrapPhone: {
+    alignSelf: "flex-start",
+    marginTop: 0,
+    flexShrink: 0,
+  },
+  snapshotPhoneStack: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 10,
+  },
+  fieldsAreaPhone: {
+    minHeight: 0,
+    gap: 10,
+    width: "100%",
+    overflow: "hidden",
+  },
+  confirmBtnTextPhone: {
+    fontSize: 11,
+    textAlign: "center",
+    flexShrink: 1,
+  },
+  confirmHintPhone: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  reasonChipsPhone: {
+    gap: 6,
+  },
+  reasonChipPhone: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    minWidth: 0,
+    maxWidth: "48%",
+    alignItems: "center",
   },
   metricsBoxMobile: {
     width: "100%",
@@ -948,6 +1050,9 @@ export const aws = StyleSheet.create({
     textTransform: "uppercase",
     flexShrink: 1,
   },
+  sectionHintRowPhone: {
+    marginBottom: 0,
+  },
   kycHint: {
     fontSize: 10,
     fontWeight: "700",
@@ -959,6 +1064,17 @@ export const aws = StyleSheet.create({
     fontWeight: "700",
     color: Theme.assignmentVehicleAccent,
     fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
+  },
+  fieldsGridPhone: {
+    flexDirection: "column",
+    flexWrap: "nowrap",
+    gap: 12,
+  },
+  fieldPhone: {
+    width: "100%",
+    flexBasis: "auto",
+    flexGrow: 0,
+    minWidth: 0,
   },
   auditCard: {
     backgroundColor: Theme.cardWhite,
@@ -1046,6 +1162,8 @@ export const aws = StyleSheet.create({
     color: Theme.cardWhite,
     letterSpacing: 0.6,
     textTransform: "uppercase",
+    flexShrink: 1,
+    minWidth: 0,
   },
   placeholderTab: {
     backgroundColor: Theme.cardWhite,

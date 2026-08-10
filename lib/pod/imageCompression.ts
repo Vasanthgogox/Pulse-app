@@ -1,4 +1,8 @@
-export async function compressImage(fileOrBlob: Blob, maxWidth = 1200): Promise<Blob> {
+export async function compressImage(
+  fileOrBlob: Blob,
+  maxWidth = 1200,
+  quality = 0.6,
+): Promise<Blob> {
   if (typeof document === 'undefined') return fileOrBlob; // Skip on native
   if (!fileOrBlob.type.startsWith('image/')) {
     return fileOrBlob;
@@ -34,14 +38,13 @@ export async function compressImage(fileOrBlob: Blob, maxWidth = 1200): Promise<
         }
         
         ctx.drawImage(img, 0, 0, width, height);
-        // Using lower quality (0.6) yields massive size reductions with decent OCR readability
         canvas.toBlob(
           (blob) => {
             if (blob) resolve(blob);
             else resolve(fileOrBlob);
           },
           'image/jpeg',
-          0.6 
+          quality,
         );
       };
       img.onerror = () => resolve(fileOrBlob);

@@ -48,7 +48,8 @@ export interface AwardQuoteResult {
   open: (load: IndentRow) => void;
   close: () => void;
   selectQuote: (id: string | null) => void;
-  award: () => Promise<void>;
+  /** Optional quote id awards that pending offer immediately (card Award button). */
+  award: (quoteIdOverride?: string) => Promise<void>;
 }
 
 export function useAwardQuote({
@@ -237,8 +238,11 @@ export function useAwardQuote({
     setSelectedQuoteId(id);
   }, []);
 
-  const award = useCallback(async () => {
-    if (!orgId || !currentLoad || !selectedQuoteId) return;
+  const award = useCallback(async (quoteIdOverride?: string) => {
+    if (!orgId || !currentLoad) return;
+    const winnerId = quoteIdOverride ?? selectedQuoteId;
+    if (!winnerId) return;
+    if (quoteIdOverride) setSelectedQuoteId(quoteIdOverride);
     const load = currentLoad;
     const currentStatus = (load.status || "").toLowerCase();
     if (currentStatus === "awarded" || currentStatus === "completed") {
@@ -264,7 +268,7 @@ export function useAwardQuote({
     const pendingQuotes = awardModalQuotes.filter(
       (q) => (q.status || "").toLowerCase() === "pending",
     );
-    const winner = pendingQuotes.find((q) => q.id === selectedQuoteId);
+    const winner = pendingQuotes.find((q) => q.id === winnerId);
     if (!winner) {
       showAppAlert(
         "Invalid selection",

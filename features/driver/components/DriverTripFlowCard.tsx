@@ -11,7 +11,11 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverChat } from '@/features/chat/contexts/DriverChatContext';
-import { sendDocumentShareMessage } from '@/features/chat/services/chat.service';
+import {
+  sendDocumentShareMessage,
+  softDeleteTripChatByStoragePath,
+} from '@/features/chat/services/chat.service';
+import { invalidateChatDocumentUrlCaches } from '@/features/chat/utils/resolveChatDocumentUrl.util';
 import { useDriverReferralForTripQuery } from '@/lib/queries/useReachCampaignsQuery';
 import type { JobCardAssignerPayload } from '@/features/trips/utils/driverAssignerDisplay.util';
 import type { DriverFlowStepId as StepId } from '@/features/driver/utils/driverTripStatusNotes.util';
@@ -31,6 +35,8 @@ import { useTripCheckpointDistanceQuery } from '@/lib/queries/useTripCheckpointD
 import { useTripDriverPresenceQuery } from '@/lib/queries/useTripDriverPresenceQuery';
 import { openExternalNavigation } from '@/lib/mapsNavigation.util';
 import { MissionCardLayout } from '@/features/driver/components/MissionCardLayout';
+import { DriverPodCompletionPage } from '@/features/driver/components/DriverPodCompletionPage';
+import { missionStagePeekCopy } from '@/features/driver/utils/missionStagePeekLabel.util';
 import {
   clearLrPhase,
   hasEnteredLrPhase,
@@ -44,9 +50,6 @@ import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// expo-file-system SDK 54 moved readAsStringAsync/EncodingType to the legacy entry.
-import * as FileSystem from 'expo-file-system/legacy';
-import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -63,7 +66,20 @@ import {
     View,
 } from 'react-native';
 import { Pressable as HoldPressable } from 'react-native-gesture-handler';
-import { compressImage } from '@/lib/pod/imageCompression';
+import {
+  compressLocalImageForUpload,
+  PROOF_IMAGE_JPEG_QUALITY,
+  PROOF_IMAGE_PICKER_QUALITY,
+} from '@/lib/media/compressLocalImage.util';
+import { ChevronUp } from 'lucide-react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 /** Secondary row (Call / Chat / Camera, Navigate) and the stage CTA below it. */
 const ACTION_BTN_HEIGHT = 52;
@@ -74,10 +90,7 @@ const HOLD_DURATION_MS = 1500;
 const HOLD_PRESS_RETENTION = 100;
 const DRIVER_ACCEPTED_TRIP_ID_KEY = 'driver_accepted_trip_id';
 const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_POD_IMAGE_BYTES = 10 * 1024 * 1024;
-const IMAGE_MAX_DIMENSION = 1280;
-const CHAT_IMAGE_QUALITY = 0.72;
-const POD_IMAGE_QUALITY = 0.82;
+const MAX_POD_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const holdCompleteWebStyle = {
   touchAction: 'none' as 'none' | 'auto' | 'manipulation',
@@ -143,37 +156,74 @@ function normalizeImageFileName(fileName: string | null | undefined): string {
   return `${noExt || `img-${Date.now()}`}.jpg`;
 }
 
-async function readArrayBufferFromUri(uri: string): Promise<ArrayBuffer> {
-  if (Platform.OS === 'web') {
-    const response = await fetch(uri);
-    return response.arrayBuffer();
-  }
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as const });
-  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
-}
-
 async function optimizeImageForUpload(
   uri: string,
-  quality: number,
+  quality: number = PROOF_IMAGE_JPEG_QUALITY,
 ): Promise<{ arrayBuffer: ArrayBuffer; mimeType: string }> {
+  const compressed = await compressLocalImageForUpload(uri, { quality });
+  return {
+    arrayBuffer: compressed.arrayBuffer,
+    mimeType: compressed.mimeType,
+  };
+}
+
+function promptAttachmentImageSource(): Promise<'camera' | 'library' | null> {
   if (Platform.OS === 'web') {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const compressed = await compressImage(blob, IMAGE_MAX_DIMENSION);
+    // Nested Alert is unreliable on web; prefer camera when confirm, else library.
+    const w =
+      typeof globalThis !== 'undefined'
+        ? (globalThis as { confirm?: (msg: string) => boolean }).confirm
+        : undefined;
+    if (typeof w === 'function') {
+      const useCamera = w('Use camera for a live photo?\n\nCancel = Photo library');
+      return Promise.resolve(useCamera ? 'camera' : 'library');
+    }
+    return Promise.resolve('library');
+  }
+  return new Promise((resolve) => {
+    Alert.alert('Add photo', 'Capture with camera or choose from library', [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+      { text: 'Photo library', onPress: () => resolve('library') },
+      { text: 'Camera', onPress: () => resolve('camera') },
+    ]);
+  });
+}
+
+async function pickAttachmentImageAsset(
+  source: 'camera' | 'library',
+): Promise<{ uri: string; fileName: string | null } | null> {
+  if (source === 'camera') {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      throw new Error('Camera permission is required');
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: PROOF_IMAGE_PICKER_QUALITY,
+      exif: false,
+    });
+    if (result.canceled || !result.assets?.[0]) return null;
     return {
-      arrayBuffer: await compressed.arrayBuffer(),
-      mimeType: 'image/jpeg',
+      uri: result.assets[0].uri,
+      fileName: result.assets[0].fileName ?? null,
     };
   }
 
-  const manipulated = await ImageManipulator.manipulateAsync(
-    uri,
-    [{ resize: { width: IMAGE_MAX_DIMENSION } }],
-    { compress: quality, format: ImageManipulator.SaveFormat.JPEG },
-  );
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    throw new Error('Permission to access photos is required');
+  }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: false,
+    quality: PROOF_IMAGE_PICKER_QUALITY,
+    exif: false,
+  });
+  if (result.canceled || !result.assets?.[0]) return null;
   return {
-    arrayBuffer: await readArrayBufferFromUri(manipulated.uri),
-    mimeType: 'image/jpeg',
+    uri: result.assets[0].uri,
+    fileName: result.assets[0].fileName ?? null,
   };
 }
 
@@ -186,7 +236,7 @@ async function optimizeImageForUpload(
  * represents it, so there's no shared-engine title to defer to here.
  */
 function titleForStep(step: StepId): string {
-  if (step === 'lr') return 'Upload Lorry Receipt';
+  if (step === 'lr') return 'Attach pickup proof';
   return getStageMetadata(step).title;
 }
 
@@ -201,7 +251,7 @@ export interface DriverTripFlowCardProps {
   driverLongitude?: number | null;
   /** Reverse-geocoded place for current GPS (no raw lat/long in UI). */
   driverLocationLabel?: string | null;
-  /** Called after any server write succeeds (so dashboard can refetch). */
+  /** Called after a server write that needs a parent list refetch (status / completion). Prefer `onTripUpdated` for in-mission patches. */
   onRefresh?: () => void;
   /** Optimistic patch so parent trip list (guidance header) updates before refetch. */
   onTripUpdated?: (trip: tripsService.TripRow) => void;
@@ -311,8 +361,8 @@ export function DriverTripFlowCard({
   driverLocationLabel = null,
   onRefresh,
   onTripUpdated,
-  onToggleCollapse: _onToggleCollapse,
-  collapsed: _collapsed = false,
+  onToggleCollapse,
+  collapsed = false,
   onBackToDashboard,
   onTripCompleted,
   edgeToEdge = false,
@@ -343,6 +393,14 @@ export function DriverTripFlowCard({
   const [viewingPodError, setViewingPodError] = useState(false);
   const [podDeletingId, setPodDeletingId] = useState<string | null>(null);
   const podUploadCancelledRef = useRef(false);
+  /** Full-page POD finish flow — auto-opens when entering AT DROP. */
+  const [podPageVisible, setPodPageVisible] = useState(
+    () => deriveDriverFlowStepFromTrip(trip) === 'reached',
+  );
+  const prevStepForPodPageRef = useRef<StepId>(deriveDriverFlowStepFromTrip(trip));
+  /** Full-page LR / pickup-proof flow — auto-opens after Package collected. */
+  const [lrPageVisible, setLrPageVisible] = useState(false);
+  const prevStepForLrPageRef = useRef<StepId>(deriveDriverFlowStepFromTrip(trip));
 
   const [lrDocuments, setLrDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
   const [lrLoading, setLrLoading] = useState(false);
@@ -389,6 +447,32 @@ export function DriverTripFlowCard({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tripSyncKey gates identity
   }, [tripSyncKey]);
+
+  // Auto-open full POD page whenever the driver enters AT DROP (`reached`).
+  useEffect(() => {
+    const prev = prevStepForPodPageRef.current;
+    if (step === 'reached' && prev !== 'reached') {
+      setPodPageVisible(true);
+      if (collapsed) onToggleCollapse?.();
+    }
+    if (step !== 'reached') {
+      setPodPageVisible(false);
+    }
+    prevStepForPodPageRef.current = step;
+  }, [step, collapsed, onToggleCollapse]);
+
+  // Auto-open full LR / pickup-proof page when entering the local LR stage.
+  useEffect(() => {
+    const prev = prevStepForLrPageRef.current;
+    if (step === 'lr' && prev !== 'lr') {
+      setLrPageVisible(true);
+      if (collapsed) onToggleCollapse?.();
+    }
+    if (step !== 'lr') {
+      setLrPageVisible(false);
+    }
+    prevStepForLrPageRef.current = step;
+  }, [step, collapsed, onToggleCollapse]);
 
   // Restore the local-only "LR" sub-step across full reloads / remounts.
   // The LR phase ("Package collected" → upload Lorry Receipt) is NOT encoded in
@@ -485,44 +569,105 @@ export function DriverTripFlowCard({
     [ensureDriverTripConversation, localTrip.driver_id, localTrip.id, localTrip.organization_id, profile],
   );
 
+  const resolvePodPreviewUrl = useCallback(
+    async (doc: tripDocumentsService.TripDocumentRow): Promise<string | null> => {
+      const cached = podViewUrls[doc.id];
+      if (cached) return cached;
+      const url = await tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path);
+      if (url) {
+        setPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
+      }
+      return url;
+    },
+    [podViewUrls],
+  );
+
   const openPodPreview = useCallback(
     async (doc: tripDocumentsService.TripDocumentRow) => {
       setViewingPodError(false);
-      const cached = podViewUrls[doc.id];
-      if (cached) {
-        setViewingPodUrl(cached);
-        return;
-      }
       setViewingPodLoading(true);
-      const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
-      setPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
-      setViewingPodLoading(false);
-      setViewingPodUrl(url);
+      setViewingPodUrl(null);
+      try {
+        const url = await resolvePodPreviewUrl(doc);
+        if (url) {
+          setViewingPodUrl(url);
+        } else {
+          setViewingPodError(true);
+        }
+      } catch {
+        setViewingPodError(true);
+      } finally {
+        setViewingPodLoading(false);
+      }
     },
-    [podViewUrls],
+    [resolvePodPreviewUrl],
+  );
+
+  const resolveLrPreviewUrl = useCallback(
+    async (doc: tripDocumentsService.TripDocumentRow): Promise<string | null> => {
+      const cached = lrViewUrls[doc.id];
+      if (cached) return cached;
+      const url = await tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path);
+      if (url) {
+        setLrViewUrls((prev) => ({ ...prev, [doc.id]: url }));
+      }
+      return url;
+    },
+    [lrViewUrls],
   );
 
   const openLrPreview = useCallback(
     async (doc: tripDocumentsService.TripDocumentRow) => {
       setViewingPodError(false);
-      const cached = lrViewUrls[doc.id];
-      if (cached) {
-        setViewingPodUrl(cached);
-        return;
-      }
       setViewingPodLoading(true);
-      const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
-      setLrViewUrls((prev) => ({ ...prev, [doc.id]: url }));
-      setViewingPodLoading(false);
-      setViewingPodUrl(url);
+      setViewingPodUrl(null);
+      try {
+        const url = await resolveLrPreviewUrl(doc);
+        if (url) {
+          setViewingPodUrl(url);
+        } else {
+          setViewingPodError(true);
+        }
+      } catch {
+        setViewingPodError(true);
+      } finally {
+        setViewingPodLoading(false);
+      }
     },
-    [lrViewUrls],
+    [resolveLrPreviewUrl],
   );
 
   const cancelPodUpload = useCallback(() => {
     podUploadCancelledRef.current = true;
     setPodUploading(false);
   }, []);
+
+  const revokeSharedTripDocumentInChat = useCallback(
+    async (storagePath: string) => {
+      const tripId = String(localTrip.id ?? '').trim();
+      const path = String(storagePath ?? '').trim();
+      if (!tripId || !path) return;
+      invalidateChatDocumentUrlCaches(path);
+      const { error } = await softDeleteTripChatByStoragePath({
+        tripId,
+        storagePath: path,
+      });
+      if (error && __DEV__) {
+        console.warn('[trip-flow] softDeleteTripChatByStoragePath:', error.message);
+      }
+    },
+    [localTrip.id],
+  );
+
+  /**
+   * Status writes already call `onTripUpdated` (optimistic + confirmed).
+   * Skip full-home `onRefresh` when that patch path exists — dashboard
+   * invalidate remounts the sheet and flashes the map under POD/LR.
+   */
+  const syncAfterStatusWrite = useCallback(() => {
+    if (onTripUpdated) return;
+    onRefresh?.();
+  }, [onTripUpdated, onRefresh]);
 
   const confirmDeletePod = useCallback(
     async (doc: tripDocumentsService.TripDocumentRow) => {
@@ -543,9 +688,10 @@ export function DriverTripFlowCard({
         return next;
       });
       podViewUrlsRequestedRef.current.delete(doc.id);
-      onRefresh?.();
+      void revokeSharedTripDocumentInChat(doc.storage_path);
+      // Local list already updated — do not onRefresh (closes sheet / flashes map).
     },
-    [onRefresh],
+    [revokeSharedTripDocumentInChat],
   );
 
   const earnings = useMemo(() => {
@@ -627,11 +773,25 @@ export function DriverTripFlowCard({
     [stageTarget, localTrip],
   );
   const onNavigate = useMemo(() => {
-    if (!navigateCoordinate) return null;
+    if (navigateCoordinate) {
+      return () => {
+        void openExternalNavigation(
+          navigateCoordinate.latitude,
+          navigateCoordinate.longitude,
+        );
+      };
+    }
+    const place =
+      stageTarget === 'pickup'
+        ? pickupLabel
+        : dropLabel;
+    const q = (place ?? '').trim();
+    if (!q || q === '—') return null;
     return () => {
-      void openExternalNavigation(navigateCoordinate.latitude, navigateCoordinate.longitude);
+      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+      void Linking.openURL(url);
     };
-  }, [navigateCoordinate]);
+  }, [navigateCoordinate, stageTarget, pickupLabel, dropLabel]);
   const routeTotalKm = useMemo(() => {
     const d = Number(localTrip.distance);
     return Number.isFinite(d) && d > 0 ? d : null;
@@ -704,7 +864,11 @@ export function DriverTripFlowCard({
     lrDocuments.forEach((doc) => {
       if (lrViewUrlsRequestedRef.current.has(doc.id)) return;
       lrViewUrlsRequestedRef.current.add(doc.id);
-      tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
+      tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path).then((url) => {
+        if (!url) {
+          setLrDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+          return;
+        }
         setLrViewUrls((prev) => (prev[doc.id] ? prev : { ...prev, [doc.id]: url }));
       });
     });
@@ -715,7 +879,11 @@ export function DriverTripFlowCard({
     podDocuments.forEach((doc) => {
       if (podViewUrlsRequestedRef.current.has(doc.id)) return;
       podViewUrlsRequestedRef.current.add(doc.id);
-      tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
+      tripDocumentsService.tryGetDocumentViewUrl(doc.storage_path).then((url) => {
+        if (!url) {
+          setPodDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+          return;
+        }
         setPodViewUrls((prev) => (prev[doc.id] ? prev : { ...prev, [doc.id]: url }));
       });
     });
@@ -753,7 +921,7 @@ export function DriverTripFlowCard({
       setLocalTrip(updated);
       onTripUpdated?.(updated);
     }
-    onRefresh?.();
+    syncAfterStatusWrite();
   };
 
   // Explicit driver action ("Package collected"). Enters the local-only LR
@@ -795,7 +963,7 @@ export function DriverTripFlowCard({
       setLocalTrip(updated);
       onTripUpdated?.(updated);
     }
-    onRefresh?.();
+    syncAfterStatusWrite();
   };
 
   const confirmReached = async () => {
@@ -828,7 +996,7 @@ export function DriverTripFlowCard({
       setLocalTrip(updated);
       onTripUpdated?.(updated);
     }
-    onRefresh?.();
+    syncAfterStatusWrite();
   };
 
   const uploadStagePhoto = async () => {
@@ -842,7 +1010,8 @@ export function DriverTripFlowCard({
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: false,
-      quality: 0.85,
+      quality: PROOF_IMAGE_PICKER_QUALITY,
+      exif: false,
     });
     if (result.canceled || !result.assets?.[0]) return;
     setStepError(null);
@@ -850,7 +1019,7 @@ export function DriverTripFlowCard({
     const uri = result.assets[0].uri;
     const fileName = `stage-${step}-${Date.now()}.jpg`;
     try {
-      const { arrayBuffer, mimeType } = await optimizeImageForUpload(uri, CHAT_IMAGE_QUALITY);
+      const { arrayBuffer, mimeType } = await optimizeImageForUpload(uri);
       if (!arrayBuffer || arrayBuffer.byteLength === 0) {
         setStepError('Could not read image file');
         setStagePhotoUploading(false);
@@ -888,7 +1057,7 @@ export function DriverTripFlowCard({
           },
           stageLabel,
         );
-        onRefresh?.();
+        // Chat realtime handles badge — skip dashboard refresh (avoids sheet/map flash).
       }
     } catch (e) {
       setStepError(e instanceof Error ? e.message : 'Upload failed');
@@ -897,27 +1066,31 @@ export function DriverTripFlowCard({
     }
   };
 
-  const uploadPod = async () => {
+  const uploadPod = async (source?: 'camera' | 'library') => {
     const id = localTrip?.id;
     if (!id || !profile?.uid || podUploading) return;
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      setStepError('Permission to access photos is required');
+    let pickedSource = source;
+    if (!pickedSource) {
+      pickedSource = (await promptAttachmentImageSource()) ?? undefined;
+    }
+    if (!pickedSource) return;
+
+    let asset: { uri: string; fileName: string | null } | null = null;
+    try {
+      asset = await pickAttachmentImageAsset(pickedSource);
+    } catch (e) {
+      setStepError(e instanceof Error ? e.message : 'Could not open camera or photos');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: false,
-      quality: 0.9,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
+    if (!asset) return;
+
     setStepError(null);
     podUploadCancelledRef.current = false;
     setPodUploading(true);
-    const uri = result.assets[0].uri;
-    const fileName = normalizeImageFileName(result.assets[0].fileName ?? `pod-${Date.now()}`);
+    const uri = asset.uri;
+    const fileName = normalizeImageFileName(asset.fileName ?? `pod-${Date.now()}`);
     try {
-      const { arrayBuffer, mimeType } = await optimizeImageForUpload(uri, POD_IMAGE_QUALITY);
+      const { arrayBuffer, mimeType } = await optimizeImageForUpload(uri);
 
       if (podUploadCancelledRef.current) {
         return;
@@ -958,7 +1131,7 @@ export function DriverTripFlowCard({
         });
         await shareTripDocumentInChat(doc, 'Proof of delivery');
       }
-      onRefresh?.();
+      // Local POD list + chat share update UI — do not onRefresh (sheet remount / map flash).
     } catch (e) {
       setStepError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
@@ -967,27 +1140,31 @@ export function DriverTripFlowCard({
     }
   };
 
-  const uploadLr = async () => {
+  const uploadLr = async (source?: 'camera' | 'library') => {
     const id = localTrip?.id;
     if (!id || !profile?.uid || lrUploading) return;
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      setStepError('Permission to access photos is required');
+    let pickedSource = source;
+    if (!pickedSource) {
+      pickedSource = (await promptAttachmentImageSource()) ?? undefined;
+    }
+    if (!pickedSource) return;
+
+    let asset: { uri: string; fileName: string | null } | null = null;
+    try {
+      asset = await pickAttachmentImageAsset(pickedSource);
+    } catch (e) {
+      setStepError(e instanceof Error ? e.message : 'Could not open camera or photos');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: false,
-      quality: 0.9,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
+    if (!asset) return;
+
     setStepError(null);
     lrUploadCancelledRef.current = false;
     setLrUploading(true);
-    const uri = result.assets[0].uri;
-    const fileName = normalizeImageFileName(result.assets[0].fileName ?? `lr-${Date.now()}`);
+    const uri = asset.uri;
+    const fileName = normalizeImageFileName(asset.fileName ?? `lr-${Date.now()}`);
     try {
-      const { arrayBuffer, mimeType } = await optimizeImageForUpload(uri, POD_IMAGE_QUALITY);
+      const { arrayBuffer, mimeType } = await optimizeImageForUpload(uri);
 
       if (lrUploadCancelledRef.current) {
         return;
@@ -1026,7 +1203,7 @@ export function DriverTripFlowCard({
         tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((u) => {
           setLrViewUrls((prev) => ({ ...prev, [doc.id]: u }));
         });
-        await shareTripDocumentInChat(doc, 'Lorry Receipt');
+        await shareTripDocumentInChat(doc, 'LR / pickup proof');
       }
       // NOTE: intentionally NOT calling onRefresh?.() here. LR upload does not
       // change trip status and the dashboard does not render LR docs, so a full
@@ -1066,9 +1243,10 @@ export function DriverTripFlowCard({
         return next;
       });
       lrViewUrlsRequestedRef.current.delete(doc.id);
-      onRefresh?.();
+      void revokeSharedTripDocumentInChat(doc.storage_path);
+      // Local LR list already updated — do not onRefresh.
     },
-    [onRefresh],
+    [revokeSharedTripDocumentInChat],
   );
 
   const completeTrip = async () => {
@@ -1163,6 +1341,110 @@ export function DriverTripFlowCard({
     setIsLrHolding(false);
   };
 
+  const peekCopy = missionStagePeekCopy(step, pickupLabel, dropLabel);
+  const peekBounce = useSharedValue(0);
+
+  useEffect(() => {
+    if (!collapsed) {
+      peekBounce.value = 0;
+      return;
+    }
+    peekBounce.value = withRepeat(
+      withSequence(
+        withTiming(-5, { duration: 650, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 650, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
+    );
+  }, [collapsed, peekBounce]);
+
+  const peekChevronStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: peekBounce.value }],
+  }));
+
+  if (collapsed) {
+    return (
+      <>
+        <Pressable
+          onPress={() => onToggleCollapse?.()}
+          style={[
+            styles.sheet,
+            variant === 'page' || edgeToEdge ? styles.sheetEdgeToEdge : styles.sheetInset,
+            styles.collapsedPeek,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={peekCopy.label}
+          accessibilityHint="Opens full trip card"
+        >
+          <View style={styles.collapsedPeekInner}>
+            <View style={[styles.collapsedPeekDot, { backgroundColor: FLOW_EMERALD }]} />
+            <View style={styles.collapsedPeekTextCol}>
+              {peekCopy.kicker ? (
+                <Text style={styles.collapsedPeekKicker} numberOfLines={1}>
+                  {peekCopy.kicker}
+                </Text>
+              ) : null}
+              <Text style={styles.collapsedPeekPlace} numberOfLines={1}>
+                {peekCopy.place}
+              </Text>
+            </View>
+            <Animated.View style={[styles.collapsedPeekHintWrap, peekChevronStyle]}>
+              <ChevronUp size={16} color={FLOW_EMERALD} strokeWidth={2.6} />
+              <Text style={styles.collapsedPeekHint}>Drag up</Text>
+            </Animated.View>
+          </View>
+        </Pressable>
+        {step === 'lr' ? (
+          <DriverPodCompletionPage
+            visible={lrPageVisible}
+            variant="lr"
+            onCloseToMap={() => setLrPageVisible(false)}
+            placeLabel={pickupLabel}
+            earnings={earnings}
+            documents={lrDocuments}
+            viewUrls={lrViewUrls}
+            docsLoading={lrLoading}
+            uploading={lrUploading}
+            skipped={lrSkipped}
+            deletingId={lrDeletingId}
+            actionBusy={stepLoading}
+            stepError={stepError}
+            onUpload={uploadLr}
+            onCancelUpload={cancelLrUpload}
+            onSkip={() => setLrSkipped(true)}
+            onResolvePreview={resolveLrPreviewUrl}
+            onDelete={confirmDeleteLr}
+            onConfirmAction={() => { void engageTransit(); }}
+          />
+        ) : null}
+        {step === 'reached' ? (
+          <DriverPodCompletionPage
+            visible={podPageVisible}
+            variant="pod"
+            onCloseToMap={() => setPodPageVisible(false)}
+            placeLabel={dropLabel}
+            earnings={earnings}
+            documents={podDocuments}
+            viewUrls={podViewUrls}
+            docsLoading={podLoading}
+            uploading={podUploading}
+            skipped={podSkipped}
+            deletingId={podDeletingId}
+            actionBusy={completing}
+            stepError={stepError}
+            onUpload={uploadPod}
+            onCancelUpload={cancelPodUpload}
+            onSkip={() => setPodSkipped(true)}
+            onResolvePreview={resolvePodPreviewUrl}
+            onDelete={confirmDeletePod}
+            onConfirmAction={() => { void completeTrip(); }}
+          />
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <View
       style={[
@@ -1220,11 +1502,17 @@ export function DriverTripFlowCard({
           vehicleNumber={localTrip.vehicle_display_number}
           dwellLabel={dwellLabel}
           guidanceMessage={guidanceMessage}
+          onNavigate={onNavigate}
         />
       ) : null}
 
       {step !== 'completed' ? (
-        <View style={styles.flowBody}>
+        <View
+          style={[
+            styles.flowBody,
+            edgeToEdge || variant === 'page' ? styles.flowBodyFlushBottom : null,
+          ]}
+        >
           {stepError ? (
             <View style={[styles.errorWrap, { backgroundColor: Theme.negativeMuted, borderColor: Theme.negative }]}>
               <FontAwesome name="exclamation-circle" size={12} color={Theme.negative} />
@@ -1265,7 +1553,7 @@ export function DriverTripFlowCard({
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: Theme.surface, borderColor: Theme.border }]}
               activeOpacity={0.8}
-              onPress={step === 'reached' ? uploadPod : uploadStagePhoto}
+              onPress={step === 'reached' ? () => { void uploadPod(); } : () => { void uploadStagePhoto(); }}
               disabled={stagePhotoUploading || podUploading}
               accessibilityLabel={step === 'reached' ? 'Upload proof of delivery' : 'Send photo to trip chat'}
             >
@@ -1277,20 +1565,6 @@ export function DriverTripFlowCard({
               <Text style={[styles.actionBtnText, { color: Theme.textPrimaryDark }]}>Camera</Text>
             </TouchableOpacity>
           </View>
-
-          {onNavigate ? (
-            <TouchableOpacity
-              style={[styles.navigateBar, { backgroundColor: Theme.surface, borderColor: Theme.border }]}
-              onPress={onNavigate}
-              activeOpacity={0.75}
-              accessibilityRole="button"
-              accessibilityLabel="Open navigation"
-            >
-              <FontAwesome name="location-arrow" size={14} color={FLOW_EMERALD} />
-              <Text style={[styles.navigateBarText, { color: FLOW_EMERALD }]}>Navigate</Text>
-              <FontAwesome name="angle-right" size={18} color={Theme.textMuted} style={styles.navigateChevron} />
-            </TouchableOpacity>
-          ) : null}
 
           {step === 'accepted' ? (
             <TouchableOpacity
@@ -1353,193 +1627,114 @@ export function DriverTripFlowCard({
 
       {step === 'lr' ? (
         <View style={styles.reachedBlock}>
-          <View style={styles.podSectionHeader}>
-            <Text style={[sheetStyles.sectionLabel, { color: Theme.textMuted }]}>
-              LORRY RECEIPT (LR)
-            </Text>
-            {lrLoading ? (
-              <LoadingIndicator size="small" color={colors.emerald} />
-            ) : (
-              <Text style={[sheetStyles.bodyMetaText, { color: Theme.textMuted }]}>
-                {lrDocuments.length} file{lrDocuments.length === 1 ? '' : 's'}
-              </Text>
-            )}
-          </View>
-          <View style={[sheetStyles.insetCard, styles.podCard]}>
+          {!lrPageVisible ? (
             <TouchableOpacity
-              style={[styles.podUploadBtn, { backgroundColor: Theme.textPrimaryDark }, lrUploading && styles.btnDisabled]}
-              onPress={uploadLr}
-              disabled={lrUploading}
-              activeOpacity={0.9}
+              style={[styles.primaryBtnWrap, { marginBottom: 4 }]}
+              onPress={() => setLrPageVisible(true)}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="Open pickup proof attachment page"
             >
-              <FontAwesome name="cloud-upload" size={16} color={Theme.textOnPrimary} />
-              <Text style={styles.podUploadText}>{lrUploading ? 'Uploading…' : 'Upload LR'}</Text>
-            </TouchableOpacity>
-            {lrUploading ? (
-              <TouchableOpacity onPress={cancelLrUpload} activeOpacity={0.8} style={styles.podCancelLink}>
-                <Text style={[styles.podCancelLinkText, { color: Theme.textMuted }]}>Cancel upload</Text>
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity onPress={() => setLrSkipped(true)} activeOpacity={0.8} style={styles.skipLink}>
-              <Text style={[styles.skipLinkText, { color: colors.emerald }]}>Skip LR</Text>
-            </TouchableOpacity>
-            {lrDocuments.length >= 1 ? (
-              <View style={[styles.podListWrap, { borderColor: Theme.border }]}>
-                {lrDocuments.map((doc, index) => (
-                  <PodDocumentRow
-                    key={doc.id}
-                    doc={doc}
-                    index={index}
-                    colors={colors}
-                    podDeletingId={lrDeletingId}
-                    docFallbackLabel="LR"
-                    onView={openLrPreview}
-                    onDelete={confirmDeleteLr}
-                  />
-                ))}
-              </View>
-            ) : null}
-          </View>
-
-          {(lrDocuments.length >= 1 || lrSkipped) ? (
-            <HoldPressable
-              onPressIn={startLrHold}
-              onPressOut={cancelLrHold}
-              pressRetentionOffset={HOLD_PRESS_RETENTION}
-              android_ripple={{ color: 'transparent' }}
-              style={[
-                styles.holdBtnWrap,
-                { backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight },
-                Platform.OS === 'web' && holdCompleteWebStyle,
-              ]}
-            >
-              <View style={[styles.holdFill, { width: `${lrHoldProgress}%`, backgroundColor: colors.emerald }]} />
-              <View style={[styles.holdContent, { pointerEvents: 'none' }]}>
-                <FontAwesome name="truck" size={17} color={lrHoldProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
-                <Text
-                  style={[
-                    styles.holdText,
-                    { color: lrHoldProgress > 20 ? Theme.textOnPrimary : colors.emerald },
-                  ]}
-                  numberOfLines={1}
-                >
-                  Hold to start transit
+              <LinearGradient
+                colors={[FLOW_EMERALD, FLOW_EMERALD_DARK]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryGradient}
+              >
+                <FontAwesome name="file-text-o" size={16} color="#fff" />
+                <Text style={styles.primaryBtnText}>
+                  {lrDocuments.length >= 1 || lrSkipped
+                    ? 'Continue to start transit'
+                    : 'Upload LR / pickup proof'}
                 </Text>
-              </View>
-            </HoldPressable>
+              </LinearGradient>
+            </TouchableOpacity>
           ) : (
             <Text style={[styles.podRequired, { color: Theme.textMuted }]}>
-              Upload at least one LR to proceed to drop-off.
+              Finish attachments on the pickup proof page…
+            </Text>
+          )}
+        </View>
+      ) : null}
+
+      {step === 'lr' ? (
+      <DriverPodCompletionPage
+        visible={lrPageVisible}
+        variant="lr"
+        onCloseToMap={() => setLrPageVisible(false)}
+        placeLabel={pickupLabel}
+        earnings={earnings}
+        documents={lrDocuments}
+        viewUrls={lrViewUrls}
+        docsLoading={lrLoading}
+        uploading={lrUploading}
+        skipped={lrSkipped}
+        deletingId={lrDeletingId}
+        actionBusy={stepLoading}
+        stepError={stepError}
+        onUpload={uploadLr}
+        onCancelUpload={cancelLrUpload}
+        onSkip={() => setLrSkipped(true)}
+        onResolvePreview={resolveLrPreviewUrl}
+        onDelete={confirmDeleteLr}
+        onConfirmAction={() => { void engageTransit(); }}
+      />
+      ) : null}
+
+      {step === 'reached' ? (
+        <View style={styles.reachedBlock}>
+          {!podPageVisible ? (
+            <TouchableOpacity
+              style={[styles.primaryBtnWrap, { marginBottom: 4 }]}
+              onPress={() => setPodPageVisible(true)}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="Open proof of delivery page"
+            >
+              <LinearGradient
+                colors={[FLOW_EMERALD, FLOW_EMERALD_DARK]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryGradient}
+              >
+                <FontAwesome name="file-text-o" size={16} color="#fff" />
+                <Text style={styles.primaryBtnText}>
+                  {podDocuments.length >= 1 || podSkipped
+                    ? 'Continue to complete delivery'
+                    : 'Upload POD & complete'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.podRequired, { color: Theme.textMuted }]}>
+              Finish on the proof of delivery page…
             </Text>
           )}
         </View>
       ) : null}
 
       {step === 'reached' ? (
-        <View style={styles.reachedBlock}>
-          <View style={styles.podSectionHeader}>
-            <Text style={[sheetStyles.sectionLabel, { color: Theme.textMuted }]}>
-              PROOF OF DELIVERY
-            </Text>
-            {podLoading ? (
-              <LoadingIndicator size="small" color={colors.emerald} />
-            ) : (
-              <Text style={[sheetStyles.bodyMetaText, { color: Theme.textMuted }]}>
-                {podDocuments.length} file{podDocuments.length === 1 ? '' : 's'}
-              </Text>
-            )}
-          </View>
-          <View style={[sheetStyles.insetCard, styles.podCard]}>
-            <View style={styles.podActionsRow}>
-              <TouchableOpacity
-                style={[
-                  styles.podUploadBtn,
-                  styles.podUploadBtnCompact,
-                  { backgroundColor: Theme.textPrimaryDark },
-                  podUploading && styles.btnDisabled,
-                ]}
-                onPress={uploadPod}
-                disabled={podUploading}
-                activeOpacity={0.9}
-              >
-                <FontAwesome name="cloud-upload" size={13} color={Theme.textOnPrimary} />
-                <Text style={styles.podUploadTextCompact}>
-                  {podUploading ? 'Uploading…' : 'Upload POD'}
-                </Text>
-              </TouchableOpacity>
-              {podUploading ? (
-                <TouchableOpacity
-                  onPress={cancelPodUpload}
-                  activeOpacity={0.8}
-                  style={styles.podSkipBtn}
-                >
-                  <Text style={[styles.podSkipBtnText, { color: Theme.textMuted }]}>
-                    Cancel
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={() => setPodSkipped(true)}
-                  activeOpacity={0.8}
-                  style={styles.podSkipBtn}
-                >
-                  <Text style={[styles.podSkipBtnText, { color: colors.emerald }]}>
-                    Skip POD
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {podDocuments.length >= 1 ? (
-              <View style={[styles.podListWrap, { borderColor: Theme.border }]}>
-                {podDocuments.map((doc, index) => (
-                  <PodDocumentRow
-                    key={doc.id}
-                    doc={doc}
-                    index={index}
-                    colors={colors}
-                    podDeletingId={podDeletingId}
-                    onView={openPodPreview}
-                    onDelete={confirmDeletePod}
-                  />
-                ))}
-              </View>
-            ) : null}
-          </View>
-
-          {(podDocuments.length >= 1 || podSkipped) ? (
-            <HoldPressable
-              onPressIn={completing ? undefined : startHold}
-              onPressOut={cancelHold}
-              disabled={completing}
-              pressRetentionOffset={HOLD_PRESS_RETENTION}
-              android_ripple={{ color: 'transparent' }}
-              style={[
-                styles.holdBtnWrap,
-                { backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight },
-                completing && styles.btnDisabled,
-                Platform.OS === 'web' && holdCompleteWebStyle,
-              ]}
-            >
-              <View style={[styles.holdFill, { width: `${holdProgress}%`, backgroundColor: colors.emerald }]} />
-              <View style={[styles.holdContent, { pointerEvents: 'none' }]}>
-                <FontAwesome name="check-circle" size={17} color={holdProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
-                <Text
-                  style={[
-                    styles.holdText,
-                    { color: holdProgress > 20 ? Theme.textOnPrimary : colors.emerald },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {completing ? 'Completing…' : 'Hold to complete delivery'}
-                </Text>
-              </View>
-            </HoldPressable>
-          ) : (
-            <Text style={[styles.podRequired, { color: Theme.textMuted }]}>
-              Upload at least one POD to complete the trip.
-            </Text>
-          )}
-        </View>
+        <DriverPodCompletionPage
+          visible={podPageVisible}
+          variant="pod"
+          onCloseToMap={() => setPodPageVisible(false)}
+          placeLabel={dropLabel}
+          earnings={earnings}
+          documents={podDocuments}
+          viewUrls={podViewUrls}
+          docsLoading={podLoading}
+          uploading={podUploading}
+          skipped={podSkipped}
+          deletingId={podDeletingId}
+          actionBusy={completing}
+          stepError={stepError}
+          onUpload={uploadPod}
+          onCancelUpload={cancelPodUpload}
+          onSkip={() => setPodSkipped(true)}
+          onResolvePreview={resolvePodPreviewUrl}
+          onDelete={confirmDeletePod}
+          onConfirmAction={() => { void completeTrip(); }}
+        />
       ) : null}
 
       {step === 'completed' ? (
@@ -1718,6 +1913,65 @@ const styles = StyleSheet.create({
     paddingBottom: TRIP_SHEET_BODY_PAD.bottom,
     gap: 10,
     backgroundColor: Theme.surface,
+  },
+  flowBodyFlushBottom: {
+    paddingBottom: 0,
+  },
+  collapsedPeek: {
+    overflow: 'hidden',
+    backgroundColor: Theme.surface,
+    borderTopLeftRadius: TRIP_SHEET_TOP_RADIUS,
+    borderTopRightRadius: TRIP_SHEET_TOP_RADIUS,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    flexGrow: 1,
+    justifyContent: 'flex-start',
+  },
+  collapsedPeekInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 12,
+    minHeight: 56,
+  },
+  collapsedPeekDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
+  },
+  collapsedPeekTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  collapsedPeekKicker: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+  },
+  collapsedPeekPlace: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    color: Theme.textPrimaryDark,
+  },
+  collapsedPeekHintWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+    flexShrink: 0,
+    minWidth: 52,
+  },
+  collapsedPeekHint: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: FLOW_EMERALD,
+    letterSpacing: 0.2,
   },
   actionIconsRow: { flexDirection: 'row', gap: 10 },
   navigateBar: {

@@ -1098,6 +1098,8 @@ export function ReassignSheet({
                 maxHeight: Platform.OS === 'web' ? '94%' : '100%',
                 padding: 0,
                 overflow: 'hidden',
+                alignSelf: 'stretch',
+                minWidth: 0,
               },
             ]}
           >

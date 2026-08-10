@@ -21,7 +21,6 @@ import {
   type KeypadKey,
 } from "@/components/mobile-input/keypad";
 import { fullPageWizardStyles as wizard, WIZARD_ACCENT_SOFT } from "@/components/full-page-wizard/fullPageWizardStyles";
-import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 
@@ -53,13 +52,13 @@ export type OdometerKeypadFlowProps = {
   onFieldPhotoPress?: (fieldId: OdometerFieldId) => void;
 };
 
+/** Same pay keypad as FullscreenNumericEntry amount entry (equal cells, KEY_H_PAY). */
 function KeypadDock({ onKey }: { onKey: (key: KeypadKey) => void }) {
   return (
     <DecimalKeypad
       onKey={onKey}
       showDecimal={false}
       variant="pay"
-      size="compact"
     />
   );
 }
@@ -322,7 +321,7 @@ export const OdometerKeypadFlow = memo(function OdometerKeypadFlow({
         <View style={wizard.wizardKeypadDesktopRow}>
           <View style={[wizard.wizardKeypadAmountPane, local.desktopPane]}>{amountPane}</View>
           <View style={wizard.wizardKeypadKeysPane}>
-            <View style={wizard.wizardKeypadKeysCard}>
+            <View style={local.keypadDockPay}>
               <KeypadDock onKey={handleKey} />
             </View>
           </View>
@@ -341,7 +340,7 @@ export const OdometerKeypadFlow = memo(function OdometerKeypadFlow({
       >
         {amountPane}
       </ScrollView>
-      <View style={flow.keypadDockWizard}>
+      <View style={local.keypadDockPay}>
         <KeypadDock onKey={handleKey} />
       </View>
     </View>
@@ -366,6 +365,13 @@ const local = StyleSheet.create({
   scrollContentShell: {
     paddingTop: 8,
     paddingBottom: 4,
+  },
+  /** Match FullscreenNumericEntry payBottom — keypad owns inset via PAY_KEYPAD_*. */
+  keypadDockPay: {
+    flexShrink: 0,
+    alignSelf: "stretch",
+    width: "100%",
+    marginTop: "auto",
   },
   amountStack: {
     width: "100%",

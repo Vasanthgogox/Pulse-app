@@ -3,7 +3,6 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import {
   OperationalBottomActionBar,
   OperationalButton,
-  OperationalChipSelect,
   OperationalHeader,
   Surface,
 } from "@/components/operational";
@@ -63,6 +62,7 @@ import {
   formatOtherExpenseCategoryLabel,
   splitOtherExpenseOptions,
 } from "../shared/tripOtherExpenseCategories";
+import { OperationalChipSelect } from "@/components/operational";
 import { DriverExpenseCategorySwitch } from "../shared/DriverExpenseCategorySwitch";
 import { DriverExpenseChipSelect } from "../shared/DriverExpenseChipSelect";
 import {

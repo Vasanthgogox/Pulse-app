@@ -1,12 +1,7 @@
 /**
- * Load Center filter header — integrated party avatars + grow-network nudge.
+ * Load Center filter header — integrated party avatars.
  */
 import { EntityAvatar } from "@/components/EntityAvatar";
-import {
-  LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT,
-  LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT_COMPACT,
-  LoadCenterNetworkGrowNudge,
-} from "@/features/network/components/LoadCenterNetworkGrowNudge";
 import Theme from "@/constants/Theme";
 import type { LoadCenterIntegratedParty } from "@/features/network/utils/loadCenterIntegratedParties.util";
 import { useMemo, type ReactNode } from "react";
@@ -24,6 +19,8 @@ const FACE_SIZE = 30;
 const RING_SIZE = FACE_SIZE + 2;
 /** Ring + white halo — kept inside the shared track so dots don’t drop the stack. */
 const SLOT_SIZE = RING_SIZE + 2;
+const TRACK_HEIGHT = 42;
+const TRACK_HEIGHT_COMPACT = 38;
 
 type Props = {
   mode: "supplier" | "client";
@@ -55,13 +52,10 @@ export function LoadCenterIntegratedPartiesRow({
 }: Props) {
   const { width } = useWindowDimensions();
   const compact = width < 640;
-  const trackHeight = compact
-    ? LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT_COMPACT
-    : LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT;
+  const trackHeight = compact ? TRACK_HEIGHT_COMPACT : TRACK_HEIGHT;
   const visible = parties.slice(0, MAX_VISIBLE);
   const overflow = Math.max(0, parties.length - MAX_VISIBLE);
   const overlap = 10;
-  const nudgeMode = mode === "supplier" ? "give" : "get";
   const slotSize = Math.min(SLOT_SIZE, trackHeight);
 
   const stackWidth = useMemo(() => {
@@ -69,6 +63,8 @@ export function LoadCenterIntegratedPartiesRow({
     if (slots <= 0) return 0;
     return slotSize + Math.max(0, slots - 1) * (slotSize - overlap);
   }, [overflow, slotSize, visible.length]);
+
+  if (parties.length === 0) return null;
 
   return (
     <View
@@ -78,82 +74,68 @@ export function LoadCenterIntegratedPartiesRow({
         { height: trackHeight, minHeight: trackHeight },
       ]}
     >
-      {parties.length > 0 ? (
-        <View
-          style={[
-            styles.stackWrap,
-            { minWidth: stackWidth, height: trackHeight },
-          ]}
-          accessibilityRole="toolbar"
-          accessibilityLabel={
-            mode === "supplier"
-              ? `${parties.length} integrated suppliers`
-              : `${parties.length} integrated clients`
-          }
-        >
-          {visible.map((party, index) => (
-            <Pressable
-              key={party.id}
-              onPress={() => onPartyPress(party)}
-              style={({ pressed }) => [
-                styles.facePressable,
-                { width: slotSize, height: trackHeight },
-                index > 0 && { marginLeft: -overlap },
-                { zIndex: index + 1 },
-                pressed && styles.facePressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={party.displayName}
-              hitSlop={4}
-            >
-              <PartyFaceSlot slotSize={slotSize}>
-                <EntityAvatar
-                  name={party.displayName}
-                  entityType={party.entityType}
-                  organizationImageUrl={party.organizationImageUrl}
-                  organizationAvatarSeed={party.organizationAvatarSeed}
-                  avatarUrl={party.avatarUrl}
-                  avatarSeed={party.avatarSeed}
-                  isIntegrated
-                  size={FACE_SIZE}
-                  showIntegrationBadge={false}
-                />
-              </PartyFaceSlot>
-            </Pressable>
-          ))}
-          {overflow > 0 ? (
-            <Pressable
-              onPress={onAddToNetwork}
-              style={({ pressed }) => [
-                styles.facePressable,
-                { width: slotSize, height: trackHeight },
-                { marginLeft: -overlap, zIndex: MAX_VISIBLE + 1 },
-                pressed && styles.facePressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`${overflow} more integrated ${mode === "supplier" ? "suppliers" : "clients"}`}
-              hitSlop={4}
-            >
-              <View style={[styles.faceSlot, { width: slotSize, height: slotSize }]}>
-                <View style={[styles.faceRing, styles.overflowFrame]}>
-                  <Text style={styles.overflowText}>+{overflow}</Text>
-                </View>
+      <View
+        style={[
+          styles.stackWrap,
+          { minWidth: stackWidth, height: trackHeight },
+        ]}
+        accessibilityRole="toolbar"
+        accessibilityLabel={
+          mode === "supplier"
+            ? `${parties.length} integrated suppliers`
+            : `${parties.length} integrated clients`
+        }
+      >
+        {visible.map((party, index) => (
+          <Pressable
+            key={party.id}
+            onPress={() => onPartyPress(party)}
+            style={({ pressed }) => [
+              styles.facePressable,
+              { width: slotSize, height: trackHeight },
+              index > 0 && { marginLeft: -overlap },
+              { zIndex: index + 1 },
+              pressed && styles.facePressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={party.displayName}
+            hitSlop={4}
+          >
+            <PartyFaceSlot slotSize={slotSize}>
+              <EntityAvatar
+                name={party.displayName}
+                entityType={party.entityType}
+                organizationImageUrl={party.organizationImageUrl}
+                organizationAvatarSeed={party.organizationAvatarSeed}
+                avatarUrl={party.avatarUrl}
+                avatarSeed={party.avatarSeed}
+                isIntegrated
+                size={FACE_SIZE}
+                showIntegrationBadge={false}
+              />
+            </PartyFaceSlot>
+          </Pressable>
+        ))}
+        {overflow > 0 ? (
+          <Pressable
+            onPress={onAddToNetwork}
+            style={({ pressed }) => [
+              styles.facePressable,
+              { width: slotSize, height: trackHeight },
+              { marginLeft: -overlap, zIndex: MAX_VISIBLE + 1 },
+              pressed && styles.facePressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`${overflow} more integrated ${mode === "supplier" ? "suppliers" : "clients"}`}
+            hitSlop={4}
+          >
+            <View style={[styles.faceSlot, { width: slotSize, height: slotSize }]}>
+              <View style={[styles.faceRing, styles.overflowFrame]}>
+                <Text style={styles.overflowText}>+{overflow}</Text>
               </View>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-
-      {parties.length > 0 ? (
-        <View style={[styles.divider, { height: Math.max(16, trackHeight - 12) }]} />
-      ) : null}
-
-      <View style={[styles.nudgeWrap, { height: trackHeight }]}>
-        <LoadCenterNetworkGrowNudge
-          mode={nudgeMode}
-          onPress={onAddToNetwork}
-          compact={compact}
-        />
+            </View>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -166,7 +148,6 @@ const styles = StyleSheet.create({
     gap: 14,
     minWidth: 0,
     flexShrink: 1,
-    flex: 1,
   },
   rowCompact: {
     gap: 11,
@@ -176,19 +157,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     flexShrink: 0,
-  },
-  nudgeWrap: {
-    flex: 1,
-    minWidth: 0,
-    flexShrink: 1,
-    justifyContent: "center",
-  },
-  divider: {
-    width: 1,
-    backgroundColor: Theme.loadStatusTabTrayBorder,
-    flexShrink: 0,
-    alignSelf: "center",
-    opacity: 0.7,
   },
   facePressable: {
     alignItems: "center",

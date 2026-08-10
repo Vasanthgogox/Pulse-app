@@ -3,13 +3,14 @@ import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { DriverHeaderTripOpsButtons } from '@/components/driver/DriverHeaderTripOpsButtons';
+import { DriverSelfAvatar } from '@/components/driver/DriverSelfAvatar';
 import { useOptionalLanguage } from '@/contexts/LanguageContext';
 import { ROUTES } from '@/lib/routes';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { MessageSquare } from 'lucide-react-native';
 import React, { useEffect } from 'react';
-import { Image, Platform, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Platform, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
 import Animated, {
     cancelAnimation,
     Easing,
@@ -149,21 +150,12 @@ export function DriverHeader({
                 ]}
               />
             ) : null}
-            <View
-              style={[
-                styles.avatarCircle,
-                {
-                  borderColor: colors.border,
-                  backgroundColor: colors.emeraldMuted,
-                },
-              ]}
-            >
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-              ) : (
-                <FontAwesome name="user" size={16} color={colors.text} />
-              )}
-            </View>
+            <DriverSelfAvatar
+              size={Layout.driverHeaderAvatarSize}
+              uri={avatarUri}
+              borderColor={colors.emerald}
+              backgroundColor={colors.emerald}
+            />
           </View>
         </TouchableOpacity>
 
@@ -307,22 +299,6 @@ const styles = StyleSheet.create({
   onlinePresenceRing: {
     position: 'absolute',
     backgroundColor: 'transparent',
-  },
-  avatarCircle: {
-    width: Layout.driverHeaderAvatarSize,
-    height: Layout.driverHeaderAvatarSize,
-    borderRadius: Layout.driverHeaderAvatarSize / 2,
-    borderWidth: 2,
-    borderColor: Theme.driverEmeraldBorder,
-    backgroundColor: Theme.driverSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: Layout.driverHeaderAvatarSize / 2,
   },
   welcomeTitle: {
     ...Typography.headerTitle,

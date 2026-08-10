@@ -18,6 +18,7 @@ import {
 import { useOptionalDriverAvatar } from "@/contexts/DriverAvatarContext";
 import { DriverDailySummaryCard } from "@/features/driver/components/DriverDailySummaryCard";
 import { DriverDashboardMapPreview } from "@/features/driver/components/DriverDashboardMapPreview";
+import { DriverExpenseCaptureFab } from "@/features/driver/components/DriverExpenseCaptureFab";
 import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -47,9 +48,10 @@ import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
     buildAssignerDisplayForTrip,
     buildJobCardAssignerPayload,
+    findDriverInviteForTripOrgs,
     resolveAssignerUserId,
 } from "@/features/trips/utils/driverAssignerDisplay.util";
-import { boundsFromCoordinates } from "@/features/trips/utils/mapRouteViewport.util";
+import { boundsFromCoordinates, inflateMapBounds } from "@/features/trips/utils/mapRouteViewport.util";
 import {
     DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
     DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
@@ -82,6 +84,7 @@ import MapView, {
     Polyline,
 } from "@/lib/reactNativeMapsCompat";
 import { supabase } from "@/lib/supabase";
+import { fetchOrgBrandingByIds } from "@/lib/orgBrandingFetch";
 import { withWebSafeShadows } from "@/lib/platformViewStyle.util";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import * as driversService from "@/features/drivers/services/drivers.service";
@@ -123,9 +126,11 @@ import BottomSheet, {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
+import { isExpoGo } from "@/lib/expoGoMaps";
 import * as ExpoLocation from "expo-location";
 import { startForegroundPositionWatch } from "@/lib/safeForegroundPositionWatch";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
+import { ROUTES } from "@/lib/routes";
 import {
   Fragment,
   useCallback,
@@ -177,10 +182,12 @@ const DEFAULT_MAP_REGION = {
 const DRIVER_MAP_BOOT_KEY = "@pulse/driver-map-native-booting";
 const DRIVER_MAP_BOOT_TS_KEY = "@pulse/driver-map-native-boot-ts";
 
-/** Route overview fit — city/corridor scale (avoids blank OSM overzoom). */
-const DRIVER_MAP_OVERVIEW_MAX_ZOOM = 14;
-/** Center-on-me / follow ceiling. */
+/** Route overview fit — slightly wider than city corridor (more country visible). */
+const DRIVER_MAP_OVERVIEW_MAX_ZOOM = 11;
+/** Center-on-me / locate close-up. */
 const DRIVER_MAP_MY_LOCATION_ZOOM = 15;
+/** Minimized job-card peek — closer than route overview, under blank-tile overzoom. */
+const DRIVER_MAP_PEEK_ZOOM = 13;
 /** User +/- / pin taps — still below blank-tile range. */
 const DRIVER_MAP_MAX_ZOOM = 16;
 
@@ -257,21 +264,25 @@ export default function DriverRadarScreen() {
   const insets = useSafeAreaInsets();
   const { isDark, mapTheme } = useDriverTheme();
   const colors = useDriverThemeColors();
-  const footerPadTop = 4;
+  // Match DriverTabBar (footerPadTop 6) so clearance math agrees with the dock.
+  const footerPadTop = 6;
   const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
+  /** Space reserved under floating dock (includes air above the glass pill). */
   const driverTabBarClearance =
     Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
+  /**
+   * Mission sheet sits clear of the floating glass dock (same clearance as
+   * scroll screens) so CTAs aren’t covered by the bottom nav.
+   */
+  const driverSheetBottomInset = driverTabBarClearance;
   // Driver home previously used a hardcoded dark map for contrast.
   // Now it respects the "Map Style" user setting (light, dark, or auto-sync with theme).
   const mapIsDark = mapTheme === "auto" ? isDark : mapTheme === "dark";
-  /** Job request bottom sheet: earnings, addresses, pills; muted labels; hold bar */
+  /** Job request bottom sheet: earnings, addresses, pills; muted labels */
   const jobRequestSheetPrimary = isDark
     ? Theme.textOnPrimary
     : Theme.textPrimaryDark;
   const jobRequestSheetMuted = isDark ? Theme.textOnDarkMuted : Theme.textMuted;
-  const jobRequestHoldTrack = isDark
-    ? "rgba(255,255,255,0.22)"
-    : Theme.textPrimaryDark;
   const { profile } = useAuth();
   const uid = profile?.uid ?? null;
   const invalidateDriverHome = useInvalidateDriverHomeDashboard();
@@ -305,6 +316,11 @@ export default function DriverRadarScreen() {
   } = useDriverHomeInvites();
   const { avatarUri } = useDriverAvatarUri();
   const optionalDriverAvatar = useOptionalDriverAvatar();
+  /** Prefer DB seed so map/markers match business profile, not stale AsyncStorage. */
+  const driverAvatarSeed =
+    profile?.avatar_seed?.trim() ||
+    optionalDriverAvatar?.avatarSeed ||
+    undefined;
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [allTrips, setAllTrips] = useState<tripsService.TripRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -355,7 +371,7 @@ export default function DriverRadarScreen() {
 
   const [acceptedTripId, setAcceptedTripId] = useState<string | null>(null);
   // Stays false until the AsyncStorage check completes so we never flash the
-  // "Hold to accept" card for a driver who already accepted this trip.
+  // accept-trip card for a driver who already accepted this trip.
   const [acceptedTripIdResolved, setAcceptedTripIdResolved] = useState(false);
   // Bumped whenever we explicitly clear acceptedTripId so an in-flight
   // AsyncStorage read from before the clear can't resurrect the stale value.
@@ -386,6 +402,12 @@ export default function DriverRadarScreen() {
     Record<string, string>
   >({});
   const [organizationLogoById, setOrganizationLogoById] = useState<
+    Record<string, string>
+  >({});
+  const [organizationAvatarSeedById, setOrganizationAvatarSeedById] = useState<
+    Record<string, string>
+  >({});
+  const [organizationAvatarUrlById, setOrganizationAvatarUrlById] = useState<
     Record<string, string>
   >({});
   const [assignmentActorByTripId, setAssignmentActorByTripId] = useState<
@@ -494,7 +516,11 @@ export default function DriverRadarScreen() {
   const fullLeafletRef = useRef<LeafletMapRef | null>(null);
   const nativeMapZoomRef = useRef(DRIVER_MAP_MY_LOCATION_ZOOM);
   const bottomSheetRef = useRef<BottomSheet | null>(null);
+  /** Tracks sheet top Y so expense FAB floats above the job card as it minimizes. */
+  const missionSheetAnimatedPosition = useSharedValue(0);
   const sheetOperationActiveRef = useRef(false);
+  /** True while an in-progress mission sheet is mounted — skip resume invalidate (camera/POD). */
+  const hasActiveMissionRef = useRef(false);
   const sheetSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAutoExpandedIncomingTripIdRef = useRef<string | null>(null);
   const inlineMapViewportHeightRef = useRef(0);
@@ -502,6 +528,9 @@ export default function DriverRadarScreen() {
   const fullMapLastFitKeyRef = useRef<string | null>(null);
   /** Real rendered height of the mission sheet (measured via onLayout), not a screen-fraction guess. */
   const [measuredSheetHeight, setMeasuredSheetHeight] = useState(0);
+  /** 0 = stage peek ("Deliver to Delhi"), 1 = full mission card. */
+  const [missionSheetIndex, setMissionSheetIndex] = useState(1);
+  const expandedSheetHeightRef = useRef(0);
   /** Suppressed once the driver manually pans/pinches, until a meaningful context change or "Center" re-enables it. */
   const inlineMapUserInteractedRef = useRef(false);
   const fullMapUserInteractedRef = useRef(false);
@@ -515,6 +544,8 @@ export default function DriverRadarScreen() {
   const [showTrackingInfoCard, setShowTrackingInfoCard] = useState(false);
   /** Default off = map-first (ref 1); tap route icon to show FROM/distance/TO overlay (ref 2). */
   const [showRouteSummary, setShowRouteSummary] = useState(false);
+  /** Locate control: true = close-up on driver; false = full route overview. */
+  const [mapLocateCloseUp, setMapLocateCloseUp] = useState(false);
   const locationWatchRef = useRef<{ remove: () => void } | null>(null);
   const gpsFallbackWarnedKeyRef = useRef<string | null>(null);
   /** Phase 1: FG location requested once per active mission (resume / mid-session start). */
@@ -524,17 +555,20 @@ export default function DriverRadarScreen() {
 
   // Map fallback:
   // - Force Leaflet via env (debug): EXPO_PUBLIC_DRIVER_MAP_FALLBACK=leaflet
+  // - Expo Go: prefer Leaflet (native maps often grey after heavy Home / avatar loads)
   // - If the app crashed while native map was booting last time, use Leaflet on next launch (prevents boot-loop).
-  const [useLeafletFallback, setUseLeafletFallback] = useState(false);
   const googleMapsAndroidKey = String(
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY || "",
   ).trim();
   const leafLetForced =
     String(process.env.EXPO_PUBLIC_DRIVER_MAP_FALLBACK || "").toLowerCase() ===
       "leaflet" ||
+    isExpoGo() ||
     // If we don't have a Google Maps key on Android, native tiles may render blank or crash on some devices.
     // Default to Leaflet in that case so the driver app is usable out of the box.
     (Platform.OS === "android" && !googleMapsAndroidKey);
+  // Seed from leafLetForced so the first frame is not a grey native MapView.
+  const [useLeafletFallback, setUseLeafletFallback] = useState(leafLetForced);
 
   useEffect(() => {
     let mounted = true;
@@ -927,7 +961,7 @@ export default function DriverRadarScreen() {
 
   // Coarse city label only — full GPS precision caused reverse-geocode spam.
   const liveDriverGeocodeCoord = useMemo(() => {
-    const c = truckPosition ?? driverMapPosition;
+    const c = driverMapPosition ?? truckPosition;
     if (!c) return null;
     return {
       latitude: Number(c.latitude.toFixed(3)),
@@ -980,6 +1014,9 @@ export default function DriverRadarScreen() {
   useEffect(() => {
     if (!uid) return;
     return subscribeSignificantAppResume(() => {
+      // Camera / gallery for POD & LR briefly flips AppState inactive → active.
+      // A full invalidate remounts the mission sheet and flashes the map underneath.
+      if (hasActiveMissionRef.current) return;
       lastTripsSyncKeyRef.current = null;
       void invalidateDriverHome(uid);
     });
@@ -1255,6 +1292,7 @@ export default function DriverRadarScreen() {
     () => allTrips.find((t) => isTripInProgress(t)),
     [allTrips],
   );
+  hasActiveMissionRef.current = Boolean(activeMission?.id);
 
   // Active-trip resume (and first time a mission becomes active): request FG location.
   // Startup offline dashboard must not request permissions.
@@ -1683,36 +1721,28 @@ export default function DriverRadarScreen() {
     ) ?? null;
   const buildAssignerPayloadForTrip = useCallback(
     (trip: tripsService.TripRow, requiresOtp: boolean) => {
-      const fromList = incomingNotificationsWithMeta.find(
-        (item) => item.trip.id === trip.id,
+      // Always use the full resolver so `effectiveAssignerOrgId` is available for
+      // org logo lookup (PartyAvatar: logo → seed → contact → initials).
+      const assignerDisplay = buildAssignerDisplayForTrip(
+        trip,
+        invites,
+        driver?.organization_id,
+        {
+          assignmentActorByTripId: effectiveAssignmentActorByTripId,
+          assignerNamesByUserId,
+          assignerOrgNameByUserId,
+          assignerDisplayByTripId,
+          assignerTripOrgNameByTripId,
+          assignerTripOrgIdByTripId,
+          organizationNamesById: mergedOrganizationNamesById,
+        },
       );
-      const assignerDisplay =
-        fromList != null
-          ? {
-              assignerLinePrimary: fromList.assignerLinePrimary,
-              assignerLineSecondary: fromList.assignerLineSecondary,
-              assignedByOrgName: fromList.assignedByOrgName,
-            }
-          : buildAssignerDisplayForTrip(
-              trip,
-              invites,
-              driver?.organization_id,
-              {
-                assignmentActorByTripId: effectiveAssignmentActorByTripId,
-                assignerNamesByUserId,
-                assignerOrgNameByUserId,
-                assignerDisplayByTripId,
-                assignerTripOrgNameByTripId,
-                assignerTripOrgIdByTripId,
-                organizationNamesById: mergedOrganizationNamesById,
-              },
-            );
-      const inviteForTrip =
-        invites.find(
-          (i) =>
-            (i.from_organization_id ?? "").trim() ===
-            (trip.organization_id ?? "").trim(),
-        ) ?? null;
+      const inviteForTrip = findDriverInviteForTripOrgs(invites, [
+        assignerDisplay.effectiveAssignerOrgId,
+        trip.supplier_id,
+        trip.organization_id,
+      ]);
+      const orgId = (assignerDisplay.effectiveAssignerOrgId ?? "").trim();
       return buildJobCardAssignerPayload(
         trip,
         assignerDisplay,
@@ -1723,15 +1753,14 @@ export default function DriverRadarScreen() {
           isAggregate: isAggregateTrip(trip),
           isRoster: isRosterTrip(trip),
         },
-        organizationLogoById[
-          "effectiveAssignerOrgId" in assignerDisplay
-            ? (assignerDisplay.effectiveAssignerOrgId ?? "")
-            : ""
-        ] ?? null,
+        organizationLogoById[orgId] ?? null,
+        {
+          seed: organizationAvatarSeedById[orgId] ?? null,
+          url: organizationAvatarUrlById[orgId] ?? null,
+        },
       );
     },
     [
-      incomingNotificationsWithMeta,
       invites,
       driver?.organization_id,
       effectiveAssignmentActorByTripId,
@@ -1742,6 +1771,8 @@ export default function DriverRadarScreen() {
       assignerTripOrgIdByTripId,
       mergedOrganizationNamesById,
       organizationLogoById,
+      organizationAvatarSeedById,
+      organizationAvatarUrlById,
     ],
   );
   const jobCardAssigner = useMemo(
@@ -1833,6 +1864,8 @@ export default function DriverRadarScreen() {
           setAssignerTripOrgIdByTripId({});
           setOrganizationNamesById({});
           setOrganizationLogoById({});
+          setOrganizationAvatarSeedById({});
+          setOrganizationAvatarUrlById({});
         }
         return;
       }
@@ -1851,6 +1884,8 @@ export default function DriverRadarScreen() {
         const orgByTrip: Record<string, string> = {};
         const logosById: Record<string, string> = {};
         const namesById: Record<string, string> = {};
+        const seedsById: Record<string, string> = {};
+        const avatarUrlsById: Record<string, string> = {};
         for (const row of assignerRpcRows as Array<{
           trip_id?: string;
           display_name?: string | null;
@@ -1858,6 +1893,8 @@ export default function DriverRadarScreen() {
           assigning_organization_name?: string | null;
           assigning_organization_id?: string | null;
           assigning_organization_logo_url?: string | null;
+          assigning_organization_avatar_seed?: string | null;
+          assigning_organization_avatar_url?: string | null;
         }>) {
           const tid = row.trip_id != null ? String(row.trip_id) : "";
           const dn = String(row.display_name ?? "").trim();
@@ -1865,6 +1902,10 @@ export default function DriverRadarScreen() {
           const orgName = String(row.assigning_organization_name ?? "").trim();
           const orgId = String(row.assigning_organization_id ?? "").trim();
           const logo = String(row.assigning_organization_logo_url ?? "").trim();
+          const seed = String(row.assigning_organization_avatar_seed ?? "").trim();
+          const avatarUrl = String(
+            row.assigning_organization_avatar_url ?? "",
+          ).trim();
           if (tid && dn) byTrip[tid] = dn;
           if (tid && uid) rpcAssignerUserIdByTrip[tid] = uid;
           if (tid && orgName) orgByTrip[tid] = orgName;
@@ -1872,6 +1913,8 @@ export default function DriverRadarScreen() {
             rpcOrgIdByTrip[tid] = orgId;
             if (orgName) namesById[orgId] = orgName;
             if (logo) logosById[orgId] = logo;
+            if (seed) seedsById[orgId] = seed;
+            if (avatarUrl) avatarUrlsById[orgId] = avatarUrl;
           }
         }
         setAssignerDisplayByTripId(byTrip);
@@ -1883,6 +1926,15 @@ export default function DriverRadarScreen() {
         }
         if (Object.keys(logosById).length > 0) {
           setOrganizationLogoById((prev) => ({ ...prev, ...logosById }));
+        }
+        if (Object.keys(seedsById).length > 0) {
+          setOrganizationAvatarSeedById((prev) => ({ ...prev, ...seedsById }));
+        }
+        if (Object.keys(avatarUrlsById).length > 0) {
+          setOrganizationAvatarUrlById((prev) => ({
+            ...prev,
+            ...avatarUrlsById,
+          }));
         }
       }
 
@@ -1906,6 +1958,7 @@ export default function DriverRadarScreen() {
                 Record<string, string | number | boolean | null | undefined>;
               return [
                 (trip.organization_id ?? "").trim(),
+                (trip.supplier_id ?? "").trim(),
                 (
                   (tripMeta.from_organization_id as string | null | undefined) ?? ""
                 ).trim(),
@@ -2003,24 +2056,30 @@ export default function DriverRadarScreen() {
       if (organizationIds.length > 0) {
         const { data, error } = await supabase()
           .from("organizations")
-          .select("id, name, logo_url")
+          .select("id, name")
           .in("id", organizationIds);
         if (!cancelled && !error) {
           const byId: Record<string, string> = {};
-          const logosById: Record<string, string> = {};
           for (const row of
-            (data ?? []) as Array<{
-              id: string;
-              name?: string | null;
-              logo_url?: string | null;
-            }>) {
+            (data ?? []) as Array<{ id: string; name?: string | null }>) {
             const name = (row.name ?? "").trim();
             if (name) byId[row.id] = name;
-            const logo = (row.logo_url ?? "").trim();
-            if (logo) logosById[row.id] = logo;
           }
           setOrganizationNamesById((prev) => ({ ...prev, ...byId }));
+        }
+        const branding = await fetchOrgBrandingByIds(organizationIds);
+        if (!cancelled && Object.keys(branding).length > 0) {
+          const logosById: Record<string, string> = {};
+          const seedsById: Record<string, string> = {};
+          const urlsById: Record<string, string> = {};
+          for (const [orgId, row] of Object.entries(branding)) {
+            if (row.logoUrl) logosById[orgId] = row.logoUrl;
+            if (row.avatarSeed) seedsById[orgId] = row.avatarSeed;
+            if (row.avatarUrl) urlsById[orgId] = row.avatarUrl;
+          }
           setOrganizationLogoById((prev) => ({ ...prev, ...logosById }));
+          setOrganizationAvatarSeedById((prev) => ({ ...prev, ...seedsById }));
+          setOrganizationAvatarUrlById((prev) => ({ ...prev, ...urlsById }));
         }
       }
     };
@@ -2090,6 +2149,8 @@ export default function DriverRadarScreen() {
       const r = pingMapUiRef.current;
       if (!r) return;
       const { latitude, longitude, position } = args;
+      // Real GPS always wins over any leftover fabricated truckPosition.
+      setTruckPosition(null);
       r.commitMapPosition({ latitude, longitude });
       r.youLatSv.value = withTiming(latitude, { duration: 450 });
       r.youLonSv.value = withTiming(longitude, { duration: 450 });
@@ -2167,7 +2228,7 @@ export default function DriverRadarScreen() {
   // Blink for "New assignment" card (pending accept, or showing accept/decline feedback).
   // Guard on acceptedTripIdResolved: don't show the card until we've checked AsyncStorage —
   // cached trips may load synchronously before AsyncStorage answers, causing a false flash
-  // of the "Hold to accept" card for drivers who already accepted the trip.
+  // of the accept-trip card for drivers who already accepted the trip.
   const showNewAssignmentCard = Boolean(
     acceptedTripIdResolved &&
     ((otpClaimTripId && otpClaimTrip) ||
@@ -2189,6 +2250,26 @@ export default function DriverRadarScreen() {
     (showNewAssignmentCard || activeMission || isAcceptedIncomingFlow) &&
       !otpClaimTripId,
   );
+  /** Active trip flow can drag to a slim stage-status peek (not OTP / new-assignment). */
+  const canMinimizeMissionSheet = Boolean(
+    (activeMission || isAcceptedIncomingFlow) &&
+      !otpClaimTripId &&
+      !showNewAssignmentCard,
+  );
+  const missionSheetCollapsed = canMinimizeMissionSheet && missionSheetIndex <= 0;
+  useEffect(() => {
+    if (!canMinimizeMissionSheet) return;
+    setMissionSheetIndex(1);
+    const t = setTimeout(() => {
+      try {
+        bottomSheetRef.current?.snapToIndex(1);
+      } catch {
+        /* ignore */
+      }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [canMinimizeMissionSheet, activeMission?.id, acceptedTripId]);
+
   useEffect(() => {
     if (!showNewAssignmentCard) return;
     newAssignmentBlinkAnim.setValue(0);
@@ -2236,11 +2317,10 @@ export default function DriverRadarScreen() {
     activeTripId: activeGuidanceTrip?.id ?? null,
   });
 
-  /** Map-only GPS stream when not in full follow mode (follow mode has its own watch). DB cadence unchanged. */
+  /** Map GPS stream during live trip (including follow mode). Follow mode still
+   * owns camera recenter; this keeps the marker on real device fixes. */
   useDriverMapLivePositionWatch({
-    enabled: Boolean(
-      driver && activeGuidanceTrip && shouldShowMap && !isFollowingLocation,
-    ),
+    enabled: Boolean(driver && activeGuidanceTrip && shouldShowMap),
     onFix: onPingLocationFix,
   });
 
@@ -2271,20 +2351,43 @@ export default function DriverRadarScreen() {
       : null;
   const highlightedTarget = activeGuidance?.target ?? null;
 
-  // Keep the important route/marker clear of the mission sheet. Derived from
-  // the sheet's real measured height (onLayout on its content, above) rather
-  // than a screen-fraction guess -- that guess goes stale the moment the
-  // sheet's content height changes (e.g. the mission card gaining/losing a
-  // guidance banner) since nothing kept it in sync.
-  const olaMapBottomPaddingPx =
-    measuredSheetHeight > 0
-      ? measuredSheetHeight + 24
-      : Math.round(Dimensions.get("window").height * 0.5);
+  // Visible wedge = above the job card. Fit uses edgePadding only — do not also
+  // stuff this into MapView mapPadding (Expo Go / Apple Maps double-counts and
+  // pins the route under the header).
   const screenHeight = Dimensions.get("window").height;
+  const MISSION_SHEET_PEEK_HEIGHT = 86;
+  const olaMapBottomPaddingPx = (() => {
+    if (missionSheetCollapsed) {
+      return Math.min(MISSION_SHEET_PEEK_HEIGHT + 28, Math.round(screenHeight * 0.28));
+    }
+    const raw =
+      measuredSheetHeight > 0
+        ? measuredSheetHeight + 36
+        : Math.round(screenHeight * 0.38);
+    return Math.min(raw, Math.round(screenHeight * 0.62));
+  })();
   const sheetSnapPoints = useMemo(() => {
+    if (canMinimizeMissionSheet) {
+      const maxExpanded = Math.min(
+        Math.round(screenHeight * 0.52),
+        Math.max(280, screenHeight - insets.top - driverSheetBottomInset - 120),
+      );
+      // Snap height is content only — no BottomSheet handle chrome on mission card.
+      const handleSlop = 0;
+      const contentH =
+        expandedSheetHeightRef.current > 160
+          ? expandedSheetHeightRef.current
+          : measuredSheetHeight > 160
+            ? measuredSheetHeight
+            : Math.round(screenHeight * 0.48);
+      const expanded = Math.min(
+        Math.max(contentH + handleSlop, MISSION_SHEET_PEEK_HEIGHT + 120),
+        maxExpanded,
+      );
+      return [MISSION_SHEET_PEEK_HEIGHT, expanded];
+    }
     if (shouldUseStaticMapSheetCard) {
-      // In dynamic sizing mode (v5), we still need to provide valid snap points.
-      // They will be used as fallback or initial points before content height is measured.
+      // Dynamic sizing for new-assignment / OTP flows.
       return ["100%"];
     }
     const mid = Math.round(Dimensions.get("window").height * 0.5); // Fixed half-screen
@@ -2300,7 +2403,14 @@ export default function DriverRadarScreen() {
       ),
     );
     return [min, mid, expanded];
-  }, [screenHeight, insets.top, shouldUseStaticMapSheetCard]);
+  }, [
+    screenHeight,
+    insets.top,
+    shouldUseStaticMapSheetCard,
+    canMinimizeMissionSheet,
+    measuredSheetHeight,
+    driverSheetBottomInset,
+  ]);
 
   /**
    * Cap for `enableDynamicSizing` on the static (active-mission) sheet.
@@ -2331,6 +2441,15 @@ export default function DriverRadarScreen() {
     },
     [sheetSnapPoints.length],
   );
+
+  const expandMissionSheetFromPeek = useCallback(() => {
+    setMissionSheetIndex(1);
+    try {
+      bottomSheetRef.current?.snapToIndex(1);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const handleTripFlowOperationActiveChange = useCallback(
     (active: boolean) => {
@@ -2638,12 +2757,11 @@ export default function DriverRadarScreen() {
   }, [shouldShowMap, routeContextTrip, routeContextPickup, routeContextDrop]);
 
   /**
-   * Start for active navigation polyline.
-   * - Approach (→ pickup): live GPS only.
-   * - After Package collected (→ drop): live GPS, else pickup (driver is still there).
+   * Start for active navigation polyline: live device GPS only.
+   * After Package collected with no GPS yet, fall back to pickup.
    */
   const navStartCoordinate = useMemo(() => {
-    const live = truckPosition ?? driverMapPosition;
+    const live = driverMapPosition ?? truckPosition;
     if (live) return live;
     if (
       shouldShowDriverToDropRoute(activeGuidanceStep) &&
@@ -2653,8 +2771,8 @@ export default function DriverRadarScreen() {
     }
     return null;
   }, [
-    truckPosition,
     driverMapPosition,
+    truckPosition,
     activeGuidanceStep,
     routeContextPickup,
   ]);
@@ -2664,7 +2782,7 @@ export default function DriverRadarScreen() {
     if (!shouldShowMap || !shouldShowDriverApproachRoute(activeGuidanceStep)) {
       return null;
     }
-    const start = navStartCoordinate ?? truckPosition ?? driverMapPosition;
+    const start = navStartCoordinate ?? driverMapPosition ?? truckPosition;
     if (!start || !routeContextPickup || !routeContextTrip) return null;
     // 3 decimals ≈ 100m — GPS ticks must not refetch approach every meter.
     return buildRouteFetchKey(
@@ -2984,333 +3102,18 @@ export default function DriverRadarScreen() {
     setShowTrackingInfoCard(false);
   }, [activeMission?.id, shouldShowMap]);
 
-  // Status-driven truck animation:
-  // - accepted/pickup: animate current -> pickup
-  // - transit: animate pickup -> midpoint between pickup & drop (and stop)
-  // - reached/completed: animate current -> drop and stay
+  // Live GPS owns the "You" marker. A previous status-driven animation walked
+  // the avatar along a fabricated polyline (to pickup / mid-corridor / drop)
+  // and overwrote youLatSv + truckPosition, so the map ignored real device
+  // GPS and chat/nav start preferred the fake point. Cancel any leftover
+  // animation when the trip/step changes; do not re-animate along the route.
   useEffect(() => {
-    if (!shouldShowMap || !activeGuidanceTrip || !activeGuidanceStep) return;
-
-    const stepKey = `${activeGuidanceTrip.id}:${activeGuidanceStep}`;
-    if (lastAnimatedStepKeyRef.current === stepKey) return;
-    lastAnimatedStepKeyRef.current = stepKey;
-
-    // Cancel any previous animation run.
     truckAnimTokenRef.current += 1;
     if (truckRafRef.current != null) cancelAnimationFrame(truckRafRef.current);
     truckRafRef.current = null;
-
-    const run = async () => {
-      const pickupCoord = getTripStopCoordinate(activeGuidanceTrip, "pickup");
-      const dropCoord = getTripStopCoordinate(activeGuidanceTrip, "drop");
-
-      const fromCoord = truckPosition ?? driverMapPosition;
-      if (!fromCoord) return;
-
-      const SPEED_MPS = 9; // ~32 km/h; UX timing, not real vehicle physics
-
-      const downsample = (pts: { latitude: number; longitude: number }[]) => {
-        if (pts.length <= 2) return pts;
-        const minSpacingM = 25;
-        const out: { latitude: number; longitude: number }[] = [pts[0]];
-        let last = pts[0];
-        for (let i = 1; i < pts.length; i++) {
-          const p = pts[i];
-          if (
-            distanceMeters(
-              last.latitude,
-              last.longitude,
-              p.latitude,
-              p.longitude,
-            ) >= minSpacingM
-          ) {
-            out.push(p);
-            last = p;
-          }
-        }
-        const end = pts[pts.length - 1];
-        if (out[out.length - 1] !== end) out.push(end);
-        return out;
-      };
-
-      const buildCumDistances = (
-        pts: { latitude: number; longitude: number }[],
-      ) => {
-        const cum: number[] = [0];
-        for (let i = 0; i < pts.length - 1; i++) {
-          const a = pts[i];
-          const b = pts[i + 1];
-          cum.push(
-            cum[i] +
-              distanceMeters(a.latitude, a.longitude, b.latitude, b.longitude),
-          );
-        }
-        return cum;
-      };
-
-      const interpolateAtDistance = (
-        pts: { latitude: number; longitude: number }[],
-        cum: number[],
-        dist: number,
-      ) => {
-        if (pts.length === 0) return null;
-        if (pts.length === 1) return pts[0];
-        const total = cum[cum.length - 1] ?? 0;
-        if (total <= 0) return pts[pts.length - 1];
-        const clamped = Math.max(0, Math.min(total, dist));
-
-        for (let i = 0; i < cum.length - 1; i++) {
-          const d0 = cum[i];
-          const d1 = cum[i + 1];
-          if (clamped >= d0 && clamped <= d1) {
-            const denom = d1 - d0;
-            const t = denom <= 0 ? 0 : (clamped - d0) / denom;
-            const a = pts[i];
-            const b = pts[i + 1];
-            return {
-              latitude: a.latitude + (b.latitude - a.latitude) * t,
-              longitude: a.longitude + (b.longitude - a.longitude) * t,
-            };
-          }
-        }
-        return pts[pts.length - 1];
-      };
-
-      const animateByDistance = (
-        pts: { latitude: number; longitude: number }[],
-        cum: number[],
-        startDist: number,
-        endDist: number,
-        durationMs: number,
-      ) => {
-        const token = truckAnimTokenRef.current;
-        const travel = Math.max(0, endDist - startDist);
-        const publishTruckVisual = (
-          p: { latitude: number; longitude: number },
-          opts?: { forceReact?: boolean },
-        ) => {
-          youLatSv.value = p.latitude;
-          youLonSv.value = p.longitude;
-          setDriverLivePosition(p);
-          driverMapPositionRef.current = p;
-          if (opts?.forceReact) {
-            const now = Date.now();
-            truckLastUpdateMsRef.current = now;
-            lastDriverMapCommitAtRef.current = now;
-            lastCommittedMapPosRef.current = p;
-            setTruckPosition(p);
-            return;
-          }
-          if (
-            shouldCommitDriverMapPosition({
-              prev: lastCommittedMapPosRef.current,
-              next: p,
-              lastCommitAt: lastDriverMapCommitAtRef.current,
-              minDisplacementM: 25,
-              minIntervalMs: 1000,
-            })
-          ) {
-            const now = Date.now();
-            truckLastUpdateMsRef.current = now;
-            lastDriverMapCommitAtRef.current = now;
-            lastCommittedMapPosRef.current = p;
-            setTruckPosition(p);
-          }
-        };
-
-        if (travel <= 0) {
-          const finalPos = interpolateAtDistance(pts, cum, endDist);
-          if (finalPos && token === truckAnimTokenRef.current)
-            publishTruckVisual(finalPos, { forceReact: true });
-          return;
-        }
-
-        const startTs = Date.now();
-        truckLastUpdateMsRef.current = 0;
-
-        const frame = () => {
-          if (token !== truckAnimTokenRef.current) return;
-          const now = Date.now();
-          const elapsed = now - startTs;
-          const t = Math.min(1, elapsed / Math.max(1, durationMs));
-          const dist = startDist + travel * t;
-
-          // Visual updates every ~70ms via shared values + live bus (imperative Leaflet).
-          if (now - truckLastUpdateMsRef.current >= 70 || t >= 1) {
-            const p = interpolateAtDistance(pts, cum, dist);
-            if (p) {
-              youLatSv.value = p.latitude;
-              youLonSv.value = p.longitude;
-              setDriverLivePosition(p);
-              driverMapPositionRef.current = p;
-              // Do not stamp truckLastUpdateMsRef here — that gates React commits.
-              if (
-                shouldCommitDriverMapPosition({
-                  prev: lastCommittedMapPosRef.current,
-                  next: p,
-                  lastCommitAt: lastDriverMapCommitAtRef.current,
-                  minDisplacementM: 25,
-                  minIntervalMs: 1000,
-                })
-              ) {
-                lastCommittedMapPosRef.current = p;
-                lastDriverMapCommitAtRef.current = now;
-                setTruckPosition(p);
-              }
-            }
-            truckLastUpdateMsRef.current = now;
-          }
-
-          if (t < 1) {
-            truckRafRef.current = requestAnimationFrame(frame);
-          } else {
-            const finalPos = interpolateAtDistance(pts, cum, endDist);
-            if (finalPos && token === truckAnimTokenRef.current)
-              publishTruckVisual(finalPos, { forceReact: true });
-          }
-        };
-
-        truckRafRef.current = requestAnimationFrame(frame);
-      };
-
-      const runFullAnimation = async (
-        routeFrom: typeof fromCoord,
-        routeTo: typeof fromCoord,
-        mode: "full" | "mid",
-      ) => {
-        const route = await getOptimalRoute(routeFrom, routeTo);
-        if (token !== truckAnimTokenRef.current) return;
-        if (!route || route.coordinates.length < 2) {
-          const pts = [routeFrom, routeTo];
-          const cum = buildCumDistances(pts);
-          const total = cum[cum.length - 1] ?? 0;
-          const endDist = mode === "mid" ? total * 0.5 : total;
-          animateByDistance(
-            pts,
-            cum,
-            0,
-            endDist,
-            Math.min(10000, Math.max(800, (total / SPEED_MPS) * 1000)),
-          );
-          return;
-        }
-        const pts = downsample(route.coordinates);
-        const cum = buildCumDistances(pts);
-        const total = cum[cum.length - 1] ?? 0;
-        if (total <= 0) return;
-
-        const endDist = mode === "mid" ? total * 0.5 : total;
-        animateByDistance(
-          pts,
-          cum,
-          0,
-          endDist,
-          Math.min(
-            10000,
-            Math.max(900, route.duration * 1000 * (endDist / total)),
-          ),
-        );
-      };
-
-      // Needed for token checks inside route fetch helper.
-      const token = truckAnimTokenRef.current;
-
-      if (activeGuidanceStep === "transit") {
-        if (!pickupCoord || !dropCoord) return;
-
-        // For transit, animate from the current truck position (usually at pickup)
-        // toward the midpoint of pickup->drop path, then stop there.
-        const route = await getOptimalRoute(pickupCoord, dropCoord);
-        if (token !== truckAnimTokenRef.current) return;
-
-        if (!route || route.coordinates.length < 2) {
-          const midpoint = {
-            latitude:
-              pickupCoord.latitude +
-              (dropCoord.latitude - pickupCoord.latitude) * 0.5,
-            longitude:
-              pickupCoord.longitude +
-              (dropCoord.longitude - pickupCoord.longitude) * 0.5,
-          };
-          const pts = [fromCoord, midpoint];
-          const cum = buildCumDistances(pts);
-          const total = cum[cum.length - 1] ?? 0;
-          animateByDistance(
-            pts,
-            cum,
-            0,
-            total,
-            Math.min(10000, Math.max(900, (total / SPEED_MPS) * 1000)),
-          );
-          return;
-        }
-
-        const pts = downsample(route.coordinates);
-        const cum = buildCumDistances(pts);
-        const total = cum[cum.length - 1] ?? 0;
-        if (total <= 0) return;
-
-        const endDist = total * 0.5; // midpoint stop
-
-        // Find a startDist along the same pickup->drop path that best matches fromCoord.
-        let bestI = 0;
-        let bestD = Number.POSITIVE_INFINITY;
-        for (let i = 0; i < pts.length; i++) {
-          const p = pts[i];
-          const d = distanceMeters(
-            fromCoord.latitude,
-            fromCoord.longitude,
-            p.latitude,
-            p.longitude,
-          );
-          if (d < bestD) {
-            bestD = d;
-            bestI = i;
-          }
-        }
-        const startDist = cum[bestI] ?? 0;
-
-        const travel = Math.max(0, endDist - startDist);
-        const ratio = travel / total;
-        animateByDistance(
-          pts,
-          cum,
-          startDist,
-          endDist,
-          Math.min(11000, Math.max(900, route.duration * 1000 * ratio)),
-        );
-        return;
-      }
-
-      if (
-        activeGuidanceStep === "accepted" ||
-        activeGuidanceStep === "pickup"
-      ) {
-        if (!pickupCoord) return;
-        await runFullAnimation(fromCoord, pickupCoord, "full");
-        return;
-      }
-
-      if (
-        activeGuidanceStep === "reached" ||
-        activeGuidanceStep === "completed"
-      ) {
-        if (!dropCoord) return;
-        await runFullAnimation(fromCoord, dropCoord, "full");
-        return;
-      }
-    };
-
-    run().catch(() => {
-      // If routing fails, do nothing; GPS/route will recover on next step change.
-    });
-  }, [
-    shouldShowMap,
-    activeGuidanceTrip,
-    activeGuidanceStep,
-    driverMapPosition,
-    truckPosition,
-  ]);
+    setTruckPosition(null);
+    lastAnimatedStepKeyRef.current = null;
+  }, [shouldShowMap, activeGuidanceTrip?.id, activeGuidanceStep]);
 
   useEffect(() => {
     const guidanceKey =
@@ -3381,12 +3184,10 @@ export default function DriverRadarScreen() {
           ? inlineMapViewportHeightRef.current
           : Math.round(screenHeight * 0.42);
 
-      // Bottom: reserve space for the mission sheet (real measured height,
-      // see olaMapBottomPaddingPx). Top: reserve space for the floating
-      // header/controls bar using the same offset they're actually
-      // positioned with, instead of a disconnected magic number.
+      // Bottom: job card + tab dock. Top: absolute header + map chips.
+      // (Header overlays the map — top pad must clear it.)
       const bottomPadding = isFullScreen
-        ? 160
+        ? Math.max(100, insets.bottom + 64)
         : shouldShowMap
           ? olaMapBottomPaddingPx
           : Math.max(110, Math.round(inlineMapHeight * 0.45));
@@ -3395,7 +3196,7 @@ export default function DriverRadarScreen() {
         insets.top,
       );
 
-      const livePosition = navStartCoordinate ?? truckPosition ?? driverMapPosition;
+      const livePosition = navStartCoordinate ?? driverMapPosition ?? truckPosition;
 
       // Goal-based framing: ask "what is the driver trying to see", not just
       // "which stage". At the endpoints the goal is a tight look at driver +
@@ -3444,28 +3245,52 @@ export default function DriverRadarScreen() {
 
       if (!options?.force && lastFitKeyRef.current === fitKey) return;
 
-      const bounds = boundsFromCoordinates(coordsForFit);
-      if (!bounds) return;
+      const rawBounds = boundsFromCoordinates(
+        coordsForFit,
+        isTightStopFit ? 0.035 : 0.05,
+      );
+      if (!rawBounds) return;
+      // Inflate just enough that short legs aren't glued to max zoom, without
+      // pulling so far that the corridor feels lost in the city.
+      const bounds = inflateMapBounds(
+        rawBounds,
+        isTightStopFit ? 0.5 : 1.05,
+        isTightStopFit ? 0.032 : 0.07,
+      );
 
       const showLeaflet =
         Platform.OS === "web" || useLeafletFallback || leafLetForced;
       if (showLeaflet) {
         const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
+        const leafPad = isFullScreen
+          ? 120
+          : Math.max(
+              160,
+              Math.round((topPadding + bottomPadding) * 0.45),
+            );
         leafRef.current?.fitBounds(
           bounds.ne,
           bounds.sw,
-          80,
-          isTightStopFit ? DRIVER_MAP_MAX_ZOOM : DRIVER_MAP_OVERVIEW_MAX_ZOOM,
+          leafPad,
+          isTightStopFit ? DRIVER_MAP_MY_LOCATION_ZOOM : DRIVER_MAP_OVERVIEW_MAX_ZOOM,
         );
         lastFitKeyRef.current = fitKey;
         return;
       }
 
       if (!targetRef.current) return;
+      const padTop = Math.max(topPadding + 36, Math.round(topPadding * 1.2));
+      const padBottom = Math.max(160, bottomPadding + 40);
+      const padSide = isFullScreen ? 72 : 88;
       targetRef.current.fitToCoordinates(
-        [bounds.ne, bounds.sw, ...coordsForFit],
+        [bounds.ne, bounds.sw],
         {
-          edgePadding: { top: topPadding, right: 50, bottom: bottomPadding, left: 50 },
+          edgePadding: {
+            top: padTop,
+            right: padSide,
+            bottom: padBottom,
+            left: padSide,
+          },
           animated: false,
         },
       );
@@ -3489,6 +3314,7 @@ export default function DriverRadarScreen() {
       leafLetForced,
       useLeafletFallback,
       insets.top,
+      insets.bottom,
     ],
   );
 
@@ -3536,12 +3362,29 @@ export default function DriverRadarScreen() {
     if (!shouldShowMap) return;
     if (!defaultBoundsTripKey) return;
     if (isFollowingLocation) return;
+    if (missionSheetCollapsed) return;
     scheduleFit(mapRef, { force: true }, 200);
   }, [
     defaultBoundsTripKey,
     shouldShowMap,
     scheduleFit,
     isFollowingLocation,
+    missionSheetCollapsed,
+  ]);
+
+  // Re-center into the open map band once the job card height is known.
+  useEffect(() => {
+    if (!shouldShowMap) return;
+    if (measuredSheetHeight <= 0) return;
+    if (isFollowingLocation) return;
+    if (missionSheetCollapsed) return;
+    scheduleFit(mapRef, { force: true }, 160);
+  }, [
+    measuredSheetHeight,
+    shouldShowMap,
+    scheduleFit,
+    isFollowingLocation,
+    missionSheetCollapsed,
   ]);
 
   // Refit inline map when road geometry loads so the full path is visible (not just A→B).
@@ -3554,6 +3397,7 @@ export default function DriverRadarScreen() {
         : (optimalRoute?.coordinates?.length ?? 0) >= 2);
     if (!hasGeometry) return;
     if (isFollowingLocation) return;
+    if (missionSheetCollapsed) return;
     scheduleFit(mapRef, { force: true }, 150);
   }, [
     tripLegRoute,
@@ -3563,6 +3407,7 @@ export default function DriverRadarScreen() {
     shouldShowMap,
     scheduleFit,
     isFollowingLocation,
+    missionSheetCollapsed,
   ]);
 
   // Active leg: one overview fit when the step changes, plus the UI-state
@@ -3681,9 +3526,49 @@ export default function DriverRadarScreen() {
     [isFullMapVisible, leafLetForced, useLeafletFallback, youHeadingSv],
   );
 
+  /**
+   * Minimized card keeps the full-route overview framing (corridor in view).
+   * Disable follow-me so GPS recenter cannot steal the camera, then re-fit.
+   */
+  const missionPeekZoomArmedRef = useRef(false);
+  useEffect(() => {
+    if (!shouldShowMap || !canMinimizeMissionSheet) {
+      missionPeekZoomArmedRef.current = false;
+      return;
+    }
+
+    if (missionSheetCollapsed) {
+      if (missionPeekZoomArmedRef.current) return;
+      missionPeekZoomArmedRef.current = true;
+      if (isFollowingLocation) setIsFollowingLocation(false);
+      setMapLocateCloseUp(false);
+      inlineMapUserInteractedRef.current = false;
+      const t = setTimeout(() => {
+        inlineMapUserInteractedRef.current = false;
+        // fitMapToActiveContext routes to leafletRef on web/Expo Go WebView maps.
+        scheduleFit(mapRef, { force: true }, 0);
+      }, 280);
+      return () => clearTimeout(t);
+    }
+
+    if (missionPeekZoomArmedRef.current) {
+      missionPeekZoomArmedRef.current = false;
+      if (!isFollowingLocation) {
+        inlineMapUserInteractedRef.current = false;
+        scheduleFit(mapRef, { force: true }, 240);
+      }
+    }
+  }, [
+    missionSheetCollapsed,
+    shouldShowMap,
+    canMinimizeMissionSheet,
+    scheduleFit,
+    isFollowingLocation,
+  ]);
+
   const handleFocusCurrentLocation = useCallback(async (): Promise<boolean> => {
     // Instant focus if we already know you (avatar on map) — never wait on GPS for UI.
-    const known = truckPosition ?? driverMapPosition;
+    const known = driverMapPosition ?? truckPosition;
     if (known) {
       commitMapPosition(known, { force: true });
       youLatSv.value = withTiming(known.latitude, { duration: 450 });
@@ -3794,6 +3679,7 @@ export default function DriverRadarScreen() {
 
     const applyFollowPosition = (latitude: number, longitude: number) => {
       const next = { latitude, longitude };
+      setTruckPosition(null);
       commitMapPosition(next);
       youLatSv.value = withTiming(next.latitude, { duration: 450 });
       youLonSv.value = withTiming(next.longitude, { duration: 450 });
@@ -3948,8 +3834,8 @@ export default function DriverRadarScreen() {
     const toDropNav = shouldShowDriverToDropRoute(activeGuidanceStep);
     const showApproachRoute = shouldShowDriverApproachRoute(activeGuidanceStep);
     const youCoordinate =
-      truckPosition ??
       driverMapPosition ??
+      truckPosition ??
       navStartCoordinate ??
       (toDropNav ? pickup : null);
     const mapCenter =
@@ -3961,7 +3847,7 @@ export default function DriverRadarScreen() {
         id: "you",
         coordinate: youCoordinate,
         avatarUri,
-        avatarSeed: optionalDriverAvatar?.avatarSeed,
+        avatarSeed: driverAvatarSeed,
         isOnline,
         onPress: () => {
           setIsFollowingLocation(false);
@@ -4220,7 +4106,7 @@ export default function DriverRadarScreen() {
 
     // Road distance from driver to current guidance target (pickup or drop)
     const pinnedPosition =
-      truckPosition ?? driverMapPosition ?? navStartCoordinate ?? DEFAULT_MAP_REGION;
+      driverMapPosition ?? truckPosition ?? navStartCoordinate ?? DEFAULT_MAP_REGION;
     const distanceToTargetKm =
       activeGuidanceTrip && pinnedPosition && activeNavigationRoute
         ? activeNavigationRoute.distance / 1000
@@ -4252,17 +4138,33 @@ export default function DriverRadarScreen() {
       );
     };
 
-    // Zoom native map to driver's current location
+    // Locate: 1st tap = close-up on driver; 2nd tap = full route overview.
     const handleZoomToDriver = () => {
-      if (!pinnedPosition) return;
       setIsFollowingLocation(false);
       setShowTrackingInfoCard(false);
+      setShowRouteSummary(false);
+
+      if (mapLocateCloseUp) {
+        setMapLocateCloseUp(false);
+        inlineMapUserInteractedRef.current = false;
+        fullMapUserInteractedRef.current = false;
+        try {
+          const ref = isFullScreen ? fullMapRef : mapRef;
+          fitMapToActiveContext(ref, { isFullScreen, force: true });
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
+      const you = pinnedPosition ?? driverMapPosition ?? truckPosition;
+      if (!you) return;
+      setMapLocateCloseUp(true);
+      if (isFullScreen) fullMapUserInteractedRef.current = true;
+      else inlineMapUserInteractedRef.current = true;
       if (showLeaflet) {
         const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
-        leafRef.current?.focusCurrentLocation(
-          pinnedPosition,
-          DRIVER_MAP_MY_LOCATION_ZOOM,
-        );
+        leafRef.current?.focusCurrentLocation(you, DRIVER_MAP_MY_LOCATION_ZOOM);
       } else {
         nativeMapZoomRef.current = DRIVER_MAP_MY_LOCATION_ZOOM;
         const map = targetRef.current;
@@ -4270,7 +4172,7 @@ export default function DriverRadarScreen() {
           if (map?.animateCamera) {
             map.animateCamera(
               {
-                center: pinnedPosition,
+                center: you,
                 zoom: DRIVER_MAP_MY_LOCATION_ZOOM,
                 pitch: 0,
               },
@@ -4279,7 +4181,7 @@ export default function DriverRadarScreen() {
           } else if (map?.animateToRegion) {
             map.animateToRegion(
               {
-                ...pinnedPosition,
+                ...you,
                 latitudeDelta: 0.02,
                 longitudeDelta: 0.02,
               },
@@ -4293,10 +4195,17 @@ export default function DriverRadarScreen() {
     const handleMapZoomDelta = (delta: number) => {
       setIsFollowingLocation(false);
       setShowTrackingInfoCard(false);
+      // Without this, auto-fit with force:true immediately undoes +/- on web/Leaflet.
+      if (isFullScreen) fullMapUserInteractedRef.current = true;
+      else inlineMapUserInteractedRef.current = true;
       if (showLeaflet) {
         const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
         if (delta > 0) leafRef.current?.zoomIn();
         else leafRef.current?.zoomOut();
+        nativeMapZoomRef.current = Math.max(
+          3,
+          Math.min(DRIVER_MAP_MAX_ZOOM, nativeMapZoomRef.current + delta),
+        );
         return;
       }
       const center =
@@ -4380,9 +4289,9 @@ export default function DriverRadarScreen() {
                   }
                 : DEFAULT_MAP_REGION
             }
-            mapType={Platform.OS === "ios" ? "mutedStandard" : "standard"}
-            userInterfaceStyle={mapIsDark ? "dark" : "light"}
-            customMapStyle={mapIsDark ? darkMapStyle : undefined}
+            mapType={isExpoGo() ? "standard" : Platform.OS === "ios" ? "mutedStandard" : "standard"}
+            userInterfaceStyle={isExpoGo() ? "light" : mapIsDark ? "dark" : "light"}
+            customMapStyle={isExpoGo() ? undefined : mapIsDark ? darkMapStyle : undefined}
             showsUserLocation={false}
             scrollEnabled={!mapViewportLocked}
             zoomEnabled={!mapViewportLocked}
@@ -4410,10 +4319,12 @@ export default function DriverRadarScreen() {
               // (including at drop-off / Upload POD when the bottom sheet layout shifts).
             }}
             mapPadding={{
+              // Fit framing owns the wedge via fitToCoordinates edgePadding.
+              // Keeping the same bottom here double-counts on Apple Maps / Expo Go.
               top: 0,
               left: 0,
               right: 0,
-              bottom: olaMapBottomPaddingPx,
+              bottom: 0,
             }}
           >
             {/* You marker: live GPS when available; at pickup after Package collected if GPS lagging. */}
@@ -4424,13 +4335,26 @@ export default function DriverRadarScreen() {
                 anchor={{ x: 0.5, y: 1 }}
               >
                 <Reanimated.View style={youIconAnimatedStyle}>
-                  <DriverMapAvatarMarker
-                    avatarUri={avatarUri}
-                    avatarSeed={optionalDriverAvatar?.avatarSeed}
-                    isOnline={isOnline}
-                    size={48}
-                    onPressStatus={handleZoomToDriver}
-                  />
+                  {isExpoGo() ? (
+                    <View
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 11,
+                        backgroundColor: Theme.driverEmerald,
+                        borderWidth: 3,
+                        borderColor: isOnline ? Theme.darkGreen : Theme.teslaRed,
+                      }}
+                    />
+                  ) : (
+                    <DriverMapAvatarMarker
+                      avatarUri={avatarUri}
+                      avatarSeed={driverAvatarSeed}
+                      isOnline={isOnline}
+                      size={48}
+                      onPressStatus={handleZoomToDriver}
+                    />
+                  )}
                 </Reanimated.View>
                 <MapCallout>
                   <View
@@ -4467,13 +4391,26 @@ export default function DriverRadarScreen() {
                 coordinate={youCoordinate}
                 anchor={{ x: 0.5, y: 1 }}
               >
-                <DriverMapAvatarMarker
-                  avatarUri={avatarUri}
-                  avatarSeed={optionalDriverAvatar?.avatarSeed}
-                  isOnline={isOnline}
-                  size={48}
-                  onPressStatus={handleZoomToDriver}
-                />
+                {isExpoGo() ? (
+                  <View
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 11,
+                      backgroundColor: Theme.driverEmerald,
+                      borderWidth: 3,
+                      borderColor: isOnline ? Theme.darkGreen : Theme.teslaRed,
+                    }}
+                  />
+                ) : (
+                  <DriverMapAvatarMarker
+                    avatarUri={avatarUri}
+                    avatarSeed={driverAvatarSeed}
+                    isOnline={isOnline}
+                    size={48}
+                    onPressStatus={handleZoomToDriver}
+                  />
+                )}
               </MapMarker>
             ) : null}
 
@@ -4619,7 +4556,7 @@ export default function DriverRadarScreen() {
         {/* Map controls + route summary — hidden during OTP entry */}
         {otpClaimTripId == null ? (
           <>
-            {/* Top controls row */}
+            {/* Top row: LIVE ROUTE (left) + zoom / locate (right) */}
             <View
               style={[
                 styles.mapTopControlsRow,
@@ -4632,109 +4569,59 @@ export default function DriverRadarScreen() {
               ]}
               pointerEvents="box-none"
             >
-              {/* Left: Full view / Done */}
-              {controlsVariant === "embedded" ? (
-                <TouchableOpacity
-                  style={[
-                    styles.mapTopIconBtn,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                  onPress={() => {
-                    setIsFullMapVisible(true);
-                    setTimeout(() => {
-                      try {
-                        fitMapToActiveContext(fullMapRef, {
-                          isFullScreen: true,
-                          force: true,
-                        });
-                      } catch {}
-                    }, 350);
-                  }}
-                  activeOpacity={0.88}
-                  accessibilityLabel="Open full screen map"
-                  accessibilityRole="button"
-                >
-                  <FontAwesome name="expand" size={12} color={colors.text} />
-                </TouchableOpacity>
+              {showTrackingInfoCard &&
+              otpClaimTripId == null &&
+              (activeMission || effectiveFirstIncoming) ? (
+                (() => {
+                  const toLabel =
+                    activeGuidanceStep === "accepted" ||
+                    activeGuidanceStep === "pickup"
+                      ? "pickup"
+                      : "destination";
+                  const distM =
+                    distanceToTargetKm != null
+                      ? formatRoadDistanceM(distanceToTargetKm * 1000)
+                      : null;
+                  const etaText = formatEtaFromRouteSeconds(
+                    activeNavigationRoute?.duration,
+                  );
+                  const arrivalClock = formatEtaArrivalClock(
+                    activeNavigationRoute?.duration,
+                  );
+                  const bottomHint =
+                    !arrivalClock && !activeMission
+                      ? "Start trip for live ETA"
+                      : !arrivalClock && activeMission && distM == null
+                        ? "Getting GPS…"
+                        : undefined;
+                  return (
+                    <View style={styles.mapTopLiveRouteWrap} pointerEvents="box-none">
+                      <LiveRouteInfoCard
+                        compact
+                        colors={colors}
+                        toLabel={toLabel}
+                        distanceDisplay={distM}
+                        etaDisplay={etaText ?? "—"}
+                        arrivalClock={arrivalClock}
+                        bottomHint={bottomHint}
+                      />
+                    </View>
+                  );
+                })()
               ) : (
-                <TouchableOpacity
-                  style={[
-                    styles.mapTopIconBtn,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                  onPress={() => {
-                    setIsFullMapVisible(false);
-                    setTimeout(() => {
-                      try {
-                        fitMapToActiveContext(mapRef, { force: true });
-                      } catch {}
-                    }, 200);
-                  }}
-                  activeOpacity={0.88}
-                  accessibilityLabel="Close full screen map"
-                  accessibilityRole="button"
-                >
-                  <FontAwesome name="compress" size={12} color={colors.text} />
-                </TouchableOpacity>
+                <View style={styles.mapTopLiveRouteSpacer} />
               )}
 
-              {/* Right group: Route + driver GPS + live tracking */}
               <View style={styles.mapTopRightGroup}>
-                {/* Route button — fit to full route + toggle summary panel */}
-                {(activeMission || effectiveFirstIncoming) &&
-                  pickup &&
-                  drop ? (
-                  <TouchableOpacity
-                    style={[
-                      styles.mapTopIconBtn,
-                      {
-                        backgroundColor: showRouteSummary
-                          ? colors.emerald
-                          : colors.surface,
-                        borderColor: showRouteSummary
-                          ? colors.emerald
-                          : colors.border,
-                      },
-                    ]}
-                    onPress={() => {
-                      setIsFollowingLocation(false);
-                      setShowTrackingInfoCard(false);
-                      const next = !showRouteSummary;
-                      setShowRouteSummary(next);
-                      if (next) {
-                        if (showLeaflet) {
-                          handleFitBoundsLeaflet();
-                        } else {
-                          try {
-                            const ref = isFullScreen ? fullMapRef : mapRef;
-                            fitMapToActiveContext(ref, {
-                              isFullScreen,
-                              force: true,
-                            });
-                          } catch {}
-                        }
-                      }
-                    }}
-                    activeOpacity={0.88}
-                    accessibilityLabel="Show route summary"
-                    accessibilityRole="button"
-                  >
-                    <FontAwesome
-                      name="map-o"
-                      size={12}
-                      color={
-                        showRouteSummary ? "#fff" : colors.text
-                      }
-                    />
-                  </TouchableOpacity>
-                ) : null}
-
                 <TouchableOpacity
                   style={[
                     styles.mapTopIconBtn,
                     { backgroundColor: colors.surface, borderColor: colors.border },
                   ]}
-                  onPress={() => handleMapZoomDelta(1)}
+                  onPress={() => {
+                    setMapLocateCloseUp(false);
+                    handleMapZoomDelta(1);
+                  }}
                   disabled={mapViewportLocked}
                   accessibilityLabel="Zoom in"
                   accessibilityRole="button"
@@ -4747,7 +4634,10 @@ export default function DriverRadarScreen() {
                     styles.mapTopIconBtn,
                     { backgroundColor: colors.surface, borderColor: colors.border },
                   ]}
-                  onPress={() => handleMapZoomDelta(-1)}
+                  onPress={() => {
+                    setMapLocateCloseUp(false);
+                    handleMapZoomDelta(-1);
+                  }}
                   disabled={mapViewportLocked}
                   accessibilityLabel="Zoom out"
                   accessibilityRole="button"
@@ -4758,112 +4648,32 @@ export default function DriverRadarScreen() {
                 <TouchableOpacity
                   style={[
                     styles.mapTopIconBtn,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                  onPress={handleZoomToDriver}
-                  disabled={!driverMapPosition}
-                  accessibilityLabel="Center on my location"
-                  accessibilityRole="button"
-                >
-                  <FontAwesome name="street-view" size={12} color={colors.text} />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.mapTopIconBtn,
                     {
-                      // Green only while live-following YOU (not just because ETA card is open).
-                      backgroundColor: isFollowingLocation
+                      backgroundColor: mapLocateCloseUp
                         ? colors.emerald
                         : colors.surface,
-                      borderColor: isFollowingLocation
+                      borderColor: mapLocateCloseUp
                         ? colors.emerald
                         : colors.border,
                     },
                   ]}
-                  onPress={() => {
-                    setShowRouteSummary(false);
-                    if (isFollowingLocation) {
-                      setIsFollowingLocation(false);
-                      setIsFetchingLocation(false);
-                      return;
-                    }
-                    // Explicit "Center" action: re-enable auto-fit the same
-                    // way a real context change would.
-                    inlineMapUserInteractedRef.current = false;
-                    fullMapUserInteractedRef.current = false;
-                    // Always zoom camera to current position + enable live follow.
-                    setShowTrackingInfoCard(true);
-                    setIsFollowingLocation(true);
-                    void handleFocusCurrentLocation().then((ok) => {
-                      if (!ok) setIsFollowingLocation(false);
-                    });
-                  }}
+                  onPress={handleZoomToDriver}
+                  disabled={!(driverMapPosition ?? truckPosition ?? pinnedPosition)}
                   accessibilityLabel={
-                    isFollowingLocation
-                      ? "Stop following my location"
-                      : "Focus and follow my location"
+                    mapLocateCloseUp
+                      ? "Show full route overview"
+                      : "Zoom to my location"
                   }
                   accessibilityRole="button"
-                  disabled={isFetchingLocation}
                 >
-                  {isFetchingLocation ? (
-                    <ActivityIndicator size="small" color={Theme.primary} />
-                  ) : (
-                    <FontAwesome
-                      name="crosshairs"
-                      size={12}
-                      color={isFollowingLocation ? "#fff" : colors.text}
-                    />
-                  )}
+                  <FontAwesome
+                    name="street-view"
+                    size={12}
+                    color={mapLocateCloseUp ? "#fff" : colors.text}
+                  />
                 </TouchableOpacity>
               </View>
             </View>
-
-            {/* Tracking tap — distance to current guidance target + route ETA */}
-            {showTrackingInfoCard &&
-            otpClaimTripId == null &&
-            (activeMission || effectiveFirstIncoming)
-              ? (() => {
-                  const toLabel =
-                    activeGuidanceStep === "accepted" || activeGuidanceStep === "pickup"
-                      ? "pickup"
-                      : "destination";
-                  const distM =
-                    distanceToTargetKm != null
-                      ? formatRoadDistanceM(distanceToTargetKm * 1000)
-                      : null;
-                  const etaText = formatEtaFromRouteSeconds(activeNavigationRoute?.duration);
-                  const arrivalClock = formatEtaArrivalClock(activeNavigationRoute?.duration);
-                  const cardTop = mapTrackingCardTop(controlsVariant, insets.top);
-                  const bottomHint =
-                    !arrivalClock && !activeMission
-                      ? "Start the trip to see live ETA from your location."
-                      : !arrivalClock && activeMission && distM == null
-                        ? "Getting GPS / route…"
-                        : undefined;
-                  return (
-                    <View
-                      pointerEvents="box-none"
-                      style={[
-                        styles.trackingInfoCardWrap,
-                        {
-                          top: cardTop,
-                        },
-                      ]}
-                    >
-                      <LiveRouteInfoCard
-                        colors={colors}
-                        toLabel={toLabel}
-                        distanceDisplay={distM}
-                        etaDisplay={etaText ?? "—"}
-                        arrivalClock={arrivalClock}
-                        bottomHint={bottomHint}
-                      />
-                    </View>
-                  );
-                })()
-              : null}
 
             {/* Route summary panel — readable pickup/drop addresses */}
             {showRouteSummary && (activeMission || effectiveFirstIncoming) ? (() => {
@@ -5130,8 +4940,8 @@ export default function DriverRadarScreen() {
               commissionAmount={activeMissionCommission}
               assignedBy={activeFlowAssigner}
               distanceToTargetKm={distanceToTargetKmGlobal}
-              driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
-              driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
+              driverLatitude={(driverMapPosition ?? truckPosition)?.latitude ?? null}
+              driverLongitude={(driverMapPosition ?? truckPosition)?.longitude ?? null}
               driverLocationLabel={locationLabel}
               onRefresh={refreshDashboard}
               onTripUpdated={patchTripInDashboard}
@@ -5159,6 +4969,8 @@ export default function DriverRadarScreen() {
                     edgeToEdge: true,
                     variant: "page" as const,
                     onOperationActiveChange: handleTripFlowOperationActiveChange,
+                    collapsed: missionSheetCollapsed,
+                    onToggleCollapse: expandMissionSheetFromPeek,
                   }
                 : {})}
             />
@@ -5173,8 +4985,8 @@ export default function DriverRadarScreen() {
               commissionAmount={newAssignmentCommission}
               assignedBy={jobCardAssigner}
               distanceToTargetKm={distanceToTargetKmGlobal}
-              driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
-              driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
+              driverLatitude={(driverMapPosition ?? truckPosition)?.latitude ?? null}
+              driverLongitude={(driverMapPosition ?? truckPosition)?.longitude ?? null}
               driverLocationLabel={locationLabel}
               onRefresh={refreshDashboard}
               onTripUpdated={patchTripInDashboard}
@@ -5202,6 +5014,8 @@ export default function DriverRadarScreen() {
                     edgeToEdge: true,
                     variant: "page" as const,
                     onOperationActiveChange: handleTripFlowOperationActiveChange,
+                    collapsed: missionSheetCollapsed,
+                    onToggleCollapse: expandMissionSheetFromPeek,
                   }
                 : {})}
             />
@@ -5410,7 +5224,6 @@ export default function DriverRadarScreen() {
             earningsAmountColor={jobRequestSheetPrimary}
             primaryTextColor={jobRequestSheetPrimary}
             mutedTextColor={jobRequestSheetMuted}
-            holdTrackColor={jobRequestHoldTrack}
             accentColor={colors.emerald}
             errorMessage={acceptError}
             otpMode={
@@ -5752,46 +5565,71 @@ export default function DriverRadarScreen() {
             <BottomSheet
               snapPoints={sheetSnapPoints}
               index={
-                sheetSnapPoints.length === 1
-                  ? 0
-                  : shouldUseStaticMapSheetCard
+                canMinimizeMissionSheet
+                  ? missionSheetIndex
+                  : sheetSnapPoints.length === 1
                     ? 0
-                    : 1
+                    : shouldUseStaticMapSheetCard
+                      ? 0
+                      : 1
               }
+              animatedPosition={missionSheetAnimatedPosition}
               enablePanDownToClose={false}
-              enableHandlePanningGesture={!shouldUseStaticMapSheetCard}
-              enableContentPanningGesture={!shouldUseStaticMapSheetCard}
-              enableOverDrag={!shouldUseStaticMapSheetCard}
-              enableDynamicSizing={shouldUseStaticMapSheetCard}
+              enableHandlePanningGesture={
+                !shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+              }
+              enableContentPanningGesture={
+                !shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+              }
+              enableOverDrag={
+                !shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+              }
+              enableDynamicSizing={
+                shouldUseStaticMapSheetCard && !canMinimizeMissionSheet
+              }
               maxDynamicContentSize={sheetMaxDynamicContentSize}
               ref={bottomSheetRef}
               keyboardBehavior={otpClaimTripId ? "extend" : "interactive"}
               keyboardBlurBehavior="restore"
               android_keyboardInputMode="adjustResize"
               onChange={(index) => {
+                if (canMinimizeMissionSheet && index >= 0) {
+                  setMissionSheetIndex(index);
+                }
                 // Only dismiss keyboard if we're snapping to a very low point or closing
                 if (index <= 0 && !shouldUseStaticMapSheetCard) {
                   Keyboard.dismiss();
                 }
               }}
-              bottomInset={driverTabBarClearance}
+              bottomInset={driverSheetBottomInset}
+              // No gray handle chrome — mission card green hero is the sheet top
+              // again (drag via content pan / card surface).
               handleComponent={
-                shouldUseStaticMapSheetCard ? () => null : undefined
+                shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                  ? () => null
+                  : undefined
               }
               backgroundStyle={{
-                backgroundColor: shouldUseStaticMapSheetCard
-                  ? "transparent"
-                  : colors.surface,
-                borderTopLeftRadius: shouldUseStaticMapSheetCard ? 0 : 28,
-                borderTopRightRadius: shouldUseStaticMapSheetCard ? 0 : 28,
+                backgroundColor:
+                  canMinimizeMissionSheet && missionSheetCollapsed
+                    ? colors.surface
+                    : shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                      ? "transparent"
+                      : colors.surface,
+                borderTopLeftRadius:
+                  shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                    ? 28
+                    : 28,
+                borderTopRightRadius:
+                  shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                    ? 28
+                    : 28,
                 overflow: "hidden",
               }}
               handleIndicatorStyle={{
-                backgroundColor: shouldUseStaticMapSheetCard
-                  ? "transparent"
-                  : colors.border,
+                backgroundColor: "transparent",
                 width: 50,
-                height: 4,
+                height: 0,
                 borderRadius: 999,
               }}
             >
@@ -5808,19 +5646,30 @@ export default function DriverRadarScreen() {
                   contentContainerStyle={[
                     styles.olaSheetContent,
                     {
-                      // Clear the driver tab bar so the last row (Hold to start
-                      // transit) is fully scrollable into view, not pinned under it.
-                      paddingBottom: insets.bottom,
+                      // Keep CTA clear of the floating dock when scrolling a tall card.
+                      paddingBottom: missionSheetCollapsed ? 0 : 16,
                       paddingHorizontal: 0,
-                      flexGrow: 0,
+                      // Peek is shorter than the snap — grow so surface fills
+                      // to the dock (transparent leftover showed the map).
+                      flexGrow: missionSheetCollapsed ? 1 : 0,
                     },
                   ]}
                 >
                   <View
-                    style={[styles.assignedSheetContent, { flexGrow: 0 }]}
+                    style={[
+                      styles.assignedSheetContent,
+                      {
+                        flexGrow: missionSheetCollapsed ? 1 : 0,
+                      },
+                    ]}
                     onLayout={(e) => {
                       const h = Math.round(e.nativeEvent.layout.height);
-                      setMeasuredSheetHeight((prev) => (Math.abs(prev - h) > 2 ? h : prev));
+                      // Don't let peek height overwrite the expanded measure used for snap #1.
+                      if (missionSheetCollapsed && h < 140) return;
+                      if (h > 160) expandedSheetHeightRef.current = h;
+                      setMeasuredSheetHeight((prev) =>
+                        Math.abs(prev - h) > 2 ? h : prev,
+                      );
                     }}
                   >
                     {showDeferredInviteCard && pendingInvite ? (
@@ -5928,6 +5777,22 @@ export default function DriverRadarScreen() {
                 </BottomSheetScrollView>
               )}
             </BottomSheet>
+
+            {(activeMission?.id ||
+              (effectiveFirstIncoming &&
+                acceptedTripId &&
+                String(effectiveFirstIncoming.id).toLowerCase() ===
+                  String(acceptedTripId).toLowerCase())) ? (
+              <DriverExpenseCaptureFab
+                animatedSheetTop={missionSheetAnimatedPosition}
+                onPress={() => {
+                  const tripId =
+                    activeMission?.id ?? effectiveFirstIncoming?.id ?? null;
+                  if (!tripId) return;
+                  router.push(ROUTES.tripOtherExpenseEntry(tripId) as Href);
+                }}
+              />
+            ) : null}
           </KeyboardAvoidingView>
         </GestureHandlerRootView>
       ) : null}
@@ -6106,7 +5971,7 @@ export default function DriverRadarScreen() {
                       }
                     }
                     avatarUri={avatarUri}
-                    avatarSeed={optionalDriverAvatar?.avatarSeed}
+                    avatarSeed={driverAvatarSeed}
                     isOnline={isOnline}
                     borderColor={colors.border}
                     surfaceColor={colors.surface}
@@ -7376,9 +7241,20 @@ const styles = withWebSafeShadows(
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 6,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     zIndex: 60,
     elevation: 24,
+  },
+  mapTopLiveRouteWrap: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 2,
+    alignSelf: "center",
+  },
+  mapTopLiveRouteSpacer: {
+    flex: 1,
+    minWidth: 0,
   },
   mapTopPillButton: {
     flexDirection: "row",
@@ -7592,6 +7468,7 @@ const styles = withWebSafeShadows(
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
+    flexShrink: 0,
   },
   mapTopIconBtn: {
     width: MAP_CONTROLS_BAR_HEIGHT,

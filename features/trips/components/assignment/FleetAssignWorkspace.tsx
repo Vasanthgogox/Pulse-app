@@ -12,6 +12,7 @@ import {
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -128,6 +129,8 @@ export function FleetAssignWorkspace({
   focus = "driver",
 }: Props) {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const isCompact = windowWidth < 720;
   const [driverAction, setDriverAction] = useState<AssignmentPanelAction>("SWAP");
   const [vehicleAction, setVehicleAction] = useState<AssignmentPanelAction>("SWAP");
   const [driverSearch, setDriverSearch] = useState("");
@@ -256,7 +259,9 @@ export function FleetAssignWorkspace({
   const driverPanelBody =
     driverAction === "SWAP" ? (
       <View style={styles.panelStack}>
-        <Text style={aws.sectionHint}>Select on-duty fleet driver</Text>
+        {!isCompact ? (
+          <Text style={aws.sectionHint}>Select on-duty fleet driver</Text>
+        ) : null}
         <View style={styles.searchWrap}>
           <FontAwesome
             name="search"
@@ -280,10 +285,14 @@ export function FleetAssignWorkspace({
             <Plus size={18} color={Theme.textMuted} strokeWidth={3} />
           </View>
           <View style={styles.rowText}>
-            <Text style={styles.rowTitle}>Add new driver</Text>
-            <Text style={styles.rowSub}>
-              Opens a short form; they appear in your fleet next time.
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              Add new driver
             </Text>
+            {!isCompact ? (
+              <Text style={styles.rowSub} numberOfLines={2}>
+                Opens a short form; they appear in your fleet next time.
+              </Text>
+            ) : null}
           </View>
         </Pressable>
         {driversLoading ? (
@@ -340,12 +349,14 @@ export function FleetAssignWorkspace({
       </View>
     ) : (
       <View style={styles.panelStack}>
-        <View style={aws.sectionHintRow}>
-          <Text style={aws.sectionHint}>Selected driver details</Text>
-          <Text style={aws.kycHint}>Fleet record</Text>
-        </View>
-        <View style={styles.fieldStack}>
-          <View>
+        {!isCompact ? (
+          <View style={aws.sectionHintRow}>
+            <Text style={aws.sectionHint}>Selected driver details</Text>
+            <Text style={aws.kycHint}>Fleet record</Text>
+          </View>
+        ) : null}
+        <View style={[styles.fieldStack, isCompact && aws.fieldsGridPhone]}>
+          <View style={isCompact ? aws.fieldPhone : undefined}>
             <Text style={aws.fieldLabel}>Driver full name</Text>
             <TextInput
               style={[aws.input, styles.readOnly]}
@@ -355,7 +366,7 @@ export function FleetAssignWorkspace({
               placeholderTextColor={Theme.textMuted}
             />
           </View>
-          <View>
+          <View style={isCompact ? aws.fieldPhone : undefined}>
             <Text style={aws.fieldLabel}>Mobile contact no.</Text>
             <TextInput
               style={[aws.input, styles.readOnly]}
@@ -383,7 +394,9 @@ export function FleetAssignWorkspace({
   const vehiclePanelBody =
     vehicleAction === "SWAP" ? (
       <View style={styles.panelStack}>
-        <Text style={aws.sectionHint}>Select available registered truck</Text>
+        {!isCompact ? (
+          <Text style={aws.sectionHint}>Select available registered truck</Text>
+        ) : null}
         <View style={styles.searchWrap}>
           <FontAwesome
             name="search"
@@ -407,10 +420,14 @@ export function FleetAssignWorkspace({
             <Plus size={18} color={Theme.textMuted} strokeWidth={3} />
           </View>
           <View style={styles.rowText}>
-            <Text style={styles.rowTitle}>Add new vehicle</Text>
-            <Text style={styles.rowSub}>
-              Opens a short form; they appear in your fleet next time.
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              Add new vehicle
             </Text>
+            {!isCompact ? (
+              <Text style={styles.rowSub} numberOfLines={2}>
+                Opens a short form; they appear in your fleet next time.
+              </Text>
+            ) : null}
           </View>
         </Pressable>
         {vehiclesLoading ? (
@@ -466,12 +483,16 @@ export function FleetAssignWorkspace({
       </View>
     ) : (
       <View style={styles.panelStack}>
-        <View style={aws.sectionHintRow}>
-          <Text style={aws.sectionHint}>Selected vehicle details</Text>
-          <Text style={[aws.kycHint, { color: Theme.assignmentVehicleAccent }]}>RC verified</Text>
-        </View>
-        <View style={styles.fieldStack}>
-          <View>
+        {!isCompact ? (
+          <View style={aws.sectionHintRow}>
+            <Text style={aws.sectionHint}>Selected vehicle details</Text>
+            <Text style={[aws.kycHint, { color: Theme.assignmentVehicleAccent }]}>
+              RC verified
+            </Text>
+          </View>
+        ) : null}
+        <View style={[styles.fieldStack, isCompact && aws.fieldsGridPhone]}>
+          <View style={isCompact ? aws.fieldPhone : undefined}>
             <Text style={aws.fieldLabel}>Registration no</Text>
             <TextInput
               style={[aws.input, styles.readOnly, { fontWeight: "800" }]}
@@ -485,7 +506,7 @@ export function FleetAssignWorkspace({
               placeholderTextColor={Theme.textMuted}
             />
           </View>
-          <View>
+          <View style={isCompact ? aws.fieldPhone : undefined}>
             <Text style={aws.fieldLabel}>Container type / specs</Text>
             <TextInput
               style={[aws.input, styles.readOnly]}

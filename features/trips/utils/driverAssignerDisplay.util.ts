@@ -3,6 +3,7 @@
  * Mirrors logic in app/(driver)/index.tsx notifications / assignment card.
  */
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { getFleetAvatarSeedForOrg } from "@/features/vehicles/utils/fleetAvatar.util";
 
 const UUID_V4_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -59,6 +60,7 @@ export type DriverInviteLite = {
   from_org_logo_url?: string | null;
   from_org_avatar_url?: string | null;
   from_org_avatar_seed?: string | null;
+  payable_amount?: number | null;
   commission_percent?: number | null;
   commission_per_km?: number | null;
   status?: string | null;
@@ -118,11 +120,13 @@ export function buildJobCardAssignerPayload(
   assigner: Pick<
     AssignerDisplayResult,
     "assignerLinePrimary" | "assignerLineSecondary" | "assignedByOrgName"
-  >,
+  > &
+    Partial<Pick<AssignerDisplayResult, "effectiveAssignerOrgId">>,
   driverOrganizationId: string | null | undefined,
   inviteForOrg: DriverInviteLite | null,
   flags: { requiresOtp: boolean; isAggregate: boolean; isRoster: boolean },
   orgLogoFromDb?: string | null,
+  orgAvatarFromDb?: { seed?: string | null; url?: string | null } | null,
 ): JobCardAssignerPayload {
   const acceptedInvite =
     inviteForOrg &&
@@ -135,11 +139,35 @@ export function buildJobCardAssignerPayload(
     flags,
     acceptedInvite,
   );
-  // Use the invite's org when available — it correctly points to the employer org
-  // even on cross-org trips where trip.organization_id is the client, not employer.
+  // Prefer employer / assigning org (invite or display resolver) over raw trip.organization_id
+  // — cross-org marketplace trips often put the client org on the trip row.
   const orgId =
     (inviteForOrg?.from_organization_id ?? "").trim() ||
+    (assigner.effectiveAssignerOrgId ?? "").trim() ||
     (trip.organization_id ?? "").trim();
+
+  // Business OrgParty order: logo → owner/admin seed → owner photo → hash fallback.
+  // Treat empty strings as missing (invite RPC often returns "").
+  const logoUrl =
+    (inviteForOrg?.from_org_logo_url ?? "").trim() ||
+    (orgLogoFromDb ?? "").trim() ||
+    null;
+  const ownerSeed =
+    (inviteForOrg?.from_org_avatar_seed ?? "").trim() ||
+    (orgAvatarFromDb?.seed ?? "").trim() ||
+    null;
+  const ownerPhoto =
+    (inviteForOrg?.from_org_avatar_url ?? "").trim() ||
+    (orgAvatarFromDb?.url ?? "").trim() ||
+    null;
+  // PartyAvatar checks contact photo before org seed — only pass owner photo when
+  // there is no seed, so we match avatarContext OrgParty (logo → seed → photo).
+  const orgAvatarSeed =
+    ownerSeed ||
+    (orgId
+      ? getFleetAvatarSeedForOrg(orgId, assigner.assignedByOrgName)
+      : null);
+
   return {
     kind,
     kindLabel,
@@ -147,10 +175,26 @@ export function buildJobCardAssignerPayload(
     lineSecondary: assigner.assignerLineSecondary,
     orgId,
     orgName: assigner.assignedByOrgName,
-    orgLogoUrl: inviteForOrg?.from_org_logo_url ?? orgLogoFromDb ?? null,
-    orgAvatarSeed: inviteForOrg?.from_org_avatar_seed ?? null,
-    orgAvatarUrl: inviteForOrg?.from_org_avatar_url ?? null,
+    orgLogoUrl: logoUrl,
+    orgAvatarSeed,
+    orgAvatarUrl: ownerSeed ? null : ownerPhoto,
   };
+}
+
+/** Match fleet invite to assigning org (employer / supplier / trip org), same as trip-history. */
+export function findDriverInviteForTripOrgs(
+  invites: readonly DriverInviteLite[],
+  orgIds: Array<string | null | undefined>,
+): DriverInviteLite | null {
+  for (const raw of orgIds) {
+    const oid = String(raw ?? "").trim();
+    if (!oid) continue;
+    const hit = invites.find(
+      (i) => (i.from_organization_id ?? "").trim() === oid,
+    );
+    if (hit) return hit;
+  }
+  return null;
 }
 
 export type AssignerResolutionDeps = {

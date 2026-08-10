@@ -324,10 +324,13 @@ export default function DriverDashboard() {
   const insets = useSafeAreaInsets();
   const { isDark, mapTheme } = useDriverTheme();
   const colors = useDriverThemeColors();
-  const footerPadTop = 4;
+  const footerPadTop = 6;
   const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
   const driverTabBarClearance =
     Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
+  /** Flush job card onto the glass dock (exclude padTop or map shows between). */
+  const driverSheetBottomInset =
+    Layout.tabBarDockHeight + footerPadBottom;
   // Driver home previously used a hardcoded dark map for contrast.
   // Now it respects the "Map Style" user setting (light, dark, or auto-sync with theme).
   const mapIsDark = mapTheme === 'auto' ? isDark : mapTheme === 'dark';
@@ -453,13 +456,15 @@ export default function DriverDashboard() {
     });
   }, []);
 
-  const fetch = useCallback(() => {
+  const fetch = useCallback((opts?: { soft?: boolean }) => {
     if (!profile?.uid) {
       setLoading(false);
       return Promise.resolve();
     }
     setAcceptError(null);
-    setLoading(true);
+    // Soft = background sync while mission sheet is open (POD/LR). Never blank the UI.
+    const soft = opts?.soft === true;
+    if (!soft) setLoading(true);
     return Promise.all([
       driversService.getLinkedDriversForCurrentUser(profile.uid),
       driversService.getDriverInvitesReceived(),
@@ -481,7 +486,20 @@ export default function DriverDashboard() {
           });
           if (disappearedLabels.length > 0) setReassignedTripLabels(disappearedLabels);
           previousTripsRef.current = new Map(trips.map((t) => [t.id, tripsService.resolveDriverFacingTripLabel(t)]));
-          setAllTrips(trips);
+          setAllTrips((prev) => {
+            if (prev.length === trips.length) {
+              const prevFp = prev
+                .map((t) => `${t.id}:${t.status}:${t.updated_at ?? ''}`)
+                .sort()
+                .join('|');
+              const nextFp = trips
+                .map((t) => `${t.id}:${t.status}:${t.updated_at ?? ''}`)
+                .sort()
+                .join('|');
+              if (prevFp === nextFp) return prev;
+            }
+            return trips;
+          });
           const normalizedDriverStatus = String(primaryDriver.status ?? '').toLowerCase();
           const hasActiveTrip = trips.some((t) => isTripInProgress(t));
           setIsOnline((prev) =>
@@ -514,6 +532,23 @@ export default function DriverDashboard() {
       }
     });
   }, [profile?.uid]);
+
+  const patchTripInDashboard = useCallback((updated: tripsService.TripRow) => {
+    setAllTrips((prev) =>
+      prev.map((t) =>
+        t.id === updated.id
+          ? {
+              ...t,
+              ...updated,
+              status: updated.status ?? t.status,
+              updated_at: updated.updated_at ?? t.updated_at,
+              started_at: updated.started_at ?? t.started_at,
+              completed_at: updated.completed_at ?? t.completed_at,
+            }
+          : t,
+      ),
+    );
+  }, []);
 
   useEffect(() => {
     fetch();
@@ -2102,7 +2137,7 @@ export default function DriverDashboard() {
               snapPoints={['20%', '45%', '88%']}
               index={0}
               enablePanDownToClose={false}
-              bottomInset={driverTabBarClearance}
+              bottomInset={driverSheetBottomInset}
               backgroundStyle={{
                 backgroundColor: colors.surface,
                 borderTopLeftRadius: 24,
@@ -2119,7 +2154,7 @@ export default function DriverDashboard() {
               <BottomSheetScrollViewComponent
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.olaSheetContent, { paddingBottom: insets.bottom }]}
+                contentContainerStyle={[styles.olaSheetContent, { paddingBottom: 0 }]}
               >
                 {!hasNativeBottomSheetSupport ? (
                   <View
@@ -2218,7 +2253,8 @@ export default function DriverDashboard() {
                               driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
                               driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
                               driverLocationLabel={locationLabel}
-                              onRefresh={fetch}
+                              onRefresh={() => void fetch({ soft: true })}
+                              onTripUpdated={patchTripInDashboard}
                               onTripCompleted={() => setJustCompletedTrip(true)}
                               onToggleCollapse={() => setIsAssignmentSheetExpanded((v) => !v)}
                               collapsed={!isAssignmentSheetExpanded}
@@ -2227,7 +2263,7 @@ export default function DriverDashboard() {
                                 setAcceptedTripId(null);
                                 setAssignmentFeedback(null);
                                 setJustCompletedTrip(false);
-                                fetch();
+                                void fetch();
                               }}
                             />
                           )
@@ -2241,7 +2277,8 @@ export default function DriverDashboard() {
                                 driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
                                 driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
                                 driverLocationLabel={locationLabel}
-                                onRefresh={fetch}
+                                onRefresh={() => void fetch({ soft: true })}
+                                onTripUpdated={patchTripInDashboard}
                                 onTripCompleted={() => setJustCompletedTrip(true)}
                                 onToggleCollapse={() => setIsAssignmentSheetExpanded((v) => !v)}
                                 collapsed={!isAssignmentSheetExpanded}
@@ -2250,7 +2287,7 @@ export default function DriverDashboard() {
                                   setAcceptedTripId(null);
                                   setAssignmentFeedback(null);
                                   setJustCompletedTrip(false);
-                                  fetch();
+                                  void fetch();
                                 }}
                               />
                             )
@@ -2719,14 +2756,15 @@ export default function DriverDashboard() {
             driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
             driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
             driverLocationLabel={locationLabel}
-            onRefresh={fetch}
+            onRefresh={() => void fetch({ soft: true })}
+            onTripUpdated={patchTripInDashboard}
             onTripCompleted={() => setJustCompletedTrip(true)}
             onBackToDashboard={async () => {
               await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
               setAcceptedTripId(null);
               setAssignmentFeedback(null);
               setJustCompletedTrip(false);
-              fetch();
+              void fetch();
             }}
           />
         ) : !isOnline && !effectiveFirstIncoming ? (
@@ -2773,14 +2811,15 @@ export default function DriverDashboard() {
             driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
             driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
             driverLocationLabel={locationLabel}
-            onRefresh={fetch}
+            onRefresh={() => void fetch({ soft: true })}
+            onTripUpdated={patchTripInDashboard}
             onTripCompleted={() => setJustCompletedTrip(true)}
             onBackToDashboard={async () => {
               await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
               setAcceptedTripId(null);
               setAssignmentFeedback(null);
               setJustCompletedTrip(false);
-              fetch();
+              void fetch();
             }}
           />
         ) : effectiveFirstIncoming && otpClaimTripId === effectiveFirstIncoming.id ? (

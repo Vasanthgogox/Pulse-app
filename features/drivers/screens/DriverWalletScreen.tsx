@@ -1,6 +1,7 @@
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { SearchBar } from '@/components/SearchBar';
 import { TripPaymentAmountGrid } from '@/features/driver/components/TripPaymentAmountGrid';
+import { DriverWalletEarningsPanel } from '@/features/drivers/components/DriverWalletEarningsPanel';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
 import {
@@ -16,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalDriverInviteModal } from '@/contexts/DriverInviteModalContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { DriverSelfAvatar } from '@/components/driver/DriverSelfAvatar';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import {
     buildBulkTripClaimWhatsappMessage,
@@ -36,8 +38,8 @@ import {
   deriveDriverPaymentMode,
   extractDriverPaymentUtr,
 } from "@/features/driver/tripSettlement/driverTripSettlement.util";
-import { getFleetAvatarUriForOrg, resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
-import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
+import { resolveDriverOrgAvatarUri } from '@/features/drivers/utils/resolveDriverOrgAvatar.util';
+import { fetchOrgBrandingByIds, type OrgBrandingRow } from '@/lib/orgBrandingFetch';
 import { buildDriverInviteSalaryLines } from '@/features/drivers/utils/driverInviteOffer.util';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/features/drivers/services/drivers.service';
@@ -188,6 +190,9 @@ export default function DriverWalletScreen() {
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);
   const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
+  const [fetchedOrgBrandingById, setFetchedOrgBrandingById] = useState<
+    Record<string, OrgBrandingRow>
+  >({});
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
   const [salaryRequests, setSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -200,16 +205,20 @@ export default function DriverWalletScreen() {
   const [expandedTripReceiptId, setExpandedTripReceiptId] = useState<string | null>(null);
   const [markPaidLoadingTripId, setMarkPaidLoadingTripId] = useState<string | null>(null);
   const [requestPaymentLoadingTripId, setRequestPaymentLoadingTripId] = useState<string | null>(null);
+  const [earningsPdfSharingTripId, setEarningsPdfSharingTripId] = useState<string | null>(null);
   const [claimAllLoading, setClaimAllLoading] = useState(false);
 
-  const [mainTab, setMainTab] = useState<'trips' | 'cash' | 'fleet'>('trips');
+  const [mainTab, setMainTab] = useState<'fleet' | 'cash' | 'earnings'>('fleet');
   const walletParams = useLocalSearchParams<{ tab?: string }>();
   useEffect(() => {
     const tab = typeof walletParams.tab === 'string' ? walletParams.tab : walletParams.tab?.[0];
-    if (tab === 'fleet' || tab === 'trips' || tab === 'cash') {
+    if (tab === 'fleet' || tab === 'cash' || tab === 'earnings') {
       setMainTab(tab);
+    } else if (tab === 'trips') {
+      router.replace('/(driver)/trip-history' as Parameters<typeof router.replace>[0]);
     }
-  }, [walletParams.tab]);
+  }, [walletParams.tab, router]);
+
   const [walletInviteActionId, setWalletInviteActionId] = useState<string | null>(null);
   const [journeySearch, setJourneySearch] = useState('');
   const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'fleet_trips' | 'open_trips' | 'fleet_marked' | 'fleet_attributed' | 'settled'>('all');
@@ -987,6 +996,217 @@ export default function DriverWalletScreen() {
     [linkedDrivers, profile?.uid, shareTripClaimPdf, openWhatsAppReminder],
   );
 
+  /** Latest trip-based payment reminder timestamp per trip (for 24h cooldown). */
+  const earningsLastReminderAtByTripId = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const r of salaryRequests) {
+      if ((r.request_type || '').toLowerCase() !== 'trip_based') continue;
+      const createdAt = r.created_at;
+      if (!createdAt) continue;
+      const at = new Date(createdAt).getTime();
+      if (!Number.isFinite(at)) continue;
+      for (const tid of r.trip_ids ?? []) {
+        if (!tid) continue;
+        const id = String(tid);
+        const prev = map[id];
+        if (!prev || at > new Date(prev).getTime()) {
+          map[id] = createdAt;
+        }
+      }
+    }
+    return map;
+  }, [salaryRequests]);
+
+  /** Earnings follow-up: create in-app salary request (Pulse alert for fleet). */
+  const sendEarningsPulseReminder = useCallback(
+    async (tripId: string) => {
+      const trip = completedTrips.find((t) => String(t.id) === String(tripId));
+      if (!trip) {
+        return { ok: false as const, errorMessage: 'Trip not found.' };
+      }
+
+      const lastAt = earningsLastReminderAtByTripId[String(trip.id)];
+      if (lastAt) {
+        const remaining = new Date(lastAt).getTime() + 24 * 60 * 60 * 1000 - Date.now();
+        if (remaining > 0) {
+          const hours = Math.ceil(remaining / (60 * 60 * 1000));
+          return {
+            ok: false as const,
+            errorMessage: `Reminder already sent. Try again in about ${hours}h.`,
+            lastReminderAt: lastAt,
+          };
+        }
+      }
+
+      const driverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
+      const orgId = trip.organization_id ?? null;
+      const earned = Math.round(tripEarnings(trip, payoutTermsForTrip(trip)));
+      const received = Math.round(receivedByTripId[trip.id] ?? 0);
+      const reqAmount = Math.max(0, earned - received) || earned;
+      const displayId = getDriverTripDisplayNumber(trip, driverTripNumberById);
+      if (!driverId || !orgId) {
+        return { ok: false as const, errorMessage: 'Missing driver or fleet for this trip.' };
+      }
+      if (!Number.isFinite(reqAmount) || reqAmount <= 0) {
+        return { ok: false as const, errorMessage: 'Nothing pending to request.' };
+      }
+
+      setRequestPaymentLoadingTripId(trip.id);
+      try {
+        const { error, request } = await salaryRequestsService.createSalaryRequest(
+          driverId,
+          orgId,
+          'trip_based',
+          reqAmount,
+          {
+            createdBy: profile?.uid ?? null,
+            tripIds: [trip.id],
+            note: `Request for payment (earnings follow-up): ${displayId}`,
+          },
+        );
+        if (error) {
+          return { ok: false as const, errorMessage: error.message };
+        }
+        if (request) {
+          setSalaryRequests((prev) => [request, ...prev.filter((r) => r.id !== request.id)]);
+        }
+        return {
+          ok: true as const,
+          paymentRequestId: request?.id ? String(request.id) : null,
+          lastReminderAt: request?.created_at ?? new Date().toISOString(),
+        };
+      } finally {
+        setRequestPaymentLoadingTripId(null);
+      }
+    },
+    [
+      completedTrips,
+      linkedDrivers,
+      profile?.uid,
+      receivedByTripId,
+      driverTripNumberById,
+      earningsLastReminderAtByTripId,
+      payoutTermsForTrip,
+    ],
+  );
+
+  const shareEarningsFollowUpPdf = useCallback(
+    async (input: { tripId: string; html: string; message: string }) => {
+      setEarningsPdfSharingTripId(input.tripId);
+      try {
+        const file = await Print.printToFileAsync({
+          html: injectPulseWatermarkIntoHtml(input.html),
+        });
+        if (Platform.OS === 'web') {
+          window.open(file.uri, '_blank');
+          return;
+        }
+        const canShare = await Sharing.isAvailableAsync();
+        if (!canShare) {
+          Alert.alert('Share unavailable', 'Sharing is not available on this device.');
+          return;
+        }
+        await Sharing.shareAsync(file.uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Share payment request PDF (choose WhatsApp)',
+          UTI: 'com.adobe.pdf',
+        });
+      } finally {
+        setEarningsPdfSharingTripId(null);
+      }
+    },
+    [],
+  );
+
+  /** Bulk earnings follow-up: one salary request for many trip_ids + total amount. */
+  const sendEarningsBulkPulseReminder = useCallback(
+    async (tripIds: string[]) => {
+      const uniqueIds = Array.from(new Set(tripIds.map(String).filter(Boolean)));
+      if (uniqueIds.length === 0) {
+        return { ok: false as const, errorMessage: 'No trips selected.' };
+      }
+
+      const trips = uniqueIds
+        .map((id) => completedTrips.find((t) => String(t.id) === id))
+        .filter((t): t is tripsService.TripRow => Boolean(t));
+      if (trips.length === 0) {
+        return { ok: false as const, errorMessage: 'Trips not found.' };
+      }
+
+      const orgId = String(trips[0].organization_id ?? '');
+      if (!orgId || trips.some((t) => String(t.organization_id ?? '') !== orgId)) {
+        return { ok: false as const, errorMessage: 'Select trips from the same fleet only.' };
+      }
+
+      for (const trip of trips) {
+        const lastAt = earningsLastReminderAtByTripId[String(trip.id)];
+        if (lastAt) {
+          const remaining = new Date(lastAt).getTime() + 24 * 60 * 60 * 1000 - Date.now();
+          if (remaining > 0) {
+            const displayId = getDriverTripDisplayNumber(trip, driverTripNumberById);
+            return {
+              ok: false as const,
+              errorMessage: `${displayId} already had a reminder in the last 24 hours.`,
+              lastReminderAt: lastAt,
+            };
+          }
+        }
+      }
+
+      const driverId = trips[0].driver_id ?? linkedDrivers[0]?.id ?? null;
+      if (!driverId) {
+        return { ok: false as const, errorMessage: 'Missing driver for these trips.' };
+      }
+
+      let total = 0;
+      for (const trip of trips) {
+        const earned = Math.round(tripEarnings(trip, payoutTermsForTrip(trip)));
+        const received = Math.round(receivedByTripId[trip.id] ?? 0);
+        total += Math.max(0, earned - received) || earned;
+      }
+      if (!Number.isFinite(total) || total <= 0) {
+        return { ok: false as const, errorMessage: 'Nothing pending to request.' };
+      }
+
+      setRequestPaymentLoadingTripId(trips[0].id);
+      try {
+        const { error, request } = await salaryRequestsService.createSalaryRequest(
+          driverId,
+          orgId,
+          'trip_based',
+          total,
+          {
+            createdBy: profile?.uid ?? null,
+            tripIds: trips.map((t) => t.id),
+            note: `Request for payment (earnings bulk follow-up): ${trips.length} trips`,
+          },
+        );
+        if (error) {
+          return { ok: false as const, errorMessage: error.message };
+        }
+        if (request) {
+          setSalaryRequests((prev) => [request, ...prev.filter((r) => r.id !== request.id)]);
+        }
+        return {
+          ok: true as const,
+          paymentRequestId: request?.id ? String(request.id) : null,
+          lastReminderAt: request?.created_at ?? new Date().toISOString(),
+        };
+      } finally {
+        setRequestPaymentLoadingTripId(null);
+      }
+    },
+    [
+      completedTrips,
+      linkedDrivers,
+      profile?.uid,
+      receivedByTripId,
+      driverTripNumberById,
+      earningsLastReminderAtByTripId,
+      payoutTermsForTrip,
+    ],
+  );
+
   const { receivedTrips, filteredTrips, pendingTotal } = useMemo(() => {
     const visibleTrips = [...completedTrips]
       .sort((a, b) => {
@@ -1182,20 +1402,58 @@ export default function DriverWalletScreen() {
     return map;
   }, [linkedDrivers, invites, orgNameFromTrips]);
 
-  /** org_id → { logoUrl, avatarUrl, avatarSeed } sourced from invite rows (org owner profile via RPC). */
+  /** org_id → branding (invite RPC fields + org owner logo/seed/url from DB). */
   const orgAvatarById = useMemo(() => {
-    const map: Record<string, { logoUrl: string | null; avatarUrl: string | null; avatarSeed: string | null }> = {};
+    const map: Record<
+      string,
+      { logoUrl: string | null; avatarUrl: string | null; avatarSeed: string | null }
+    > = {};
+    for (const [orgId, row] of Object.entries(fetchedOrgBrandingById)) {
+      map[orgId] = {
+        logoUrl: row.logoUrl,
+        avatarUrl: row.avatarUrl,
+        avatarSeed: row.avatarSeed,
+      };
+    }
     invites.forEach((i) => {
       const orgId = String(i.from_organization_id ?? '');
-      if (!orgId || map[orgId]) return;
+      if (!orgId) return;
+      const prev = map[orgId];
+      const inviteLogo = (i.from_org_logo_url ?? '').trim();
+      const inviteUrl = (i.from_org_avatar_url ?? '').trim();
+      const inviteSeed = (i.from_org_avatar_seed ?? '').trim();
+      // Prefer invite branding when present; never let empty invite strings wipe
+      // owner seed/logo fetched via get_org_branding_for_driver.
       map[orgId] = {
-        logoUrl: i.from_org_logo_url ?? null,
-        avatarUrl: i.from_org_avatar_url ?? null,
-        avatarSeed: i.from_org_avatar_seed ?? null,
+        logoUrl: inviteLogo || prev?.logoUrl || null,
+        avatarUrl: inviteUrl || prev?.avatarUrl || null,
+        avatarSeed: inviteSeed || prev?.avatarSeed || null,
       };
     });
     return map;
-  }, [invites]);
+  }, [invites, fetchedOrgBrandingById]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const orgIds = [
+      ...invites.map((i) => String(i.from_organization_id ?? '').trim()),
+      ...trips.flatMap((t) => [
+        String(t.organization_id ?? '').trim(),
+        String(t.supplier_id ?? '').trim(),
+      ]),
+      ...linkedDrivers.map((d) => String(d.organization_id ?? '').trim()),
+    ].filter((id) => id.length > 0);
+    if (orgIds.length === 0) {
+      setFetchedOrgBrandingById({});
+      return;
+    }
+    void fetchOrgBrandingByIds(orgIds).then((map) => {
+      if (!cancelled) setFetchedOrgBrandingById(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [invites, trips, linkedDrivers]);
 
   const fleetCards = useMemo(() => {
     return salaryRequestOrgOptions.map((fleet) => {
@@ -2095,7 +2353,9 @@ export default function DriverWalletScreen() {
     <>
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+      contentContainerStyle={{
+        paddingBottom: insets.bottom + 100 + Layout.tabBarHeight,
+      }}
       showsVerticalScrollIndicator={false}
     >
       <View style={[styles.header, { paddingTop: insets.top + Layout.driverHeaderTopOffset, backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -2105,9 +2365,7 @@ export default function DriverWalletScreen() {
             style={styles.avatarBtn}
             activeOpacity={0.8}
           >
-            <View style={[styles.avatarCircle, { borderColor: colors.border, backgroundColor: colors.emeraldMuted }]}>
-              <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
-            </View>
+            <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <DriverBrandMark color={colors.textMuted} />
@@ -2224,24 +2482,16 @@ export default function DriverWalletScreen() {
         <TouchableOpacity
           style={[
             styles.mainTab,
-            mainTab === 'trips' && [
+            mainTab === 'earnings' && [
               styles.mainTabActive,
               { backgroundColor: colors.surface, borderColor: isDark ? colors.borderSubtle : colors.border },
             ],
           ]}
-          onPress={() => setMainTab('trips')}
+          onPress={() => setMainTab('earnings')}
           activeOpacity={0.92}
         >
-          <FontAwesome name="history" size={12} color={mainTab === 'trips' ? colors.emerald : colors.textMuted} />
-          <Text
-            style={[
-              styles.mainTabText,
-              styles.tripsItalicText,
-              mainTab === 'trips' ? { color: colors.emerald } : { color: colors.textMuted },
-            ]}
-          >
-            Trips
-          </Text>
+          <FontAwesome name="line-chart" size={12} color={mainTab === 'earnings' ? colors.emerald : colors.textMuted} />
+          <Text style={[styles.mainTabText, mainTab === 'earnings' ? { color: colors.emerald } : { color: colors.textMuted }]}>Earnings</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -2259,185 +2509,16 @@ export default function DriverWalletScreen() {
         </TouchableOpacity>
       </View>
 
-      {(mainTab === 'trips' || mainTab === 'cash') && (
+      {mainTab === 'cash' && (
         <View style={styles.searchSection}>
           <SearchBar
             value={journeySearch}
             onChangeText={setJourneySearch}
             style={styles.tripsSearchBar}
             inputProps={{ style: styles.tripsSearchInput }}
-            placeholder={
-              mainTab === 'trips'
-                ? 'Search trips...'
-                : 'Search settlements...'
-            }
+            placeholder="Search settlements..."
           />
 
-          {mainTab === 'trips' && (
-            <>
-              {/* Fleet / Open primary sub-tabs */}
-              <View
-                style={[
-                  styles.tripsSubTabRow,
-                  {
-                    backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.9)',
-                    borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
-                  },
-                ]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.tripsSubTabBtn,
-                    tripsSubTab === 'fleet' && [
-                      styles.tripsSubTabBtnActive,
-                      {
-                        backgroundColor: isDark ? 'rgba(4,120,87,0.18)' : 'rgba(4,120,87,0.10)',
-                        borderColor: isDark ? 'rgba(4,120,87,0.35)' : 'rgba(4,120,87,0.20)',
-                      },
-                    ],
-                  ]}
-                  onPress={() => {
-                    setTripsSubTab('fleet');
-                    if (
-                      journeyFilter === 'open_trips' ||
-                      journeyFilter === 'fleet_trips' ||
-                      journeyFilter === 'fleet_attributed'
-                    ) setJourneyFilter('all');
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <FontAwesome name="building" size={10} color={tripsSubTab === 'fleet' ? colors.emerald : colors.textMuted} />
-                  <Text style={[styles.tripsSubTabText, { color: tripsSubTab === 'fleet' ? colors.emerald : colors.textMuted }]}>
-                    Fleet trips
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.tripsSubTabBtn,
-                    tripsSubTab === 'open' && [
-                      styles.tripsSubTabBtnActive,
-                      {
-                        backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.09)',
-                        borderColor: isDark ? 'rgba(99,102,241,0.35)' : 'rgba(99,102,241,0.22)',
-                      },
-                    ],
-                  ]}
-                  onPress={() => {
-                    setTripsSubTab('open');
-                    if (
-                      journeyFilter === 'fleet_trips' ||
-                      journeyFilter === 'open_trips' ||
-                      journeyFilter === 'fleet_marked'
-                    ) setJourneyFilter('all');
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <FontAwesome name="road" size={10} color={tripsSubTab === 'open' ? '#4D3636' : colors.textMuted} />
-                  <Text style={[styles.tripsSubTabText, { color: tripsSubTab === 'open' ? '#4D3636' : colors.textMuted }]}>
-                    Open trips
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.tripsSubTabBtn,
-                    tripsSubTab === 'attributed' && [
-                      styles.tripsSubTabBtnActive,
-                      {
-                        backgroundColor: isDark ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.10)',
-                        borderColor: isDark ? 'rgba(245,158,11,0.35)' : 'rgba(245,158,11,0.24)',
-                      },
-                    ],
-                  ]}
-                  onPress={() => {
-                    setTripsSubTab('attributed');
-                    if (journeyFilter === 'fleet_trips' || journeyFilter === 'open_trips') {
-                      setJourneyFilter('fleet_attributed');
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <FontAwesome
-                    name="check-circle"
-                    size={10}
-                    color={tripsSubTab === 'attributed' ? '#d97706' : colors.textMuted}
-                  />
-                  <Text
-                    style={[
-                      styles.tripsSubTabText,
-                      { color: tripsSubTab === 'attributed' ? '#d97706' : colors.textMuted },
-                    ]}
-                  >
-                    Attributed
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Secondary filter chips */}
-              <View style={styles.filterChipScrollWrap}>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterChipRow}
-                >
-                  {[
-                    { id: 'all', label: 'All' },
-                    { id: 'pending', label: 'Pending' },
-                    ...(tripsSubTab === 'fleet' ? [
-                      { id: 'fleet_marked', label: 'Fleet marked' },
-                    ] : tripsSubTab === 'attributed' && currentEmployer ? [
-                      { id: 'fleet_attributed', label: 'Accepted' },
-                    ] : currentEmployer ? [
-                      { id: 'fleet_attributed', label: 'Attributed' },
-                    ] : []),
-                    { id: 'settled', label: 'Settled' },
-                  ].map((chip) => {
-                    const active = journeyFilter === chip.id;
-                    return (
-                      <TouchableOpacity
-                        key={chip.id}
-                        onPress={() => setJourneyFilter(chip.id as typeof journeyFilter)}
-                        style={[
-                          styles.tripsTabTag,
-                          active
-                            ? [styles.tripsTabTagActive, tripsSubTab === 'open' && styles.tripsTabTagActiveOpen]
-                            : isDark
-                              ? styles.tripsTabTagIdleDark
-                              : styles.tripsTabTagIdle,
-                        ]}
-                        activeOpacity={0.85}
-                      >
-                        <Text
-                          style={[
-                            styles.tripsTabTagText,
-                            { color: active ? (tripsSubTab === 'open' ? '#4D3636' : Theme.driverEmerald) : colors.textMuted },
-                          ]}
-                        >
-                          {chip.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </>
-          )}
-
-          {mainTab === 'trips' && journeyFilter === 'pending' && pendingTripJourneyItems.length > 0 && (
-            <TouchableOpacity
-              activeOpacity={0.88}
-              style={[
-                styles.bulkClaimButton,
-                { backgroundColor: colors.emerald, shadowColor: isDark ? '#000' : 'rgba(4,120,87,0.35)' },
-              ]}
-              onPress={() => claimAllPendingTrips().catch(() => {})}
-              disabled={claimAllLoading}
-            >
-              <FontAwesome name={claimAllLoading ? 'spinner' : 'whatsapp'} size={16} color={colors.textOnPrimary} />
-              <Text style={styles.bulkClaimButtonText}>
-                {claimAllLoading ? 'REQUESTING…' : `CLAIM ALL (${pendingTripJourneyItems.length})`}
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
       )}
 
@@ -2472,7 +2553,7 @@ export default function DriverWalletScreen() {
                     ]}
                   >
                     <Image
-                      source={{ uri: (() => { const a = orgAvatarById[String(currentEmployer.orgId ?? '')]; return resolveOrgAvatarUri(String(currentEmployer.orgId ?? ''), currentEmployer.orgName, a?.logoUrl, a?.avatarSeed, a?.avatarUrl); })() }}
+                      source={{ uri: (() => { const oid = String(currentEmployer.orgId ?? ''); const a = orgAvatarById[oid]; return resolveDriverOrgAvatarUri({ orgId: oid, orgName: currentEmployer.orgName, branding: a }); })() }}
                       style={styles.fleetCardLogoImage}
                       resizeMode="cover"
                     />
@@ -2613,7 +2694,14 @@ export default function DriverWalletScreen() {
                 <View style={{ gap: 10 }}>
                   {pendingWalletInvites.map((inv) => {
                     const orgName = inv.from_org_name?.trim() || 'Fleet';
-                    const logoUri = resolveOrgAvatarUri(inv.from_organization_id ?? '', orgName, inv.from_org_logo_url, inv.from_org_avatar_seed, inv.from_org_avatar_url);
+                    const logoUri = resolveDriverOrgAvatarUri({
+                      orgId: inv.from_organization_id,
+                      orgName,
+                      branding: orgAvatarById[String(inv.from_organization_id ?? '')],
+                      logoUrl: inv.from_org_logo_url,
+                      avatarSeed: inv.from_org_avatar_seed,
+                      avatarUrl: inv.from_org_avatar_url,
+                    });
                     const salaryLines = buildDriverInviteSalaryLines(inv);
                     const isBusy = walletInviteActionId === inv.id;
                     return (
@@ -2843,7 +2931,7 @@ export default function DriverWalletScreen() {
                 { backgroundColor: '#3730a3', shadowColor: isDark ? '#000' : 'rgba(55,48,163,0.35)' },
               ]}
               activeOpacity={0.85}
-              onPress={() => { setMainTab('trips'); setJourneyFilter('open_trips'); }}
+              onPress={() => router.push({ pathname: '/(driver)/trip-history', params: { type: 'open' } } as Parameters<typeof router.push>[0])}
             >
               <View style={styles.fleetPrimaryButtonLeft}>
                 <View style={[styles.fleetPrimaryRing, { borderColor: '#818cf8' }]}>
@@ -2912,13 +3000,11 @@ export default function DriverWalletScreen() {
                         >
                           {(() => {
                             const orgAvatar = orgAvatarById[past.orgId];
-                            const uri =
-                              resolvePartyDisplayUri({
-                                organizationImageUrl: orgAvatar?.logoUrl,
-                                organizationAvatarSeed: orgAvatar?.avatarSeed,
-                                avatarUrl: orgAvatar?.avatarUrl,
-                                avatarSeed: null,
-                              }) ?? getFleetAvatarUriForOrg(past.orgId, past.orgName);
+                            const uri = resolveDriverOrgAvatarUri({
+                              orgId: past.orgId,
+                              orgName: past.orgName,
+                              branding: orgAvatar,
+                            });
                             return (
                               <Image
                                 source={{ uri }}
@@ -2955,719 +3041,51 @@ export default function DriverWalletScreen() {
           )}
 
         </View>
-      ) : mainTab === 'trips' ? (
-        <View
-          style={[
-            styles.tripsListArea,
-            {
-              backgroundColor: tripsListBg,
-              borderTopColor: isDark ? colors.borderSubtle : Theme.borderLight,
-            },
-          ]}
-        >
-        <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
-          <Text style={[styles.transactionHistoryTitle, styles.tripsItalicText, { color: colors.text }]}>
-            {tripsSubTab === 'fleet' ? 'Fleet trips' : 'Open trips'}
-          </Text>
-          {filteredTripJourneySections.length === 0 ? (
-            <View style={[styles.ledgerCard, { backgroundColor: tripsCardBg, borderColor: colors.border }]}>
-              <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
-                <FontAwesome name="search" size={32} color={colors.textMuted} />
-                <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No trips found</Text>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.tripsPremiumWrap}>
-              {filteredTripJourneySections.map(({ sectionLabel, items }) => (
-                <View key={sectionLabel} style={styles.tripsPremiumSection}>
-                  <View style={styles.tripsSectionHeaderRow}>
-                    <View style={[styles.tripsSectionDot, { backgroundColor: colors.emerald }]} />
-                    <Text style={[styles.tripsPremiumSectionLabel, { color: colors.textMuted }]}>{sectionLabel}</Text>
-                  </View>
-
-                  <View style={styles.tripsTimeline}>
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        styles.tripsTimelineLine,
-                        { backgroundColor: isDark ? colors.borderSubtle : 'rgba(4,120,87,0.35)' },
-                      ]}
-                    />
-
-                    <View style={styles.tripsTimelineList}>
-                      {items.map((item) => {
-                        const tripId = item.trip.id;
-                        const isExpanded = expandedTripId === tripId;
-                        const isActionRequired = item.status === 'Action Required';
-                        const isPending = item.status === 'Pending' || isActionRequired;
-                        const isSettled = item.status === 'Settled';
-                        const isSalaryTrip = item.isSalary === true;
-                        const fleetPendingLedger = item.fleetPendingLedger;
-                        const hasFleetPending = !!fleetPendingLedger && !isSettled;
-                        const providerShort = item.provider.split("'")[0];
-                        const receiptExpanded = expandedTripReceiptId === tripId;
-                        const ledger = latestCreditLedgerByTripId[item.trip.id];
-                        const settlementTxnId = ledger?.id ?? tripId;
-                        const settlementUtr = extractUtr(ledger?.description) ?? '—';
-                        const settlementMode = derivePaymentMode(ledger?.description) ?? '—';
-                        const settlementCapturedAt = phonePeMetaDate(ledger?.created_at ?? item.trip.completed_at ?? item.trip.updated_at ?? item.trip.created_at);
-                        const settlementRoute = `${item.from} → ${item.to}`;
-
-                        const pendingUtr = extractUtr(fleetPendingLedger?.description) ?? '—';
-                        const pendingMode = derivePaymentMode(fleetPendingLedger?.description) ?? '—';
-                        const pendingCapturedAt = phonePeMetaDate(
-                          fleetPendingLedger?.created_at ?? item.trip.completed_at ?? item.trip.updated_at ?? item.trip.created_at,
-                        );
-                        const orgId = String(item.trip.organization_id ?? '');
-                        const orgAvatar = orgAvatarById[orgId];
-                        const fleetAvatarUri =
-                          resolvePartyDisplayUri({
-                            organizationImageUrl: orgAvatar?.logoUrl,
-                            organizationAvatarSeed: orgAvatar?.avatarSeed,
-                            avatarUrl: orgAvatar?.avatarUrl,
-                            entityType: 'client',
-                          }) ?? getFleetAvatarUriForOrg(orgId, providerShort);
-                        // Attribution state for this specific trip:
-                        //   pending  = driver sent it to fleet owner, awaiting approval
-                        //   approved = fleet owner approved it (counts as fleet trip)
-                        const isAttributionPending =
-                          fleetAttributedTripIds.has(item.trip.id) &&
-                          !fleetAttributedApprovedTripIds.has(item.trip.id);
-                        const isAttributionApproved = fleetAttributedApprovedTripIds.has(item.trip.id);
-
-                        // Only show attribution row on open trips — a trip already classified as
-                        // isFleetOwnerTrip was dispatched directly by the employer and needs no attribution label.
-                        const showAttributedAvatarRow =
-                          !item.isFleetOwnerTrip &&
-                          (isAttributionPending || isAttributionApproved) &&
-                          !!currentEmployer;
-                        // Only settled trips expose an expand panel with receipt actions; otherwise keep the card static.
-                        const hasCardExpandAction = isSettled;
-
-                        const tripCardHeader = (
-                            <>
-                              <View style={styles.tripsCardTop}>
-                                <View style={styles.tripsCardTopLeft}>
-                                  <View style={[styles.tripsIcon, styles.tripsIconStack, { overflow: 'visible' }]}>
-                                    <Image source={{ uri: fleetAvatarUri }} style={[styles.tripsIconImage, { borderRadius: 10, overflow: 'hidden' }]} resizeMode="cover" />
-                                    {(isActionRequired || hasFleetPending || isSettled) ? (
-                                      <View
-                                        style={[
-                                          styles.tripsIconBadge,
-                                          {
-                                            backgroundColor: isActionRequired
-                                              ? 'rgb(249,115,22)'
-                                              : colors.emerald,
-                                          },
-                                        ]}
-                                      >
-                                        <FontAwesome
-                                          name={isActionRequired ? 'exclamation' : 'check'}
-                                          size={7}
-                                          color="#fff"
-                                        />
-                                      </View>
-                                    ) : null}
-                                  </View>
-                                  <View style={styles.tripsHeadText}>
-                                    <Text style={[styles.tripsTripId, { color: colors.text }]} numberOfLines={1}>
-                                      {item.id}
-                                    </Text>
-                                    <View style={styles.tripsMetaInline}>
-                                      <Text style={[styles.tripsMetaText, { color: colors.textMuted }]}>{item.time}</Text>
-                                      <Text style={[styles.tripsMetaDot, { color: colors.emerald }]}>•</Text>
-                                      <Text style={[styles.tripsMetaText, { color: colors.textMuted }]} numberOfLines={1}>
-                                        {providerShort}
-                                      </Text>
-                                    </View>
-                                      {showAttributedAvatarRow ? (
-                                        <View style={styles.tripsAttributedAvatarRow}>
-                                          <View style={styles.tripsAttributedAvatarStack}>
-                                            <Image
-                                              source={{ uri: avatarUri }}
-                                              style={[styles.tripsAttributedAvatar, styles.tripsAttributedAvatarFront]}
-                                              resizeMode="cover"
-                                            />
-                                            <Image
-                                              source={{ uri: getFleetAvatarUriForOrg(
-                                                String(currentEmployer?.orgId ?? ''),
-                                                currentEmployer?.orgName ?? 'Fleet',
-                                              ) }}
-                                              style={[styles.tripsAttributedAvatar, styles.tripsAttributedAvatarBack]}
-                                              resizeMode="cover"
-                                            />
-                                          </View>
-                                          <Text style={[styles.tripsAttributedAvatarText, {
-                                            color: isAttributionApproved ? colors.emerald : '#d97706',
-                                          }]} numberOfLines={1}>
-                                            {isAttributionApproved
-                                              ? `Accepted by ${currentEmployer?.orgName ?? 'fleet'}`
-                                              : `Sent to ${currentEmployer?.orgName ?? 'fleet'} · Pending`}
-                                          </Text>
-                                        </View>
-                                      ) : null}
-                                  </View>
-                                </View>
-
-                                <View style={styles.tripsCardRight}>
-                                  {!isSalaryTrip ? (
-                                    <Text style={[styles.tripsAmount, { color: colors.text }]}>
-                                      ₹{item.amount.toLocaleString('en-IN')}
-                                    </Text>
-                                  ) : null}
-                                  {item.hasPaymentShortfall && !isSettled && !isSalaryTrip ? (
-                                    <Text style={[styles.tripsAmountSub, { color: colors.textMuted }]}>
-                                      of ₹{item.expectedAmount.toLocaleString('en-IN')}
-                                    </Text>
-                                  ) : item.partialPaymentAccepted && isSettled ? (
-                                    <Text style={[styles.tripsAmountSub, { color: Theme.negative }]}>
-                                      ₹{item.writeOffAmount.toLocaleString('en-IN')} written off
-                                    </Text>
-                                  ) : null}
-                                </View>
-                              </View>
-
-                              <View
-                                style={[
-                                  styles.tripsRouteCard,
-                                  {
-                                    borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
-                                    backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.65)',
-                                  },
-                                ]}
-                              >
-                                <View style={styles.tripsRouteSide}>
-                                  <Text style={[styles.tripsRouteLabel, { color: colors.textMuted }]}>Origin</Text>
-                                  <Text style={[styles.tripsRouteValue, { color: colors.text }]} numberOfLines={2}>
-                                    {item.from}
-                                  </Text>
-                                </View>
-                                <View style={styles.tripsRouteMiddle}>
-                                  <View style={[styles.tripsRouteDot, { backgroundColor: colors.emerald }]} />
-                                  <View
-                                    style={[
-                                      styles.tripsRouteLine,
-                                      { backgroundColor: isDark ? colors.borderSubtle : 'rgba(148,163,184,0.45)' },
-                                    ]}
-                                  />
-                                  <View style={[styles.tripsRouteDot, { backgroundColor: colors.textMuted }]} />
-                                </View>
-                                <View style={[styles.tripsRouteSide, styles.tripsRouteSideRight]}>
-                                  <Text style={[styles.tripsRouteLabel, { color: colors.textMuted }]}>Destination</Text>
-                                  <Text
-                                    style={[styles.tripsRouteValue, styles.tripsRouteValueRight, { color: colors.text }]}
-                                    numberOfLines={2}
-                                  >
-                                    {item.to}
-                                  </Text>
-                                </View>
-                              </View>
-
-                              <View
-                                style={[
-                                  styles.tripsCardFooter,
-                                  { borderTopColor: isDark ? colors.borderSubtle : '#f1f5f9' },
-                                ]}
-                              >
-                                <View style={styles.tripsFooterLeft}>
-                                  <Text
-                                    style={[
-                                      styles.tripsStatusPill,
-                                      hasFleetPending
-                                        ? styles.tripsStatusFleet
-                                        : isActionRequired
-                                          ? styles.tripsStatusWarning
-                                          : isPending
-                                            ? styles.tripsStatusInfo
-                                            : styles.tripsStatusSuccess,
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {hasFleetPending
-                                      ? 'Awaiting confirmation'
-                                      : isSalaryTrip
-                                        ? 'Open trip'
-                                        : item.subStatus || item.status}
-                                  </Text>
-                                  {item.isFleetOwnerTrip ? (
-                                    // Fleet trip: assigned directly by the employer
-                                    <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(4,120,87,0.15)' : 'rgba(4,120,87,0.08)', color: colors.emerald, borderColor: 'rgba(4,120,87,0.25)' }]}>
-                                      FLEET TRIP
-                                    </Text>
-                                  ) : isAttributionApproved ? (
-                                    // Open trip accepted by fleet owner → counts as fleet work
-                                    <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(4,120,87,0.15)' : 'rgba(4,120,87,0.08)', color: colors.emerald, borderColor: 'rgba(4,120,87,0.25)' }]}>
-                                      ATTRIBUTED ✓
-                                    </Text>
-                                  ) : isAttributionPending ? (
-                                    // Sent to fleet owner, awaiting their approval
-                                    <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.10)', color: '#d97706', borderColor: 'rgba(245,158,11,0.30)' }]}>
-                                      PENDING REVIEW
-                                    </Text>
-                                  ) : (
-                                    // Open/direct trip — not sent to fleet owner yet
-                                    <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.10)', color: '#4D3636', borderColor: 'rgba(99,102,241,0.30)' }]}>
-                                      OPEN TRIP
-                                    </Text>
-                                  )}
-                                </View>
-                                {hasCardExpandAction ? (
-                                  <FontAwesome
-                                    name="chevron-down"
-                                    size={12}
-                                    color={colors.textMuted}
-                                    style={isExpanded ? styles.tripsChevronExpanded : undefined}
-                                  />
-                                ) : null}
-                              </View>
-                            </>
-                        );
-
-                        return (
-                          <View
-                            key={tripId}
-                            style={[
-                              styles.tripsCard,
-                              {
-                                backgroundColor: tripsCardBg,
-                                borderColor:
-                                  hasCardExpandAction && isExpanded
-                                    ? colors.emerald
-                                    : isActionRequired
-                                      ? 'rgba(249,115,22,0.65)'
-                                      : isDark
-                                        ? colors.borderSubtle
-                                        : 'rgba(226,232,240,0.9)',
-                                shadowColor: isActionRequired ? 'rgba(249,115,22,0.25)' : 'rgba(4,120,87,0.18)',
-                              },
-                              hasCardExpandAction && isExpanded && styles.tripsCardExpanded,
-                            ]}
-                          >
-                            {hasCardExpandAction ? (
-                              <TouchableOpacity
-                                onPress={() => setExpandedTripId((prev) => (prev === tripId ? null : tripId))}
-                                activeOpacity={0.82}
-                                style={styles.tripsCardTouch}
-                              >
-                                {tripCardHeader}
-                              </TouchableOpacity>
-                            ) : (
-                              <Pressable
-                                style={styles.tripsCardTouch}
-                                onPress={(event) => {
-                                  event.stopPropagation();
-                                }}
-                              >
-                                {tripCardHeader}
-                              </Pressable>
-                            )}
-
-                            {hasFleetPending && !isSettled ? (
-                              <View
-                                style={[
-                                  styles.tripVerifyPanel,
-                                  {
-                                    borderTopColor: isDark ? colors.borderSubtle : '#f1f5f9',
-                                    backgroundColor: isDark ? 'rgba(4,120,87,0.07)' : 'rgba(248,250,252,0.92)',
-                                  },
-                                ]}
-                              >
-                                <View style={styles.tripVerifyHeader}>
-                                  <View
-                                    style={[
-                                      styles.tripVerifyIconWrap,
-                                      { backgroundColor: isDark ? 'rgba(4,120,87,0.18)' : colors.emeraldMuted },
-                                    ]}
-                                  >
-                                    <FontAwesome name="shield" size={10} color={colors.emerald} />
-                                  </View>
-                                  <View style={styles.tripVerifyHeaderText}>
-                                    <Text style={[styles.tripVerifyTitle, { color: colors.text }]}>
-                                      Confirm fleet payment
-                                    </Text>
-                                    <Text style={[styles.tripVerifySubtitle, { color: colors.textMuted }]} numberOfLines={3}>
-                                      {item.hasPaymentShortfall
-                                        ? `${providerShort} marked ₹${item.amount.toLocaleString('en-IN')} of ₹${item.expectedAmount.toLocaleString('en-IN')} trip earning via ${formatPaymentModeLabel(pendingMode)}. ₹${item.outstandingAmount.toLocaleString('en-IN')} outstanding — you can accept the partial amount.`
-                                        : `${providerShort} marked ₹${item.amount.toLocaleString('en-IN')} via ${formatPaymentModeLabel(pendingMode)}`}
-                                    </Text>
-                                  </View>
-                                </View>
-
-                                {item.hasPaymentShortfall ? (
-                                  <TripPaymentAmountGrid
-                                    expectedAmount={item.expectedAmount}
-                                    paymentAmount={item.amount}
-                                    outstandingAmount={item.outstandingAmount}
-                                    writeOffAmount={item.writeOffAmount}
-                                    hasPaymentShortfall={item.hasPaymentShortfall}
-                                    mode="fleet_marked"
-                                    colors={colors}
-                                    isDark={isDark}
-                                    compact
-                                  />
-                                ) : null}
-
-                                <View
-                                  style={[
-                                    styles.tripVerifyMetaGrid,
-                                    {
-                                      borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
-                                      backgroundColor: isDark ? 'rgba(15,23,42,0.35)' : colors.surface,
-                                    },
-                                  ]}
-                                >
-                                  <View style={styles.tripVerifyMetaCell}>
-                                    <Text style={[styles.tripVerifyMetaLabel, { color: colors.textMuted }]}>Mode</Text>
-                                    <Text style={[styles.tripVerifyMetaValue, { color: colors.text }]} numberOfLines={1}>
-                                      {formatPaymentModeLabel(pendingMode)}
-                                    </Text>
-                                  </View>
-                                  <View
-                                    style={[
-                                      styles.tripVerifyMetaDivider,
-                                      { backgroundColor: isDark ? colors.borderSubtle : '#e2e8f0' },
-                                    ]}
-                                  />
-                                  <View style={styles.tripVerifyMetaCell}>
-                                    <Text style={[styles.tripVerifyMetaLabel, { color: colors.textMuted }]}>UTR</Text>
-                                    <Text style={[styles.tripVerifyMetaValue, { color: colors.text }]} numberOfLines={1}>
-                                      {pendingUtr}
-                                    </Text>
-                                  </View>
-                                </View>
-
-                                <Text style={[styles.tripVerifyTimestamp, { color: colors.textMuted }]}>
-                                  Marked {pendingCapturedAt}
-                                </Text>
-
-                                <TouchableOpacity
-                                  style={[
-                                    styles.tripVerifyBtn,
-                                    {
-                                      backgroundColor: colors.emerald,
-                                      shadowColor: isDark ? '#000' : 'rgba(4,120,87,0.28)',
-                                    },
-                                  ]}
-                                  onPress={() =>
-                                    confirmMarkAsPaid(item.trip, item.amount, fleetPendingLedger, {
-                                      expectedAmount: item.expectedAmount,
-                                      writeOffAmount: item.writeOffAmount,
-                                      hasPaymentShortfall: item.hasPaymentShortfall,
-                                    })
-                                  }
-                                  disabled={markPaidLoadingTripId === item.trip.id}
-                                  activeOpacity={0.88}
-                                >
-                                  {markPaidLoadingTripId === item.trip.id ? (
-                                    <LoadingIndicator size="small" color={Theme.textOnPrimary} />
-                                  ) : (
-                                    <>
-                                      <FontAwesome name="check" size={11} color={Theme.textOnPrimary} />
-                                      <Text style={styles.tripVerifyBtnText}>
-                                        {item.hasPaymentShortfall
-                                          ? `Accept ₹${item.amount.toLocaleString('en-IN')} and write off ₹${item.writeOffAmount.toLocaleString('en-IN')}`
-                                          : 'Verify payment'}
-                                      </Text>
-                                    </>
-                                  )}
-                                </TouchableOpacity>
-                              </View>
-                            ) : null}
-
-                            {!isSettled && !hasFleetPending && !isSalaryTrip ? (
-                              <View
-                                style={[
-                                  styles.tripsPendingActionsWrap,
-                                  { borderTopColor: isDark ? colors.borderSubtle : '#f1f5f9' },
-                                ]}
-                              >
-                                <View style={styles.tripsExpandedGrid}>
-                                  <TouchableOpacity
-                                    activeOpacity={0.88}
-                                    onPress={() =>
-                                      claimTripInAppAndShare({
-                                        trip: item.trip,
-                                        displayId: item.id,
-                                        fleetName: providerShort,
-                                        amount: item.amount,
-                                        from: item.from,
-                                        to: item.to,
-                                        status: item.subStatus || item.status,
-                                      }).catch(() => {})
-                                    }
-                                    disabled={requestPaymentLoadingTripId === item.trip.id}
-                                    style={[
-                                      styles.tripsPendingActionPrimary,
-                                      {
-                                        backgroundColor: colors.emerald,
-                                        shadowColor: isDark ? '#000' : 'rgba(4,120,87,0.22)',
-                                      },
-                                    ]}
-                                    accessibilityLabel="Request payment: save request, share PDF with fleet, optional WhatsApp"
-                                  >
-                                    <FontAwesome
-                                      name={requestPaymentLoadingTripId === item.trip.id ? 'spinner' : 'whatsapp'}
-                                      size={12}
-                                      color={Theme.textOnPrimary}
-                                    />
-                                    <Text style={styles.tripsPendingActionPrimaryText} numberOfLines={1}>
-                                      {requestPaymentLoadingTripId === item.trip.id ? 'Requesting…' : 'Request payment'}
-                                    </Text>
-                                  </TouchableOpacity>
-
-                                  <TouchableOpacity
-                                    activeOpacity={0.88}
-                                    onPress={() =>
-                                      confirmMarkAsPaid(item.trip, item.amount, null, {
-                                        expectedAmount: item.expectedAmount,
-                                        writeOffAmount: item.writeOffAmount,
-                                        hasPaymentShortfall: item.hasPaymentShortfall,
-                                      })
-                                    }
-                                    style={[
-                                      styles.tripsPendingActionSecondary,
-                                      {
-                                        backgroundColor: isDark ? colors.surfaceElevated : '#ffffff',
-                                        borderColor: isDark ? colors.borderSubtle : '#e2e8f0',
-                                      },
-                                    ]}
-                                    disabled={markPaidLoadingTripId === item.trip.id}
-                                  >
-                                    <FontAwesome
-                                      name={markPaidLoadingTripId === item.trip.id ? 'spinner' : 'check'}
-                                      size={12}
-                                      color={colors.emerald}
-                                    />
-                                    <Text
-                                      style={[styles.tripsPendingActionSecondaryText, { color: colors.textMuted }]}
-                                      numberOfLines={1}
-                                    >
-                                      {markPaidLoadingTripId === item.trip.id ? 'Saving…' : 'Mark as paid'}
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-
-                                {!item.isFleetOwnerTrip ? (() => {
-                                  const tripEmployer = findEmployerAtTripDate(item.trip);
-                                  if (!tripEmployer) return null;
-
-                                  if (isAttributionApproved) {
-                                    // Fleet owner approved — show accepted state
-                                    return (
-                                      <View
-                                        style={[
-                                          styles.tripsPendingActionSecondary,
-                                          {
-                                            marginTop: 8,
-                                            backgroundColor: isDark ? 'rgba(4,120,87,0.10)' : 'rgba(220,252,231,0.6)',
-                                            borderColor: 'rgba(4,120,87,0.30)',
-                                          },
-                                        ]}
-                                      >
-                                        <FontAwesome name="check-circle" size={12} color="#059669" />
-                                        <Text style={[styles.tripsPendingActionSecondaryText, { color: '#059669' }]} numberOfLines={1}>
-                                          Accepted by {tripEmployer.orgName}
-                                        </Text>
-                                      </View>
-                                    );
-                                  }
-
-                                  if (isAttributionPending) {
-                                    // Sent to fleet owner, awaiting approval
-                                    return (
-                                      <View
-                                        style={[
-                                          styles.tripsPendingActionSecondary,
-                                          {
-                                            marginTop: 8,
-                                            backgroundColor: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(254,243,199,0.6)',
-                                            borderColor: 'rgba(245,158,11,0.30)',
-                                            opacity: 0.85,
-                                          },
-                                        ]}
-                                      >
-                                        <FontAwesome name="clock-o" size={12} color="#d97706" />
-                                        <Text style={[styles.tripsPendingActionSecondaryText, { color: '#d97706' }]} numberOfLines={1}>
-                                          Awaiting {tripEmployer.orgName} approval
-                                        </Text>
-                                      </View>
-                                    );
-                                  }
-
-                                  // Not yet sent — show the "Send to Fleet" button
-                                  return (
-                                    <TouchableOpacity
-                                      activeOpacity={0.88}
-                                      onPress={() => handleMarkAsFleetTrip(item.trip, tripEmployer)}
-                                      disabled={markFleetTripLoadingId === item.trip.id}
-                                      style={[
-                                        styles.tripsPendingActionSecondary,
-                                        {
-                                          marginTop: 8,
-                                          backgroundColor: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(254,243,199,0.5)',
-                                          borderColor: 'rgba(245,158,11,0.35)',
-                                        },
-                                      ]}
-                                    >
-                                      <FontAwesome name="building" size={12} color="#d97706" />
-                                      <Text style={[styles.tripsPendingActionSecondaryText, { color: '#d97706' }]} numberOfLines={1}>
-                                        {markFleetTripLoadingId === item.trip.id
-                                          ? 'Sending…'
-                                          : `Send to ${tripEmployer.orgName}`}
-                                      </Text>
-                                    </TouchableOpacity>
-                                  );
-                                })() : null}
-                              </View>
-                            ) : null}
-
-                            {hasCardExpandAction && isExpanded && (
-                              <View style={styles.tripsExpanded}>
-                                {isActionRequired && (
-                                  <View
-                                    style={[
-                                      styles.tripsAttention,
-                                      {
-                                        backgroundColor: 'rgba(249,115,22,0.10)',
-                                        borderColor: 'rgba(249,115,22,0.22)',
-                                      },
-                                    ]}
-                                  >
-                                    <View style={styles.tripsAttentionLeft}>
-                                      <FontAwesome name="exclamation-circle" size={16} color={'rgb(249,115,22)'} />
-                                      <View style={styles.tripsAttentionText}>
-                                        <Text style={styles.tripsAttentionLabel}>Attention needed</Text>
-                                        <Text style={[styles.tripsAttentionValue, { color: colors.text }]} numberOfLines={1}>
-                                          {item.subStatus}
-                                        </Text>
-                                      </View>
-                                    </View>
-                                    <FontAwesome name="info-circle" size={16} color={'rgba(249,115,22,0.65)'} />
-                                  </View>
-                                )}
-
-                                {isSettled ? (
-                                  <>
-                                    <TouchableOpacity
-                                      activeOpacity={0.88}
-                                      style={[
-                                        styles.tripsReceiptButton,
-                                        {
-                                          backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.7)',
-                                          borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.8)',
-                                        },
-                                      ]}
-                                      onPress={() => setExpandedTripReceiptId((prev) => (prev === tripId ? null : tripId))}
-                                    >
-                                      <View style={styles.tripsReceiptButtonLeft}>
-                                        <FontAwesome name="file-text-o" size={14} color={colors.textMuted} />
-                                        <Text style={[styles.tripsReceiptButtonText, { color: colors.textMuted }]}>View receipt</Text>
-                                      </View>
-                                      <FontAwesome name={receiptExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
-                                    </TouchableOpacity>
-
-                                    {receiptExpanded && (
-                                      <View style={styles.tripsReceiptCardWrap}>
-                                        <View
-                                          style={[
-                                            styles.tripsReceiptCard,
-                                            { backgroundColor: colors.surface, borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)' },
-                                          ]}
-                                        >
-                                          <View style={styles.tripsReceiptHero}>
-                                            <View style={[styles.tripsReceiptIcon, { backgroundColor: 'rgba(4,120,87,0.12)' }]}>
-                                              <FontAwesome name="check" size={20} color={colors.emerald} />
-                                            </View>
-                                            <Text style={[styles.tripsReceiptEyebrow, { color: colors.emerald }]}>SETTLEMENT RECEIVED</Text>
-                                            <Text style={[styles.tripsReceiptAmount, { color: colors.text }]}>₹{Math.round(item.amount).toLocaleString('en-IN')}</Text>
-                                          </View>
-
-                                          <View style={[styles.tripsReceiptMeta, { borderTopColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)' }]}>
-                                            {[
-                                              { k: 'Transaction ID', v: String(settlementTxnId) },
-                                              { k: 'UTR', v: String(settlementUtr) },
-                                              { k: 'Payment mode', v: String(settlementMode) },
-                                              { k: 'Captured at', v: String(settlementCapturedAt) },
-                                              { k: 'Reference', v: item.id },
-                                              { k: 'Settled to', v: providerShort },
-                                            ].map((r) => (
-                                              <View key={r.k} style={styles.tripsReceiptMetaRow}>
-                                                <Text style={[styles.tripsReceiptMetaLabel, { color: colors.textMuted }]}>{r.k}</Text>
-                                                <Text style={[styles.tripsReceiptMetaValue, { color: colors.text }]} numberOfLines={1} ellipsizeMode="middle">
-                                                  {r.v}
-                                                </Text>
-                                              </View>
-                                            ))}
-                                            <View style={styles.tripsReceiptMetaRow}>
-                                              <Text style={[styles.tripsReceiptMetaLabel, { color: colors.textMuted }]}>Route</Text>
-                                              <Text style={[styles.tripsReceiptMetaValue, { color: colors.text }]} numberOfLines={1}>
-                                                {settlementRoute}
-                                              </Text>
-                                            </View>
-                                          </View>
-
-                                          <View style={styles.tripsReceiptActions}>
-                                            <TouchableOpacity
-                                              activeOpacity={0.85}
-                                              style={[
-                                                styles.tripsReceiptActionSecondary,
-                                                {
-                                                  backgroundColor: isDark ? colors.surfaceElevated : '#f8fafc',
-                                                  borderColor: isDark ? colors.borderSubtle : '#e2e8f0',
-                                                },
-                                              ]}
-                                              onPress={() => {
-                                                const msg = buildSettlementShareMessage({
-                                                  fleetName: providerShort,
-                                                  tripId: item.id,
-                                                  amount: Math.round(item.amount),
-                                                  transactionId: String(settlementTxnId),
-                                                  utr: String(settlementUtr),
-                                                });
-                                                Share.share({ message: msg }).catch(() => {});
-                                              }}
-                                            >
-                                              <FontAwesome name="share-square-o" size={13} color={colors.textMuted} />
-                                              <Text style={[styles.tripsReceiptActionSecondaryText, { color: colors.textMuted }]}>Share</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                              activeOpacity={0.85}
-                                              style={[styles.tripsReceiptActionPrimary, { backgroundColor: colors.emerald }]}
-                                              onPress={() =>
-                                                shareTripSettlementPdf({
-                                                  fleetName: providerShort,
-                                                  displayId: item.id,
-                                                  amount: Math.round(item.amount),
-                                                  transactionId: String(settlementTxnId),
-                                                  utr: String(settlementUtr),
-                                                  paymentMode: String(settlementMode),
-                                                  capturedAt: String(settlementCapturedAt),
-                                                  route: settlementRoute,
-                                                }).catch(() => {})
-                                              }
-                                            >
-                                              <FontAwesome name="file-pdf-o" size={13} color={colors.textOnPrimary} />
-                                              <Text style={styles.tripsReceiptActionPrimaryText}>PDF receipt</Text>
-                                            </TouchableOpacity>
-                                          </View>
-                                        </View>
-                                      </View>
-                                    )}
-                                  </>
-                                ) : null}
-                              </View>
-                            )}
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-        </View>
+      ) : mainTab === 'earnings' ? (
+        <DriverWalletEarningsPanel
+          completedTrips={completedTrips}
+          fleets={salaryRequestOrgOptions.map((f) => ({
+            orgId: String(f.orgId ?? ''),
+            orgName: f.orgName,
+          })).filter((f) => f.orgId.length > 0)}
+          ledgerEntries={ledgerEntries}
+          tripEarnings={(trip) => tripEarnings(trip, payoutTermsForTrip(trip))}
+          receivedByTripId={receivedByTripId}
+          tripMeta={(trip) => {
+            const earned = Math.round(tripEarnings(trip, payoutTermsForTrip(trip)));
+            const received = Math.round(receivedByTripId[trip.id] ?? 0);
+            const pending = Math.max(0, earned - received);
+            const orgId = String(trip.organization_id ?? '');
+            const fleetName =
+              orgNameById[orgId] ||
+              (trip as { organization_name?: string | null }).organization_name ||
+              'Fleet';
+            const from = String(trip.pickup_area ?? '').trim() || '—';
+            const to = String(trip.drop_location ?? '').trim() || '—';
+            return {
+              displayId: getDriverTripDisplayNumber(trip, driverTripNumberById),
+              fleetName,
+              from,
+              to,
+              statusLabel: pending > 0 ? 'Pending payment' : 'Received',
+              tripDate: phonePeMetaDate(
+                trip.completed_at ?? trip.updated_at ?? trip.created_at,
+              ),
+              lastReminderAt: earningsLastReminderAtByTripId[String(trip.id)] ?? null,
+            };
+          }}
+          driverName={linkedDrivers.find((d) => !d.left_at)?.name ?? linkedDrivers[0]?.name ?? null}
+          driverPhone={
+            linkedDrivers.find((d) => !d.left_at)?.phone ?? linkedDrivers[0]?.phone ?? null
+          }
+          pulseLoadingTripId={requestPaymentLoadingTripId}
+          pdfSharingTripId={earningsPdfSharingTripId}
+          onSendPulseReminder={sendEarningsPulseReminder}
+          onSendBulkPulseReminder={sendEarningsBulkPulseReminder}
+          onSharePaymentPdf={shareEarningsFollowUpPdf}
+          colors={colors}
+          isDark={isDark}
+        />
       ) : (
         <View style={[styles.ledgerSection, { paddingHorizontal: 12 }]}>
           <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>Cash settlements</Text>
@@ -3707,13 +3125,11 @@ export default function DriverWalletScreen() {
                         salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === cashOrgId)?.orgName ??
                         'Fleet';
                       const cashOrgAvatar = orgAvatarById[cashOrgId];
-                      const fleetAvatarUri =
-                        resolvePartyDisplayUri({
-                          organizationImageUrl: cashOrgAvatar?.logoUrl,
-                          organizationAvatarSeed: cashOrgAvatar?.avatarSeed,
-                          avatarUrl: cashOrgAvatar?.avatarUrl,
-                          entityType: 'client',
-                        }) ?? getFleetAvatarUriForOrg(cashOrgId, fleetName);
+                      const fleetAvatarUri = resolveDriverOrgAvatarUri({
+                        orgId: cashOrgId,
+                        orgName: fleetName,
+                        branding: cashOrgAvatar,
+                      });
                       const ledger = latestCreditLedgerByTripId[trip.id];
                       const paymentMode = derivePaymentMode(ledger?.description) ?? '—';
                       const utr = extractUtr(ledger?.description) ?? '—';
@@ -3935,6 +3351,7 @@ export default function DriverWalletScreen() {
         </View>
       )}
     </ScrollView>
+
     <ThemedConfirmModal
       variant="positive"
       visible={!!markPaidConfirmState}

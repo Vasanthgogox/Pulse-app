@@ -41,6 +41,9 @@ const REQUIRED_VIEW_COLUMNS = [
   'supplier_id',
   'completed_at',
   'trip_number',
+  'start_odometer_km',
+  'end_odometer_km',
+  'trip_payout_mode',
 ];
 
 const errors: string[] = [];

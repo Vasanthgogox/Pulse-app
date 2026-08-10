@@ -3,7 +3,7 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  excludeTrackingOnlyDrivers,
+  filterActiveFleetRelationshipDrivers,
   getDriversByOrganization,
   syncDriversWithCache,
   type DriverRow,
@@ -37,14 +37,15 @@ export function useDriversQuery(orgId: string | null) {
           return { error: res.error, rows: res.drivers };
         },
       });
-      // Party roster only — never cache one-time assign-by-phone stubs.
-      return excludeTrackingOnlyDrivers(rows);
+      // Party roster only — fleet-relationship membership (active_employee /
+      // independent), not tracking_only. See filterActiveFleetRelationshipDrivers.
+      return filterActiveFleetRelationshipDrivers(rows);
     },
     enabled: !!orgId && status !== 'restoring',
     staleTime: STALE.moderate,
     refetchOnMount: refetchOnMountIfEntityListEmpty<DriverRow[]>(),
-    // Drop tracking_only rows from any stale in-memory / persisted cache.
-    select: excludeTrackingOnlyDrivers,
+    // Drop non-fleet-relationship rows from any stale in-memory / persisted cache.
+    select: filterActiveFleetRelationshipDrivers,
   });
 }
 

@@ -3,7 +3,6 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import {
   OperationalBottomActionBar,
   OperationalButton,
-  OperationalChipSelect,
   OperationalHeader,
   Surface,
 } from "@/components/operational";
@@ -431,28 +430,31 @@ export function FuelEntryScreen({
         </Surface>
 
         <Surface elevation={1} density="high" style={s.card}>
-          <OperationalChipSelect
+          <DriverExpenseChipSelect
             label="Fuel type"
             options={FUEL_TYPE_OPTIONS}
             value={fuelType}
             onChange={setFuelType}
-            density="compact"
+            columns={2}
+            visualGroup="fuel_type"
           />
           <View style={s.divider} />
-          <OperationalChipSelect
+          <DriverExpenseChipSelect
             label="Paid by"
             options={paymentOwnerOptions}
             value={paymentOwner}
             onChange={setPaymentOwner}
-            density="compact"
+            columns={3}
+            visualGroup="payment_owner"
           />
           <View style={s.divider} />
-          <OperationalChipSelect
+          <DriverExpenseChipSelect
             label="Payment mode"
             options={PAYMENT_MODE_OPTIONS}
             value={paymentMode}
             onChange={setPaymentMode}
-            density="compact"
+            columns={3}
+            visualGroup="payment_mode"
           />
           <Text style={s.metaHint}>
             Operational log only — approval required before posting.

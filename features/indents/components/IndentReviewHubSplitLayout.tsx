@@ -387,6 +387,9 @@ const styles = StyleSheet.create({
   ownerBidsWrap: {
     flexGrow: 1,
     minHeight: 120,
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
   },
   awaitingPaneShell: {
     alignSelf: "stretch",

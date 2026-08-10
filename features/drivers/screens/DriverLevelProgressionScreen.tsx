@@ -34,11 +34,6 @@ function getLevelIcon(type: string): 'user' | 'truck' | 'id-card' | 'star' {
   return 'user';
 }
 
-function isCompleted(status: string) {
-  const s = (status || '').toLowerCase();
-  return s === 'completed' || s === 'delivered' || s === 'done';
-}
-
 export default function LevelProgressionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -67,7 +62,7 @@ export default function LevelProgressionScreen() {
       if (drivers.length > 0) {
         tripsService.getDriverUiTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
           const list = tRes.trips ?? [];
-          setTripsCount(list.filter((t) => isCompleted(t.status)).length);
+          setTripsCount(list.filter((t) => tripsService.isTripCompleted(t)).length);
           setLoading(false);
         });
       } else {

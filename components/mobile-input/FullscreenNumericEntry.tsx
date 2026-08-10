@@ -21,7 +21,7 @@ import { ArrowRight } from 'lucide-react-native';
 import { MotiView } from 'moti';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Theme from '@/constants/Theme';
-import { DecimalKeypad } from './DecimalKeypad';
+import { DecimalKeypad, PAY_KEYPAD_CELL_PAD, PAY_KEYPAD_INSET } from './DecimalKeypad';
 import { NumericDisplay } from './NumericDisplay';
 import type { NumericEntryPartyPreview } from './NumericEntryPartyBanner';
 import { NumericEntryRecipientHero } from './NumericEntryRecipientHero';
@@ -196,20 +196,24 @@ export function FullscreenNumericEntry({
 
       <View style={styles.payBottom}>
         <View style={styles.payFabRow}>
-          <View style={styles.payFabSpacer} />
-          <TouchableOpacity
-            style={[styles.payFab, !hasValue && styles.payFabDisabled]}
-            onPress={handleSubmit}
-            disabled={!hasValue}
-            accessibilityRole="button"
-            accessibilityLabel={submitLabel}
-          >
-            <ArrowRight
-              size={26}
-              color={hasValue ? Theme.textOnPrimary : Theme.textMuted}
-              strokeWidth={2.5}
-            />
-          </TouchableOpacity>
+          <View style={styles.payFabCell} />
+          <View style={styles.payFabCell} />
+          <View style={styles.payFabCell}>
+            <TouchableOpacity
+              style={[styles.payFab, !hasValue && styles.payFabDisabled]}
+              onPress={handleSubmit}
+              disabled={!hasValue}
+              accessibilityRole="button"
+              accessibilityLabel={submitLabel}
+              accessibilityState={{ disabled: !hasValue }}
+            >
+              <ArrowRight
+                size={22}
+                color={hasValue ? '#ffffff' : Theme.textMuted}
+                strokeWidth={2.4}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
         <DecimalKeypad onKey={handleKey} showDecimal={allowDecimal} variant="pay" />
       </View>
@@ -425,28 +429,39 @@ const styles = StyleSheet.create({
   },
   payFabRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-    marginTop: -4,
+    alignItems: 'center',
+    // Match keypad: outer inset minus cell pad so cell centers line up with keys.
+    paddingHorizontal: PAY_KEYPAD_INSET - PAY_KEYPAD_CELL_PAD,
+    paddingTop: 2,
+    paddingBottom: 2,
   },
-  payFabSpacer: {
+  payFabCell: {
     flex: 1,
-  },
-  payFab: {
-    width: 60,
-    height: 60,
-    backgroundColor: Theme.buttonPrimary,
+    minWidth: 0,
+    padding: PAY_KEYPAD_CELL_PAD,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Theme.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
+  },
+  payFab: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Theme.driverEmeraldDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: Theme.driverEmeraldDark,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28,
+        shadowRadius: 10,
+      },
+      android: { elevation: 5 },
+      default: {},
+    }),
   },
   payFabDisabled: {
-    backgroundColor: Theme.borderLight,
+    backgroundColor: 'rgba(148,163,184,0.22)',
     shadowOpacity: 0,
     elevation: 0,
   },

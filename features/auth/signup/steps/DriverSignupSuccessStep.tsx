@@ -3,11 +3,13 @@ import { useRouter } from 'expo-router';
 
 import { ROUTES } from '@/lib/routes';
 import { clearDriverSignupSuccess } from '@/lib/onboarding/businessSignupBranding.util';
+import { PULSE_PILOT_BRAND_WORD } from '@/lib/brand/pulseBrandMark.tokens';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
-import { SignUpWorkspaceReadyCard } from '../components/SignUpWorkspaceReadyCard';
+import {
+  DriverSignupReadyCard,
+  type DriverReadyCheckpoint,
+} from '../components/DriverSignupReadyCard';
 import { DRIVER_SIGNUP } from '../signUpDriverTheme';
-import Theme from '@/constants/Theme';
-import type { SignUpWorkspaceReadyCheckpoint } from '../components/SignUpWorkspaceReadyCard';
 
 export interface DriverSignupSuccessStepProps {
   displayName: string;
@@ -29,7 +31,7 @@ function buildDriverCheckpoints({
   licenseSkipped,
   aadhaarSkipped,
   panSkipped,
-}: Omit<DriverSignupSuccessStepProps, 'displayName' | 'onEnterApp'>): SignUpWorkspaceReadyCheckpoint[] {
+}: Omit<DriverSignupSuccessStepProps, 'displayName' | 'onEnterApp'>): DriverReadyCheckpoint[] {
   const docResolved = (uploaded: boolean, skipped: boolean) => uploaded || skipped;
   const docsDone =
     docResolved(licenseUploaded, licenseSkipped) &&
@@ -38,25 +40,27 @@ function buildDriverCheckpoints({
   const uploadedCount = [licenseUploaded, aadhaarUploaded, panUploaded].filter(Boolean).length;
   const skippedCount = [licenseSkipped, aadhaarSkipped, panSkipped].filter(Boolean).length;
 
-  let docsDetail = `${uploadedCount} of 3 documents uploaded`;
+  let docsDetail = `${uploadedCount} of 3 documents on file`;
   if (skippedCount > 0) {
-    docsDetail = `${uploadedCount} uploaded · ${skippedCount} skipped — add later in profile`;
+    docsDetail = `${uploadedCount} uploaded · ${skippedCount} later from profile`;
   }
 
   return [
-    { id: 'account', label: 'Driver account created', status: 'complete' },
+    { id: 'account', label: 'Driver account live', status: 'complete' },
     {
       id: 'docs',
       label: 'Compliance documents',
       status: docsDone ? 'complete' : 'in_progress',
       detail: docsDetail,
     },
-    { id: 'photo', label: 'Profile photo configured', status: 'complete' },
+    { id: 'photo', label: 'Profile identity set', status: 'complete' },
     {
       id: 'trips',
       label: 'Trip access',
       status: docsDone ? 'complete' : 'in_progress',
-      detail: docsDone ? 'Ready to run trips' : 'Finish documents to unlock all trips',
+      detail: docsDone
+        ? 'Cleared to accept trips'
+        : 'Upload remaining docs to unlock all trips',
     },
   ];
 }
@@ -83,12 +87,13 @@ export function DriverSignupSuccessStep({
 
   return (
     <SignUpPulseFormStep
-      title="You're in"
-      subtitle={`${trimmedName} is ready on the Pulse driver network.`}
-      primaryLabel="Go to app"
+      title="You're cleared"
+      subtitle={`Welcome to ${PULSE_PILOT_BRAND_WORD} — your pilot profile is ready.`}
+      primaryLabel="Open driver app"
       onPrimary={handleEnterApp}
       theme={DRIVER_SIGNUP}
       centerContent
+      titleCentered
       secondaryAction={{
         label: 'Sign in on another device',
         onPress: () => {
@@ -98,17 +103,10 @@ export function DriverSignupSuccessStep({
       }}
     >
       <View style={styles.cardWrap}>
-        <SignUpWorkspaceReadyCard
-          entityName={trimmedName}
-          entityIcon="truck"
-          theme={DRIVER_SIGNUP}
-          liveLabel="Ready"
+        <DriverSignupReadyCard
+          displayName={trimmedName}
           profilePreviewUri={profilePreviewUri}
           profileImage={profileImage}
-          profilePhotoLabel="Profile photo selected"
-          gradientColors={['#f8fafc', '#f1f5f9', DRIVER_SIGNUP.bg]}
-          progressEndColor={DRIVER_SIGNUP.primary}
-          entityPillBorderColor={Theme.driverEmeraldBorderSoft}
           checkpoints={buildDriverCheckpoints({
             licenseUploaded,
             aadhaarUploaded,
@@ -126,8 +124,10 @@ export function DriverSignupSuccessStep({
 const styles = StyleSheet.create({
   cardWrap: {
     width: '100%',
+    alignSelf: 'stretch',
     alignItems: 'center',
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingHorizontal: 4,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
 });

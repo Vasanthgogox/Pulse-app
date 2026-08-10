@@ -4,7 +4,10 @@ import {
   type ScoreLevel,
   type VehicleScoreTripInput,
 } from "@/features/analytics";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import {
+  filterActiveFleetRelationshipDrivers,
+  type DriverRow,
+} from "@/features/drivers/services/drivers.service";
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
@@ -392,7 +395,7 @@ function driverTripStats(
   filters: AssetSalesCrossFilters,
 ): Map<string, DriverStats> {
   const allowed = new Set(
-    drivers.filter((d) => !d.left_at && !d.tracking_only).map((d) => d.id),
+    filterActiveFleetRelationshipDrivers(drivers as DriverRow[]).map((d) => d.id),
   );
   const map = new Map<string, DriverStats>();
 
@@ -464,7 +467,10 @@ function passesDriverFilters(
 }
 
 export function fleetDriversBase(drivers: readonly DriverRow[]): DriverRow[] {
-  return drivers.filter((d) => !d.left_at && !d.tracking_only);
+  // Fleet-relationship membership (active_employee/independent), not tracking_only.
+  // See filterActiveFleetRelationshipDrivers — this is membership only, not
+  // compensation eligibility or trip-assignment context.
+  return filterActiveFleetRelationshipDrivers(drivers as DriverRow[]);
 }
 
 function utilizationPctForStat(

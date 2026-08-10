@@ -141,7 +141,10 @@ async function sharePdf(html: string, dialogTitle: string) {
   });
 }
 
-export function useDriverTripSettlement(trip: TripRow | null) {
+export function useDriverTripSettlement(
+  trip: TripRow | null,
+  opts?: { isFleetLinked?: boolean },
+) {
   const { profile } = useAuth();
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);
   const [invites, setInvites] = useState<
@@ -215,6 +218,38 @@ export function useDriverTripSettlement(trip: TripRow | null) {
     return rawName && String(rawName).trim() ? String(rawName).trim() : "Fleet";
   }, [trip, invites]);
 
+  const payoutTerms = useMemo(() => {
+    if (!trip?.organization_id) return null;
+    const orgId = String(trip.organization_id);
+    const acceptedInvite = invites.find(
+      (inv) =>
+        (inv.status || "").toLowerCase() === "accepted" &&
+        String(inv.from_organization_id ?? "") === orgId,
+    );
+    const linkedDriver =
+      linkedDrivers.find(
+        (d) =>
+          String(d.organization_id ?? "") === orgId &&
+          String(d.id ?? "") === String(trip.driver_id ?? ""),
+      ) ??
+      linkedDrivers.find((d) => String(d.organization_id ?? "") === orgId) ??
+      null;
+    return {
+      commissionPercent:
+        acceptedInvite?.commission_percent ?? linkedDriver?.commission_percent ?? null,
+      commissionPerKm:
+        acceptedInvite?.commission_per_km ?? linkedDriver?.commission_per_km ?? null,
+    };
+  }, [trip, invites, linkedDrivers]);
+
+  const isFleetLinkedFromDrivers = useMemo(() => {
+    if (!trip?.organization_id) return false;
+    const orgId = String(trip.organization_id);
+    return linkedDrivers.some((d) => String(d.organization_id ?? "") === orgId);
+  }, [trip?.organization_id, linkedDrivers]);
+
+  const isFleetLinked = opts?.isFleetLinked ?? isFleetLinkedFromDrivers;
+
   const settlementView: DriverTripSettlementView | null = useMemo(() => {
     if (!trip) return null;
     return buildDriverTripSettlementView({
@@ -223,8 +258,10 @@ export function useDriverTripSettlement(trip: TripRow | null) {
       fleetOrgName,
       driverTripNumberById,
       tripCompleted: isTripCompleted(trip.status),
+      payoutTerms,
+      isFleetLinked,
     });
-  }, [trip, ledgerEntries, fleetOrgName, driverTripNumberById]);
+  }, [trip, ledgerEntries, fleetOrgName, driverTripNumberById, payoutTerms, isFleetLinked]);
 
   const requestPayment = useCallback(async () => {
     if (!trip || !settlementView) return;

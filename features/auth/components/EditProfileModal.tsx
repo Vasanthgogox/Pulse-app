@@ -78,6 +78,11 @@ export interface EditProfileModalProps {
    * Optional line under the name on the driver hero (e.g. tier). When omitted, a generic "DRIVER" label is shown.
    */
   heroSubtitle?: string;
+  /**
+   * `driver` — full-screen hero edit (avatar sheet + user-2d grid, editable phone/company).
+   * `form` — compact form used by business/workspace profile.
+   */
+  layout?: 'driver' | 'form';
 }
 
 export function EditProfileModal({
@@ -93,12 +98,11 @@ export function EditProfileModal({
   initialStatusText = '',
   avatarPresetStyle = 'driver',
   heroSubtitle,
+  layout = 'form',
 }: EditProfileModalProps) {
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
-  // Use the same clean, form-first modal layout across driver + user flows.
-  // Keeps interactions identical while matching app theme consistently.
-  const driverRefLayout = false;
+  const driverRefLayout = layout === 'driver';
 
   const [fullName, setFullName] = useState(initialFullName);
   const [phone, setPhone] = useState(initialPhone);
@@ -191,11 +195,24 @@ export function EditProfileModal({
       setError(statusErr);
       return;
     }
+    if (driverRefLayout && phone.trim()) {
+      const phoneErr = validatePhone(phone);
+      if (phoneErr) {
+        setError(phoneErr);
+        return;
+      }
+    }
     const name = fullName.trim();
     setSaving(true);
     const { error: err } = await authService.updateProfile({
       full_name: name,
       status_text: statusText.trim() || null,
+      ...(driverRefLayout
+        ? {
+            phone: phone.trim(),
+            company_name: companyName.trim(),
+          }
+        : {}),
     });
     setSaving(false);
     if (err) {
@@ -442,8 +459,12 @@ export function EditProfileModal({
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={() => {
-        if (driverRefLayout && showAvatarActions) {
+        if (showAvatarActions) {
           setShowAvatarActions(false);
+          return;
+        }
+        if (showAvatarDropdown) {
+          setShowAvatarDropdown(false);
           return;
         }
         onClose();
@@ -1532,6 +1553,7 @@ const styles = StyleSheet.create({
   actionSheetBackdropFill: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: Theme.overlayBackdrop,
+    zIndex: 0,
   },
   actionSheetCard: {
     backgroundColor: Theme.screenBackground,
@@ -1540,6 +1562,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
+    zIndex: 2,
+    ...Platform.select({ android: { elevation: 28 }, web: { position: 'relative' as const } }),
   },
   actionSheetTitle: {
     fontSize: 13,

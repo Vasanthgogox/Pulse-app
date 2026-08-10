@@ -1,24 +1,20 @@
-import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsOnline } from "@/contexts/NetworkContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { DriverOpsEntryFooter } from "@/features/trips/operations/shared/DriverOpsEntryFooter";
 import { OpsEntryBodyPhotoSlot } from "@/features/trips/operations/shared/OpsEntryBodyPhotoSlot";
-import { driverOpsEntryStyles as ops } from "@/features/trips/operations/shared/driverOpsEntry.styles";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 
 import { normalizeOdometerRaw } from "./applyOdometerScan.util";
 import { OdometerEntryShell } from "./components/OdometerEntryShell";
 import { OdometerKeypadFlow, type OdometerFieldId } from "./components/OdometerKeypadFlow";
+import { OdometerNotesField } from "./components/OdometerNotesField";
 import { OdometerScanBanner } from "./components/OdometerScanBanner";
 import { useGPSDistanceEstimate } from "./GPSDistanceHook";
 import { useOdometerPhotoOcr } from "./hooks/useOdometerPhotoOcr";
@@ -53,7 +49,6 @@ export function OdometerStartEndScreen({ trip }: { trip: TripRow }) {
   const [startRaw, setStartRaw] = useState(() => kmToRaw(trip.start_odometer_km));
   const [endRaw, setEndRaw] = useState(() => kmToRaw(trip.end_odometer_km));
   const [notes, setNotes] = useState(trip.odometer_notes ?? "");
-  const [showNotes, setShowNotes] = useState(Boolean(trip.odometer_notes?.trim()));
   const [syncHint, setSyncHint] = useState<string | null>(null);
 
   const applyStartReading = useCallback((raw: string) => {
@@ -254,40 +249,14 @@ export function OdometerStartEndScreen({ trip }: { trip: TripRow }) {
             </>
           }
           extras={
-          <View style={styles.extras}>
-            {showNotes ? (
-              <View style={styles.notesWrap}>
-                <Text style={[ops.fieldLabel, { color: Theme.textMuted }]}>Notes (optional)</Text>
-                <TextInput
-                  style={[
-                    ops.input,
-                    ops.inputMultiline,
-                    {
-                      color: Theme.textPrimaryDark,
-                      backgroundColor: Theme.cardWhite,
-                      borderColor: Theme.borderLight,
-                    },
-                  ]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Correction, issue, or remark"
-                  placeholderTextColor={Theme.textMuted}
-                  multiline
-                />
-              </View>
-            ) : (
-              <Pressable
-                style={styles.notesToggle}
-                onPress={() => setShowNotes(true)}
-                accessibilityRole="button"
-              >
-                <Text style={[ops.syncHint, { color: Theme.textSecondary }]}>
-                  Add note (optional)
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        }
+            <View style={styles.extras}>
+              <OdometerNotesField
+                value={notes}
+                onChange={setNotes}
+                contextLine="Start & end odometer"
+              />
+            </View>
+          }
         />
       )}
     </OdometerEntryShell>
@@ -298,13 +267,5 @@ const styles = StyleSheet.create({
   extras: {
     width: "100%",
     gap: 8,
-  },
-  notesWrap: {
-    gap: 5,
-  },
-  notesToggle: {
-    alignSelf: "center",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
   },
 });

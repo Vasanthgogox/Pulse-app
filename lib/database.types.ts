@@ -11011,6 +11011,8 @@ export type Database = {
           completed_at: string | null
           created_at: string | null
           distance: number | null
+          distance_discrepancy_km: number | null
+          distance_source: string | null
           driver_commission: number | null
           driver_display_trip_id: string | null
           driver_id: string | null
@@ -11019,9 +11021,15 @@ export type Database = {
           dropoff_address: string | null
           dropoff_location: string | null
           dropoff_scheduled_at: string | null
+          end_odometer_km: number | null
+          gps_distance_km: number | null
           id: string | null
           indent_id: string | null
           instructions: string | null
+          odometer_distance_km: number | null
+          odometer_notes: string | null
+          odometer_updated_at: string | null
+          odometer_verification_state: string | null
           organization_id: string | null
           organization_name: string | null
           pickup_address: string | null
@@ -11031,11 +11039,13 @@ export type Database = {
           pickup_scheduled_at: string | null
           source: string | null
           source_indent_id: string | null
+          start_odometer_km: number | null
           started_at: string | null
           status: string | null
           supplier_id: string | null
           supplier_rate: number | null
           trip_number: string | null
+          trip_payout_mode: string | null
           updated_at: string | null
           vehicle_id: string | null
         }
@@ -13160,6 +13170,15 @@ export type Database = {
           trial_ends_at: string
         }[]
       }
+      get_org_branding_for_driver: {
+        Args: { p_org_ids: string[] }
+        Returns: {
+          avatar_seed: string
+          avatar_url: string
+          logo_url: string
+          organization_id: string
+        }[]
+      }
       get_org_ledger_summary: {
         Args: { p_from?: string; p_org_id: string; p_to?: string }
         Returns: {
@@ -13503,6 +13522,8 @@ export type Database = {
         Args: { p_trip_ids: string[] }
         Returns: {
           assigner_user_id: string
+          assigning_organization_avatar_seed: string
+          assigning_organization_avatar_url: string
           assigning_organization_id: string
           assigning_organization_logo_url: string
           assigning_organization_name: string
@@ -14353,6 +14374,10 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      soft_delete_trip_chat_by_storage_path: {
+        Args: { p_storage_path: string; p_trip_id: string }
+        Returns: number
+      }
       soft_delete_trip: {
         Args: { p_org_id: string; p_trip_id: string }
         Returns: undefined

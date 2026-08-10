@@ -1,5 +1,5 @@
 import Theme from "@/constants/Theme";
-import React, { useEffect, useState, type ComponentProps } from "react";
+import React, { useEffect, useMemo, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -18,6 +18,11 @@ type NativeHtmlWebViewProps = {
   uri?: string;
   style?: StyleProp<ViewStyle>;
   startInLoadingState?: WebViewProps["startInLoadingState"];
+  /**
+   * Document-preview mode: fit content to width and allow pinch zoom
+   * (payment request / PDF-style HTML viewers).
+   */
+  docPreview?: boolean;
 };
 
 let WebViewComponent: React.ComponentType<WebViewProps> | null = null;
@@ -33,12 +38,39 @@ function loadWebView(): Promise<void> {
   return webViewLoadPromise;
 }
 
+/** Ensure HTML can fit screen width and accept pinch zoom. */
+function withDocPreviewViewport(html: string): string {
+  const viewport =
+    '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.5, maximum-scale=4, user-scalable=yes" />';
+  const fitCss = `<style id="pulse-doc-preview-fit">
+    html, body { margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: 100% !important; background: #ffffff !important; }
+    body { -webkit-text-size-adjust: 100%; }
+    .page { padding: 10px 8px 14px !important; max-width: 100% !important; box-sizing: border-box !important; }
+    .doc { max-width: 100% !important; }
+    img, table { max-width: 100% !important; }
+  </style>`;
+
+  if (/<meta[^>]+name=["']viewport["']/i.test(html)) {
+    return html
+      .replace(
+        /<meta[^>]+name=["']viewport["'][^>]*>/i,
+        viewport,
+      )
+      .replace(/<\/head>/i, `${fitCss}</head>`);
+  }
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head([^>]*)>/i, `<head$1>${viewport}${fitCss}`);
+  }
+  return `<!doctype html><html><head>${viewport}${fitCss}</head><body>${html}</body></html>`;
+}
+
 /** Native-only WebView wrapper (lazy, single import site). */
 export function NativeHtmlWebView({
   html,
   uri,
   style,
   startInLoadingState,
+  docPreview = false,
 }: NativeHtmlWebViewProps) {
   const [ready, setReady] = useState(() => WebViewComponent != null);
 
@@ -53,6 +85,11 @@ export function NativeHtmlWebView({
     };
   }, []);
 
+  const resolvedHtml = useMemo(() => {
+    if (html == null) return undefined;
+    return docPreview ? withDocPreviewViewport(html) : html;
+  }, [html, docPreview]);
+
   if (Platform.OS === "web") return null;
 
   if (!ready || !WebViewComponent) {
@@ -64,7 +101,12 @@ export function NativeHtmlWebView({
   }
 
   const WebView = WebViewComponent;
-  const source = html != null ? { html } : uri != null ? { uri } : { html: "" };
+  const source =
+    resolvedHtml != null
+      ? { html: resolvedHtml }
+      : uri != null
+        ? { uri }
+        : { html: "" };
 
   return (
     <WebView
@@ -72,8 +114,23 @@ export function NativeHtmlWebView({
       source={source}
       style={style}
       showsVerticalScrollIndicator
+      showsHorizontalScrollIndicator={docPreview}
       nestedScrollEnabled
       startInLoadingState={startInLoadingState}
+      // Document preview: pinch-zoom + fit-to-width
+      scalesPageToFit={docPreview || undefined}
+      setBuiltInZoomControls={docPreview || undefined}
+      setDisplayZoomControls={false}
+      javaScriptEnabled
+      bounces={docPreview}
+      {...(docPreview
+        ? {
+            // iOS WebKit: allow user scaling beyond default
+            allowsInlineMediaPlayback: true,
+            automaticallyAdjustContentInsets: false,
+            contentInsetAdjustmentBehavior: "never" as const,
+          }
+        : null)}
     />
   );
 }

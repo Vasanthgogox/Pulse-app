@@ -1,6 +1,7 @@
-import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
-import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
+import { resolveDriverOrgAvatarUri } from '@/features/drivers/utils/resolveDriverOrgAvatar.util';
+import { useOrgBrandingByIds } from '@/lib/hooks/useOrgBrandingByIds';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useMemo } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { PendingEarningsTripItem } from '../hooks/useDriverPendingEarnings';
 
@@ -28,17 +29,27 @@ export function PendingEarningsTripCard({
   isDark,
   onPress,
 }: Props) {
-  const fleetAvatarUri =
-    resolvePartyDisplayUri({
-      organizationImageUrl: item.organizationImageUrl,
-      organizationAvatarSeed: item.organizationAvatarSeed,
-      avatarUrl: item.organizationAvatarUrl,
-      entityType: 'client',
-    }) ??
-    getFleetAvatarUriForOrg(
-      String(item.trip.organization_id ?? ''),
+  const orgId = String(item.trip.organization_id ?? '');
+  const brandingById = useOrgBrandingByIds([orgId]);
+  const fleetAvatarUri = useMemo(
+    () =>
+      resolveDriverOrgAvatarUri({
+        orgId,
+        orgName: item.provider,
+        branding: brandingById[orgId],
+        logoUrl: item.organizationImageUrl,
+        avatarSeed: item.organizationAvatarSeed,
+        avatarUrl: item.organizationAvatarUrl,
+      }),
+    [
+      orgId,
       item.provider,
-    );
+      brandingById,
+      item.organizationImageUrl,
+      item.organizationAvatarSeed,
+      item.organizationAvatarUrl,
+    ],
+  );
 
   return (
     <TouchableOpacity

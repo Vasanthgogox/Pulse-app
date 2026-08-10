@@ -77,8 +77,13 @@ export function NumericDisplay({
   const display = isEmpty ? placeholder : formatEntryDisplay(rawValue, type);
 
   const largeTypography = useMemo(() => {
-    if (!isLarge || isEmpty) return null;
-    return computeLargeDisplayTypography(display, isHero ? 'hero' : isWizardCompact ? 'wizardCompact' : 'wizard');
+    if (!isLarge) return null;
+    // Empty placeholder ("Enter amount") must scale down — hero 72px truncates the string.
+    const typographySource = isEmpty ? '0' : display;
+    return computeLargeDisplayTypography(
+      typographySource,
+      isHero ? 'hero' : isWizardCompact ? 'wizardCompact' : 'wizard',
+    );
   }, [display, isEmpty, isHero, isLarge, isWizardCompact]);
 
   return (
@@ -124,15 +129,20 @@ export function NumericDisplay({
             isWizard && styles.amountWizard,
             isWizardCompact && styles.amountWizardCompact,
             largeTypography && {
-              fontSize: largeTypography.amount,
-              lineHeight: largeTypography.lineHeight,
+              fontSize: isEmpty
+                ? Math.min(largeTypography.amount, isHero ? 36 : 32)
+                : largeTypography.amount,
+              lineHeight: isEmpty
+                ? Math.min(largeTypography.lineHeight, isHero ? 42 : 38)
+                : largeTypography.lineHeight,
             },
             isEmpty && styles.amountPlaceholder,
             isEmpty && isLarge && styles.amountPlaceholderHero,
+            isEmpty && styles.amountFlexible,
           ]}
           numberOfLines={1}
-          adjustsFontSizeToFit={!isLarge && !isEmpty}
-          minimumFontScale={isLarge ? 1 : 0.65}
+          adjustsFontSizeToFit
+          minimumFontScale={0.55}
           allowFontScaling={false}
         >
           {display}
@@ -248,6 +258,10 @@ const styles = StyleSheet.create({
     lineHeight: 48,
     flexShrink: 0,
     textAlign: 'center',
+  },
+  amountFlexible: {
+    flexShrink: 1,
+    minWidth: 0,
   },
   amountHero: {
     fontSize: 72,

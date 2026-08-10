@@ -91,6 +91,7 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
       marketingTag={marketingTag}
       marketingTitle={marketingTitle}
       marketingOutcomeLines={marketingOutcomeLines}
+      edgeToEdgeBody={bodyMode === 'keypad'}
     >
       <View style={styles.body}>{body}</View>
     </SignUpPulseShell>

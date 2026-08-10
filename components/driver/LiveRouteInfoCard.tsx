@@ -1,5 +1,6 @@
 /**
  * Floating “Live route” panel on the driver map — aligned with trip sheet card UI.
+ * `compact`: single-row strip for the map controls row (left of +/-/locate).
  */
 import { sheetStyles } from "@/components/driver/DriverTripSheetLayout";
 import Theme from "@/constants/Theme";
@@ -35,6 +36,8 @@ type Props = {
   etaDisplay: string;
   arrivalClock: string | null;
   bottomHint?: string;
+  /** Inline strip for the map top controls row (left of zoom / locate). */
+  compact?: boolean;
 };
 
 const EMERALD = Theme.driverEmerald;
@@ -48,6 +51,7 @@ export function LiveRouteInfoCard({
   etaDisplay,
   arrivalClock,
   bottomHint,
+  compact = false,
 }: Props) {
   const pulse = useSharedValue(0.55);
 
@@ -68,6 +72,74 @@ export function LiveRouteInfoCard({
   }));
 
   const dist = distanceDisplay ?? "—";
+
+  if (compact) {
+    const toShort =
+      toLabel === "destination" ? "drop" : toLabel === "pickup" ? "pickup" : toLabel;
+    return (
+      <View style={styles.compactShell}>
+        <LinearGradient
+          colors={[EMERALD_DARK, EMERALD]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.compactGradient}
+        >
+          <View style={styles.compactEyebrowRow}>
+            <Sparkles size={7} color={MINT} strokeWidth={2.5} />
+            <Text style={styles.compactEyebrow} numberOfLines={1}>
+              LIVE
+            </Text>
+            <Text style={styles.compactTo} numberOfLines={1}>
+              · {toShort}
+            </Text>
+            <Reanimated.View style={[styles.liveDot, styles.liveDotOnDark, pulseStyle]} />
+          </View>
+
+          <View style={styles.compactStats}>
+            <View style={styles.compactStat}>
+              <Navigation size={8} color={MINT} strokeWidth={2.4} />
+              <Text
+                style={styles.compactStatValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+              >
+                {dist}
+              </Text>
+            </View>
+            <View style={styles.compactStatDiv} />
+            <View style={styles.compactStat}>
+              <Clock size={8} color={MINT} strokeWidth={2.4} />
+              <Text
+                style={styles.compactStatValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+              >
+                {etaDisplay}
+              </Text>
+            </View>
+            {arrivalClock ? (
+              <>
+                <View style={styles.compactStatDiv} />
+                <View style={[styles.compactStat, styles.compactStatArrival]}>
+                  <FontAwesome name="flag-checkered" size={7} color={MINT} />
+                  <Text
+                    style={styles.compactStatValue}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                  >
+                    ~{arrivalClock}
+                  </Text>
+                </View>
+              </>
+            ) : null}
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.shell}>
@@ -139,6 +211,94 @@ const styles = StyleSheet.create({
         }
       : { elevation: 4 }),
   },
+  compactShell: {
+    flex: 1,
+    minWidth: 0,
+    height: 32,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.28)",
+    ...(Platform.OS === "ios"
+      ? {
+          shadowColor: "#0f172a",
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+        }
+      : { elevation: 2 }),
+  },
+  compactGradient: {
+    flex: 1,
+    height: 32,
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  compactEyebrowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: "38%",
+  },
+  compactEyebrow: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    color: MINT,
+    flexShrink: 0,
+  },
+  compactTo: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.92)",
+    letterSpacing: -0.1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  compactStats: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+  },
+  compactStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  compactStatArrival: {
+    maxWidth: 52,
+    flexShrink: 1,
+  },
+  compactStatValue: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#fff",
+    letterSpacing: -0.2,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  compactStatDiv: {
+    width: StyleSheet.hairlineWidth,
+    height: 10,
+    backgroundColor: "rgba(255,255,255,0.32)",
+    flexShrink: 0,
+  },
+  compactHint: {
+    fontSize: 7,
+    fontWeight: "600",
+    letterSpacing: 0.1,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
   hero: {
     paddingTop: 8,
     paddingHorizontal: 10,
@@ -192,6 +352,13 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: EMERALD,
+  },
+  liveDotOnDark: {
+    backgroundColor: MINT,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    flexShrink: 0,
   },
   hint: {
     fontSize: 9,

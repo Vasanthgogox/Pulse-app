@@ -4,6 +4,7 @@
  * Give load: idle VEHICLE_AVAILABILITY stories + sponsored capacity ads.
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { LoadCenterSidebarFindEmpty } from "@/features/network/components/LoadCenterSidebarFindEmpty";
 import Theme from "@/constants/Theme";
 import type { PostRow } from "@/features/network/services/posts.service";
 import {
@@ -18,8 +19,6 @@ import { useRouter } from "expo-router";
 import {
   ArrowRight,
   MapPin,
-  Megaphone,
-  Sparkles,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -39,6 +38,18 @@ type LoadCenterOpportunityExchangeProps = {
   mode: LoadCenterOpportunityMode;
   /** Trim outer horizontal padding when already inside a padded canvas. */
   embedded?: boolean;
+  /** Full-width horizontal strip below the search bar. */
+  fullBleed?: boolean;
+  /**
+   * Vertical stack for a Kanban column (e.g. Get Load → Open Market).
+   * Full-width cards; returns null when there are no matching posts.
+   */
+  columnStack?: boolean;
+  /**
+   * Left Give Load rail: header + vertical idle-capacity cards
+   * (replaces Story / Pulse Reach promo banners).
+   */
+  sidebarStack?: boolean;
   /**
    * Orgs in my suppliers book (linked). LOAD posts from supplier-only
    * counterparties are hidden in Get Load — same rule as Find Work.
@@ -96,14 +107,16 @@ function filterOpportunityPosts(
 
 const EMPTY_ORG_SET: ReadonlySet<string> = new Set();
 
-function OpportunityCard({
+export function OpportunityCard({
   post,
   mode,
   onPress,
+  fillWidth = false,
 }: {
   post: PostRow;
   mode: LoadCenterOpportunityMode;
   onPress: () => void;
+  fillWidth?: boolean;
 }) {
   const isSponsored = !!post.is_sponsored;
   const isLoad = mode === "get";
@@ -144,6 +157,7 @@ function OpportunityCard({
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
+        fillWidth && styles.cardFillWidth,
         isSponsored && styles.cardSponsored,
         pressed && styles.cardPressed,
       ]}
@@ -151,7 +165,7 @@ function OpportunityCard({
       accessibilityLabel={
         isSponsored
           ? `Sponsored ${isLoad ? "load" : "capacity"} from ${post.org_name}`
-          : `${isLoad ? "Open load" : "Idle vehicle"} from ${post.org_name}`
+          : `${isLoad ? "Indent from network" : "Idle vehicle"} from ${post.org_name}`
       }
     >
       <View style={styles.cardTop}>
@@ -160,7 +174,7 @@ function OpportunityCard({
           avatarUrl={avatarUrl}
           avatarSeed={post.org_avatar_seed}
           entityType="supplier"
-          size={32}
+          size={24}
         />
         <View style={styles.cardTopText}>
           <Text style={styles.orgName} numberOfLines={1}>
@@ -172,8 +186,8 @@ function OpportunityCard({
                 ? "Sponsored load"
                 : "Sponsored capacity"
               : isLoad
-                ? "Network load story"
-                : "Network vehicle story"}
+                ? "Indent from network"
+                : "Network capacity"}
             {posted ? ` · ${posted}` : ""}
           </Text>
         </View>
@@ -188,48 +202,36 @@ function OpportunityCard({
         )}
       </View>
 
-      <Text style={styles.kicker} numberOfLines={1}>
-        {isLoad ? "Load broadcast" : "Capacity broadcast"}
-      </Text>
-      <Text style={styles.heroTitle} numberOfLines={2}>
-        {vehicle}
-      </Text>
+      <View style={styles.heroRow}>
+        <Text style={styles.kicker} numberOfLines={1}>
+          {isLoad ? "Open indent" : "Open capacity"}
+        </Text>
+        <Text style={styles.heroTitle} numberOfLines={1}>
+          {vehicle}
+        </Text>
+      </View>
 
       <View style={styles.routeStrip}>
-        <View style={styles.routeEndpoint}>
+        <View style={styles.routeCityCol}>
           <View style={styles.dotOrigin} />
           <Text style={styles.routeCity} numberOfLines={1}>
             {originParts.city}
           </Text>
-          {originParts.state ? (
-            <Text style={styles.routeState} numberOfLines={1}>
-              {originParts.state}
-            </Text>
-          ) : null}
         </View>
-        <View style={styles.routeArrowWrap}>
-          <View style={styles.routeLine} />
-          <ArrowRight size={14} color={Theme.loadAddButtonText} strokeWidth={2.25} />
-          <View style={styles.routeLine} />
-        </View>
-        <View style={[styles.routeEndpoint, styles.routeEndpointEnd]}>
+        <ArrowRight size={11} color={Theme.loadAddButtonText} strokeWidth={2.25} />
+        <View style={[styles.routeCityCol, styles.routeCityColEnd]}>
           <View style={styles.dotDest} />
           <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
             {destinationParts.city}
           </Text>
-          {destinationParts.state ? (
-            <Text style={[styles.routeState, styles.routeStateEnd]} numberOfLines={1}>
-              {destinationParts.state}
-            </Text>
-          ) : null}
         </View>
       </View>
 
-      {material || rate ? (
+      {(material || rate) && (
         <View style={styles.specRow}>
           {material ? (
             <View style={styles.specChip}>
-              <MapPin size={11} color={Theme.loadStatusTabTextMuted} strokeWidth={2.2} />
+              <MapPin size={10} color={Theme.loadStatusTabTextMuted} strokeWidth={2.2} />
               <Text style={styles.specText} numberOfLines={1}>
                 {material}
               </Text>
@@ -243,26 +245,24 @@ function OpportunityCard({
             </View>
           ) : null}
         </View>
-      ) : null}
+      )}
 
       <View style={styles.cardFooter}>
         <Text style={styles.ctaText}>
           {isLoad ? "View & bid" : "View capacity"}
         </Text>
-        <ArrowRight size={12} color={Theme.primary} strokeWidth={2.4} />
+        <ArrowRight size={11} color={Theme.primary} strokeWidth={2.4} />
       </View>
     </Pressable>
   );
 }
 
-export function LoadCenterOpportunityExchange({
-  orgId,
-  mode,
-  embedded = false,
-  supplierOrgIds,
-  clientOrgIds,
-}: LoadCenterOpportunityExchangeProps) {
-  const router = useRouter();
+export function useLoadCenterOpportunityPosts(
+  orgId: string | null,
+  mode: LoadCenterOpportunityMode,
+  supplierOrgIds?: ReadonlySet<string>,
+  clientOrgIds?: ReadonlySet<string>,
+): { posts: PostRow[]; isLoading: boolean } {
   const feedQ = useNetworkFeedQuery(orgId, { enabled: !!orgId });
   const posts = useMemo(
     () =>
@@ -277,21 +277,134 @@ export function LoadCenterOpportunityExchange({
         : [],
     [feedQ.data, orgId, mode, supplierOrgIds, clientOrgIds],
   );
+  return { posts, isLoading: feedQ.isLoading };
+}
+
+export function LoadCenterOpportunityExchange({
+  orgId,
+  mode,
+  embedded = false,
+  fullBleed = false,
+  columnStack = false,
+  sidebarStack = false,
+  supplierOrgIds,
+  clientOrgIds,
+}: LoadCenterOpportunityExchangeProps) {
+  const router = useRouter();
+  const { posts, isLoading } = useLoadCenterOpportunityPosts(
+    orgId,
+    mode,
+    supplierOrgIds,
+    clientOrgIds,
+  );
 
   const sponsoredCount = posts.filter((p) => p.is_sponsored).length;
   const networkCount = posts.length - sponsoredCount;
   const isGet = mode === "get";
   const title = isGet
-    ? "Open opportunities"
+    ? sidebarStack
+      ? "Advertised loads"
+      : "Open opportunities"
     : "Idle capacity nearby";
   const subtitle = isGet
-    ? "Sponsored load ads and network freight stories you can bid on"
+    ? sidebarStack
+      ? "Indents from network you can bid on"
+      : "Sponsored load ads and indents from network you can bid on"
     : "Sponsored capacity ads and idle vehicle stories in your network";
+  const loadingSidebarText = isGet ? "Finding loads…" : "Finding capacity…";
+
+  const openStory = (post: PostRow) => {
+    router.push({
+      pathname: "/(modals)/story-detail",
+      params: {
+        postId: post.id,
+        orgId: post.organization_id,
+        storyType: post.type,
+      },
+    });
+  };
 
   if (!orgId) return null;
-  if (feedQ.isLoading && posts.length === 0) {
+
+  if (columnStack || sidebarStack) {
+    if (isLoading && posts.length === 0) {
+      if (!sidebarStack) return null;
+      return (
+        <View style={[styles.wrap, styles.wrapSidebar, embedded && styles.wrapEmbedded]}>
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={Theme.accentBrown} />
+            <Text style={styles.loadingText}>{loadingSidebarText}</Text>
+          </View>
+        </View>
+      );
+    }
+    if (posts.length === 0) {
+      if (!sidebarStack) return null;
+      return (
+        <View style={[styles.wrap, styles.wrapSidebar, embedded && styles.wrapEmbedded]}>
+          <View style={styles.header}>
+            <View style={styles.headerText}>
+              <Text style={styles.headerTitle}>{title}</Text>
+              <Text style={styles.headerSub} numberOfLines={2}>
+                {subtitle}
+              </Text>
+            </View>
+          </View>
+          <LoadCenterSidebarFindEmpty mode={mode} plain />
+        </View>
+      );
+    }
+
+    const cards = posts.map((post) => (
+      <OpportunityCard
+        key={post.id}
+        post={post}
+        mode={mode}
+        fillWidth
+        onPress={() => openStory(post)}
+      />
+    ));
+
+    if (columnStack) {
+      return <View style={styles.columnStack}>{cards}</View>;
+    }
+
     return (
-      <View style={[styles.wrap, embedded && styles.wrapEmbedded]}>
+      <View style={[styles.wrap, styles.wrapSidebar, embedded && styles.wrapEmbedded]}>
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text style={styles.headerTitle}>{title}</Text>
+            <Text style={styles.headerSub} numberOfLines={2}>
+              {subtitle}
+            </Text>
+          </View>
+          <View style={styles.countCluster}>
+            {sponsoredCount > 0 ? (
+              <View style={styles.countPillAds}>
+                <Text style={styles.countPillAdsText}>{sponsoredCount} Ads</Text>
+              </View>
+            ) : null}
+            {networkCount > 0 ? (
+              <View style={styles.countPillNet}>
+                <Text style={styles.countPillNetText}>{networkCount} live</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.columnStack}>{cards}</View>
+      </View>
+    );
+  }
+
+  if (isLoading && posts.length === 0) {
+    return (
+      <View
+        style={[
+          styles.wrap,
+          embedded && styles.wrapEmbedded,
+          fullBleed && styles.wrapFullBleed,
+        ]}
+      >
         <View style={styles.loadingRow}>
           <ActivityIndicator size="small" color={Theme.accentBrown} />
           <Text style={styles.loadingText}>Finding opportunities…</Text>
@@ -302,18 +415,17 @@ export function LoadCenterOpportunityExchange({
   if (posts.length === 0) return null;
 
   return (
-    <View style={[styles.wrap, embedded && styles.wrapEmbedded]}>
+    <View
+      style={[
+        styles.wrap,
+        embedded && styles.wrapEmbedded,
+        fullBleed && styles.wrapFullBleed,
+      ]}
+    >
       <View style={styles.header}>
-        <View style={styles.headerIcon}>
-          {isGet ? (
-            <Megaphone size={14} color={Theme.accentBrown} strokeWidth={2.2} />
-          ) : (
-            <Sparkles size={14} color={Theme.accentBrown} strokeWidth={2.2} />
-          )}
-        </View>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>{title}</Text>
-          <Text style={styles.headerSub} numberOfLines={2}>
+          <Text style={styles.headerSub} numberOfLines={1}>
             {subtitle}
           </Text>
         </View>
@@ -333,24 +445,20 @@ export function LoadCenterOpportunityExchange({
 
       <ScrollView
         horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        showsHorizontalScrollIndicator={fullBleed}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scroll,
+          fullBleed && styles.scrollFullBleed,
+        ]}
+        style={fullBleed ? styles.scrollViewFullBleed : undefined}
       >
         {posts.map((post) => (
           <OpportunityCard
             key={post.id}
             post={post}
             mode={mode}
-            onPress={() => {
-              router.push({
-                pathname: "/(modals)/story-detail",
-                params: {
-                  postId: post.id,
-                  orgId: post.organization_id,
-                  storyType: post.type,
-                },
-              });
-            }}
+            onPress={() => openStory(post)}
           />
         ))}
       </ScrollView>
@@ -358,18 +466,18 @@ export function LoadCenterOpportunityExchange({
   );
 }
 
-const CARD_W = 260;
+const CARD_W = 228;
 
 const cardShadow = Platform.select({
   web: {
     boxShadow:
-      "0 8px 28px rgba(77, 54, 54, 0.08), 0 2px 8px rgba(205, 233, 247, 0.45)",
+      "0 1px 0 rgba(255,255,255,0.95) inset, 0 8px 22px rgba(15, 23, 42, 0.09), 0 2px 6px rgba(15, 23, 42, 0.04)",
   } as object,
   ios: {
-    shadowColor: "#4D3636",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
   },
   android: { elevation: 3 },
   default: {},
@@ -377,270 +485,294 @@ const cardShadow = Platform.select({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 12,
-    marginBottom: 14,
-    paddingTop: 2,
+    gap: 8,
+    marginBottom: 0,
+    paddingTop: 0,
   },
   wrapEmbedded: {
     marginHorizontal: 0,
+    marginBottom: 0,
+  },
+  wrapFullBleed: {
+    width: "100%",
+    marginBottom: 0,
+    paddingTop: 10,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
+    gap: 8,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  wrapSidebar: {
+    width: "100%",
+    flexGrow: 1,
+    marginBottom: 0,
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
+    gap: 10,
+    borderRadius: 14,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 2px 10px rgba(15, 23, 42, 0.05)",
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+      } as object,
+      default: {},
+    }),
+  },
+  scrollViewFullBleed: {
+    width: "100%",
+    marginHorizontal: 0,
+  },
+  scrollFullBleed: {
+    paddingVertical: 4,
+    paddingRight: 4,
+    flexGrow: 1,
   },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 0,
   },
   loadingText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
     color: Theme.textMuted,
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
+    justifyContent: "space-between",
     gap: 10,
     paddingHorizontal: 2,
   },
-  headerIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    backgroundColor: Theme.accentBrownMuted,
-    borderWidth: 1,
-    borderColor: Theme.accentBrownBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerText: { flex: 1, minWidth: 0, gap: 2 },
+  headerText: { flex: 1, minWidth: 0, gap: 1 },
   headerTitle: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   headerSub: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
-    color: Theme.textRouteCard,
-    lineHeight: 15,
+    color: Theme.textMuted,
+    lineHeight: 13,
   },
   countCluster: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
   countPillAds: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 999,
     backgroundColor: Theme.accentBrown,
   },
   countPillAdsText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textOnPrimary,
     letterSpacing: 0.2,
   },
   countPillNet: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 999,
     backgroundColor: Theme.positiveMuted,
     borderWidth: 1,
     borderColor: Theme.networkHubListCardConnectedBorder,
   },
   countPillNetText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
     color: Theme.success,
   },
   scroll: {
-    gap: 12,
-    paddingVertical: 4,
+    gap: 8,
+    paddingVertical: 2,
     paddingRight: 4,
+  },
+  columnStack: {
+    width: "100%",
+    gap: 8,
+    marginBottom: 2,
   },
   card: {
     width: CARD_W,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.loadStatusTabTrayBorder,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
     backgroundColor: Theme.cardWhite,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 12,
-    gap: 8,
+    paddingHorizontal: 11,
+    paddingTop: 10,
+    paddingBottom: 10,
+    gap: 6,
     overflow: "hidden",
     ...cardShadow,
   },
+  cardFillWidth: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
   cardSponsored: {
     borderColor: Theme.accentBrownBorder,
+    backgroundColor: Theme.cardWhite,
   },
-  cardPressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
-  cardTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  cardTopText: { flex: 1, minWidth: 0, gap: 1 },
+  cardPressed: { opacity: 0.94, transform: [{ scale: 0.985 }] },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: 7 },
+  cardTopText: { flex: 1, minWidth: 0, gap: 0 },
   orgName: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
-    color: Theme.loadAddButtonText,
-    letterSpacing: -0.2,
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
   },
   adsPill: {
     paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 999,
     backgroundColor: Theme.accentBrown,
     flexShrink: 0,
   },
   adsPillText: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "800",
     color: Theme.textOnPrimary,
-    letterSpacing: 0.6,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   networkPill: {
     paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: Theme.loadStatusTabTrayBg,
+    backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.loadStatusTabBorderSoft,
+    borderColor: Theme.borderMedium,
     flexShrink: 0,
   },
   networkPillText: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "800",
-    color: Theme.pulseIndigo,
-    letterSpacing: 0.3,
+    color: Theme.textSecondary,
+    letterSpacing: 0.25,
     textTransform: "uppercase",
   },
   metaLine: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: Theme.loadStatusTabTextMuted,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  heroRow: {
+    gap: 2,
   },
   kicker: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 1.6,
+    letterSpacing: 0.6,
     textTransform: "uppercase",
-    color: Theme.pulseIndigo,
-    textAlign: "center",
-    marginTop: 2,
+    color: Theme.textMuted,
   },
   heroTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: Theme.loadAddButtonText,
-    letterSpacing: -0.4,
-    textAlign: "center",
-    lineHeight: 22,
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+    lineHeight: 17,
   },
   routeStrip: {
     width: "100%",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 2,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: Theme.loadAddButtonBg,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+    backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.loadStatusTabBorderSoft,
+    borderColor: Theme.borderLight,
   },
-  routeEndpoint: {
+  routeCityCol: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
-    alignItems: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
-  routeEndpointEnd: {
-    alignItems: "flex-end",
+  routeCityColEnd: {
+    justifyContent: "flex-end",
   },
   dotOrigin: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: Theme.success,
-    marginBottom: 1,
+    flexShrink: 0,
   },
   dotDest: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: Theme.accentBrown,
-    marginBottom: 1,
+    flexShrink: 0,
   },
   routeCity: {
+    flexShrink: 1,
     fontSize: 12,
-    fontWeight: "800",
-    color: Theme.loadAddButtonText,
-    letterSpacing: -0.2,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
   },
   routeCityEnd: {
     textAlign: "right",
   },
-  routeState: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.loadStatusTabTextMuted,
-  },
-  routeStateEnd: {
-    textAlign: "right",
-  },
-  routeArrowWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    flexShrink: 0,
-    paddingHorizontal: 2,
-  },
-  routeLine: {
-    width: 10,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.loadStatusTabBorderSoft,
-  },
   specRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    justifyContent: "center",
+    gap: 5,
   },
   specChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     maxWidth: "100%",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: Theme.loadStatusTabTrayBg,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.loadStatusTabBorderSoft,
+    borderColor: Theme.borderLight,
   },
   specChipRate: {
     backgroundColor: Theme.positiveMuted,
     borderColor: Theme.networkHubListCardConnectedBorder,
   },
   specText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
-    color: Theme.loadStatusTabTextMuted,
+    color: Theme.textMuted,
     maxWidth: 120,
   },
   specRateText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     color: Theme.success,
   },
   cardFooter: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 4,
     paddingTop: 2,
   },
   ctaText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "800",
     color: Theme.primary,
   },
 });

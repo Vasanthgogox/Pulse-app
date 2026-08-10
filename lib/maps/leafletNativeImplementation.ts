@@ -23,7 +23,7 @@ export type NativeLeafletComponent = React.ForwardRefExoticComponent<
 export const resolveNativeLeafletMap =
   createMapImplementationResolver<NativeLeafletComponent>({
     "expo-go": () =>
-      require("@/components/driver/LeafletMap.rnmaps").LeafletMapRnMaps,
+      require("@/components/driver/LeafletMap.rnmaps").LeafletMap,
     standalone: () =>
       require("@/components/driver/LeafletMap.maplibre").LeafletMapMapLibre,
   });

@@ -119,6 +119,18 @@ describe('Phase 6 fail-closed matrix', () => {
       expect: `redirect:${DRIVER_HOME_PATH}`,
     },
     {
+      name: 'driver + trip verification stays (shared)',
+      path: '/trip/abc/verification',
+      snapshot: snap({ sessionPosture: 'authenticated', principal: driver }),
+      expect: 'allow',
+    },
+    {
+      name: 'driver + trip expense entry stays (shared)',
+      path: '/trip/abc/operations/other',
+      snapshot: snap({ sessionPosture: 'authenticated', principal: driver }),
+      expect: 'allow',
+    },
+    {
       name: 'driver + pulse-loads → driver home',
       path: '/pulse-loads',
       snapshot: snap({ sessionPosture: 'authenticated', principal: driver }),

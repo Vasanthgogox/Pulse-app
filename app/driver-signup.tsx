@@ -2,13 +2,13 @@
  * Driver sign-up: multi-step widget (moving pages).
  * Step 1: Phone number
  * Step 2: OTP entry (UI only; any 4 digits to proceed)
- * Step 3: Full name, email, password
+ * Step 3: Full name, email (optional), password
  * Step 4: Choose avatar
  * Step 5: Success, go to app
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PULSE_PILOT_BRAND_WORD } from '@/lib/brand/pulseBrandMark.tokens';
-import { ALL_PRESET_AVATARS } from '@/constants/DriverLevels';
+import { getSignupPresetAvatars } from '@/constants/DriverLevels';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
@@ -27,7 +27,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, type Href } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
     Image,
@@ -57,7 +57,7 @@ import { SignUpPulseTitle } from '@/features/auth/signup/SignUpPulseTitle';
 import { SignUpOtpBoxes } from '@/features/auth/signup/SignUpOtpBoxes';
 import { formatSignupPhoneDisplay } from '@/features/auth/signup/signUpKeypad.util';
 import { DRIVER_SIGNUP } from '@/features/auth/signup/signUpDriverTheme';
-import { DRIVER_SIGNUP_LOTTIE } from '@/features/auth/signup/signUpDriverLottieAssets';
+import { DRIVER_SIGNUP_HERO_MASCOT, DRIVER_SIGNUP_LOTTIE } from '@/features/auth/signup/signUpDriverLottieAssets';
 import { createPulseSignUpTextStyles } from '@/features/auth/signup/signUpTypography';
 import { suiteSignUpCopy } from '@/lib/suite/suiteAuthContent';
 import { updateProfile } from '@/features/auth';
@@ -87,10 +87,10 @@ const DRIVER_STEP_LABELS = [
 const STEP_CONTENT = [
   { title: 'Welcome aboard as driver', subtitle: 'Enter your Indian mobile number to get started.' },
   { title: 'Verify your number', subtitle: 'Enter the 4-digit code we sent to your number.' },
-  { title: 'Finish signing up', subtitle: 'Enter your name, email and password to complete your profile.' },
-  { title: 'Driving license', subtitle: 'Upload or capture your driving license to continue.' },
-  { title: 'Aadhaar', subtitle: 'Upload or capture your Aadhaar card to continue.' },
-  { title: 'PAN', subtitle: 'Upload or capture your PAN card to continue.' },
+  { title: 'Finish signing up', subtitle: 'Enter your name and password. Email is optional.' },
+  { title: 'Driving license', subtitle: 'Upload your license, or skip all documents and add them later.' },
+  { title: 'Aadhaar', subtitle: 'Upload your Aadhaar, or skip remaining documents and add them later.' },
+  { title: 'PAN', subtitle: 'Upload your PAN, or skip and add documents later from your profile.' },
   { title: 'Your profile photo', subtitle: 'Upload a photo or pick a preset to finish your driver profile.' },
   { title: "You're in", subtitle: 'Your account is ready. You can start using the driver app.' },
 ];
@@ -208,7 +208,7 @@ function getPhoneInlineError(national: string): string | null {
   return validatePhone(digits);
 }
 
-/** Step 2 valid: name, email (required and valid), password valid. */
+/** Step 2 valid: name, optional email (if present must be valid), password valid. */
 function isStep2Valid(
   callsign: string,
   email: string,
@@ -217,11 +217,19 @@ function isStep2Valid(
 ): boolean {
   const name = callsign.trim();
   if (name.length < NAME_MIN_LENGTH || name.length > NAME_MAX_LENGTH) return false;
-  if (!email.trim()) return false;
-  if (validateEmail(email) !== null) return false;
+  if (email.trim() && validateEmail(email) !== null) return false;
   if (validatePassword(pwd) !== null) return false;
   if (pwd !== confirmPwd) return false;
   return true;
+}
+
+/**
+ * Auth requires an email; when the driver skips the field, use a phone-derived
+ * placeholder for login only (profile contact email stays empty).
+ */
+function driverSignupAuthEmailFromPhone(phoneE164: string): string {
+  const digits = phoneE164.replace(/\D/g, '').slice(-10);
+  return `d${digits}@drivers.pulse.app`;
 }
 
 export default function DriverSignUpScreen() {
@@ -243,7 +251,8 @@ export default function DriverSignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [avatarSeed, setAvatarSeed] = useState(ALL_PRESET_AVATARS[0].seed);
+  const signupAvatars = useMemo(() => getSignupPresetAvatars(), []);
+  const [avatarSeed, setAvatarSeed] = useState(() => getSignupPresetAvatars()[0]!.seed);
   const [profilePreviewUri, setProfilePreviewUri] = useState<string | null>(null);
   const [profileLocalBase64, setProfileLocalBase64] = useState<string | null>(null);
   const [profileUploading, setProfileUploading] = useState(false);
@@ -539,14 +548,12 @@ export default function DriverSignUpScreen() {
       showAppAlert('Invalid', `Full name must be at most ${NAME_MAX_LENGTH} characters.`);
       return;
     }
-    if (!email.trim()) {
-      showAppAlert('Required', 'Enter your email.');
-      return;
-    }
-    const emailErr = validateEmail(email);
-    if (emailErr) {
-      showAppAlert('Invalid', emailErr);
-      return;
+    if (email.trim()) {
+      const emailErr = validateEmail(email);
+      if (emailErr) {
+        showAppAlert('Invalid', emailErr);
+        return;
+      }
     }
     const pwdErr = validatePassword(password);
     if (pwdErr) {
@@ -573,8 +580,11 @@ export default function DriverSignUpScreen() {
     setDriverSignupSuccessActive(true);
     try {
       await AsyncStorage.setItem(DRIVER_AVATAR_STORAGE_KEY, avatarSeed);
+      const providedEmail = email.trim();
+      const authEmail =
+        providedEmail || driverSignupAuthEmailFromPhone(fullPhoneForApi);
       const { error } = await signUp({
-        email: email.trim(),
+        email: authEmail,
         password,
         fullName: callsign.trim(),
         role: 'driver',
@@ -584,7 +594,7 @@ export default function DriverSignUpScreen() {
       if (error && !error.message.toLowerCase().includes('already registered')) {
         throw error;
       }
-      const signInResult = await signIn(email.trim(), password, true);
+      const signInResult = await signIn(authEmail, password, true);
       if (signInResult.error) {
         throw signInResult.error;
       }
@@ -593,6 +603,19 @@ export default function DriverSignUpScreen() {
         data: { user: signedInUser },
       } = await supabase().auth.getUser();
       if (signedInUser?.id) {
+        // Auth email was phone-derived — don’t surface it as the contact email.
+        if (!providedEmail) {
+          const { error: clearEmailErr } = await supabase()
+            .from('profiles')
+            .update({ email: null })
+            .eq('id', signedInUser.id);
+          if (clearEmailErr) {
+            console.warn(
+              '[driver-signup] Failed to clear synthetic profile email:',
+              clearEmailErr.message,
+            );
+          }
+        }
         if (profilePreviewUri) {
           const uploaded = await uploadAvatarFromLocal(
             signedInUser.id,
@@ -692,6 +715,22 @@ export default function DriverSignUpScreen() {
       return;
     }
     setPanSkipped(true);
+  };
+
+  /** One-shot: skip this doc and every later doc that isn’t uploaded, then open photo step. */
+  const skipRemainingDocsAndContinue = (from: DriverSignupDocKey) => {
+    const order: DriverSignupDocKey[] = ['license', 'aadhaar', 'pan'];
+    const uploadedByKey: Record<DriverSignupDocKey, boolean> = {
+      license: licenseUploaded,
+      aadhaar: aadhaarUploaded,
+      pan: panUploaded,
+    };
+    const start = order.indexOf(from);
+    for (let i = Math.max(0, start); i < order.length; i += 1) {
+      const key = order[i]!;
+      if (!uploadedByKey[key]) markDocumentSkipped(key);
+    }
+    goToPage(6);
   };
 
   const pickDocument = async (doc: DriverSignupDocKey, method: 'gallery' | 'camera') => {
@@ -886,7 +925,7 @@ export default function DriverSignUpScreen() {
         {pageBody(0, useMobileLayout ? (
           <SignUpPulseKeypadStep
             theme={DRIVER_SIGNUP}
-            heroLottie={DRIVER_SIGNUP_LOTTIE.phone}
+            heroMascotId={DRIVER_SIGNUP_HERO_MASCOT.phone}
             title={STEP_CONTENT[0].title}
             subtitle={STEP_CONTENT[0].subtitle}
             value={phone}
@@ -990,7 +1029,7 @@ export default function DriverSignUpScreen() {
         {pageBody(1, useMobileLayout ? (
           <SignUpPulseKeypadStep
             theme={DRIVER_SIGNUP}
-            heroLottie={DRIVER_SIGNUP_LOTTIE.verify}
+            heroMascotId={DRIVER_SIGNUP_HERO_MASCOT.verify}
             centeredLayout
             title={STEP_CONTENT[1].title}
             subtitle={
@@ -1082,8 +1121,7 @@ export default function DriverSignUpScreen() {
             />
             <SignUpPulseField
               theme={DRIVER_SIGNUP}
-              label="Email"
-              required
+              label="Email (optional)"
               value={email}
               onChangeText={setEmail}
               placeholder="you@example.com"
@@ -1174,7 +1212,7 @@ export default function DriverSignUpScreen() {
               </View>
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.fieldLabel}>Email</Text>
+              <Text style={styles.fieldLabel}>Email (optional)</Text>
               <View style={styles.inputWrap}>
                 <TextInput
                   style={styles.input}
@@ -1322,23 +1360,27 @@ export default function DriverSignUpScreen() {
             {useMobileLayout ? (
               <SignUpPulsePrimaryButton
                 theme={DRIVER_SIGNUP}
-                label="Continue"
-                onPress={() => goToPage(4)}
-                disabled={(!licenseUploaded && !licenseSkipped) || loading}
+                label={licenseUploaded ? 'Continue' : 'Skip & upload later'}
+                onPress={() => {
+                  if (licenseUploaded) goToPage(4);
+                  else skipRemainingDocsAndContinue('license');
+                }}
+                disabled={loading}
                 style={styles.mobilePrimaryBtn}
               />
             ) : (
               <TouchableOpacity
-                style={[
-                  styles.primaryBtn,
-                  ((!licenseUploaded && !licenseSkipped) || loading) &&
-                    styles.primaryBtnDisabled,
-                ]}
-                onPress={() => goToPage(4)}
-                disabled={(!licenseUploaded && !licenseSkipped) || loading}
+                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+                onPress={() => {
+                  if (licenseUploaded) goToPage(4);
+                  else skipRemainingDocsAndContinue('license');
+                }}
+                disabled={loading}
                 activeOpacity={0.8}
               >
-                <Text style={styles.primaryBtnText}>Continue</Text>
+                <Text style={styles.primaryBtnText}>
+                  {licenseUploaded ? 'Continue' : 'Skip & upload later'}
+                </Text>
               </TouchableOpacity>
             )}
             {pendingDocs.license?.uri ? (
@@ -1348,11 +1390,6 @@ export default function DriverSignUpScreen() {
                 hitSlop={12}
               >
                 <Text style={styles.tryAgainText}>View uploaded document</Text>
-              </TouchableOpacity>
-            ) : null}
-            {!licenseUploaded ? (
-              <TouchableOpacity style={styles.tryAgainLink} onPress={() => markDocumentSkipped('license')} hitSlop={12}>
-                <Text style={styles.tryAgainText}>Skip for now</Text>
               </TouchableOpacity>
             ) : null}
           </>
@@ -1406,23 +1443,27 @@ export default function DriverSignUpScreen() {
             {useMobileLayout ? (
               <SignUpPulsePrimaryButton
                 theme={DRIVER_SIGNUP}
-                label="Continue"
-                onPress={() => goToPage(5)}
-                disabled={(!aadhaarUploaded && !aadhaarSkipped) || loading}
+                label={aadhaarUploaded ? 'Continue' : 'Skip & upload later'}
+                onPress={() => {
+                  if (aadhaarUploaded) goToPage(5);
+                  else skipRemainingDocsAndContinue('aadhaar');
+                }}
+                disabled={loading}
                 style={styles.mobilePrimaryBtn}
               />
             ) : (
               <TouchableOpacity
-                style={[
-                  styles.primaryBtn,
-                  ((!aadhaarUploaded && !aadhaarSkipped) || loading) &&
-                    styles.primaryBtnDisabled,
-                ]}
-                onPress={() => goToPage(5)}
-                disabled={(!aadhaarUploaded && !aadhaarSkipped) || loading}
+                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+                onPress={() => {
+                  if (aadhaarUploaded) goToPage(5);
+                  else skipRemainingDocsAndContinue('aadhaar');
+                }}
+                disabled={loading}
                 activeOpacity={0.8}
               >
-                <Text style={styles.primaryBtnText}>Continue</Text>
+                <Text style={styles.primaryBtnText}>
+                  {aadhaarUploaded ? 'Continue' : 'Skip & upload later'}
+                </Text>
               </TouchableOpacity>
             )}
             {pendingDocs.aadhaar?.uri ? (
@@ -1432,11 +1473,6 @@ export default function DriverSignUpScreen() {
                 hitSlop={12}
               >
                 <Text style={styles.tryAgainText}>View uploaded document</Text>
-              </TouchableOpacity>
-            ) : null}
-            {!aadhaarUploaded ? (
-              <TouchableOpacity style={styles.tryAgainLink} onPress={() => markDocumentSkipped('aadhaar')} hitSlop={12}>
-                <Text style={styles.tryAgainText}>Skip for now</Text>
               </TouchableOpacity>
             ) : null}
           </>
@@ -1490,23 +1526,27 @@ export default function DriverSignUpScreen() {
             {useMobileLayout ? (
               <SignUpPulsePrimaryButton
                 theme={DRIVER_SIGNUP}
-                label="Continue"
-                onPress={() => goToPage(6)}
-                disabled={(!panUploaded && !panSkipped) || loading}
+                label={panUploaded ? 'Continue' : 'Skip & upload later'}
+                onPress={() => {
+                  if (panUploaded) goToPage(6);
+                  else skipRemainingDocsAndContinue('pan');
+                }}
+                disabled={loading}
                 style={styles.mobilePrimaryBtn}
               />
             ) : (
               <TouchableOpacity
-                style={[
-                  styles.primaryBtn,
-                  ((!panUploaded && !panSkipped) || loading) &&
-                    styles.primaryBtnDisabled,
-                ]}
-                onPress={() => goToPage(6)}
-                disabled={(!panUploaded && !panSkipped) || loading}
+                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+                onPress={() => {
+                  if (panUploaded) goToPage(6);
+                  else skipRemainingDocsAndContinue('pan');
+                }}
+                disabled={loading}
                 activeOpacity={0.8}
               >
-                <Text style={styles.primaryBtnText}>Continue</Text>
+                <Text style={styles.primaryBtnText}>
+                  {panUploaded ? 'Continue' : 'Skip & upload later'}
+                </Text>
               </TouchableOpacity>
             )}
             {pendingDocs.pan?.uri ? (
@@ -1516,11 +1556,6 @@ export default function DriverSignUpScreen() {
                 hitSlop={12}
               >
                 <Text style={styles.tryAgainText}>View uploaded document</Text>
-              </TouchableOpacity>
-            ) : null}
-            {!panUploaded ? (
-              <TouchableOpacity style={styles.tryAgainLink} onPress={() => markDocumentSkipped('pan')} hitSlop={12}>
-                <Text style={styles.tryAgainText}>Skip for now</Text>
               </TouchableOpacity>
             ) : null}
           </>
@@ -1536,9 +1571,9 @@ export default function DriverSignUpScreen() {
               previewImage={
                 profilePreviewUri
                   ? undefined
-                  : ALL_PRESET_AVATARS.find((av) => av.seed === avatarSeed)?.image
+                  : signupAvatars.find((av) => av.seed === avatarSeed)?.image
               }
-              presetAvatars={ALL_PRESET_AVATARS}
+              presetAvatars={signupAvatars}
               selectedPresetSeed={profilePreviewUri ? null : avatarSeed}
               onPresetSelect={selectDriverAvatarSeed}
               onUpload={() => void uploadDriverProfilePhoto()}
@@ -1581,7 +1616,7 @@ export default function DriverSignUpScreen() {
             profileImage={
               profilePreviewUri
                 ? undefined
-                : ALL_PRESET_AVATARS.find((av) => av.seed === avatarSeed)?.image
+                : signupAvatars.find((av) => av.seed === avatarSeed)?.image
             }
             licenseUploaded={licenseUploaded}
             aadhaarUploaded={aadhaarUploaded}

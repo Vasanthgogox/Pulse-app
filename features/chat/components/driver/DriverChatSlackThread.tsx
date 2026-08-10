@@ -647,6 +647,13 @@ export function DriverChatSlackThread({
 
   const renderTripMessage = useCallback(
     (m: TripMessageRow) => {
+      if (m.is_deleted) {
+        return (
+          <View style={localStyles.deletedRow}>
+            <Text style={localStyles.deletedText}>This message was deleted.</Text>
+          </View>
+        );
+      }
       const own = m.sender_role === "driver";
       const burstLeader = mediaBurstIndexRef.current.leaders.get(m.id);
       if (burstLeader) {
@@ -1018,5 +1025,15 @@ const localStyles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  deletedRow: {
+    paddingHorizontal: DRIVER_CHAT_EDGE,
+    paddingVertical: 8,
+  },
+  deletedText: {
+    fontSize: 12,
+    fontStyle: "italic",
+    color: "#94a3b8",
+    fontWeight: "500",
   },
 });

@@ -269,7 +269,7 @@ export function DriverReassignSection({
       ) : null}
 
       {mode === 'phone' || isAggregate ? (
-        <View style={s.form}>
+        <View style={[s.form, embedded && { padding: 0, backgroundColor: 'transparent' }]}>
           <Text style={s.label}>Driver name *</Text>
           <TextInput
             style={s.input}
@@ -293,7 +293,9 @@ export function DriverReassignSection({
             keyboardType="phone-pad"
           />
           {phoneName ? (
-            <Text style={[s.rowSub, { marginTop: 4 }]}>Found: {phoneName}</Text>
+            <Text style={[s.rowSub, { marginTop: 4 }]} numberOfLines={2}>
+              Found: {phoneName}
+            </Text>
           ) : null}
           {phoneBusy ? (
             <Text style={s.inlineError}>

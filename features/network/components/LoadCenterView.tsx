@@ -5,10 +5,7 @@
 import { PulsePillButton } from "@/components/PulsePillButton";
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { HUB_GRID_MIN_WIDTH } from "@/components/hub/hubGridCardLayout";
-import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
-import { HubScreenBottomBar } from "@/components/hub/HubScreenBottomBar";
 import { HubScreenShell } from "@/components/hub/HubScreenShell";
-import { useHubGridPagination } from "@/components/hub/useHubGridPagination";
 import {
   ClaimedIndentCardActions,
   GetLoadIndentCardActions,
@@ -29,6 +26,7 @@ import {
   giveLoadIndentAvatarProps,
   marketLoadIndentAvatarProps,
 } from "@/features/network/utils/indentCardAvatar.util";
+import { isTripTrackingActive } from "@/features/trips/utils/tripTrackingStatus.util";
 import {
   CHAT_FILTER_MUTED,
   chatFilterChromeStyles as chatChrome,
@@ -68,13 +66,25 @@ import { useSuccessToast } from "@/features/network/hooks/useSuccessToast";
 import { useTripDeployment } from "@/features/network/hooks/useTripDeployment";
 import { AwardModal } from "@/features/network/components/AwardModal";
 import { BidModal } from "@/features/network/components/bidding/BidModal";
+import { LoadCenterKanbanBoard, type LoadCenterKanbanColumn } from "@/features/network/components/LoadCenterKanbanBoard";
+import { LoadCenterKanbanColumnModal } from "@/features/network/components/LoadCenterKanbanColumnModal";
+import { GIVE_LOAD_KANBAN_COLUMNS, bucketGiveLoadIndentsForKanban, giveLoadKanbanColumnLabel } from "@/features/network/utils/giveLoadKanban.util";
+import {
+  GET_LOAD_KANBAN_COLUMNS,
+  bucketGetLoadIndentsForKanban,
+  getLoadKanbanColumnLabel,
+} from "@/features/network/utils/getLoadKanban.util";
 import { LoadCenterIntegratedPartiesBanner } from "@/features/network/components/LoadCenterIntegratedPartiesBanner";
 import { LoadCenterIntegratedPartiesRow } from "@/features/network/components/LoadCenterIntegratedPartiesRow";
 import { LoadCenterUnderlineTabStrip } from "@/features/network/components/LoadCenterUnderlineTabStrip";
 import { LoadCenterPromoCard } from "@/features/network/components/LoadCenterPromoCard";
-import { LoadCenterOpportunityExchange } from "@/features/network/components/LoadCenterOpportunityExchange";
+import { FindNetworkVehiclesDrawer } from "@/features/network/components/FindNetworkVehiclesDrawer";
+import { LoadCenterSidebarFindEmpty } from "@/features/network/components/LoadCenterSidebarFindEmpty";
+import {
+  LoadCenterOpportunityExchange,
+  useLoadCenterOpportunityPosts,
+} from "@/features/network/components/LoadCenterOpportunityExchange";
 import { LoadCenterPartnerRecommendations } from "@/features/network/components/LoadCenterPartnerRecommendations";
-import { LoadCenterSidebarBanners } from "@/features/network/components/LoadCenterSidebarBanners";
 import {
   selectIntegratedClientsForLoadCenter,
   selectIntegratedSuppliersForLoadCenter,
@@ -112,6 +122,7 @@ import {
     Alert,
     Modal,
     Platform,
+    Pressable,
     RefreshControl,
     ScrollView,
     Share,
@@ -148,7 +159,7 @@ export function LoadCenterView({
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
-  const { width } = useWindowDimensions();
+  const { width, height: windowHeight } = useWindowDimensions();
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
@@ -162,6 +173,23 @@ export function LoadCenterView({
     useState<StatusFilterTab>("OPEN");
   const [doneSubTab, setDoneSubTab] = useState<DoneSubTab>("REJECTED");
   const [searchQuery, setSearchQuery] = useState("");
+  /** Measured left rail height — syncs desktop Kanban shell to the sidebar. */
+  const [partnerSidebarHeight, setPartnerSidebarHeight] = useState<number | null>(
+    null,
+  );
+  const [findMarketplaceMode, setFindMarketplaceMode] = useState<
+    "give" | "get" | null
+  >(null);
+  const [expandedKanbanColumnId, setExpandedKanbanColumnId] = useState<
+    string | null
+  >(null);
+  const [expandedKanbanMode, setExpandedKanbanMode] = useState<
+    "give" | "get" | null
+  >(null);
+  /** Indent detail opened from a kanban column expand (stays on that page). */
+  const [kanbanDetailIndentId, setKanbanDetailIndentId] = useState<string | null>(
+    null,
+  );
   const [creatorOrgProfileMap, setCreatorOrgProfileMap] = useState<
     Record<string, { avatarUrl?: string; avatarSeed?: string }>
   >({});
@@ -245,8 +273,26 @@ export function LoadCenterView({
   const isMobileView = width < 820;
   /** Desktop: Suggested partners sit in a Network-style left sidebar. */
   const usePartnerSidebar = Boolean(orgId) && isGiveGetTab && !isMobileView;
-  /** Narrow / grid cards: stack bid meta + actions so CTAs stay aligned and tappable. */
-  const compactIndentFooter = width < 520;
+  /**
+   * Same board height for Give Load + Get Load: at least the measured left
+   * rail, floored by remaining viewport so neither tab looks short.
+   */
+  const desktopBoardHeight = useMemo(() => {
+    if (!usePartnerSidebar) return null;
+    const chrome =
+      (layout.isDesktopWeb ? Layout.desktopTopNavOffset : insets.top + 56) +
+      contentTopPadding +
+      132;
+    const viewportFloor = Math.max(600, Math.round(windowHeight - chrome));
+    return Math.max(partnerSidebarHeight ?? 0, viewportFloor);
+  }, [
+    usePartnerSidebar,
+    partnerSidebarHeight,
+    windowHeight,
+    layout.isDesktopWeb,
+    insets.top,
+    contentTopPadding,
+  ]);
 
   useEffect(() => {
     if (!highlightedIndentId || useGridLayout) return;
@@ -299,29 +345,129 @@ export function LoadCenterView({
     hirePartnerLoads,
     awardedLoads,
     findWorkLoads,
+    findWorkDoneUnionLoads,
     filteredHirePartnerLoads,
     filteredFindWorkList,
     filteredClaimedLoads,
     filteredClaimedDoneLoads,
     doneSubTabCounts,
     statusTabCounts,
+    loadMatchesSearch,
   } = filters;
 
-  const shareablePulseIndent = useMemo(
-    () =>
-      filteredHirePartnerLoads.find((load) =>
-        indentCanBroadcastToPulseNetwork(load),
-      ) ?? null,
-    [filteredHirePartnerLoads],
-  );
+  const giveLoadKanbanColumns = useMemo(() => {
+    const buckets = bucketGiveLoadIndentsForKanban(hirePartnerLoads, quoteCounts, {
+      searchQuery,
+      matchesSearch: loadMatchesSearch,
+      isInTransit: (indentId) => {
+        const trip = tripByIndentId.get(indentId);
+        if (!trip) return false;
+        return isTripTrackingActive(trip.status, trip.completed_at);
+      },
+    });
+    const accents = {
+      OPEN: Theme.primary,
+      QUOTED: Theme.aggregatePillText,
+      AWARDED: Theme.positive,
+      DONE: Theme.textMuted,
+    } as const;
+    return GIVE_LOAD_KANBAN_COLUMNS.map((id) => {
+      if (id === "DONE") {
+        return {
+          id,
+          label: giveLoadKanbanColumnLabel(id),
+          accent: accents[id],
+          loads: buckets.DONE,
+          defaultTabId: "IN_TRANSIT",
+          tabs: [
+            {
+              id: "IN_TRANSIT",
+              label: "In Transit",
+              loads: buckets.DONE_IN_TRANSIT,
+            },
+            {
+              id: "COMPLETED",
+              label: "Completed",
+              loads: buckets.DONE_COMPLETED,
+            },
+          ],
+        };
+      }
+      return {
+        id,
+        label: giveLoadKanbanColumnLabel(id),
+        accent: accents[id],
+        loads: buckets[id],
+      };
+    });
+  }, [
+    hirePartnerLoads,
+    quoteCounts,
+    searchQuery,
+    loadMatchesSearch,
+    tripByIndentId,
+  ]);
 
-  const handleSidebarPulseStory = useCallback(() => {
-    if (shareablePulseIndent && onShareToNetwork) {
-      onShareToNetwork(shareablePulseIndent);
-      return;
-    }
-    setShowPostModal(true);
-  }, [onShareToNetwork, shareablePulseIndent]);
+  const getLoadKanbanColumns = useMemo(() => {
+    const buckets = bucketGetLoadIndentsForKanban(
+      findWorkLoads,
+      awardedLoads,
+      findWorkDoneUnionLoads,
+      myQuoteByIndentId,
+      {
+        searchQuery,
+        matchesSearch: loadMatchesSearch,
+        isInTransit: (indentId) => {
+          const trip = tripByIndentId.get(indentId);
+          if (!trip) return false;
+          return isTripTrackingActive(trip.status, trip.completed_at);
+        },
+      },
+    );
+    const accents = {
+      OPEN: Theme.primary,
+      QUOTED: Theme.aggregatePillText,
+      AWARDED: Theme.positive,
+      CLAIMED: Theme.textMuted,
+    } as const;
+    return GET_LOAD_KANBAN_COLUMNS.map((id) => {
+      if (id === "CLAIMED") {
+        return {
+          id,
+          label: getLoadKanbanColumnLabel(id),
+          accent: accents[id],
+          loads: buckets.CLAIMED,
+          defaultTabId: "IN_TRANSIT",
+          tabs: [
+            {
+              id: "IN_TRANSIT",
+              label: "In Transit",
+              loads: buckets.CLAIMED_IN_TRANSIT,
+            },
+            {
+              id: "COMPLETED",
+              label: "Completed",
+              loads: buckets.CLAIMED_COMPLETED,
+            },
+          ],
+        };
+      }
+      return {
+        id,
+        label: getLoadKanbanColumnLabel(id),
+        accent: accents[id],
+        loads: buckets[id],
+      };
+    });
+  }, [
+    findWorkLoads,
+    awardedLoads,
+    findWorkDoneUnionLoads,
+    myQuoteByIndentId,
+    searchQuery,
+    loadMatchesSearch,
+    tripByIndentId,
+  ]);
 
   /** Claimed tab: prefer action-needed deploy count so quiet-mode badge stays honest. */
   const claimedTabCount =
@@ -443,20 +589,6 @@ export function LoadCenterView({
     ],
   );
 
-  const loadGridPaginationResetKey = `${loadSubTab}|${statusFilterTab}|${doneSubTab}|${searchQuery}`;
-  const giveLoadGridPagination = useHubGridPagination(
-    filteredHirePartnerLoads,
-    loadGridPaginationResetKey,
-  );
-  const findWorkGridPagination = useHubGridPagination(
-    filteredFindWorkList,
-    loadGridPaginationResetKey,
-  );
-  const claimedGridPagination = useHubGridPagination(
-    displayedClaimedLoads,
-    loadGridPaginationResetKey,
-  );
-
   // ── Award Quote hook ────────────────────────────────────────────────────────
   const connectedSupplierOrgIds = useMemo(
     () => new Set(suppliers.map((s) => s.linked_organization_id).filter(Boolean) as string[]),
@@ -466,7 +598,133 @@ export function LoadCenterView({
     () => new Set(clients.map((c) => c.linked_organization_id).filter(Boolean) as string[]),
     [clients],
   );
+  const { posts: getLoadOpportunityPosts } = useLoadCenterOpportunityPosts(
+    orgId,
+    "get",
+    connectedSupplierOrgIds,
+    connectedClientOrgIds,
+  );
+  const getLoadKanbanColumnsWithOpps = useMemo(() => {
+    const oppCount = getLoadOpportunityPosts.length;
+    if (oppCount === 0) return getLoadKanbanColumns;
+    return getLoadKanbanColumns.map((col) => {
+      if (col.id !== "OPEN") return col;
+      return {
+        ...col,
+        countExtra: oppCount,
+        topExtra: (
+          <LoadCenterOpportunityExchange
+            orgId={orgId}
+            mode="get"
+            columnStack
+            supplierOrgIds={connectedSupplierOrgIds}
+            clientOrgIds={connectedClientOrgIds}
+            embedded
+          />
+        ),
+      };
+    });
+  }, [
+    getLoadKanbanColumns,
+    getLoadOpportunityPosts.length,
+    orgId,
+    connectedSupplierOrgIds,
+    connectedClientOrgIds,
+  ]);
+
+  const expandedKanbanColumn = useMemo(() => {
+    if (!expandedKanbanColumnId || !expandedKanbanMode) return null;
+    const cols =
+      expandedKanbanMode === "give"
+        ? giveLoadKanbanColumns
+        : getLoadKanbanColumnsWithOpps;
+    return cols.find((c) => c.id === expandedKanbanColumnId) ?? null;
+  }, [
+    expandedKanbanColumnId,
+    expandedKanbanMode,
+    giveLoadKanbanColumns,
+    getLoadKanbanColumnsWithOpps,
+  ]);
+
+  const kanbanStageNeighbors = useMemo(() => {
+    if (!expandedKanbanColumnId || !expandedKanbanMode) {
+      return { previous: null, next: null };
+    }
+    const cols =
+      expandedKanbanMode === "give"
+        ? giveLoadKanbanColumns
+        : getLoadKanbanColumnsWithOpps;
+    const idx = cols.findIndex((c) => c.id === expandedKanbanColumnId);
+    if (idx < 0) return { previous: null, next: null };
+    const prev = idx > 0 ? cols[idx - 1] : null;
+    const next = idx < cols.length - 1 ? cols[idx + 1] : null;
+    const toNav = (col: LoadCenterKanbanColumn) => ({
+      id: col.id,
+      label: col.label,
+      count: col.loads.length + (col.countExtra ?? 0),
+    });
+    return {
+      previous: prev ? toNav(prev) : null,
+      next: next ? toNav(next) : null,
+    };
+  }, [
+    expandedKanbanColumnId,
+    expandedKanbanMode,
+    giveLoadKanbanColumns,
+    getLoadKanbanColumnsWithOpps,
+  ]);
+
+  const openKanbanColumn = useCallback(
+    (mode: "give" | "get", column: LoadCenterKanbanColumn) => {
+      setExpandedKanbanMode(mode);
+      setExpandedKanbanColumnId(column.id);
+    },
+    [],
+  );
+
+  const closeKanbanColumn = useCallback(() => {
+    setKanbanDetailIndentId(null);
+    setExpandedKanbanColumnId(null);
+    setExpandedKanbanMode(null);
+  }, []);
+
+  const handleCardIndentPress = useCallback(
+    (indent: IndentRow) => {
+      if (expandedKanbanColumnId != null) {
+        setKanbanDetailIndentId(indent.id);
+        return;
+      }
+      onIndentPress(indent);
+    },
+    [expandedKanbanColumnId, onIndentPress],
+  );
+
+  const handleKanbanEditIndent = useCallback(
+    (indent: IndentRow) => {
+      setKanbanDetailIndentId(null);
+      closeKanbanColumn();
+      router.push(
+        `/create-indent?draftId=${encodeURIComponent(indent.id)}` as import("expo-router").Href,
+      );
+    },
+    [closeKanbanColumn, router],
+  );
+
+  useEffect(() => {
+    closeKanbanColumn();
+  }, [loadSubTab, closeKanbanColumn]);
+
   const awardModal = useAwardQuote({ orgId, queryClient, invalidateIndents, onSuccess: triggerSuccess, connectedSupplierOrgIds });
+
+  const navigateKanbanStage = useCallback(
+    (columnId: string) => {
+      setKanbanDetailIndentId(null);
+      setBidLoad(null);
+      awardModal.close();
+      setExpandedKanbanColumnId(columnId);
+    },
+    [awardModal.close],
+  );
 
   const openIndentAllocation = useCallback(
     (load: IndentRow) => {
@@ -556,12 +814,15 @@ export function LoadCenterView({
     if (loadSubTab === "AWARDED") refetchMyQuotes();
   }, [loadSubTab, refetchMyQuotes]);
 
-  /** Refetch offer counts when viewing Receiving Bids so badges stay current. */
+  /** Refetch offer counts when viewing Receiving Bids or desktop Give Load board. */
   useEffect(() => {
-    if (loadSubTab === "GIVE_LOAD" && statusFilterTab === "QUOTED") {
+    if (
+      loadSubTab === "GIVE_LOAD" &&
+      (statusFilterTab === "QUOTED" || !isMobileView)
+    ) {
       refetchQuoteCounts();
     }
-  }, [loadSubTab, statusFilterTab, refetchQuoteCounts]);
+  }, [loadSubTab, statusFilterTab, isMobileView, refetchQuoteCounts]);
 
   useEffect(() => {
     if (statusFilterTab === "DONE") return;
@@ -574,6 +835,10 @@ export function LoadCenterView({
 
   const renderDesktopStatusTabs = () => {
     if (statusTabsForRole.length === 0) return null;
+    /** Desktop/tablet Give & Get Load always use the board — no stage strip. */
+    if (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD") {
+      return null;
+    }
     const showDoneSubs = statusFilterTab === "DONE";
     return (
       <View style={styles.loadsCombinedTabRow}>
@@ -629,52 +894,56 @@ export function LoadCenterView({
       <View style={styles.loadsInlineFilterPanelDesktop}>
         <View style={styles.loadsInlineFilterPanelInner}>
           <View style={chatChrome.filterHeaderRow}>
-          <View style={styles.loadsFilterTabsWrap}>
-            <LoadCenterUnderlineTabStrip
-              variant="yellow"
-              tabs={mainLoadTabs}
-              activeKey={loadSubTab}
-              onChange={(key) => setLoadSubTab(key as LoadSubTab)}
-              formatLabel={formatLoadTabLabel}
-            />
-          </View>
-          <View style={styles.loadsFilterActions}>
-            {loadSubTab === "GIVE_LOAD" ? renderAddLoadButton() : null}
-            {loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD" ? (
-              <LoadCenterIntegratedPartiesRow
-                mode={loadSubTab === "GIVE_LOAD" ? "supplier" : "client"}
-                parties={
-                  loadSubTab === "GIVE_LOAD"
-                    ? integratedSuppliers
-                    : integratedClients
-                }
-                onAddToNetwork={openNetworkForParties}
-                onPartyPress={openIntegratedParty}
+            <View style={styles.loadsFilterTabsWrap}>
+              <LoadCenterUnderlineTabStrip
+                variant="yellow"
+                tabs={mainLoadTabs}
+                activeKey={loadSubTab}
+                onChange={(key) => setLoadSubTab(key as LoadSubTab)}
+                formatLabel={formatLoadTabLabel}
               />
-            ) : null}
+            </View>
+            <View style={styles.loadsFilterActions}>
+              {loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD" ? (
+                <LoadCenterIntegratedPartiesRow
+                  mode={loadSubTab === "GIVE_LOAD" ? "supplier" : "client"}
+                  parties={
+                    loadSubTab === "GIVE_LOAD"
+                      ? integratedSuppliers
+                      : integratedClients
+                  }
+                  onAddToNetwork={openNetworkForParties}
+                  onPartyPress={openIntegratedParty}
+                />
+              ) : null}
+              <View style={styles.loadsSearchCluster}>
+                {loadSubTab === "GIVE_LOAD" ? renderAddLoadButton() : null}
+                <View style={[chatChrome.searchWrap, styles.loadsSearchWrapInline]}>
+                  <FontAwesome
+                    name="search"
+                    size={13}
+                    color={CHAT_FILTER_MUTED}
+                    style={styles.loadsSearchIcon}
+                  />
+                  <TextInput
+                    style={chatChrome.searchInput}
+                    placeholder="Search loads…"
+                    placeholderTextColor={CHAT_FILTER_MUTED}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              </View>
+            </View>
           </View>
-        </View>
-        <View style={chatChrome.searchScopeStrip}>
-          <View style={chatChrome.searchWrap}>
-            <FontAwesome
-              name="search"
-              size={13}
-              color={CHAT_FILTER_MUTED}
-              style={styles.loadsSearchIcon}
-            />
-            <TextInput
-              style={chatChrome.searchInput}
-              placeholder="Search loads by route, load ID, client..."
-              placeholderTextColor={CHAT_FILTER_MUTED}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-        </View>
-        <View style={styles.loadsTabDivider} />
-        {renderDesktopStatusTabs()}
+          {loadSubTab === "AWARDED" ? (
+            <>
+              <View style={styles.loadsTabDivider} />
+              {renderDesktopStatusTabs()}
+            </>
+          ) : null}
         </View>
       </View>
     </View>
@@ -816,14 +1085,14 @@ export function LoadCenterView({
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
           tripAllocation={tripAllocationForLoad(load.id)}
-          onPress={() => onIndentPress(load)}
+          onPress={() => handleCardIndentPress(load)}
           actions={
             <LoadCenterIndentCardFooter>
               <ClaimedIndentCardActions
                 load={load}
                 isDone={isDone}
                 assigning={tripDeployment.assigningTripId === load.id}
-                onIndentPress={onIndentPress}
+                onIndentPress={handleCardIndentPress}
                 onShareIndent={handleShareIndent}
                 onAssignDeploy={openIndentAllocation}
               />
@@ -838,7 +1107,7 @@ export function LoadCenterView({
       handleShareIndent,
       openIndentAllocation,
       myQuotes,
-      onIndentPress,
+      handleCardIndentPress,
       tripAllocationForLoad,
       tripDeployment.assigningTripId,
     ],
@@ -937,7 +1206,11 @@ export function LoadCenterView({
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
           tripAllocation={tripAllocationForLoad(load.id)}
-          onPress={() => onIndentPress(load)}
+          onPress={
+            layout.fillGrid && !isMobileView
+              ? undefined
+              : () => handleCardIndentPress(load)
+          }
           dense={layout.dense}
           fillGrid={layout.fillGrid}
           actions={
@@ -956,7 +1229,7 @@ export function LoadCenterView({
                   }
                   awardedAmount={awardedAmount}
                   onShareToNetwork={onShareToNetwork}
-                  onIndentPress={onIndentPress}
+                  onIndentPress={handleCardIndentPress}
                   onShareIndent={handleShareIndent}
                   onBroadcastDraft={handleBroadcastDraft}
                   onOpenAwardModal={awardModal.open}
@@ -974,8 +1247,9 @@ export function LoadCenterView({
       handleBroadcastDraft,
       handleShareIndent,
       indentIdsWithTrip,
+      isMobileView,
       linkedOrgByOrganizationId,
-      onIndentPress,
+      handleCardIndentPress,
       onShareToNetwork,
       quoteCounts,
       statusFilterTab,
@@ -1002,10 +1276,11 @@ export function LoadCenterView({
   const renderGiveLoadListCard = useCallback(
     (load: IndentRow) =>
       renderGiveLoadHubCard(load, {
-        dense: compactIndentFooter,
+        // Comfort toolbar: same 32px row height as status/share, readable labels.
+        dense: false,
         withActions: true,
       }),
-    [compactIndentFooter, renderGiveLoadHubCard],
+    [renderGiveLoadHubCard],
   );
 
   const renderGetLoadHubCard = useCallback(
@@ -1068,7 +1343,7 @@ export function LoadCenterView({
       const ctaLabel = isAccepted
         ? isDoneOutcome
           ? "View details"
-          : "View claimed"
+          : "Allocate"
         : isCountered
           ? "Respond to counter"
           : isPending
@@ -1082,6 +1357,14 @@ export function LoadCenterView({
         load.organization_id,
         connectedClientOrgIds,
       );
+
+      const openLoad = () => {
+        if (isAccepted && !isDoneOutcome) {
+          openIndentAllocation(load);
+          return;
+        }
+        handleCardIndentPress(load);
+      };
 
       return (
         <LoadCenterHubMobileIndentCard
@@ -1101,7 +1384,7 @@ export function LoadCenterView({
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
           tripAllocation={tripAllocationForLoad(load.id)}
-          onPress={() => onIndentPress(load)}
+          onPress={openLoad}
           dense={layout.dense}
           fillGrid={layout.fillGrid}
           actions={
@@ -1114,10 +1397,10 @@ export function LoadCenterView({
                   ctaLabel={ctaLabel}
                   quoteVariant={quoteVariant}
                   quoteAmount={quoteAmount}
-                  onIndentPress={onIndentPress}
+                  onIndentPress={handleCardIndentPress}
                   onShareIndent={handleShareIndent}
                   onOpenBidModal={setBidLoad}
-                  onGoToClaimed={() => setLoadSubTab("AWARDED")}
+                  onAllocate={openIndentAllocation}
                   dense={layout.dense}
                 />
               </LoadCenterIndentCardFooter>
@@ -1133,8 +1416,8 @@ export function LoadCenterView({
       handleShareIndent,
       indentIdsWithTrip,
       myQuoteByIndentId,
-      onIndentPress,
-      setLoadSubTab,
+      handleCardIndentPress,
+      openIndentAllocation,
       statusFilterTab,
       tripAllocationForLoad,
     ],
@@ -1158,10 +1441,11 @@ export function LoadCenterView({
   const renderGetLoadListCard = useCallback(
     (load: IndentRow) =>
       renderGetLoadHubCard(load, {
-        dense: compactIndentFooter,
+        // Comfort toolbar: same 32px row height as status/share, readable labels.
+        dense: false,
         withActions: true,
       }),
-    [compactIndentFooter, renderGetLoadHubCard],
+    [renderGetLoadHubCard],
   );
 
   const renderClaimedGridCard = useCallback(
@@ -1200,7 +1484,7 @@ export function LoadCenterView({
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
           tripAllocation={tripAllocationForLoad(load.id)}
-          onPress={() => onIndentPress(load)}
+          onPress={() => handleCardIndentPress(load)}
           dense
           fillGrid
           actions={
@@ -1209,7 +1493,7 @@ export function LoadCenterView({
                 load={load}
                 isDone={isDone}
                 assigning={tripDeployment.assigningTripId === load.id}
-                onIndentPress={onIndentPress}
+                onIndentPress={handleCardIndentPress}
                 onShareIndent={handleShareIndent}
                 onAssignDeploy={openIndentAllocation}
                 dense
@@ -1225,53 +1509,14 @@ export function LoadCenterView({
       handleShareIndent,
       openIndentAllocation,
       myQuotes,
-      onIndentPress,
+      handleCardIndentPress,
       tripAllocationForLoad,
       tripDeployment.assigningTripId,
     ],
   );
 
   return (
-    <HubScreenShell
-      footer={
-        !isMobileView && useGridLayout
-          ? (() => {
-              const activePagination =
-                loadSubTab === "GIVE_LOAD"
-                  ? giveLoadGridPagination
-                  : loadSubTab === "GET_LOAD"
-                    ? findWorkGridPagination
-                    : loadSubTab === "AWARDED"
-                      ? claimedGridPagination
-                      : null;
-              if (!activePagination || activePagination.totalItems <= 0) {
-                return null;
-              }
-              return (
-                <HubScreenBottomBar>
-                  <HubListPaginationBar
-                    embedded
-                    page={activePagination.page}
-                    totalPages={activePagination.totalPages}
-                    totalItems={activePagination.totalItems}
-                    pageSize={activePagination.pageSize}
-                    onPageSizeChange={activePagination.setPageSize}
-                    itemLabel="loads"
-                    onPrev={() =>
-                      activePagination.setPage((p) => Math.max(0, p - 1))
-                    }
-                    onNext={() =>
-                      activePagination.setPage((p) =>
-                        Math.min(activePagination.totalPages - 1, p + 1),
-                      )
-                    }
-                  />
-                </HubScreenBottomBar>
-              );
-            })()
-          : null
-      }
-    >
+    <HubScreenShell footer={null}>
     <View
       style={[
         styles.container,
@@ -1315,7 +1560,11 @@ export function LoadCenterView({
       ) : null}
 
       {isMobileView &&
-      (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD") ? (
+      (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD") &&
+      (loadSubTab === "GIVE_LOAD"
+        ? integratedSuppliers
+        : integratedClients
+      ).length > 0 ? (
         <View style={styles.mobileNetworkToolbarRow}>
           <LoadCenterIntegratedPartiesRow
             mode={loadSubTab === "GIVE_LOAD" ? "supplier" : "client"}
@@ -1370,15 +1619,79 @@ export function LoadCenterView({
               }
             >
               {usePartnerSidebar && orgId ? (
-                <View style={styles.loadDesktopSidebar}>
+                <View
+                  style={[
+                    styles.loadDesktopSidebar,
+                    desktopBoardHeight != null
+                      ? { minHeight: desktopBoardHeight }
+                      : null,
+                  ]}
+                  onLayout={(e) => {
+                    const next = Math.round(e.nativeEvent.layout.height);
+                    if (next <= 0) return;
+                    setPartnerSidebarHeight((prev) =>
+                      prev === next ? prev : next,
+                    );
+                  }}
+                >
+                  {loadSubTab === "GIVE_LOAD" ? (
+                    <View style={styles.sidebarIdleCapacity}>
+                      <LoadCenterOpportunityExchange
+                        orgId={orgId}
+                        mode="give"
+                        supplierOrgIds={connectedSupplierOrgIds}
+                        clientOrgIds={connectedClientOrgIds}
+                        embedded
+                        sidebarStack
+                      />
+                      <Pressable
+                        onPress={() => setFindMarketplaceMode("give")}
+                        style={({ pressed }) => [
+                          styles.findVehiclesBtn,
+                          pressed && styles.findVehiclesBtnPressed,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Find vehicles"
+                      >
+                        <FontAwesome
+                          name="truck"
+                          size={12}
+                          color={Theme.textOnDark}
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.findVehiclesBtnText}>
+                          Find vehicles
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <View style={styles.sidebarIdleCapacity}>
+                      <Pressable
+                        onPress={() => setFindMarketplaceMode("get")}
+                        style={({ pressed }) => [
+                          styles.findVehiclesBtn,
+                          pressed && styles.findVehiclesBtnPressed,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Find load"
+                      >
+                        <FontAwesome
+                          name="cube"
+                          size={12}
+                          color={Theme.textOnDark}
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.findVehiclesBtnText}>
+                          Find load
+                        </Text>
+                      </Pressable>
+                      <LoadCenterSidebarFindEmpty mode="get" />
+                    </View>
+                  )}
                   <LoadCenterPartnerRecommendations
                     orgId={orgId}
                     mode={loadSubTab === "GET_LOAD" ? "get" : "give"}
                     onViewAll={openNetworkForParties}
-                  />
-                  <LoadCenterSidebarBanners
-                    onPulseStory={handleSidebarPulseStory}
-                    hasShareableIndent={Boolean(shareablePulseIndent)}
                   />
                 </View>
               ) : null}
@@ -1387,13 +1700,17 @@ export function LoadCenterView({
                   usePartnerSidebar ? styles.loadDesktopMain : undefined
                 }
               >
-                <LoadCenterOpportunityExchange
-                  orgId={orgId}
-                  mode={loadSubTab === "GET_LOAD" ? "get" : "give"}
-                  supplierOrgIds={connectedSupplierOrgIds}
-                  clientOrgIds={connectedClientOrgIds}
-                  embedded
-                />
+                {/* Mobile / Awarded: opportunity strip above list.
+                    Desktop Get Load network indents live in Open Market. */}
+                {isMobileView || loadSubTab === "AWARDED" ? (
+                  <LoadCenterOpportunityExchange
+                    orgId={orgId}
+                    mode={loadSubTab === "GET_LOAD" ? "get" : "give"}
+                    supplierOrgIds={connectedSupplierOrgIds}
+                    clientOrgIds={connectedClientOrgIds}
+                    embedded
+                  />
+                ) : null}
                 {!usePartnerSidebar && orgId ? (
                   <View style={styles.loadPartnerRecsMobile}>
                     <LoadCenterPartnerRecommendations
@@ -1411,6 +1728,19 @@ export function LoadCenterView({
                   <ActivityIndicator size="small" color={Theme.primary} />
                   <Text style={styles.loadingText}>Loading…</Text>
                 </View>
+              ) : !isMobileView ? (
+                hirePartnerLoads.length === 0 ? (
+                  renderLoadCenterEmptyPromo()
+                ) : (
+                  <LoadCenterKanbanBoard
+                    title="Your indents by stage"
+                    columns={giveLoadKanbanColumns}
+                    renderCard={renderGiveLoadGridCard}
+                    highlightedIndentId={highlightedIndentId}
+                    matchHeight={desktopBoardHeight}
+                    onColumnPress={(col) => openKanbanColumn("give", col)}
+                  />
+                )
               ) : filteredHirePartnerLoads.length === 0 ? (
                 renderLoadCenterEmptyPromo()
               ) : useGridLayout ? (
@@ -1433,7 +1763,7 @@ export function LoadCenterView({
                       </Text>
                     ) : null}
                   </View>
-                  {giveLoadGridPagination.paginatedItems.map((load) => (
+                  {filteredHirePartnerLoads.map((load) => (
                         <View
                           key={load.id}
                           style={[
@@ -1500,6 +1830,22 @@ export function LoadCenterView({
                 onRetry={() => void refetchMarketIndents()}
                 retrying={marketRefetching}
               />
+            ) : !isMobileView ? (
+              findWorkLoads.length === 0 &&
+              awardedLoads.length === 0 &&
+              findWorkDoneUnionLoads.length === 0 &&
+              getLoadOpportunityPosts.length === 0 ? (
+                renderLoadCenterEmptyPromo()
+              ) : (
+                <LoadCenterKanbanBoard
+                  title="Market opportunities by stage"
+                  columns={getLoadKanbanColumnsWithOpps}
+                  renderCard={renderGetLoadGridCard}
+                  highlightedIndentId={highlightedIndentId}
+                  matchHeight={desktopBoardHeight}
+                  onColumnPress={(col) => openKanbanColumn("get", col)}
+                />
+              )
             ) : filteredFindWorkList.length === 0 ? (
               renderLoadCenterEmptyPromo()
             ) : useGridLayout ? (
@@ -1512,7 +1858,7 @@ export function LoadCenterView({
                     <Text style={styles.loadSectionPillText}>Live</Text>
                   </View>
                 </View>
-                {findWorkGridPagination.paginatedItems.map((load) => (
+                {filteredFindWorkList.map((load) => (
                   <View
                     key={load.id}
                     style={[
@@ -1576,7 +1922,7 @@ export function LoadCenterView({
                   </View>
                 </View>
                 <View style={styles.gridList}>
-                  {claimedGridPagination.paginatedItems.map((load) => (
+                  {displayedClaimedLoads.map((load) => (
                     <View
                       key={`claimed-${load.id}`}
                       style={[
@@ -1697,44 +2043,109 @@ export function LoadCenterView({
         </TouchableOpacity>
       </Modal>
 
-      {/* Offer Hub modal — list quotes, select one, Award */}
-      <AwardModal
-        visible={awardModal.isOpen}
-        award={awardModal}
-        onViewIndent={onIndentPress}
-        insets={insets}
+      <LoadCenterKanbanColumnModal
+        visible={expandedKanbanColumn != null}
+        column={expandedKanbanColumn}
+        onClose={closeKanbanColumn}
+        renderCard={
+          expandedKanbanMode === "get"
+            ? renderGetLoadGridCard
+            : renderGiveLoadGridCard
+        }
+        highlightedIndentId={highlightedIndentId}
+        detailIndentId={kanbanDetailIndentId}
+        onCloseDetail={() => setKanbanDetailIndentId(null)}
+        onEditIndent={handleKanbanEditIndent}
+        previousStage={kanbanStageNeighbors.previous}
+        nextStage={kanbanStageNeighbors.next}
+        onNavigateStage={navigateKanbanStage}
+      >
+        <AwardModal
+          visible={awardModal.isOpen}
+          award={awardModal}
+          onViewIndent={handleCardIndentPress}
+          insets={insets}
+        />
+        <BidModal
+          visible={bidLoad !== null}
+          load={bidLoad}
+          orgId={orgId}
+          myQuoteByIndentId={myQuoteByIndentId}
+          onClose={() => setBidLoad(null)}
+          onSuccess={triggerSuccess}
+          localBidHistoryByIndentId={localBidHistoryByIndentId}
+          onUpdateLocalBidHistory={(indentId, entry) => {
+            setLocalBidHistoryByIndentId((prev) => {
+              const prior = prev[indentId] ?? [];
+              const alreadyExists = prior.some(
+                (row) =>
+                  Number(row.amount) === Number(entry.amount) &&
+                  row.updatedAt === entry.updatedAt,
+              );
+              if (alreadyExists) return prev;
+              return {
+                ...prev,
+                [indentId]: [entry, ...prior].slice(0, 10),
+              };
+            });
+          }}
+          queryClient={queryClient}
+          invalidateIndents={invalidateIndents}
+          refetchMyQuotes={refetchMyQuotes}
+          refetchMarketIndents={refetchMarketIndents}
+          insets={insets}
+        />
+      </LoadCenterKanbanColumnModal>
+
+      {expandedKanbanColumn == null ? (
+        <AwardModal
+          visible={awardModal.isOpen}
+          award={awardModal}
+          onViewIndent={onIndentPress}
+          insets={insets}
+        />
+      ) : null}
+
+      <FindNetworkVehiclesDrawer
+        visible={findMarketplaceMode != null}
+        mode={findMarketplaceMode ?? "give"}
+        onClose={() => setFindMarketplaceMode(null)}
+        orgId={orgId}
+        supplierOrgIds={connectedSupplierOrgIds}
+        clientOrgIds={connectedClientOrgIds}
       />
 
-      {/* Submit Registry Bid modal (reference) */}
-      <BidModal
-        visible={bidLoad !== null}
-        load={bidLoad}
-        orgId={orgId}
-        myQuoteByIndentId={myQuoteByIndentId}
-        onClose={() => setBidLoad(null)}
-        onSuccess={triggerSuccess}
-        localBidHistoryByIndentId={localBidHistoryByIndentId}
-        onUpdateLocalBidHistory={(indentId, entry) => {
-          setLocalBidHistoryByIndentId((prev) => {
-            const prior = prev[indentId] ?? [];
-            const alreadyExists = prior.some(
-              (row) =>
-                Number(row.amount) === Number(entry.amount) &&
-                row.updatedAt === entry.updatedAt,
-            );
-            if (alreadyExists) return prev;
-            return {
-              ...prev,
-              [indentId]: [entry, ...prior].slice(0, 10),
-            };
-          });
-        }}
-        queryClient={queryClient}
-        invalidateIndents={invalidateIndents}
-        refetchMyQuotes={refetchMyQuotes}
-        refetchMarketIndents={refetchMarketIndents}
-        insets={insets}
-      />
+      {expandedKanbanColumn == null ? (
+        <BidModal
+          visible={bidLoad !== null}
+          load={bidLoad}
+          orgId={orgId}
+          myQuoteByIndentId={myQuoteByIndentId}
+          onClose={() => setBidLoad(null)}
+          onSuccess={triggerSuccess}
+          localBidHistoryByIndentId={localBidHistoryByIndentId}
+          onUpdateLocalBidHistory={(indentId, entry) => {
+            setLocalBidHistoryByIndentId((prev) => {
+              const prior = prev[indentId] ?? [];
+              const alreadyExists = prior.some(
+                (row) =>
+                  Number(row.amount) === Number(entry.amount) &&
+                  row.updatedAt === entry.updatedAt,
+              );
+              if (alreadyExists) return prev;
+              return {
+                ...prev,
+                [indentId]: [entry, ...prior].slice(0, 10),
+              };
+            });
+          }}
+          queryClient={queryClient}
+          invalidateIndents={invalidateIndents}
+          refetchMyQuotes={refetchMyQuotes}
+          refetchMarketIndents={refetchMarketIndents}
+          insets={insets}
+        />
+      ) : null}
 
     </View>
     </HubScreenShell>
@@ -1751,7 +2162,7 @@ const styles = StyleSheet.create({
   },
   loadsBodyFiltersBleed: {
     marginHorizontal: -Layout.screenPaddingHorizontal,
-    marginBottom: 20,
+    marginBottom: 4,
     paddingTop: 4,
     paddingBottom: 4,
     paddingHorizontal: Layout.screenPaddingHorizontal,
@@ -1800,6 +2211,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   loadsSearchIcon: { marginRight: 8 },
+  loadsSearchWrapFlex: {
+    flex: 1,
+    minWidth: 0,
+  },
+  loadsSearchWrapInline: {
+    width: 220,
+    maxWidth: 260,
+    flexShrink: 1,
+    minWidth: 160,
+  },
+  loadsSearchCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexShrink: 1,
+    minWidth: 0,
+    marginLeft: "auto",
+  },
   loadsStatusTabRow: {
     flexWrap: "wrap",
   },
@@ -1809,22 +2238,49 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 2,
   },
+  sidebarIdleCapacity: {
+    width: "100%",
+    minWidth: 0,
+    flexGrow: 1,
+    flexShrink: 1,
+    gap: 10,
+  },
+  findVehiclesBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  findVehiclesBtnPressed: {
+    opacity: 0.9,
+  },
+  findVehiclesBtnText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 0.2,
+  },
   loadsCombinedTabRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     alignSelf: "stretch",
     justifyContent: "space-between",
     width: "100%",
     paddingTop: 2,
     paddingBottom: 4,
     flexWrap: "wrap",
+    gap: 8,
   },
   loadsDoneTabGroup: {
     flexShrink: 0,
     marginLeft: "auto",
   },
   loadsStatusTabGroup: {
-    flexShrink: 0,
+    flexShrink: 1,
+    minWidth: 0,
     alignSelf: "flex-start",
   },
   loadSearchRow: {
@@ -1926,7 +2382,7 @@ const styles = StyleSheet.create({
   /** Network-style Give/Get desktop: suggested partners rail + loads main. */
   loadDesktopSplit: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "stretch",
     flexWrap: "nowrap",
     gap: 12,
     width: "100%",
@@ -1941,14 +2397,16 @@ const styles = StyleSheet.create({
     maxWidth: 300,
     flexShrink: 0,
     gap: 10,
+    alignSelf: "flex-start",
     ...Platform.select({
-      web: { position: "sticky" as const, top: 8, alignSelf: "flex-start" },
+      web: { position: "sticky" as const, top: 8 },
     }),
   },
   loadDesktopMain: {
     flex: 1,
     minWidth: 0,
-    gap: 8,
+    gap: 0,
+    alignSelf: "stretch",
   },
   loadPartnerRecsMobile: {
     marginTop: 4,
@@ -2237,11 +2695,11 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
     alignItems: "stretch",
   },
-  /** Desktop load grid — 3 cards per row. */
+  /** Desktop load grid — 4 cards per row (aligns with Trips hub + column modal). */
   gridCardWrap: {
-    width: "33.333%",
-    maxWidth: "33.333%",
-    flexBasis: "33.333%",
+    width: "25%",
+    maxWidth: "25%",
+    flexBasis: "25%",
     paddingHorizontal: 4,
     marginBottom: 12,
     alignSelf: "stretch",

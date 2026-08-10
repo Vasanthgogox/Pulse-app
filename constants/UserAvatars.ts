@@ -1,5 +1,5 @@
 import { type ImageSourcePropType } from "react-native";
-import { type PresetAvatar, getPresetAvatarUri } from "./DriverLevels";
+import { getPresetAvatarUri, type PresetAvatar } from "@/constants/presetAvatar";
 
 export type UserAvatarGender = "male" | "female";
 export type UserAvatarPreset = PresetAvatar & { gender: UserAvatarGender };
