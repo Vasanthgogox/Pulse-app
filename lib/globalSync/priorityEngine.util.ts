@@ -240,7 +240,8 @@ function syntheticIdle(trip: ActiveTripSummary, now: number): GlobalOperationAle
     title: 'Vehicle idle',
     subtitle: 'No location ping in 4+ hours',
     amount: null,
-    created_at: new Date(now).toISOString(),
+    // Event time = last GPS ping (the reason this fired). Non-zero via the `!locMs` guard above.
+    created_at: new Date(locMs).toISOString(),
     source: 'trip_synthetic_idle',
   };
 }
@@ -278,7 +279,9 @@ function syntheticLateLog(trip: ActiveTripSummary, now: number): GlobalOperation
     title: 'Mission log overdue',
     subtitle: 'No driver system_log in 5+ hours',
     amount: null,
-    created_at: new Date(now).toISOString(),
+    // Event time = last driver system_log; when none was ever sent (lastLog === 0) the
+    // overdue window starts at trip creation, which the guard above already uses.
+    created_at: lastLog > 0 ? new Date(lastLog).toISOString() : trip.created_at,
     source: 'trip_synthetic_late_log',
   };
 }

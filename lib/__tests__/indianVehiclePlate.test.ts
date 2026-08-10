@@ -8,6 +8,7 @@ import {
   formatIndianVehicleNumber,
   normalizeVehicleNumberForMatch,
 } from "@/lib/format";
+import { validateIndianVehicleNumber } from "@/lib/validation";
 
 /** Simulate the custom keypad: one character at a time through the filter. */
 function typeOut(plate: string): string {
@@ -49,10 +50,20 @@ describe("Indian vehicle plate entry", () => {
     expect(isIndianVehiclePlateValid(pasted)).toBe(true);
   });
 
+  it.each(VALID_PLATES)("validateIndianVehicleNumber accepts %s", (plate) => {
+    expect(validateIndianVehicleNumber(plate)).toBeNull();
+    expect(validateIndianVehicleNumber(formatIndianVehicleNumber(plate))).toBeNull();
+  });
+
   it.each(["", "TN", "TN01", "TN01CM", "ABCD", "12345", "22BH1234"])(
     "treats incomplete %s as invalid",
     (partial) => {
       expect(isIndianVehiclePlateValid(partial)).toBe(false);
+      if (partial.length === 0) {
+        expect(validateIndianVehicleNumber(partial)).toBe("Required");
+      } else {
+        expect(validateIndianVehicleNumber(partial)).toMatch(/valid vehicle number/i);
+      }
     },
   );
 

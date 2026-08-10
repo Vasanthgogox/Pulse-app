@@ -48,6 +48,7 @@ import { showAppAlert } from "@/lib/appAlert";
 import { validateEmail } from "@/lib/emailValidation";
 import { formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
 import { applyIndianDlKeystroke } from "@/lib/indianDrivingLicenseInput.util";
+import { applyIndianVehicleKeystroke } from "@/lib/indianVehicleInput.util";
 import {
   normalizeIndianPhoneForMetadata,
   validatePhone,
@@ -2537,7 +2538,7 @@ function PartyRegistrationPortalInner(
                           autoCapitalize="characters"
                           value={vehicleReg}
                           onChangeText={(t) =>
-                            setVehicleReg(formatIndianVehicleNumberInput(t))
+                            setVehicleReg(applyIndianVehicleKeystroke(t))
                           }
                           testID="party-vehicle-reg-input"
                         />

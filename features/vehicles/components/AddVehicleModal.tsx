@@ -24,7 +24,7 @@ import {
     KeyboardAvoidingView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { formatIndianVehicleNumberInput } from "@/lib/format";
+import { applyIndianVehicleKeystroke } from "@/lib/indianVehicleInput.util";
 import { dateISO, validateIndianVehicleNumber } from "@/lib/validation";
 import {
     AXLE_CHIP_OPTIONS,
@@ -400,7 +400,7 @@ export function AddVehicleModal({
                 placeholder="e.g. TN 25 CM 7892"
                 placeholderTextColor={Theme.placeholder}
                 value={vehicleNumber}
-                onChangeText={(v) => setVehicleNumber(formatIndianVehicleNumberInput(v))}
+                onChangeText={(v) => setVehicleNumber(applyIndianVehicleKeystroke(v))}
                 autoCorrect={false}
                 spellCheck={false}
                 autoComplete="off"
@@ -487,7 +487,7 @@ export function AddVehicleModal({
               placeholder="e.g. TN 25 CM 7892"
               placeholderTextColor={Theme.placeholder}
               value={vehicleNumber}
-              onChangeText={(v) => setVehicleNumber(formatIndianVehicleNumberInput(v))}
+              onChangeText={(v) => setVehicleNumber(applyIndianVehicleKeystroke(v))}
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
