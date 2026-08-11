@@ -23,6 +23,11 @@ function getFromLookup<T extends { id: string }>(
   return lookup[id] ?? null;
 }
 
+/**
+ * True when the trip was created via indent → trip (award/convert).
+ * False when created as a Direct trip (Add Trip / manual).
+ * Hub cards surface this as product tags: Indent vs Direct.
+ */
 export function isLoadBasedTrip(
   trip: Pick<TripRow, 'indent_id'> | { indent_id?: string | null } | null | undefined,
 ): boolean {

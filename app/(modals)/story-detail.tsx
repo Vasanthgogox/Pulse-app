@@ -273,8 +273,16 @@ export default function StoryDetailRoute() {
   );
 
   if (isDriver && params.postId) {
+    const driverQueue =
+      (driverStoriesQ.data?.length ?? 0) > 0
+        ? driverStoriesQ.data!
+        : driverStory
+          ? [driverStory]
+          : [];
     return (
       <DriverPulseStoryViewer
+        stories={driverQueue}
+        initialPostId={params.postId}
         postId={params.postId}
         story={driverStory}
         shipperName={driverStory?.org_name ?? preview?.org_name}

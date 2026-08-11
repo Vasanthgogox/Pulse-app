@@ -2,6 +2,7 @@ import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { SearchBar } from '@/components/SearchBar';
 import { TripPaymentAmountGrid } from '@/features/driver/components/TripPaymentAmountGrid';
 import { DriverWalletEarningsPanel } from '@/features/drivers/components/DriverWalletEarningsPanel';
+import { DriverSelfLedgerPanel } from '@/features/drivers/components/DriverSelfLedgerPanel';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
 import {
@@ -19,6 +20,7 @@ import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { DriverSelfAvatar } from '@/components/driver/DriverSelfAvatar';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
+import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
 import {
     buildBulkTripClaimWhatsappMessage,
     buildSettlementShareMessage,
@@ -31,7 +33,10 @@ import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
 } from '@/features/driver/utils/driverTripSequence.util';
-import { tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
+import {
+  resolveDriverTripPayoutTerms,
+  tripEarningsForDriver,
+} from '@/features/drivers/utils/driverUtils.util';
 import {
   buildDriverTripSettlementView,
   buildMarkPaidConfirmMessage,
@@ -176,6 +181,7 @@ export default function DriverWalletScreen() {
     useOptionalDriverInviteModal()?.fleetConnectionRevision ?? 0;
   useDriverAvatar();
   const { avatarUri } = useDriverAvatarUri();
+  const { isFleetOwner } = useDriverFleetOwnerQuery(profile?.uid ?? null);
   const [_driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);
   const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
@@ -202,8 +208,8 @@ export default function DriverWalletScreen() {
   const walletParams = useLocalSearchParams<{ tab?: string }>();
   useEffect(() => {
     const tab = typeof walletParams.tab === 'string' ? walletParams.tab : walletParams.tab?.[0];
-    if (tab === 'fleet' || tab === 'cash' || tab === 'earnings') {
-      setMainTab(tab);
+    if (tab === 'self' || tab === 'fleet' || tab === 'cash' || tab === 'earnings') {
+      setMainTab(tab === 'self' ? 'fleet' : tab);
     } else if (tab === 'trips') {
       router.replace('/(driver)/trip-history' as Parameters<typeof router.replace>[0]);
     }
@@ -357,7 +363,10 @@ export default function DriverWalletScreen() {
 
   // Pre-built O(1) map of payout terms keyed by "driverId:orgId".
   const payoutTermsMap = useMemo(() => {
-    const map = new Map<string, { commissionPercent: number | null; commissionPerKm: number | null }>();
+    const map = new Map<
+      string,
+      { commissionPercent: number | null; commissionPerKm: number | null; payableAmount: number | null }
+    >();
     for (const d of linkedDrivers) {
       const inv = invites.find(
         (i) =>
@@ -367,6 +376,7 @@ export default function DriverWalletScreen() {
       map.set(`${String(d.id ?? '')}:${String(d.organization_id ?? '')}`, {
         commissionPercent: inv?.commission_percent ?? d.commission_percent ?? null,
         commissionPerKm: inv?.commission_per_km ?? d.commission_per_km ?? null,
+        payableAmount: inv?.payable_amount ?? d.payable_amount ?? null,
       });
     }
     return map;
@@ -376,6 +386,20 @@ export default function DriverWalletScreen() {
     (t: tripsService.TripRow) =>
       payoutTermsMap.get(`${String(t.driver_id ?? '')}:${String(t.organization_id ?? '')}`) ?? null,
     [payoutTermsMap],
+  );
+
+  /** True only when real agreed payout terms exist — never inferred from an aggregate/estimated guess. */
+  const hasAgreedPayoutTermsForTrip = useCallback(
+    (t: tripsService.TripRow) =>
+      resolveDriverTripPayoutTerms(t, payoutTermsForTrip(t)).hasAgreedPayoutTerms,
+    [payoutTermsForTrip],
+  );
+
+  /** Same as tripEarnings(), but ₹0 for any trip with no agreed payout terms. */
+  const gatedTripEarnings = useCallback(
+    (t: tripsService.TripRow) =>
+      hasAgreedPayoutTermsForTrip(t) ? tripEarnings(t, payoutTermsForTrip(t)) : 0,
+    [hasAgreedPayoutTermsForTrip, payoutTermsForTrip],
   );
 
   const receivedLedgerEntries = useMemo(() => {
@@ -1002,6 +1026,14 @@ export default function DriverWalletScreen() {
         return { ok: false as const, errorMessage: 'Trip not found.' };
       }
 
+      // Hard gate: never create a salary request for a trip with no agreed
+      // payout terms (e.g. an aggregate/open trip assigned by a shipper with
+      // no employer relationship). Do not fall through with an amount of 0 —
+      // refuse outright.
+      if (!hasAgreedPayoutTermsForTrip(trip)) {
+        return { ok: false as const, errorMessage: 'No agreed payout terms for this trip.' };
+      }
+
       const lastAt = earningsLastReminderAtByTripId[String(trip.id)];
       if (lastAt) {
         const remaining = new Date(lastAt).getTime() + 24 * 60 * 60 * 1000 - Date.now();
@@ -1064,6 +1096,7 @@ export default function DriverWalletScreen() {
       driverTripNumberById,
       earningsLastReminderAtByTripId,
       payoutTermsForTrip,
+      hasAgreedPayoutTermsForTrip,
     ],
   );
 
@@ -1113,6 +1146,17 @@ export default function DriverWalletScreen() {
       const orgId = String(trips[0].organization_id ?? '');
       if (!orgId || trips.some((t) => String(t.organization_id ?? '') !== orgId)) {
         return { ok: false as const, errorMessage: 'Select trips from the same fleet only.' };
+      }
+
+      // Hard gate: refuse the whole batch if any selected trip has no agreed
+      // payout terms — never create a request that includes a fabricated amount.
+      const ungatedTrip = trips.find((trip) => !hasAgreedPayoutTermsForTrip(trip));
+      if (ungatedTrip) {
+        const displayId = getDriverTripDisplayNumber(ungatedTrip, driverTripNumberById);
+        return {
+          ok: false as const,
+          errorMessage: `${displayId} has no agreed payout terms and can't be included in a request.`,
+        };
       }
 
       for (const trip of trips) {
@@ -1181,6 +1225,7 @@ export default function DriverWalletScreen() {
       driverTripNumberById,
       earningsLastReminderAtByTripId,
       payoutTermsForTrip,
+      hasAgreedPayoutTermsForTrip,
     ],
   );
 
@@ -1194,8 +1239,11 @@ export default function DriverWalletScreen() {
 
     const pending = visibleTrips.filter((t) => (receivedByTripId[t.id] ?? 0) === 0);
     const received = visibleTrips.filter((t) => (receivedByTripId[t.id] ?? 0) > 0);
-    const pendingSum = pending.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t)), 0);
-    const receivedSum = received.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t)), 0);
+    // Only trips with actual agreed payout terms contribute to the totals —
+    // an aggregate/direct-shipper trip with no agreed terms is worth ₹0, not
+    // a 10%-of-price guess.
+    const pendingSum = pending.reduce((s, t) => s + gatedTripEarnings(t), 0);
+    const receivedSum = received.reduce((s, t) => s + gatedTripEarnings(t), 0);
     const list =
       transactionFilter === 'pending'
         ? pending
@@ -1209,7 +1257,7 @@ export default function DriverWalletScreen() {
       pendingTotal: pendingSum,
       receivedTotal: receivedSum,
     };
-  }, [completedTrips, receivedByTripId, transactionFilter]);
+  }, [completedTrips, receivedByTripId, transactionFilter, gatedTripEarnings]);
 
   /** UPI-style: trips grouped by date section (Today, Yesterday, 5 Mar, ...) */
   const _transactionSections = useMemo(() => {
@@ -2453,8 +2501,10 @@ export default function DriverWalletScreen() {
           onPress={() => setMainTab('fleet')}
           activeOpacity={0.92}
         >
-          <FontAwesome name="users" size={12} color={mainTab === 'fleet' ? colors.emerald : colors.textMuted} />
-          <Text style={[styles.mainTabText, mainTab === 'fleet' ? { color: colors.emerald } : { color: colors.textMuted }]}>Fleet</Text>
+          <FontAwesome name={isFleetOwner ? 'user' : 'users'} size={12} color={mainTab === 'fleet' ? colors.emerald : colors.textMuted} />
+          <Text style={[styles.mainTabText, mainTab === 'fleet' ? { color: colors.emerald } : { color: colors.textMuted }]}>
+            {isFleetOwner ? 'Self' : 'Fleet'}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -2500,6 +2550,16 @@ export default function DriverWalletScreen() {
       )}
 
       {mainTab === 'fleet' ? (
+        isFleetOwner ? (
+          <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
+            <DriverSelfLedgerPanel
+              entries={ledgerEntries}
+              orgNameById={orgNameById}
+              colors={colors}
+              isDark={isDark}
+            />
+          </View>
+        ) : (
         <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
 
           {/* ── CURRENT EMPLOYER ── */}
@@ -3018,6 +3078,7 @@ export default function DriverWalletScreen() {
           )}
 
         </View>
+        )
       ) : mainTab === 'earnings' ? (
         <DriverWalletEarningsPanel
           completedTrips={completedTrips}
@@ -3026,10 +3087,11 @@ export default function DriverWalletScreen() {
             orgName: f.orgName,
           })).filter((f) => f.orgId.length > 0)}
           ledgerEntries={ledgerEntries}
-          tripEarnings={(trip) => tripEarnings(trip, payoutTermsForTrip(trip))}
+          tripEarnings={gatedTripEarnings}
+          hasAgreedPayoutTerms={hasAgreedPayoutTermsForTrip}
           receivedByTripId={receivedByTripId}
           tripMeta={(trip) => {
-            const earned = Math.round(tripEarnings(trip, payoutTermsForTrip(trip)));
+            const earned = Math.round(gatedTripEarnings(trip));
             const received = Math.round(receivedByTripId[trip.id] ?? 0);
             const pending = Math.max(0, earned - received);
             const orgId = String(trip.organization_id ?? '');

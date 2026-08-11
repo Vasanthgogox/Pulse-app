@@ -10,6 +10,14 @@ export function formatINR(value: number): string {
   return formatted.replace(/₹(?=\d)/g, '₹ ');
 }
 
+/** Positive finite money for Target ₹ chips — never treat 0/null as a displayable target. */
+export function positiveMoneyOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
 /** Compact INR for tight UI chips (e.g. ₹1.2L, ₹50K). */
 export function formatINRChip(value: number): string {
   const n = Math.abs(Number(value));

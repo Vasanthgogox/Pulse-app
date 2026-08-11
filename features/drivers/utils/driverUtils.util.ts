@@ -277,6 +277,30 @@ export function resolveDriverTripPayoutTerms(
   };
 }
 
+/**
+ * Whether the driver assignment / mission UI may show a trip ₹ as EST. EARNINGS.
+ *
+ * False when:
+ * - Trip is supplier-mediated (**aggregate**) — shipper→supplier commercial
+ *   price is not the driver's pay (Driver-cum-Owner payable not defined yet).
+ * - Phone / tracking-only stub assignment (no employment pay terms).
+ * - No agreed salary / commission / trip_commission on record.
+ */
+export function canShowDriverTripEstEarnings(
+  trip: TripWithSupplier | null | undefined,
+  offer?: DriverTripPayoutOffer | null,
+  opts?: { trackingOnly?: boolean | null },
+): boolean {
+  if (!trip) return false;
+  if (isAggregateTrip(trip)) return false;
+  if (opts?.trackingOnly === true) return false;
+  return resolveDriverTripPayoutTerms(trip, offer).hasAgreedPayoutTerms;
+}
+
+/** Hero copy when {@link canShowDriverTripEstEarnings} is false. */
+export const DRIVER_PAY_NA_AMOUNT = "—";
+export const DRIVER_PAY_NA_LABEL = "PAY N/A";
+
 export function isAssignedNotStarted(status: string) {
   const s = (status || "").toLowerCase();
   return s === "assigned" || s === "pending" || s === "scheduled";

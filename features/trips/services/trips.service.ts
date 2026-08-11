@@ -83,6 +83,8 @@ export interface TripRow {
   driver_display_name?: string | null;
   /** Cached vehicle number for display. Synced from vehicles when vehicle_id set; can be set ad-hoc when vehicle_id is null (aggregate trips). */
   vehicle_display_number?: string | null;
+  /** Explicit Fleet Owner / Driver-cum-Owner vehicle link. Nullable until set via set_trip_owner_vehicle() — never inferred from ownership or vehicle count. */
+  owner_vehicle_id?: string | null;
   client_price: number;
   supplier_rate: number;
   margin: number;
@@ -657,6 +659,7 @@ const DRIVER_TRIP_FALLBACK_COLUMNS = [
   "organization_id",
   "completed_at",
   "indent_id",
+  "owner_vehicle_id",
   // NOTE: organization_name is deliberately NOT fetched here. `trips` has no such
   // column and embedding `organizations(name)` fails outright for drivers
   // ("permission denied for function is_org_member"), which would break the whole

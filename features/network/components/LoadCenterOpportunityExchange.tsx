@@ -8,7 +8,9 @@ import { LoadCenterSidebarFindEmpty } from "@/features/network/components/LoadCe
 import Theme from "@/constants/Theme";
 import type { PostRow } from "@/features/network/services/posts.service";
 import {
+  formatCapacityMaterial,
   formatStoryDate,
+  isFleetOwnerCapacityPost,
   splitLocationParts,
 } from "@/features/network/utils/storyDisplay";
 import { shouldHideLoadStoryFromAuthor } from "@/features/network/utils/storyLoadVisibility.util";
@@ -72,9 +74,16 @@ function filterOpportunityPosts(
   const suppliers = supplierOrgIds ?? EMPTY_ORG_SET;
   const clients = clientOrgIds ?? EMPTY_ORG_SET;
   const matched = posts.filter((p) => {
-    if (p.organization_id === orgId) return false;
     if (!p.is_active) return false;
-    if (p.type !== wantType) return false;
+    if ((p.type ?? "").toUpperCase() !== wantType) return false;
+
+    // Fleet Owner organic capacity (null org) — include in Give Load / Find vehicles.
+    // Same posts model; not connection-gated; docs/private fleet fields never in payload.
+    if (mode === "give" && isFleetOwnerCapacityPost(p)) return true;
+
+    // Hide own-org stories from the "nearby" rail.
+    if (p.organization_id != null && p.organization_id === orgId) return false;
+
     if (
       mode === "get" &&
       shouldHideLoadStoryFromAuthor({
@@ -92,6 +101,12 @@ function filterOpportunityPosts(
     const aSponsored = a.is_sponsored ? 1 : 0;
     const bSponsored = b.is_sponsored ? 1 : 0;
     if (aSponsored !== bSponsored) return bSponsored - aSponsored;
+    // Prefer FO / organic capacity after ads so Idle capacity isn't ads-only.
+    if (mode === "give") {
+      const aFo = isFleetOwnerCapacityPost(a) ? 1 : 0;
+      const bFo = isFleetOwnerCapacityPost(b) ? 1 : 0;
+      if (aFo !== bFo) return bFo - aFo;
+    }
     return (
       new Date(b.created_at ?? 0).getTime() -
       new Date(a.created_at ?? 0).getTime()
@@ -116,6 +131,7 @@ export function OpportunityCard({
 }) {
   const isSponsored = !!post.is_sponsored;
   const isLoad = mode === "get";
+  const isFleetCapacity = isFleetOwnerCapacityPost(post);
   const rawLogo = post.org_avatar_url?.trim() ?? "";
   const [avatarUrl, setAvatarUrl] = useState<string | null>(
     rawLogo.startsWith("http") ? rawLogo : null,
@@ -140,13 +156,16 @@ export function OpportunityCard({
     isLoad ? post.destination : post.destination || "Anywhere",
   );
   const vehicle = post.vehicle_type?.trim() || (isLoad ? "Any vehicle" : "Capacity");
-  const material = post.material?.trim();
+  const material = formatCapacityMaterial(post.material);
   const rate =
     post.rate_offer != null && Number.isFinite(post.rate_offer)
       ? formatINR(post.rate_offer)
       : null;
   const posted = post.created_at ? formatStoryDate(post.created_at) : null;
-  const shortName = post.org_name.trim().split(/\s+/)[0] ?? post.org_name;
+  const displayOrgName = (post.org_name ?? "").trim() || "Fleet availability";
+  const shortName = isFleetCapacity
+    ? "Fleet"
+    : (displayOrgName.split(/\s+/)[0] ?? displayOrgName);
 
   return (
     <Pressable
@@ -160,13 +179,15 @@ export function OpportunityCard({
       accessibilityRole="button"
       accessibilityLabel={
         isSponsored
-          ? `Sponsored ${isLoad ? "load" : "capacity"} from ${post.org_name}`
-          : `${isLoad ? "Indent from network" : "Idle vehicle"} from ${post.org_name}`
+          ? `Sponsored ${isLoad ? "load" : "capacity"} from ${displayOrgName}`
+          : isFleetCapacity
+            ? `Fleet availability ${vehicle}`
+            : `${isLoad ? "Indent from network" : "Idle vehicle"} from ${displayOrgName}`
       }
     >
       <View style={styles.cardTop}>
         <PartyAvatar
-          name={post.org_name}
+          name={displayOrgName}
           avatarUrl={avatarUrl}
           avatarSeed={post.org_avatar_seed}
           entityType="supplier"
@@ -174,13 +195,15 @@ export function OpportunityCard({
         />
         <View style={styles.cardTopText}>
           <Text style={styles.orgName} numberOfLines={1}>
-            {shortName}
+            {isFleetCapacity ? "Fleet availability" : shortName}
           </Text>
           <Text style={styles.metaLine} numberOfLines={1}>
             {isSponsored
               ? isLoad
                 ? "Sponsored load"
                 : "Sponsored capacity"
+              : isFleetCapacity
+                ? "Driver capacity"
               : isLoad
                 ? "Indent from network"
                 : "Network capacity"}
@@ -193,7 +216,9 @@ export function OpportunityCard({
           </View>
         ) : (
           <View style={styles.networkPill}>
-            <Text style={styles.networkPillText}>Network</Text>
+            <Text style={styles.networkPillText}>
+              {isFleetCapacity ? "Fleet" : "Network"}
+            </Text>
           </View>
         )}
       </View>
@@ -306,7 +331,7 @@ export function LoadCenterOpportunityExchange({
     ? sidebarStack
       ? "Indents from network you can bid on"
       : "Sponsored load ads and indents from network you can bid on"
-    : "Sponsored capacity ads and idle vehicle stories in your network";
+    : "Sponsored capacity ads and fleet vehicle Stories";
   const loadingSidebarText = isGet ? "Finding loads…" : "Finding capacity…";
 
   const openStory = (post: PostRow) => {
@@ -314,7 +339,9 @@ export function LoadCenterOpportunityExchange({
       pathname: "/(modals)/story-detail",
       params: {
         postId: post.id,
-        orgId: post.organization_id,
+        ...(post.organization_id
+          ? { orgId: post.organization_id }
+          : {}),
         storyType: post.type,
       },
     });

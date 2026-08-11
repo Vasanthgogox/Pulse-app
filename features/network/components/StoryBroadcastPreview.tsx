@@ -23,6 +23,7 @@ const SKY = Theme.loadAddButtonBg;
 const SKY_TRAY = Theme.loadStatusTabTrayBg;
 
 const LOAD_BROADCAST_LOTTIE = require("@/assets/Animated folder/auction.json");
+const OPEN_CAPACITY_LOTTIE = require("@/assets/Animated folder/truck.json");
 
 type LocationParts = { city: string; state: string };
 
@@ -34,6 +35,8 @@ export type StoryBroadcastPreviewProps = {
   loadTargetRate: number | null;
   isDesktopPreview?: boolean;
   storyKey: string;
+  /** Defaults to "Load broadcast". FO capacity uses "Open capacity". */
+  kicker?: string;
 };
 
 export function StoryBroadcastPreview({
@@ -44,10 +47,18 @@ export function StoryBroadcastPreview({
   loadTargetRate,
   isDesktopPreview = false,
   storyKey,
+  kicker = "Load broadcast",
 }: StoryBroadcastPreviewProps) {
   const fade = useRef(new Animated.Value(0)).current;
   const rise = useRef(new Animated.Value(28)).current;
   const routePulse = useRef(new Animated.Value(0)).current;
+  const isCapacity = (post.type ?? "").toUpperCase() === "VEHICLE_AVAILABILITY";
+  const heroLottie = isCapacity ? OPEN_CAPACITY_LOTTIE : LOAD_BROADCAST_LOTTIE;
+  const resolvedKicker = kicker !== "Load broadcast"
+    ? kicker
+    : isCapacity
+      ? "Open capacity"
+      : "Load broadcast";
 
   useEffect(() => {
     fade.setValue(0);
@@ -113,7 +124,7 @@ export function StoryBroadcastPreview({
       <View style={[styles.card, isDesktopPreview && styles.cardDesktop]}>
         <View style={styles.lottieRing}>
           <HubPromoHeroLottie
-            source={LOAD_BROADCAST_LOTTIE}
+            source={heroLottie}
             width={lottieSize}
             height={lottieSize}
             renderScale={1.22}
@@ -121,7 +132,7 @@ export function StoryBroadcastPreview({
         </View>
 
         <Text style={[styles.kicker, isDesktopPreview && styles.kickerDesktop]}>
-          Load broadcast
+          {resolvedKicker}
         </Text>
 
         <Text

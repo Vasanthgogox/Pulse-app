@@ -146,7 +146,7 @@ export function FindNetworkVehiclesDrawer({
       pathname: "/(modals)/story-detail",
       params: {
         postId: post.id,
-        orgId: post.organization_id,
+        ...(post.organization_id ? { orgId: post.organization_id } : {}),
         storyType: post.type,
       },
     });
@@ -168,7 +168,7 @@ export function FindNetworkVehiclesDrawer({
   const title = isGet ? "Find load" : "Find vehicles";
   const subtitle = isGet
     ? "Indents from network and advertised loads"
-    : "Idle capacity from your network";
+    : "Idle capacity from network and fleet owners";
   const searchPlaceholder = isGet
     ? "Search loads, org, route…"
     : "Search vehicles, org, route…";

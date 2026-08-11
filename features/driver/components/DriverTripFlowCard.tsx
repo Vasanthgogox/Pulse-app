@@ -42,11 +42,22 @@ import {
   hasEnteredLrPhase,
   markLrPhaseEntered,
 } from '@/features/drivers/services/tripControlProgress.storage';
-import { isAggregateTrip } from '@/features/drivers/utils/driverUtils.util';
+import {
+  DRIVER_PAY_NA_AMOUNT,
+  DRIVER_PAY_NA_LABEL,
+  isAggregateTrip,
+} from '@/features/drivers/utils/driverUtils.util';
 import { formatINR } from '@/lib/format';
 import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
 import * as tripDocumentsService from '@/features/trips/services/tripDocuments.service';
 import * as tripsService from '@/features/trips/services/trips.service';
+import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
+import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
+import {
+  ownerVehicleSubtitle,
+  ownerVehicleTitle,
+  setTripOwnerVehicle,
+} from '@/features/driver/services/ownerVehicles.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -54,6 +65,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Image,
     Linking,
@@ -378,6 +390,54 @@ export function DriverTripFlowCard({
   const [step, setStep] = useState<StepId>(() => deriveDriverFlowStepFromTrip(trip));
   const [stepLoading, setStepLoading] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
+
+  // Owner Vehicle Link (3B.4/3C follow-up) — Fleet Owner explicit vehicle
+  // selection for this trip. Never auto-selected, including when the FO has
+  // exactly one vehicle. See docs/DRIVER_FLEET_OWNER_PHASE1.md.
+  const { isFleetOwner } = useDriverFleetOwnerQuery(profile?.uid);
+  const { vehicles: ownerVehicles, isLoading: ownerVehiclesLoading } =
+    useOwnerVehiclesQuery(profile?.uid);
+  const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
+  const [vehiclePickerSelectedId, setVehiclePickerSelectedId] = useState<string | null>(null);
+  const [vehiclePickerBusy, setVehiclePickerBusy] = useState(false);
+  const [vehiclePickerError, setVehiclePickerError] = useState<string | null>(null);
+
+  const openVehiclePicker = useCallback(() => {
+    setVehiclePickerSelectedId(localTrip.owner_vehicle_id ?? null);
+    setVehiclePickerError(null);
+    setVehiclePickerOpen(true);
+  }, [localTrip.owner_vehicle_id]);
+
+  // Takes an explicit id (defaulting to the current selection state) rather
+  // than always reading vehiclePickerSelectedId — the Clear action needs to
+  // pass null directly, since setVehiclePickerSelectedId(null) followed by
+  // calling this in the same handler would otherwise still see the
+  // pre-update state value (React state updates aren't applied synchronously
+  // within the same event handler).
+  const confirmVehicleSelection = useCallback(
+    async (idToSet: string | null = vehiclePickerSelectedId) => {
+      const id = localTrip?.id;
+      if (!id || vehiclePickerBusy) return;
+      setVehiclePickerBusy(true);
+      setVehiclePickerError(null);
+      const { error, ownerVehicleId } = await setTripOwnerVehicle(id, idToSet);
+      setVehiclePickerBusy(false);
+      if (error) {
+        setVehiclePickerError(error.message);
+        return;
+      }
+      const updated = { ...localTrip, owner_vehicle_id: ownerVehicleId };
+      setLocalTrip(updated);
+      onTripUpdated?.(updated);
+      setVehiclePickerOpen(false);
+    },
+    [localTrip, onTripUpdated, vehiclePickerBusy, vehiclePickerSelectedId],
+  );
+
+  const selectedOwnerVehicle = useMemo(
+    () => ownerVehicles.find((v) => v.id === localTrip.owner_vehicle_id) ?? null,
+    [ownerVehicles, localTrip.owner_vehicle_id],
+  );
   /** Completion write in flight — keeps the hold button disabled so it cannot double-submit. */
   const [completing, setCompleting] = useState(false);
 
@@ -694,11 +754,23 @@ export function DriverTripFlowCard({
     [revokeSharedTripDocumentInChat],
   );
 
-  const earnings = useMemo(() => {
+  const { earnings, earningsLabel } = useMemo(() => {
+    // Aggregate / supplier-mediated: shipper commercial ₹ is not driver pay.
+    // Driver-cum-Owner earnings are not defined yet for this path.
+    if (tripIsAggregate) {
+      return {
+        earnings: DRIVER_PAY_NA_AMOUNT,
+        earningsLabel: DRIVER_PAY_NA_LABEL,
+      };
+    }
     const n = Math.max(0, Number(commissionAmount ?? 0) || 0);
-    if (n > 0) return formatINR(n);
-    if (tripIsAggregate) return 'SALARY';
-    return formatINR(0);
+    if (n > 0) {
+      return { earnings: formatINR(n), earningsLabel: 'EST. EARNINGS' };
+    }
+    return {
+      earnings: DRIVER_PAY_NA_AMOUNT,
+      earningsLabel: DRIVER_PAY_NA_LABEL,
+    };
   }, [tripIsAggregate, commissionAmount]);
 
   const _progressPct = useMemo(() => progressForStep(step), [step]);
@@ -1402,6 +1474,7 @@ export function DriverTripFlowCard({
             onCloseToMap={() => setLrPageVisible(false)}
             placeLabel={pickupLabel}
             earnings={earnings}
+            earningsLabel={earningsLabel}
             documents={lrDocuments}
             viewUrls={lrViewUrls}
             docsLoading={lrLoading}
@@ -1425,6 +1498,7 @@ export function DriverTripFlowCard({
             onCloseToMap={() => setPodPageVisible(false)}
             placeLabel={dropLabel}
             earnings={earnings}
+            earningsLabel={earningsLabel}
             documents={podDocuments}
             viewUrls={podViewUrls}
             docsLoading={podLoading}
@@ -1489,6 +1563,7 @@ export function DriverTripFlowCard({
         <MissionCardLayout
           title={title}
           earnings={earnings}
+          earningsLabel={earningsLabel}
           assignedBy={assignedBy}
           showHeroAssigner={showHeroAssigner}
           target={stageTarget}
@@ -1505,6 +1580,122 @@ export function DriverTripFlowCard({
           onNavigate={onNavigate}
         />
       ) : null}
+
+      {isFleetOwner && step !== 'completed' ? (
+        <Pressable
+          onPress={openVehiclePicker}
+          style={({ pressed }) => [
+            ownerVehicleRowStyles.row,
+            { borderColor: colors.borderSubtle, opacity: pressed ? 0.85 : 1 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            selectedOwnerVehicle ? 'Change vehicle for this trip' : 'Select vehicle for this trip'
+          }
+        >
+          <FontAwesome name="truck" size={14} color={colors.textMuted} />
+          <Text style={[ownerVehicleRowStyles.label, { color: colors.text }]} numberOfLines={1}>
+            {selectedOwnerVehicle
+              ? ownerVehicleTitle(selectedOwnerVehicle)
+              : 'Select vehicle for this trip'}
+          </Text>
+          <Text style={[ownerVehicleRowStyles.action, { color: FLOW_EMERALD }]}>
+            {selectedOwnerVehicle ? 'Change' : 'Select'}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <Modal
+        visible={vehiclePickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setVehiclePickerOpen(false)}
+      >
+        <View style={ownerVehicleRowStyles.modalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setVehiclePickerOpen(false)}
+          />
+          <View style={[ownerVehicleRowStyles.modalSheet, { backgroundColor: colors.surface }]}>
+            <Text style={[ownerVehicleRowStyles.modalTitle, { color: colors.text }]}>
+              Select vehicle
+            </Text>
+            {ownerVehiclesLoading ? (
+              <ActivityIndicator color={FLOW_EMERALD} style={{ marginVertical: 20 }} />
+            ) : ownerVehicles.length === 0 ? (
+              <Text style={[ownerVehicleRowStyles.emptyText, { color: colors.textMuted }]}>
+                You have no vehicles registered in My Fleet yet. Add one there first.
+              </Text>
+            ) : (
+              <View style={ownerVehicleRowStyles.chipList}>
+                {ownerVehicles.map((v) => {
+                  const on = v.id === vehiclePickerSelectedId;
+                  return (
+                    <Pressable
+                      key={v.id}
+                      onPress={() => setVehiclePickerSelectedId(v.id)}
+                      style={[
+                        ownerVehicleRowStyles.chip,
+                        {
+                          borderColor: on ? FLOW_EMERALD : colors.borderSubtle,
+                          backgroundColor: on ? FLOW_EMERALD_DARK + '22' : 'transparent',
+                        },
+                      ]}
+                    >
+                      <Text style={[ownerVehicleRowStyles.chipTitle, { color: colors.text }]}>
+                        {ownerVehicleTitle(v)}
+                      </Text>
+                      <Text style={[ownerVehicleRowStyles.chipSub, { color: colors.textMuted }]}>
+                        {ownerVehicleSubtitle(v)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+            {vehiclePickerError ? (
+              <Text style={ownerVehicleRowStyles.errorText}>{vehiclePickerError}</Text>
+            ) : null}
+            <View style={ownerVehicleRowStyles.modalActions}>
+              {localTrip.owner_vehicle_id ? (
+                <Pressable
+                  onPress={() => {
+                    setVehiclePickerSelectedId(null);
+                    void confirmVehicleSelection(null);
+                  }}
+                  disabled={vehiclePickerBusy}
+                  style={ownerVehicleRowStyles.clearBtn}
+                >
+                  <Text style={ownerVehicleRowStyles.clearBtnText}>Clear</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={() => setVehiclePickerOpen(false)}
+                disabled={vehiclePickerBusy}
+                style={ownerVehicleRowStyles.cancelBtn}
+              >
+                <Text style={[ownerVehicleRowStyles.cancelBtnText, { color: colors.textMuted }]}>
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void confirmVehicleSelection()}
+                disabled={vehiclePickerBusy || !vehiclePickerSelectedId}
+                style={[
+                  ownerVehicleRowStyles.confirmBtn,
+                  { opacity: vehiclePickerBusy || !vehiclePickerSelectedId ? 0.6 : 1 },
+                ]}
+              >
+                {vehiclePickerBusy ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={ownerVehicleRowStyles.confirmBtnText}>Confirm</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {step !== 'completed' ? (
         <View
@@ -1664,6 +1855,7 @@ export function DriverTripFlowCard({
         onCloseToMap={() => setLrPageVisible(false)}
         placeLabel={pickupLabel}
         earnings={earnings}
+        earningsLabel={earningsLabel}
         documents={lrDocuments}
         viewUrls={lrViewUrls}
         docsLoading={lrLoading}
@@ -1720,6 +1912,7 @@ export function DriverTripFlowCard({
           onCloseToMap={() => setPodPageVisible(false)}
           placeLabel={dropLabel}
           earnings={earnings}
+          earningsLabel={earningsLabel}
           documents={podDocuments}
           viewUrls={podViewUrls}
           docsLoading={podLoading}
@@ -2222,5 +2415,43 @@ const styles = StyleSheet.create({
   earningsPill: { marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, width: '100%', alignItems: 'center' },
   earningsLabel: { ...sheetStyles.sectionLabel, color: Theme.textMuted },
   earningsValue: { marginTop: 4, fontSize: 22, fontWeight: '900' },
+});
+
+/** Owner Vehicle Link (3B.4/3C follow-up) — explicit select/change/clear row + picker sheet. */
+const ownerVehicleRowStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  label: { flex: 1, fontSize: 13, fontWeight: '600' },
+  action: { fontSize: 12, fontWeight: '800' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalSheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, maxHeight: '80%' },
+  modalTitle: { fontSize: 15, fontWeight: '800', marginBottom: 10 },
+  emptyText: { fontSize: 13, marginVertical: 16 },
+  chipList: { gap: 8 },
+  chip: { borderWidth: 1.5, borderRadius: 10, padding: 10 },
+  chipTitle: { fontSize: 13, fontWeight: '700' },
+  chipSub: { fontSize: 12, marginTop: 2 },
+  errorText: { color: Theme.negative, fontSize: 12, marginTop: 10 },
+  modalActions: { flexDirection: 'row', gap: 8, marginTop: 16 },
+  clearBtn: { paddingVertical: 10, paddingHorizontal: 12 },
+  clearBtnText: { color: Theme.negative, fontSize: 13, fontWeight: '700' },
+  cancelBtn: { flex: 1, paddingVertical: 10, alignItems: 'center' },
+  cancelBtnText: { fontSize: 13, fontWeight: '700' },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: FLOW_EMERALD,
+  },
+  confirmBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
 });
 

@@ -26,6 +26,14 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | _(pending)_ | Fix: Team/Workspace surfaces were wrongly gated on `team_manage` (never emitted by org operating-model caps) — now available for any business org so owners can grant invite/audit/settings/KYC/notifications |
 | _(pending)_ | Fix: Driver Control screen treated an Aggregate-mode org that only ever assigned an open trip (via a `tracking_only` phone-assignment stub, no real fleet employment) as the driver's employer — fabricating an "Estimated earnings" figure and offering "Attribute to employer" with no salary/commission ever configured. Now excludes `tracking_only` rows from employer resolution and from the earnings-estimate gate, matching the pattern already used everywhere else `tracking_only` is checked (`DriverWalletScreen`, `drivers.service.ts`, `aggregateDrivers.ts`) |
 | _(pending)_ | Driver Stories: Pulse story preview (`DriverPulseStoryViewer` + `StoryBroadcastPreview`); `/story-detail` nav experience `public_content` so drivers can open market stories; bid-to-shipper footer banner |
+| _(pending)_ | Driver + Fleet Owner Phase 1 foundation: explicit `driver_fleet_owner_profiles` + `enable_driver_fleet_owner` RPC (no personal org); Become Fleet Owner entry in Driver App. Canonical: [`DRIVER_FLEET_OWNER_PHASE1.md`](./DRIVER_FLEET_OWNER_PHASE1.md). Does **not** grant Business create-trip/load/indent. |
+| _(pending)_ | Driver + Fleet Owner Phase 1b: separate `owner_vehicles` (`owner_user_id` RLS); My Fleet list/add/detail. Business `public.vehicles` unchanged. No trip/docs/P&L/create-trip. |
+| _(pending)_ | Driver + Fleet Owner Phase 2: `owner_vehicle_documents` + private `owner-vehicle-documents` bucket; upload/preview/replace/expiry on vehicle detail. No marketplace/P&L. |
+| _(pending)_ | Driver + Fleet Owner Phase 3A: `list_open_marketplace_loads_for_fleet_owner` + Available Loads UI (read-only). No bid/trip create. Explicit `owner_vehicle_id` deferred to 3C. |
+| _(pending)_ | Driver + Fleet Owner Phase 3B inspection baseline appended to PRD — Story/Reach reuse; no My Fleet bidding; extend `driver_direct_bids` preferred over new bid tables; capacity Story needs minimal posts authoring extension (no personal org). |
+| _(pending)_ | Driver + Fleet Owner Phase **3B.1 integration correction**: Business Give Load Idle capacity / Find vehicles consumes FO `VEHICLE_AVAILABILITY` via existing feed + OpportunityCard; FO Stories reuses same card language; null-org Stories/detail hardened. No bid / Boost. |
+| _(pending)_ | **NO-GO security:** lock `get_network_feed(uuid,integer,integer)` EXECUTE to authenticated only (`20270210182000`); Reach Option A deleted-source bid = campaign snapshot (`20270210183000`). Employed-driver role-blind OM RLS tracked only: [`SECURITY_TICKET_EMPLOYED_DRIVER_RLS.md`](./SECURITY_TICKET_EMPLOYED_DRIVER_RLS.md). **Do not start 3B.2 until re-audit green.** |
+| _(pending)_ | Plan lock (docs only): Trip Assignment + Counterparty Role + Trip-level Receivable + Driver/Owner Payable — support Fleet Owner→Driver **and** Driver cum Owner; Trip List/Detail payment UX on existing allocation. Canonical: [`DRIVER_TRIP_COMPENSATION_MODEL.md`](./DRIVER_TRIP_COMPENSATION_MODEL.md) Part 5; FO PRD pointer. **No implementation authorized.** |
 
 ---
 
@@ -52,6 +60,34 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `app/(modals)/member-permissions.tsx` | Owner-only per-member domain permission detail screen (`?memberId=`) |
 | `features/organization/components/MemberPermissionsPanel/MemberPermissionsPanel.tsx` | KYC-style WorkspaceDetailLayout page: role presets + domain Switch rows + save via `updateMemberPermissions`; zero-domain handling; custom preset save/apply UI |
 | `features/organization/components/MemberPermissionsPanel/DomainPermissionToggleRow.tsx` | Expandable domain row (Switch + grants chips), mirrors KycRequiredDocumentRow |
+| `docs/DRIVER_FLEET_OWNER_PHASE1.md` | Driver App Fleet Owner Phase 1 PRD — identity, RBAC boundary, no personal org |
+| `supabase/migrations/20270210103000_enable_driver_fleet_owner_capability.sql` | `driver_fleet_owner_profiles` + `enable_driver_fleet_owner` / `is_driver_fleet_owner` |
+| `features/driver/services/driverFleetOwner.service.ts` | Client API for owner capability |
+| `lib/queries/useDriverFleetOwnerQuery.ts` | React Query hook for Fleet Owner status |
+| `features/driver/components/BecomeFleetOwnerScreen.tsx` | Lightweight Become Fleet Owner onboarding |
+| `app/(driver)/become-fleet-owner.tsx` | Route entry |
+| `supabase/migrations/20270210114000_create_owner_vehicles.sql` | Personal `owner_vehicles` + owner-only fleet-owner RLS |
+| `features/driver/services/ownerVehicles.service.ts` | Owner vehicle CRUD (soft delete) |
+| `lib/queries/useOwnerVehiclesQuery.ts` | List/detail queries |
+| `features/driver/components/MyFleetScreen.tsx` | My Fleet list |
+| `features/driver/components/AddOwnerVehicleScreen.tsx` | Add vehicle (no docs) |
+| `features/driver/components/OwnerVehicleDetailScreen.tsx` | Vehicle detail + “Share as Story” deeplink (3B.1) |
+| `app/(driver)/my-fleet/*` | My Fleet routes |
+| `supabase/migrations/20270210123000_create_owner_vehicle_documents.sql` | Document rows + private owner-vehicle-documents storage |
+| `features/driver/services/ownerVehicleDocuments.service.ts` | Upload / signed URL / replace / delete |
+| `features/driver/utils/ownerVehicleDocuments.util.ts` | Types + expiry + summary |
+| `features/driver/components/OwnerVehicleDocumentsSection.tsx` | Document vault UI |
+| `supabase/migrations/20270210133000_list_open_marketplace_loads_for_fleet_owner.sql` | Sanitized open marketplace loads RPC for FO |
+| `features/driver/services/fleetOwnerLoads.service.ts` | FO load list helpers |
+| `lib/queries/useFleetOwnerOpenLoadsQuery.ts` | React Query for Available Loads |
+| `features/driver/components/AvailableLoadsScreen.tsx` | Load discovery list |
+| `features/driver/components/AvailableLoadDetailScreen.tsx` | Read-only load detail |
+| `app/(driver)/available-loads/*` | Routes |
+| `supabase/migrations/20270210143000_fleet_owner_capacity_story.sql` | Phase 3B.1: `VEHICLE_AVAILABILITY` on posts, nullable org, `owner_vehicle_id`, FO RLS + create/deactivate RPCs, organic `get_network_feed` branch |
+| `features/driver/services/fleetOwnerCapacityStory.service.ts` | Create / list / deactivate capacity Stories |
+| `lib/queries/useMyCapacityStoriesQuery.ts` | FO “My availability” query |
+| `features/driver/components/CapacityStoryComposerScreen.tsx` | Minimal capacity Story composer |
+| `app/(driver)/capacity-story.tsx` | Route entry |
 
 ---
 
@@ -62,7 +98,8 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe; `hasBusinessCapabilities`; `allowedConnectionRoles` (counterparty-aware client/supplier); `operatingModelTransition` (impact preview); removed hardcoded driver limits |
 | `features/organization/services/organization.service.ts` | `changeOperatingModel` RPC wrapper + `looksLikeModelChangeCooldownError` |
 | `features/organization/services/members.service.ts` | `transferOwnership` RPC wrapper + `looksLikeTransferTargetError`; `updateMemberRole` → `set_member_role`; new `updateMemberPermissions` for domain toggles + `looksLikeNotOwnerError`; new `updateBulkMemberPermissions` |
-| `lib/routes.ts` | `MODALS.ACCESS_CONTROL` + `MODALS.MEMBER_PERMISSIONS` |
+| `lib/routes.ts` | `MODALS.ACCESS_CONTROL` + `MODALS.MEMBER_PERMISSIONS`; driver FO routes incl. `driverCapacityStory` (3B.1) |
+| `features/reach/screens/DriverStoriesScreen.tsx` | FO “My availability” + Share capacity entry (3B.1); no bidding |
 | `app/(modals)/_layout.tsx` | Register `access-control` + `member-permissions` fullScreenModal screens |
 | `features/organization/components/workspace/WorkspaceTeamPanel.tsx` | Owner-only "Access" button → `ROUTES.MODALS.ACCESS_CONTROL` |
 | `features/network/components/desktop/NetworkDesktopTeamPanel.tsx` | Owner-only "Access" button (network hub Team tab) → `ROUTES.MODALS.ACCESS_CONTROL` |

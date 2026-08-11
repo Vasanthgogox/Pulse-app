@@ -1,0 +1,50 @@
+-- One-time, evidence-based relationship_status backfill for a single legacy
+-- driver row whose current relationship is now positively established
+-- through an accepted Direct Bid award — not inferred from absence of data.
+--
+-- Investigation (read-only, prior sessions): drivers.id
+-- 808d19a0-59c7-4f09-99d3-2036cdf2ac56 has relationship_status/
+-- relationship_origin = NULL because its row predates
+-- 20270210090000_driver_relationship_origin_and_status.sql, which explicitly
+-- left every pre-existing row NULL ("provenance cannot be proven
+-- retroactively... left honestly unknown rather than guessed"). That NULL
+-- meant "unknown at the time," not "inactive" — and it is no longer
+-- actually unknown for this one row: a concrete, FK-enforced, non-inferred
+-- evidence chain now exists:
+--
+--   driver_direct_bids.id = 938d4e4d-afa9-4360-870f-b958d3e655d6
+--     status = 'accepted'
+--   -> trips.source_bid_id references that bid (the only such trip in
+--      production at investigation time)
+--   -> trips.driver_id references this driver row
+--   -> driver_direct_bids.driver_user_id matches drivers.user_id
+--      independently, confirming identity, not just row linkage
+--
+-- Verified before writing this migration: this is the only driver row in
+-- production satisfying this criterion; it is not part of the unrelated
+-- 33-row tracking_only incident cohort (Sadam and others — no
+-- source_bid_id linkage, not touched by or related to this migration); no
+-- duplicate/superseded row exists for this user_id; the row is not
+-- disconnected (left_at IS NULL).
+--
+-- relationship_origin is intentionally left untouched (stays NULL): the
+-- evidence chain proves the driver's CURRENT relationship status, not HOW
+-- the row originally came to exist — that provenance genuinely cannot be
+-- reconstructed, and 20270210090000's own design explicitly forbids
+-- guessing it. tracking_only is also left untouched — it is an orthogonal,
+-- unrelated concept (confirmed via
+-- driverRelationshipWriters.service.test.ts) and this migration has no
+-- evidence bearing on what it should be.
+--
+-- Deliberately narrow: exactly one row, one column, a defensive
+-- relationship_status IS NULL guard so this can never re-fire or affect a
+-- second row even if reapplied. Not a general backfill; not
+-- recurrence-prevention (whether accept_driver_direct_bid,
+-- assign_aggregate_trip_driver, or createDriver()'s reconnect path should
+-- stamp relationship_status on an existing-row-reuse branch remains a
+-- separate, unauthorized future scope — this migration does not touch any
+-- of those writers).
+UPDATE public.drivers
+SET relationship_status = 'independent'
+WHERE id = '808d19a0-59c7-4f09-99d3-2036cdf2ac56'
+  AND relationship_status IS NULL;

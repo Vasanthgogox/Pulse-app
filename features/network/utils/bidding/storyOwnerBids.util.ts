@@ -1,7 +1,10 @@
 import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
-import type { BidRow } from "@/features/network/services/bids.service";
+import type {
+  BidRow,
+  DriverDirectBidRow,
+} from "@/features/network/services/bids.service";
 
-export type StoryOwnerBidChannel = "pulse_story" | "load_center";
+export type StoryOwnerBidChannel = "pulse_story" | "load_center" | "fleet_owner";
 
 export type StoryOwnerBidRow = {
   key: string;
@@ -16,6 +19,8 @@ export type StoryOwnerBidRow = {
   createdAt: string;
   bidId: string | null;
   quoteId: string | null;
+  /** Set for driver_direct_bids rows. */
+  directBidId?: string | null;
 };
 
 function shortIdentifier(prefix: string, id: string): string {
@@ -27,13 +32,22 @@ function normalizeStatus(status: string | null | undefined): string {
   return (status ?? "").trim().toLowerCase();
 }
 
+function fleetOwnerBidderLabel(bid: DriverDirectBidRow): string {
+  const name = bid.driver_display_name.trim() || "Driver";
+  if (bid.is_fleet_owner) {
+    return `Fleet owner with driver (${name})`;
+  }
+  return `Driver (${name})`;
+}
+
 /**
- * Merge Pulse story bids (`bids` on post) with Load center / network quotes
- * (`direct_quotes` on indent). Story bids upsert both — dedupe by bidder org.
+ * Merge Pulse story bids (`bids` on post), Load center quotes (`direct_quotes`
+ * on indent), and Fleet Owner / independent driver_direct_bids on the post.
  */
 export function buildStoryOwnerBidRows(
   storyBids: BidRow[],
   directQuotes: DirectQuoteRow[],
+  driverDirectBids: DriverDirectBidRow[] = [],
 ): StoryOwnerBidRow[] {
   const quoteNameByOrg = new Map(
     directQuotes
@@ -62,6 +76,7 @@ export function buildStoryOwnerBidRows(
       createdAt: bid.created_at,
       bidId: bid.id,
       quoteId: null,
+      directBidId: null,
     });
   }
 
@@ -80,6 +95,25 @@ export function buildStoryOwnerBidRows(
       createdAt: quote.created_at,
       bidId: null,
       quoteId: quote.id,
+      directBidId: null,
+    });
+  }
+
+  for (const bid of driverDirectBids) {
+    rows.push({
+      key: `direct-${bid.id}`,
+      channel: "fleet_owner",
+      channelLabel: bid.is_fleet_owner ? "Fleet owner" : "Driver",
+      identifier: shortIdentifier(bid.is_fleet_owner ? "FO" : "DRV", bid.id),
+      bidderOrgId: bid.driver_user_id,
+      bidderName: fleetOwnerBidderLabel(bid),
+      amount: Number(bid.amount ?? 0),
+      status: normalizeStatus(bid.status),
+      note: bid.note,
+      createdAt: bid.created_at,
+      bidId: null,
+      quoteId: null,
+      directBidId: bid.id,
     });
   }
 

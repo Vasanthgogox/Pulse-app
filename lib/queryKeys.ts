@@ -192,6 +192,20 @@ export const queryKeys = {
      * linked-driver set changes. */
     dailySummary: (driverIdsKey: string) =>
       ["q", "driver-app", "daily-summary", driverIdsKey] as const,
+    /** Explicit Fleet Owner capability (not employment). */
+    fleetOwner: (userId: string) =>
+      ["q", "driver-app", userId, "fleet-owner"] as const,
+    /** Personal owner vehicles (Phase 1b). */
+    ownerVehicles: (userId: string) =>
+      ["q", "driver-app", userId, "owner-vehicles"] as const,
+    ownerVehicle: (userId: string, vehicleId: string) =>
+      ["q", "driver-app", userId, "owner-vehicles", vehicleId] as const,
+    /** Phase 3A: open marketplace loads for Fleet Owner (read-only). */
+    fleetOwnerOpenLoads: (userId: string) =>
+      ["q", "driver-app", userId, "fleet-owner-open-loads"] as const,
+    /** Phase 3B.1: FO capacity Stories authored by this driver. */
+    capacityStories: (userId: string) =>
+      ["q", "driver-app", userId, "capacity-stories"] as const,
   },
 
   salaryRequests: (orgId: string, status?: string) =>
@@ -225,6 +239,7 @@ export const queryKeys = {
 
   bids: {
     forPost: (postId: string) => ["q", "bids", "post", postId] as const,
+    directForPost: (postId: string) => ["q", "bids", "direct-post", postId] as const,
     myBid: (postId: string, orgId: string) =>
       ["q", "bids", "mine", postId, orgId] as const,
   },

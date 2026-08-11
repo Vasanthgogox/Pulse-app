@@ -22,7 +22,7 @@ import * as tripDocumentsService from "@/features/trips/services/tripDocuments.s
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as salaryRequestsService from "@/features/drivers/services/salaryRequests.service";
 import * as tripsService from "@/features/trips/services/trips.service";
-import { tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
+import { resolveDriverTripPayoutTerms } from "@/features/drivers/utils/driverUtils.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -408,11 +408,26 @@ export function DriverTripHistoryDetailScreen({
     if (!historyCurrentEmployer || !trip) return;
     setAttributeLoading(true);
     try {
-      const earnings = Math.round(tripEarningsForDriver(trip));
-      if (earnings <= 0) {
-        Alert.alert("No earnings", "Could not calculate trip earnings.");
+      // Independent write-path gate: the employer-relationship check above
+      // only proves an employer exists somewhere, not that it applies to
+      // THIS trip. Re-resolve this trip's actual agreed terms — an employee
+      // relationship does not imply the legacy 10% guess is payable.
+      const driverRow = linkedDriversFull.find((d) => d.id === historyCurrentEmployer.driverRowId);
+      const invite = invites.find(
+        (i) =>
+          String(i.status ?? "").toLowerCase() === "accepted" &&
+          String(i.from_organization_id ?? "") === historyCurrentEmployer.orgId,
+      );
+      const { hasAgreedPayoutTerms, commissionDetail } = resolveDriverTripPayoutTerms(trip, {
+        commissionPercent: invite?.commission_percent ?? driverRow?.commission_percent ?? null,
+        commissionPerKm: invite?.commission_per_km ?? driverRow?.commission_per_km ?? null,
+        payableAmount: invite?.payable_amount ?? driverRow?.payable_amount ?? null,
+      });
+      if (!hasAgreedPayoutTerms || commissionDetail.amount <= 0) {
+        Alert.alert("No agreed payout terms", "This trip has no agreed payout terms and can't be attributed.");
         return;
       }
+      const earnings = Math.round(commissionDetail.amount);
       const tripDate = trip.pickup_date ?? trip.started_at ?? trip.created_at ?? "";
       const tripDateStr = tripDate
         ? new Date(tripDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
@@ -437,7 +452,7 @@ export function DriverTripHistoryDetailScreen({
     } finally {
       setAttributeLoading(false);
     }
-  }, [historyCurrentEmployer, trip, driverTripNumberById, linkedDriversFull, profile?.uid]);
+  }, [historyCurrentEmployer, trip, driverTripNumberById, linkedDriversFull, invites, profile?.uid]);
 
   const onBack = () => {
     if (router.canGoBack()) router.back();

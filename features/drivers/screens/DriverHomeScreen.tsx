@@ -62,6 +62,9 @@ import {
 } from "@/features/driver/utils/driverTripSequence.util";
 import {
     buildOfferText,
+    canShowDriverTripEstEarnings,
+    DRIVER_PAY_NA_AMOUNT,
+    DRIVER_PAY_NA_LABEL,
     isActiveMission,
     isAggregateTrip,
     isAssignedNotStarted,
@@ -271,10 +274,10 @@ export default function DriverRadarScreen() {
   const driverTabBarClearance =
     Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
   /**
-   * Mission sheet sits clear of the floating glass dock (same clearance as
-   * scroll screens) so CTAs aren’t covered by the bottom nav.
+   * Job / mission sheet sits on the glass dock top (no air / map strip).
+   * Scroll screens still use `driverTabBarClearance` (includes footerPadTop).
    */
-  const driverSheetBottomInset = driverTabBarClearance;
+  const driverSheetBottomInset = Layout.tabBarDockHeight + footerPadBottom;
   // Driver home previously used a hardcoded dark map for contrast.
   // Now it respects the "Map Style" user setting (light, dark, or auto-sync with theme).
   const mapIsDark = mapTheme === "auto" ? isDark : mapTheme === "dark";
@@ -1568,7 +1571,9 @@ export default function DriverRadarScreen() {
   );
 
   // Use driver's accepted offer (salary + commission) for this org so EST. EARNINGS
-  // matches Finance Hub labor (commission + pro-rata salary).
+  // matches Finance Hub labor — but NEVER invent ₹ for supplier-mediated
+  // (aggregate) assignments: shipper→supplier rate ≠ driver pay until
+  // Driver-cum-Owner earnings are defined.
   const acceptedInviteForOrg =
     effectiveFirstIncoming &&
     (invites.find(
@@ -1591,14 +1596,20 @@ export default function DriverRadarScreen() {
       null,
   };
   const newAssignmentCommission =
-    effectiveFirstIncoming != null
+    effectiveFirstIncoming != null &&
+    canShowDriverTripEstEarnings(effectiveFirstIncoming, offerForCommission, {
+      trackingOnly: driver?.tracking_only,
+    })
       ? computeDriverTripEstEarningsInr(
           effectiveFirstIncoming,
           offerForCommission,
         )
       : 0;
   const activeMissionCommission =
-    activeMission != null
+    activeMission != null &&
+    canShowDriverTripEstEarnings(activeMission, offerForCommission, {
+      trackingOnly: driver?.tracking_only,
+    })
       ? computeDriverTripEstEarningsInr(activeMission, offerForCommission)
       : 0;
   const incomingNotificationsWithMeta = useMemo(
@@ -1644,7 +1655,7 @@ export default function DriverRadarScreen() {
               )
             : undefined) ??
           null;
-        const commissionForTrip = computeDriverTripEstEarningsInr(trip, {
+        const payoutOffer = {
           payableAmount:
             acceptedInviteForTrip?.payable_amount ?? driver?.payable_amount ?? null,
           commissionPercent:
@@ -1655,7 +1666,12 @@ export default function DriverRadarScreen() {
             acceptedInviteForTrip?.commission_per_km ??
             driver?.commission_per_km ??
             null,
-        });
+        };
+        const commissionForTrip = canShowDriverTripEstEarnings(trip, payoutOffer, {
+          trackingOnly: driver?.tracking_only,
+        })
+          ? computeDriverTripEstEarningsInr(trip, payoutOffer)
+          : 0;
         return {
           trip,
           assignedByName,
@@ -1675,6 +1691,7 @@ export default function DriverRadarScreen() {
       driver?.payable_amount,
       driver?.commission_percent,
       driver?.commission_per_km,
+      driver?.tracking_only,
       pendingOtpTripsRequiringOtp,
       assignerNamesByUserId,
       assignerOrgNameByUserId,
@@ -5215,7 +5232,12 @@ export default function DriverRadarScreen() {
             earnings={
               (selectedIncomingMeta?.commissionForTrip ?? 0) > 0
                 ? formatINR(selectedIncomingMeta?.commissionForTrip ?? 0)
-                : "SALARY"
+                : DRIVER_PAY_NA_AMOUNT
+            }
+            earningsLabel={
+              (selectedIncomingMeta?.commissionForTrip ?? 0) > 0
+                ? "EST. EARNINGS"
+                : DRIVER_PAY_NA_LABEL
             }
             onAccept={() => handleAcceptMission(effectiveFirstIncoming)}
             onDecline={() => handleDeclineAssignment(effectiveFirstIncoming.id)}
@@ -5609,6 +5631,11 @@ export default function DriverRadarScreen() {
                   ? () => null
                   : undefined
               }
+              handleHeight={
+                shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                  ? 0
+                  : undefined
+              }
               backgroundStyle={{
                 backgroundColor:
                   canMinimizeMissionSheet && missionSheetCollapsed
@@ -5646,8 +5673,9 @@ export default function DriverRadarScreen() {
                   contentContainerStyle={[
                     styles.olaSheetContent,
                     {
-                      // Keep CTA clear of the floating dock when scrolling a tall card.
-                      paddingBottom: missionSheetCollapsed ? 0 : 16,
+                      // Sheet is transparent and already cleared via bottomInset —
+                      // any padding here shows as a map gap above the dock.
+                      paddingBottom: 0,
                       paddingHorizontal: 0,
                       // Peek is shorter than the snap — grow so surface fills
                       // to the dock (transparent leftover showed the map).

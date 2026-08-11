@@ -1,6 +1,5 @@
 import { buildDriverTripSettlementView } from '@/features/driver/tripSettlement/driverTripSettlement.util';
 import { buildDriverTripNumberMap } from '@/features/driver/utils/driverTripSequence.util';
-import { tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
 import {
   buildCompensationSalaryLines,
   buildDriverInviteSalaryLines,
@@ -279,7 +278,10 @@ export function useDriverPendingEarnings() {
         from: view.from,
         to: view.to,
         provider,
-        amount: view.amount || tripEarningsForDriver(trip, payoutTerms),
+        // Trust view.amount as-is — buildDriverTripSettlementView already
+        // correctly zeroes this for aggregate/salary trips with no agreed
+        // payout terms. Do not fall back to the raw (ungated) calculator.
+        amount: view.amount,
         expectedAmount: view.expectedAmount,
         statusLabel: view.statusLabel || 'To collect',
         isFleetOwnerTrip,

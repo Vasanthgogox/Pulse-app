@@ -43,6 +43,28 @@ export function formatStoryDate(d: string): string {
   return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+/** True for Fleet Owner organic capacity posts (null org, VEHICLE_AVAILABILITY). */
+export function isFleetOwnerCapacityPost(post: {
+  type?: string | null;
+  organization_id?: string | null;
+}): boolean {
+  return (
+    (post.type ?? '').toUpperCase() === 'VEHICLE_AVAILABILITY' &&
+    (post.organization_id == null || String(post.organization_id).trim() === '')
+  );
+}
+
+/** Capacity chip: "16" → "16T"; leave non-numeric material unchanged. */
+export function formatCapacityMaterial(material: string | null | undefined): string | null {
+  const raw = (material ?? '').trim();
+  if (!raw) return null;
+  if (/^\d+(\.\d+)?$/.test(raw)) return `${raw}T`;
+  if (/^\d+(\.\d+)?\s*t(onnes?)?$/i.test(raw)) {
+    return `${raw.match(/^\d+(\.\d+)?/)?.[0] ?? raw}T`;
+  }
+  return raw;
+}
+
 export function storyHeadline(fields: StoryContentFields, isLoad: boolean, isVehicle: boolean): string {
   const t = fields.content?.trim();
   if (t) return t;

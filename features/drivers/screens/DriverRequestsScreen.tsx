@@ -14,6 +14,7 @@ import Theme from '@/constants/Theme';
 import {
   buildOfferText,
   isCompletedStatus,
+  resolveDriverTripPayoutTerms,
   tripEarningsForDriver,
 } from '@/features/drivers/utils/driverUtils.util';
 import { phonePeMetaDate } from '@/features/driver/utils/driverGpayTransactions.util';
@@ -201,8 +202,19 @@ export default function DriverRequestsScreen() {
       const completed = driverTrips.filter((t) =>
         isCompletedStatus(String(t.status ?? '')),
       );
+      // Same authoritative resolver used elsewhere — an accepted invite for
+      // this org doesn't mean every trip has agreed per-trip terms; only
+      // trips with real agreed terms contribute to the total.
+      const offer = {
+        commissionPercent: inv.commission_percent ?? driver.commission_percent ?? null,
+        commissionPerKm: inv.commission_per_km ?? driver.commission_per_km ?? null,
+        payableAmount: inv.payable_amount ?? driver.payable_amount ?? null,
+      };
       const totalEarned = Math.round(
-        completed.reduce((sum, t) => sum + tripEarningsForDriver(t), 0)
+        completed.reduce((sum, t) => {
+          const { hasAgreedPayoutTerms } = resolveDriverTripPayoutTerms(t, offer);
+          return sum + (hasAgreedPayoutTerms ? tripEarningsForDriver(t, offer) : 0);
+        }, 0)
       );
       const totalReceived = Math.round(
         driverLedger.reduce((s, e) => s + (Number(e.amount) ?? 0), 0)

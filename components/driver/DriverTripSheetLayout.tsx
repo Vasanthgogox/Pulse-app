@@ -26,7 +26,7 @@ export const TRIP_SHEET_HERO_PAD = {
 export const TRIP_SHEET_BODY_PAD = {
   horizontal: 18,
   top: 12,
-  bottom: 12,
+  bottom: 10,
   gap: 8,
 } as const;
 
@@ -151,6 +151,7 @@ export function RouteInlineRow({
   primaryTextColor = Theme.textPrimaryDark,
   mutedTextColor = Theme.textMuted,
   useFullPlace = false,
+  dense = false,
 }: {
   pickup: string;
   dropoff: string;
@@ -158,12 +159,18 @@ export function RouteInlineRow({
   mutedTextColor?: string;
   /** When true, show full place string instead of city-only. */
   useFullPlace?: boolean;
+  dense?: boolean;
 }) {
   const pickupLabel = useFullPlace ? pickup.trim() || "—" : compactRoutePlace(pickup);
   const dropoffLabel = useFullPlace ? dropoff.trim() || "—" : compactRoutePlace(dropoff);
 
   return (
-    <View style={sheetStyles.routeInlineRow}>
+    <View
+      style={[
+        sheetStyles.routeInlineRow,
+        dense && sheetStyles.routeInlineRowDense,
+      ]}
+    >
       <View style={sheetStyles.routeSide}>
         <View style={sheetStyles.routeDotOrigin} />
         <Text
@@ -198,6 +205,7 @@ export function TripDetailsStrip({
   locationLabel,
   primaryTextColor = Theme.textPrimaryDark,
   mutedTextColor = Theme.textMuted,
+  dense = false,
 }: {
   statLeft: string;
   statRight: string;
@@ -209,6 +217,8 @@ export function TripDetailsStrip({
   locationLabel?: string | null;
   primaryTextColor?: string;
   mutedTextColor?: string;
+  /** Tighter job-assignment layout (less air between km/eta and route). */
+  dense?: boolean;
 }) {
   const trimmedLocation = locationLabel?.trim();
   const showLocationStatsRow = !!trimmedLocation;
@@ -241,7 +251,12 @@ export function TripDetailsStrip({
     <View style={sheetStyles.tripDetailsCard}>
       {!showLocationStatsRow ? (
         <>
-          <View style={sheetStyles.statsInline}>
+          <View
+            style={[
+              sheetStyles.statsInline,
+              dense && sheetStyles.statsInlineDense,
+            ]}
+          >
             <View style={sheetStyles.statChip}>
               <Navigation size={10} color={FLOW_EMERALD} strokeWidth={2.2} />
               <Text style={[sheetStyles.statValue, { color: primaryTextColor }]}>
@@ -264,6 +279,7 @@ export function TripDetailsStrip({
         dropoff={dropoff}
         primaryTextColor={primaryTextColor}
         mutedTextColor={mutedTextColor}
+        dense={dense}
       />
       {showLocationStatsRow ? (
         <>
@@ -364,6 +380,11 @@ export const sheetStyles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
+  statsInlineDense: {
+    minHeight: 30,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
   statChip: {
     flex: 1,
     flexDirection: "row",
@@ -447,6 +468,12 @@ export const sheetStyles = StyleSheet.create({
     minHeight: 38,
     paddingVertical: 9,
     paddingHorizontal: 12,
+  },
+  routeInlineRowDense: {
+    minHeight: 32,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    gap: 6,
   },
   routeSide: {
     flex: 1,

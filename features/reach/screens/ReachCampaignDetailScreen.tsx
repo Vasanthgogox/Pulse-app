@@ -30,6 +30,7 @@ import {
   cancelReasonLabel,
   formatReachTripId,
 } from "@/features/reach/utils/campaignFormat";
+import { findOrgDraftOrActiveCampaign } from "@/features/reach/utils/orgActiveBoost";
 import {
   classifyStoredPostType,
   displayStoryContent,
@@ -39,7 +40,7 @@ import { formatLedgerDateTime } from "@/lib/format";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import * as Sharing from "expo-sharing";
-import { buildPulseStoryPublicUrl } from "@/lib/routes";
+import { buildPulseStoryPublicUrl, ROUTES } from "@/lib/routes";
 import {
   ArrowLeft,
   BarChart3,
@@ -57,7 +58,7 @@ import {
   Wallet,
   Zap,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -107,6 +108,10 @@ export default function ReachCampaignDetailScreen() {
   const [upgradeRequested, setUpgradeRequested] = useState(false);
 
   const campaign = campaignsQ.data?.find((c) => c.id === campaignId) ?? null;
+  const orgActiveBoost = useMemo(
+    () => findOrgDraftOrActiveCampaign(campaignsQ.data),
+    [campaignsQ.data],
+  );
   const hasDriverChannel = !!campaign?.distribution_channels?.includes("driver");
   const referralsQ = useReachDriverReferralsQuery(hasDriverChannel ? campaign?.id ?? null : null);
   const referrals = referralsQ.data ?? [];
@@ -694,12 +699,24 @@ export default function ReachCampaignDetailScreen() {
           {isCompleted && hasSource ? (
             <Pressable
               style={styles.actionRow}
-              onPress={() => setBoostAgainPostId(campaign.post_id)}
+              onPress={() => {
+                if (orgActiveBoost) {
+                  router.push(ROUTES.REACH.campaignDetail(orgActiveBoost.id) as never);
+                  return;
+                }
+                if (!campaign.post_id) {
+                  router.push(ROUTES.REACH.HISTORY as never);
+                  return;
+                }
+                setBoostAgainPostId(campaign.post_id);
+              }}
             >
               <View style={[styles.actionIcon, { backgroundColor: Theme.positiveMuted }]}>
                 <Rocket size={14} color={Theme.success} />
               </View>
-              <Text style={styles.actionText}>Boost Again</Text>
+              <Text style={styles.actionText}>
+                {orgActiveBoost ? "Boost Active" : "Boost Again"}
+              </Text>
             </Pressable>
           ) : null}
           {hasSource ? (
@@ -751,7 +768,7 @@ export default function ReachCampaignDetailScreen() {
         </View>
       </ScrollView>
 
-      {orgId && boostAgainPostId ? (
+      {orgId && boostAgainPostId && !orgActiveBoost ? (
         <BoostSheet
           visible={!!boostAgainPostId}
           onClose={() => setBoostAgainPostId(null)}

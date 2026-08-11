@@ -1787,21 +1787,37 @@ export function TripsHubTableView({
               entityType: "supplier",
             });
             const vehicleLine = (t.vehicle_display_number ?? "").trim();
-            const payableKindLabel = !hasSupplierLink
-              ? tr("tripsHubColVehicle")
-              : tr("tripsHubSupplierShort");
-            const payableNameDisplay = !hasSupplierLink
-              ? vehicleLine || tr("tripsHubAwaitingData")
-              : payablePartyName === "—"
+            /**
+             * Asset-execution trip with no supplier: the payable party is
+             * either a Driver-cum-Owner (driver_id present — the direct-bid
+             * award path, no vehicle assigned) or an owned-vehicle cost row
+             * (no driver_id). Mirrors TripDetailScreen's provisionCostPartyName,
+             * which already falls back to the driver's name for this same case.
+             */
+            const hasDriverPayable =
+              !hasSupplierLink && !!(t.driver_id && String(t.driver_id).trim());
+            const driverPayName = (t.driver_display_name ?? "").trim();
+            const payableKindLabel = hasSupplierLink
+              ? tr("tripsHubSupplierShort")
+              : hasDriverPayable
+                ? tr("tripsHubColDriver")
+                : tr("tripsHubColVehicle");
+            const payableNameDisplay = hasSupplierLink
+              ? payablePartyName === "—"
                 ? "—"
-                : payablePartyName.toUpperCase();
-            const payableStatusLine = !hasSupplierLink
-              ? payableTarget > 0
-                ? `${tr("tripsHubColCost").toUpperCase()} ${formatINR(payableTarget)}`
-                : "NO VEHICLE EXPENSE"
-              : pendingPayable > 0
+                : payablePartyName.toUpperCase()
+              : hasDriverPayable
+                ? (driverPayName || tr("tripsHubAwaitingData")).toUpperCase()
+                : vehicleLine || tr("tripsHubAwaitingData");
+            const payableStatusLine = hasSupplierLink
+              ? pendingPayable > 0
                 ? `${tr("tripsHubColDue")} ${formatINR(pendingPayable)}`
-                : tr("tripsHubSettlementSettled").toUpperCase();
+                : tr("tripsHubSettlementSettled").toUpperCase()
+              : payableTarget > 0
+                ? `${tr("tripsHubColCost").toUpperCase()} ${formatINR(payableTarget)}`
+                : hasDriverPayable
+                  ? "NO DRIVER PAYABLE"
+                  : "NO VEHICLE EXPENSE";
 
             return (
               <View key={t.id} style={styles.auditRowGroup}>

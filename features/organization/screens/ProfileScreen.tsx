@@ -1,4 +1,3 @@
-import { LEVELS_CONFIG } from "@/constants/DriverLevels";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -11,6 +10,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { EditProfileModal } from "@/features/auth/components/EditProfileModal";
+import {
+  computeExperienceProgress,
+  countFiveStarRatings,
+  getMilestoneCount,
+  isMilestoneCompleted,
+  isMilestoneInProgress,
+  type ExperienceProgress,
+} from "@/features/experience/experienceProgress";
 import {
   averageScore,
   getRatingsForClients,
@@ -62,15 +69,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const SLATE_900 = "#0f172a";
 const AMBER_400 = "#fbbf24";
 const AMBER_500 = "#f59e0b";
-
-/** Commercial ops tiers — same trip thresholds as driver road map (parity). */
-const BUSINESS_ROADMAP = [
-  { tier: "Rookie", minTrips: 0, dot: Theme.textMuted },
-  { tier: "Pro", minTrips: 200, dot: "#3b82f6" },
-  { tier: "Veteran", minTrips: 1000, dot: AMBER_500 },
-  { tier: "Elite", minTrips: 2500, dot: "#9333ea" },
-  { tier: "Legend", minTrips: 5000, dot: "#0d9488" },
-] as const;
 
 function isTripDone(status: string) {
   const s = (status || "").toLowerCase();
@@ -206,29 +204,17 @@ function FleetStars({ value }: { value: number }) {
 }
 
 type RoadmapPanelProps = {
-  completedTrips: number;
+  experience: ExperienceProgress;
   onBack: () => void;
 };
 
-function BusinessRoadmapPanel({ completedTrips, onBack }: RoadmapPanelProps) {
-  let activeRoadIdx = 0;
-  for (let i = BUSINESS_ROADMAP.length - 1; i >= 0; i--) {
-    if (completedTrips >= BUSINESS_ROADMAP[i].minTrips) {
-      activeRoadIdx = i;
-      break;
-    }
-  }
-  const nextRoad = BUSINESS_ROADMAP[activeRoadIdx + 1];
-  const cur = BUSINESS_ROADMAP[activeRoadIdx];
-  const tierProgressPct = nextRoad
-    ? Math.min(
-        100,
-        Math.round(
-          ((completedTrips - cur.minTrips) / Math.max(1, nextRoad.minTrips - cur.minTrips)) *
-            100,
-        ),
-      )
-    : 100;
+function BusinessRoadmapPanel({ experience, onBack }: RoadmapPanelProps) {
+  const {
+    currentLevelConfig,
+    nextLevelConfig,
+    experiencePct,
+    metrics,
+  } = experience;
 
   return (
     <View style={styles.roadmapWrap}>
@@ -240,7 +226,7 @@ function BusinessRoadmapPanel({ completedTrips, onBack }: RoadmapPanelProps) {
         >
           <ChevronLeft size={22} color={Theme.textPrimary} />
         </Pressable>
-        <Text style={styles.roadmapTitle}>Operations roadmap</Text>
+        <Text style={styles.roadmapTitle}>Experience roadmap</Text>
         <View style={{ width: 40 }} />
       </View>
       <LinearGradient colors={["#0f172a", "#020617"]} style={styles.roadmapHero}>
@@ -252,34 +238,38 @@ function BusinessRoadmapPanel({ completedTrips, onBack }: RoadmapPanelProps) {
             <Crown size={26} color="#fff" />
           </LinearGradient>
           <View>
-            <Text style={styles.roadmapEyebrow}>CURRENT TIER</Text>
-            <Text style={styles.roadmapTierName}>{cur.tier}</Text>
-          </View>
-        </View>
-        {nextRoad ? (
-          <View style={styles.roadmapProgBlock}>
-            <View style={styles.roadmapProgLabels}>
-              <Text style={styles.roadmapProgLeft}>Progress to {nextRoad.tier}</Text>
-              <Text style={styles.roadmapProgPct}>{tierProgressPct}%</Text>
-            </View>
-            <View style={styles.roadmapTrack}>
-              <View
-                style={[styles.roadmapFill, { width: `${tierProgressPct}%` }]}
-              />
-            </View>
-            <Text style={styles.roadmapSmall}>
-              {completedTrips} completed trips · next milestone {nextRoad.minTrips}
+            <Text style={styles.roadmapEyebrow}>CURRENT MILESTONE</Text>
+            <Text style={styles.roadmapTierName}>
+              {currentLevelConfig.tier} · {currentLevelConfig.name}
             </Text>
           </View>
-        ) : (
-          <Text style={styles.roadmapSmall}>You have reached the top tier. Keep the grid moving.</Text>
-        )}
+        </View>
+        <View style={styles.roadmapProgBlock}>
+          <View style={styles.roadmapProgLabels}>
+            <Text style={styles.roadmapProgLeft}>
+              {nextLevelConfig
+                ? `Progress to ${nextLevelConfig.name}`
+                : "Final milestone"}
+            </Text>
+            <Text style={styles.roadmapProgPct}>{experiencePct}%</Text>
+          </View>
+          <View style={styles.roadmapTrack}>
+            <View
+              style={[styles.roadmapFill, { width: `${experiencePct}%` }]}
+            />
+          </View>
+          <Text style={styles.roadmapSmall}>
+            {currentLevelConfig.goalText} · {metrics.completedTrips} trips ·{" "}
+            {metrics.fiveStarCount}× 5★
+          </Text>
+        </View>
         <View style={styles.roadmapSteps}>
-          {BUSINESS_ROADMAP.map((step, i) => {
-            const past = i < activeRoadIdx;
-            const active = i === activeRoadIdx;
+          {experience.levels.map((step) => {
+            const past = isMilestoneCompleted(step.level, experience);
+            const active = isMilestoneInProgress(step.level, experience);
+            const count = getMilestoneCount(step, experience.metrics);
             return (
-              <View key={step.tier} style={styles.roadmapStepRow}>
+              <View key={step.level} style={styles.roadmapStepRow}>
                 <View
                   style={[
                     styles.roadmapDot,
@@ -289,8 +279,13 @@ function BusinessRoadmapPanel({ completedTrips, onBack }: RoadmapPanelProps) {
                   ]}
                 />
                 <View style={styles.roadmapStepText}>
-                  <Text style={styles.roadmapStepTitle}>{step.tier}</Text>
-                  <Text style={styles.roadmapStepSub}>{step.minTrips}+ trips</Text>
+                  <Text style={styles.roadmapStepTitle}>
+                    L{step.level} {step.name}
+                  </Text>
+                  <Text style={styles.roadmapStepSub}>
+                    {step.goalText}
+                    {active ? ` · ${count.done}/${count.target}` : ""}
+                  </Text>
                 </View>
               </View>
             );
@@ -343,13 +338,14 @@ export default function ProfileScreen() {
     queryKey: ["q", "profile", "receivedCustomerRatings", orgId ?? ""],
     queryFn: async () => {
       if (!orgId) {
-        return { avg: null as number | null, count: 0 };
+        return { avg: null as number | null, count: 0, fiveStarCount: 0 };
       }
       const { error, ratings } = await getRatingsReceivedAsLinkedOrganization(orgId);
       if (error) throw error;
       return {
         avg: averageScore(ratings),
         count: ratings.length,
+        fiveStarCount: countFiveStarRatings(ratings),
       };
     },
     enabled: !!orgId,
@@ -362,21 +358,28 @@ export default function ProfileScreen() {
     [trips],
   );
 
-  const currentLevel = useMemo(
-    () => Math.min(1 + Math.floor(completedTrips / 2), 8),
-    [completedTrips],
+  const experience = useMemo(
+    () =>
+      computeExperienceProgress({
+        hasSignedUp: Boolean(user?.id || profile?.uid),
+        completedTrips,
+        isVerified: Boolean(orgId),
+        fiveStarCount: receivedCustomerRatingData?.fiveStarCount ?? 0,
+      }),
+    [
+      user?.id,
+      profile?.uid,
+      completedTrips,
+      orgId,
+      receivedCustomerRatingData?.fiveStarCount,
+    ],
   );
-  const currentLevelConfig =
-    LEVELS_CONFIG.find((l) => l.level === currentLevel) ?? LEVELS_CONFIG[0];
-  const nextLevelConfig = LEVELS_CONFIG.find((l) => l.level === currentLevel + 1);
-
-  const experiencePct = useMemo(() => {
-    const nextTarget = nextLevelConfig?.type === "trips" ? nextLevelConfig.target : 0;
-    if (nextTarget > 0) {
-      return Math.min(100, Math.floor((completedTrips / nextTarget) * 100));
-    }
-    return nextLevelConfig ? 0 : 100;
-  }, [nextLevelConfig, completedTrips]);
+  const {
+    currentLevel,
+    currentLevelConfig,
+    nextLevelConfig,
+    experiencePct,
+  } = experience;
 
   const [viewMode, setViewMode] = useState<ProfileViewMode>("main");
   const [avatarSeed, setAvatarSeed] = useState(
@@ -655,7 +658,7 @@ export default function ProfileScreen() {
         {viewMode === "roadmap" ? (
           <View style={{ paddingTop: insets.top + 8, paddingBottom: 8 }}>
             <BusinessRoadmapPanel
-              completedTrips={completedTrips}
+              experience={experience}
               onBack={() => setViewMode("main")}
             />
           </View>
@@ -772,7 +775,7 @@ export default function ProfileScreen() {
                   onPress={() => setViewMode("roadmap")}
                   style={({ pressed }) => [styles.xpCard, pressed && { opacity: 0.92 }]}
                   accessibilityRole="button"
-                  accessibilityLabel="View operations roadmap"
+                  accessibilityLabel="View experience roadmap"
                 >
                   <View style={styles.xpTop}>
                     <Text style={styles.xpEyebrow}>EXPERIENCE</Text>
@@ -788,10 +791,12 @@ export default function ProfileScreen() {
                   </View>
                   <View style={styles.xpFooter}>
                     <Text style={styles.xpFooterTxt}>
-                      {tripsLoading ? "…" : `${completedTrips} trips done`}
+                      {tripsLoading
+                        ? "…"
+                        : `L${currentLevel} ${currentLevelConfig.name}`}
                     </Text>
                     <Text style={styles.xpFooterTxt}>
-                      {nextLevelConfig?.name ?? "Max rank"} next · tap roadmap
+                      {nextLevelConfig?.name ?? "Max"} next · tap roadmap
                     </Text>
                   </View>
                 </Pressable>

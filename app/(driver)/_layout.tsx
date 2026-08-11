@@ -52,7 +52,7 @@ function DriverTabsNavigator() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Dashboard' }} />
-      <Tabs.Screen name="stories" options={{ title: 'Stories' }} />
+      <Tabs.Screen name="stories" options={{ title: 'Loads' }} />
       <Tabs.Screen name="control" options={{ title: 'Trip', href: null }} />
       <Tabs.Screen name="trip-history" options={{ title: 'History' }} />
       <Tabs.Screen name="wallet" options={{ title: 'Transactions' }} />
@@ -76,6 +76,10 @@ function DriverTabsNavigator() {
       <Tabs.Screen name="pending-earnings" options={{ title: 'Pending Earnings', href: null }} />
       <Tabs.Screen name="expense-capture" options={{ title: 'Capture expense', href: null }} />
       <Tabs.Screen name="general-expense" options={{ title: 'General expense', href: null }} />
+      <Tabs.Screen name="become-fleet-owner" options={{ title: 'Become Fleet Owner', href: null }} />
+      <Tabs.Screen name="my-fleet" options={{ title: 'My Fleet', href: null }} />
+      <Tabs.Screen name="available-loads" options={{ title: 'Available Loads', href: null }} />
+      <Tabs.Screen name="capacity-story" options={{ title: 'Capacity Story', href: null }} />
     </Tabs>
   );
 }

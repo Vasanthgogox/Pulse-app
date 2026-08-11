@@ -81,6 +81,8 @@ export type DriverTripRow = {
   odometer_verification_state?: string | null;
   odometer_notes?: string | null;
   odometer_updated_at?: string | null;
+  /** Explicit Fleet Owner / Driver-cum-Owner vehicle link. Nullable until set via set_trip_owner_vehicle(). */
+  owner_vehicle_id?: string | null;
 };
 
 /** Map supplier view row → legacy TripRow for screens not yet migrated off TripRow. */
@@ -164,6 +166,7 @@ export function tripRowToDriverTripRow(
     | 'odometer_verification_state'
     | 'odometer_notes'
     | 'odometer_updated_at'
+    | 'owner_vehicle_id'
   >,
 ): DriverTripRow {
   return {
@@ -213,6 +216,7 @@ export function tripRowToDriverTripRow(
     odometer_verification_state: row.odometer_verification_state ?? null,
     odometer_notes: row.odometer_notes ?? null,
     odometer_updated_at: row.odometer_updated_at ?? null,
+    owner_vehicle_id: row.owner_vehicle_id ?? null,
   };
 }
 
@@ -271,5 +275,6 @@ export function driverRowToTripRow(row: DriverTripRow): TripRow {
     odometer_verification_state: row.odometer_verification_state ?? null,
     odometer_notes: row.odometer_notes ?? null,
     odometer_updated_at: row.odometer_updated_at ?? null,
+    owner_vehicle_id: row.owner_vehicle_id ?? null,
   };
 }

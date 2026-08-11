@@ -49,6 +49,8 @@ export type DriverPodCompletionPageProps = {
   /** Destination context — drop for POD, pickup for LR. */
   placeLabel: string;
   earnings: string;
+  /** Defaults to EST. EARNINGS. */
+  earningsLabel?: string;
   documents: tripDocumentsService.TripDocumentRow[];
   viewUrls: Record<string, string>;
   docsLoading: boolean;
@@ -128,6 +130,7 @@ export function DriverPodCompletionPage({
   onCloseToMap,
   placeLabel,
   earnings,
+  earningsLabel = 'EST. EARNINGS',
   documents,
   viewUrls,
   docsLoading,
@@ -487,7 +490,7 @@ export function DriverPodCompletionPage({
               <FontAwesome name="money" size={12} color={FLOW_EMERALD} />
             </View>
             <View style={styles.earnTextCol}>
-              <Text style={styles.earnLabel}>EST. EARNINGS</Text>
+              <Text style={styles.earnLabel}>{earningsLabel}</Text>
               <Text style={styles.earnValue} numberOfLines={1}>
                 {earnings}
               </Text>

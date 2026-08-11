@@ -22,6 +22,7 @@ import {
   HUB_GRID_ROUTE_MIN_HEIGHT,
 } from "@/components/hub/hubGridCardLayout";
 import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
+import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import type { ReactNode } from "react";
 import { memo } from "react";
@@ -388,6 +389,12 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
       ? `driver-entity:${String(trip.driver_id).trim()}`
       : `driver-trip:${trip.id}`);
   const stageUpper = asLabel(stageLabel).toUpperCase();
+  /** Product term: Indent = created from indent→trip; Direct = created as a trip. */
+  const fromIndent = isLoadBasedTrip(trip);
+  const originTagLabel = fromIndent
+    ? tr("tripOriginIndent")
+    : tr("tripOriginDirect");
+  const originTagUpper = asLabel(originTagLabel).toUpperCase();
 
   return (
     <View style={[styles.cardWrap, fillGrid && styles.cardWrapGrid, style]}>
@@ -407,7 +414,7 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
             pressed && styles.bodyPressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel={`${tripNo} ${clientName}, ${asLabel(origin)} to ${asLabel(dest)}`}
+          accessibilityLabel={`${tripNo} ${clientName}, ${originTagUpper}, ${asLabel(origin)} to ${asLabel(dest)}`}
         >
           <View style={[styles.head, fillGrid && styles.headGrid]}>
             <View style={styles.headLeft}>
@@ -436,6 +443,25 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
               <Text style={styles.headMeta} numberOfLines={1}>
                 {stageUpper}
               </Text>
+              <View
+                style={[
+                  styles.originTag,
+                  fromIndent ? styles.originTagIndent : styles.originTagDirect,
+                ]}
+                accessibilityLabel={`Created from ${originTagLabel}`}
+              >
+                <Text
+                  style={[
+                    styles.originTagText,
+                    fromIndent
+                      ? styles.originTagTextIndent
+                      : styles.originTagTextDirect,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {originTagUpper}
+                </Text>
+              </View>
               <TripHubInTransitPingLines ping={inTransitPing} />
             </View>
           </View>
@@ -639,7 +665,7 @@ const styles = StyleSheet.create({
   },
   head: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
     marginBottom: 14,
@@ -680,6 +706,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     maxWidth: "42%",
     alignItems: "flex-end",
+    gap: 4,
+    paddingTop: 1,
   },
   headMeta: {
     fontSize: 10,
@@ -689,6 +717,39 @@ const styles = StyleSheet.create({
     textAlign: "right",
     textTransform: "uppercase",
     letterSpacing: 0.25,
+  },
+  originTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Theme.buttonPrimaryRadius,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    alignSelf: "flex-end",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  /** Indent = inverse of Direct: brown fill + blue border. */
+  originTagIndent: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.brandBlue,
+  },
+  /** Direct = primary CTA language: blue fill + brown border. */
+  originTagDirect: {
+    backgroundColor: Theme.buttonPrimary,
+    borderColor: Theme.buttonPrimaryBorder,
+  },
+  originTagText: {
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    textAlign: "center",
+  },
+  originTagTextIndent: {
+    color: Theme.textOnPrimary,
+  },
+  originTagTextDirect: {
+    color: Theme.buttonPrimaryText,
   },
   route: {
     flexDirection: "row",

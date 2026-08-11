@@ -22,9 +22,8 @@ export type ReachDriverReferralStatus =
   | 'expired';
 
 /** Status of an independent driver's direct bid on a boosted story
- * (driver_direct_bids). 'accepted'/'rejected' are reserved for a future
- * award/acceptance surface — not yet built, so today a bid only ever shows
- * 'pending' or 'withdrawn'. */
+ * (driver_direct_bids). UI maps pending → Quoted, pending+counter_amount →
+ * Counter received, accepted → Awarded (job card). */
 export type DriverDirectBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
 
 /** Structured driver intent — WHY the driver recommends this load. */
@@ -112,6 +111,8 @@ export interface DriverReachStoryRow {
   snapshot_vehicle_type: string | null;
   snapshot_material: string | null;
   snapshot_content: string | null;
+  /** Load target / offered rate from the Boost snapshot (posts.rate_offer). */
+  snapshot_rate_offer: number | null;
   driver_reward_enabled: boolean;
   /** Driver Incentive per converted recommendation (₹, 1:1 with credits). */
   reward_amount: number;
@@ -126,6 +127,8 @@ export interface DriverReachStoryRow {
   post_id: string;
   direct_bid_status: DriverDirectBidStatus | null;
   direct_bid_amount: number | null;
+  /** Shipper counter-offer when set; null until countered. */
+  direct_bid_counter_amount: number | null;
 }
 
 /** Driver Story tab feed — the authenticated driver's boosted stories. */
@@ -155,6 +158,24 @@ export async function submitDriverDirectBid(
   if (error) return { error: new Error(error.message), bidId: null };
   const bidId = (data as { bid_id?: string } | null)?.bid_id ?? null;
   return { error: null, bidId };
+}
+
+/** Map RPC error text to a short driver-facing line. */
+export function formatDirectBidError(message: string): string {
+  const m = (message ?? '').toLowerCase();
+  if (m.includes('not_biddable')) {
+    return 'This load is no longer open for bidding. Pull to refresh Stories.';
+  }
+  if (m.includes('bid_locked')) {
+    return 'This bid was already decided and cannot be changed.';
+  }
+  if (m.includes('unauthorized')) {
+    return 'Your account cannot bid on this load. Sign in as a driver / fleet owner.';
+  }
+  if (m.includes('invalid_amount')) {
+    return 'Enter a valid bid amount greater than zero.';
+  }
+  return message.trim() || 'Could not submit bid.';
 }
 
 /** Driver-channel impression/view logging — best-effort, deduped per day

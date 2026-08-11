@@ -419,7 +419,13 @@ function NetworkScreenInner() {
         if (!isPostVisibleForOrg(post, { allowLoadPosts })) return false;
         if (!orgId) return false;
         const authorOrgId = (post.organization_id ?? "").trim();
-        if (!authorOrgId) return false;
+        // Fleet Owner organic capacity has no Business org — still show on Stories.
+        if (!authorOrgId) {
+          return (
+            post.is_active === true &&
+            (post.type ?? "").toUpperCase() === "VEHICLE_AVAILABILITY"
+          );
+        }
         if (authorOrgId === orgId) return true;
         // Find Work parity: supplier-only counterparties' LOAD stories/ads
         // are not bid opportunities for me (I am their client).
