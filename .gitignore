@@ -80,6 +80,9 @@ apps/web/.next/
 # Local client agreement PDFs / rate sheets (not for git)
 docs/warehouse-contracts/
 
+# Supabase log exports (debugging artifacts, not source)
+supabase_logs*.csv
+
 # OpenClaw (local agent workspace — not app source)
 .openclaw/
 AGENTS.md
