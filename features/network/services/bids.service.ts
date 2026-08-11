@@ -26,6 +26,62 @@ export interface BidRow {
   updated_at: string;
 }
 
+/** Independent / Fleet Owner bid on a Reach story (driver_direct_bids). */
+export interface DriverDirectBidRow {
+  id: string;
+  post_id: string;
+  driver_user_id: string;
+  driver_display_name: string;
+  is_fleet_owner: boolean;
+  amount: number;
+  note: string | null;
+  status: BidStatus;
+  counter_amount: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getDriverDirectBidsForPost(
+  postId: string,
+): Promise<{ error: Error | null; bids: DriverDirectBidRow[] }> {
+  const { data, error } = await supabase().rpc('list_driver_direct_bids_for_post', {
+    p_post_id: postId,
+  });
+  if (error) return { error: new Error(error.message), bids: [] };
+  const rows = (data ?? []) as Array<{
+    id: string;
+    post_id: string;
+    driver_user_id: string;
+    driver_display_name: string | null;
+    is_fleet_owner: boolean | null;
+    amount: number;
+    note: string | null;
+    status: string;
+    counter_amount: number | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+  return {
+    error: null,
+    bids: rows.map((r) => ({
+      id: r.id,
+      post_id: r.post_id,
+      driver_user_id: r.driver_user_id,
+      driver_display_name: (r.driver_display_name ?? '').trim() || 'Driver',
+      is_fleet_owner: Boolean(r.is_fleet_owner),
+      amount: Number(r.amount ?? 0),
+      note: r.note,
+      status: (r.status as BidStatus) || 'pending',
+      counter_amount:
+        r.counter_amount != null && Number.isFinite(Number(r.counter_amount))
+          ? Number(r.counter_amount)
+          : null,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    })),
+  };
+}
+
 async function enrichBidderOrgNames(bids: BidRow[]): Promise<BidRow[]> {
   const missingIds = [
     ...new Set(

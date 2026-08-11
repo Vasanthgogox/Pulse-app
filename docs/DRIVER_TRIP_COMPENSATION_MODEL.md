@@ -1,6 +1,6 @@
 # Driver Trip Compensation Model → Driver / Fleet / Marketplace / Reach Contract
 
-**Status: Design note — no schema implementation in this document.** Started as a compensation-only fix after a production bug (an Aggregate-mode org's open-trip assignment fabricated an "Estimated Earnings" figure with no salary/commission ever configured — fixed in `DriverControlScreen.tsx`). Part 1 below is that original scope: the compensation map, its governing rules, and two open decisions. Part 2 extends it — the product direction turned out to be bigger than compensation alone (Driver App as a load-discovery surface, vehicle ownership, marketplace bidding vs. fleet recommendation, Reach/Credits integration). Nothing in either part has been implemented. Naming note: this file's title grew with its scope. No other doc references this file by name yet, so renaming it (and the file itself) later, once the product direction settles, is safe and low-cost — not done now to avoid renaming mid-conversation.
+**Status: Design note — no schema implementation in this document.** Started as a compensation-only fix after a production bug (an Aggregate-mode org's open-trip assignment fabricated an "Estimated Earnings" figure with no salary/commission ever configured — fixed in `DriverControlScreen.tsx`). Part 1 below is that original scope: the compensation map, its governing rules, and two open decisions. Part 2 extends it — the product direction turned out to be bigger than compensation alone (Driver App as a load-discovery surface, vehicle ownership, marketplace bidding vs. fleet recommendation, Reach/Credits integration). **Part 5** locks a cross-cutting Business requirement: **Trip Assignment + Counterparty Role + Trip-level Receivable + Driver/Owner Payable** (including **Driver cum Owner** on Open Trip assign, and Trip List/Detail payment visibility on top of existing multi-trip payment allocation). Parts 2–5 are design locks unless a later decision authorizes build. Naming note: this file's title grew with its scope — renaming later is fine when the product direction settles.
 
 ---
 
@@ -291,7 +291,7 @@ Each phase depends on the previous one's data model existing — Phase 3's load 
 
 ## 2.8 Open decisions before Phase 2 starts
 
-1. **Vehicle ownership model** — genuinely new (Section 2.1). Needs its own short design (schema for driver-owned vehicles, verification/registration requirements, relationship to the existing `vehicles` table) before Phase 2 can start. Not scoped in this document.
+1. **Vehicle ownership model** — Phase 1 design: [`DRIVER_FLEET_OWNER_PHASE1.md`](./DRIVER_FLEET_OWNER_PHASE1.md) (explicit `driver_fleet_owner_profiles`, personal vehicles via `owner_user_id` in 1b — **no** personal org). Schema for vehicles still Phase 1b.
 2. **Bid storage object** — genuinely new. `driver_direct_bids` (Reach Boost V2) is the closest existing pattern but is scoped narrowly to boosted stories with award/acceptance explicitly not built. Whether Phase 5's marketplace bid reuses/extends that table or needs its own is an open question, not decided here.
 3. **Part 1, Section 5's A/B decision** (preserve vs. replace the attribution flow) now also gates Section 2.4's "Recommend to my fleet" — if Part 1 replaces the attribution model, the recommendation flow should target whatever replaces it, not the current `salary_requests`-based mechanism.
 
@@ -343,14 +343,15 @@ Nothing in Part 3 is authorized for implementation. It exists to make the next s
 
 Section 3.0's employment-signal conflict (`drivers.tracking_only` vs. `organization_members`) turned out to be an instance of a more general rule this whole document has been converging on. Stated once, explicitly:
 
-**Employment, vehicle ownership, load participation, and compensation are four separate concepts. No single table or flag should be asked to answer more than one of them.**
+**Employment, vehicle ownership, load participation, compensation, and trip counterparty roles are separate concepts. No single table or flag should be asked to answer more than one of them.**
 
 - **Employment** — does this fleet employ/represent this driver? (Section 3.0 — currently two disagreeing answers.)
-- **Ownership** — does this driver own/control this vehicle? (Part 2, Section 2.1 — doesn't exist yet.)
+- **Ownership** — does this driver own/control this vehicle? (Part 2 / [`DRIVER_FLEET_OWNER_PHASE1.md`](./DRIVER_FLEET_OWNER_PHASE1.md).)
 - **Participation** — how is this driver responding to this load: bid, recommend, accept? (Part 3 — exists in fragments, at the wrong lifecycle stage.)
 - **Compensation** — what amount/basis was actually agreed for this trip? (Part 1 — exists, partially audited in Section 4.1.)
+- **Trip counterparties** — who is Customer / Transporter(Owner) / Executing Driver on this trip; where receivable and payable attach (Part 5). **Driver** and **Fleet Owner** are not mutually exclusive identities; owner-driver is an allowed assignment shape.
 
-Every bug and near-bug found across this document's three parts is one of these four questions being answered by inferring it from one of the other three: `tracking_only` existence implying employment (the original bug), a `drivers` row implying compensation eligibility, story-recommendation reward logic implying trip-compensation logic, and now `organization_members` vs. `drivers` implying two different answers to the same employment question. Keeping the four concepts structurally separate is what prevents the next occurrence of this pattern on a screen nobody has looked at yet.
+Every bug and near-bug found across this document's parts is one of these questions being answered by inferring it from another: `tracking_only` existence implying employment (the original bug), a `drivers` row implying compensation eligibility, story-recommendation reward logic implying trip-compensation logic, `organization_members` vs. `drivers` implying two different answers to employment, or assuming every driver sits under a separate fleet-owner entity. Keeping the concepts structurally separate is what prevents the next occurrence of this pattern on a screen nobody has looked at yet.
 
 ## Priority order this implies
 
@@ -361,9 +362,108 @@ Every bug and near-bug found across this document's three parts is one of these 
 | P1 | Resolve Section 5's attribution A/B | Prevents a second attribution system existing alongside the first |
 | P1 | Design the driver-owned vehicle (ownership) model | Required before "owner → vehicle → bid" can exist at all |
 | P1 | Design the marketplace bid/award model | `driver_direct_bids` is real but scoped to boosted stories only, with no award path |
+| P1 | Part 5 — trip counterparty + trip-level receivable/payable UX | Open Trip assign must support Driver cum Owner; Trip List/Detail payment visibility must sit on existing allocation (not a parallel payment model) |
 | P2 | Build Story → Load preview → Recommend/Bid | Only safe once the relationship model it reads from is canonical |
 | P2 | Connect Reach credits/Boost as the distribution layer | Monetization/growth layer, sequenced after transaction semantics are solid — Reach stays discovery + boost + credits; it does not become a second transaction engine alongside Marketplace |
 
 The two P0s are independent of each other (one is a data-model ambiguity, the other is a consumer-discipline gap) but both are prerequisites to everything below — Recommend-vs-Bid depends on the first, and no compensation figure computed anywhere in Part 2/3's new flows should inherit the second issue's unflagged-estimate pattern.
 
-Nothing in this document authorizes implementation of any row in this table. This is the accumulated decision backlog — Section 3.0, Section 5, Section 4.1's 9 callers, and Part 2 Section 2.8's three new-object designs — in the order the team should resolve them, not a build plan.
+Nothing in this document authorizes implementation of any row in this table. This is the accumulated decision backlog — Section 3.0, Section 5, Section 4.1's 9 callers, Part 2 Section 2.8's three new-object designs, and Part 5 — in the order the team should resolve them, not a build plan.
+
+---
+---
+
+# Part 5 — Trip Assignment + Counterparty Role + Trip-level Receivable + Driver/Owner Payable
+
+**Status: Product / architecture lock only — not authorized for implementation in this note.**  
+**Audience:** Business App Open Trip → Assign, Trip List, Trip Detail, and Finance allocation. Complements Driver App FO identity ([`DRIVER_FLEET_OWNER_PHASE1.md`](./DRIVER_FLEET_OWNER_PHASE1.md)) without collapsing roles into mutually exclusive identities.  
+**Finance reuse:** Sit on existing trip-linked payment / multi-trip allocation and status model ([`TRIP_TO_FINANCE_FLOW.md`](./TRIP_TO_FINANCE_FLOW.md), [`CORE_ACCOUNTING_MODEL.md`](./CORE_ACCOUNTING_MODEL.md), [`TRIP_FINANCIAL_LIFECYCLE_TDD.md`](./TRIP_FINANCIAL_LIFECYCLE_TDD.md) / `payment_status`). **Do not** invent a parallel “Trip Detail payment” ledger.
+
+## 5.1 Assignment cases Pulse must support
+
+### A. Fleet owner → driver (normal fleet)
+
+| Role | Who |
+|------|-----|
+| Contracting / owning party (Transporter) | Fleet Owner |
+| Executing driver | Assigned driver (may be employed or open-assigned) |
+| Driver payout | Per agreed **driver** terms (salary / commission / trip deal) |
+| Owner settlement | Per fleet settlement model (owner receives commercial margin / supplier-style payout as already modeled for the org) |
+
+### B. Driver = fleet owner / owner-driver (**Driver cum Owner**)
+
+| Role | Who |
+|------|-----|
+| Transporter / Owner | Same person (Driver cum Owner) |
+| Executing Driver | Same person |
+| Payable attribution | **Directly to that driver/owner** — not forced through a separate fleet-owner entity stub |
+
+Open Trip → Assign must support choosing this person as the **actual transporter/owner** from day one of any UI work that touches this requirement. Do **not** hard-code “every driver belongs under a distinct fleet owner party.”
+
+## 5.2 Trip assignment layer (conceptual)
+
+```
+Trip
+ ├── Customer / Shipper          ← receivable / AR side
+├── Transporter / Owner         ← commercial counterparty for haulage
+ │     ├── Fleet Owner          ← may differ from executing driver
+ │     └── Driver cum Owner     ← same person as executing driver
+ └── Executing Driver           ← who runs the trip / POD
+```
+
+| Pattern | Transporter | Executing driver | Payable destination |
+|---------|-------------|------------------|---------------------|
+| Normal fleet | Fleet Owner | Assigned driver | Fleet Owner / settlement model; driver paid per driver terms |
+| Owner-driver | Driver cum Owner | Same person | That driver/owner directly |
+
+This distinction matters for ledger, salary/payout, invoices, receivables, and settlement. It extends Part 4: **transporter role ≠ employment ≠ ownership flag alone** — an assignment can make one person fill two trip roles without inventing a fake second party.
+
+## 5.3 Trip List — payment visibility (no Finance detour required to understand status)
+
+Trip List should surface trip-level money state (exact column layout is UX detail; semantics are locked):
+
+**Customer receivable**
+
+- Receivable: ₹X  
+- Received: ₹X  
+- Balance: ₹X  
+- Status: **Unpaid** / **Partially Paid** / **Paid** (align naming with existing `payment_status` vocabulary where present)
+
+**Driver / Fleet payout**
+
+- Payout / payable: ₹X  
+- Payout status: **Pending** / **Requested** / **Paid**
+
+Users must not be forced into Finance solely to answer “is this trip paid / what’s left?” Finance remains the ledger home; Trip List is the operational glance.
+
+## 5.4 Trip Detail — payment control point
+
+Trip Detail shows **both sides** and allows customer payment recording without leaving the trip:
+
+**Customer side**
+
+- Receivable ₹… · Received ₹… · Balance ₹…  
+- **[Update Payment]** — manually record / allocate against this trip using the **existing** payment + allocation machinery (one customer payment may still cover multiple trips; this trip updates to Paid / Partially Paid / Unpaid accordingly)
+
+**Driver / Owner side**
+
+- Payable ₹… · Status: Pending / Paid (and Requested where that lifecycle already exists)  
+- **[View payout / payment details]** — navigate into existing payout/settlement surfaces; do not fork a second payable writer
+
+## 5.5 Architecture constraints (non-negotiable)
+
+1. **Not mutually exclusive identities** — Driver and Fleet Owner capabilities may coexist on one auth user; trip roles are assignment fields, not exclusive profile types.
+2. **No parallel payment mechanism** — Trip Detail “Update Payment” allocates into the same transaction / allocation model that already supports one payment → many trips and trip-level statuses.
+3. **No forced FO entity for owner-drivers** — Open Trip assign must allow Driver cum Owner without creating a dummy fleet-owner counterparty.
+4. **Receivable vs payable stay separate objects** — customer AR vs driver/owner/supplier AP (existing architecture); UI just composes both on the trip.
+5. **Still design-only here** — schema/UI work needs an explicit build authorization; this Part does not authorize migrations or screens by itself.
+
+## 5.6 Relationship to Driver App FO work
+
+| Concern | Where |
+|---------|--------|
+| FO identity + My Fleet + capacity Stories | [`DRIVER_FLEET_OWNER_PHASE1.md`](./DRIVER_FLEET_OWNER_PHASE1.md) |
+| Marketplace bid / award later | Parts 2–3; **3B.2 remains gated** on app five-pack |
+| Business trip assign + trip payment UX | **This Part** |
+
+A Driver App FO who later wins work as owner-driver must map cleanly onto Transporter = Driver cum Owner / Executing Driver = same person when Business creates or assigns the trip — without requiring a personal Business org.

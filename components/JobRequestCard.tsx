@@ -44,6 +44,8 @@ export interface JobRequestCardProps {
   distance: string;
   eta: string;
   earnings: string;
+  /** Defaults to EST. EARNINGS; use PAY N/A when amount is not applicable. */
+  earningsLabel?: string;
   onAccept: () => void;
   onDecline: () => void;
   onToggleCollapse?: () => void;
@@ -78,6 +80,7 @@ export function JobRequestCard({
   distance,
   eta,
   earnings,
+  earningsLabel = "EST. EARNINGS",
   onAccept,
   onDecline,
   onToggleCollapse,
@@ -340,7 +343,7 @@ export function JobRequestCard({
                   <Text style={styles.heroAmount} numberOfLines={1}>
                     {earnings}
                   </Text>
-                  <Text style={styles.heroAmountLabel}>EST. EARNINGS</Text>
+                  <Text style={styles.heroAmountLabel}>{earningsLabel}</Text>
                 </View>
               </View>
               {showHeroAssigner ? (
@@ -370,6 +373,7 @@ export function JobRequestCard({
                 dropoff={dropoff}
                 primaryTextColor={primaryTextColor}
                 mutedTextColor={mutedTextColor}
+                dense
               />
 
               {errorMessage ? (
@@ -569,13 +573,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
     paddingTop: TRIP_SHEET_BODY_PAD.top,
     paddingBottom: TRIP_SHEET_BODY_PAD.bottom,
-    gap: TRIP_SHEET_BODY_PAD.gap,
+    gap: 6,
     backgroundColor: Theme.surface,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 0,
   },
   errorText: {
     fontSize: 11,

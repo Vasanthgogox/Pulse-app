@@ -18,7 +18,7 @@ import {
 } from "@/features/driver/utils/driverTripSequence.util";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as salaryRequestsService from "@/features/drivers/services/salaryRequests.service";
-import { isAggregateTrip, isRosterTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
+import { isAggregateTrip, isRosterTrip, resolveDriverTripPayoutTerms } from "@/features/drivers/utils/driverUtils.util";
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import * as tripsService from "@/features/trips/services/trips.service";
 import {
@@ -674,6 +674,29 @@ export default function DriverTripsScreen() {
     );
   }, [invites]);
 
+  /** Real agreed payout terms for this trip's driver+org (invite takes precedence over the roster row). */
+  const payoutTermsForTrip = useCallback(
+    (trip: tripsService.TripRow) => {
+      const orgId = String(trip.organization_id ?? "").trim();
+      const driverRow = linkedDriverRows.find(
+        (row) =>
+          String(row.organization_id ?? "").trim() === orgId &&
+          String(row.id ?? "") === String(trip.driver_id ?? ""),
+      );
+      const invite = invites.find(
+        (i) =>
+          String(i.status ?? "").toLowerCase() === "accepted" &&
+          String(i.from_organization_id ?? "").trim() === orgId,
+      );
+      return {
+        commissionPercent: invite?.commission_percent ?? driverRow?.commission_percent ?? null,
+        commissionPerKm: invite?.commission_per_km ?? driverRow?.commission_per_km ?? null,
+        payableAmount: invite?.payable_amount ?? driverRow?.payable_amount ?? null,
+      };
+    },
+    [linkedDriverRows, invites],
+  );
+
   const salaryRelationshipOrgIds = useMemo(() => {
     const set = new Set<string>();
     linkedDriverRows.forEach((row) => {
@@ -763,9 +786,16 @@ export default function DriverTripsScreen() {
   ]);
 
   const getEarning = (trip: tripsService.TripRow) => {
-    const amount = tripEarningsForDriver(trip);
-    if (amount <= 0) return isAggregateTrip(trip) ? "SALARY" : "—";
-    return `₹${Math.round(amount).toLocaleString()}`;
+    // Aggregate/direct-shipper trips with no agreed payout terms are worth
+    // ₹0 — never the legacy 10%-of-price guess.
+    const { hasAgreedPayoutTerms, commissionDetail } = resolveDriverTripPayoutTerms(
+      trip,
+      payoutTermsForTrip(trip),
+    );
+    if (!hasAgreedPayoutTerms || commissionDetail.amount <= 0) {
+      return isAggregateTrip(trip) ? "SALARY" : "—";
+    }
+    return `₹${Math.round(commissionDetail.amount).toLocaleString()}`;
   };
 
   const driverTripNumberById = useMemo(

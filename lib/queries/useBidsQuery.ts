@@ -2,6 +2,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tansta
 import { STALE } from '@/lib/queryClient';
 import {
   getBidsForPost,
+  getDriverDirectBidsForPost,
   getMyBidForPost,
   submitPulseBidWithDirectQuote,
   updateBid,
@@ -31,6 +32,7 @@ function invalidateAfterBidWrite(
 ) {
   if (postId) {
     void qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+    void qc.invalidateQueries({ queryKey: queryKeys.bids.directForPost(postId) });
     void qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
     void qc.invalidateQueries({ queryKey: queryKeys.posts.detail(postId) });
     void qc.invalidateQueries({ queryKey: queryKeys.storyViews.forPost(postId) });
@@ -51,6 +53,19 @@ export function useBidsForPostQuery(postId: string | null) {
     queryKey: queryKeys.bids.forPost(postId ?? ''),
     queryFn: async () => {
       const res = await getBidsForPost(postId!);
+      if (res.error) throw res.error;
+      return res.bids;
+    },
+    enabled: !!postId,
+    staleTime: STALE.moderate,
+  });
+}
+
+export function useDriverDirectBidsForPostQuery(postId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.bids.directForPost(postId ?? ''),
+    queryFn: async () => {
+      const res = await getDriverDirectBidsForPost(postId!);
       if (res.error) throw res.error;
       return res.bids;
     },

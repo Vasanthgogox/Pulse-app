@@ -33,12 +33,14 @@ import {
     storyOwnerBidsLabel,
 } from "@/features/network/utils/bidding/storyOwnerBids.util";
 import {
+    formatCapacityMaterial,
     formatStoryDate,
     loadMaterialLabel,
     splitLocationParts,
     storyHeadline,
     storyTypeLabel,
 } from "@/features/network/utils/storyDisplay";
+import { positiveMoneyOrNull } from "@/lib/format";
 import {
     buildStoryOwnerViewRows,
     storyOwnerViewsLabel,
@@ -48,9 +50,10 @@ import { useVerifiedActionGuard } from "@/features/network/utils/verifiedActionG
 import { BoostProgressSheet } from "@/features/reach/components/BoostProgressSheet";
 import { BoostSheet } from "@/features/reach/components/BoostSheet";
 import { recordReachEvent } from "@/features/reach/services/events.service";
+import { findOrgDraftOrActiveCampaign } from "@/features/reach/utils/orgActiveBoost";
 import { confirmDialog } from "@/lib/confirmDialog";
 import { useIndentDirectQuotesQuery, useMyDirectQuotesQuery } from "@/lib/queries";
-import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
+import { useBidsForPostQuery, useDriverDirectBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
 import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
 import { useAfterPostDeleted, useInvalidatePosts, useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
 import { useMarkReachCampaignSourceDeletedMutation, useReachCampaignsQuery } from "@/lib/queries/useReachCampaignsQuery";
@@ -96,9 +99,10 @@ const PALETTE = [
   "#4D3636", "#8b5cf6", "#ec4899", "#f43f5e",
   "#10b981", "#3b82f6", "#f59e0b", "#0ea5e9",
 ];
-function seedColor(id: string): string {
+function seedColor(id: string | null | undefined): string {
+  const key = (id ?? "").trim() || "fleet";
   let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % PALETTE.length;
+  for (let i = 0; i < key.length; i++) h = (h + key.charCodeAt(i)) % PALETTE.length;
   return PALETTE[h];
 }
 
@@ -314,6 +318,11 @@ export default function StoryDetailScreen() {
 
   const isOwnPost = useMemo(() => !!myOrgId && !!post && post.organization_id === myOrgId, [myOrgId, post]);
   const myCampaignsQ = useReachCampaignsQuery(isOwnPost ? myOrgId : null);
+  /** Org-level invariant — not post.reach_campaign_id (that missed other loads). */
+  const orgActiveBoost = useMemo(
+    () => findOrgDraftOrActiveCampaign(myCampaignsQ.data),
+    [myCampaignsQ.data],
+  );
   const activeCampaignForPost = useMemo(
     () =>
       myCampaignsQ.data?.find(
@@ -321,6 +330,8 @@ export default function StoryDetailScreen() {
       ) ?? null,
     [myCampaignsQ.data, post?.id],
   );
+  const progressCampaignId =
+    orgActiveBoost?.id ?? post?.reach_campaign_id ?? freshCampaignId ?? null;
   // Fetch bids whenever this is someone else's LOAD — commercial rules live in the resolver.
   const shouldFetchMyBid = Boolean(isLoad && !isOwnPost && myOrgId && post);
   const canContactVehicle = Boolean(isVehicle && !isOwnPost && myOrgId);
@@ -417,13 +428,21 @@ export default function StoryDetailScreen() {
   const storyBidsQ = useBidsForPostQuery(
     isOwnPost && isLoad ? (post?.id ?? null) : null,
   );
+  const driverDirectBidsQ = useDriverDirectBidsForPostQuery(
+    isOwnPost && isLoad ? (post?.id ?? null) : null,
+  );
   const ownerQuotesQ = useIndentDirectQuotesQuery(ownerIndentId);
   const ownerBidRows = useMemo(
     () =>
-      buildStoryOwnerBidRows(storyBidsQ.data ?? [], ownerQuotesQ.data ?? []),
-    [storyBidsQ.data, ownerQuotesQ.data],
+      buildStoryOwnerBidRows(
+        storyBidsQ.data ?? [],
+        ownerQuotesQ.data ?? [],
+        driverDirectBidsQ.data ?? [],
+      ),
+    [storyBidsQ.data, ownerQuotesQ.data, driverDirectBidsQ.data],
   );
-  const ownerBidsLoading = storyBidsQ.isLoading || ownerQuotesQ.isLoading;
+  const ownerBidsLoading =
+    storyBidsQ.isLoading || ownerQuotesQ.isLoading || driverDirectBidsQ.isLoading;
   const ownerViewRows = useMemo(
     () => buildStoryOwnerViewRows(views, ownerBidRows),
     [views, ownerBidRows],
@@ -436,8 +455,17 @@ export default function StoryDetailScreen() {
 
   const headline = post ? storyHeadline(post, Boolean(isLoad), Boolean(isVehicle)) : "";
   const originParts = splitLocationParts(post?.origin);
-  const destinationParts = splitLocationParts(post?.destination);
+  const destinationParts = post?.destination?.trim()
+    ? splitLocationParts(post.destination)
+    : isVehicle
+      ? { city: "Anywhere", state: "" }
+      : splitLocationParts(post?.destination);
   const loadMaterial = post && isLoad ? loadMaterialLabel(post, headline) : "";
+  const capacityMaterial =
+    post && isVehicle
+      ? formatCapacityMaterial(post.material) || post.vehicle_type?.trim() || "Open capacity"
+      : "";
+  const capacityTargetRate = post && isVehicle ? positiveMoneyOrNull(post.rate_offer) : null;
   const availabilityLabel = useMemo(() => {
     if (!post || !isVehicle) return null;
     const first = post.content?.split("·")[0]?.trim();
@@ -634,6 +662,17 @@ export default function StoryDetailScreen() {
             isDesktopPreview={isDesktopPreview}
             storyKey={post.id}
           />
+        ) : isVehicle && post.origin ? (
+          <StoryBroadcastPreview
+            post={post}
+            loadMaterial={capacityMaterial}
+            originParts={originParts}
+            destinationParts={destinationParts}
+            loadTargetRate={capacityTargetRate}
+            isDesktopPreview={isDesktopPreview}
+            storyKey={post.id}
+            kicker="Open capacity"
+          />
         ) : (
           <StoryContentEntrance storyKey={post.id}>
             <View style={[styles.iconHero, isDesktopPreview && styles.iconHeroDesktop, { backgroundColor: color + "18" }]}>
@@ -712,12 +751,14 @@ export default function StoryDetailScreen() {
             onBidsPress={ownerIndentId ? () => setShowBids(true) : undefined}
             onPrimaryPress={() => router.push(ROUTES.PULSE_LOADS)}
             onShareWhatsApp={handleShareWhatsApp}
-            boostLabel={post.reach_campaign_id ? "Boosted" : "Boost"}
-            onBoostPress={
-              post.reach_campaign_id
-                ? () => setShowBoostProgress(true)
-                : () => setShowBoost(true)
-            }
+            boostLabel={orgActiveBoost ? "Boost Active" : "Boost"}
+            onBoostPress={() => {
+              if (orgActiveBoost) {
+                setShowBoostProgress(true);
+                return;
+              }
+              setShowBoost(true);
+            }}
           />
         )}
 
@@ -931,17 +972,27 @@ export default function StoryDetailScreen() {
             invalidatePosts();
             setFreshCampaignId(campaignId);
           }}
-          onViewCampaign={() => setShowBoostProgress(true)}
+          onViewCampaign={() => {
+            setShowBoost(false);
+            setShowBoostProgress(true);
+          }}
         />
       ) : null}
 
-      {post && myOrgId && (post.reach_campaign_id ?? freshCampaignId) ? (
+      {post && myOrgId && progressCampaignId ? (
         <BoostProgressSheet
           visible={showBoostProgress}
           onClose={() => setShowBoostProgress(false)}
           orgId={myOrgId}
-          campaignId={(post.reach_campaign_id ?? freshCampaignId)!}
-          onBoostAgain={() => setShowBoost(true)}
+          campaignId={progressCampaignId}
+          onBoostAgain={() => {
+            // Org may already have another draft/active (e.g. re-broadcast).
+            if (findOrgDraftOrActiveCampaign(myCampaignsQ.data)) {
+              setShowBoostProgress(true);
+              return;
+            }
+            setShowBoost(true);
+          }}
         />
       ) : null}
     </View>

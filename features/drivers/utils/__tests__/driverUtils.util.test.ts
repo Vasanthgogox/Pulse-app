@@ -1,4 +1,5 @@
 import {
+  canShowDriverTripEstEarnings,
   isAggregateTrip,
   resolveDriverTripPayoutTerms,
   tripEarningsDetailForDriver,
@@ -81,6 +82,22 @@ describe('resolveDriverTripPayoutTerms — the confirmed bug and its exact fix',
     expect(tripIsAggregate).toBe(true);
     const showsEarnings = !tripIsAggregate && result.hasAgreedPayoutTerms;
     expect(showsEarnings).toBe(false);
+  });
+
+  it('5b) canShowDriverTripEstEarnings false for supplier-mediated Godrej→supplier trip', () => {
+    const trip: TripWithSupplier = {
+      ...TRP035_SHAPE,
+      supplier_id: 'supplier-1',
+      client_price: 50000,
+      supplier_rate: 50000,
+    };
+    expect(
+      canShowDriverTripEstEarnings(trip, {
+        payableAmount: 18000,
+        commissionPercent: null,
+        commissionPerKm: null,
+      }),
+    ).toBe(false);
   });
 
   it('6) pending attribution (not yet a fleet trip) → no payable earnings yet', () => {

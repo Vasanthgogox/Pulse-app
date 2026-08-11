@@ -1,15 +1,14 @@
 /**
- * Driver level progression — matches user profile / User Profile design:
- * Dark Elite Evolution card, 2x2 stats grid, Next Mile Objectives with VERIFIED and progress bars.
+ * Driver level progression — Experience milestones from LEVELS_CONFIG.
+ * Live trips + KYC + five-star ratings drive sequential progress.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import Theme from '@/constants/Theme';
-import { LEVELS_CONFIG } from '@/constants/DriverLevels';
 import {
   DRIVER_DETAIL_HORIZONTAL_PAD,
   DriverSubScreenHeader,
@@ -20,13 +19,21 @@ import { useAuth } from '@/contexts/AuthContext';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import * as driversService from '@/features/drivers/services/drivers.service';
 import * as tripsService from '@/features/trips/services/trips.service';
+import { getRatingsForDrivers } from '@/features/ratings/services/ratings.service';
+import type { RatingRow } from '@/features/ratings/types';
+import {
+  computeExperienceProgress,
+  countFiveStarRatings,
+  getMilestoneCount,
+  isMilestoneCompleted,
+  isMilestoneInProgress,
+} from '@/features/experience/experienceProgress';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
-
+import { supabase } from '@/lib/supabase';
 
 const DARK_HERO_BG = '#0f0f0f';
 const DARK_CARD_BORDER = 'rgba(255,255,255,0.06)';
 
-/** Icon name per level type for Next Mile Objectives. */
 function getLevelIcon(type: string): 'user' | 'truck' | 'id-card' | 'star' {
   if (type === 'trips') return 'truck';
   if (type === 'ratings') return 'star';
@@ -46,8 +53,10 @@ export default function LevelProgressionScreen() {
     if (router.canGoBack()) router.back();
     else router.replace('/(driver)/profile');
   };
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [tripsCount, setTripsCount] = useState(0);
+  const [ratings, setRatings] = useState<RatingRow[]>([]);
+  const [isVerified, setIsVerified] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback((showLoading = true) => {
@@ -56,54 +65,80 @@ export default function LevelProgressionScreen() {
       return;
     }
     if (showLoading) setLoading(true);
-    driversService.getLinkedDriversForCurrentUser(profile.uid).then((res) => {
-      // Experience is cumulative — include ALL driver rows (including left fleets).
-      const drivers = res.drivers ?? [];
-      if (drivers.length > 0) {
-        tripsService.getDriverUiTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
-          const list = tRes.trips ?? [];
-          setTripsCount(list.filter((t) => tripsService.isTripCompleted(t)).length);
-          setLoading(false);
-        });
-      } else {
+    void (async () => {
+      try {
+        const [driversRes, kycRes] = await Promise.all([
+          driversService.getLinkedDriversForCurrentUser(profile.uid),
+          supabase()
+            .from('driver_kyc_status')
+            .select('is_verified')
+            .eq('driver_user_id', profile.uid)
+            .maybeSingle(),
+        ]);
+        setIsVerified(Boolean((kycRes.data as { is_verified?: boolean } | null)?.is_verified));
+
+        const drivers = driversRes.drivers ?? [];
+        const driverIds = drivers.map((d) => d.id);
+        if (driverIds.length === 0) {
+          setTripsCount(0);
+          setRatings([]);
+          return;
+        }
+        const [tRes, rRes] = await Promise.all([
+          tripsService.getDriverUiTripsByDriverIds(driverIds),
+          getRatingsForDrivers(driverIds),
+        ]);
+        const list = tRes.trips ?? [];
+        setTripsCount(list.filter((t) => tripsService.isTripCompleted(t)).length);
+        const byDriver = rRes.byDriverId ?? {};
+        setRatings(Object.values(byDriver).flat());
+      } finally {
         setLoading(false);
       }
-    });
+    })();
   }, [profile?.uid]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Reload when screen comes back into focus (e.g. after returning from another screen).
-  useFocusEffect(useCallback(() => {
-    load(false);
-  }, [load]));
+  useFocusEffect(
+    useCallback(() => {
+      load(false);
+    }, [load]),
+  );
 
-  // Supabase Realtime: re-fetch trips count whenever any of the driver's trips change.
-  // Uses the shared registry channel ('driver-app:trips:all') so this and DriverProfileScreen
-  // reuse ONE server channel instead of two private static-named channels.
   useEffect(() => {
     return subscribeSharedPostgresChanges(
       'driver-app:trips:all',
       [{ event: '*', schema: 'public', table: 'trips' }],
-      () => { load(false); },
+      () => {
+        load(false);
+      },
     );
   }, [load]);
 
-  const currentLevel = Math.min(1 + Math.floor(tripsCount / 2), 8);
-  const currentLevelConfig = LEVELS_CONFIG.find((l) => l.level === currentLevel) ?? LEVELS_CONFIG[0];
-  const nextLevelConfig = LEVELS_CONFIG.find((l) => l.level === currentLevel + 1);
+  const experience = useMemo(
+    () =>
+      computeExperienceProgress({
+        hasSignedUp: Boolean(profile?.uid || user?.id),
+        completedTrips: tripsCount,
+        isVerified,
+        fiveStarCount: countFiveStarRatings(ratings),
+      }),
+    [profile?.uid, user?.id, tripsCount, isVerified, ratings],
+  );
 
-  // Elite Evolution progress: trips (e.g. 6 / 10) when next level is trip-based
-  const nextTarget = nextLevelConfig?.type === 'trips' ? nextLevelConfig.target : 0;
-  const progressCurrent = nextTarget > 0 ? Math.min(tripsCount, nextTarget) : 0;
-  const progressTotal = nextTarget > 0 ? nextTarget : 1;
-  const progressPct = nextTarget > 0 ? Math.min(100, Math.floor((tripsCount / nextTarget) * 100)) : 0;
+  const {
+    currentLevel,
+    currentLevelConfig,
+    nextLevelConfig,
+    experiencePct,
+    currentCount,
+  } = experience;
 
-  // Road to [next tier] label
   const roadToLabel = nextLevelConfig
-    ? `ROAD TO LEVEL ${nextLevelConfig.level}`
+    ? `ROAD TO ${nextLevelConfig.name.toUpperCase()}`
     : `${currentLevelConfig.tier.toUpperCase()} MAX`;
 
   if (loading) {
@@ -126,51 +161,49 @@ export default function LevelProgressionScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-      {/* Elite Evolution — dark card (same as user profile) */}
       <View style={[styles.eliteCard, Platform.OS === 'ios' ? styles.eliteCardShadowIos : styles.eliteCardShadowAndroid]}>
         <View style={[styles.cardDeco, { pointerEvents: 'none' }]}>
           <FontAwesome name="star" size={72} color="rgba(255,255,255,0.12)" />
         </View>
         <Text style={styles.eliteLabel}>Elite Evolution</Text>
         <Text style={styles.eliteTitle}>{roadToLabel}</Text>
+        <Text style={styles.eliteSub}>
+          L{currentLevel} {currentLevelConfig.name} · {currentLevelConfig.goalText}
+        </Text>
         <View style={styles.eliteXpRow}>
           <Text style={styles.eliteXpValue}>
-            {progressCurrent} / {progressTotal}
+            {currentCount.done} / {currentCount.target}
           </Text>
-          <Text style={styles.eliteXpLabel}>XP Progress</Text>
+          <Text style={styles.eliteXpLabel}>Milestone Progress</Text>
         </View>
         <View style={styles.xpBarBg}>
-          <View style={[styles.xpBarFill, { width: `${Math.max(progressPct, 2)}%` }]} />
+          <View style={[styles.xpBarFill, { width: `${Math.max(experiencePct, 2)}%` }]} />
         </View>
-        <Text style={styles.eliteStatus}>Status: Active · Milestone Tracker</Text>
+        <Text style={styles.eliteStatus}>
+          Status: Active · Unlocks {currentLevelConfig.privilege}
+        </Text>
       </View>
 
-      {/* Stats grid — Safety, Reliability, Trips Logged, XP Level (same as user profile) */}
       <View style={styles.statsGrid}>
         <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.statCardDeco, { pointerEvents: 'none' }]}>
-            <FontAwesome name="shield" size={56} color={colors.emerald ? `${colors.emerald}20` : 'rgba(21,128,61,0.12)'} />
-          </View>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Safety Score</Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>KYC</Text>
           <View style={styles.statRow}>
-            <Text style={[styles.statValue, { color: colors.text }]}>—</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>
+              {isVerified ? 'Verified' : 'Pending'}
+            </Text>
             <FontAwesome name="shield" size={14} color={Theme.darkGreen} />
           </View>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.statCardDeco, { pointerEvents: 'none' }]}>
-            <FontAwesome name="line-chart" size={56} color={colors.emerald ? `${colors.emerald}20` : 'rgba(21,128,61,0.12)'} />
-          </View>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Reliability</Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>5★ Ratings</Text>
           <View style={styles.statRow}>
-            <Text style={[styles.statValue, { color: colors.text }]}>—</Text>
-            <FontAwesome name="line-chart" size={14} color={Theme.darkGreen} />
+            <Text style={[styles.statValue, { color: colors.text }]}>
+              {experience.metrics.fiveStarCount}
+            </Text>
+            <FontAwesome name="star" size={14} color={Theme.darkGreen} />
           </View>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.statCardDeco, { pointerEvents: 'none' }]}>
-            <FontAwesome name="trophy" size={56} color="rgba(217,119,6,0.14)" />
-          </View>
           <Text style={[styles.statLabel, { color: colors.textMuted }]}>Trips Logged</Text>
           <View style={styles.statRow}>
             <Text style={[styles.statValue, { color: colors.text }]}>{tripsCount}</Text>
@@ -178,9 +211,6 @@ export default function LevelProgressionScreen() {
           </View>
         </View>
         <View style={[styles.statCard, styles.statCardDark]}>
-          <View style={[styles.statCardDecoDark, { pointerEvents: 'none' }]}>
-            <FontAwesome name="star" size={56} color="rgba(255,255,255,0.12)" />
-          </View>
           <Text style={styles.statLabelDark}>XP Level</Text>
           <View style={styles.statRow}>
             <Text style={styles.statValueDark}>{currentLevel}</Text>
@@ -189,15 +219,13 @@ export default function LevelProgressionScreen() {
         </View>
       </View>
 
-      {/* Next Mile Objectives — same card layout as user profile */}
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Next Mile Objectives</Text>
       <View style={styles.questsList}>
-        {LEVELS_CONFIG.map((lvl) => {
-          const completed = lvl.level < currentLevel;
-          const inProgress = lvl.level === currentLevel;
-          const countDone = lvl.type === 'trips' ? Math.min(tripsCount, lvl.target) : (completed ? lvl.target : 0);
-          const countReq = lvl.target;
-          const progressPctObj = inProgress && countReq > 0 ? Math.min(100, Math.floor((countDone / countReq) * 100)) : 0;
+        {experience.levels.map((lvl) => {
+          const completed = isMilestoneCompleted(lvl.level, experience);
+          const inProgress = isMilestoneInProgress(lvl.level, experience);
+          const count = getMilestoneCount(lvl, experience.metrics);
+          const progressPctObj = inProgress ? count.pct : completed ? 100 : 0;
           const iconName = getLevelIcon(lvl.type);
           return (
             <View
@@ -208,13 +236,6 @@ export default function LevelProgressionScreen() {
                 completed && styles.questCardDone,
               ]}
             >
-              <View style={[styles.questCardDeco, { pointerEvents: 'none' }]}>
-                <FontAwesome
-                  name={iconName}
-                  size={48}
-                  color={completed ? 'rgba(21,128,61,0.1)' : 'rgba(0,0,0,0.06)'}
-                />
-              </View>
               <View style={[styles.questIconWrap, completed && styles.questIconWrapDone]}>
                 {completed ? (
                   <FontAwesome name="check" size={20} color={Theme.textOnPrimary} />
@@ -230,29 +251,24 @@ export default function LevelProgressionScreen() {
                 <Text style={[styles.questTitle, { color: colors.text }, completed && styles.questTitleDone]}>
                   {lvl.name.toUpperCase()}
                 </Text>
-                <Text style={[styles.questDesc, { color: colors.textMuted }]}>{lvl.goalText.toUpperCase()}</Text>
+                <Text style={[styles.questDesc, { color: colors.textMuted }]}>
+                  {lvl.goalText.toUpperCase()}
+                </Text>
               </View>
               {completed ? (
                 <View style={styles.questVerified}>
                   <Text style={styles.questVerifiedText}>VERIFIED</Text>
                 </View>
-              ) : inProgress ? (
+              ) : (
                 <View style={styles.questProgressWrap}>
-                  <Text style={[styles.questCount, { color: colors.text }]}>
-                    {countDone}
-                    <Text style={[styles.questCountTotal, { color: colors.textMuted }]}>/{countReq}</Text>
+                  <Text style={[styles.questCount, { color: inProgress ? colors.text : colors.textMuted }]}>
+                    {count.done}
+                    <Text style={[styles.questCountTotal, { color: colors.textMuted }]}>
+                      /{count.target}
+                    </Text>
                   </Text>
                   <View style={styles.questProgressBg}>
                     <View style={[styles.questProgressFill, { width: `${progressPctObj}%` }]} />
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.questProgressWrap}>
-                  <Text style={[styles.questCount, { color: colors.textMuted }]}>
-                    0<Text style={[styles.questCountTotal, { color: colors.textMuted }]}>/{countReq}</Text>
-                  </Text>
-                  <View style={styles.questProgressBg}>
-                    <View style={[styles.questProgressFill, { width: '0%' }]} />
                   </View>
                 </View>
               )}
@@ -269,7 +285,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   container: { flex: 1 },
   scrollContent: {},
-  // Elite Evolution (dark card — same as user profile)
   eliteCard: {
     backgroundColor: DARK_HERO_BG,
     borderRadius: 28,
@@ -306,154 +321,130 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Theme.textOnPrimary,
     textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  eliteSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.55)',
     marginBottom: 12,
   },
   eliteXpRow: {
     flexDirection: 'row',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   eliteXpValue: {
-    fontSize: 18,
+    fontSize: 28,
     fontWeight: '800',
     color: Theme.textOnPrimary,
   },
   eliteXpLabel: {
-    fontSize: 8,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '700',
     color: 'rgba(255,255,255,0.5)',
-    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   xpBarBg: {
-    height: 6,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     overflow: 'hidden',
     marginBottom: 10,
   },
   xpBarFill: {
     height: '100%',
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 3,
+    backgroundColor: Theme.driverEmerald,
+    borderRadius: 4,
   },
   eliteStatus: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: 'rgba(255,255,255,0.6)',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.45)',
   },
-
-  // Stats grid (same as user profile)
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 32,
+    gap: 10,
+    marginBottom: 24,
   },
   statCard: {
-    width: '47%',
-    padding: 20,
+    width: '48%',
+    flexGrow: 1,
+    minWidth: '46%',
+    borderRadius: 16,
     borderWidth: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  statCardDeco: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    opacity: 1,
+    padding: 14,
   },
   statCardDark: {
-    backgroundColor: Theme.buttonPrimary,
-    borderColor: Theme.primary,
-  },
-  statCardDecoDark: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    opacity: 1,
+    backgroundColor: DARK_HERO_BG,
+    borderColor: DARK_CARD_BORDER,
+    width: '48%',
+    flexGrow: 1,
+    minWidth: '46%',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
   },
   statLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    fontSize: 10,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   statLabelDark: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: Theme.textMutedDemo,
-    letterSpacing: 0.5,
+    fontSize: 10,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 8,
+    color: 'rgba(255,255,255,0.55)',
   },
   statRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  statValueDark: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Theme.textOnPrimary,
-  },
-
-  // Next Mile Objectives (same as user profile)
+  statValue: { fontSize: 20, fontWeight: '800' },
+  statValueDark: { fontSize: 20, fontWeight: '800', color: Theme.textOnPrimary },
   sectionTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 1.5,
     textTransform: 'uppercase',
+    letterSpacing: 0.8,
     marginBottom: 12,
-    paddingHorizontal: 4,
   },
-  questsList: { marginBottom: 24 },
+  questsList: { gap: 12 },
   questCard: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderWidth: 1,
     borderRadius: 20,
-    marginBottom: 10,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  questCardDeco: {
-    position: 'absolute',
-    top: 8,
-    right: 12,
-    opacity: 1,
   },
   questCardDone: {
     backgroundColor: Theme.positiveMuted,
-    borderColor: 'rgba(21,128,61,0.2)',
+    borderColor: 'rgba(21,128,61,0.15)',
   },
   questIconWrap: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 12,
   },
   questIconWrapDone: {
-    backgroundColor: Theme.darkGreen,
+    backgroundColor: Theme.driverEmerald,
+    borderColor: Theme.driverEmerald,
   },
   questBody: { flex: 1, minWidth: 0 },
   questTitle: {
     fontSize: 13,
     fontWeight: '800',
-    textTransform: 'uppercase',
     letterSpacing: 0.2,
   },
   questTitleDone: {
@@ -480,29 +471,16 @@ const styles = StyleSheet.create({
     color: Theme.darkGreen,
     letterSpacing: 0.5,
   },
-  questProgressWrap: {
-    alignItems: 'flex-end',
-    marginLeft: 8,
-  },
-  questCount: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  questCountTotal: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  questProgressWrap: { alignItems: 'flex-end', marginLeft: 8 },
+  questCount: { fontSize: 16, fontWeight: '800' },
+  questCountTotal: { fontSize: 11, fontWeight: '600' },
   questProgressBg: {
-    width: 56,
+    width: 64,
     height: 4,
     backgroundColor: Theme.surfaceLight,
     borderRadius: 2,
     marginTop: 6,
     overflow: 'hidden',
   },
-  questProgressFill: {
-    height: '100%',
-    backgroundColor: Theme.teslaRed,
-    borderRadius: 2,
-  },
+  questProgressFill: { height: '100%', backgroundColor: Theme.teslaRed, borderRadius: 2 },
 });

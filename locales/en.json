@@ -187,6 +187,8 @@
   "addTrip": "Add Trip",
   "tripAsset": "Asset",
   "tripAggregate": "Aggregate",
+  "tripOriginIndent": "Indent",
+  "tripOriginDirect": "Direct",
   "tripHubLabelMoverAsset": "Your job · fuel & driver pay",
   "tripHubLabelSettlement": "Settlement from shipper",
   "tripHubLabelJob": "Job",

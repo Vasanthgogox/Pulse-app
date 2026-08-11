@@ -33,7 +33,7 @@ function normalizeFeedPost(row: PostRow): PostRow {
 
 export interface PostRow {
   id: string;
-  organization_id: string;
+  organization_id: string | null;
   org_name: string;
   org_avatar_seed: string | null;
   /** Org logo image (organizations.logo_url) — rendered as the story cover. */

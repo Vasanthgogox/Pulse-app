@@ -1,7 +1,6 @@
 /**
  * Driver Profile — hero, fleet vehicle, levels, KYC shortcut to documents (single upload hub).
  */
-import { LEVELS_CONFIG } from '@/constants/DriverLevels';
 import { useAvatar } from '@/lib/useAvatar';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
@@ -10,6 +9,13 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { EditProfileModal } from '@/features/auth/components/EditProfileModal';
+import {
+  computeExperienceProgress,
+  countFiveStarRatings,
+  getMilestoneCount,
+  isMilestoneCompleted,
+  isMilestoneInProgress,
+} from '@/features/experience/experienceProgress';
 import {
   averageScore,
   getRatingsForDriver,
@@ -21,30 +27,31 @@ import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import * as driversService from '@/features/drivers/services/drivers.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import { getVehicleById } from '@/features/vehicles/services/vehicles.service';
+import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
-    Camera,
-    ChevronLeft,
-    ChevronRight,
-    Crown,
-    Dna,
-    Edit3,
-    Fuel,
-    Gauge,
-    Globe,
-    History,
-    LogOut,
-    Milestone,
-    Quote,
-    Share2,
-    Shield,
-    Star,
-    Thermometer,
-    Trophy,
-    Truck,
-    UserPlus,
-    Wrench
+  Camera,
+  ChevronLeft,
+  ChevronRight,
+  Crown,
+  Dna,
+  Edit3,
+  Fuel,
+  Gauge,
+  Globe,
+  History,
+  LogOut,
+  Milestone,
+  Quote,
+  Share2,
+  Shield,
+  Star,
+  Thermometer,
+  Trophy,
+  Truck,
+  UserPlus,
+  Wrench
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -72,14 +79,6 @@ const AMBER_500 = '#f59e0b';
 
 type ProfileView = 'main' | 'vehicle' | 'levels';
 
-const CAREER_ROADMAP = [
-  { tier: 'Rookie', minTrips: 0, dot: Theme.driverEmerald },
-  { tier: 'Pro', minTrips: 200, dot: '#3b82f6' },
-  { tier: 'Veteran', minTrips: 1000, dot: AMBER_500 },
-  { tier: 'Elite', minTrips: 2500, dot: '#9333ea' },
-  { tier: 'Legend', minTrips: 5000, dot: Theme.driverEmeraldDark },
-] as const;
-
 function formatShortDate(iso?: string | null) {
   if (!iso) return '—';
   try {
@@ -96,6 +95,7 @@ export default function DriverProfileScreen() {
   const isDark = theme === 'dark';
   const colors = useDriverThemeColors();
   const { user, profile, signOut, refreshSession, patchProfile } = useAuth();
+  const { isFleetOwner } = useDriverFleetOwnerQuery(profile?.uid);
   const { locale, localeOptions } = useLanguage();
   const languageLabel =
     localeOptions.find((o) => o.value === locale)?.label ?? 'English';
@@ -327,36 +327,22 @@ export default function DriverProfileScreen() {
   const driverRatingAvg = useMemo(() => averageScore(driverRatings), [driverRatings]);
   const driverRatingCount = driverRatings.length;
 
-  /** Same heuristic as `level-progression.tsx` for consistency across driver UI. */
-  const currentLevel = useMemo(() => Math.min(1 + Math.floor(tripsCount / 2), 8), [tripsCount]);
-
-  const currentLevelConfig = LEVELS_CONFIG.find((l) => l.level === currentLevel) ?? LEVELS_CONFIG[0];
-  const nextLevelConfig = LEVELS_CONFIG.find((l) => l.level === currentLevel + 1);
-
-  const experiencePct = useMemo(() => {
-    const nextTarget = nextLevelConfig?.type === 'trips' ? nextLevelConfig.target : 0;
-    if (nextTarget > 0) return Math.min(100, Math.floor((tripsCount / nextTarget) * 100));
-    return nextLevelConfig ? 0 : 100;
-  }, [nextLevelConfig, tripsCount]);
-
-  let activeRoadIdx = 0;
-  for (let i = CAREER_ROADMAP.length - 1; i >= 0; i--) {
-    if (tripsCount >= CAREER_ROADMAP[i].minTrips) {
-      activeRoadIdx = i;
-      break;
-    }
-  }
-  const nextRoad = CAREER_ROADMAP[activeRoadIdx + 1];
-  const tierProgressPct = nextRoad
-    ? Math.min(
-        100,
-        Math.round(
-          ((tripsCount - CAREER_ROADMAP[activeRoadIdx].minTrips) /
-            Math.max(1, nextRoad.minTrips - CAREER_ROADMAP[activeRoadIdx].minTrips)) *
-            100,
-        ),
-      )
-    : 100;
+  const experience = useMemo(
+    () =>
+      computeExperienceProgress({
+        hasSignedUp: Boolean(profile?.uid || user?.id),
+        completedTrips: tripsCount,
+        isVerified: Boolean(kycStatus?.isVerified),
+        fiveStarCount: countFiveStarRatings(driverRatings),
+      }),
+    [profile?.uid, user?.id, tripsCount, kycStatus?.isVerified, driverRatings],
+  );
+  const {
+    currentLevel,
+    currentLevelConfig,
+    nextLevelConfig,
+    experiencePct,
+  } = experience;
 
   const fleetOrgName =
     (primaryDriver?.organizations as { name?: string } | null | undefined)?.name?.trim() ||
@@ -449,18 +435,21 @@ export default function DriverProfileScreen() {
             <Crown size={28} color="#fff" />
           </LinearGradient>
           <View>
-            <Text style={styles.heroEyebrowGold}>CURRENT RANK</Text>
-            <Text style={styles.heroRankTitle}>{CAREER_ROADMAP[activeRoadIdx].tier}</Text>
+            <Text style={styles.heroEyebrowGold}>CURRENT MILESTONE</Text>
+            <Text style={styles.heroRankTitle}>
+              {currentLevelConfig.tier} · {currentLevelConfig.name}
+            </Text>
           </View>
         </View>
 
         <View style={styles.roadLineWrap}>
           <View style={styles.roadLine} />
-          {CAREER_ROADMAP.map((step, i) => {
-            const active = i === activeRoadIdx;
-            const past = i < activeRoadIdx;
+          {experience.levels.map((step) => {
+            const past = isMilestoneCompleted(step.level, experience);
+            const active = isMilestoneInProgress(step.level, experience);
+            const count = getMilestoneCount(step, experience.metrics);
             return (
-              <View key={step.tier} style={styles.roadStep}>
+              <View key={step.level} style={styles.roadStep}>
                 <View
                   style={[
                     styles.roadDot,
@@ -472,18 +461,27 @@ export default function DriverProfileScreen() {
                 />
                 <View style={[styles.roadCard, active ? styles.roadCardActive : styles.roadCardMuted]}>
                   <View style={styles.roadCardTop}>
-                    <Text style={styles.roadTier}>{step.tier}</Text>
-                    <Text style={styles.roadMin}>{step.minTrips}+ trips</Text>
+                    <Text style={styles.roadTier}>
+                      L{step.level} {step.name}
+                    </Text>
+                    <Text style={styles.roadMin}>{step.goalText}</Text>
                   </View>
-                  {active && nextRoad ? (
+                  {active ? (
                     <View style={{ marginTop: 10 }}>
                       <View style={styles.roadProgLabels}>
-                        <Text style={styles.roadProgLeft}>Progress to {nextRoad.tier}</Text>
-                        <Text style={styles.roadProgPct}>{tierProgressPct}%</Text>
+                        <Text style={styles.roadProgLeft}>
+                          {nextLevelConfig
+                            ? `Progress to ${nextLevelConfig.name}`
+                            : 'Final milestone'}
+                        </Text>
+                        <Text style={styles.roadProgPct}>{experiencePct}%</Text>
                       </View>
                       <View style={styles.progressTrack}>
-                        <View style={[styles.progressFillGold, { width: `${tierProgressPct}%` }]} />
+                        <View style={[styles.progressFillGold, { width: `${experiencePct}%` }]} />
                       </View>
+                      <Text style={[styles.roadMin, { marginTop: 6 }]}>
+                        {count.done}/{count.target} · unlocks {step.privilege}
+                      </Text>
                     </View>
                   ) : null}
                 </View>
@@ -497,14 +495,14 @@ export default function DriverProfileScreen() {
         <Text style={[styles.metricsTitle, { color: muted }]}>EXPERIENCE METRICS</Text>
         <View style={styles.metricsGrid}>
           <View style={[styles.metricCell, { backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
-            <Text style={[styles.metricLabel, { color: muted }]}>TOTAL TENURE</Text>
-            <Text style={[styles.metricValue, { color: colors.text }]}>
-              {primaryDriver ? `${Math.max(1, Math.floor((Date.now() - new Date(primaryDriver.created_at).getTime()) / (86400000)))} days` : '—'}
-            </Text>
+            <Text style={[styles.metricLabel, { color: muted }]}>TRIPS DONE</Text>
+            <Text style={[styles.metricValue, { color: colors.text }]}>{tripsCount}</Text>
           </View>
           <View style={[styles.metricCell, { backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
-            <Text style={[styles.metricLabel, { color: muted }]}>CONSISTENCY</Text>
-            <Text style={[styles.metricValue, { color: Theme.driverEmeraldDark }]}>High</Text>
+            <Text style={[styles.metricLabel, { color: muted }]}>5★ RATINGS</Text>
+            <Text style={[styles.metricValue, { color: Theme.driverEmeraldDark }]}>
+              {experience.metrics.fiveStarCount}
+            </Text>
           </View>
         </View>
       </View>
@@ -699,7 +697,9 @@ export default function DriverProfileScreen() {
                       />
                     </View>
                     <View style={styles.xpFooter}>
-                      <Text style={styles.xpFooterTxt}>{tripsCount} trips</Text>
+                      <Text style={styles.xpFooterTxt}>
+                        {experience.currentCount.done}/{experience.currentCount.target} · {tripsCount} trips
+                      </Text>
                       <Text style={styles.xpFooterTxt}>{nextLevelConfig?.name ?? 'Max'} next</Text>
                     </View>
                   </TouchableOpacity>
@@ -729,6 +729,44 @@ export default function DriverProfileScreen() {
                       : 'Add a short bio — visible to passengers and fleet managers. Tap edit to update.'}
                   </Text>
                 </View>
+
+                <TouchableOpacity
+                  style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: cardBorder }]}
+                  onPress={() =>
+                    router.push(
+                      (isFleetOwner
+                        ? ROUTES.driverMyFleet()
+                        : ROUTES.driverBecomeFleetOwner()) as Parameters<typeof router.push>[0],
+                    )
+                  }
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isFleetOwner ? 'Open My Fleet' : 'Become a Fleet Owner'
+                  }
+                >
+                  <View style={styles.rowCardLeft}>
+                    <View style={[styles.blueIcon, { backgroundColor: isDark ? colors.emeraldMuted : 'rgba(167,243,208,0.45)' }]}>
+                      <Truck size={20} color={colors.emerald} />
+                    </View>
+                    <View style={styles.rowCardText}>
+                      <Text style={[styles.rowEyebrow, { color: muted }]}>
+                        {isFleetOwner ? 'FLEET OWNER' : 'GROW YOUR WORK'}
+                      </Text>
+                      <Text style={[styles.rowTitle, { color: colors.text }]}>
+                        {isFleetOwner ? 'My Fleet' : 'Become a Fleet Owner'}
+                      </Text>
+                      <Text style={[styles.rowSub, { color: muted }]} numberOfLines={2}>
+                        {isFleetOwner
+                          ? 'Vehicles · documents · browse available loads'
+                          : 'Add your fleet · bid for loads · track vehicle earnings'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.chevPill, { backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
+                    <ChevronRight size={18} color={muted} />
+                  </View>
+                </TouchableOpacity>
 
                 <TouchableOpacity style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: cardBorder }]} onPress={() => setProfileView('vehicle')} activeOpacity={0.88}>
                   <View style={styles.rowCardLeft}>

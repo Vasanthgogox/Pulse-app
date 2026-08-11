@@ -85,9 +85,10 @@ const RING_SPONSORED_SEEN = ["#c4b5a5", "#a89080"] as const;
 
 const ACCENT_TOKENS = [Theme.accentGold, Theme.darkGreen, Theme.primary, Theme.brandBluePressed] as const;
 
-function seedColor(id: string): string {
+function seedColor(id: string | null | undefined): string {
+  const key = (id ?? "").trim() || "fleet";
   let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % ACCENT_TOKENS.length;
+  for (let i = 0; i < key.length; i++) h = (h + key.charCodeAt(i)) % ACCENT_TOKENS.length;
   return ACCENT_TOKENS[h];
 }
 
@@ -96,7 +97,7 @@ function storyLane(post: PostRow): "ad" | "organic" {
 }
 
 function storySeenKey(post: PostRow): string {
-  return `${post.organization_id}:${post.type}:${storyLane(post)}`;
+  return `${post.organization_id ?? "fleet"}:${post.type}:${storyLane(post)}`;
 }
 
 function storyDedupeKey(post: PostRow): string {

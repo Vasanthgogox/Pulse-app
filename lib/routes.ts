@@ -76,6 +76,22 @@ export const ROUTES = {
   driverExpenseCapture: () => '/(driver)/expense-capture' as const,
   /** Device-local general expense (no trip) + WhatsApp share. */
   driverGeneralExpense: () => '/(driver)/general-expense' as const,
+  /** Become Fleet Owner (Phase 1 capability enablement). */
+  driverBecomeFleetOwner: () => '/(driver)/become-fleet-owner' as const,
+  /** My Fleet list (personal owner vehicles). */
+  driverMyFleet: () => '/(driver)/my-fleet' as const,
+  driverMyFleetAdd: () => '/(driver)/my-fleet/add' as const,
+  driverMyFleetVehicle: (vehicleId: string) =>
+    `/(driver)/my-fleet/${encodeURIComponent(vehicleId)}` as const,
+  /** Phase 3A: open marketplace loads (Fleet Owner, read-only). */
+  driverAvailableLoads: () => '/(driver)/available-loads' as const,
+  driverAvailableLoad: (indentId: string) =>
+    `/(driver)/available-loads/${encodeURIComponent(indentId)}` as const,
+  /** Phase 3B.1: FO capacity Story composer (optional vehicleId). */
+  driverCapacityStory: (vehicleId?: string) =>
+    vehicleId
+      ? (`/(driver)/capacity-story?vehicleId=${encodeURIComponent(vehicleId)}` as const)
+      : ('/(driver)/capacity-story' as const),
 
   /** Full-screen Pulse Chat (root stack — preferred entry). */
   CHAT: '/chat' as const,

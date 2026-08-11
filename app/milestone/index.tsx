@@ -1,6 +1,6 @@
 /**
- * Milestone detail page — matches reference milestone.tsx levelDetail 100%.
- * Evolution Protocol: Upgrade Distance hero, Gold Path Progress, Next Mile Objectives.
+ * Milestone Map — live Experience milestones from LEVELS_CONFIG.
+ * MILE-01…04: segment progress + next-mile objectives from real trip/rating/KYC metrics.
  */
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -8,59 +8,104 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { TeslaHeader } from '@/components/TeslaHeader';
+import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useSafeBack } from '@/lib/useSafeBack';
+import { useAuth } from '@/contexts/AuthContext';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useTripsQuery } from '@/lib/queries/useTripsQuery';
+import { useQuery } from '@tanstack/react-query';
+import {
+  averageScore,
+  getRatingsReceivedAsLinkedOrganization,
+} from '@/features/ratings/services/ratings.service';
+import {
+  computeExperienceProgress,
+  countFiveStarRatings,
+  getMilestoneCount,
+  isMilestoneCompleted,
+  isMilestoneInProgress,
+} from '@/features/experience/experienceProgress';
+import { useMemo } from 'react';
 
-function getTierData(level: number): { label: string; color: string; nextTier: string; levelsToNext: number; unlock: string } {
-  if (level <= 10) return { label: 'SILVER', color: '#94A3B8', nextTier: 'GOLD', levelsToNext: 11 - level, unlock: 'Base Freight Access' };
-  if (level <= 20) return { label: 'GOLD', color: '#F59E0B', nextTier: 'PLATINUM', levelsToNext: 21 - level, unlock: 'Priority Load Bidding' };
-  if (level <= 30) return { label: 'PLATINUM', color: '#38BDF8', nextTier: 'TITANIUM', levelsToNext: 31 - level, unlock: 'Instant Settlement' };
-  return { label: 'TITANIUM', color: '#E11D48', nextTier: 'MAX', levelsToNext: 0, unlock: 'Zero Fee Withdrawals' };
-}
-
-type QuestStatus = 'COMPLETED' | 'IN_PROGRESS';
-interface Quest {
-  id: string;
-  title: string;
-  desc: string;
-  status: QuestStatus;
-  xp: number;
-  countReq: number;
-  countDone: number;
-  icon: string;
-}
-
-const PROFILE = {
-  level: 14,
-  xp: 780,
-  xpToNext: 1000,
-  quests: [
-    { id: 'Q1', title: 'Neural Handshake', desc: 'Complete Biometric KYC', status: 'COMPLETED' as QuestStatus, xp: 500, countReq: 1, countDone: 1, icon: 'user' },
-    { id: 'Q2', title: 'Fleet Pioneer', desc: 'Add 5 trips to ledger', status: 'IN_PROGRESS' as QuestStatus, xp: 1000, countReq: 5, countDone: 3, icon: 'truck' },
-    { id: 'Q3', title: 'Elite Rating', desc: 'Get 10 5-star reviews', status: 'IN_PROGRESS' as QuestStatus, xp: 500, countReq: 10, countDone: 8, icon: 'star' },
-    { id: 'Q4', title: 'Chain Verifier', desc: 'Settle 10 Shared Ledgers', status: 'IN_PROGRESS' as QuestStatus, xp: 1500, countReq: 10, countDone: 4, icon: 'refresh' },
-  ] as Quest[],
-};
-
-const SEGMENTS = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 const EMERALD = '#10B981';
+
+function isTripDone(status: string) {
+  const s = (status || '').toLowerCase();
+  return s === 'completed' || s === 'delivered' || s === 'done';
+}
+
+function getLevelIcon(type: string): 'user' | 'truck' | 'id-card' | 'star' {
+  if (type === 'trips') return 'truck';
+  if (type === 'ratings') return 'star';
+  if (type === 'verification') return 'id-card';
+  return 'user';
+}
 
 export default function MilestoneScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const safeBack = useSafeBack();
-  const p = PROFILE;
-  const currentTier = getTierData(p.level);
-  const xpRemaining = p.xpToNext - p.xp;
+  const { user, profile } = useAuth();
+  const { currentOrganization } = useOrganization();
+  const orgId = currentOrganization?.id ?? null;
+  const { data: trips = [], isLoading: tripsLoading } = useTripsQuery(orgId);
+
+  const { data: ratingBundle, isLoading: ratingsLoading } = useQuery({
+    queryKey: ['q', 'milestone', 'receivedRatings', orgId ?? ''],
+    queryFn: async () => {
+      if (!orgId) return { fiveStarCount: 0, avg: null as number | null };
+      const { error, ratings } = await getRatingsReceivedAsLinkedOrganization(orgId);
+      if (error) throw error;
+      return {
+        fiveStarCount: countFiveStarRatings(ratings),
+        avg: averageScore(ratings),
+      };
+    },
+    enabled: !!orgId,
+    staleTime: 60_000,
+  });
+
+  const completedTrips = useMemo(
+    () => (trips ?? []).filter((t) => isTripDone(t.status ?? '')).length,
+    [trips],
+  );
+
+  const experience = useMemo(
+    () =>
+      computeExperienceProgress({
+        hasSignedUp: Boolean(user?.id || profile?.uid),
+        completedTrips,
+        isVerified: Boolean(orgId),
+        fiveStarCount: ratingBundle?.fiveStarCount ?? 0,
+      }),
+    [user?.id, profile?.uid, completedTrips, orgId, ratingBundle?.fiveStarCount],
+  );
+
+  const {
+    currentLevel,
+    currentLevelConfig,
+    nextLevelConfig,
+    experiencePct,
+    currentCount,
+    levels,
+  } = experience;
+
+  const remainingUnits = Math.max(0, currentCount.target - currentCount.done);
+  const segments = levels.map((l) => l.level);
+
+  if (tripsLoading || ratingsLoading) {
+    return <CenteredLoadingView message="Loading milestones…" />;
+  }
 
   return (
     <View style={styles.outer}>
       <TeslaHeader
         title="Milestone Map"
-        subtitle="Evolution Protocol"
+        subtitle="Experience Protocol"
         variant="default"
         showBack
         onBack={safeBack}
-        onNotificationClick={() => router.push("/notifications")}
+        onNotificationClick={() => router.push('/notifications')}
       />
 
       <ScrollView
@@ -68,7 +113,6 @@ export default function MilestoneScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 32 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Dark hero — Upgrade Distance */}
         <View style={styles.hero}>
           <View style={styles.heroDeco}>
             <FontAwesome name="flag" size={100} color="rgba(255,255,255,0.1)" />
@@ -77,70 +121,104 @@ export default function MilestoneScreen() {
             <FontAwesome name="chevron-up" size={32} color={EMERALD} />
           </View>
           <Text style={styles.heroLabel}>Upgrade Distance</Text>
-          <Text style={styles.heroXp}>{xpRemaining} <Text style={styles.heroXpUnit}>XP</Text></Text>
+          <Text style={styles.heroXp}>
+            {remainingUnits}{' '}
+            <Text style={styles.heroXpUnit}>
+              {currentLevelConfig.type === 'trips'
+                ? 'TRIPS'
+                : currentLevelConfig.type === 'ratings'
+                  ? '5★'
+                  : 'STEPS'}
+            </Text>
+          </Text>
           <Text style={styles.heroDesc}>
-            Complete the tasks below to reach Level {p.level + 1} and unlock {currentTier.unlock}.
+            {nextLevelConfig
+              ? `Complete “${currentLevelConfig.goalText}” to reach ${nextLevelConfig.name} and unlock ${currentLevelConfig.privilege}.`
+              : `Max milestone reached · ${currentLevelConfig.privilege}`}
           </Text>
         </View>
 
-        {/* Gold Path Progress */}
-        <Text style={styles.sectionLabel}>Gold Path Progress</Text>
+        <Text style={styles.sectionLabel}>
+          {currentLevelConfig.tier} Path Progress · L{currentLevel}
+        </Text>
         <View style={styles.segmentsRow}>
-          {SEGMENTS.map((s) => (
-            <View key={s} style={styles.segmentCol}>
-              <View
-                style={[
-                  styles.segmentBar,
-                  s < p.level && styles.segmentBarDone,
-                  s === p.level && styles.segmentBarCurrent,
-                ]}
-              />
-              <Text style={[styles.segmentNum, s === p.level && styles.segmentNumCurrent]}>{s}</Text>
-            </View>
-          ))}
+          {segments.map((s) => {
+            const done = isMilestoneCompleted(s, experience);
+            const current = isMilestoneInProgress(s, experience);
+            return (
+              <View key={s} style={styles.segmentCol}>
+                <View
+                  style={[
+                    styles.segmentBar,
+                    done && styles.segmentBarDone,
+                    current && styles.segmentBarCurrent,
+                  ]}
+                />
+                <Text style={[styles.segmentNum, current && styles.segmentNumCurrent]}>{s}</Text>
+              </View>
+            );
+          })}
         </View>
 
-        {/* Next Mile Objectives */}
         <View style={styles.objectivesHead}>
           <Text style={styles.objectivesTitle}>Next Mile Objectives</Text>
           <FontAwesome name="crosshairs" size={16} color={Theme.teslaRed} />
         </View>
         <View style={styles.questsList}>
-          {p.quests.map((q) => (
-            <View
-              key={q.id}
-              style={[styles.questCard, q.status === 'COMPLETED' && styles.questCardDone]}
-            >
-              <View style={[styles.questIconWrap, q.status === 'COMPLETED' && styles.questIconWrapDone]}>
-                {q.status === 'COMPLETED' ? (
-                  <FontAwesome name="check" size={24} color={Theme.textOnPrimary} />
+          {levels.map((q) => {
+            const completed = isMilestoneCompleted(q.level, experience);
+            const inProgress = isMilestoneInProgress(q.level, experience);
+            const count = getMilestoneCount(q, experience.metrics);
+            const icon = getLevelIcon(q.type);
+            return (
+              <View
+                key={q.level}
+                style={[styles.questCard, completed && styles.questCardDone]}
+              >
+                <View style={[styles.questIconWrap, completed && styles.questIconWrapDone]}>
+                  {completed ? (
+                    <FontAwesome name="check" size={24} color={Theme.textOnPrimary} />
+                  ) : (
+                    <FontAwesome name={icon} size={20} color={Theme.textMutedDemo} />
+                  )}
+                </View>
+                <View style={styles.questBody}>
+                  <Text style={[styles.questTitle, completed && styles.questTitleDone]}>
+                    {q.name}
+                  </Text>
+                  <Text style={styles.questDesc}>{q.goalText}</Text>
+                </View>
+                {completed ? (
+                  <View style={styles.questVerified}>
+                    <Text style={styles.questVerifiedText}>VERIFIED</Text>
+                  </View>
                 ) : (
-                  <FontAwesome
-                    name={(q.icon === 'refresh' ? 'refresh' : q.icon) as 'user' | 'truck' | 'star' | 'refresh'}
-                    size={20}
-                    color={Theme.textMutedDemo}
-                  />
+                  <View style={styles.questProgressWrap}>
+                    <Text style={styles.questCount}>
+                      {count.done}
+                      <Text style={styles.questCountTotal}>/{count.target}</Text>
+                    </Text>
+                    <View style={styles.questProgressBg}>
+                      <View
+                        style={[
+                          styles.questProgressFill,
+                          {
+                            width: `${inProgress ? count.pct : 0}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
                 )}
               </View>
-              <View style={styles.questBody}>
-                <Text style={[styles.questTitle, q.status === 'COMPLETED' && styles.questTitleDone]}>{q.title}</Text>
-                <Text style={styles.questDesc}>{q.desc}</Text>
-              </View>
-              {q.status === 'COMPLETED' ? (
-                <View style={styles.questVerified}>
-                  <Text style={styles.questVerifiedText}>VERIFIED</Text>
-                </View>
-              ) : (
-                <View style={styles.questProgressWrap}>
-                  <Text style={styles.questCount}>{q.countDone}<Text style={styles.questCountTotal}>/{q.countReq}</Text></Text>
-                  <View style={styles.questProgressBg}>
-                    <View style={[styles.questProgressFill, { width: `${(q.countDone / q.countReq) * 100}%` }]} />
-                  </View>
-                </View>
-              )}
-            </View>
-          ))}
+            );
+          })}
         </View>
+
+        <Text style={styles.footerMeta}>
+          {experiencePct}% on current milestone · {completedTrips} trips ·{' '}
+          {experience.metrics.fiveStarCount}× 5★
+        </Text>
       </ScrollView>
     </View>
   );
@@ -229,7 +307,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   segmentBarDone: { backgroundColor: EMERALD },
-  segmentBarCurrent: { backgroundColor: EMERALD, shadowColor: EMERALD, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 2 },
+  segmentBarCurrent: {
+    backgroundColor: EMERALD,
+    shadowColor: EMERALD,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   segmentNum: { fontSize: 7, fontWeight: '800', color: Theme.textMutedDemo },
   segmentNumCurrent: { color: EMERALD },
   objectivesHead: {
@@ -317,4 +402,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   questProgressFill: { height: '100%', backgroundColor: Theme.teslaRed, borderRadius: 2 },
+  footerMeta: {
+    marginTop: 18,
+    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: '600',
+    color: Theme.textMutedDemo,
+  },
 });

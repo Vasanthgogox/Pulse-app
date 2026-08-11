@@ -32,6 +32,8 @@ import {
     getDriverTripDisplayNumber,
 } from '@/features/driver/utils/driverTripSequence.util';
 import {
+    canShowDriverTripEstEarnings,
+    DRIVER_PAY_NA_LABEL,
     isActiveMission,
     isAggregateTrip,
     isAssignedNotStarted,
@@ -539,7 +541,7 @@ export default function DriverNotificationsScreen() {
           String(inviteForTrip.status ?? '').toLowerCase() === 'accepted'
             ? inviteForTrip
             : null;
-        const commissionForTrip = computeDriverTripEstEarningsInr(trip, {
+        const payoutOffer = {
           payableAmount:
             acceptedInviteForTrip?.payable_amount ?? driver?.payable_amount ?? null,
           commissionPercent:
@@ -550,7 +552,12 @@ export default function DriverNotificationsScreen() {
             acceptedInviteForTrip?.commission_per_km ??
             driver?.commission_per_km ??
             null,
-        });
+        };
+        const commissionForTrip = canShowDriverTripEstEarnings(trip, payoutOffer, {
+          trackingOnly: driver?.tracking_only,
+        })
+          ? computeDriverTripEstEarningsInr(trip, payoutOffer)
+          : 0;
 
         const orgId = (assignerDisplay.effectiveAssignerOrgId ?? '').trim();
         const assignerPayload = buildJobCardAssignerPayload(
@@ -785,7 +792,7 @@ export default function DriverNotificationsScreen() {
                 <Text style={[styles.meta, { color: colors.textMuted }]}>
                   {item.commissionForTrip > 0
                     ? `Est. earning ${formatINR(item.commissionForTrip)}`
-                    : 'Est. earning · Salary'}
+                    : DRIVER_PAY_NA_LABEL}
                 </Text>
                 {passiveAssignmentRows ? (
                   <View style={styles.cardFooter}>

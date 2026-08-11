@@ -1,6 +1,7 @@
 /**
  * Driver fullscreen Pulse story viewer — Mission layout aligned with
  * business StoryDetailScreen + StoryBroadcastPreview.
+ * Opens the full active-load reel as one WhatsApp-style sequence.
  */
 import { PulseBrandMark } from "@/components/brand/PulseBrandMark";
 import Layout from "@/constants/Layout";
@@ -13,6 +14,7 @@ import {
   splitLocationParts,
 } from "@/features/network/utils/storyDisplay";
 import type { DriverReachStoryRow } from "@/features/reach/services/driverReferrals.service";
+import { positiveMoneyOrNull } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2,
@@ -22,7 +24,7 @@ import {
   X,
   XCircle,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -40,16 +42,28 @@ const INK = Theme.textPrimaryDark;
 const MUTED = Theme.textSecondary;
 const STORY_DURATION = 15000;
 
+export type DriverStoryFooterAction = {
+  label: string;
+  hint?: string;
+  onPress: () => void;
+};
+
 export type DriverPulseStoryViewerProps = {
-  postId: string;
+  /** Full active-load queue (WhatsApp-style). Prefer over a single postId. */
+  stories?: DriverReachStoryRow[];
+  /** Start at this post within `stories`. Defaults to the first item. */
+  initialPostId?: string | null;
+  /** Legacy single-story entry (deep link / story-detail). */
+  postId?: string;
   story?: DriverReachStoryRow | null;
   shipperName?: string | null;
   onClose: () => void;
-  footerAction?: {
-    label: string;
-    hint?: string;
-    onPress: () => void;
-  } | null;
+  /** Static footer for a single-story open. Prefer `resolveFooterAction`. */
+  footerAction?: DriverStoryFooterAction | null;
+  /** Per-story footer CTA while paging through the reel. */
+  resolveFooterAction?: (story: DriverReachStoryRow) => DriverStoryFooterAction | null;
+  /** Fired when each story becomes the active segment (for view analytics). */
+  onStoryViewed?: (story: DriverReachStoryRow) => void;
 };
 
 function timeAgo(d: string): string {
@@ -91,7 +105,7 @@ function previewToPost(
     load_date: preview.load_date,
     vehicle_type: preview.vehicle_type ?? story?.snapshot_vehicle_type ?? null,
     weight_tonnes: null,
-    rate_offer: null,
+    rate_offer: positiveMoneyOrNull(story?.snapshot_rate_offer),
     material: story?.snapshot_material ?? null,
     expires_at: preview.expires_at ?? story?.expires_at ?? null,
     is_active: preview.is_active,
@@ -101,6 +115,37 @@ function previewToPost(
     is_sponsored: true,
     reach_campaign_id: story?.campaign_id ?? null,
   };
+}
+
+function ProgressSegment({
+  index,
+  current,
+  progress,
+}: {
+  index: number;
+  current: number;
+  progress: Animated.Value;
+}) {
+  const width = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0%", "100%"],
+    extrapolate: "clamp",
+  });
+  if (index < current) {
+    return (
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: "100%" }]} />
+      </View>
+    );
+  }
+  if (index === current) {
+    return (
+      <View style={styles.progressTrack}>
+        <Animated.View style={[styles.progressFill, { width }]} />
+      </View>
+    );
+  }
+  return <View style={styles.progressTrack} />;
 }
 
 function BidToShipperBanner({
@@ -199,68 +244,170 @@ function BidToShipperBanner({
   return null;
 }
 
+function buildQueue(
+  stories: DriverReachStoryRow[] | undefined,
+  postId: string | undefined,
+  story: DriverReachStoryRow | null | undefined,
+): DriverReachStoryRow[] {
+  if (stories && stories.length > 0) {
+    if (story?.post_id && !stories.some((s) => s.post_id === story.post_id)) {
+      return [story, ...stories];
+    }
+    return stories;
+  }
+  if (story?.post_id) return [story];
+  if (postId) {
+    return [
+      {
+        campaign_id: "",
+        campaign_org_id: "",
+        org_name: "Pulse",
+        org_logo_url: null,
+        campaign_status: "active",
+        published_at: null,
+        expires_at: null,
+        snapshot_post_type: "LOAD",
+        snapshot_title: null,
+        snapshot_origin: null,
+        snapshot_destination: null,
+        snapshot_vehicle_type: null,
+        snapshot_material: null,
+        snapshot_content: null,
+        snapshot_rate_offer: null,
+        driver_reward_enabled: false,
+        reward_amount: 0,
+        reward_available: false,
+        referral_id: null,
+        referral_status: null,
+        referral_reward_amount: null,
+        recommended_at: null,
+        rewarded_at: null,
+        post_id: postId,
+        direct_bid_status: null,
+        direct_bid_amount: null,
+        direct_bid_counter_amount: null,
+      },
+    ];
+  }
+  return [];
+}
+
 export function DriverPulseStoryViewer({
+  stories,
+  initialPostId = null,
   postId,
   story = null,
   shipperName,
   onClose,
   footerAction = null,
+  resolveFooterAction,
+  onStoryViewed,
 }: DriverPulseStoryViewerProps) {
   const insets = useSafeAreaInsets();
   const progress = useRef(new Animated.Value(0)).current;
   const footerFade = useRef(new Animated.Value(0)).current;
+  const animRef = useRef<Animated.CompositeAnimation | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const viewedRef = useRef<Set<string>>(new Set());
+
+  const queue = useMemo(
+    () => buildQueue(stories, postId, story),
+    [stories, postId, story],
+  );
+
+  const initialIndex = useMemo(() => {
+    const target = initialPostId ?? postId ?? story?.post_id ?? null;
+    if (!target || queue.length === 0) return 0;
+    const idx = queue.findIndex((s) => s.post_id === target);
+    return idx >= 0 ? idx : 0;
+  }, [queue, initialPostId, postId, story?.post_id]);
+
+  const [current, setCurrent] = useState(initialIndex);
+
+  useEffect(() => {
+    setCurrent(initialIndex);
+    progress.setValue(0);
+  }, [initialIndex, progress]);
+
+  const activeStory = queue[current] ?? null;
+  const activePostId = activeStory?.post_id ?? postId ?? "";
+
+  const goNext = useCallback(() => {
+    if (current < queue.length - 1) {
+      progress.setValue(0);
+      setCurrent((c) => c + 1);
+      return;
+    }
+    onCloseRef.current();
+  }, [current, queue.length, progress]);
+
+  const goPrev = useCallback(() => {
+    if (current > 0) {
+      progress.setValue(0);
+      setCurrent((c) => c - 1);
+    }
+  }, [current, progress]);
+
+  useEffect(() => {
+    if (!activeStory?.campaign_id) return;
+    if (viewedRef.current.has(activeStory.campaign_id)) return;
+    viewedRef.current.add(activeStory.campaign_id);
+    onStoryViewed?.(activeStory);
+  }, [activeStory, onStoryViewed]);
 
   const previewQ = useQuery({
-    queryKey: ["q", "posts", "story-preview", "driver", postId],
+    queryKey: ["q", "posts", "story-preview", "driver", activePostId],
     queryFn: async () => {
-      const { preview, error } = await getStoryPreview(postId);
+      const { preview, error } = await getStoryPreview(activePostId);
       if (error) throw error;
       return preview;
     },
-    enabled: Boolean(postId),
+    enabled: Boolean(activePostId),
     staleTime: 30_000,
     retry: 1,
   });
 
   const post = useMemo(() => {
-    if (previewQ.data) return previewToPost(previewQ.data, story);
+    if (previewQ.data) return previewToPost(previewQ.data, activeStory);
     // Instant paint from feed snapshot while preview RPC loads
-    if (story?.post_id) {
+    if (activeStory?.post_id) {
       return previewToPost(
         {
-          id: story.post_id,
-          organization_id: story.campaign_org_id,
-          org_name: story.org_name,
-          type: (story.snapshot_post_type as PostRow["type"]) || "LOAD",
-          origin: story.snapshot_origin,
-          destination: story.snapshot_destination,
+          id: activeStory.post_id,
+          organization_id: activeStory.campaign_org_id,
+          org_name: activeStory.org_name,
+          type: (activeStory.snapshot_post_type as PostRow["type"]) || "LOAD",
+          origin: activeStory.snapshot_origin,
+          destination: activeStory.snapshot_destination,
           load_date: null,
-          vehicle_type: story.snapshot_vehicle_type,
-          expires_at: story.expires_at,
+          vehicle_type: activeStory.snapshot_vehicle_type,
+          expires_at: activeStory.expires_at,
           is_active: true,
         },
-        story,
+        activeStory,
       );
     }
     return null;
-  }, [previewQ.data, story]);
+  }, [previewQ.data, activeStory]);
 
   useEffect(() => {
-    if (!post?.id) return;
+    if (!post?.id || queue.length === 0) return;
+    if (animRef.current) animRef.current.stop();
     progress.setValue(0);
-    const anim = Animated.timing(progress, {
+    animRef.current = Animated.timing(progress, {
       toValue: 1,
       duration: STORY_DURATION,
       easing: Easing.linear,
       useNativeDriver: false,
     });
-    anim.start(({ finished }) => {
-      if (finished) onCloseRef.current();
+    animRef.current.start(({ finished }) => {
+      if (finished) goNext();
     });
-    return () => anim.stop();
-  }, [post?.id, progress]);
+    return () => {
+      if (animRef.current) animRef.current.stop();
+    };
+  }, [post?.id, current, queue.length, goNext, progress]);
 
   useEffect(() => {
     if (!post?.id) return;
@@ -274,16 +421,16 @@ export function DriverPulseStoryViewer({
   }, [post?.id, footerFade]);
 
   const resolvedShipper =
-    (shipperName ?? story?.org_name ?? post?.org_name ?? "shipper").trim() || "shipper";
+    (shipperName ?? activeStory?.org_name ?? post?.org_name ?? "shipper").trim() ||
+    "shipper";
 
-  const progressWidth = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
-    extrapolate: "clamp",
-  });
+  const activeFooter =
+    (activeStory && resolveFooterAction?.(activeStory)) ??
+    (queue.length <= 1 ? footerAction : null) ??
+    null;
 
   const body = (() => {
-    if (!post && previewQ.isLoading) {
+    if (queue.length === 0 && previewQ.isLoading) {
       return (
         <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
           <ActivityIndicator size="large" color={Theme.driverEmerald} />
@@ -292,7 +439,7 @@ export function DriverPulseStoryViewer({
       );
     }
 
-    if (!post) {
+    if (!post && !activeStory) {
       return (
         <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
           <Pressable style={styles.topBarIconBtn} onPress={onClose}>
@@ -310,19 +457,33 @@ export function DriverPulseStoryViewer({
       );
     }
 
+    if (!post) {
+      return (
+        <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
+          <ActivityIndicator size="large" color={Theme.driverEmerald} />
+          <Text style={styles.loadingText}>Opening story…</Text>
+        </View>
+      );
+    }
+
     const isLoad = post.type === "LOAD" && Boolean(post.origin && post.destination);
     const originParts = splitLocationParts(post.origin);
     const destinationParts = splitLocationParts(post.destination);
-    const loadMaterial = loadMaterialLabel(post, story?.snapshot_title ?? "Load");
+    const loadMaterial = loadMaterialLabel(post, activeStory?.snapshot_title ?? "Load");
 
     return (
       <View style={styles.container}>
         {isLoad ? <View style={styles.ambientGlow} pointerEvents="none" /> : null}
 
         <View style={[styles.progressRow, { paddingTop: insets.top + 8 }]}>
-          <View style={styles.progressTrack}>
-            <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
-          </View>
+          {queue.map((item, i) => (
+            <ProgressSegment
+              key={item.post_id || item.campaign_id || String(i)}
+              index={i}
+              current={current}
+              progress={progress}
+            />
+          ))}
         </View>
 
         <View style={[styles.topBar, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
@@ -363,6 +524,21 @@ export function DriverPulseStoryViewer({
           >
             <X size={16} color={INK} strokeWidth={2.25} />
           </Pressable>
+        </View>
+
+        <View style={styles.tapZones} pointerEvents="box-none">
+          <Pressable
+            style={styles.tapLeft}
+            onPress={goPrev}
+            accessibilityRole="button"
+            accessibilityLabel="Previous story"
+          />
+          <Pressable
+            style={styles.tapRight}
+            onPress={goNext}
+            accessibilityRole="button"
+            accessibilityLabel="Next story"
+          />
         </View>
 
         <View style={styles.centerStage} pointerEvents="none">
@@ -407,21 +583,21 @@ export function DriverPulseStoryViewer({
             },
           ]}
         >
-          {story ? (
-            <BidToShipperBanner story={story} shipperName={resolvedShipper} />
+          {activeStory ? (
+            <BidToShipperBanner story={activeStory} shipperName={resolvedShipper} />
           ) : null}
 
-          {footerAction ? (
+          {activeFooter ? (
             <Pressable
               style={({ pressed }) => [
                 styles.authorizeBtn,
                 pressed && styles.authorizeBtnPressed,
               ]}
-              onPress={footerAction.onPress}
+              onPress={activeFooter.onPress}
             >
-              <Text style={styles.authorizeBtnText}>{footerAction.label}</Text>
-              {footerAction.hint ? (
-                <Text style={styles.authorizeBtnHint}>{footerAction.hint}</Text>
+              <Text style={styles.authorizeBtnText}>{activeFooter.label}</Text>
+              {activeFooter.hint ? (
+                <Text style={styles.authorizeBtnHint}>{activeFooter.hint}</Text>
               ) : null}
             </Pressable>
           ) : (
@@ -522,19 +698,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   orgTitle: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
     color: INK,
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
   },
   topBarSubRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   timeAgoLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: MUTED,
   },
   sponsoredTag: {
@@ -542,21 +718,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 3,
     backgroundColor: Theme.accentBrownMuted,
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   sponsoredTagText: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.4,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.35,
     color: Theme.accentBrown,
     textTransform: "uppercase",
   },
   topBarIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surface,
@@ -566,6 +742,17 @@ const styles = StyleSheet.create({
   topBarIconBtnPressed: {
     opacity: 0.85,
   },
+  tapZones: {
+    position: "absolute",
+    top: 100,
+    left: 0,
+    right: 0,
+    bottom: 200,
+    flexDirection: "row",
+    zIndex: 30,
+  },
+  tapLeft: { flex: 1 },
+  tapRight: { flex: 2.2 },
   centerStage: {
     flex: 1,
     justifyContent: "center",
@@ -574,28 +761,28 @@ const styles = StyleSheet.create({
   fallbackHero: {
     alignItems: "center",
     paddingHorizontal: 24,
-    gap: 10,
+    gap: 8,
   },
   fallbackIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.driverEmeraldMuted,
   },
   fallbackKicker: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.2,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.8,
     color: Theme.driverEmerald,
   },
   fallbackTitle: {
-    fontSize: 22,
-    fontWeight: "900",
+    fontSize: 18,
+    fontWeight: "800",
     color: INK,
     textAlign: "center",
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
   },
   watermark: {
     position: "absolute",
@@ -606,28 +793,28 @@ const styles = StyleSheet.create({
     transform: [{ translateY: -28 }],
   },
   watermarkText: {
-    fontSize: 56,
-    fontWeight: "900",
+    fontSize: 48,
+    fontWeight: "800",
     color: INK,
     opacity: 0.03,
-    letterSpacing: -1.2,
+    letterSpacing: -1,
     fontStyle: "italic",
   },
   footer: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.loadStatusTabBorderSoft,
-    backgroundColor: "rgba(255,255,255,0.96)",
+    backgroundColor: "rgba(255,255,255,0.98)",
     gap: 8,
   },
   bidStatusBanner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    gap: 8,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
     backgroundColor: "rgba(16,185,129,0.08)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(16,185,129,0.22)",
@@ -643,10 +830,10 @@ const styles = StyleSheet.create({
   bidStatusText: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
   },
   bidStatusLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: INK,
   },
@@ -654,14 +841,14 @@ const styles = StyleSheet.create({
     color: Theme.warning,
   },
   bidStatusAmount: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: MUTED,
   },
   bidStatusBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
   },
   bidBadgePending: {
     backgroundColor: Theme.driverEmerald,
@@ -673,59 +860,62 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.negative,
   },
   bidStatusBadgeText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "800",
-    letterSpacing: 0.6,
+    letterSpacing: 0.4,
     color: Theme.textOnPrimary,
   },
   authorizeBtn: {
-    borderRadius: 14,
-    backgroundColor: INK,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
     alignItems: "center",
-    gap: 2,
-    minHeight: 52,
+    gap: 1,
+    minHeight: 44,
     justifyContent: "center",
   },
   authorizeBtnPressed: {
     opacity: 0.9,
   },
   authorizeBtnText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.buttonPrimaryText,
   },
   authorizeBtnHint: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.72)",
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.buttonPrimaryText,
+    opacity: 0.72,
   },
   secondaryBtn: {
-    borderRadius: 14,
+    borderRadius: 8,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    paddingVertical: 14,
+    paddingVertical: 11,
     alignItems: "center",
-    minHeight: 48,
+    minHeight: 40,
     justifyContent: "center",
   },
   secondaryBtnText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "700",
     color: INK,
   },
   doneBtn: {
     marginTop: 8,
-    borderRadius: 14,
+    borderRadius: 8,
     backgroundColor: Theme.driverEmerald,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
   doneBtnText: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.textOnPrimary,
   },
 });

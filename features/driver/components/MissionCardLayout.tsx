@@ -24,6 +24,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 export interface MissionCardLayoutProps {
   title: string;
   earnings: string;
+  /** Defaults to EST. EARNINGS; PAY N/A when ₹ is not applicable. */
+  earningsLabel?: string;
   assignedBy?: JobCardAssignerPayload | null;
   showHeroAssigner: boolean;
   /** Which stop this stage is oriented toward — drives the destination heading. Null once completed. */
@@ -52,6 +54,7 @@ export interface MissionCardLayoutProps {
 export function MissionCardLayout({
   title,
   earnings,
+  earningsLabel = "EST. EARNINGS",
   assignedBy = null,
   showHeroAssigner,
   target,
@@ -118,7 +121,7 @@ export function MissionCardLayout({
               <Text style={styles.heroAmount} numberOfLines={1}>
                 {earnings}
               </Text>
-              <Text style={styles.heroAmountLabel}>EST. EARNINGS</Text>
+              <Text style={styles.heroAmountLabel}>{earningsLabel}</Text>
             </View>
           </View>
           {showHeroAssigner && assignedBy ? (

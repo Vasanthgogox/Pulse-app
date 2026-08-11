@@ -5,6 +5,7 @@
 import Layout from '@/constants/Layout';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,6 +19,8 @@ type Props = {
   backAccessibilityLabel?: string;
   /** When true, back button is a left chevron; when false, uses arrow-left (some lists use it). */
   backIcon?: 'chevron' | 'arrow';
+  /** Optional trailing control (e.g. Add). Keeps 44pt side column balanced. */
+  right?: ReactNode;
 };
 
 export function DriverSubScreenHeader({
@@ -26,6 +29,7 @@ export function DriverSubScreenHeader({
   onBack,
   backAccessibilityLabel = 'Go back',
   backIcon = 'chevron',
+  right,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useDriverTheme();
@@ -60,7 +64,7 @@ export function DriverSubScreenHeader({
           </Text>
         ) : null}
       </View>
-      <View style={styles.side} />
+      <View style={styles.side}>{right ?? null}</View>
     </View>
   );
 }

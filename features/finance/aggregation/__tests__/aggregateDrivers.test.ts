@@ -18,16 +18,34 @@ describe('computeDriverCommissionForTrip', () => {
     expect(commission).toBe(1250);
   });
 
-  it('falls back to trip.driver_commission when there is no offer', () => {
+  it('falls back to trip.driver_commission (already-agreed, stamped amount) when there is no offer', () => {
     expect(computeDriverCommissionForTrip({ driver_id: 'd1', driver_commission: 300 }, null)).toBe(300);
   });
 
-  it('falls back to 10% of supplier_rate when no offer or driver_commission', () => {
-    expect(computeDriverCommissionForTrip({ driver_id: 'd1', supplier_rate: 2000 }, null)).toBe(200);
+  it('never guesses 10% of supplier_rate — no agreed terms and nothing stamped means 0, not an estimate', () => {
+    expect(computeDriverCommissionForTrip({ driver_id: 'd1', supplier_rate: 2000 }, null)).toBe(0);
   });
 
-  it('falls back to 10% of client_price as the last resort', () => {
-    expect(computeDriverCommissionForTrip({ driver_id: 'd1', client_price: 500 }, null)).toBe(50);
+  it('never guesses 10% of client_price — no agreed terms and nothing stamped means 0, not an estimate', () => {
+    expect(computeDriverCommissionForTrip({ driver_id: 'd1', client_price: 500 }, null)).toBe(0);
+  });
+
+  it('returns 0 for a driver-cum-owner (no org relationship, no offer, no stamped commission) even with a real trip price', () => {
+    expect(
+      computeDriverCommissionForTrip(
+        { driver_id: 'fo-1', client_price: 50000, supplier_rate: 0 },
+        { commissionPercent: null, commissionPerKm: null, payableAmount: null },
+      ),
+    ).toBe(0);
+  });
+
+  it('still returns the real agreed percent-based commission even when trip.driver_commission is not yet stamped', () => {
+    expect(
+      computeDriverCommissionForTrip(
+        { driver_id: 'd1', client_price: 1000, driver_commission: 0 },
+        { commissionPercent: 15, commissionPerKm: null, payableAmount: null },
+      ),
+    ).toBe(150);
   });
 });
 

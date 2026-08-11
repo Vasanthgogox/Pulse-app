@@ -30,7 +30,7 @@ const INK = Theme.loadAddButtonText;
 const MUTED = Theme.loadStatusTabTextMuted;
 const SKY = Theme.loadAddButtonBg;
 
-type Filter = "all" | "pulse_story" | "load_center";
+type Filter = "all" | "pulse_story" | "load_center" | "fleet_owner";
 
 function timeAgo(d: string): string {
   const diff = Date.now() - new Date(d).getTime();
@@ -68,23 +68,27 @@ function ChannelIcon({ channel }: { channel: StoryOwnerBidRow["channel"] }) {
   if (channel === "pulse_story") {
     return <Zap size={9} color={INK} strokeWidth={2.25} />;
   }
+  if (channel === "fleet_owner") {
+    return <Gavel size={9} color={INK} strokeWidth={2.25} />;
+  }
   return <Truck size={9} color={INK} strokeWidth={2.25} />;
 }
 
 function BidRowCard({ row }: { row: StoryOwnerBidRow }) {
   const tone = statusTone(row.status);
+  const isFleetOwnerBid = row.channel === "fleet_owner";
 
   return (
     <View style={styles.bidCard}>
       <PartyAvatar
         name={row.bidderName}
         initialsColorSeed={row.bidderOrgId}
-        entityType="supplier"
+        entityType={isFleetOwnerBid ? "driver" : "supplier"}
         size={32}
       />
       <View style={styles.bidMain}>
         <View style={styles.bidTopRow}>
-          <Text style={styles.bidderName} numberOfLines={1}>
+          <Text style={styles.bidderName} numberOfLines={2}>
             {row.bidderName}
           </Text>
           <Text style={styles.bidAmount}>{formatINR(row.amount)}</Text>
@@ -141,6 +145,7 @@ export function StoryOwnerBidsSheet({
 
   const storyCount = bids.filter((b) => b.channel === "pulse_story").length;
   const loadCount = bids.filter((b) => b.channel === "load_center").length;
+  const fleetCount = bids.filter((b) => b.channel === "fleet_owner").length;
   const listMaxHeight = Math.min(Math.max(filtered.length, 1) * 74 + 10, windowHeight * 0.42);
   const bottomPad = sheetBottomPad ?? insets.bottom + 14;
 
@@ -184,6 +189,7 @@ export function StoryOwnerBidsSheet({
                 { id: "all" as const, label: `All (${bids.length})` },
                 { id: "pulse_story" as const, label: `Story (${storyCount})` },
                 { id: "load_center" as const, label: `Load (${loadCount})` },
+                { id: "fleet_owner" as const, label: `Fleet (${fleetCount})` },
               ] as const
             ).map((chip) => {
               const active = filter === chip.id;
@@ -210,7 +216,8 @@ export function StoryOwnerBidsSheet({
               <Text style={styles.emptyTitle}>Waiting for partners</Text>
               <Text style={styles.emptyBody}>
                 Bids from your Pulse story show as STORY·… IDs. Quotes from the Load
-                center / network page show as LOAD·… IDs.
+                center show as LOAD·… IDs. Fleet Owner / driver direct bids show as FO·…
+                or DRV·… with the owner name.
               </Text>
             </View>
           ) : (

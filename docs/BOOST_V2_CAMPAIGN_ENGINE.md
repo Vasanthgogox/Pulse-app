@@ -128,6 +128,7 @@ Product decision: **the customer didn't buy a story, they bought distribution.**
 - **Feed**: `get_network_feed` grew a second branch — active campaigns whose post is deactivated or hard-deleted are served from the campaign snapshot to their released targets (and the owning org). The branch stops if the load was already assigned (an accepted bid exists) — continued distribution of a filled load helps nobody, consistent with the driver-story disappearance rule.
 - **Transparency label**: campaign detail shows "Original story deleted — serving campaign snapshot" when `source_deleted_at` is set.
 - `cancel_reach_campaign('source_deleted')` still exists for historical rows and genuine cancellations; new deletions simply never call it.
+- **Driver Bid Now (Option A):** `submit_driver_direct_bid` and `get_driver_reach_stories` use **campaign** eligibility (active campaign + channels), not `posts.is_active`. Soft-deleted source Stories remain biddable while the campaign is active and the load is unassigned — same snapshot-lifecycle rule as Network feed Branch B (`20270210171000` + `20270210183000`).
 
 ## Canonical delivery record (`reach_campaign_targets`)
 

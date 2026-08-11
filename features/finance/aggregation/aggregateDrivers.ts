@@ -1,6 +1,8 @@
 /**
  * O(n) driver aggregation. due = from trips (commission); paid = from ledger only (amount_out).
- * Commission: from driver offer (client_price * commission_percent/100 or distance * commission_per_km) when available; else trip.driver_commission or 10% supplier_rate.
+ * Commission: from driver offer (client_price * commission_percent/100 or distance * commission_per_km)
+ * when available; else the trip's already-stamped driver_commission (see stampTripDriverPayFromTerms,
+ * which only ever writes this when real agreed terms existed). No agreed terms → 0, never a guess.
  */
 import type { FinancialRowData, AggregationTotals } from './types';
 import type { LedgerTx, TripForDriver, DriverLike, DriverOfferForAggregation, TripPartyMap } from './types';
@@ -20,9 +22,11 @@ function parseDistanceKm(distance: string | number | null | undefined): number |
 /**
  * Compute trip-based commission for one trip. Used in TRANSACTION LEDGER table (COMMISSION column).
  * 1) Driver offer: client_price * (commission_percent/100) or distance_km * commission_per_km.
- * 2) Else trip.driver_commission.
- * 3) Else 10% of supplier_rate.
- * 4) Else 10% of client_price (trip revenue) so commission is always derived from trip when possible.
+ * 2) Else trip.driver_commission (already-stamped real amount — see stampTripDriverPayFromTerms).
+ * No agreed terms and nothing stamped → 0. Never guess from supplier_rate/client_price: an
+ * unagreed amount must not be treated as a real payable (see the driver-app equivalent,
+ * resolveDriverTripPayoutTerms/hasAgreedPayoutTerms in driverUtils.util.ts, which this mirrors
+ * on the business side).
  */
 export function computeDriverCommissionForTrip(
   trip: Omit<TripForDriver, 'distance'> & { distance?: string | number | null },
@@ -36,11 +40,7 @@ export function computeDriverCommissionForTrip(
     if (pct != null && basePrice > 0) return (basePrice * pct) / 100;
     if (perKm != null && distanceKm != null && distanceKm > 0) return distanceKm * perKm;
   }
-  const fromTrip =
-    Number(trip.driver_commission ?? 0) ||
-    Number(trip.supplier_rate ?? 0) * 0.1 ||
-    (basePrice > 0 ? basePrice * 0.1 : 0);
-  return fromTrip;
+  return Number(trip.driver_commission ?? 0) || 0;
 }
 
 export function aggregateDrivers(

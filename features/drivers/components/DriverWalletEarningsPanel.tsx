@@ -185,6 +185,8 @@ type Props = {
   fleets: WalletEarningsFleetOption[];
   ledgerEntries: DriverLedgerRow[];
   tripEarnings: (trip: TripRow) => number;
+  /** True only when real agreed payout terms exist. Trips without this are excluded entirely — not shown as ₹0. */
+  hasAgreedPayoutTerms: (trip: TripRow) => boolean;
   receivedByTripId: Record<string, number>;
   tripMeta: (trip: TripRow) => WalletEarningsTripMeta;
   driverName?: string | null;
@@ -227,6 +229,7 @@ export const DriverWalletEarningsPanel = memo(function DriverWalletEarningsPanel
   fleets,
   ledgerEntries,
   tripEarnings,
+  hasAgreedPayoutTerms,
   receivedByTripId,
   tripMeta,
   driverName = null,
@@ -264,12 +267,15 @@ export const DriverWalletEarningsPanel = memo(function DriverWalletEarningsPanel
 
   const scopedTrips = useMemo(() => {
     return completedTrips.filter((trip) => {
+      // Aggregate/direct-shipper trips with no agreed payout terms never
+      // belong in the earnings breakdown — excluded entirely, not shown as ₹0.
+      if (!hasAgreedPayoutTerms(trip)) return false;
       const d = tripDate(trip);
       if (!d || monthKeyFromDate(d) !== monthKey) return false;
       if (fleetOrgId === "all") return true;
       return String(trip.organization_id ?? "") === fleetOrgId;
     });
-  }, [completedTrips, monthKey, fleetOrgId]);
+  }, [completedTrips, monthKey, fleetOrgId, hasAgreedPayoutTerms]);
 
   const earnedTotal = useMemo(
     () => Math.round(scopedTrips.reduce((sum, t) => sum + tripEarnings(t), 0)),

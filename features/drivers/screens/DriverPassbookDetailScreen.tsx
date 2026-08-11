@@ -18,6 +18,7 @@ import {
 import { phonePeMetaDate } from '@/features/driver/utils/driverGpayTransactions.util';
 import {
   isAggregateTrip,
+  resolveDriverTripPayoutTerms,
   tripEarningsDetailForDriver,
   tripEarningsForDriver,
 } from '@/features/drivers/utils/driverUtils.util';
@@ -565,18 +566,35 @@ export default function DriverPassbookDetailScreen() {
     () => ({
       commissionPercent: acceptedInviteForOrg?.commission_percent ?? driver?.commission_percent ?? null,
       commissionPerKm: acceptedInviteForOrg?.commission_per_km ?? driver?.commission_per_km ?? null,
+      payableAmount: acceptedInviteForOrg?.payable_amount ?? driver?.payable_amount ?? null,
     }),
     [
       acceptedInviteForOrg?.commission_percent,
       acceptedInviteForOrg?.commission_per_km,
+      acceptedInviteForOrg?.payable_amount,
       driver?.commission_percent,
       driver?.commission_per_km,
+      driver?.payable_amount,
     ],
   );
 
   const earningsForTrip = useCallback(
     (trip: tripsService.TripRow) => tripEarningsForDriver(trip, tripPayoutTerms),
     [tripPayoutTerms],
+  );
+
+  /** True only when this specific trip has real agreed payout terms — never inferred from an aggregate/estimated guess. */
+  const hasAgreedPayoutTermsForTrip = useCallback(
+    (trip: tripsService.TripRow) =>
+      resolveDriverTripPayoutTerms(trip, tripPayoutTerms).hasAgreedPayoutTerms,
+    [tripPayoutTerms],
+  );
+
+  /** Same as earningsForTrip(), but ₹0 for any trip with no agreed payout terms. */
+  const gatedEarningsForTrip = useCallback(
+    (trip: tripsService.TripRow) =>
+      hasAgreedPayoutTermsForTrip(trip) ? earningsForTrip(trip) : 0,
+    [hasAgreedPayoutTermsForTrip, earningsForTrip],
   );
 
   /**
@@ -602,8 +620,8 @@ export default function DriverPassbookDetailScreen() {
   const showPayTermsPrompt = !hasAgreedPayTerms && estimatedTripCount > 0;
 
   const totalEarned = useMemo(() => {
-    return Math.round(completedTrips.reduce((sum, trip) => sum + earningsForTrip(trip), 0));
-  }, [completedTrips, earningsForTrip]);
+    return Math.round(completedTrips.reduce((sum, trip) => sum + gatedEarningsForTrip(trip), 0));
+  }, [completedTrips, gatedEarningsForTrip]);
 
   const pendingToCollect = useMemo(() => Math.max(0, totalEarned - totalReceived), [totalEarned, totalReceived]);
 
@@ -637,7 +655,7 @@ export default function DriverPassbookDetailScreen() {
       const isSettled = receivedAmt > 0;
       const fleetPendingLedger = latestFleetPaidPendingLedgerByTripId[trip.id];
       const hasFleetPending = !!fleetPendingLedger;
-      const isActionRequired = !isSettled && !hasFleetPending && isAggregateTrip(trip) && earningsForTrip(trip) === 0;
+      const isActionRequired = !isSettled && !hasFleetPending && isAggregateTrip(trip) && gatedEarningsForTrip(trip) === 0;
       const status: 'Pending' | 'Action Required' | 'Settled' = isSettled
         ? 'Settled'
         : isActionRequired
@@ -685,8 +703,8 @@ export default function DriverPassbookDetailScreen() {
           isSettled
             ? receivedAmt
             : hasFleetPending
-              ? Number(fleetPendingLedger?.amount ?? earningsForTrip(trip))
-              : earningsForTrip(trip),
+              ? Number(fleetPendingLedger?.amount ?? gatedEarningsForTrip(trip))
+              : gatedEarningsForTrip(trip),
         ),
         status,
         subStatus,
@@ -709,7 +727,7 @@ export default function DriverPassbookDetailScreen() {
     latestFleetPaidPendingLedgerByTripId,
     orgName,
     driverTripNumberById,
-    earningsForTrip,
+    gatedEarningsForTrip,
   ]);
 
   const isFleetMarkedAwaitingVerify = useCallback(
@@ -805,10 +823,21 @@ export default function DriverPassbookDetailScreen() {
     const fleetDriverId = driver?.id ?? '';
     if (!orgId || !fleetDriverId) return;
 
+    // Independent write-path gate: re-check every trip here, regardless of
+    // whether the displayed/claimable list upstream was correctly filtered.
+    // A trip with no agreed payout terms must never be claimed.
+    const gatedItems = pendingTripJourneyItems.filter((item) =>
+      hasAgreedPayoutTermsForTrip(item.trip),
+    );
+    if (gatedItems.length === 0) {
+      Alert.alert('Nothing to claim', 'None of these trips have agreed payout terms.');
+      return;
+    }
+
     setClaimAllLoading(true);
     try {
-      const tripIds = pendingTripJourneyItems.map((i) => i.trip.id);
-      const total = pendingTripJourneyItems.reduce((sum, i) => sum + Math.round(i.amount), 0);
+      const tripIds = gatedItems.map((i) => i.trip.id);
+      const total = gatedItems.reduce((sum, i) => sum + Math.round(i.amount), 0);
 
       await salaryRequestsService.createSalaryRequest(fleetDriverId, orgId, 'trip_based', total, {
         createdBy: profile?.uid ?? null,
@@ -825,7 +854,7 @@ export default function DriverPassbookDetailScreen() {
         hour12: true,
       });
 
-      const tripsPayload = pendingTripJourneyItems.map((item) => {
+      const tripsPayload = gatedItems.map((item) => {
         const date = new Date(item.trip.completed_at ?? item.trip.updated_at ?? item.trip.created_at ?? '').toLocaleString(
           'en-IN',
           {
@@ -854,7 +883,7 @@ export default function DriverPassbookDetailScreen() {
       });
 
       const msg = buildBulkTripClaimWhatsappMessage({
-        tripCount: pendingTripJourneyItems.length,
+        tripCount: gatedItems.length,
         totalAmount: total,
         driverName: driver?.name ?? null,
         driverPhone: driver?.phone ?? null,
@@ -870,6 +899,7 @@ export default function DriverPassbookDetailScreen() {
   }, [
     claimAllLoading,
     pendingTripJourneyItems,
+    hasAgreedPayoutTermsForTrip,
     driver?.id,
     driver?.name,
     driver?.phone,

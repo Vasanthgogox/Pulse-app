@@ -10,12 +10,15 @@ import {
   useStoryPhoneFrameMetrics,
 } from "@/features/network/components/StoryMobilePopupShell";
 import type { ReachPlanRow } from "@/features/reach/services/campaigns.service";
+import { findOrgDraftOrActiveCampaign } from "@/features/reach/utils/orgActiveBoost";
 import { formatINR } from "@/lib/format";
-import { usePublishReachCampaignMutation, useReachPlansQuery } from "@/lib/queries/useReachCampaignsQuery";
+import { usePublishReachCampaignMutation, useReachCampaignsQuery, useReachPlansQuery } from "@/lib/queries/useReachCampaignsQuery";
 import { useReachWalletQuery } from "@/lib/queries/useReachWalletQuery";
 import { describeReachPlan, getReachPlanDisplay } from "@/lib/reachPlanRegistry";
+import { ROUTES } from "@/lib/routes";
+import { useRouter } from "expo-router";
 import { Check, CheckCircle2, Coins, CreditCard, Rocket, Users, X, Zap } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -55,11 +58,18 @@ function formatDuration(hours: number): string {
 
 export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewCampaign }: BoostSheetProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { phonePopup, sheetBottomPad } = useStoryPhoneFrameMetrics();
   const plansQ = useReachPlansQuery();
+  const campaignsQ = useReachCampaignsQuery(visible ? orgId : null);
   const walletQ = useReachWalletQuery(visible ? orgId : null);
   const publishMutation = usePublishReachCampaignMutation();
   const bottomPad = sheetBottomPad ?? insets.bottom + 14;
+
+  const orgActiveBoost = useMemo(
+    () => findOrgDraftOrActiveCampaign(campaignsQ.data),
+    [campaignsQ.data],
+  );
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"credits" | "money">("credits");
@@ -97,8 +107,33 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
     (paymentMethod === "credits" ? (selectedPlan?.credit_price ?? 0) : 0) + rewardBudget;
   const canAffordCredits = balance >= requiredCredits;
 
+  const openExistingBoost = () => {
+    onClose();
+    if (onViewCampaign) {
+      onViewCampaign();
+      return;
+    }
+    if (orgActiveBoost?.id) {
+      router.push(ROUTES.REACH.campaignDetail(orgActiveBoost.id) as never);
+      return;
+    }
+    router.push(ROUTES.REACH.HISTORY as never);
+  };
+
   const handleConfirm = async () => {
     if (!selectedPlan || !rewardConfigValid) return;
+    // UI convenience — RPC still enforces active_boost_exists.
+    if (findOrgDraftOrActiveCampaign(campaignsQ.data)) {
+      Alert.alert(
+        "Boost Active",
+        "Your organization already has an active Boost. Open it instead of purchasing another.",
+        [
+          { text: "View Boost", onPress: openExistingBoost },
+          { text: "Cancel", style: "cancel" },
+        ],
+      );
+      return;
+    }
     const { error, result } = await publishMutation.mutateAsync({
       orgId,
       postId,
@@ -112,12 +147,26 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
       },
     });
     if (error || !result) {
-      Alert.alert("Couldn't boost this load", error?.message ?? "Unknown error");
+      const message = error?.message ?? "Unknown error";
+      if (message.includes("active_boost_exists")) {
+        Alert.alert(
+          "Boost Active",
+          "Your organization already has an active Boost. Open it instead of purchasing another.",
+          [
+            { text: "View Boost", onPress: openExistingBoost },
+            { text: "Cancel", style: "cancel" },
+          ],
+        );
+        return;
+      }
+      Alert.alert("Couldn't boost this load", message);
       return;
     }
     onBoosted(result.campaign_id);
     setJustBoosted({ plan: selectedPlan, pending: result.purchase_status === "pending" });
   };
+
+  const showActiveBlock = Boolean(visible && orgActiveBoost && !justBoosted);
 
   return (
     <StoryFlowSheetPortal
@@ -172,6 +221,31 @@ export function BoostSheet({ visible, onClose, orgId, postId, onBoosted, onViewC
                 <Pressable style={[styles.doneBtn, onViewCampaign && styles.doneBtnFlex]} onPress={onClose}>
                   <CheckCircle2 size={15} color={INK} strokeWidth={2.25} />
                   <Text style={styles.doneBtnText}>Done</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : showActiveBlock ? (
+            <View style={styles.successWrap}>
+              <View style={styles.headerIcon}>
+                <Rocket size={15} color={INK} strokeWidth={2.25} />
+              </View>
+              <Text style={styles.successTitle}>Boost Active</Text>
+              <Text style={styles.successBody}>
+                Your organization already has a draft or active Boost. Only one can run at a time —
+                open the current campaign instead of purchasing another.
+              </Text>
+              <View style={styles.successActionRow}>
+                <Pressable style={styles.viewCampaignBtn} onPress={openExistingBoost}>
+                  <Text style={styles.viewCampaignBtnText}>View Boost</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.doneBtn, styles.doneBtnFlex]}
+                  onPress={() => {
+                    onClose();
+                    router.push(ROUTES.REACH.HISTORY as never);
+                  }}
+                >
+                  <Text style={styles.doneBtnText}>Reach History</Text>
                 </Pressable>
               </View>
             </View>

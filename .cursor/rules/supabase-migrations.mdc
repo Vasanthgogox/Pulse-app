@@ -38,12 +38,29 @@ That is exactly how the `quoted`-trigger fix and the Get Load outage both happen
 
 ## Applying migrations
 
+### Mandatory preflight (agents + humans)
+
+Before **any** remote push (`supabase db push --linked`, `npm run db:push`, or
+`db:push-both`):
+
+1. Run **`npm run db:preflight`** and fix failures first.
+2. Preflight **hard-fails** if any **Local-only** (not yet on Remote) migration
+   file is empty or whitespace-only. Empty + push/repair has already marked
+   versions “applied” with **no SQL** (owner_vehicles / capacity Story).
+3. Preflight prints **`supabase migration list --linked`** — inspect Local vs
+   Remote before applying. Already-applied empty placeholders (e.g. historical
+   `mcp_applied`) may WARN only; do not create new ones.
+4. Only then run `npm run db:push` (or `supabase db push --linked`).
+
+Do **not** push, then use `migration repair … applied`, when the local file was empty.
+
 - **Local full replay:** `supabase db reset` (replays all migrations from scratch; destructive to local data unless you rely on seeds).
 - **Remote:** `supabase db push` (applies only unapplied migrations in order). Use `--include-all` when the CLI instructs you to (out-of-order local files vs remote history).
 - **Do not** make production schema changes only in the Supabase SQL editor or Table Editor on remote — that bypasses migration files and breaks history / `db push` for the team.
 
 ## Checking sync
 
+- Prefer **`npm run db:preflight`** (non-empty check + `migration list --linked`) over ad hoc list-only.
 - Run `supabase migration list --linked` before pushing when unsure.
 - **Local = Remote** for all rows → in sync; nothing to repair for naming alone.
 - Remote missing versions that exist locally → `supabase db push` (or `--include-all` if prompted).
@@ -76,4 +93,5 @@ That is exactly how the `quoted`-trigger fix and the Get Load outage both happen
 1. Schema changes ship as migration files — not ad hoc on remote production.
 2. Migration prefixes are sort keys, not calendar truth.
 3. `migration repair` is a scalpel — targeted, deliberate, rare.
-4. When in doubt: `supabase migration list --linked`, then choose push / pull / repair with intent.
+4. Never push an empty migration file; run `npm run db:preflight` first.
+5. When in doubt: `npm run db:preflight` / `supabase migration list --linked`, then choose push / pull / repair with intent.

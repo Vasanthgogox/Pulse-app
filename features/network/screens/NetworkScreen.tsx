@@ -50,6 +50,7 @@ import {
   UnlinkedCounterpartiesSection,
 } from "@/features/network/components/UnlinkedCounterpartiesSection";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
+import { isFleetOwnerCapacityPost } from "@/features/network/utils/storyDisplay";
 import { shouldShowFeedPostForOrg } from "@/features/network/utils/storyLoadVisibility.util";
 import {
   cancelPendingConnectionRequestByOrgPair,
@@ -423,6 +424,8 @@ function NetworkScreenInner() {
     () =>
       (feedQ.data ?? []).filter((post) => {
         if (!isPostVisibleForOrg(post, { allowLoadPosts })) return false;
+        // Fleet Owner organic capacity has no Business org — still show on Stories.
+        if (isFleetOwnerCapacityPost(post)) return post.is_active === true;
         return shouldShowFeedPostForOrg({
           authorOrgId: post.organization_id,
           viewerOrgId: orgId,
