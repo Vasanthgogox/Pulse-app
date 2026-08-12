@@ -572,7 +572,11 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Trip detail",
     hint: "Open trip detail page",
     domain: "tripops",
+    // Reachable by dispatch OR finance users, but confers neither: opening a
+    // trip is read-only. Without an explicit `grantsCaps` this would fall back
+    // to `anyOfCaps` and hand a dispatcher finance_view/finance_manage.
     anyOfCaps: [...DISP, ...FIN],
+    grantsCaps: [],
     requires: "tripops.trips.view",
   },
   {
@@ -636,7 +640,10 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Expense hub on trip detail",
     domain: "tripops",
     anyOfCaps: [...DISP, ...FIN],
-    grantsCaps: FIN,
+    // Read-only, same rationale as tripops.trips.finance: seeing the expense
+    // hub must not confer finance_manage. Approving/posting an expense is
+    // gated on finance.expenses.approve at the call site.
+    grantsCaps: ["finance_view"],
     requires: "tripops.trips.detail",
   },
   {
@@ -646,7 +653,10 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Trip-level finance / settlement tab",
     domain: "tripops",
     anyOfCaps: [...DISP, ...FIN],
-    grantsCaps: FIN,
+    // Read-only: seeing a trip's settlement figures must not confer
+    // finance_manage. Write actions (capture payment, adjustments) are gated on
+    // their own finance.* surfaces at the call site.
+    grantsCaps: ["finance_view"],
     requires: "tripops.trips.detail",
   },
   {

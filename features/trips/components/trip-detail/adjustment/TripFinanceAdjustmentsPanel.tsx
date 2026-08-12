@@ -46,6 +46,12 @@ export interface TripFinanceAdjustmentsPanelProps {
   /** True when the supplier/cost rate was never entered on the trip (renders "Not set" instead of a false ₹0). */
   costUnset?: boolean;
   lineMetaLabel: (adj: TripAdjustment) => string;
+  /**
+   * False hides the +Sale / +Cost toolbar for a viewer without
+   * `finance.void_adjustments`. Defaults to true so existing callers are
+   * unchanged. The modal itself is separately gated in useTripDetail.
+   */
+  canAddAdjustment?: boolean;
   onOpenProvision: (side: "client" | "supplier") => void;
   onRequestDeduction?: (rec: ClientPassThroughRecommendation) => void;
   onViewNotePdf?: (adj: TripAdjustment) => void;
@@ -153,6 +159,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
         <Text style={[styles.tableTitle, isDesktop && styles.tableTitleDesktop]}>
           Adjustment lines
         </Text>
+        {props.canAddAdjustment !== false && (
         <View style={styles.toolbarActions}>
           <Pressable
             style={[styles.addBtnSale, isDesktop && styles.addBtnDesktop]}
@@ -173,6 +180,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
             </Text>
           </Pressable>
         </View>
+        )}
       </View>
 
       <View style={[styles.table, isDesktop && styles.tableDesktop]}>
