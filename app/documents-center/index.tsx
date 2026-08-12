@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 import Theme from "@/constants/Theme";
+import { SurfaceAccessGate } from "@/components/SurfaceAccessGate";
 import { TeslaHeader } from "@/components/TeslaHeader";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { DocumentCenter } from "@/features/compliance/components/DocumentCenter";
@@ -35,7 +36,9 @@ export default function DocumentsCenterScreen() {
           else router.replace("/(tabs)/network" as Parameters<typeof router.replace>[0]);
         }}
       />
-      <DocumentCenter />
+      <SurfaceAccessGate surface="finance.documents_center">
+        <DocumentCenter />
+      </SurfaceAccessGate>
     </View>
   );
 }

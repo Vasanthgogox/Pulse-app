@@ -1,4 +1,5 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { SurfaceAccessGate } from "@/components/SurfaceAccessGate";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { EditClientModal } from "@/features/clients/components/EditClientModal";
 import {
@@ -78,12 +79,14 @@ export default function EditClientScreen() {
   }
 
   return (
-    <EditClientModal
-      visible
-      client={client}
-      onClose={() => closeModal(router)}
-      onSave={handleSave}
-      onSyncLatest={client.is_integrated ? handleSyncLatest : undefined}
-    />
+    <SurfaceAccessGate surface="sales.clients.edit">
+      <EditClientModal
+        visible
+        client={client}
+        onClose={() => closeModal(router)}
+        onSave={handleSave}
+        onSyncLatest={client.is_integrated ? handleSyncLatest : undefined}
+      />
+    </SurfaceAccessGate>
   );
 }

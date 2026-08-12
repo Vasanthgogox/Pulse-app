@@ -189,6 +189,55 @@ Resolved three defects reported after the first pass, where a functional-role me
 - **No-access notice instead of a blank frame.** A member with no reachable domain (no functional role) has nowhere to redirect, so the gate now renders a themed "No workspace access yet" notice (i18n `memberNoAccessTitle` / `memberNoAccessBody`) rather than an empty `<View>`.
 - **Denied tabs are now hidden from the dock.** `DemoTabBar` (desktop top nav) and `PulseBottomTabBar` (mobile footer) take an optional `visibility` prop, wired from `useMemberCapabilities()` in `app/(tabs)/_layout.tsx`. A member only sees the primary tabs their role can reach; the dock highlight also falls back to the member's home tab (not a hard-coded `trips`) when the current route isn't a primary tab, fixing the "Trips highlighted while URL is /profile" desync. Owner/Admin are unaffected — all three tabs stay visible. While access is still resolving, all tabs stay visible to avoid a flicker (the per-tab gate holds the screen).
 
+---
+
+## Part 5 — wiring the unenforced surfaces
+
+An audit of `MEMBER_SURFACE_CATALOG` (85 surfaces) found 47 enforced via `canSurface(...)`, a further 17 enforced indirectly (finance sub-tabs and ledger filters via `canAccessFinanceSubTab` / `ledgerCategorySurface`; the three primary tabs via `MemberDomainGate`; team/access-control via owner-only `useOrgRole().isOwner` + `set_member_role` RPC), and **21 that were stored, rendered as toggles, and never read**. Turning those off changed nothing — the permission UI made promises it did not keep. This part wires them.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `components/SurfaceAccessGate.tsx` | Reusable whole-screen gate for a single `MemberSurfaceId`. Holds a blank frame while surfaces hydrate (same rule as `ModelAccessGate`), then renders children or a themed no-access notice. Owner/admin bypass comes from `useMemberAccess`. |
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `locales/en.json` | New keys `surfaceNoAccessTitle` / `surfaceNoAccessBody` for the gate notice |
+| `app/documents-center/index.tsx` | Body wrapped in `SurfaceAccessGate surface="finance.documents_center"` (header left outside so Back stays usable) |
+| `app/pod-reconciliation/index.tsx` | Wrapped — `finance.pod_reconciliation` |
+| `app/business-pulse.tsx` | Screen body wrapped — `finance.business_pulse` |
+| `app/load-board/index.tsx` | Wrapped — `sales.load_board` |
+| `app/from-clients/index.tsx` | Bare re-export replaced with a wrapper component — `sales.from_clients` |
+| `app/notifications/index.tsx` | Wrapped — `workspace.notifications` |
+| `app/trip-ledger/[id].tsx` | Wrapped — `finance.trip_ledger` |
+| `app/(modals)/edit-client.tsx` | Wrapped — `sales.clients.edit` |
+| `features/clients/components/ClientDetailRoute.tsx` | Wrapped — `sales.clients.detail` (route previously had no gate at all) |
+| `app/client/[id]/analytics.tsx` | Wrapped — `sales.clients.analytics` |
+| `app/supplier/[id].tsx` | `sales.suppliers.detail` nested inside the existing `ModelAccessGate` |
+| `app/supplier/[id]/analytics.tsx` | `sales.suppliers.analytics` nested inside the existing `ModelAccessGate` |
+| `features/network/screens/StoryDetailScreen.tsx` | `viewerCanBidCapability` now `allowLoadPosts && canSurface("sales.marketplace.bid")`. Deliberately kept separate from the feed filter so a member without the surface still *sees* load posts — they just cannot bid |
+| `features/finance/components/FinanceScreen.tsx` | `initialEntry` gated on `finance.edit_transaction`; `onReportPress` omitted without `finance.reports` |
+| `features/finance/screens/LedgerSyncScreen.tsx` | `?entryId` deep-link edit gated on `finance.edit_transaction` (falls back to a blank add form) |
+| `features/finance/components/EntityDetailOverlay.tsx` | `handleReportPress` + both toolbar props gated on `finance.reports` |
+| `features/clients/…/ClientDetailScreen.tsx`, `features/suppliers/…/SupplierDetailScreen.tsx`, `features/drivers/…/DriverDetailScreen.tsx` | `openClientReport` / `openSupplierReport` / `openDriverReport` early-return without `finance.reports` |
+| `features/finance/components/TreasurySummaryCard.tsx`, `TreasuryToolbar.tsx`, `TreasuryDetailLayout.tsx`, `FinanceSummarySection.tsx` | `onReportPress` made optional through the whole prop chain; Report button renders only when supplied |
+| `features/trips/components/trip-detail/hooks/useTripDetail.ts` | `openTripAdjustmentModal` early-returns without `finance.void_adjustments` — one chokepoint covering add / income / deduction / supplier-cost entry points. Exposes `canVoidAdjustments`, `canViewTripExpenses`, `canApproveTripExpenses` |
+| `features/trips/components/trip-detail/TripDetailScreen.tsx` | Expenses tab now needs `tripops.trips.expenses` **and** `finance.expenses.view` (two domains cover the same tab) |
+| `features/trips/operations/hub/TripExpensesScreen.tsx` | `handleApprove` early-returns and `onApprove` is omitted (button hidden) without `finance.expenses.approve` |
+
+### Known gaps after Part 5
+
+- **`finance.manage`** — still not read directly. Write actions are gated by their own narrower surfaces (`add_transaction`, `edit_transaction`, `void_adjustments`, `expenses.approve`) plus the `finance_manage` capability, so the toggle is redundant rather than broken. Consider removing it from the catalog or making it a true parent.
+- **`finance.shared_ledger` and `finance.branding`** — left unwired **because they have no live UI entry point**. `setShowSharedLedgerModal(true)` is never called anywhere, and `/branding-settings` is a deprecated redirect to `/workspace`. Gating a modal nothing opens would be dead code; wire them when the entry points return.
+- **`fleet.vehicles.edit`** — no `EditVehicleModal` or vehicle-edit trigger exists in the codebase; `VehicleProfileScreen`'s `onEditPress` is an empty stub. Nothing to gate yet.
+- **Still no server-side enforcement.** Every surface remains client-only; RLS authorizes on org membership alone. A member can bypass any of the above via a direct API call. Unchanged by this part.
+- **Nav gates still fail open while loading** (`surfaceLoading || canSurface(...)` in `app/_layout.tsx` and `app/(tabs)/_layout.tsx`) — a denied nav item flashes briefly before surfaces resolve. Cosmetic; destination screens re-check.
+
+**Verification:** `tsc --noEmit` 28 errors before and after (all pre-existing, none in touched files); `eslint` 0 errors on every edited file; `jest` 759 passed / 6 failed — identical to the clean-tree baseline (same 4 suites). No behavior was tested in a running app.
+
 ## How to update this file
 
 When you change RBAC again:

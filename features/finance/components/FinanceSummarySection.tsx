@@ -38,7 +38,8 @@ export interface FinanceSummarySectionProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   searchPlaceholder?: string;
-  onReportPress: () => void;
+  /** Omitted when the viewer lacks `finance.reports` — hides the Report button. */
+  onReportPress?: () => void;
   entityFilter?: EntityListFilter;
   onEntityFilterChange?: (f: EntityListFilter) => void;
   entityFilterLabels?: Partial<Record<EntityListFilter, string>>;

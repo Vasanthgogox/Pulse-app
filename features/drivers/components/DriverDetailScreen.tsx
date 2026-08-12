@@ -933,10 +933,11 @@ export default function DriverDetailScreen({
 
   const openDriverReport = useCallback(
     (kind: "payable" | "ledger") => {
+      if (!canSurface("finance.reports")) return;
       setDriverReportKind(kind);
       setShowReportModal(true);
     },
-    [],
+    [canSurface],
   );
 
   const handleDriverDownloadPress = useCallback(() => {

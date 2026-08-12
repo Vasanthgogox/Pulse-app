@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import Theme from "@/constants/Theme";
+import { SurfaceAccessGate } from "@/components/SurfaceAccessGate";
 import { BusinessPulseScreen } from "@/features/business-pulse/components/BusinessPulseScreen";
 import {
   PULSE_PAGE_BG,
@@ -35,7 +36,9 @@ export default function BusinessPulseRoute() {
             <Text style={ent.datePillText}>Live scope</Text>
           </View>
         </View>
-        <BusinessPulseScreen embedded topInset={0} />
+        <SurfaceAccessGate surface="finance.business_pulse">
+          <BusinessPulseScreen embedded topInset={0} />
+        </SurfaceAccessGate>
       </View>
     </PulseFilterProvider>
   );

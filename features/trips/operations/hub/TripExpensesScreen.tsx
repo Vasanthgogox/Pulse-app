@@ -29,6 +29,7 @@ import { syncOperationalFinanceProjection } from "@/features/finance/projections
 import { syncPostedTripExpensesToOperationLedger } from "../vehicle/syncPostedExpensesToOperationLedger.service";
 import type { TripCostEvent, TripCostCategory } from "@/features/finance";
 import { formatIndianVehicleNumber } from "@/lib/format";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 
 type ListFilter = "all" | "action";
 
@@ -245,7 +246,8 @@ type ExpenseRowProps = {
   iconMd: number;
   loadingAction: boolean;
   isDriverViewer: boolean;
-  onApprove: (event: TripCostEvent) => void;
+  /** Omitted when the viewer lacks `finance.expenses.approve` — hides the approve action. */
+  onApprove?: (event: TripCostEvent) => void;
   onReject: (event: TripCostEvent) => void;
   onMarkSettled: (event: TripCostEvent) => void;
   onCancelRequest: (event: TripCostEvent) => void;
@@ -403,7 +405,7 @@ const ExpenseRow = memo(function ExpenseRow({
                 </Text>
               </Pressable>
             </>
-          ) : canApproveAndPostToLedger(event) ? (
+          ) : canApproveAndPostToLedger(event) && onApprove ? (
             <>
               <Pressable
                 style={({ pressed }) => [
@@ -627,7 +629,11 @@ export function TripExpensesScreen({
     !!trip.driver_id &&
     (reimbursementDueInr > 0 || hasReimbursableExpenses);
 
+  const { can: canSurface } = useMemberAccess();
+  const canApproveExpenses = canSurface("finance.expenses.approve");
+
   const handleApprove = useCallback(async (event: TripCostEvent) => {
+    if (!canApproveExpenses) return;
     const [kind, sourceId] = event.id.split(":");
     if (!sourceId) return;
     try {
@@ -670,6 +676,7 @@ export function TripExpensesScreen({
       );
     }
   }, [
+    canApproveExpenses,
     profile?.uid,
     queryClient,
     reviewFuel,
@@ -1383,7 +1390,7 @@ export function TripExpensesScreen({
                 iconMd={iconMd}
                 loadingAction={loadingAction}
                 isDriverViewer={isDriverViewer}
-                onApprove={handleApprove}
+                onApprove={canApproveExpenses ? handleApprove : undefined}
                 onReject={handleReject}
                 onMarkSettled={handleMarkSettled}
                 onCancelRequest={handleCancelRequest}

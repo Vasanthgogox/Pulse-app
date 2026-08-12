@@ -1471,9 +1471,10 @@ export default function ClientDetailScreen({
   }, [missionRows]);
 
   const openClientReport = useCallback((kind: "receivable" | "pnl" | "ledger") => {
+    if (!canSurface("finance.reports")) return;
     setClientReportKind(kind);
     setShowReportModal(true);
-  }, []);
+  }, [canSurface]);
 
   const handleClientDownloadPress = useCallback(() => {
     if (detailSubTab === "trips") {

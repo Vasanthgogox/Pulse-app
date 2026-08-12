@@ -59,7 +59,8 @@ export interface TreasurySummaryCardProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   searchPlaceholder?: string;
-  onReportPress: () => void;
+  /** Omitted when the viewer lacks `finance.reports` — hides the Report action. */
+  onReportPress?: () => void;
   entityFilter?: EntityListFilter;
   onEntityFilterChange?: (f: EntityListFilter) => void;
   showPeriodFilter?: boolean;
@@ -1223,7 +1224,7 @@ export function TreasurySummaryCard({
             {onEntityFilterChange != null ? periodAndSourceFilters : null}
           </View>
 
-          {!hideReportInToolbar && (
+          {!hideReportInToolbar && onReportPress && (
             <PressableIcon
               name="file-text-o"
               size={11}
@@ -1289,7 +1290,7 @@ export function TreasurySummaryCard({
                 </Text>
               </TouchableOpacity>
             )}
-            {!hideReportInToolbar && (
+            {!hideReportInToolbar && onReportPress && (
               <PressableIcon
                 name="file-text-o"
                 size={11}

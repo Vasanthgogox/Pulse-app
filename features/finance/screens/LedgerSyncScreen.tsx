@@ -60,6 +60,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { showAppAlert } from "@/lib/appAlert";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 
 /** TripOption with organization_id and driver_display_name for entity filtering. */
@@ -224,6 +225,10 @@ export default function LedgerSyncScreen() {
   const [transactions, setTransactions] = useState<LedgerRow[] | null>(null);
   const [driverOffers, setDriverOffers] = useState<Record<string, DriverOffer>>({});
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
+  // Edit mode is reachable via the ?entryId deep link — gate it on the surface
+  // so a member without edit rights lands on a blank add form instead.
+  const { can: canSurface } = useMemberAccess();
+  const canEditFinanceTx = canSurface("finance.edit_transaction");
 
   const orgId = currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
@@ -1128,7 +1133,7 @@ export default function LedgerSyncScreen() {
         lockedVehicleId={isVehicleEntity ? (params.entityId ?? null) : null}
         lockedVehicleNumber={isVehicleEntity ? lockedVehicleNumber : null}
         hidePartyForCashOut={isVehicleEntity}
-        initialEntry={editingEntry}
+        initialEntry={canEditFinanceTx ? editingEntry : null}
         entryContextLabel={entryContextLabel ?? undefined}
         lockedAmount={
           params.salaryAmount != null ? (parseFloat(params.salaryAmount) || undefined) : undefined

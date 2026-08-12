@@ -21,7 +21,8 @@ export interface TreasuryToolbarProps {
   showPeriodFilter?: boolean;
   periodFilter?: FinancePeriodFilter;
   onPeriodFilterChange?: (p: FinancePeriodFilter) => void;
-  onReportPress: () => void;
+  /** Omitted when the viewer lacks `finance.reports` — hides the Report button. */
+  onReportPress?: () => void;
 }
 
 const ENTITY_FILTER_LABELS: Record<EntityListFilter, string> = {
@@ -84,10 +85,12 @@ export function TreasuryToolbar({
             autoComplete="off"
           />
         </View>
-        <TouchableOpacity style={styles.reportBtn} onPress={onReportPress} activeOpacity={0.8}>
-          <FontAwesome name="file-text-o" size={12} color={Theme.textOnDark} />
-          <Text style={styles.reportLabel}>Report</Text>
-        </TouchableOpacity>
+        {onReportPress && (
+          <TouchableOpacity style={styles.reportBtn} onPress={onReportPress} activeOpacity={0.8}>
+            <FontAwesome name="file-text-o" size={12} color={Theme.textOnDark} />
+            <Text style={styles.reportLabel}>Report</Text>
+          </TouchableOpacity>
+        )}
         {filterLabel != null && (
           <View style={styles.filterBlock}>
             <TouchableOpacity

@@ -59,6 +59,7 @@ import { useAfterPostDeleted, useInvalidatePosts, useNetworkFeedQuery } from "@/
 import { useMarkReachCampaignSourceDeletedMutation, useReachCampaignsQuery } from "@/lib/queries/useReachCampaignsQuery";
 import { useRecordStoryViewMutation, useStoryViewsQuery } from "@/lib/queries/useStoryViewsQuery";
 import { ROUTES, buildPulseStoryPublicUrl } from "@/lib/routes";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useQuery } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -200,6 +201,11 @@ export default function StoryDetailScreen() {
 
   const feedQ = useNetworkFeedQuery(myOrgId);
   const allowLoadPosts = currentOrganization?.capabilities?.canBid ?? true;
+  // Bidding needs the org capability AND the member's own bid surface. Kept
+  // separate from `allowLoadPosts` so a member without the surface still *sees*
+  // load posts in the feed — they just can't place a bid on them.
+  const { can: canSurface } = useMemberAccess();
+  const canBidAsMember = allowLoadPosts && canSurface("sales.marketplace.bid");
   const allPosts = useMemo(
     () => (feedQ.data ?? []).filter((post) => isPostVisibleForOrg(post, { allowLoadPosts })),
     [feedQ.data, allowLoadPosts],
@@ -374,7 +380,7 @@ export default function StoryDetailScreen() {
         isSponsored: post?.is_sponsored,
         reachCampaignId: post?.reach_campaign_id ?? activeCampaignForPost?.id,
         hasActiveCampaign: Boolean(activeCampaignForPost),
-        viewerCanBidCapability: allowLoadPosts,
+        viewerCanBidCapability: canBidAsMember,
       }),
     [
       myOrgId,
@@ -392,7 +398,7 @@ export default function StoryDetailScreen() {
       bidStatus,
       counterOfferInr,
       activeCampaignForPost,
-      allowLoadPosts,
+      canBidAsMember,
     ],
   );
   const loadDisplayPrice = commercialOpportunity.pricing.displayPrice;
