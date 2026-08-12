@@ -1,3 +1,4 @@
+import { SurfaceAccessGate } from '@/components/SurfaceAccessGate';
 import ClientDetailScreen from '@/features/clients/components/ClientDetailScreen';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeBack } from '@/lib/useSafeBack';
@@ -17,11 +18,13 @@ export default function ClientDetailRoute() {
   const autoOpenProfile = profile === '1';
 
   return (
-    <ClientDetailScreen
-      clientId={clientId}
-      onBack={safeBack}
-      autoOpenProfile={autoOpenProfile}
-      initialDetailSubTab={initialDetailSubTab}
-    />
+    <SurfaceAccessGate surface="sales.clients.detail">
+      <ClientDetailScreen
+        clientId={clientId}
+        onBack={safeBack}
+        autoOpenProfile={autoOpenProfile}
+        initialDetailSubTab={initialDetailSubTab}
+      />
+    </SurfaceAccessGate>
   );
 }

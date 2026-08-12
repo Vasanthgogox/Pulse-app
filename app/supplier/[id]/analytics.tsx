@@ -1,4 +1,5 @@
 import { ModelAccessGate } from "@/components/ModelAccessGate";
+import { SurfaceAccessGate } from "@/components/SurfaceAccessGate";
 import { useLocalSearchParams } from "expo-router";
 import { SupplierAnalyticsFullScreen } from "@/features/suppliers/components/SupplierAnalyticsFullScreen";
 
@@ -9,7 +10,9 @@ export default function SupplierAnalyticsRoute() {
 
   return (
     <ModelAccessGate kind="suppliers">
-      <SupplierAnalyticsFullScreen supplierId={supplierId} />
+      <SurfaceAccessGate surface="sales.suppliers.analytics">
+        <SupplierAnalyticsFullScreen supplierId={supplierId} />
+      </SurfaceAccessGate>
     </ModelAccessGate>
   );
 }

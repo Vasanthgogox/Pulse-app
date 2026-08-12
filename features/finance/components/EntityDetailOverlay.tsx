@@ -88,6 +88,7 @@ import {
 import { LedgerReportModal } from "./LedgerReportModal";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
 import { TreasurySummaryCard } from "./TreasurySummaryCard";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 
 /** Pulsing icon for summary row to match home TreasurySummaryCard. */
 function SummaryPulseIcon({
@@ -1100,9 +1101,13 @@ export function EntityDetailOverlay({
   const monthlyRowsReversed =
     monthlyStatement?.rows != null ? [...monthlyStatement.rows].reverse() : [];
 
+  const { can: canSurface } = useMemberAccess();
+  const canViewFinanceReports = canSurface("finance.reports");
+
   const handleReportPress = useCallback(() => {
+    if (!canViewFinanceReports) return;
     setShowReportModal(true);
-  }, []);
+  }, [canViewFinanceReports]);
 
   const handleLoadBoard = useCallback(() => {
     onBack();
@@ -2433,7 +2438,7 @@ export function EntityDetailOverlay({
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               searchPlaceholder="Search month…"
-              onReportPress={handleReportPress}
+              onReportPress={canViewFinanceReports ? handleReportPress : undefined}
             />
           </View>
           <View style={styles.tableWrap}>
@@ -2870,7 +2875,7 @@ export function EntityDetailOverlay({
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               searchPlaceholder="Search trip, destination…"
-              onReportPress={handleReportPress}
+              onReportPress={canViewFinanceReports ? handleReportPress : undefined}
             />
           </View>
           <>

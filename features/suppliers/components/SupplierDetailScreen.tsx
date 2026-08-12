@@ -1103,9 +1103,10 @@ export default function SupplierDetailScreen({
   ]);
 
   const openSupplierReport = useCallback((kind: "payable" | "ledger") => {
+    if (!canSurface("finance.reports")) return;
     setSupplierReportKind(kind);
     setShowReportModal(true);
-  }, []);
+  }, [canSurface]);
 
   const handleSupplierDownloadPress = useCallback(() => {
     if (detailSubTab === "trips") {

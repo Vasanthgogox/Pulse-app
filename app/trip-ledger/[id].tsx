@@ -2,6 +2,7 @@
  * Trip Ledger Detail — full-page P&L + Record cash in / Add expense (same content as former inline expand).
  * Opened when tapping a trip row from entity overlay (Receivables/Payables by trip).
  */
+import { SurfaceAccessGate } from "@/components/SurfaceAccessGate";
 import { TripLedgerDetailScreen } from "@/features/finance/components/TripLedgerDetailScreen";
 import { useLocalSearchParams } from "expo-router";
 import { useSafeBack } from "@/lib/useSafeBack";
@@ -24,12 +25,14 @@ export default function TripLedgerDetailRoute() {
   const partyName = typeof raw.partyName === "string" ? raw.partyName : undefined;
 
   return (
-    <TripLedgerDetailScreen
-      tripId={id}
-      entityType={entityType ?? undefined}
-      entityId={entityId ?? undefined}
-      partyName={partyName ?? undefined}
-      onBack={safeBack}
-    />
+    <SurfaceAccessGate surface="finance.trip_ledger">
+      <TripLedgerDetailScreen
+        tripId={id}
+        entityType={entityType ?? undefined}
+        entityId={entityId ?? undefined}
+        partyName={partyName ?? undefined}
+        onBack={safeBack}
+      />
+    </SurfaceAccessGate>
   );
 }

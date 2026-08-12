@@ -7,7 +7,8 @@ Load this doc in any session that touches access, finance tabs, create-trip, giv
 |---------|------|
 | Capability engine | `lib/capabilities.ts` |
 | React hook (prefer this) | `lib/useCapabilities.ts` |
-| Route soft-gate | `components/ModelAccessGate.tsx` |
+| Route soft-gate (operating model) | `components/ModelAccessGate.tsx` |
+| Route soft-gate (single surface) | `components/SurfaceAccessGate.tsx` |
 | Functional role ∩ org model hook | `lib/useMemberCapabilities.ts` |
 | Functional role route soft-gate | `components/MemberDomainGate.tsx` |
 | Nav policy grants | `lib/navigationPolicy/registry/org.ts` |
@@ -83,7 +84,7 @@ Empty result → callers block Connect with an alert (never a 0-option modal). U
 
 1. Prefer `useCapabilities()` for org-model helpers; add `useMemberAccess().can(surfaceId)` when two actions share a Capability.
 2. Gate UI with helpers: `canAccessSuppliers`, `canAccessVehicles`, `canUseAssetSupply`, `canUseAggregateSupply`, `canAccessFinanceSubTab`, `canAccessPartyKind` **and** the matching surface id from `MEMBER_SURFACE_CATALOG`.
-3. Wrap party routes with `ModelAccessGate` (`components/ModelAccessGate.tsx`).
+3. Wrap party routes with `ModelAccessGate` (`components/ModelAccessGate.tsx`). For a screen governed by one surface id, wrap with `SurfaceAccessGate surface="…"`; nest it *inside* `ModelAccessGate` when both axes apply. For an action inside an already-allowed screen, call `useMemberAccess().can(id)` at the call site instead of nesting a gate.
 4. Keep `lib/navigationPolicy/registry/org.ts` grants aligned (suppliers/`create-indent` → `dispatch` only; vehicles/drivers → `fleet_management`).
 5. **Hybrid:** `dispatch` + `dispatch_for_own_fleet` must not wipe indent create — see merge logic in `getEffectivePermissions`.
 6. After RBAC changes, update **both** this matrix and `docs/RBAC_OPERATING_MODEL_CHANGELOG.md`.

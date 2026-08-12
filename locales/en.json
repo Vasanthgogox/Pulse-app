@@ -969,5 +969,7 @@
   "analyticsRiskMeterPaymentLabel": "Payment risk",
   "analyticsRiskMeterPaymentCaption": "Avg {days} days delay over last 6 months",
   "analyticsInsightsTitle": "Auto insights",
-  "analyticsInsightsEmpty": "No insights yet — add more trips to unlock callouts."
+  "analyticsInsightsEmpty": "No insights yet — add more trips to unlock callouts.",
+  "surfaceNoAccessTitle": "You don't have access",
+  "surfaceNoAccessBody": "This section isn't part of your access. Ask the workspace owner if you need it."
 }

@@ -307,6 +307,8 @@ export function FinanceScreen() {
   );
 
   const canAddFinanceTx = canSurface("finance.add_transaction");
+  const canEditFinanceTx = canSurface("finance.edit_transaction");
+  const canViewFinanceReports = canSurface("finance.reports");
 
   useEffect(() => {
     if (!canLedgerCategory(selectedLedgerCategory)) {
@@ -1576,7 +1578,9 @@ export function FinanceScreen() {
               ? "Find by name..."
               : t("searchEntities")
         }
-        onReportPress={() => setShowReportModal(true)}
+        onReportPress={
+          canViewFinanceReports ? () => setShowReportModal(true) : undefined
+        }
         entityFilter={financeSubTab === "cash" ? undefined : entityFilter}
         onEntityFilterChange={
           financeSubTab === "cash" ? undefined : setEntityFilter
@@ -1894,7 +1898,7 @@ export function FinanceScreen() {
                 ? "all"
                 : "customers"
         }
-        initialEntry={editingEntry}
+        initialEntry={canEditFinanceTx ? editingEntry : null}
         lockedAmount={
           selectedEntity?.entityType === "DRIVER" && addEntryContext == null
             ? (selectedEntity.data.pending ?? selectedEntity.data.due ?? 0)

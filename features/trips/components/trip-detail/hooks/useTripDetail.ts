@@ -419,6 +419,9 @@ export function useTripDetail({
     [capabilities, trip, canSurface],
   );
   const canAddFinanceEntry = canSurface("finance.add_transaction");
+  const canVoidAdjustments = canSurface("finance.void_adjustments");
+  const canViewTripExpenses = canSurface("finance.expenses.view");
+  const canApproveTripExpenses = canSurface("finance.expenses.approve");
 
   const showAssignByPhone = useMemo(() => {
     if (!trip) return false;
@@ -1876,10 +1879,13 @@ export function useTripDetail({
         reasonSeed?: string | null;
       } | null = null,
     ) => {
+      // Single chokepoint for every adjustment entry point (add / income /
+      // deduction / supplier cost) — a member without the surface can't open it.
+      if (!canVoidAdjustments) return;
       setAdjustmentModalPreset(preset);
       setShowAdjustmentModal(true);
     },
-    [],
+    [canVoidAdjustments],
   );
 
   // ── Adjustment handlers ───────────────────────────────────────────────────
@@ -2730,6 +2736,9 @@ export function useTripDetail({
     canAssign,
     canViewDetail,
     canAddFinanceEntry,
+    canVoidAdjustments,
+    canViewTripExpenses,
+    canApproveTripExpenses,
     showAssignByPhone,
     assignmentSource,
     previousDriverName,

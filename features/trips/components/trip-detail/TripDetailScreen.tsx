@@ -593,7 +593,10 @@ export default function TripDetailScreen({
   });
   const { can: canSurface } = useMemberAccess();
   const canTripFinanceTab = canSurface("tripops.trips.finance");
-  const canTripExpensesTab = canSurface("tripops.trips.expenses");
+  // Two surfaces cover this tab from different domains: the TripOps tab grant
+  // and the Finance expense-view grant. Require both so turning either off hides it.
+  const canTripExpensesTab =
+    canSurface("tripops.trips.expenses") && canSurface("finance.expenses.view");
   const canTripDocsTab = canSurface("tripops.trips.docs");
   const canTripTrackingTab = canSurface("tripops.trips.tracking");
   const canTripReassign = canSurface("tripops.trips.reassign");

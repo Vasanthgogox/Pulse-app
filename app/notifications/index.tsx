@@ -1,4 +1,5 @@
 import { AlertRegistryPanel, type RegistryFilterTab } from "@/components/AlertRegistryPanel";
+import { SurfaceAccessGate } from "@/components/SurfaceAccessGate";
 import Theme from "@/constants/Theme";
 import { useAlertRegistryFinanceHandlers } from "@/lib/hooks/useAlertRegistryFinanceHandlers";
 import { useRouter } from "expo-router";
@@ -19,16 +20,18 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.root}>
-      <AlertRegistryPanel
-        layout="fullscreen"
-        topInset={layout.top}
-        bottomInset={layout.scrollBottomPadding()}
-        filterTab={filterTab}
-        onFilterTabChange={setFilterTab}
-        onClose={close}
-        onSync={refreshRegistry}
-        finance={finance}
-      />
+      <SurfaceAccessGate surface="workspace.notifications">
+        <AlertRegistryPanel
+          layout="fullscreen"
+          topInset={layout.top}
+          bottomInset={layout.scrollBottomPadding()}
+          filterTab={filterTab}
+          onFilterTabChange={setFilterTab}
+          onClose={close}
+          onSync={refreshRegistry}
+          finance={finance}
+        />
+      </SurfaceAccessGate>
     </View>
   );
 }

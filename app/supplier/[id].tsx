@@ -1,4 +1,5 @@
 import { ModelAccessGate } from '@/components/ModelAccessGate';
+import { SurfaceAccessGate } from '@/components/SurfaceAccessGate';
 import SupplierDetailScreen from '@/features/suppliers/components/SupplierDetailScreen';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { useLocalSearchParams } from 'expo-router';
@@ -23,12 +24,14 @@ export default function SupplierDetailRoute() {
 
   return (
     <ModelAccessGate kind="suppliers">
-      <SupplierDetailScreen
-        supplierId={supplierId}
-        onBack={safeBack}
-        autoOpenProfile={autoOpenProfile}
-        initialDetailSubTab={parseDetailSubTab(tabRaw)}
-      />
+      <SurfaceAccessGate surface="sales.suppliers.detail">
+        <SupplierDetailScreen
+          supplierId={supplierId}
+          onBack={safeBack}
+          autoOpenProfile={autoOpenProfile}
+          initialDetailSubTab={parseDetailSubTab(tabRaw)}
+        />
+      </SurfaceAccessGate>
     </ModelAccessGate>
   );
 }

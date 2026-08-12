@@ -33,7 +33,8 @@ export interface TreasuryDetailLayoutProps {
     searchQuery: string;
     onSearchChange: (q: string) => void;
     searchPlaceholder?: string;
-    onReportPress: () => void;
+    /** Omitted when the viewer lacks `finance.reports` — hides the Report button. */
+    onReportPress?: () => void;
   };
   children: ReactNode;
   /** Optional FAB or other fixed bottom-right content. */
