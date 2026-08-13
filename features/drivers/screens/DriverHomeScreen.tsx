@@ -3811,7 +3811,26 @@ export default function DriverRadarScreen() {
   const handleSetOffline = useCallback(() => {
     setIsOnline(false);
     justCompletedTripRef.current = false;
-  }, []);
+    // Persist it. Without this the row keeps status "online", so dispatchers
+    // still see the driver as available and the next rehydration reads a stale
+    // "online" back out of the DB (see the sticky-true setIsOnline above).
+    // updateDriver resolves with { error } instead of throwing, so the failure
+    // has to be checked in .then — a bare .catch would miss the common case.
+    if (driver?.organization_id && driver?.id) {
+      void driversService
+        .updateDriver(driver.organization_id, driver.id, { status: "offline" })
+        .then(({ error }) => {
+          if (error) {
+            setIsOnline(true); // revert — the DB still says online
+            setAcceptError("Could not go offline. Check connection and retry.");
+          }
+        })
+        .catch(() => {
+          setIsOnline(true);
+          setAcceptError("Could not go offline. Check connection and retry.");
+        });
+    }
+  }, [driver?.organization_id, driver?.id]);
 
   const renderDriverMap = (
     targetRef: MutableRefObject<MapViewRef | null>,
@@ -5115,7 +5134,20 @@ export default function DriverRadarScreen() {
                     .updateDriver(driver.organization_id, driver.id, {
                       status: "online",
                     })
-                    .catch(() => {});
+                    .then(({ error }) => {
+                      if (error) {
+                        setIsOnline(false);
+                        setAcceptError(
+                          "Could not go online. Check connection and retry.",
+                        );
+                      }
+                    })
+                    .catch(() => {
+                      setIsOnline(false);
+                      setAcceptError(
+                        "Could not go online. Check connection and retry.",
+                      );
+                    });
                 }
               }}
               activeOpacity={0.8}
@@ -5162,7 +5194,20 @@ export default function DriverRadarScreen() {
                       .updateDriver(driver.organization_id, driver.id, {
                         status: "online",
                       })
-                      .catch(() => {});
+                      .then(({ error }) => {
+                        if (error) {
+                          setIsOnline(false);
+                          setAcceptError(
+                            "Could not go online. Check connection and retry.",
+                          );
+                        }
+                      })
+                      .catch(() => {
+                        setIsOnline(false);
+                        setAcceptError(
+                          "Could not go online. Check connection and retry.",
+                        );
+                      });
                   }
                 }}
                 activeOpacity={0.8}
