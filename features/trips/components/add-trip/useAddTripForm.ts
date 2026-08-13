@@ -188,6 +188,7 @@ const initialState: AddTripFormState = {
   driverPhoneTripConflict: false,
   driverPhoneTripConflictLabel: null,
   aggregateVehicleText: '',
+  aggregateDriverCommissionPercent: '',
 };
 
 export function useAddTripForm(options?: {
@@ -252,6 +253,8 @@ export function useAddTripForm(options?: {
     driverPhoneTripConflict: v === 'asset' ? false : s.driverPhoneTripConflict,
     driverPhoneTripConflictLabel: v === 'asset' ? null : s.driverPhoneTripConflictLabel,
     aggregateVehicleText: v === 'asset' ? '' : s.aggregateVehicleText,
+    aggregateDriverCommissionPercent:
+      v === 'asset' ? '' : s.aggregateDriverCommissionPercent,
   })), []);
   const setSupplierSelection = useCallback(
     (id: string | null, displayName?: string | null) =>
@@ -279,6 +282,7 @@ export function useAddTripForm(options?: {
             driverPhoneTripConflict: false,
             driverPhoneTripConflictLabel: null as string | null,
             aggregateVehicleText: '',
+            aggregateDriverCommissionPercent: '',
           }
         : {}),
     })),
@@ -325,6 +329,10 @@ export function useAddTripForm(options?: {
   const setDriverPhoneName = useCallback((v: string | null) => setState((s) => ({ ...s, driverPhoneName: v })), []);
   const setDriverPhoneConfirmed = useCallback((v: boolean) => setState((s) => ({ ...s, driverPhoneConfirmed: v })), []);
   const setAggregateVehicleText = useCallback((v: string) => setState((s) => ({ ...s, aggregateVehicleText: v })), []);
+  const setAggregateDriverCommissionPercent = useCallback(
+    (v: string) => setState((s) => ({ ...s, aggregateDriverCommissionPercent: v })),
+    [],
+  );
   const setAggregateDriverName = useCallback((v: string) => {
     setState((s) => {
       const typed = v.trim();
@@ -538,7 +546,9 @@ export function useAddTripForm(options?: {
       driver_commission_percent:
         state.supplySource === 'asset' && !state.assignLater
           ? state.driverCommissionPercent ?? null
-          : null,
+          : state.supplySource === 'aggregate' && !state.assignLater
+            ? Number(state.aggregateDriverCommissionPercent) || null
+            : null,
       driver_commission_per_km:
         state.supplySource === 'asset' && !state.assignLater
           ? state.driverCommissionPerKm ?? null
@@ -588,6 +598,7 @@ export function useAddTripForm(options?: {
       setDriverPhoneTripConflict,
       setAggregateVehicleText,
       setAggregateDriverName,
+      setAggregateDriverCommissionPercent,
       clearClientSelection,
     }),
     [
@@ -620,6 +631,7 @@ export function useAddTripForm(options?: {
       setDriverPhoneTripConflict,
       setAggregateVehicleText,
       setAggregateDriverName,
+      setAggregateDriverCommissionPercent,
       clearClientSelection,
     ],
   );

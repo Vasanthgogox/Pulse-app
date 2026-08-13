@@ -27,6 +27,9 @@ export type CreateTripDesktopAggregateFieldsProps = {
   onPartnerRateChange: (value: string) => void;
   advancePaid: string;
   onAdvancePaidChange: (value: string) => void;
+  /** Aggregate driver commission % as raw text (optional — blank means no agreed terms). */
+  driverCommissionPercent: string;
+  onDriverCommissionPercentChange: (value: string) => void;
   partyPreview?: NumericEntryPartyPreview;
   suppressPartyPreview?: boolean;
   rateError?: boolean;
@@ -56,6 +59,8 @@ export const CreateTripDesktopAggregateFields = memo(
     onPartnerRateChange,
     advancePaid,
     onAdvancePaidChange,
+    driverCommissionPercent,
+    onDriverCommissionPercentChange,
     partyPreview,
     suppressPartyPreview = false,
     rateError = false,
@@ -234,6 +239,27 @@ export const CreateTripDesktopAggregateFields = memo(
               autoCorrect={false}
               {...currencyInputProps}
             />
+          </DesktopInputShell>
+        </View>
+
+        <View style={s.allocationFieldBlockFull}>
+          <DesktopFieldLabel>Driver commission (%)</DesktopFieldLabel>
+          <DesktopInputShell>
+            <View style={s.salePriceInputShell}>
+              <TextInput
+                style={s.aggregateAmountInput}
+                placeholder="10"
+                placeholderTextColor={Theme.placeholder}
+                value={driverCommissionPercent}
+                onChangeText={(v) =>
+                  onDriverCommissionPercentChange(v.replace(/[^0-9.]/g, ""))
+                }
+                keyboardType="numeric"
+                maxLength={5}
+                {...currencyInputProps}
+              />
+              <Text style={s.aggregateCurrency}>%</Text>
+            </View>
           </DesktopInputShell>
         </View>
 

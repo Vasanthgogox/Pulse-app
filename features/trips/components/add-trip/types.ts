@@ -94,6 +94,12 @@ export interface AddTripFormState {
   driverPhoneTripConflictLabel: string | null;
   /** Aggregate only: optional vehicle as text (stored in trip notes). */
   aggregateVehicleText: string;
+  /**
+   * Aggregate only: dispatcher-entered driver commission % as raw text.
+   * Kept as a string because it is a free-text input; `driverCommissionPercent`
+   * stays reserved for the number copied off a selected fleet driver row.
+   */
+  aggregateDriverCommissionPercent: string;
 }
 
 /** Optional context passed to onComplete for post-create actions (e.g. assign driver by phone). */
