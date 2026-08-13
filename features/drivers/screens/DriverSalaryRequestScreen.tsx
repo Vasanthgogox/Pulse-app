@@ -100,6 +100,21 @@ function parseRupeeAmountInput(raw: string): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
+/**
+ * Statuses that positively disqualify a driver from billing a fleet.
+ * NULL is deliberately NOT here: it is the un-backfilled legacy cohort (16 of
+ * 25 active drivers), not evidence of a missing relationship. Gating on a
+ * non-NULL status would keep the highest-mileage drivers blocked (Mani: 20
+ * trips, Ravi: 7 trips and already billing via the Wallet path).
+ */
+const SALARY_BLOCKED_RELATIONSHIP_STATUSES = new Set(['disconnected', 'superseded']);
+
+const canRequestSalaryFromFleet = (d: driversService.DriverRow) => {
+  if (!String(d.organization_id ?? '').trim()) return false;
+  const status = String(d.relationship_status ?? '').trim().toLowerCase();
+  return !SALARY_BLOCKED_RELATIONSHIP_STATUSES.has(status);
+};
+
 const REQUEST_TYPES: { type: salaryRequestsService.SalaryRequestType; label: string; hint: string }[] = [
   // Map to existing DB enum (kept stable for backend):
   // - Salary -> monthly
@@ -285,8 +300,12 @@ export default function SalaryRequestScreen() {
 
   const salaryRequestOrgOptions = useMemo(() => {
     const accepted = invites.filter((i) => (i.status || '').toLowerCase() === 'accepted');
+    // An accepted invite is ONE way to earn a salary relationship, not the only
+    // one. Phone-assignment drivers never get an invite row yet run real trips,
+    // and the Wallet / trip-detail claim paths already let them request payment.
+    // Requiring an invite here blocked 17 of 25 active drivers.
     const options = linkedDrivers
-      .filter((d) => accepted.some((i) => String(i.from_organization_id || '') === String(d.organization_id || '')))
+      .filter(canRequestSalaryFromFleet)
       .map((d) => {
         const inv = accepted.find(
           (i) => String(i.from_organization_id || '') === String(d.organization_id || '')
@@ -310,23 +329,23 @@ export default function SalaryRequestScreen() {
       });
     if (options.length <= 1) return options;
 
-    // Salary can be requested only from the effective employer (accepted + salary relationship).
-    const acceptedOrgIds = new Set(
-      accepted
-        .map((i) => String(i.from_organization_id ?? ''))
-        .filter(Boolean),
-    );
-    const withInviteAndPay = options.find((opt) => {
-      if (!acceptedOrgIds.has(String(opt.orgId))) return false;
-      const row = linkedDrivers.find((d) => String(d.organization_id ?? '') === String(opt.orgId));
+    // Multi-fleet driver: pick the single effective employer. Each tier below is
+    // real evidence of a salary relationship; an accepted invite is no longer a
+    // precondition, otherwise an invite-less driver falls past every tier to an
+    // arbitrary options[0] and could bill the WRONG fleet.
+    const hasPayTerms = (orgId: string) => {
+      const row = linkedDrivers.find((d) => String(d.organization_id ?? '') === String(orgId));
       if (!row) return false;
       return (
         (row.payable_amount != null && Number(row.payable_amount) > 0) ||
         (row.commission_percent != null && Number(row.commission_percent) > 0) ||
         (row.commission_per_km != null && Number(row.commission_per_km) > 0)
       );
-    });
-    if (withInviteAndPay) return [withInviteAndPay];
+    };
+
+    // Tier 1 — agreed pay terms on the driver row. Strongest signal.
+    const withPay = options.find((opt) => hasPayTerms(opt.orgId));
+    if (withPay) return [withPay];
 
     const monthlySalaryOrgIds = new Set(
       salaryRequests
@@ -334,25 +353,20 @@ export default function SalaryRequestScreen() {
         .map((r) => String(r.organization_id ?? ''))
         .filter(Boolean),
     );
-    const withInviteAndMonthly = options.find(
-      (opt) =>
-        acceptedOrgIds.has(String(opt.orgId)) &&
-        monthlySalaryOrgIds.has(String(opt.orgId)),
-    );
-    if (withInviteAndMonthly) return [withInviteAndMonthly];
+    // Tier 2 — prior monthly salary history with that fleet.
+    const withMonthly = options.find((opt) => monthlySalaryOrgIds.has(String(opt.orgId)));
+    if (withMonthly) return [withMonthly];
 
     const anySalaryOrgIds = new Set(
       salaryRequests
         .map((r) => String(r.organization_id ?? ''))
         .filter(Boolean),
     );
-    const withInviteAndSalary = options.find(
-      (opt) =>
-        acceptedOrgIds.has(String(opt.orgId)) &&
-        anySalaryOrgIds.has(String(opt.orgId)),
-    );
-    if (withInviteAndSalary) return [withInviteAndSalary];
+    // Tier 3 — any prior request of any type with that fleet.
+    const withAnySalary = options.find((opt) => anySalaryOrgIds.has(String(opt.orgId)));
+    if (withAnySalary) return [withAnySalary];
 
+    // Tier 4 — most recent accepted invite, when one exists.
     const acceptedSorted = [...accepted].sort(
       (a, b) =>
         new Date(b.responded_at ?? b.created_at).getTime() -
@@ -364,7 +378,10 @@ export default function SalaryRequestScreen() {
       if (match) return [match];
     }
 
-    return [options[0]];
+    // No evidence distinguishes the fleets. Return ALL of them so the driver
+    // chooses explicitly — silently defaulting to options[0] risks billing the
+    // wrong fleet, which is worse than asking.
+    return options;
   }, [linkedDrivers, invites, salaryRequests]);
 
   const effectiveSalaryOrg = salaryRequestOrg ?? (salaryRequestOrgOptions.length === 1 ? salaryRequestOrgOptions[0] : null);
@@ -562,7 +579,14 @@ export default function SalaryRequestScreen() {
     }
     const org = salaryRequestOrg ?? (salaryRequestOrgOptions.length === 1 ? salaryRequestOrgOptions[0] : null);
     if (!org) {
-      showAppAlert('Select fleet', 'Choose which fleet to request salary from.');
+      if (salaryRequestOrgOptions.length === 0) {
+        showAppAlert(
+          'No fleet linked',
+          'Your account is not linked to a fleet that can accept payment requests. Ask your fleet to add you, then try again.',
+        );
+      } else {
+        showAppAlert('Select fleet', 'Choose which fleet to request salary from.');
+      }
       return;
     }
     if (!salaryRequestType) {
