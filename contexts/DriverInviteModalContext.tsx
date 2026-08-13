@@ -20,7 +20,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { showAppAlert } from '@/lib/appAlert';
 
 type DriverInviteModalContextValue = {
   allInvites: DriverInviteRow[];
@@ -155,7 +156,15 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
     const { error: acceptError } = await driversService.acceptDriverInvite(activeInvite.id);
     setBusyId(null);
     if (acceptError) {
-      Alert.alert('Accept failed', acceptError.message ?? 'Could not accept invite. Try again.');
+      // Alert.alert from react-native is a NO-OP on react-native-web, so on
+      // gx-pulse.netlify.app this error was raised, returned, and then shown to
+      // nobody — the Accept button looked dead. That silence is what led the
+      // driver to tap Decline instead, permanently burning the invite.
+      // showAppAlert routes to the themed modal, falling back to window.alert.
+      showAppAlert(
+        'Accept failed',
+        acceptError.message ?? 'Could not accept invite. Try again.',
+      );
       return;
     }
     setSessionSnoozedIds((prev) => {
@@ -182,7 +191,11 @@ export function DriverInviteModalProvider({ children }: { children: ReactNode })
       setBusyId(null);
       setDeclineTarget(null);
       if (declineError) {
-        Alert.alert('Decline failed', declineError.message ?? 'Could not decline invite. Try again.');
+        // Same react-native-web no-op as the accept path above.
+        showAppAlert(
+          'Decline failed',
+          declineError.message ?? 'Could not decline invite. Try again.',
+        );
         return;
       }
       setSessionSnoozedIds((prev) => {
