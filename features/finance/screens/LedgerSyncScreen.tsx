@@ -37,7 +37,7 @@ import {
   normTripFinanceAdjustmentKey,
   type TripAdjustment,
 } from "@/features/trips/services/tripAdjustments";
-import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, supplierRowToTripRow, type TripRow } from "@/features/trips/services/trips.service";
+import { getTripDisplayNumber, getTripsForOrg, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, supplierRowToTripRow, type TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { getVehiclesByOrganization } from "@/features/vehicles/services/vehicles.service";
 import { updateSalaryRequestStatus } from "@/features/drivers/services/salaryRequests.service";
@@ -260,7 +260,11 @@ export default function LedgerSyncScreen() {
         return Array.isArray(list) ? list.map((v) => ({ id: v.id, vehicle_number: v.vehicle_number ?? "" })) : [];
       }),
       Promise.all([
-        getTripsByOrganization(orgId),
+        // Masked RPC, not a direct select("*") on trips. The RLS policy
+        // "Orgs can read trips where they are the supplier" grants row access
+        // with no column-level grants, so a direct select exposes the trip
+        // owner's client_price and margin to a linked supplier org.
+        getTripsForOrg(orgId),
         getTripsWhereOrgIsClient(orgId),
         getTripsWhereOrgIsSupplier(orgId),
       ]).then(async ([ownedRes, asClientRes, asSupplierRes]) => {

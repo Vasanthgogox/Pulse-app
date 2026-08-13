@@ -1637,9 +1637,18 @@ export async function createTrip(
   const distanceKm = data.distance != null && Number.isFinite(Number(data.distance)) ? Number(data.distance) : null;
   const driverCommissionPct = Number(data.driver_commission_percent ?? 0) || 0;
   const driverCommissionPerKm = Number(data.driver_commission_per_km ?? 0) || 0;
+  // Commission basis. On market (aggregate) trips the driver belongs to the
+  // supplier, so commission is charged against supplier_rate — client_price
+  // carries our margin and charging against it would eat that margin. Asset
+  // trips keep the historical client_price basis even when a supplier rate is
+  // present. Mirrors resolveDriverTripPayoutTerms in driverUtils.util.ts so the
+  // stamped amount and the driver app agree.
+  const isMarketPayout = data.trip_payout_mode === "market";
+  const commissionBasis =
+    isMarketPayout && supplierRate > 0 ? supplierRate : clientPrice;
   const computedDriverCommission =
-    driverCommissionPct > 0 && clientPrice > 0
-      ? Math.round((clientPrice * driverCommissionPct) / 100)
+    driverCommissionPct > 0 && commissionBasis > 0
+      ? Math.round((commissionBasis * driverCommissionPct) / 100)
       : driverCommissionPerKm > 0 && distanceKm != null && distanceKm > 0
         ? Math.round(distanceKm * driverCommissionPerKm)
         : 0;
@@ -1959,6 +1968,11 @@ export interface UpdateTripAssignmentOptions {
   expectedUpdatedAt?: string | null;
   /** Dispatcher-entered driver name for assign-by-phone (stored on drivers.name). */
   driverName?: string | null;
+  /**
+   * Dispatcher-agreed commission %. Forwarded to ensureDriverRowByPhone and
+   * written only when that call inserts a brand-new driver row.
+   */
+  commissionPercent?: number | null;
 }
 
 export async function updateTripAssignment(
@@ -2275,6 +2289,7 @@ export async function assignTripDriverByPhone(
     {
       trackingOnly: options?.trackingOnly ?? false,
       forceUnlinkedForOtp: options?.forceOtpClaim ?? false,
+      commissionPercent: options?.commissionPercent ?? null,
     },
   );
   if (driverError || !driver)

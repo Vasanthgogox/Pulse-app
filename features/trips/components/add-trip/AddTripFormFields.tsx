@@ -2685,6 +2685,10 @@ export function AddTripFormFields({
                 suppressPartyPreview={Boolean(allocationContextRow?.right)}
                 rateError={invalid("partnerRate")}
                 advanceError={invalid("advancePaid")}
+                driverCommissionPercent={state.aggregateDriverCommissionPercent}
+                onDriverCommissionPercentChange={
+                  setters.setAggregateDriverCommissionPercent
+                }
                 driverName={state.aggregateDriverName}
                 onDriverNameChange={(t) =>
                   onPadValueChange(setters.setAggregateDriverName, t)

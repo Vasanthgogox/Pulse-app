@@ -260,6 +260,10 @@ export const CreateTripDesktopAllocationStep = memo(function CreateTripDesktopAl
             onPartnerRateChange={(v) => setters.setSupplierRate(v)}
             advancePaid={state.advancePaid}
             onAdvancePaidChange={(v) => setters.setAdvancePaid(v)}
+            driverCommissionPercent={state.aggregateDriverCommissionPercent}
+            onDriverCommissionPercentChange={
+              setters.setAggregateDriverCommissionPercent
+            }
             partyPreview={
               selectedSupplierRow
                 ? supplierToNumericPartyPreview(selectedSupplierRow)

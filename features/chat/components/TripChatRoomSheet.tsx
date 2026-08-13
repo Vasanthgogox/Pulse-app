@@ -109,6 +109,7 @@ export function TripChatRoomSheet({
   const currentOrgId = organizationId ?? currentOrganization?.id ?? null;
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   // mentionUserIds is wired through to the RPC — team member picker is a future feature.
   const mentionUserIdsRef = useRef<string[]>([]);
 
@@ -138,10 +139,16 @@ export function TripChatRoomSheet({
     if (!text || sending) return;
     setSending(true);
     const mentions = mentionUserIdsRef.current.slice();
+    setSendError(null);
     try {
       await sendMessage({ content: text, messageType: "text", mentionUserIds: mentions });
       setDraft("");
       mentionUserIdsRef.current = [];
+    } catch (e) {
+      // Keep the draft so the text is not lost, and say what happened —
+      // previously a throw left the input full with no feedback at all, which
+      // read as a dead Send button.
+      setSendError(e instanceof Error ? e.message : "Could not send message.");
     } finally {
       setSending(false);
     }
@@ -263,6 +270,15 @@ export function TripChatRoomSheet({
           />
         </>
       )}
+
+      {sendError ? (
+        <View style={styles.sendErrorBar}>
+          <Feather name="alert-circle" size={13} color={Theme.warning} />
+          <Text style={styles.sendErrorText} numberOfLines={2}>
+            {sendError}
+          </Text>
+        </View>
+      ) : null}
 
       <View
         style={[
@@ -453,6 +469,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Theme.textSecondary,
     textAlign: "center",
+  },
+  sendErrorBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: Theme.cardWhite,
+  },
+  sendErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: Theme.warning,
   },
   composeBar: {
     flexDirection: "row",

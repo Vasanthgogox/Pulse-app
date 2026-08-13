@@ -102,6 +102,7 @@ export default function AddTripPage() {
         load_type: data.load_type ?? undefined,
         advance_paid: normalizedAdvancePaid,
         notes: data.notes ?? undefined,
+        driver_commission_percent: data.driver_commission_percent ?? undefined,
         vehicle_display_number: data.vehicle_display_number?.trim() || undefined,
         owner_user_id: profile?.uid ?? userId,
         created_by_user_id: profile?.uid ?? userId,
@@ -136,6 +137,7 @@ export default function AddTripPage() {
             driverIdPrev: null,
             vehicleIdPrev: null,
             driverName: assignDriverName,
+            commissionPercent: data.driver_commission_percent ?? null,
           },
         );
         if (assignErr) {
@@ -207,6 +209,7 @@ export default function AddTripPage() {
           driverIdPrev: null,
           vehicleIdPrev: null,
           driverName: options.driverName?.trim() || undefined,
+          commissionPercent: data.driver_commission_percent ?? null,
         },
       );
       if (assignErr) {

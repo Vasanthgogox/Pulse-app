@@ -1291,6 +1291,13 @@ export interface EnsureDriverRowByPhoneOptions {
    * so the trip must be claimed via OTP and does not show directly in any driver's trips list.
    */
   forceUnlinkedForOtp?: boolean;
+  /**
+   * Dispatcher-agreed commission %. Written ONLY when this call inserts a new
+   * row. Existing rows keep their own terms — overwriting them here would let
+   * one org silently rewrite pay terms agreed by another org for the same
+   * driver. The trip still gets the correct payout via trips.driver_commission.
+   */
+  commissionPercent?: number | null;
 }
 
 function isPlaceholderDriverName(value: string | null | undefined): boolean {
@@ -1435,6 +1442,9 @@ export async function ensureDriverRowByPhone(
     relationship_status: "independent",
   };
   if (options?.trackingOnly === true) insertPayload.tracking_only = true;
+  // Insert-only: never stamp terms onto a pre-existing row (see the option doc).
+  const commissionPct = Number(options?.commissionPercent ?? 0) || 0;
+  if (commissionPct > 0) insertPayload.commission_percent = commissionPct;
 
   const { data: row, error: insertError } = await supabase()
     .from("drivers")

@@ -593,6 +593,11 @@ export default function TripDetailScreen({
   });
   const { can: canSurface } = useMemberAccess();
   const canTripFinanceTab = canSurface("tripops.trips.finance");
+  // Settlement write actions (capture payment / record payout). The trip finance
+  // tab is read-only for a dispatcher — money movement needs its own grant.
+  const canAddFinanceEntry = canSurface("finance.add_transaction");
+  const canViewTripLedger = canSurface("finance.trip_ledger");
+  const canVoidAdjustments = canSurface("finance.void_adjustments");
   // Two surfaces cover this tab from different domains: the TripOps tab grant
   // and the Finance expense-view grant. Require both so turning either off hides it.
   const canTripExpensesTab =
@@ -2068,7 +2073,8 @@ export default function TripDetailScreen({
   const showRecordSupplierPayoutCta =
     hasMarketSupplierPayable &&
     !isPartnerSettlementView &&
-    isTripOwner;
+    isTripOwner &&
+    canAddFinanceEntry;
   // Asset trips: the mover can pay its driver at any time, even before a cost
   // is recorded (previously gated on adjCost/cost > 0, which hid the button on
   // a fresh asset trip — chicken-and-egg). Still owner-only and not a partner view.
@@ -2080,6 +2086,7 @@ export default function TripDetailScreen({
    */
   const showRecordDriverPayoutCta =
     isAssetTripFinance &&
+    canAddFinanceEntry &&
     (isPartnerSettlementView ? partnerOwnAssetDriverPay > 0 : isTripOwner);
   /**
    * The partner-settlement view normally hides the payable lane: the carrier is
@@ -2186,6 +2193,7 @@ export default function TripDetailScreen({
             : undefined
         }
         receivableAction={
+          !canAddFinanceEntry ? null : (
           <TouchableOpacity
             style={[
               neoStyles.laneActionBtn,
@@ -2221,6 +2229,7 @@ export default function TripDetailScreen({
               Capture payment
             </Text>
           </TouchableOpacity>
+          )
         }
         payableAction={
           showRecordSupplierPayoutCta ? (
@@ -2310,6 +2319,7 @@ export default function TripDetailScreen({
   const financeAdjustmentSummaryWrappedEl = (
     <TripFinanceAdjustmentsPanel
       layout={financeLayout}
+      canAddAdjustment={canVoidAdjustments}
       adjustments={detail.adjustments}
       sales={sales}
       adjSales={adjSales}
@@ -4197,6 +4207,7 @@ export default function TripDetailScreen({
                               isDesktop && neoStyles.financeSummaryPaneRightDesktop,
                             ]}
                           >
+                            {canViewTripLedger && (
                             <View
                               style={[
                                 neoStyles.financeLedgerPreviewCard,
@@ -4340,6 +4351,7 @@ export default function TripDetailScreen({
                                 )}
                               </ScrollView>
                             </View>
+                            )}
                           </View>
                         </View>
 
