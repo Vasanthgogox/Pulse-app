@@ -90,7 +90,10 @@ export function useMemberCapabilities(): MemberDomainAccess {
     const orgAllowsSales =
       capabilities.includes("marketplace_post") ||
       capabilities.includes("marketplace_bid") ||
-      canAccessClients(capabilities);
+      canAccessClients(capabilities) ||
+      // Indents surfaces live under Sales; keep the domain unlocked for
+      // give-load orgs that have dispatch but no marketplace/client caps.
+      canAccessIndents(capabilities);
     const orgAllowsTripOps =
       canAccessIndents(capabilities) || canAccessTrips(capabilities);
 
