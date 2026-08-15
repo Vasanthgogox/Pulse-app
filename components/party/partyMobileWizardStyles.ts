@@ -5,6 +5,9 @@ import Theme from "@/constants/Theme";
 
 const padX = Layout.screenPaddingHorizontal;
 
+/** Matches `PartyMobileWizardShell` cardFit — centered desktop/tablet card. */
+export const PARTY_WIZARD_DESKTOP_MIN_WIDTH = 720;
+
 export const partyMobileWizardStyles = StyleSheet.create({
   root: {
     flex: 1,
@@ -186,8 +189,19 @@ export const partyMobileWizardStyles = StyleSheet.create({
     backgroundColor: Theme.surfaceForm,
     overflow: "hidden",
   },
+  sourceCardDesktop: {
+    borderWidth: 0,
+    borderRadius: 0,
+    backgroundColor: "transparent",
+    overflow: "visible",
+    marginTop: 4,
+  },
   sourceBlock: {
     gap: 0,
+  },
+  sourceBlockDesktop: {
+    alignItems: "flex-start",
+    gap: 12,
   },
   importPrimary: {
     flexDirection: "row",
@@ -198,6 +212,15 @@ export const partyMobileWizardStyles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 14,
     minHeight: Layout.minTouchTargetSize,
+  },
+  importPrimaryDesktop: {
+    alignSelf: "flex-start",
+    justifyContent: "flex-start",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
   },
   importPrimaryDim: {
     opacity: 0.65,
@@ -223,9 +246,26 @@ export const partyMobileWizardStyles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 4,
   },
+  importHintDesktop: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    fontSize: 12,
+    lineHeight: 18,
+    maxWidth: 420,
+  },
+  importErrorDesktop: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+  },
   sourceDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: Theme.borderLight,
+  },
+  sourceDividerDesktop: {
+    height: 0,
+    marginVertical: 0,
+    backgroundColor: "transparent",
   },
   manualLink: {
     flexDirection: "row",
@@ -234,6 +274,12 @@ export const partyMobileWizardStyles = StyleSheet.create({
     gap: 4,
     paddingVertical: 10,
     minHeight: Layout.minTouchTargetSize,
+  },
+  manualLinkDesktop: {
+    alignSelf: "flex-start",
+    justifyContent: "flex-start",
+    paddingHorizontal: 0,
+    paddingVertical: 8,
   },
   manualLinkText: {
     fontSize: 12,

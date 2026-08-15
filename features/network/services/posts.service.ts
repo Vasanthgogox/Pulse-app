@@ -332,18 +332,16 @@ export interface StoryClosedInfo {
   indentStatus: string | null;
 }
 
-const INDENT_ASSIGNED_STATUSES = new Set([
-  'awarded',
-  'assigned',
-  'deployed',
-  'completed',
-]);
-
 /**
  * Best-effort explanation for a dead story link (deleted, deactivated or
- * expired). Reads the post row and, when the broadcast came from an indent,
- * the indent status — so the share page can say "load assigned" instead of a
- * generic error. All reads are RLS-guarded; any miss degrades gracefully.
+ * expired) — so the share page can say "load assigned" instead of a generic
+ * error. Goes through get_story_closed_info (SECURITY DEFINER), not a direct
+ * table read: posts_select_authenticated only allows a raw SELECT when
+ * is_active = true OR the caller is in the post's own org, which means the
+ * exact moment a story closes is the moment a direct read from any other
+ * viewer would return nothing — collapsing every real reason into the
+ * generic fallback. The RPC sees the row regardless of caller org, same
+ * public-callable pattern as get_story_preview.
  */
 export async function getStoryClosedInfo(
   postId: string,
@@ -351,52 +349,17 @@ export async function getStoryClosedInfo(
   const fallback: StoryClosedInfo = { reason: 'removed', indentStatus: null };
   if (!postId) return fallback;
 
-  let post: {
-    is_active: boolean | null;
-    expires_at: string | null;
-    source_indent_id: string | null;
-  } | null = null;
   try {
-    const { data } = await supabase()
-      .from('posts')
-      .select('is_active, expires_at, source_indent_id')
-      .eq('id', postId)
-      .maybeSingle();
-    post = data ?? null;
+    const { data, error } = await supabase().rpc('get_story_closed_info', {
+      p_post_id: postId,
+    });
+    if (error) return fallback;
+    const row = (data ?? [])[0] as { reason: StoryClosedReason; indent_status: string | null } | undefined;
+    if (!row) return fallback;
+    return { reason: row.reason, indentStatus: row.indent_status };
   } catch {
-    post = null;
+    return fallback;
   }
-
-  // Post row gone (deleted) or hidden — check nothing else.
-  if (!post) return fallback;
-
-  if (post.source_indent_id) {
-    try {
-      const { data: indent } = await supabase()
-        .from('indents')
-        .select('status')
-        .eq('id', post.source_indent_id)
-        .maybeSingle();
-      const status = (indent?.status ?? '').trim().toLowerCase();
-      if (INDENT_ASSIGNED_STATUSES.has(status)) {
-        return { reason: 'assigned', indentStatus: status };
-      }
-      if (status === 'cancelled') {
-        return { reason: 'withdrawn', indentStatus: status };
-      }
-      if (status === 'expired' || status === 'closed') {
-        return { reason: 'expired', indentStatus: status };
-      }
-      // Indent still open for bids — posts.expires_at must not invent a close reason.
-      if (post.is_active === false) return { reason: 'closed', indentStatus: status };
-      return fallback;
-    } catch {
-      // RLS-hidden indent — fall through.
-    }
-  }
-
-  if (post.is_active === false) return { reason: 'closed', indentStatus: null };
-  return fallback;
 }
 
 export async function incrementPostViewCount(postId: string): Promise<void> {

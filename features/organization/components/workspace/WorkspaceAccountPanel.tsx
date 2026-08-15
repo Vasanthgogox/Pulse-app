@@ -391,7 +391,7 @@ export function WorkspaceAccountPanel({
                 onPress={() => onOpenPanel("settings")}
               />
               <ManagementRow
-                label="Org identity & KYC"
+                label="Organization"
                 icon={<Settings2 size={15} color={PURPLE} strokeWidth={1.8} />}
                 onPress={() => onOpenPanel("kyc")}
               />

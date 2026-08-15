@@ -1,10 +1,11 @@
 /**
  * Elegant party-add pill — compact capsule with icon well + label.
- * Used by Finance FAB and finance promo empty states.
+ * Used by Finance FAB, party add chip, and finance promo empty states.
  *
- * FAB (`expandOnHover`): desktop web collapses until hover; mobile / narrow
- * viewports play the same slide-open once on mount, then stay expanded.
- * Promo rows leave the chip always expanded (no collapse).
+ * `expandOnHover`: rest as a circular icon + plus. Desktop/web expands the
+ * label on hover; mobile expands on press and collapses on release.
+ * `collapsedGlyph="icon"` keeps the party glyph visible with a plus badge.
+ * Promo rows that should stay labeled leave `expandOnHover` false.
  */
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
@@ -25,23 +26,18 @@ import {
   StyleSheet,
   Text,
   useWindowDimensions,
+  View,
 } from "react-native";
 import Animated, {
   Easing,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
   withTiming,
 } from "react-native-reanimated";
 
 const MOTION_MS = 180;
-const ENTRANCE_MS = 300;
 const motion = { duration: MOTION_MS, easing: Easing.out(Easing.cubic) };
-const entranceMotion = {
-  duration: ENTRANCE_MS,
-  easing: Easing.out(Easing.cubic),
-};
 
 const DESKTOP_MIN_WIDTH = 768;
 
@@ -56,10 +52,16 @@ export type PartyAddChipProps = {
   onPress?: () => void;
   accessibilityLabel?: string;
   /**
-   * FAB: collapse to icon until hover (desktop web), or play slide-open
-   * entrance then stay expanded (mobile / narrow). Promo: leave false.
+   * Collapse to icon + plus at rest. Desktop/web: expand label on hover.
+   * Mobile: expand on press, collapse on release. Promo always-on: leave false.
    */
   expandOnHover?: boolean;
+  /**
+   * When collapsed (`expandOnHover`): `"plus"` morphs a plus into the party
+   * icon (default). `"icon"` keeps the party glyph visible and adds a small
+   * plus badge — used when several party chips sit together as a speed dial.
+   */
+  collapsedGlyph?: "plus" | "icon";
   /** Cross-axis alignment when placed in a flex parent. */
   align?: "start" | "center" | "end";
   /** Stretch chip to parent width (mobile promo rows). */
@@ -93,42 +95,39 @@ export const PartyAddChip = memo(function PartyAddChip({
   onPress,
   accessibilityLabel,
   expandOnHover = false,
+  collapsedGlyph = "plus",
   align = "end",
   fullWidth = false,
   disabled = false,
   testID,
 }: PartyAddChipProps) {
+  const showIconWhenCollapsed = collapsedGlyph === "icon";
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = windowWidth >= DESKTOP_MIN_WIDTH;
-  /** Pointer hover collapses/expands repeatedly — desktop web only. */
-  const canHoverExpand = expandOnHover && isDesktop && Platform.OS === "web";
-  /** Same slide morph on mobile / narrow — once on mount, then stays open. */
-  const playEntranceSlide = expandOnHover && !canHoverExpand;
+  const isWeb = Platform.OS === "web";
+  /** Pointer hover expands/collapses — desktop web only. */
+  const canHoverExpand = expandOnHover && isWeb && isDesktop;
+  /** Mobile / narrow: press expands the label, release collapses. */
+  const canPressExpand = expandOnHover && !canHoverExpand;
 
   const expand = useSharedValue(expandOnHover ? 0 : 1);
   const pressed = useSharedValue(0);
   const PartyIcon = resolvePartyIcon(icon);
 
   const chipHeight = isDesktop ? 40 : Layout.minTouchTargetSize;
-  const iconWellSize = isDesktop ? 30 : 28;
-  const iconSize = isDesktop ? 14 : 13;
-  const labelGap = isDesktop ? 8 : 9;
-  const padRight = isDesktop ? 12 : 11;
-  const padLeft = isDesktop ? 5 : 6;
+  const padLeft = 5;
+  const iconWellSize = chipHeight - padLeft * 2;
+  const iconSize = isDesktop ? 14 : 15;
+  const labelGap = isDesktop ? 8 : 8;
+  const padRight = isDesktop ? 12 : 12;
 
   useEffect(() => {
     if (!expandOnHover) {
       expand.value = 1;
       return;
     }
-    if (canHoverExpand) {
-      expand.value = 0;
-      return;
-    }
-    // Mobile / narrow: plus → truck + label slide (matches desktop morph).
     expand.value = 0;
-    expand.value = withDelay(70, withTiming(1, entranceMotion));
-  }, [canHoverExpand, expand, expandOnHover]);
+  }, [expand, expandOnHover]);
 
   const setExpanded = useCallback(
     (active: boolean) => {
@@ -144,20 +143,18 @@ export const PartyAddChip = memo(function PartyAddChip({
 
   const onPressIn = useCallback(() => {
     pressed.value = withTiming(1, { duration: 80 });
-    // Touch / narrow: press also drives the morph when still collapsed.
-    if (playEntranceSlide && expand.value < 0.95) {
-      setExpanded(true);
-    }
-  }, [expand, playEntranceSlide, pressed, setExpanded]);
+    if (expandOnHover) setExpanded(true);
+  }, [expandOnHover, pressed, setExpanded]);
 
   const onPressOut = useCallback(() => {
     pressed.value = withTiming(0, { duration: 110 });
-  }, [pressed]);
+    if (canPressExpand) setExpanded(false);
+  }, [canPressExpand, pressed, setExpanded]);
 
   const shellStyle = useAnimatedStyle(() => {
     const h = expandOnHover ? expand.value : 1;
     const p = pressed.value;
-    const active = canHoverExpand ? h : Math.max(h, p * 0.5);
+    const active = h;
     return {
       transform: [
         { scale: 1 + active * 0.012 - p * 0.02 },
@@ -176,9 +173,7 @@ export const PartyAddChip = memo(function PartyAddChip({
 
   const iconWellStyle = useAnimatedStyle(() => {
     const h = expandOnHover ? expand.value : 1;
-    const active = canHoverExpand
-      ? h
-      : Math.max(h, pressed.value * 0.5);
+    const active = h;
     return {
       backgroundColor:
         active > 0.45 ? Theme.brandBlue : Theme.brandBlueWash,
@@ -188,7 +183,7 @@ export const PartyAddChip = memo(function PartyAddChip({
 
   const partyIconStyle = useAnimatedStyle(() => {
     const h = expandOnHover ? expand.value : 1;
-    if (!expandOnHover) {
+    if (!expandOnHover || showIconWhenCollapsed) {
       return {
         opacity: 1,
         transform: [{ scale: 1 }],
@@ -201,7 +196,7 @@ export const PartyAddChip = memo(function PartyAddChip({
   });
 
   const plusStyle = useAnimatedStyle(() => {
-    if (!expandOnHover) {
+    if (!expandOnHover || showIconWhenCollapsed) {
       return { opacity: 0 };
     }
     const h = expand.value;
@@ -246,31 +241,53 @@ export const PartyAddChip = memo(function PartyAddChip({
           minHeight: chipHeight,
         },
         isDesktop && styles.chipDesktop,
+        (showIconWhenCollapsed || expandOnHover) && styles.chipOverflowVisible,
         shellStyle,
       ]}
     >
-      <Animated.View
-        style={[
-          styles.iconWell,
-          {
-            width: iconWellSize,
-            height: iconWellSize,
-            borderRadius: iconWellSize / 2,
-          },
-          iconWellStyle,
-        ]}
-      >
-        <Animated.View style={[styles.iconLayer, partyIconStyle]}>
-          <PartyIcon
-            size={iconSize}
-            color={Theme.brandBlueInk}
-            strokeWidth={2.15}
-          />
+      <View style={styles.iconWellWrap}>
+        <Animated.View
+          style={[
+            styles.iconWell,
+            {
+              width: iconWellSize,
+              height: iconWellSize,
+              borderRadius: iconWellSize / 2,
+            },
+            iconWellStyle,
+          ]}
+        >
+          <Animated.View style={[styles.iconLayer, partyIconStyle]}>
+            <PartyIcon
+              size={iconSize}
+              color={Theme.brandBlueInk}
+              strokeWidth={2.15}
+            />
+          </Animated.View>
+          <Animated.View style={[styles.iconLayer, plusStyle]}>
+            <Plus size={iconSize} color={Theme.brandBlueInk} strokeWidth={2.4} />
+          </Animated.View>
         </Animated.View>
-        <Animated.View style={[styles.iconLayer, plusStyle]}>
-          <Plus size={iconSize} color={Theme.brandBlueInk} strokeWidth={2.4} />
-        </Animated.View>
-      </Animated.View>
+        {showIconWhenCollapsed ? (
+          <View
+            style={[
+              styles.plusBadge,
+              {
+                width: isDesktop ? 14 : 15,
+                height: isDesktop ? 14 : 15,
+                borderRadius: isDesktop ? 7 : 8,
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <Plus
+              size={isDesktop ? 9 : 10}
+              color={Theme.brandBlueInk}
+              strokeWidth={3}
+            />
+          </View>
+        ) : null}
+      </View>
       <Animated.View style={[styles.labelWrap, labelWrapStyle]}>
         <Text
           style={[styles.label, isDesktop && styles.labelDesktop]}
@@ -292,8 +309,8 @@ export const PartyAddChip = memo(function PartyAddChip({
       onPress={onPress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
-      onHoverIn={Platform.OS === "web" && expandOnHover ? onHoverIn : undefined}
-      onHoverOut={Platform.OS === "web" && expandOnHover ? onHoverOut : undefined}
+      onHoverIn={canHoverExpand ? onHoverIn : undefined}
+      onHoverOut={canHoverExpand ? onHoverOut : undefined}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
@@ -301,6 +318,7 @@ export const PartyAddChip = memo(function PartyAddChip({
         styles.pressable,
         alignStyle,
         fullWidth && styles.pressableFullWidth,
+        { minHeight: chipHeight },
         (webPressed || disabled) && styles.pressableDim,
       ]}
       hitSlop={
@@ -321,8 +339,8 @@ export const PartyAddChip = memo(function PartyAddChip({
 
 const styles = StyleSheet.create({
   pressable: {
-    minHeight: Layout.minTouchTargetSize,
     justifyContent: "center",
+    overflow: "visible",
   },
   pressableStart: {
     alignSelf: "flex-start",
@@ -364,9 +382,38 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  chipOverflowVisible: {
+    overflow: "visible",
+  },
   chipFullWidth: {
     alignSelf: "stretch",
     width: "100%",
+  },
+  iconWellWrap: {
+    position: "relative",
+    flexShrink: 0,
+  },
+  plusBadge: {
+    position: "absolute",
+    right: -3,
+    bottom: -3,
+    backgroundColor: Theme.accentGold,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.cardWhite,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 1px 3px rgba(77, 54, 54, 0.18)",
+      } as object,
+      default: {
+        shadowColor: Theme.darkBackground,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.16,
+        shadowRadius: 2,
+        elevation: 3,
+      },
+    }),
   },
   chipDesktop: {
     ...Platform.select({

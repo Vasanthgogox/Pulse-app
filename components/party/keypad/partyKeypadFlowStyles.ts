@@ -171,6 +171,18 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     borderTopRightRadius: 12,
     marginTop: 0,
   },
+  /** Full-bleed pay tray — same chrome as driver sign-in keypadDock. */
+  keypadDockSignIn: {
+    paddingTop: 0,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+    marginTop: "auto",
+    borderTopWidth: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    backgroundColor: Theme.surfaceGray,
+    overflow: "hidden",
+  },
   /** Full-bleed iOS-style dial pad (no side margins, system gray chrome). */
   keypadDockApple: {
     flexShrink: 0,

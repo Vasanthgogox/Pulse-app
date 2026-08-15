@@ -32,15 +32,15 @@ export function InlineVerificationStatusBanner({ kyc, documents = [] }: Props) {
       icon: <Clock size={16} color="#D97706" />,
       accent: '#D97706',
       label: 'Under review',
-      sub: 'Submitted for verification. Fields are locked until review completes.',
+      sub: 'Tax IDs stay locked. You can still update a document — only the new file is sent for review.',
     },
     verified: {
       icon: <CheckCircle size={16} color={Theme.success} />,
       accent: Theme.success,
       label: 'Verified business',
       sub: kyc?.verified_at
-        ? `Approved ${new Date(kyc.verified_at).toLocaleDateString('en-IN')}.`
-        : 'Your business profile is verified.',
+        ? `Approved ${new Date(kyc.verified_at).toLocaleDateString('en-IN')}. Update a document below to send a new file for admin review.`
+        : 'Your business profile is verified. Update a document below to send a new file for admin review.',
     },
     rejected: {
       icon: <XCircle size={16} color={Theme.destructive} />,

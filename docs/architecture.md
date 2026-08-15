@@ -59,3 +59,8 @@ lib/capabilities.ts
 - `contexts/AuthContext.tsx` (462 lines) — multi-path session restore, race conditions possible
 - Realtime invalidation — channel proliferation risk if subscriptions not cleaned up
 - Map abstraction — `.native.tsx`/`.web.tsx` split; verify changes on both platforms
+
+## Organization KYC
+
+Pulse, Admin, and `submit_business_verification` share one requirement matrix.
+See [`KYC_REQUIREMENT_POLICY.md`](./KYC_REQUIREMENT_POLICY.md).

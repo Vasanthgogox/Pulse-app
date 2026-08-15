@@ -100,6 +100,17 @@ export async function removeOrganizationKycDocument(
   return { error: null };
 }
 
+export async function requestKycDocumentReview(
+  orgId: string,
+): Promise<{ error: Error | null; status?: string }> {
+  const { data, error } = await supabase().rpc('request_kyc_document_review', {
+    p_org_id: orgId,
+  });
+  if (error) return { error: new Error(error.message) };
+  const result = data as { ok?: boolean; status?: string } | null;
+  return { error: null, status: result?.status };
+}
+
 export function latestOrgKycDocument(
   documents: OrganizationKycDocument[],
   docType: OrganizationKycDocType,

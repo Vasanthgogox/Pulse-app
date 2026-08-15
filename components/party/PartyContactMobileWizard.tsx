@@ -5,9 +5,11 @@
 import { memo, useCallback, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { ArrowRight, BookUser } from "lucide-react-native";
@@ -15,7 +17,10 @@ import { ArrowRight, BookUser } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeypadFlow";
 import { PartyMobileWizardShell } from "./PartyMobileWizardShell";
-import { partyMobileWizardStyles as styles } from "./partyMobileWizardStyles";
+import {
+  PARTY_WIZARD_DESKTOP_MIN_WIDTH,
+  partyMobileWizardStyles as styles,
+} from "./partyMobileWizardStyles";
 
 export type PartyContactWizardFieldStep =
   | "source"
@@ -95,6 +100,9 @@ export const PartyContactMobileWizard = memo(function PartyContactMobileWizard({
   onAdvance,
   advanceLabel = "Continue",
 }: PartyContactMobileWizardProps) {
+  const { width } = useWindowDimensions();
+  const isDesktop =
+    Platform.OS === "web" && width >= PARTY_WIZARD_DESKTOP_MIN_WIDTH;
   const isPhoneStep = wizardStep === "phone";
 
   const handleBack = useCallback(() => {
@@ -142,11 +150,17 @@ export const PartyContactMobileWizard = memo(function PartyContactMobileWizard({
     switch (wizardStep) {
       case "source":
         return (
-          <View style={styles.sourceCard}>
-            <View style={styles.sourceBlock}>
+          <View style={[styles.sourceCard, isDesktop && styles.sourceCardDesktop]}>
+            <View
+              style={[
+                styles.sourceBlock,
+                isDesktop && styles.sourceBlockDesktop,
+              ]}
+            >
               <Pressable
                 style={[
                   styles.importPrimary,
+                  isDesktop && styles.importPrimaryDesktop,
                   (!contactPickerAvailable || importLoading) &&
                     styles.importPrimaryDim,
                 ]}
@@ -163,16 +177,36 @@ export const PartyContactMobileWizard = memo(function PartyContactMobileWizard({
                 </Text>
               </Pressable>
               {importError ? (
-                <Text style={styles.importError}>{importError}</Text>
+                <Text
+                  style={[
+                    styles.importError,
+                    isDesktop && styles.importErrorDesktop,
+                  ]}
+                >
+                  {importError}
+                </Text>
               ) : !contactPickerAvailable ? (
-                <Text style={styles.importHint}>
+                <Text
+                  style={[
+                    styles.importHint,
+                    isDesktop && styles.importHintDesktop,
+                  ]}
+                >
                   Contact import works in the native app. Enter details manually
                   below.
                 </Text>
               ) : null}
-              <View style={styles.sourceDivider} />
+              <View
+                style={[
+                  styles.sourceDivider,
+                  isDesktop && styles.sourceDividerDesktop,
+                ]}
+              />
               <Pressable
-                style={styles.manualLink}
+                style={[
+                  styles.manualLink,
+                  isDesktop && styles.manualLinkDesktop,
+                ]}
                 onPress={() => onWizardStepChange("organization")}
               >
                 <Text style={styles.manualLinkText}>Enter details manually</Text>

@@ -5,7 +5,7 @@ import type {
     TripOption,
 } from "@/components/AddTransactionModal";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
-import { FinanceFAB } from "@/components/FinanceFAB";
+import { PartySpeedDialFab, type PartySpeedDialAction } from "@/components/PartySpeedDialFab";
 import { Layout } from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -456,6 +456,52 @@ export function FinanceScreen() {
       openAddPartyForSubTab(financeSubTab);
     }
   }, [financeSubTab, openAddPartyForSubTab]);
+
+  const partySpeedDialActions = useMemo((): PartySpeedDialAction[] => {
+    if (
+      financeSubTab !== "customers" &&
+      financeSubTab !== "suppliers" &&
+      financeSubTab !== "garage" &&
+      financeSubTab !== "drivers"
+    ) {
+      return [];
+    }
+    const surface =
+      financeSubTab === "customers"
+        ? ("sales.clients.create" as const)
+        : financeSubTab === "suppliers"
+          ? ("sales.suppliers.create" as const)
+          : financeSubTab === "garage"
+            ? ("fleet.vehicles.create" as const)
+            : ("fleet.drivers.create" as const);
+    if (!canAccessFinanceSubTab(capabilities, financeSubTab)) return [];
+    if (!canSurface(surface)) return [];
+    const byTab: Record<
+      "customers" | "suppliers" | "garage" | "drivers",
+      Pick<PartySpeedDialAction, "label" | "icon">
+    > = {
+      customers: { label: t("addCustomer"), icon: "building" },
+      suppliers: { label: t("addSupplier"), icon: "warehouse" },
+      garage: { label: t("addVehicle"), icon: "truck" },
+      drivers: { label: t("addDriver"), icon: "user" },
+    };
+    const meta = byTab[financeSubTab];
+    return [
+      {
+        id: financeSubTab,
+        label: meta.label,
+        icon: meta.icon,
+        accessibilityLabel: meta.label,
+        onPress: () => openAddPartyForSubTab(financeSubTab),
+      },
+    ];
+  }, [canSurface, capabilities, financeSubTab, openAddPartyForSubTab, t]);
+
+  const showPartySpeedDial =
+    financeSubTab === "customers" ||
+    financeSubTab === "suppliers" ||
+    financeSubTab === "garage" ||
+    financeSubTab === "drivers";
 
   const handleKanbanPartyAddPress = openAddPartyForSubTab;
 
@@ -1756,75 +1802,14 @@ export function FinanceScreen() {
         </>
       )}
 
-      {(() => {
-        const partyKind = financeSubTabToPartyKind(financeSubTab);
-        const createOk =
-          financeSubTab === "customers"
-            ? canSurface("sales.clients.create")
-            : financeSubTab === "suppliers"
-              ? canSurface("sales.suppliers.create")
-              : financeSubTab === "garage"
-                ? canSurface("fleet.vehicles.create")
-                : financeSubTab === "drivers"
-                  ? canSurface("fleet.drivers.create")
-                  : false;
-        const routeAdd =
-          !createOk || financeSubTab === "cash"
-            ? undefined
-            : financeSubTab === "customers"
-              ? () => router.push("/(modals)/add-client" as const)
-              : financeSubTab === "suppliers"
-                ? () => router.push("/(modals)/add-supplier" as const)
-                : financeSubTab === "garage"
-                  ? () =>
-                      router.push({
-                        pathname: "/(modals)/add-vehicle",
-                        params: { returnTo: "/(tabs)/finance" },
-                      })
-                  : financeSubTab === "drivers"
-                    ? () => router.push("/(modals)/add-driver" as const)
-                    : undefined;
-        const onAdd =
-          routeAdd && partyKind && usePartyPortalOnWeb
-            ? () => {
-                setPartyPortalKind(partyKind);
-                setPartyPortalOpen(true);
-              }
-            : routeAdd;
-        if (!onAdd) return null;
-        return (
-          <View
-            style={[
-              styles.fabAbsoluteWrap,
-              {
-                bottom: layout.fabBottom({ stackOffset: Layout.fabStackOffset }),
-              },
-            ]}
-          >
-            <FinanceFAB
-              onPress={onAdd}
-              accessibilityLabel={
-                financeSubTab === "customers"
-                  ? t("addClient")
-                  : financeSubTab === "suppliers"
-                    ? t("addSupplier")
-                    : financeSubTab === "garage"
-                      ? t("addVehicle")
-                      : t("addDriver")
-              }
-              icon={
-                financeSubTab === "customers"
-                  ? "building"
-                  : financeSubTab === "drivers"
-                    ? "user"
-                    : financeSubTab === "suppliers"
-                      ? "warehouse"
-                      : "truck"
-              }
-            />
-          </View>
-        );
-      })()}
+      {showPartySpeedDial && partySpeedDialActions.length > 0 ? (
+        <PartySpeedDialFab
+          actions={partySpeedDialActions}
+          bottom={layout.fabBottom({ stackOffset: Layout.fabStackOffset })}
+          addPartyLabel={t("addParty")}
+          closeLabel={t("closeAddParty")}
+        />
+      ) : null}
 
       <DateRangePickerModal
         visible={financeDateModalVisible}

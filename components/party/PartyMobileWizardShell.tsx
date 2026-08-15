@@ -12,7 +12,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowRight, ChevronLeft } from "lucide-react-native";
 
 import Theme from "@/constants/Theme";
-import { partyMobileWizardStyles as styles } from "./partyMobileWizardStyles";
+import {
+  PARTY_WIZARD_DESKTOP_MIN_WIDTH,
+  partyMobileWizardStyles as styles,
+} from "./partyMobileWizardStyles";
 
 export interface PartyMobileWizardShellProps {
   entityTitle: string;
@@ -62,7 +65,7 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
   // The party wizards are always hosted in a bounded, centered card on web ≥ 720.
   // There the shell must size to its content instead of stretching (flex:1) to a
   // fixed card height, which would leave a large empty gap above the footer.
-  const cardFit = Platform.OS === "web" && width >= 720;
+  const cardFit = Platform.OS === "web" && width >= PARTY_WIZARD_DESKTOP_MIN_WIDTH;
 
   const stepContent = (
     <>

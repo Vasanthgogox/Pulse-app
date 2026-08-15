@@ -14425,28 +14425,23 @@ export type Database = {
         }
         Returns: Json
       }
-      submit_business_verification:
-        | {
-            Args: {
-              p_address_pincode?: string
-              p_address_proof_path?: string
-              p_address_proof_type?: string
-              p_org_id: string
-              p_registration_type?: Database["public"]["Enums"]["registration_type_enum"]
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_address_pincode?: string
-              p_address_proof_path?: string
-              p_address_proof_type?: string
-              p_gst_not_applicable?: boolean
-              p_org_id: string
-              p_registration_type?: Database["public"]["Enums"]["registration_type_enum"]
-            }
-            Returns: Json
-          }
+      request_kyc_document_review: {
+        Args: {
+          p_org_id: string
+        }
+        Returns: Json
+      }
+      submit_business_verification: {
+        Args: {
+          p_address_pincode?: string
+          p_address_proof_path?: string
+          p_address_proof_type?: string
+          p_gst_not_applicable?: boolean
+          p_org_id: string
+          p_registration_type?: Database["public"]["Enums"]["registration_type_enum"]
+        }
+        Returns: Json
+      }
       submit_pulse_bid_with_direct_quote: {
         Args: {
           p_amount: number

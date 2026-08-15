@@ -56,7 +56,7 @@ export function OrgVerificationReminderProvider({ children }: { children: ReactN
 
   const onVerify = useCallback(() => {
     setSessionDismissed(true);
-    router.push('/workspace?panel=kyc' as Parameters<typeof router.push>[0]);
+    router.push('/workspace?panel=kyc&section=verification' as Parameters<typeof router.push>[0]);
   }, [router]);
 
   const onLater = useCallback(() => {

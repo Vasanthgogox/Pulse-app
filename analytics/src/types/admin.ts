@@ -15,7 +15,7 @@ export type DocumentType =
   | 'MSME / Udyam'
   | 'IEC'
   | 'Activity Proof';
-export type DocumentStatus = 'Valid' | 'Flagged' | 'Unreadable' | 'Missing' | 'Expired';
+export type DocumentStatus = 'Valid' | 'Pending' | 'Flagged' | 'Unreadable' | 'Missing' | 'Expired';
 export type CheckStatus    = 'Passed' | 'Failed' | 'Pending' | 'Manual Review' | 'N/A';
 export type AuditActorType = 'system' | 'admin' | 'applicant';
 export type AuditEventType =
@@ -25,6 +25,8 @@ export type AuditEventType =
 
 export interface AutomatedCheck {
   id: string; label: string; status: CheckStatus; detail?: string; checked_at?: string;
+  /** Structure-driven: GSTIN/PAN always; CIN for limited companies; required doc slots. */
+  required?: boolean;
 }
 
 export interface BusinessDocument {
@@ -35,6 +37,8 @@ export interface BusinessDocument {
   /** Original upload MIME (jpeg/png/webp/heic/pdf). Keep as-is for re-preview. */
   mime_type: string;
   size_kb: number; page_count?: number;
+  /** True when this slot is mandatory for the org's registration type. */
+  required?: boolean;
 }
 
 export interface Director {

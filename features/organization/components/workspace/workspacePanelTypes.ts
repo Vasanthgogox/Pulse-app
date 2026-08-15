@@ -1,6 +1,7 @@
 export type WorkspacePanelId =
   | "account"
   | "account-edit"
+  | "profile"
   | "settings"
   | "team"
   | "kyc"
@@ -9,12 +10,26 @@ export type WorkspacePanelId =
   | "language"
   | "region";
 
+/** Nested Organization hub screens under `panel=kyc`. */
+export type OrgHubSection = "details" | "verification" | "documents";
+
+export function parseOrgHubSection(
+  raw: string | string[] | undefined,
+): OrgHubSection | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === "details" || value === "verification" || value === "documents") {
+    return value;
+  }
+  return null;
+}
+
 export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
   account: "My Account",
   "account-edit": "Edit profile",
+  profile: "Profile",
   settings: "Workspace settings",
   team: "Team members",
-  kyc: "Org identity & KYC",
+  kyc: "Organization",
   products: "Pulse Platform",
   "ocr-usage": "Pulse Scan usage",
   language: "Language",
@@ -24,6 +39,7 @@ export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
 export const WORKSPACE_PANEL_SUBTITLES: Partial<Record<WorkspacePanelId, string>> = {
   account: "Manage your personal identity",
   "account-edit": "Update your name, photo and status",
+  profile: "Business identity, reputation, and workspace shortcuts",
   products: "Eight suites — execution, commerce, network, finance, and more",
   "ocr-usage": "OCR scans, quota, and quality metrics for your workspace",
 };
@@ -48,6 +64,7 @@ export function parseWorkspacePanelId(
   if (
     value === "account" ||
     value === "account-edit" ||
+    value === "profile" ||
     value === "settings" ||
     value === "team" ||
     value === "kyc" ||

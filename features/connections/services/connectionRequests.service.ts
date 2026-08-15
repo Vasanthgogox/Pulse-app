@@ -338,7 +338,7 @@ const PENDING_INVITE_SAME_CONTACT_MESSAGE =
 
 /** Shown when an unverified org tries to connect. UI paths surface this via their existing error Alert. */
 export const CONNECT_REQUIRES_VERIFICATION_MESSAGE =
-  "Verify your business to connect with other organisations. Complete KYC in Workspace → Org identity & KYC.";
+  "Verify your business to connect with other organisations. Complete verification in Workspace → Organization.";
 
 /**
  * Create a connection request (invite another org as client and/or supplier).

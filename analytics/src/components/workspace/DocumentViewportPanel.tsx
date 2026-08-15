@@ -32,6 +32,7 @@ type StatusCfg = {
 
 const DOC_STATUS: Record<DocumentStatus, StatusCfg> = {
   Valid: { variant: 'success', icon: CheckCircle },
+  Pending: { variant: 'info', icon: Clock },
   Flagged: { variant: 'destructive', icon: AlertTriangle },
   Unreadable: { variant: 'warning', icon: AlertTriangle },
   Missing: { variant: 'secondary', icon: XCircle },
@@ -52,6 +53,15 @@ function DocTabTrigger({ doc }: { doc: BusinessDocument }) {
   return (
     <span className="flex items-center gap-1.5">
       <span className="truncate max-w-[120px]">{doc.type}</span>
+      {doc.required ? (
+        <Badge variant="info" appearance="light" size="xs">
+          Required
+        </Badge>
+      ) : doc.required === false ? (
+        <Badge variant="secondary" appearance="light" size="xs">
+          Optional
+        </Badge>
+      ) : null}
       <Badge variant={variant} appearance="light" size="xs">
         {doc.status}
       </Badge>
@@ -217,7 +227,7 @@ function DocViewer({ doc }: { doc: BusinessDocument }) {
             'flex items-start gap-2.5 rounded-lg border px-3 py-2.5',
             doc.status === 'Missing'
               ? 'border-border bg-muted/40 text-muted-foreground'
-              : doc.status === 'Unreadable'
+              : doc.status === 'Unreadable' || doc.status === 'Pending'
                 ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'
                 : 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400',
           ].join(' ')}
@@ -366,7 +376,8 @@ export function DocumentViewportPanel() {
             </p>
           </div>
           <Badge variant="secondary" appearance="light" size="sm">
-            {documents.filter((d) => d.status !== 'Missing').length} / {documents.length} uploaded
+            {documents.filter((d) => d.required && d.status !== 'Missing').length} /{' '}
+            {Math.max(documents.filter((d) => d.required).length, 1)} required
           </Badge>
         </div>
       </div>

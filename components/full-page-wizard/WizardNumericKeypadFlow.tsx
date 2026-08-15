@@ -63,16 +63,19 @@ export type WizardNumericKeypadFlowProps = {
 function KeypadDock({
   onKey,
   showDecimal,
+  size = "compact",
 }: {
   onKey: (key: KeypadKey) => void;
   showDecimal: boolean;
+  size?: "default" | "compact";
 }) {
   return (
     <DecimalKeypad
       onKey={onKey}
       showDecimal={showDecimal}
       variant="pay"
-      size="compact"
+      size={size}
+      hapticsEnabled={false}
     />
   );
 }
@@ -94,6 +97,8 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   const { width } = useWindowDimensions();
   const isDesktopKeypad =
     !forceMobileLayout && width >= Layout.wizardSteppedMaxWidth;
+  /** Desktop popup — same pay keypad chrome as driver sign-in. */
+  const matchSignInKeypad = forceMobileLayout;
 
   const resolvedActiveId = activeFieldId ?? fields[0]?.id ?? "";
   const activeField =
@@ -232,6 +237,7 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
 
   // Field switch / modal chrome already name the field — skip duplicate title.
   const showLabelBlock = !showFieldSwitch && !useCompactChrome;
+  const showCompactFieldTitle = useCompactChrome && !showFieldSwitch;
   const showHintUnderAmount = Boolean(activeHint) && !useCompactChrome;
 
   const payoutStage = (
@@ -256,7 +262,7 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
             <Text style={styles.wizardKeypadHint}>{activeHint}</Text>
           ) : null}
         </View>
-      ) : useCompactChrome ? (
+      ) : showCompactFieldTitle ? (
         <Text style={styles.wizardKeypadTitleCompact} numberOfLines={1}>
           {activeField.label}
           {activeField.optional ? " (optional)" : ""}
@@ -296,7 +302,11 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
               <View style={styles.wizardKeypadAmountPane}>{payoutStage}</View>
               <View style={styles.wizardKeypadKeysPane}>
                 <View style={styles.wizardKeypadKeysCard}>
-                  <KeypadDock onKey={handleKey} showDecimal={showDecimal} />
+                  <KeypadDock
+                    onKey={handleKey}
+                    showDecimal={showDecimal}
+                    size="compact"
+                  />
                 </View>
               </View>
             </View>
@@ -310,12 +320,18 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   }
 
   return (
-    <View style={styles.wizardKeypadRoot}>
+    <View
+      style={[
+        styles.wizardKeypadRoot,
+        matchSignInKeypad && styles.wizardKeypadRootPopup,
+      ]}
+    >
       <View
         style={[
           styles.wizardKeypadBody,
           styles.wizardKeypadBodyMobilePay,
           useCompactChrome && styles.wizardKeypadBodyCompact,
+          matchSignInKeypad && styles.wizardKeypadBodyPopup,
         ]}
       >
         {recipientHero ? (
@@ -325,7 +341,14 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         {payoutStage}
       </View>
       {accessory ? (
-        <View style={styles.wizardKeypadAccessory}>{accessory}</View>
+        <View
+          style={[
+            styles.wizardKeypadAccessory,
+            matchSignInKeypad && styles.wizardKeypadAccessoryPopup,
+          ]}
+        >
+          {accessory}
+        </View>
       ) : null}
       {/* Continue / Close — hosted above the pad so CTAs never sit under keys. */}
       <WizardActionBarHost style={styles.wizardKeypadActionBar} />
@@ -333,10 +356,16 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         style={[
           flow.keypadDockWizard,
           flow.keypadDockWizardBleed,
-          useCompactChrome && flow.keypadDockWizardCompact,
+          matchSignInKeypad
+            ? flow.keypadDockSignIn
+            : useCompactChrome && flow.keypadDockWizardCompact,
         ]}
       >
-        <KeypadDock onKey={handleKey} showDecimal={showDecimal} />
+        <KeypadDock
+          onKey={handleKey}
+          showDecimal={showDecimal}
+          size={matchSignInKeypad ? "default" : "compact"}
+        />
       </View>
     </View>
   );

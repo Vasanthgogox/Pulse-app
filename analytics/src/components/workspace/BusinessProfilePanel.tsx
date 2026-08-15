@@ -7,7 +7,15 @@ import type { CheckStatus, AutomatedCheck } from '@/types/kyc';
 
 // ─── Copy Field ───────────────────────────────────────────────────────────────
 
-function CopyField({ label, value }: { label: string; value: string }) {
+function CopyField({
+  label,
+  value,
+  required,
+}: {
+  label: string;
+  value: string;
+  required?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
 
   function copy() {
@@ -19,7 +27,12 @@ function CopyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="group flex items-start justify-between gap-2 py-1.5">
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">{label}</p>
+        <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+          {label}
+          {required ? (
+            <span className="ml-1.5 font-bold text-foreground/70">Required</span>
+          ) : null}
+        </p>
         <p className="mt-0.5 truncate font-mono text-[12px] text-foreground">{value || '—'}</p>
       </div>
       {value && (
@@ -55,7 +68,14 @@ function CheckRow({ check }: { check: AutomatedCheck }) {
         {cfg.label}
       </Badge>
       <div className="min-w-0 flex-1">
-        <p className="text-[12px] font-medium text-foreground">{check.label}</p>
+        <p className="text-[12px] font-medium text-foreground">
+          {check.label}
+          {check.required ? (
+            <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+              Required
+            </span>
+          ) : null}
+        </p>
         {check.detail && (
           <p className="mt-0.5 text-[11px] text-muted-foreground">{check.detail}</p>
         )}
@@ -113,9 +133,11 @@ export function BusinessProfilePanel() {
         {/* Registration & Tax */}
         <div>
           <SectionHeader icon={Building2} title="Registration & Tax" />
-          <CopyField label="GSTIN" value={gstin} />
-          <CopyField label="PAN" value={pan} />
-          {cin && <CopyField label="CIN" value={cin} />}
+          <CopyField label="GSTIN" value={gstin} required />
+          <CopyField label="PAN" value={pan} required />
+          {(cin || entity_type === 'Pvt Ltd' || entity_type === 'Public Ltd') && (
+            <CopyField label="CIN" value={cin || 'Not submitted'} required={entity_type === 'Pvt Ltd' || entity_type === 'Public Ltd'} />
+          )}
           <CopyField label="Org Created" value={new Date(registration_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} />
         </div>
 

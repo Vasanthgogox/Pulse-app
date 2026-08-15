@@ -3,9 +3,11 @@
  */
 import { memo, useCallback, type ReactNode } from "react";
 import {
+  Platform,
   Pressable,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -15,7 +17,10 @@ import Theme from "@/constants/Theme";
 import { IndianDrivingLicenseKeypadFlow } from "@/components/party/keypad/IndianDrivingLicenseKeypadFlow";
 import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeypadFlow";
 import { PartyMobileWizardShell } from "./PartyMobileWizardShell";
-import { partyMobileWizardStyles as styles } from "./partyMobileWizardStyles";
+import {
+  PARTY_WIZARD_DESKTOP_MIN_WIDTH,
+  partyMobileWizardStyles as styles,
+} from "./partyMobileWizardStyles";
 
 export type PartyDriverWizardStep =
   | "source"
@@ -117,6 +122,9 @@ export const PartyDriverMobileWizard = memo(function PartyDriverMobileWizard({
   onAdvance,
   advanceLabel = "Continue",
 }: PartyDriverMobileWizardProps) {
+  const { width } = useWindowDimensions();
+  const isDesktop =
+    Platform.OS === "web" && width >= PARTY_WIZARD_DESKTOP_MIN_WIDTH;
   const isPhoneStep = wizardStep === "phone";
   const isLicenseStep = wizardStep === "license";
   const isKeypadStep = isPhoneStep || isLicenseStep;
@@ -168,11 +176,17 @@ export const PartyDriverMobileWizard = memo(function PartyDriverMobileWizard({
     switch (wizardStep) {
       case "source":
         return (
-          <View style={styles.sourceCard}>
-            <View style={styles.sourceBlock}>
+          <View style={[styles.sourceCard, isDesktop && styles.sourceCardDesktop]}>
+            <View
+              style={[
+                styles.sourceBlock,
+                isDesktop && styles.sourceBlockDesktop,
+              ]}
+            >
               <Pressable
                 style={[
                   styles.importPrimary,
+                  isDesktop && styles.importPrimaryDesktop,
                   (!contactPickerAvailable || importLoading) &&
                     styles.importPrimaryDim,
                 ]}
@@ -185,17 +199,37 @@ export const PartyDriverMobileWizard = memo(function PartyDriverMobileWizard({
                 </Text>
               </Pressable>
               {importError ? (
-                <Text style={styles.importError}>{importError}</Text>
+                <Text
+                  style={[
+                    styles.importError,
+                    isDesktop && styles.importErrorDesktop,
+                  ]}
+                >
+                  {importError}
+                </Text>
               ) : null}
               {!contactPickerAvailable ? (
-                <Text style={styles.importHint}>
+                <Text
+                  style={[
+                    styles.importHint,
+                    isDesktop && styles.importHintDesktop,
+                  ]}
+                >
                   Contact import is not available on this device. Use manual entry
                   below.
                 </Text>
               ) : null}
-              <View style={styles.sourceDivider} />
+              <View
+                style={[
+                  styles.sourceDivider,
+                  isDesktop && styles.sourceDividerDesktop,
+                ]}
+              />
               <Pressable
-                style={styles.manualLink}
+                style={[
+                  styles.manualLink,
+                  isDesktop && styles.manualLinkDesktop,
+                ]}
                 onPress={() => onWizardStepChange("name")}
               >
                 <FontAwesome name="pencil" size={13} color={Theme.primary} />

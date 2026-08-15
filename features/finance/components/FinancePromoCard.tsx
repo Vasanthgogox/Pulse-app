@@ -113,28 +113,33 @@ export function FinancePromoCard({
 
   return (
     <View style={[styles.card, isColumn && styles.cardColumn, style]}>
-      <View style={[styles.cardBody, isColumn && styles.cardBodyColumn, !isDesktop && !isColumn && showHeroTextAction && styles.cardBodyMobileStack]}>
+      <View
+        style={[
+          styles.cardBody,
+          isColumn && (isDesktop ? styles.cardBodyColumnDesktop : styles.cardBodyColumn),
+        ]}
+      >
         <View style={styles.textCol}>
-          <Text style={[styles.title, isColumn && styles.titleColumn]}>
+          <Text style={[styles.title, isColumn && !isDesktop && styles.titleColumn]}>
             {resolvedTitle}
           </Text>
-          <Text style={[styles.description, isColumn && styles.descriptionColumn]}>
+          <Text style={[styles.description, isColumn && !isDesktop && styles.descriptionColumn]}>
             {resolvedDescription}
           </Text>
-          <View style={[styles.bulletGrid, isColumn && styles.bulletGridColumn]}>
+          <View style={[styles.bulletGrid, isColumn && !isDesktop && styles.bulletGridColumn]}>
             {preset.bullets.map((bullet, index) => (
               <View
                 key={bullet.label}
-                style={[styles.bulletRow, isColumn && styles.bulletRowColumn]}
+                style={[styles.bulletRow, isColumn && !isDesktop && styles.bulletRowColumn]}
               >
                 <View style={[styles.bulletIconWrap, { backgroundColor: bullet.tint }]}>
                   <AnimatedBulletIcon
                     bullet={bullet}
-                    size={isColumn ? 11 : 12}
+                    size={isColumn && !isDesktop ? 11 : 12}
                     index={index}
                   />
                 </View>
-                <Text style={[styles.bulletLabel, isColumn && styles.bulletLabelColumn]}>
+                <Text style={[styles.bulletLabel, isColumn && !isDesktop && styles.bulletLabelColumn]}>
                   {bullet.label}
                 </Text>
               </View>
@@ -145,8 +150,8 @@ export function FinancePromoCard({
           <View
             style={[
               styles.heroTextAction,
-              isColumn && styles.heroTextActionColumn,
-              isDesktop && !isColumn && styles.heroTextActionDesktop,
+              isColumn && !isDesktop && styles.heroTextActionColumn,
+              isDesktop && styles.heroTextActionDesktop,
               !isDesktop && !isColumn && styles.heroTextActionMobile,
             ]}
           >
@@ -155,8 +160,9 @@ export function FinancePromoCard({
               icon={PROMO_PARTY_ICON[variant]}
               onPress={onCtaPress}
               accessibilityLabel={resolvedCta}
-              align={!isDesktop || isColumn ? "start" : "end"}
-              fullWidth={!isDesktop}
+              expandOnHover
+              collapsedGlyph="icon"
+              align={isColumn && !isDesktop ? "start" : "end"}
             />
           </View>
         ) : null}
@@ -183,7 +189,7 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: 12,
     backgroundColor: Theme.cardWhite,
-    overflow: "hidden",
+    overflow: "visible",
   },
   cardColumn: {
     backgroundColor: "transparent",
@@ -206,12 +212,14 @@ const styles = StyleSheet.create({
     minHeight: 0,
     gap: 10,
   },
-  cardBodyMobileStack: {
-    flexDirection: "column",
-    alignItems: "stretch",
-    gap: 12,
+  cardBodyColumnDesktop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingVertical: 14,
     minHeight: 0,
-    paddingVertical: 16,
+    gap: 20,
   },
   textCol: {
     flex: 1,
@@ -298,11 +306,11 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   heroTextActionMobile: {
-    alignItems: "stretch",
-    alignSelf: "stretch",
-    paddingLeft: 0,
-    paddingTop: 4,
-    width: "100%",
+    alignItems: "flex-end",
+    alignSelf: "center",
+    paddingLeft: 8,
+    paddingTop: 0,
+    flexShrink: 0,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

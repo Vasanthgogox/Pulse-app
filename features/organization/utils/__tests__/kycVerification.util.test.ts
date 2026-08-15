@@ -1,5 +1,9 @@
 import {
+  buildKycRequirementProfile,
   effectiveKycRegistrationType,
+  formatKycHubRemainingCopy,
+  isKycTaxFieldRequired,
+  kycOptionalTaxFields,
   kycRequiredDocumentDefs,
   kycStructureRequirementsHint,
   kycTaxIdentifiersComplete,
@@ -73,10 +77,10 @@ describe('kycVerification gaps + GST skip', () => {
     const gaps = listKycVerificationGaps(baseKyc({ business_pan: 'LTUPS6014E' }), []);
     expect(gaps).toEqual(
       expect.arrayContaining([
-        'Add GSTIN — or skip if not registered for GST',
-        'Upload GST certificate',
-        'Upload PAN card',
-        'Upload Address proof',
+        'Add GSTIN — or mark the business as not registered for GST',
+        'Upload GST Registration Certificate',
+        'Upload Business PAN',
+        'Upload Business Address Proof',
         'Select registration type',
         'Add operating address',
       ]),
@@ -242,5 +246,159 @@ describe('structure-driven KYC document matrix', () => {
     expect(kycStructureRequirementsHint(effectiveKycRegistrationType(kyc), false)).toMatch(
       /Proprietorship/,
     );
+  });
+});
+
+describe('structure-driven tax fields', () => {
+  it('always requires PAN; GSTIN only when GST is registered; CIN only for limited companies', () => {
+    expect(isKycTaxFieldRequired('gstin', 'proprietorship')).toBe(true);
+    expect(isKycTaxFieldRequired('gstin', 'proprietorship', true)).toBe(false);
+    expect(isKycTaxFieldRequired('business_pan', 'llp')).toBe(true);
+    expect(isKycTaxFieldRequired('cin', 'pvt_ltd')).toBe(true);
+    expect(isKycTaxFieldRequired('cin', 'public_ltd')).toBe(true);
+    expect(isKycTaxFieldRequired('cin', 'partnership')).toBe(false);
+    expect(isKycTaxFieldRequired('iec_number', 'proprietorship')).toBe(false);
+    expect(kycOptionalTaxFields('pvt_ltd')).not.toContain('cin');
+    expect(kycOptionalTaxFields('proprietorship')).toEqual(
+      expect.arrayContaining(['cin', 'msme_number', 'tan_number', 'iec_number']),
+    );
+  });
+
+  it('builds one requirement profile for wizard, documents, and home', () => {
+    const withGst = buildKycRequirementProfile(
+      baseKyc({ registration_type: 'pvt_ltd', gst_not_applicable: false }),
+    );
+    expect(withGst.requiredTaxFields).toEqual(['gstin', 'business_pan', 'cin']);
+    expect(withGst.optionalTaxFields).not.toContain('cin');
+    expect(withGst.requiredDocuments.map((d) => d.type)).toEqual(
+      expect.arrayContaining(['gst_certificate', 'pan_card', 'address_proof', 'incorporation_certificate']),
+    );
+
+    const skipped = buildKycRequirementProfile(
+      baseKyc({ registration_type: 'pvt_ltd', gst_not_applicable: true }),
+    );
+    expect(skipped.gstRequired).toBe(false);
+    expect(skipped.requiredTaxFields).toEqual(['business_pan', 'cin']);
+    expect(skipped.requiredDocuments.map((d) => d.type)).not.toContain('gst_certificate');
+  });
+
+  it('speaks remaining work in human copy', () => {
+    expect(formatKycHubRemainingCopy(2, 4)).toBe('2 details and 4 documents remaining');
+    expect(formatKycHubRemainingCopy(0, 4)).toBe('4 documents remaining');
+    expect(formatKycHubRemainingCopy(1, 0)).toBe('1 detail remaining');
+    expect(formatKycHubRemainingCopy(0, 0)).toBe('Ready to review');
+  });
+
+  it('keeps at least one mandatory document for every structure', () => {
+    const types: Array<WorkspaceKyc['registration_type']> = [
+      'proprietorship',
+      'partnership',
+      'pvt_ltd',
+      'public_ltd',
+      'llp',
+      null,
+    ];
+    for (const registrationType of types) {
+      for (const gstSkip of [false, true]) {
+        const defs = kycRequiredDocumentDefs(
+          baseKyc({ registration_type: registrationType, gst_not_applicable: gstSkip }),
+        );
+        expect(defs.length).toBeGreaterThanOrEqual(1);
+        expect(defs.every((d) => d.mandatory)).toBe(true);
+        expect(defs.some((d) => d.type === 'pan_card')).toBe(true);
+      }
+    }
+  });
+});
+
+/**
+ * Lockstep table: Pulse UI profile vs Admin `requiredKycDocSlots`.
+ * Live `submit_business_verification` (6-arg, gst_not_applicable) matches this
+ * set. The leftover 5-arg overload is dropped by
+ * 20270215221500_drop_legacy_submit_business_verification_5arg.sql.
+ */
+describe('requirement matrix lockstep (type × GST)', () => {
+  const cases: Array<{
+    type: NonNullable<WorkspaceKyc['registration_type']>;
+    gstSkip: boolean;
+    tax: string[];
+    docs: string[];
+  }> = [
+    {
+      type: 'proprietorship',
+      gstSkip: false,
+      tax: ['gstin', 'business_pan'],
+      docs: ['gst_certificate', 'pan_card', 'address_proof'],
+    },
+    {
+      type: 'proprietorship',
+      gstSkip: true,
+      tax: ['business_pan'],
+      docs: ['pan_card', 'address_proof', 'msme_certificate'],
+    },
+    {
+      type: 'partnership',
+      gstSkip: false,
+      tax: ['gstin', 'business_pan'],
+      docs: ['gst_certificate', 'pan_card', 'address_proof', 'partnership_deed'],
+    },
+    {
+      type: 'partnership',
+      gstSkip: true,
+      tax: ['business_pan'],
+      docs: ['pan_card', 'address_proof', 'partnership_deed'],
+    },
+    {
+      type: 'pvt_ltd',
+      gstSkip: false,
+      tax: ['gstin', 'business_pan', 'cin'],
+      docs: ['gst_certificate', 'pan_card', 'address_proof', 'incorporation_certificate'],
+    },
+    {
+      type: 'pvt_ltd',
+      gstSkip: true,
+      tax: ['business_pan', 'cin'],
+      docs: ['pan_card', 'address_proof', 'incorporation_certificate'],
+    },
+    {
+      type: 'public_ltd',
+      gstSkip: false,
+      tax: ['gstin', 'business_pan', 'cin'],
+      docs: ['gst_certificate', 'pan_card', 'address_proof', 'incorporation_certificate'],
+    },
+    {
+      type: 'public_ltd',
+      gstSkip: true,
+      tax: ['business_pan', 'cin'],
+      docs: ['pan_card', 'address_proof', 'incorporation_certificate'],
+    },
+    {
+      type: 'llp',
+      gstSkip: false,
+      tax: ['gstin', 'business_pan'],
+      docs: [
+        'gst_certificate',
+        'pan_card',
+        'address_proof',
+        'incorporation_certificate',
+        'llp_agreement',
+      ],
+    },
+    {
+      type: 'llp',
+      gstSkip: true,
+      tax: ['business_pan'],
+      docs: ['pan_card', 'address_proof', 'incorporation_certificate', 'llp_agreement'],
+    },
+  ];
+
+  it.each(cases)('$type gstSkip=$gstSkip', ({ type, gstSkip, tax, docs }) => {
+    const profile = buildKycRequirementProfile(
+      baseKyc({ registration_type: type, gst_not_applicable: gstSkip }),
+    );
+    expect(profile.requiredTaxFields).toEqual(tax);
+    expect(profile.requiredDocuments.map((d) => d.type)).toEqual(docs);
+    expect(profile.optionalTaxFields.includes('cin')).toBe(type !== 'pvt_ltd' && type !== 'public_ltd');
+    expect(profile.requiredDocuments.some((d) => d.type === 'gst_certificate')).toBe(!gstSkip);
   });
 });

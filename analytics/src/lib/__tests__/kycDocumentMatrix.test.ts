@@ -31,4 +31,33 @@ describe('admin requiredKycDocSlots', () => {
       expect.arrayContaining(['GST Certificate', 'COI', 'LLP Agreement']),
     );
   });
+
+  it('always requires PAN Card for every structure', () => {
+    for (const type of [null, 'proprietorship', 'partnership', 'pvt_ltd', 'public_ltd', 'llp']) {
+      expect(requiredKycDocSlots(type, true).some((s) => s.type === 'PAN Card')).toBe(true);
+      expect(requiredKycDocSlots(type, false).some((s) => s.type === 'PAN Card')).toBe(true);
+    }
+  });
+
+  it('matches Pulse type × GST required-document set (lockstep with buildKycRequirementProfile)', () => {
+    const cases: Array<{
+      type: string;
+      gstSkip: boolean;
+      slots: string[];
+    }> = [
+      { type: 'proprietorship', gstSkip: false, slots: ['GST Certificate', 'PAN Card', 'Address Proof'] },
+      { type: 'proprietorship', gstSkip: true, slots: ['PAN Card', 'Address Proof', 'Activity Proof'] },
+      { type: 'partnership', gstSkip: false, slots: ['GST Certificate', 'PAN Card', 'Address Proof', 'Partnership Deed'] },
+      { type: 'partnership', gstSkip: true, slots: ['PAN Card', 'Address Proof', 'Partnership Deed'] },
+      { type: 'pvt_ltd', gstSkip: false, slots: ['GST Certificate', 'PAN Card', 'Address Proof', 'COI'] },
+      { type: 'pvt_ltd', gstSkip: true, slots: ['PAN Card', 'Address Proof', 'COI'] },
+      { type: 'public_ltd', gstSkip: false, slots: ['GST Certificate', 'PAN Card', 'Address Proof', 'COI'] },
+      { type: 'public_ltd', gstSkip: true, slots: ['PAN Card', 'Address Proof', 'COI'] },
+      { type: 'llp', gstSkip: false, slots: ['GST Certificate', 'PAN Card', 'Address Proof', 'COI', 'LLP Agreement'] },
+      { type: 'llp', gstSkip: true, slots: ['PAN Card', 'Address Proof', 'COI', 'LLP Agreement'] },
+    ];
+    for (const row of cases) {
+      expect(requiredKycDocSlots(row.type, row.gstSkip).map((s) => s.type)).toEqual(row.slots);
+    }
+  });
 });

@@ -1,15 +1,22 @@
 import Theme from '@/constants/Theme';
-import type { OrganizationKycDocument } from '@/features/organization/types/organizationKycDocuments.types';
-import type { OrganizationKycDocType } from '@/features/organization/types/organizationKycDocuments.types';
-import type { AddressProofType, WorkspaceKyc } from '@/types/organization';
+import { Layout } from '@/constants/Layout';
+import type {
+  OrganizationKycDocDefinition,
+  OrganizationKycDocument,
+} from '@/features/organization/types/organizationKycDocuments.types';
+import type { WorkspaceKyc } from '@/types/organization';
 import {
   kycOptionalDocumentDefs,
   kycRequiredDocumentDefs,
   kycStructureRequirementsHint,
   effectiveKycRegistrationType,
+  latestOrgKycDocumentMatching,
   registrationTypeLabel,
+  resolveAcceptTypes,
+  totalUploadedKycDocuments,
 } from '@/features/organization/utils/kycVerification.util';
-import { StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { KycRequiredDocumentRow } from './KycRequiredDocumentRow';
 
@@ -18,10 +25,20 @@ type Props = {
   documents: OrganizationKycDocument[];
   canEdit: boolean;
   frozen: boolean;
-  uploadingDocType: OrganizationKycDocType | null;
-  onUpload: (docType: OrganizationKycDocType, proofType?: AddressProofType) => Promise<void>;
-  onRemove: (docType: OrganizationKycDocType) => Promise<void>;
+  uploadingDocType: OrganizationKycDocument['doc_type'] | null;
+  onOpenUpdate: (definition: OrganizationKycDocDefinition) => void;
+  /** Optional docs only, and only above the last-remaining-document floor. */
+  onRemove?: (docType: OrganizationKycDocument['doc_type']) => void;
+  /** First-time verify wizard: required evidence only. */
+  requiredOnly?: boolean;
 };
+
+function optionalChipLabel(def: OrganizationKycDocDefinition): string {
+  if (def.type === 'cin_certificate' || def.type === 'incorporation_certificate') return '+ CIN';
+  if (def.type === 'msme_certificate') return '+ Udyam Certificate';
+  if (def.type === 'iec_certificate') return '+ IEC';
+  return `+ ${def.label}`;
+}
 
 export function KycRequiredDocumentsSection({
   kyc,
@@ -29,16 +46,42 @@ export function KycRequiredDocumentsSection({
   canEdit,
   frozen,
   uploadingDocType,
-  onUpload,
+  onOpenUpdate,
   onRemove,
+  requiredOnly = false,
 }: Props) {
   const requiredDefs = kycRequiredDocumentDefs(kyc);
   const optionalDefs = kycOptionalDocumentDefs(kyc);
+  const [revealedOptional, setRevealedOptional] = useState<string[]>([]);
+  // Removal must stay confined to still-draft evidence. `frozen` only covers
+  // pending/verified — a rejected org has already been through one full
+  // submit+review cycle, so its documents are just as much "submitted
+  // evidence" as a verified org's. Gate on the org never having left
+  // unverified, not just on the current frozen flag.
+  const isUnsubmittedDraft = (kyc?.verification_status ?? 'unverified') === 'unverified';
+  const canRemoveUploaded =
+    canEdit && isUnsubmittedDraft && totalUploadedKycDocuments(documents) > 1;
   const resolvedType = effectiveKycRegistrationType(kyc);
   const structureLabel = registrationTypeLabel(resolvedType);
   const structureHint = kycStructureRequirementsHint(
     resolvedType,
     !!kyc?.gst_not_applicable,
+  );
+
+  const optionalHasFile = useMemo(() => {
+    const uploaded = new Set<string>();
+    for (const def of optionalDefs) {
+      const match = latestOrgKycDocumentMatching(documents, resolveAcceptTypes(def));
+      if (match?.storage_path) uploaded.add(def.type);
+    }
+    return uploaded;
+  }, [documents, optionalDefs]);
+
+  const visibleOptional = optionalDefs.filter(
+    (def) => optionalHasFile.has(def.type) || revealedOptional.includes(def.type),
+  );
+  const optionalChips = optionalDefs.filter(
+    (def) => !optionalHasFile.has(def.type) && !revealedOptional.includes(def.type),
   );
 
   return (
@@ -66,30 +109,52 @@ export function KycRequiredDocumentsSection({
               !!def.acceptTypes?.includes(uploadingDocType) ||
               !!def.uploadChoices?.includes(uploadingDocType))
           }
-          onUpload={(uploadType, proofType) => onUpload(uploadType, proofType)}
-          onRemove={(removeType) => onRemove(removeType)}
+          onOpenUpdate={onOpenUpdate}
         />
       ))}
 
-      {optionalDefs.length > 0 ? (
+      {!requiredOnly && visibleOptional.length > 0 ? (
         <View style={styles.optionalHeader}>
           <Text style={styles.optionalHeaderText}>Optional for this structure</Text>
         </View>
       ) : null}
 
-      {optionalDefs.map((def) => (
-        <KycRequiredDocumentRow
-          key={`opt-${def.type}`}
-          definition={def}
-          documents={documents}
-          kyc={kyc}
-          canEdit={canEdit}
-          frozen={frozen}
-          uploading={uploadingDocType === def.type}
-          onUpload={(uploadType, proofType) => onUpload(uploadType, proofType)}
-          onRemove={(removeType) => onRemove(removeType)}
-        />
-      ))}
+      {!requiredOnly
+        ? visibleOptional.map((def) => (
+            <KycRequiredDocumentRow
+              key={`opt-${def.type}`}
+              definition={def}
+              documents={documents}
+              kyc={kyc}
+              canEdit={canEdit}
+              frozen={frozen}
+              uploading={uploadingDocType === def.type}
+              onOpenUpdate={onOpenUpdate}
+              onRemove={canRemoveUploaded ? onRemove : undefined}
+              onDismiss={
+                !optionalHasFile.has(def.type)
+                  ? () =>
+                      setRevealedOptional((prev) => prev.filter((type) => type !== def.type))
+                  : undefined
+              }
+            />
+          ))
+        : null}
+
+      {!requiredOnly && canEdit && !frozen && optionalChips.length > 0 ? (
+        <View style={styles.chipRow}>
+          {optionalChips.map((def) => (
+            <Pressable
+              key={`chip-${def.type}`}
+              style={styles.addChip}
+              onPress={() => setRevealedOptional((prev) => [...prev, def.type])}
+              accessibilityRole="button"
+            >
+              <Text style={styles.addChipText}>{optionalChipLabel(def)}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
     </>
   );
 }
@@ -129,4 +194,22 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  addChip: {
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.cardWhite,
+  },
+  addChipText: { fontSize: 13, fontWeight: '700', color: Theme.primary },
 });

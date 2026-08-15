@@ -296,7 +296,18 @@ function BusinessRoadmapPanel({ experience, onBack }: RoadmapPanelProps) {
   );
 }
 
-export default function ProfileScreen() {
+export type ProfileScreenProps = {
+  /** Render inside the workspace flex-card (no full-screen header / tab insets). */
+  embedded?: boolean;
+  onClose?: () => void;
+  onOpenAccount?: () => void;
+};
+
+export default function ProfileScreen({
+  embedded = false,
+  onClose,
+  onOpenAccount,
+}: ProfileScreenProps = {}) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
@@ -407,6 +418,10 @@ export default function ProfileScreen() {
     capabilities.includes("dispatch_for_own_fleet");
 
   const handleClose = () => {
+    if (onClose) {
+      onClose();
+      return;
+    }
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -635,18 +650,19 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={styles.outer}>
+    <View style={[styles.outer, embedded && styles.outerEmbedded]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingBottom:
-              Layout.sectionSpacing + layout.scrollBottomPadding(),
+            paddingBottom: embedded
+              ? Layout.sectionSpacing + 16
+              : Layout.sectionSpacing + layout.scrollBottomPadding(),
           },
         ]}
         showsVerticalScrollIndicator={false}
-        {...tabBarScrollProps}
+        {...(embedded ? {} : tabBarScrollProps)}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -656,7 +672,7 @@ export default function ProfileScreen() {
         }
       >
         {viewMode === "roadmap" ? (
-          <View style={{ paddingTop: insets.top + 8, paddingBottom: 8 }}>
+          <View style={{ paddingTop: embedded ? 8 : insets.top + 8, paddingBottom: 8 }}>
             <BusinessRoadmapPanel
               experience={experience}
               onBack={() => setViewMode("main")}
@@ -666,6 +682,7 @@ export default function ProfileScreen() {
 
         {viewMode === "main" ? (
           <>
+            {!embedded ? (
             <View style={[styles.driverLikeTopBar, { paddingTop: insets.top + 8 }]}>
               <Pressable
                 onPress={handleClose}
@@ -685,19 +702,20 @@ export default function ProfileScreen() {
                 <FontAwesome name="pencil" size={15} color={Theme.textOnDark} />
               </Pressable>
             </View>
+            ) : null}
 
-            <View style={styles.contentWrapDriverLike}>
+            <View style={[styles.contentWrapDriverLike, embedded && styles.contentWrapEmbedded]}>
               {/* Hero bleeds to screen edges via negative margins — sits flush under the dark top bar */}
               <LinearGradient
                 colors={["#1e1b4b", "#312e81", "#4D3636"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.driverLikeHero}
+                style={[styles.driverLikeHero, embedded && styles.driverLikeHeroEmbedded]}
               >
-                <View style={styles.avatarGlow} />
+                <View style={[styles.avatarGlow, embedded && styles.avatarGlowEmbedded]} />
 
                 {/* Org DP — always org-centric */}
-                <View style={styles.heroDpWrap}>
+                <View style={[styles.heroDpWrap, embedded && styles.heroDpWrapEmbedded]}>
                   <Pressable
                     style={({ pressed }) => [styles.orgDpTouch, pressed && { opacity: 0.86 }]}
                     onPress={() => void handleUploadOrgLogo()}
@@ -705,10 +723,13 @@ export default function ProfileScreen() {
                     accessibilityLabel="Change organisation logo"
                   >
                     {orgLogoUri ? (
-                      <Image source={{ uri: orgLogoUri }} style={styles.orgDpImage} />
+                      <Image
+                        source={{ uri: orgLogoUri }}
+                        style={[styles.orgDpImage, embedded && styles.orgDpImageEmbedded]}
+                      />
                     ) : (
-                      <View style={styles.orgDpPlaceholder}>
-                        <Text style={styles.orgDpInitialsText}>
+                      <View style={[styles.orgDpPlaceholder, embedded && styles.orgDpImageEmbedded]}>
+                        <Text style={[styles.orgDpInitialsText, embedded && styles.orgDpInitialsEmbedded]}>
                           {orgInitials(currentOrganization?.name || "Org")}
                         </Text>
                       </View>
@@ -723,7 +744,7 @@ export default function ProfileScreen() {
                   </Pressable>
                 </View>
 
-                <Text numberOfLines={1} style={styles.nameText}>
+                <Text numberOfLines={1} style={[styles.nameText, embedded && styles.nameTextEmbedded]}>
                   {currentOrganization?.name || displayName}
                 </Text>
 
@@ -781,7 +802,7 @@ export default function ProfileScreen() {
                     <Text style={styles.xpEyebrow}>EXPERIENCE</Text>
                     <Text style={styles.xpPct}>{experiencePct}%</Text>
                   </View>
-                  <View style={styles.xpTrack}>
+                  <View style={[styles.xpTrack, embedded && styles.xpTrackEmbedded]}>
                     <LinearGradient
                       colors={["#10b981", "#0ea5e9"]}
                       start={{ x: 0, y: 0 }}
@@ -802,15 +823,15 @@ export default function ProfileScreen() {
                 </Pressable>
               </LinearGradient>
 
-              <View style={styles.statsGrid}>
-                <View style={styles.statTile}>
+              <View style={[styles.statsGrid, embedded && styles.statsGridEmbedded]}>
+                <View style={[styles.statTile, embedded && styles.statTileEmbedded]}>
                   <Truck size={20} color={Theme.primary} />
                   <Text style={styles.statTileNum}>
                     {tripsLoading ? "—" : completedTrips}
                   </Text>
                   <Text style={styles.statTileLbl}>TRIPS</Text>
                 </View>
-                <View style={styles.statTile}>
+                <View style={[styles.statTile, embedded && styles.statTileEmbedded]}>
                   <Star
                     size={20}
                     color={AMBER_500}
@@ -825,7 +846,7 @@ export default function ProfileScreen() {
                   </Text>
                   <Text style={styles.statTileLbl}>{statMiddleLabel}</Text>
                 </View>
-                <View style={styles.statTile}>
+                <View style={[styles.statTile, embedded && styles.statTileEmbedded]}>
                   <Users size={20} color="#8b5cf6" />
                   <Text style={styles.statTileNum}>{drivers.length}</Text>
                   <Text style={styles.statTileLbl}>DRIVERS</Text>
@@ -835,7 +856,10 @@ export default function ProfileScreen() {
               {/* Managed By — admin identity link to personal account */}
               <Pressable
                 style={({ pressed }) => [styles.managedByCard, pressed && { opacity: 0.9 }]}
-                onPress={() => router.push(ROUTES.MY_ACCOUNT as Parameters<typeof router.push>[0])}
+                onPress={() => {
+                  if (onOpenAccount) onOpenAccount();
+                  else router.push(ROUTES.MY_ACCOUNT as Parameters<typeof router.push>[0]);
+                }}
                 accessibilityRole="button"
                 accessibilityLabel="View admin account"
               >
@@ -870,7 +894,7 @@ export default function ProfileScreen() {
                       <View style={styles.dashIcon}>
                         <BarChart3 size={20} color={Theme.primary} />
                       </View>
-                      <View>
+                      <View style={styles.interactiveCopy}>
                         <Text style={styles.interactiveEyebrow}>OPERATIONS PULSE</Text>
                         <Text style={styles.interactiveTitle}>Business dashboard</Text>
                         <Text style={styles.interactiveSub}>
@@ -957,8 +981,11 @@ export default function ProfileScreen() {
                   <ProfileItemRow
                     icon="cog"
                     label="Workspace"
-                    value="Org identity, KYC & invoice branding"
-                    onPress={() => router.push(ROUTES.WORKSPACE as Parameters<typeof router.push>[0])}
+                    value="Organization, verification & invoice branding"
+                    onPress={() => {
+                      if (embedded && onClose) onClose();
+                      else router.push(ROUTES.WORKSPACE as Parameters<typeof router.push>[0]);
+                    }}
                     showChevron
                   />
                   <View style={styles.premiumDivider} />
@@ -1076,6 +1103,7 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   outer: { flex: 1, backgroundColor: Theme.screenBackground },
+  outerEmbedded: { backgroundColor: "#f5f7fb" },
   scroll: { flex: 1 },
   scrollContent: {
     paddingTop: 0,
@@ -1107,19 +1135,33 @@ const styles = StyleSheet.create({
   contentWrapDriverLike: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 0,
-    gap: 14,
+    gap: 12,
+  },
+  contentWrapEmbedded: {
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    gap: 12,
   },
   driverLikeHero: {
-    borderRadius: 38,
+    borderRadius: 24,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
-    paddingTop: 24,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
     alignItems: "center",
     overflow: "hidden",
-    // Break out of the parent's horizontal padding so the hero is full-bleed
     marginHorizontal: -Layout.screenPaddingHorizontal,
+  },
+  driverLikeHeroEmbedded: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    marginHorizontal: -16,
+    marginBottom: 2,
+    paddingTop: 16,
+    paddingBottom: 14,
   },
 
   cinematicHeader: {
@@ -1188,10 +1230,16 @@ const styles = StyleSheet.create({
   avatarGlow: {
     position: "absolute",
     top: 8,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
+    width: 132,
+    height: 132,
+    borderRadius: 66,
     backgroundColor: "rgba(139,92,246,0.18)",
+  },
+  avatarGlowEmbedded: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    top: 4,
   },
   heroAvatarGroup: {
     flexDirection: "row",
@@ -1322,6 +1370,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textOnDark,
     marginBottom: 2,
+    textAlign: "center",
+    paddingHorizontal: 8,
+  },
+  nameTextEmbedded: {
+    fontSize: 20,
+    marginBottom: 4,
   },
   tierKicker: {
     fontSize: 10,
@@ -1381,10 +1435,13 @@ const styles = StyleSheet.create({
   xpEyebrow: { fontSize: 9, fontWeight: "900", color: "rgba(148,163,184,0.95)", letterSpacing: 2 },
   xpPct: { fontSize: 11, fontWeight: "900", color: "#5eead4" },
   xpTrack: {
-    height: 7,
+    height: 10,
     borderRadius: 999,
     backgroundColor: "rgba(15,23,42,0.9)",
     overflow: "hidden",
+  },
+  xpTrackEmbedded: {
+    height: 10,
   },
   xpFill: { height: "100%", borderRadius: 999 },
   xpFooter: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
@@ -1399,6 +1456,9 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: "row",
     gap: 10,
+  },
+  statsGridEmbedded: {
+    flexWrap: "wrap",
   },
   statTile: {
     flex: 1,
@@ -1415,6 +1475,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 2,
+  },
+  statTileEmbedded: {
+    minWidth: 96,
+    flexGrow: 1,
+    flexBasis: 96,
+    paddingVertical: 12,
+    borderRadius: 16,
   },
   statTileNum: {
     fontSize: 20,
@@ -1435,6 +1502,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   interactiveRowLeft: { flex: 1, flexDirection: "row", gap: 12, minWidth: 0 },
+  interactiveCopy: { flex: 1, minWidth: 0 },
   interactiveEyebrow: {
     fontSize: 8,
     fontWeight: "900",
@@ -1460,6 +1528,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
 
   premiumCard: {
@@ -1733,42 +1802,54 @@ const styles = StyleSheet.create({
   // ── Org DP (hero) ──────────────────────────────────────────────
   heroDpWrap: {
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 10,
+  },
+  heroDpWrapEmbedded: {
+    marginBottom: 8,
   },
   orgDpTouch: {
     position: "relative",
   },
   orgDpImage: {
-    width: 108,
-    height: 108,
-    borderRadius: 28,
-    borderWidth: 4,
+    width: 88,
+    height: 88,
+    borderRadius: 22,
+    borderWidth: 3,
     borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: Theme.surfaceGray,
   },
+  orgDpImageEmbedded: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+  },
   orgDpPlaceholder: {
-    width: 108,
-    height: 108,
-    borderRadius: 28,
+    width: 88,
+    height: 88,
+    borderRadius: 22,
     overflow: "hidden",
-    borderWidth: 4,
+    borderWidth: 3,
     borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "#1e293b",
     alignItems: "center",
     justifyContent: "center",
   },
   orgDpInitialsText: {
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: "900",
     color: "rgba(255,255,255,0.82)",
     letterSpacing: 3,
   },
+  orgDpInitialsEmbedded: {
+    fontSize: 22,
+    letterSpacing: 2,
+  },
   orgDpCameraBadge: {
     position: "absolute",
-    right: -7,
-    bottom: -7,
-    width: 32,
-    height: 32,
+    right: -6,
+    bottom: -6,
+    width: 28,
+    height: 28,
     borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
     alignItems: "center",
@@ -1852,6 +1933,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 13,
     overflow: "hidden",
+    flexShrink: 0,
   },
   managedByInfo: {
     flex: 1,
@@ -1862,6 +1944,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexWrap: "wrap",
   },
   managedByName: {
     fontSize: 14,
@@ -1890,7 +1973,7 @@ const styles = StyleSheet.create({
   managedByCaption: {
     fontSize: 10,
     color: Theme.textMuted,
-    paddingTop: 10,
+    paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.cinematicDivider,
   },

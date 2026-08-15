@@ -17,9 +17,13 @@ import {
 import {
   listOrganizationKycDocuments,
   removeOrganizationKycDocument,
+  requestKycDocumentReview,
   upsertOrganizationKycDocument,
 } from '@/features/organization/services/organizationKycDocuments.service';
-import { pickAndUploadVerificationDocument } from '@/features/organization/utils/kycDocumentUpload.util';
+import {
+  pickAndUploadVerificationDocument,
+  type PickedVerificationDocument,
+} from '@/features/organization/utils/kycDocumentUpload.util';
 import type {
   OrganizationKycDocument,
   OrganizationKycDocType,
@@ -28,6 +32,7 @@ import {
   isKycDocMandatoryForOrg,
   kycVerificationReady,
   listKycVerificationGaps,
+  totalUploadedKycDocuments,
 } from '@/features/organization/utils/kycVerification.util';
 import type { KycField } from '@/features/organization/components/workspace/workspacePanelUi';
 import type { AddressProofType, RegistrationType, WorkspaceKyc } from '@/types/organization';
@@ -289,6 +294,15 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
   const removeKycDocument = useCallback(
     async (docType: OrganizationKycDocType) => {
       if (!orgId) return { error: new Error('No workspace') };
+      if (frozen) {
+        return { error: new Error('Documents stay locked while verification is in review or approved.') };
+      }
+      if (isKycDocMandatoryForOrg(docType, kyc)) {
+        return { error: new Error('This document is required for your business type.') };
+      }
+      if (totalUploadedKycDocuments(documents) <= 1) {
+        return { error: new Error('Keep at least one document on the organisation.') };
+      }
       const { error } = await removeOrganizationKycDocument(orgId, docType);
       if (error) return { error };
 
@@ -304,7 +318,112 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
       await reload();
       return { error: null };
     },
-    [orgId, reload],
+    [documents, frozen, kyc, orgId, reload],
+  );
+
+  const pickKycDocumentFile = useCallback(
+    async (docType: OrganizationKycDocType, proofType?: AddressProofType) => {
+      if (!orgId || uploadingDocType) {
+        return { error: new Error('Busy'), cancelled: false as const, document: null };
+      }
+      if (docType === 'address_proof' && !proofType) {
+        return {
+          error: new Error('Select address proof type first.'),
+          cancelled: false as const,
+          document: null,
+        };
+      }
+      setUploadingDocType(docType);
+      try {
+        const pick = await pickAndUploadVerificationDocument(orgId, docType, proofType, {
+          gstin: kyc?.gstin ?? undefined,
+          pan: kyc?.business_pan ?? undefined,
+          cin: kyc?.cin ?? undefined,
+          msme: kyc?.msme_number ?? undefined,
+          iec: kyc?.iec_number ?? undefined,
+        });
+        if (pick.status === 'cancelled') {
+          return { error: null, cancelled: true as const, document: null };
+        }
+        if (pick.status === 'error') {
+          return { error: pick.error, cancelled: false as const, document: null };
+        }
+        return { error: null, cancelled: false as const, document: pick.document };
+      } finally {
+        setUploadingDocType(null);
+      }
+    },
+    [kyc, orgId, uploadingDocType],
+  );
+
+  const commitKycDocumentUpdate = useCallback(
+    async (
+      picked: PickedVerificationDocument,
+      docType: OrganizationKycDocType,
+      proofType?: AddressProofType,
+    ) => {
+      if (!orgId) return { error: new Error('No workspace') };
+      setSubmitting(true);
+      try {
+        const frozenNow = isVerificationFrozen(kyc?.verification_status ?? 'unverified');
+        if (!frozenNow) {
+          if (docType === 'pan_card' && picked.extractedPan && !kyc?.business_pan) {
+            const { error: panErr } = await saveKycField('business_pan', picked.extractedPan);
+            if (panErr) {
+              await removeVerificationDocumentFile(picked.path);
+              return { error: panErr };
+            }
+          }
+          if (docType === 'gst_certificate' && picked.extractedGstin && !kyc?.gstin) {
+            const { error: gstinErr } = await saveKycField('gstin', picked.extractedGstin);
+            if (gstinErr) {
+              await removeVerificationDocumentFile(picked.path);
+              return { error: gstinErr };
+            }
+          }
+        }
+
+        const { document, error: upsertErr } = await upsertOrganizationKycDocument(orgId, {
+          doc_type: docType,
+          storage_path: picked.path,
+          file_name: picked.fileName,
+          mime_type: picked.mimeType,
+          file_size_bytes: picked.sizeBytes,
+          is_mandatory: isKycDocMandatoryForOrg(docType, kyc),
+        });
+        if (upsertErr) return { error: upsertErr };
+
+        if (!frozenNow && docType === 'address_proof' && proofType) {
+          const { error: draftErr } = await saveVerificationDraft(orgId, {
+            address_proof_path: picked.path,
+            address_proof_type: proofType,
+          });
+          if (draftErr) return { error: draftErr };
+        }
+
+        // Only re-queue for admin review once the org has actually been
+        // submitted before (pending/verified/rejected). A first-time,
+        // still-unverified org is mid-draft — submitForVerification() (with
+        // its kycVerificationReady() completeness check) is the only thing
+        // allowed to move it into the review queue.
+        if (kyc && kyc.verification_status !== 'unverified') {
+          const { error: reviewErr } = await requestKycDocumentReview(orgId);
+          if (reviewErr) return { error: reviewErr };
+        }
+
+        if (document) {
+          setDocuments((prev) => {
+            const rest = prev.filter((d) => d.doc_type !== docType);
+            return [...rest, document];
+          });
+        }
+        await reload();
+        return { error: null };
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [kyc, orgId, reload, saveKycField],
   );
 
   const submitForVerification = useCallback(async () => {
@@ -354,6 +473,8 @@ export function useInlineKycVerification(orgId: string, orgName: string) {
     saveOperatingAddress,
     saveWebsite,
     uploadKycDocument,
+    pickKycDocumentFile,
+    commitKycDocumentUpdate,
     removeKycDocument,
     submitForVerification,
   };

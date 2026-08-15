@@ -206,6 +206,7 @@ export function FinanceFAB({
           onPress={handlePress}
           accessibilityLabel={accessibilityLabel}
           expandOnHover
+          collapsedGlyph="icon"
           align="end"
           testID={testID}
         />

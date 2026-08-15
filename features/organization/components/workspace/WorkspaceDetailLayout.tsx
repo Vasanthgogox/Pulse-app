@@ -31,6 +31,8 @@ type Props = {
   children: React.ReactNode;
   /** When true, children fill remaining height (e.g. embedded lists). */
   fillBody?: boolean;
+  /** Drop fill-body padding so an inner screen can bleed to the chrome edges. */
+  flushBody?: boolean;
   scrollProps?: Pick<ScrollViewProps, "keyboardShouldPersistTaps">;
   /** Override centred column width (e.g. product catalogue grid). */
   contentMaxWidth?: number;
@@ -44,6 +46,7 @@ export function WorkspaceDetailLayout({
   footerSlot,
   children,
   fillBody = false,
+  flushBody = false,
   scrollProps,
   contentMaxWidth = CONTENT_MAX_WIDTH,
 }: Props) {
@@ -54,7 +57,8 @@ export function WorkspaceDetailLayout({
     <View
       style={[
         styles.fillBody,
-        { paddingBottom: hasFooter ? 0 : insets.bottom },
+        flushBody && styles.fillBodyFlush,
+        { paddingBottom: hasFooter || flushBody ? 0 : insets.bottom },
       ]}
     >
       {children}
@@ -129,6 +133,11 @@ const styles = StyleSheet.create({
     minHeight: 0,
     paddingHorizontal: 18,
     paddingTop: 12,
+  },
+  fillBodyFlush: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   footer: {
     backgroundColor: Theme.cardWhite,

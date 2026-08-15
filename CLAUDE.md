@@ -86,6 +86,7 @@ Do not continue searching for alternative explanations.
 ## Reference Docs (load only when relevant)
 - **Operating model RBAC (Asset / Aggregate / Hybrid)** → `docs/RBAC_OPERATING_MODEL.md`
 - **RBAC change log (new / modified files)** → `docs/RBAC_OPERATING_MODEL_CHANGELOG.md`
+- **KYC requirement policy (Pulse / Admin / RPC lockstep)** → `docs/KYC_REQUIREMENT_POLICY.md`
 - Architecture & data flow → `docs/architecture.md`
 - Auth & session → `docs/auth.md`
 - Routing → `docs/routing.md`
