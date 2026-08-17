@@ -628,9 +628,12 @@ export function InviteMemberFlow({
             <View style={ui.conflictBanner}>
               <Text style={ui.conflictTitle}>Already on Pulse</Text>
               <Text style={ui.conflictBody}>
-                {liveCheck.userName || "This number"} is active in{" "}
-                {liveCheck.otherOrgs.map((o) => o.name).join(", ")}. They can join your
-                workspace after signing in — no new account or duplicate signup.
+                {liveCheck.userName || "This number"} is already active in{" "}
+                {liveCheck.otherOrgs.length > 1
+                  ? `${liveCheck.otherOrgs.length} other workspaces`
+                  : "another workspace"}
+                . They can join your workspace after signing in — no new account or
+                duplicate signup.
               </Text>
             </View>
           ) : null}
@@ -688,9 +691,12 @@ export function InviteMemberFlow({
             <View style={ui.conflictBanner}>
               <Text style={ui.conflictTitle}>Already on Pulse</Text>
               <Text style={ui.conflictBody}>
-                This person is active in{" "}
-                {precheck.otherOrgs.map((o) => o.name).join(", ")}. They can join your
-                workspace after signing in — no new account or duplicate signup.
+                This person is already active in{" "}
+                {precheck.otherOrgs.length > 1
+                  ? `${precheck.otherOrgs.length} other workspaces`
+                  : "another workspace"}
+                . They can join your workspace after signing in — no new account or
+                duplicate signup.
               </Text>
             </View>
           ) : null}
