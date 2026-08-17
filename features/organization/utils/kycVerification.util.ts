@@ -113,20 +113,20 @@ export function kycRequiredDocumentDefs(
 
   const required: OrganizationKycDocDefinition[] = [
     def('pan_card', {
-      label: 'PAN card',
-      hint: 'Business PAN card copy',
+      label: 'Business PAN',
+      hint: 'PAN card',
     }),
     def('address_proof', {
-      label: 'Address proof',
-      hint: 'Lease, utility bill, or government document',
+      label: 'Business Address Proof',
+      hint: 'Registered office / address proof',
     }),
   ];
 
   if (!skipGst) {
     required.unshift(
       def('gst_certificate', {
-        label: 'GST certificate',
-        hint: 'GST registration certificate (PDF or image)',
+        label: 'GST Registration Certificate',
+        hint: 'GST certificate',
       }),
     );
   }
@@ -157,8 +157,8 @@ export function kycRequiredDocumentDefs(
     case 'public_ltd':
       required.push(
         def('incorporation_certificate', {
-          label: 'Incorporation / CIN certificate',
-          hint: 'Certificate of incorporation (CIN certificate also accepted)',
+          label: 'Certificate of Incorporation',
+          hint: 'Company incorporation certificate',
           acceptTypes: [...INCORPORATION_DOC_TYPES],
           uploadChoices: ['incorporation_certificate', 'cin_certificate'],
         }),
@@ -167,8 +167,8 @@ export function kycRequiredDocumentDefs(
     case 'llp':
       required.push(
         def('incorporation_certificate', {
-          label: 'Incorporation certificate',
-          hint: 'LLP certificate of incorporation (CIN certificate also accepted)',
+          label: 'Certificate of Incorporation',
+          hint: 'LLP certificate of incorporation',
           acceptTypes: [...INCORPORATION_DOC_TYPES],
           uploadChoices: ['incorporation_certificate', 'cin_certificate'],
         }),
@@ -212,7 +212,7 @@ export function kycOptionalDocumentDefs(
   if (!covered.has('msme_certificate')) {
     extras.push({
       type: 'msme_certificate',
-      label: 'MSME / Udyam',
+      label: 'Udyam Certificate',
       hint: 'Udyam registration certificate',
       mandatory: false,
     });
@@ -233,6 +233,87 @@ export function registrationTypeRequiresCin(
   registrationType: RegistrationType | null | undefined,
 ): boolean {
   return registrationType === 'pvt_ltd' || registrationType === 'public_ltd';
+}
+
+/** Tax ID keys collected in the verification wizard. */
+export type KycTaxField =
+  | 'gstin'
+  | 'business_pan'
+  | 'cin'
+  | 'msme_number'
+  | 'tan_number'
+  | 'iec_number';
+
+export const OPTIONAL_KYC_TAX_FIELDS: KycTaxField[] = [
+  'cin',
+  'msme_number',
+  'tan_number',
+  'iec_number',
+];
+
+/** GSTIN only when the org has not marked GST as not registered. PAN always. CIN for limited companies. */
+export function isKycTaxFieldRequired(
+  field: KycTaxField,
+  registrationType: RegistrationType | null | undefined,
+  gstNotApplicable = false,
+): boolean {
+  if (field === 'business_pan') return true;
+  if (field === 'gstin') return !gstNotApplicable;
+  if (field === 'cin') return registrationTypeRequiresCin(registrationType);
+  return false;
+}
+
+export function kycOptionalTaxFields(
+  registrationType: RegistrationType | null | undefined,
+): KycTaxField[] {
+  return OPTIONAL_KYC_TAX_FIELDS.filter(
+    (field) => !isKycTaxFieldRequired(field, registrationType),
+  );
+}
+
+export type KycRequirementProfile = {
+  registrationType: RegistrationType | null;
+  gstRequired: boolean;
+  cinRequired: boolean;
+  requiredTaxFields: KycTaxField[];
+  optionalTaxFields: KycTaxField[];
+  requiredDocuments: OrganizationKycDocDefinition[];
+  optionalDocuments: OrganizationKycDocDefinition[];
+};
+
+/**
+ * Single requirement profile for wizard, Organization Documents, and Home.
+ * Admin console mirrors the same rules in analytics/src/lib/kycDocumentMatrix.ts.
+ * Invariant: Pulse, Admin, and submit_business_verification (6-arg) must
+ * resolve the same required/optional slots for the same type + GST state.
+ * See docs/KYC_REQUIREMENT_POLICY.md.
+ */
+export function buildKycRequirementProfile(
+  kyc: WorkspaceKyc | null,
+): KycRequirementProfile {
+  const registrationType = effectiveKycRegistrationType(kyc);
+  const gstRequired = !kyc?.gst_not_applicable;
+  const cinRequired = registrationTypeRequiresCin(registrationType);
+  const requiredTaxFields: KycTaxField[] = ['business_pan'];
+  if (gstRequired) requiredTaxFields.unshift('gstin');
+  if (cinRequired) requiredTaxFields.push('cin');
+  return {
+    registrationType,
+    gstRequired,
+    cinRequired,
+    requiredTaxFields,
+    optionalTaxFields: kycOptionalTaxFields(registrationType),
+    requiredDocuments: kycRequiredDocumentDefs(kyc),
+    optionalDocuments: kycOptionalDocumentDefs(kyc),
+  };
+}
+
+export function kycTaxIdentityCaption(
+  registrationType: RegistrationType | null | undefined,
+): string {
+  return registrationTypeRequiresCin(registrationType)
+    ? 'Tell us about your tax registrations, including CIN.'
+    : 'Tell us about your tax registrations.';
 }
 
 /** Core tax identifiers required before submit. GSTIN skipped when gst_not_applicable. */
@@ -319,7 +400,7 @@ export function listKycVerificationGaps(
   for (const field of missing.fields) {
     switch (field) {
       case 'gstin':
-        gaps.push('Add GSTIN — or skip if not registered for GST');
+        gaps.push('Add GSTIN — or mark the business as not registered for GST');
         break;
       case 'business_pan':
         gaps.push('Add Business PAN');
@@ -359,14 +440,85 @@ export function kycDocumentsProgressPct(
   return Math.round((done / total) * 100);
 }
 
+export function kycRequiredDocumentCounts(
+  documents: OrganizationKycDocument[],
+  kyc: WorkspaceKyc | null,
+): { done: number; total: number; remaining: number } {
+  const defs = kycRequiredDocumentDefs(kyc);
+  const total = defs.length;
+  const done = defs.filter((d) => kycDocSlotSatisfied(d, documents, kyc)).length;
+  return { done, total, remaining: Math.max(0, total - done) };
+}
+
+/** Total uploaded documents regardless of type — the minimum-evidence floor. */
+export function totalUploadedKycDocuments(documents: OrganizationKycDocument[]): number {
+  return documents.filter((d) => !!d.storage_path).length;
+}
+
+export function kycTaxIdentityCounts(kyc: WorkspaceKyc | null): {
+  done: number;
+  total: number;
+  remaining: number;
+} {
+  if (!kyc) return { done: 0, total: 2, remaining: 2 };
+  const needsCin = registrationTypeRequiresCin(effectiveKycRegistrationType(kyc));
+  const checks = [
+    !!kyc.gst_not_applicable || !!kyc.gstin?.trim(),
+    !!kyc.business_pan?.trim(),
+    ...(needsCin ? [!!kyc.cin?.trim()] : []),
+  ];
+  const total = checks.length;
+  const done = checks.filter(Boolean).length;
+  return { done, total, remaining: Math.max(0, total - done) };
+}
+
+export function formatKycCountCopy(
+  done: number,
+  total: number,
+  singular: string,
+  plural: string,
+): string {
+  if (total <= 0) return '';
+  const remaining = total - done;
+  if (remaining <= 0) return `${total} ${plural} complete`;
+  if (done === 0) return `${total} ${plural} remaining`;
+  if (remaining === 1) return `1 ${singular} remaining`;
+  return `${remaining} ${plural} remaining`;
+}
+
+/** Home / wizard progress in spoken English — never "2 required details required". */
+export function formatKycHubRemainingCopy(
+  taxRemaining: number,
+  docsRemaining: number,
+): string {
+  const details =
+    taxRemaining <= 0
+      ? null
+      : taxRemaining === 1
+        ? '1 detail'
+        : `${taxRemaining} details`;
+  const documents =
+    docsRemaining <= 0
+      ? null
+      : docsRemaining === 1
+        ? '1 document'
+        : `${docsRemaining} documents`;
+  if (details && documents) return `${details} and ${documents} remaining`;
+  if (details) return `${details} remaining`;
+  if (documents) return `${documents} remaining`;
+  return 'Ready to review';
+}
+
 export function docStatusLabel(
   doc: OrganizationKycDocument | undefined,
   frozen: boolean,
+  orgStatus?: string | null,
 ): string {
   if (!doc?.storage_path) return 'Not uploaded';
   if (doc.status === 'verified') return 'Verified';
   if (doc.status === 'rejected') return 'Rejected';
-  if (frozen) return 'Under review';
+  if (orgStatus === 'unverified') return 'Ready to submit';
+  if (doc.status === 'pending' || frozen) return 'Pending review';
   return 'Uploaded';
 }
 

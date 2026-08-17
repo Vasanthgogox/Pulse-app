@@ -25,12 +25,14 @@ function mapDocStatus(row: KycDocRow): DocumentStatus {
   switch (row.status) {
     case 'verified':
       return 'Valid';
+    case 'pending':
+      return 'Pending';
     case 'rejected':
       return 'Flagged';
     case 'expired':
       return 'Expired';
     default:
-      return 'Valid';
+      return 'Pending';
   }
 }
 
@@ -111,7 +113,10 @@ export async function fetchKycDocumentsByOrg(): Promise<Record<string, BusinessD
       type: mapDbDocTypeToAdmin(row.doc_type),
       file_name: fileName,
       status: mapDocStatus(row),
-      flag_reason: row.rejection_notes ?? undefined,
+      flag_reason:
+        row.status === 'pending'
+          ? (row.rejection_notes ?? 'Pending review')
+          : (row.rejection_notes ?? undefined),
       uploaded_at: row.updated_at ?? row.created_at,
       storage_path: path,
       url: path ? (signedByPath[path] ?? '') : '',

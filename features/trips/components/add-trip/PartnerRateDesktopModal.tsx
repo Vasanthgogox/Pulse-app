@@ -15,8 +15,9 @@ import { Easing } from "react-native-reanimated";
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import Theme from "@/constants/Theme";
+import { WizardActionBarProvider } from "@/components/full-page-wizard";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
+import Theme from "@/constants/Theme";
 import { PartnerRatesKeypadFlow } from "@/features/trips/components/allocation/PartnerRatesKeypadFlow";
 import { platformShadow } from "@/lib/platformShadow";
 
@@ -54,7 +55,7 @@ export const PartnerRateDesktopModal = memo(function PartnerRateDesktopModal({
 }: PartnerRateDesktopModalProps) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const sheetMaxH = Math.min(640, Math.round(height * 0.88));
+  const sheetMaxH = Math.min(720, Math.round(height * 0.92));
 
   useEffect(() => {
     if (!visible || typeof document === "undefined") return;
@@ -131,38 +132,42 @@ export const PartnerRateDesktopModal = memo(function PartnerRateDesktopModal({
             </Pressable>
           </View>
 
-          <View style={styles.keypadHost}>
-            <PartnerRatesKeypadFlow
-              wizardShell
-              forceMobileLayout
-              compact
-              partnerRate={partnerRate}
-              onPartnerRateChange={onPartnerRateChange}
-              advancePaid={advancePaid}
-              onAdvancePaidChange={onAdvancePaidChange}
-              partyPreview={partyPreview}
-              onPartyPress={onChangePartner}
-              saleValue={saleValue}
-              rateErrorMessage={rateError ? "Enter partner rate" : undefined}
-              advanceErrorMessage={
-                advanceError ? "Invalid advance amount" : undefined
-              }
-            />
-          </View>
-
-          <View style={styles.sheetFooter}>
-            <Text style={styles.keyboardHint}>
-              Type on your keyboard or use the keypad
-            </Text>
-            <Pressable
-              onPress={onDone}
-              style={styles.doneBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Done"
-            >
-              <Text style={styles.doneBtnText}>Done</Text>
-            </Pressable>
-          </View>
+          <WizardActionBarProvider
+            value={
+              <View style={styles.sheetFooter}>
+                <Text style={styles.keyboardHint}>
+                  Type on your keyboard or use the keypad
+                </Text>
+                <Pressable
+                  onPress={onDone}
+                  style={styles.doneBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Done"
+                >
+                  <Text style={styles.doneBtnText}>Done</Text>
+                </Pressable>
+              </View>
+            }
+          >
+            <View style={styles.keypadHost}>
+              <PartnerRatesKeypadFlow
+                wizardShell
+                forceMobileLayout
+                compact
+                partnerRate={partnerRate}
+                onPartnerRateChange={onPartnerRateChange}
+                advancePaid={advancePaid}
+                onAdvancePaidChange={onAdvancePaidChange}
+                partyPreview={partyPreview}
+                onPartyPress={onChangePartner}
+                saleValue={saleValue}
+                rateErrorMessage={rateError ? "Enter partner rate" : undefined}
+                advanceErrorMessage={
+                  advanceError ? "Invalid advance amount" : undefined
+                }
+              />
+            </View>
+          </WizardActionBarProvider>
         </MotiView>
       </View>
     </Modal>
@@ -183,7 +188,6 @@ const styles = StyleSheet.create({
   sheet: {
     width: "100%",
     maxWidth: 400,
-    minHeight: 520,
     backgroundColor: Theme.cardWhite,
     borderRadius: 20,
     borderWidth: 1,
@@ -238,20 +242,16 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   keypadHost: {
-    flex: 1,
-    minHeight: 380,
-    paddingHorizontal: 14,
-    paddingTop: 6,
-    paddingBottom: 4,
+    flexGrow: 0,
+    flexShrink: 1,
+    minHeight: 0,
   },
   sheetFooter: {
     gap: 8,
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
+    paddingBottom: 10,
+    backgroundColor: Theme.cardWhite,
   },
   keyboardHint: {
     fontSize: 10,
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   doneBtn: {
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 42,
+    minHeight: 44,
     borderRadius: 999,
     backgroundColor: Theme.textPrimaryDark,
   },

@@ -1,7 +1,11 @@
 /**
  * Admin-side KYC document matrix — mirrors
- * features/organization/utils/kycVerification.util.ts (client) and
- * submit_business_verification RPC.
+ * `buildKycRequirementProfile` in
+ * features/organization/utils/kycVerification.util.ts.
+ * Keep required/optional slots in lockstep with that function.
+ * Analytics cannot import Pulse feature modules; this file is the admin mirror.
+ * Invariant: same type + GST state → same slots as Pulse and the 6-arg
+ * submit_business_verification RPC. See docs/KYC_REQUIREMENT_POLICY.md.
  */
 
 import type { DocumentType } from '@/types/admin';

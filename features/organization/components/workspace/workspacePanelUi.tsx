@@ -4,6 +4,10 @@
 import { LoadingIndicator } from '@/components/LoadingIndicator';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import {
+  effectiveKycRegistrationType,
+  registrationTypeRequiresCin,
+} from '@/features/organization/utils/kycVerification.util';
 import type { WorkspaceKyc } from '@/types/organization';
 import {
   Check,
@@ -84,6 +88,15 @@ function kycSub(f: KycField) {
   return 'Importer Exporter Code (10 digits)';
 }
 
+function kycAddLabel(f: KycField) {
+  if (f === 'gstin') return 'Enter GSTIN';
+  if (f === 'business_pan') return 'Add PAN';
+  if (f === 'cin') return 'Add CIN';
+  if (f === 'msme_number') return 'Add Udyam';
+  if (f === 'tan_number') return 'Add TAN';
+  return 'Add IEC';
+}
+
 function kycPlaceholder(f: KycField) {
   if (f === 'gstin') return '27AAAAA0000A1Z5';
   if (f === 'business_pan') return 'AAAAA0000A';
@@ -114,8 +127,7 @@ export function validateKyc(f: KycField, val: string): string | null {
 export function kycCompletionPct(kyc: WorkspaceKyc | null): number {
   if (!kyc) return 0;
   const gstOk = !!kyc.gst_not_applicable || !!kyc.gstin?.trim();
-  const needsCin =
-    kyc.registration_type === 'pvt_ltd' || kyc.registration_type === 'public_ltd';
+  const needsCin = registrationTypeRequiresCin(effectiveKycRegistrationType(kyc));
   const checks = [
     gstOk,
     !!kyc.business_pan?.trim(),
@@ -474,6 +486,7 @@ export function KycFieldRow({
   onValidateGstin,
   required,
   optional,
+  onRemove,
 }: {
   field: KycField;
   value: string | null | undefined;
@@ -486,6 +499,8 @@ export function KycFieldRow({
   /** Structure-driven: show Required pill (e.g. CIN for Private Limited). */
   required?: boolean;
   optional?: boolean;
+  /** Optional IDs only — GSTIN / PAN / structure-required CIN cannot be removed. */
+  onRemove?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? '');
@@ -557,11 +572,22 @@ export function KycFieldRow({
     ? 'Verified'
     : hasValue
       ? (value ?? '').trim()
-      : 'Not added';
+      : '';
+  const actionLabel = hasValue ? 'Edit' : kycAddLabel(field);
 
   return (
     <View style={kf.wrap}>
-      <View style={kf.row}>
+      <Pressable
+        style={kf.row}
+        onPress={canEdit && !isFrozen && !editing ? handleEdit : undefined}
+        disabled={!canEdit || isFrozen || editing}
+        accessibilityRole={canEdit && !isFrozen && !editing ? 'button' : undefined}
+        accessibilityLabel={
+          canEdit && !isFrozen && !editing
+            ? `${actionLabel} ${kycLabel(field)}`
+            : undefined
+        }
+      >
         <View style={[kf.iconBox, { backgroundColor: statusBg }]}>{statusIcon}</View>
         <View style={kf.main}>
           <View style={kf.labelRow}>
@@ -585,33 +611,47 @@ export function KycFieldRow({
         </View>
         {!editing ? (
           <View style={kf.trailing}>
-            <Text
-              style={[
-                kf.valueLine,
-                !hasValue && !isVerified && kf.valueEmpty,
-                (hasValue || isVerified) && { color: statusColor },
-              ]}
-              numberOfLines={1}
-            >
-              {displayValue}
-            </Text>
-            {canEdit && !isFrozen ? (
-              <Pressable
-                style={kf.editBtn}
-                onPress={handleEdit}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={`Edit ${kycLabel(field)}`}
+            {hasValue || isVerified ? (
+              <Text
+                style={[
+                  kf.valueLine,
+                  (hasValue || isVerified) && { color: statusColor },
+                ]}
+                numberOfLines={1}
               >
-                <Pencil size={10} color={PURPLE} strokeWidth={2.2} />
-                <Text style={kf.editBtnText}>Edit</Text>
-              </Pressable>
+                {displayValue}
+              </Text>
+            ) : null}
+            {canEdit && !isFrozen ? (
+              <View style={kf.trailingActions}>
+                <View
+                  style={kf.editBtn}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  {hasValue ? (
+                    <Pencil size={10} color={PURPLE} strokeWidth={2.2} />
+                  ) : null}
+                  <Text style={kf.editBtnText}>{actionLabel}</Text>
+                </View>
+                {onRemove ? (
+                  <Pressable
+                    style={kf.removeBtn}
+                    onPress={onRemove}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${kycLabel(field)}`}
+                  >
+                    <Text style={kf.removeBtnText}>Remove</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : isFrozen ? (
               <Lock size={11} color={Theme.textMuted} strokeWidth={2} />
             ) : null}
           </View>
         ) : null}
-      </View>
+      </Pressable>
       {editing ? (
         <View style={kf.editor}>
           <TextInput
@@ -678,6 +718,11 @@ export function KycFieldsList({
   onSave,
   onValidateGstin,
   onSetGstNotApplicable,
+  forceShowOptional = [],
+  cinRequired: cinRequiredProp,
+  section = 'all',
+  onRemoveOptional,
+  hideGstin = false,
 }: {
   kyc: WorkspaceKyc | null;
   canEdit: boolean;
@@ -686,9 +731,22 @@ export function KycFieldsList({
     gstin: string,
   ) => Promise<{ ok: boolean; message?: string; registryName?: string }>;
   onSetGstNotApplicable?: (notApplicable: boolean) => Promise<void>;
+  /** Reveal empty optional IDs (CIN / Udyam / TAN / IEC) without listing them as blanks by default. */
+  forceShowOptional?: KycField[];
+  /** Override: CIN required for Private / Public Limited. */
+  cinRequired?: boolean;
+  section?: 'required' | 'optional' | 'all';
+  onRemoveOptional?: (field: KycField) => void;
+  /** Wizard asks GST Yes/No separately. */
+  hideGstin?: boolean;
 }) {
   const gstSkipped = !!kyc?.gst_not_applicable;
   const [gstSkipBusy, setGstSkipBusy] = useState(false);
+  const cinRequired =
+    cinRequiredProp ??
+    registrationTypeRequiresCin(effectiveKycRegistrationType(kyc));
+  const showRequired = section !== 'optional';
+  const showOptional = section !== 'required';
 
   const handleGstSkip = async (notApplicable: boolean) => {
     if (!onSetGstNotApplicable || gstSkipBusy) return;
@@ -702,60 +760,70 @@ export function KycFieldsList({
 
   return (
     <>
-      {gstSkipped ? (
-        <View style={kf.gstSkipActive}>
-          <View style={kf.gstSkipActiveTextCol}>
-            <Text style={kf.gstSkipActiveTitle}>GSTIN</Text>
-            <Text style={kf.gstSkipActiveSub}>
-              Not registered for GST — skip saved on this organisation
-            </Text>
-          </View>
-          {canEdit && onSetGstNotApplicable ? (
-            <Pressable
-              style={kf.gstSkipUndo}
-              disabled={gstSkipBusy}
-              onPress={() => void handleGstSkip(false)}
-              accessibilityRole="button"
-              accessibilityLabel="Add GSTIN instead"
-            >
-              <Text style={kf.gstSkipUndoText}>{gstSkipBusy ? '…' : 'Add GSTIN'}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : (
-        <>
-          <KycFieldRow
-            field="gstin"
-            value={kyc?.gstin}
-            verificationStatus={kyc?.verification_status}
-            canEdit={canEdit}
-            onSave={onSave}
-            onValidateGstin={onValidateGstin}
-          />
-          {canEdit && onSetGstNotApplicable ? (
-            <Pressable
-              style={kf.gstSkipRow}
-              disabled={gstSkipBusy}
-              onPress={() => void handleGstSkip(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Skip GSTIN — not registered for GST"
-            >
-              <Text style={kf.gstSkipRowText}>
-                {gstSkipBusy ? 'Saving…' : "I don't have a GSTIN (not registered for GST)"}
+      {showRequired && !hideGstin ? (
+        gstSkipped ? (
+          <View style={kf.gstSkipActive}>
+            <View style={kf.gstSkipActiveTextCol}>
+              <Text style={kf.gstSkipActiveTitle}>GSTIN</Text>
+              <Text style={kf.gstSkipActiveSub}>
+                Not registered for GST — skip saved on this organisation
               </Text>
-            </Pressable>
-          ) : null}
-        </>
-      )}
+            </View>
+            {canEdit && onSetGstNotApplicable ? (
+              <Pressable
+                style={kf.gstSkipUndo}
+                disabled={gstSkipBusy}
+                onPress={() => void handleGstSkip(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Add GSTIN instead"
+              >
+                <Text style={kf.gstSkipUndoText}>{gstSkipBusy ? '…' : 'Add GSTIN'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <>
+            <KycFieldRow
+              field="gstin"
+              value={kyc?.gstin}
+              verificationStatus={kyc?.verification_status}
+              canEdit={canEdit}
+              onSave={onSave}
+              onValidateGstin={onValidateGstin}
+              required
+            />
+            {canEdit && onSetGstNotApplicable ? (
+              <Pressable
+                style={kf.gstSkipRow}
+                disabled={gstSkipBusy}
+                onPress={() => void handleGstSkip(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Skip GSTIN — not registered for GST"
+              >
+                <Text style={kf.gstSkipRowText}>
+                  {gstSkipBusy ? 'Saving…' : "I don't have a GSTIN (not registered for GST)"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </>
+        )
+      ) : null}
       {KYC_FIELD_ORDER.filter((field) => field !== 'gstin').map((field) => {
-        const cinRequired =
-          field === 'cin' &&
-          (kyc?.registration_type === 'pvt_ltd' || kyc?.registration_type === 'public_ltd');
+        const fieldCinRequired = field === 'cin' && cinRequired;
         const optionalField =
           field === 'msme_number' ||
           field === 'tan_number' ||
           field === 'iec_number' ||
           (field === 'cin' && !cinRequired);
+        if (optionalField && !showOptional) return null;
+        if (!optionalField && !showRequired) return null;
+        if (
+          optionalField &&
+          !kyc?.[field]?.trim() &&
+          !forceShowOptional.includes(field)
+        ) {
+          return null;
+        }
         return (
           <KycFieldRow
             key={field}
@@ -765,8 +833,13 @@ export function KycFieldsList({
             canEdit={canEdit}
             onSave={onSave}
             onValidateGstin={undefined}
-            required={cinRequired}
+            required={field === 'business_pan' || fieldCinRequired}
             optional={optionalField}
+            onRemove={
+              optionalField && onRemoveOptional
+                ? () => onRemoveOptional(field)
+                : undefined
+            }
           />
         );
       })}
@@ -844,8 +917,22 @@ const kf = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 8,
     flexShrink: 0,
-    maxWidth: '42%',
+    maxWidth: '48%',
   },
+  trailingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  removeBtn: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 5,
+    minHeight: 28,
+    justifyContent: 'center',
+  },
+  removeBtnText: { fontSize: 10, fontWeight: '600', color: Theme.textMuted },
   valueLine: {
     fontSize: 11,
     fontWeight: '500',

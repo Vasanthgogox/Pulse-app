@@ -202,11 +202,11 @@ export const hubStyles = StyleSheet.create({
   quickRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 24,
+    justifyContent: "space-between",
+    gap: 8,
     paddingHorizontal: 4,
   },
-  quickAction: { alignItems: "center", gap: 8, minWidth: 72 },
+  quickAction: { alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
   quickCircle: {
     width: 52,
     height: 52,

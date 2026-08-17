@@ -17,6 +17,7 @@ export type PickedVerificationDocument = {
   fileName: string;
   mimeType: string;
   sizeBytes?: number;
+  localUri?: string;
   extractedGstin?: string | null;
   extractedPan?: string | null;
   extractedCin?: string | null;
@@ -126,6 +127,7 @@ async function processAsset(
       fileName,
       mimeType,
       sizeBytes: asset.fileSize ?? undefined,
+      localUri: asset.uri,
       extractedGstin: verify?.extracted?.gstin ?? null,
       extractedPan: verify?.extracted?.pan ?? null,
       extractedCin: verify?.extracted?.cin ?? null,

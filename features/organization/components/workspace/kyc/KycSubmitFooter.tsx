@@ -12,6 +12,8 @@ type Props = {
   structureLabel?: string | null;
   /** One-line reminder of the matrix for this structure. */
   structureHint?: string | null;
+  /** Shown when ready to submit instead of the structure hint. */
+  confirmCopy?: string;
 };
 
 export function KycSubmitFooter({
@@ -21,6 +23,7 @@ export function KycSubmitFooter({
   missingItems = [],
   structureLabel,
   structureHint,
+  confirmCopy,
 }: Props) {
   const showGaps = !canSubmit && !submitting && missingItems.length > 0;
   const gapsTitle = structureLabel
@@ -43,9 +46,11 @@ export function KycSubmitFooter({
         </View>
       ) : (
         <Text style={styles.hint}>
-          {structureHint
-            ? structureHint
-            : 'Submit locks your profile for review. Ensure tax IDs, required documents, and business details are complete.'}
+          {confirmCopy
+            ? confirmCopy
+            : structureHint
+              ? structureHint
+              : 'Submit locks your profile for review. Ensure tax IDs, required documents, and business details are complete.'}
         </Text>
       )}
       <Pressable

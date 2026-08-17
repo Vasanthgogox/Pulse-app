@@ -45,7 +45,12 @@ function ensureRequiredDocuments(
   gstNotApplicable: boolean,
 ): BusinessDocument[] {
   const slots = requiredKycDocSlots(registrationType, gstNotApplicable);
-  const result = [...docs];
+  const result = docs.map((d) => ({
+    ...d,
+    required: slots.some(
+      (slot) => slot.type === d.type || slot.satisfyWith.includes(d.type),
+    ),
+  }));
 
   for (const slot of slots) {
     if (docSatisfiesSlot(result, slot.satisfyWith)) continue;
@@ -61,6 +66,7 @@ function ensureRequiredDocuments(
       storage_path: '',
       mime_type: 'application/pdf',
       size_kb: 0,
+      required: true,
     });
   }
 
@@ -192,6 +198,7 @@ function capitalize(s: string): string {
 // rather than inferring intent from the status pair alone.
 function mapAuditEventType(prev: string | null, next: string, notes: string | null): AuditEntry['event_type'] {
   if (notes === 'user_submitted') return 'submitted';
+  if (notes === 'document_update_resubmit') return 'reopened';
   if (next === 'verified') return 'approved';
   if (next === 'rejected') return 'rejected';
   if (next === 'pending')  return 'escalated';
@@ -201,6 +208,7 @@ function mapAuditEventType(prev: string | null, next: string, notes: string | nu
 
 function auditTitle(prev: string | null, next: string, notes: string | null): string {
   if (notes === 'user_submitted') return 'Submitted for verification';
+  if (notes === 'document_update_resubmit') return 'Document updated — pending review';
   if (next === 'verified') return 'Approved';
   if (next === 'rejected') return 'Rejected';
   if (next === 'pending')  return 'Escalated for review';
@@ -217,7 +225,7 @@ function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]):
     const doc = docSatisfiesSlot(documents, satisfyWith);
     if (!doc) return 'Pending';
     if (doc.status === 'Flagged' || doc.status === 'Expired') return 'Failed';
-    if (doc.status === 'Unreadable') return 'Manual Review';
+    if (doc.status === 'Unreadable' || doc.status === 'Pending') return 'Manual Review';
     return 'Passed';
   };
 
@@ -229,8 +237,9 @@ function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]):
       id: 'gstin',
       label: gstNotApplicable ? 'GST (not applicable)' : 'GSTIN Registry',
       status: gstNotApplicable ? 'N/A' : row.gstin ? 'Passed' : 'Pending',
+      required: !gstNotApplicable,
       detail: gstNotApplicable
-        ? 'Marked GST not applicable'
+        ? 'Not registered for GST'
         : row.gstin
           ? `GSTIN: ${row.gstin}`
           : 'Not submitted',
@@ -239,6 +248,7 @@ function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]):
       id: 'pan',
       label: 'PAN Verification',
       status: row.business_pan ? 'Passed' : 'Pending',
+      required: true,
       detail: row.business_pan ? `PAN: ${row.business_pan}` : 'Not submitted',
     },
   ];
@@ -248,6 +258,7 @@ function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]):
       id: 'cin',
       label: 'CIN',
       status: row.cin ? 'Passed' : 'Pending',
+      required: true,
       detail: row.cin ? `CIN: ${row.cin}` : 'Required for limited company',
     });
   }
@@ -258,6 +269,7 @@ function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]):
         id: 'address',
         label: slot.label,
         status: addressPassed ? 'Passed' : 'Pending',
+        required: true,
         detail:
           (row.address_proof_type as string) ??
           docSatisfiesSlot(documents, slot.satisfyWith)?.file_name ??
@@ -270,6 +282,7 @@ function mapChecks(row: Record<string, unknown>, documents: BusinessDocument[]):
       id: `doc_${slot.type.replace(/\s+/g, '_').toLowerCase()}`,
       label: slot.label,
       status: slotCheck(slot.satisfyWith),
+      required: true,
       detail: match?.file_name ?? 'Not uploaded',
     });
   }

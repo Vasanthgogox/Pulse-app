@@ -948,7 +948,9 @@ Comparison is **trimmed, case-insensitive** on `organizations.name`.
 | 1 — Tax | GSTIN (live validate), PAN | `organizations.gstin`, `organizations.business_pan` |
 | 2 — Address proof | Upload lease/utility/other | Storage + `organizations.address_proof_path` |
 
-**Submit:** RPC `submit_business_verification` → sets `verification_status=pending`, `frozen_at`, locks edits.
+**Submit:** RPC `submit_business_verification` (6-arg, always pass `p_gst_not_applicable`) → sets `verification_status=pending`, `frozen_at`, locks edits.
+
+**Requirement matrix:** same business type + GST Yes/No → same required tax fields and documents in Pulse, Admin, and the RPC. See [`KYC_REQUIREMENT_POLICY.md`](./KYC_REQUIREMENT_POLICY.md).
 
 **Draft save:** AsyncStorage key `business-verify-draft:{orgId}` — **Partially implemented** (wizard local draft).
 

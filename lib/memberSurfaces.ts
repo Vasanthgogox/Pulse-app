@@ -911,8 +911,8 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
   {
     id: "workspace.kyc",
     group: "Workspace settings",
-    label: "KYC / business verify",
-    hint: "View or update org KYC documents",
+    label: "Organization / verification",
+    hint: "Organization home, business details, verification, and documents",
     domain: "team",
     anyOfCaps: [...DISP, ...FIN, "fleet_management"],
     grantsCaps: [],

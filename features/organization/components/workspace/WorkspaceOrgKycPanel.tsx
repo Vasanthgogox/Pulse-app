@@ -1,57 +1,55 @@
 /**
- * Org identity & KYC — inline Groww-style document-level verification on one page.
+ * Organization hub — summary home plus Business details / Verification / Documents.
+ * KYC is a guided destination, not the landing page.
  */
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
-import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useInlineKycVerification } from '@/features/organization/hooks/useInlineKycVerification';
 import { WorkspaceDetailLayout } from '@/features/organization/components/workspace/WorkspaceDetailLayout';
 import { useWorkspaceFeedback } from '@/features/organization/components/workspace/WorkspaceFeedbackProvider';
-import { WORKSPACE_PANEL_TITLES } from '@/features/organization/components/workspace/workspacePanelTypes';
-import { KycRequiredDocumentsSection } from '@/features/organization/components/workspace/kyc/KycRequiredDocumentsSection';
 import {
-  KycOperatingAddressRow,
-  KycRegistrationTypeRow,
-  KycWebsiteRow,
-} from '@/features/organization/components/workspace/kyc/KycBusinessDetailRows';
-import { InlineVerificationStatusBanner } from '@/features/organization/components/workspace/kyc/InlineVerificationStatusBanner';
-import { KycSubmitFooter } from '@/features/organization/components/workspace/kyc/KycSubmitFooter';
-import {
-  AMBER,
-  GREEN,
-  InfoRow,
-  KycFieldsList,
-  KycProgressBlock,
-  kycCompletionPct,
-  modelLabel,
-  orgInitials,
-  OrgIdCopyRow,
-  SectionHeader,
-  workspacePanelStyles as styles,
-  type KycField,
-} from '@/features/organization/components/workspace/workspacePanelUi';
-import {
-  kycBusinessDetailsProgressPct,
-  kycDocumentsProgressPct,
-  kycStructureRequirementsHint,
-  effectiveKycRegistrationType,
-  registrationTypeLabel,
-} from '@/features/organization/utils/kycVerification.util';
+  WORKSPACE_PANEL_TITLES,
+  type OrgHubSection,
+  type WorkspacePanelId,
+} from '@/features/organization/components/workspace/workspacePanelTypes';
+import { KycDocumentUpdateWizard } from '@/features/organization/components/workspace/kyc/KycDocumentUpdateWizard';
+import { OrganizationHomePanel } from '@/features/organization/components/workspace/org/OrganizationHomePanel';
+import { OrganizationBusinessDetailsPanel } from '@/features/organization/components/workspace/org/OrganizationBusinessDetailsPanel';
+import { OrganizationVerificationPanel } from '@/features/organization/components/workspace/org/OrganizationVerificationPanel';
+import { OrganizationDocumentsPanel } from '@/features/organization/components/workspace/org/OrganizationDocumentsPanel';
+import { OrganizationVerifyWizard } from '@/features/organization/components/workspace/org/OrganizationVerifyWizard';
+import type { OrganizationKycDocDefinition } from '@/features/organization/types/organizationKycDocuments.types';
 import { useOrgRole } from '@/lib/hooks/useOrgRole';
-import * as Clipboard from 'expo-clipboard';
-import { Lock } from 'lucide-react-native';
+import { useMemberAccess } from '@/lib/useMemberAccess';
+import { ROUTES } from '@/lib/routes';
 import { useCallback, useState } from 'react';
-import { Text, View } from 'react-native';
 
 type Props = {
   onBack: () => void;
+  section?: OrgHubSection | null;
+  onOpenSection: (section: OrgHubSection | null) => void;
+  onOpenPanel: (panel: WorkspacePanelId) => void;
+  onOpenRoute: (path: string) => void;
 };
 
-export function WorkspaceOrgKycPanel({ onBack }: Props) {
+const SECTION_TITLES: Record<OrgHubSection, string> = {
+  details: 'Business details',
+  verification: 'Verification',
+  documents: 'Documents',
+};
+
+export function WorkspaceOrgKycPanel({
+  onBack,
+  section = null,
+  onOpenSection,
+  onOpenPanel,
+  onOpenRoute,
+}: Props) {
   const { user } = useAuth();
   const { currentOrganization } = useOrganization();
   const { canEdit } = useOrgRole();
+  const { can } = useMemberAccess();
   const { notice } = useWorkspaceFeedback();
 
   const orgId = currentOrganization?.id ?? '';
@@ -73,32 +71,18 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
     saveRegistrationType,
     saveOperatingAddress,
     saveWebsite,
-    uploadKycDocument,
+    pickKycDocumentFile,
+    commitKycDocumentUpdate,
     removeKycDocument,
     submitForVerification,
   } = useInlineKycVerification(orgId, orgName);
 
-  const [copying, setCopying] = useState(false);
-
-  const handleCopyOrgId = async () => {
-    if (!orgId || copying) return;
-    setCopying(true);
-    try {
-      await Clipboard.setStringAsync(orgId);
-      notice({ kind: 'success', title: 'Workspace ID copied', duration: 2000 });
-      setTimeout(() => setCopying(false), 1400);
-    } catch {
-      setCopying(false);
-      notice({
-        kind: 'error',
-        title: "Couldn't copy",
-        message: 'Clipboard access was denied.',
-      });
-    }
-  };
+  const [updateDef, setUpdateDef] = useState<OrganizationKycDocDefinition | null>(null);
+  const [wizardError, setWizardError] = useState<string | null>(null);
+  const [verifyOpen, setVerifyOpen] = useState(false);
 
   const handleSaveKycField = useCallback(
-    async (field: KycField, val: string) => {
+    async (field: Parameters<typeof saveKycField>[0], val: string) => {
       const { error } = await saveKycField(field, val);
       if (error) {
         notice({ kind: 'error', title: 'Save failed', message: error.message });
@@ -142,167 +126,201 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
     [notice, validateGstinField],
   );
 
-  const taxPct = kycCompletionPct(kyc);
-  const taxBarColor = taxPct === 100 ? GREEN : taxPct > 0 ? AMBER : Theme.negative;
-  const taxAccent = taxPct === 100 ? GREEN : AMBER;
+  const handleWizardPick = useCallback(
+    async (
+      docType: OrganizationKycDocDefinition['type'],
+      proofType?: Parameters<typeof pickKycDocumentFile>[1],
+    ) => {
+      setWizardError(null);
+      const result = await pickKycDocumentFile(docType, proofType);
+      if (result.cancelled) return null;
+      if (result.error) {
+        setWizardError(result.error.message);
+        return null;
+      }
+      return result.document;
+    },
+    [pickKycDocumentFile],
+  );
 
-  const businessPct = kycBusinessDetailsProgressPct(kyc, orgProfile?.profile_website);
-  const docsPct = kycDocumentsProgressPct(documents, kyc);
-  const businessBarColor = businessPct === 100 ? GREEN : businessPct > 0 ? AMBER : Theme.negative;
-  const businessAccent = businessPct === 100 ? GREEN : AMBER;
+  const handleWizardConfirm = useCallback(
+    async (
+      picked: Parameters<typeof commitKycDocumentUpdate>[0],
+      docType: OrganizationKycDocDefinition['type'],
+      proofType?: Parameters<typeof commitKycDocumentUpdate>[2],
+    ) => {
+      setWizardError(null);
+      const { error } = await commitKycDocumentUpdate(picked, docType, proofType);
+      if (error) {
+        setWizardError(error.message);
+        return false;
+      }
+      const onboardingDraft = kyc?.verification_status === 'unverified';
+      notice({
+        kind: 'success',
+        title: onboardingDraft ? 'Document saved' : 'Sent for admin review',
+        message: onboardingDraft
+          ? 'This file is part of your application. Submit from Review when you are ready.'
+          : 'Only the new document is queued. Admins will review it in the console.',
+        duration: 2800,
+      });
+      return true;
+    },
+    [commitKycDocumentUpdate, kyc?.verification_status, notice],
+  );
+
+  const openUpdate = useCallback((definition: OrganizationKycDocDefinition) => {
+    setWizardError(null);
+    setUpdateDef(definition);
+  }, []);
+
+  const handleRemoveDocument = useCallback(
+    async (docType: OrganizationKycDocDefinition['type']) => {
+      const { error } = await removeKycDocument(docType);
+      if (error) {
+        notice({ kind: 'error', title: 'Could not remove document', message: error.message });
+        return;
+      }
+      notice({ kind: 'success', title: 'Document removed', duration: 2400 });
+    },
+    [notice, removeKycDocument],
+  );
+
+  const status = kyc?.verification_status ?? 'unverified';
+  const isDraft = status === 'unverified' || status === 'rejected';
+  const title = section ? SECTION_TITLES[section] : WORKSPACE_PANEL_TITLES.kyc;
+  const handleBack = section ? () => onOpenSection(null) : onBack;
+
+  const startVerify = useCallback(() => {
+    if (!canEdit || !isDraft) return;
+    setVerifyOpen(true);
+  }, [canEdit, isDraft]);
+
+  const wizard = (
+    <KycDocumentUpdateWizard
+      key={updateDef ? `${updateDef.type}-${updateDef.label}` : 'closed'}
+      visible={!!updateDef}
+      definition={updateDef}
+      hasExistingDocument={
+        !!updateDef &&
+        (documents.some(
+          (d) =>
+            !!d.storage_path &&
+            (d.doc_type === updateDef.type ||
+              !!updateDef.acceptTypes?.includes(d.doc_type) ||
+              !!updateDef.uploadChoices?.includes(d.doc_type)),
+        ) ||
+          (updateDef.type === 'address_proof' && !!kyc?.address_proof_path?.trim()))
+      }
+      uploading={!!uploadingDocType}
+      submitting={submitting}
+      formError={wizardError}
+      variant={verifyOpen && status === 'unverified' ? 'onboarding' : 'update'}
+      onClose={() => {
+        setUpdateDef(null);
+        setWizardError(null);
+      }}
+      onPick={handleWizardPick}
+      onConfirm={handleWizardConfirm}
+    />
+  );
 
   if (loading && !kyc) {
     return (
-      <WorkspaceDetailLayout
-        title={WORKSPACE_PANEL_TITLES.kyc}
-        subtitle={orgName || 'Organisation'}
-        onBack={onBack}
-      >
+      <WorkspaceDetailLayout title={title} subtitle={orgName || 'Organisation'} onBack={handleBack}>
         <CenteredLoadingView />
       </WorkspaceDetailLayout>
     );
   }
 
+  if (verifyOpen) {
+    return (
+      <>
+        <OrganizationVerifyWizard
+          orgName={orgName}
+          kyc={kyc}
+          documents={documents}
+          canEdit={canEdit}
+          frozen={frozen}
+          canSubmit={canSubmit}
+          submitGaps={submitGaps}
+          submitting={submitting}
+          uploadingDocType={uploadingDocType}
+          onSaveRegistrationType={saveRegistrationType}
+          onSaveOperatingAddress={saveOperatingAddress}
+          onSaveKycField={handleSaveKycField}
+          onValidateGstin={handleValidateGstin}
+          onSetGstNotApplicable={handleSetGstNotApplicable}
+          onOpenUpdate={openUpdate}
+          onRemoveDocument={handleRemoveDocument}
+          onSubmit={submitForVerification}
+          onExit={() => setVerifyOpen(false)}
+          onComplete={() => {
+            setVerifyOpen(false);
+            onOpenSection('verification');
+          }}
+        />
+        {wizard}
+      </>
+    );
+  }
+
+  const body = !section ? (
+    <OrganizationHomePanel
+      orgName={orgName}
+      organization={currentOrganization}
+      kyc={kyc}
+      documents={documents}
+      canEdit={canEdit}
+      showMembers={can('team.manage')}
+      showPreferences={can('workspace.settings')}
+      onOpenSection={onOpenSection}
+      onStartVerify={startVerify}
+      onOpenMembers={() => onOpenRoute(ROUTES.MODALS.TEAM)}
+      onOpenPreferences={() => onOpenPanel('settings')}
+    />
+  ) : section === 'details' ? (
+    <OrganizationBusinessDetailsPanel
+      orgName={orgName}
+      organization={currentOrganization}
+      kyc={kyc}
+      orgProfile={orgProfile}
+      ownerEmail={user?.email ?? null}
+      canEdit={canEdit}
+      frozen={frozen}
+      onSaveRegistrationType={saveRegistrationType}
+      onSaveOperatingAddress={saveOperatingAddress}
+      onSaveWebsite={saveWebsite}
+    />
+  ) : section === 'verification' ? (
+    <OrganizationVerificationPanel
+      kyc={kyc}
+      documents={documents}
+      canEdit={canEdit}
+      onOpenDocuments={() => onOpenSection('documents')}
+      onOpenUpdate={openUpdate}
+      onStartVerify={startVerify}
+    />
+  ) : (
+    <OrganizationDocumentsPanel
+      kyc={kyc}
+      documents={documents}
+      canEdit={canEdit}
+      frozen={frozen}
+      uploadingDocType={uploadingDocType}
+      onOpenUpdate={openUpdate}
+      onRemove={(docType) => void handleRemoveDocument(docType)}
+    />
+  );
+
   return (
     <WorkspaceDetailLayout
-      title={WORKSPACE_PANEL_TITLES.kyc}
+      title={title}
       subtitle={orgName || 'Organisation'}
-      onBack={onBack}
-      footerSlot={
-        canEdit && !frozen ? (
-          <KycSubmitFooter
-            canSubmit={canSubmit}
-            submitting={submitting}
-            missingItems={submitGaps}
-            structureLabel={registrationTypeLabel(effectiveKycRegistrationType(kyc)) || null}
-            structureHint={kycStructureRequirementsHint(
-              effectiveKycRegistrationType(kyc),
-              !!kyc?.gst_not_applicable,
-            )}
-            onSubmit={() => void submitForVerification()}
-          />
-        ) : null
-      }
+      onBack={handleBack}
     >
-      <View style={styles.panelStack}>
-        <InlineVerificationStatusBanner kyc={kyc} documents={documents} />
-
-        <View style={styles.detailCard}>
-          <SectionHeader
-            label="Tax & compliance IDs"
-            color={taxAccent}
-            trailing={<KycProgressBlock pct={taxPct} barColor={taxBarColor} inline />}
-          />
-          {!canEdit ? (
-            <View style={styles.kycReadonlyNote}>
-              <Lock size={10} color={Theme.textMuted} strokeWidth={2} />
-              <Text style={styles.kycReadonlyText}>
-                Only admins and owners can edit KYC fields.
-              </Text>
-            </View>
-          ) : frozen ? (
-            <View style={styles.kycReadonlyNote}>
-              <Lock size={10} color={Theme.textMuted} strokeWidth={2} />
-              <Text style={styles.kycReadonlyText}>
-                Profile is locked while verification is in progress or approved.
-              </Text>
-            </View>
-          ) : null}
-          <KycFieldsList
-            kyc={kyc}
-            canEdit={canEdit && !frozen}
-            onSave={handleSaveKycField}
-            onValidateGstin={handleValidateGstin}
-            onSetGstNotApplicable={handleSetGstNotApplicable}
-          />
-        </View>
-
-        <View style={styles.detailCard}>
-          <SectionHeader
-            label="Verification documents"
-            color={docsPct === 100 ? GREEN : docsPct > 0 ? AMBER : Theme.negative}
-            trailing={
-              <KycProgressBlock
-                pct={docsPct}
-                barColor={docsPct === 100 ? GREEN : docsPct > 0 ? AMBER : Theme.negative}
-                inline
-              />
-            }
-          />
-          <KycRequiredDocumentsSection
-            kyc={kyc}
-            documents={documents}
-            canEdit={canEdit}
-            frozen={frozen}
-            uploadingDocType={uploadingDocType}
-            onUpload={async (docType, proofType) => {
-              const result = await uploadKycDocument(docType, proofType);
-              if (result.cancelled) return;
-              if (result.error) {
-                notice({
-                  kind: 'error',
-                  title: 'Upload failed',
-                  message: result.error.message,
-                });
-                return;
-              }
-              notice({ kind: 'success', title: 'Document uploaded', duration: 2400 });
-            }}
-            onRemove={async (docType) => {
-              const { error } = await removeKycDocument(docType);
-              if (error) {
-                notice({ kind: 'error', title: 'Remove failed', message: error.message });
-              }
-            }}
-          />
-        </View>
-
-        <View style={styles.detailCard}>
-          <SectionHeader
-            label="Business details"
-            color={businessAccent}
-            trailing={
-              <KycProgressBlock pct={businessPct} barColor={businessBarColor} inline />
-            }
-          />
-          <KycRegistrationTypeRow
-            kyc={kyc}
-            canEdit={canEdit}
-            frozen={frozen}
-            onSave={saveRegistrationType}
-          />
-          <KycOperatingAddressRow
-            kyc={kyc}
-            canEdit={canEdit}
-            frozen={frozen}
-            onSave={saveOperatingAddress}
-          />
-          <KycWebsiteRow
-            website={orgProfile?.profile_website ?? ''}
-            canEdit={canEdit}
-            frozen={frozen}
-            onSave={saveWebsite}
-          />
-        </View>
-
-        <View style={styles.detailCard}>
-          <SectionHeader label="Org identity" />
-          <OrgIdCopyRow
-            orgId={orgId}
-            copying={copying}
-            onCopy={() => void handleCopyOrgId()}
-          />
-          <InfoRow
-            label="Operating model"
-            value={modelLabel(currentOrganization?.operatingModel)}
-          />
-          {user?.email ? <InfoRow label="Owner email" value={user.email} /> : null}
-          <InfoRow
-            label="Display name"
-            value={orgName || orgInitials(orgName)}
-          />
-        </View>
-      </View>
+      {body}
+      {wizard}
     </WorkspaceDetailLayout>
   );
 }

@@ -58,6 +58,10 @@ Do not continue searching for alternative explanations.
 - `AsyncRequireError: Loading module … failed` = stale chunk after a Netlify redeploy; recovery listeners already reload. Ignore.
 - `[AuthGuard] refresh_invalid_session_cleared` = expected warning-level auth signal (session cleared on expiry), funneled via `captureMessage`. Ignore.
 
+### Known Supabase POSTGRES dashboard noise (do NOT "fix" in code)
+- Supabase's POSTGRES error metric can include expected PostgreSQL `RAISE EXCEPTION` calls used by Pulse RPCs for normal business-rule rejection (e.g. `not_found`, `unauthorized`, `invalid_state`, `already_awarded`). These are logged at ERROR severity even when the application is behaving correctly. Do not rewrite RPC validation or suppress these exceptions just to reduce the dashboard count. Investigate actual connection, lock, timeout, crash, or other infrastructure signals separately.
+- 2026-08-13 investigation of a 27-error POSTGRES spike found no cron failures, no connection exhaustion, and confirmed the historical cron/lock-leak fixes were already live — RAISE EXCEPTION business-rule rejections (712 call sites across 163 migrations, incl. `accept_driver_direct_bid`, `set_trip_owner_vehicle`) were identified as the dominant known source of this noise. The individual dashboard log entries were not independently inspected, so treat this as the leading explanation, not a confirmed 1:1 count.
+
 ### Deploy
 - Web → Netlify (`gx-pulse.netlify.app`). Native → new build required; no OTA (`ota_updates` disabled), so client-side fixes need a fresh Android/iOS build.
 
@@ -82,6 +86,7 @@ Do not continue searching for alternative explanations.
 ## Reference Docs (load only when relevant)
 - **Operating model RBAC (Asset / Aggregate / Hybrid)** → `docs/RBAC_OPERATING_MODEL.md`
 - **RBAC change log (new / modified files)** → `docs/RBAC_OPERATING_MODEL_CHANGELOG.md`
+- **KYC requirement policy (Pulse / Admin / RPC lockstep)** → `docs/KYC_REQUIREMENT_POLICY.md`
 - Architecture & data flow → `docs/architecture.md`
 - Auth & session → `docs/auth.md`
 - Routing → `docs/routing.md`

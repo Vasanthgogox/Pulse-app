@@ -458,15 +458,16 @@ export async function updateWorkspaceKyc(
     state?: string | null;
   },
 ): Promise<{ error: Error | null; kyc: WorkspaceKyc | null }> {
-  // update_workspace_kyc RPC uses COALESCE — it cannot clear gstin. When marking
-  // GST not applicable we must null gstin via a direct organizations update.
+  // update_workspace_kyc RPC uses COALESCE — it cannot clear gstin or cin.
+  // Null those via a direct organizations update (same pattern as GST skip).
   const clearingGstinForSkip =
     fields.gst_not_applicable === true && fields.gstin === null;
+  const clearingCin = fields.cin === null || fields.cin === '';
 
   const coreFields = {
     business_pan: fields.business_pan,
     gstin: clearingGstinForSkip ? undefined : fields.gstin,
-    cin: fields.cin,
+    cin: clearingCin ? undefined : fields.cin,
   };
   const hasCoreUpdate = Object.values(coreFields).some((v) => v !== undefined);
   const hasExtUpdate =
@@ -477,7 +478,8 @@ export async function updateWorkspaceKyc(
     fields.address_line !== undefined ||
     fields.city !== undefined ||
     fields.state !== undefined ||
-    clearingGstinForSkip;
+    clearingGstinForSkip ||
+    clearingCin;
 
   if (hasCoreUpdate) {
     const { data, error } = await supabase().rpc('update_workspace_kyc', {
@@ -505,6 +507,7 @@ export async function updateWorkspaceKyc(
       patch.gst_not_applicable = fields.gst_not_applicable;
     }
     if (clearingGstinForSkip) patch.gstin = null;
+    if (clearingCin) patch.cin = null;
     if (fields.address_line !== undefined) {
       patch.address_line = fields.address_line?.trim() || null;
     }

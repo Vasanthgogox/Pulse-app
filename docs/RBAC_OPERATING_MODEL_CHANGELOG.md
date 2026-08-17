@@ -33,7 +33,14 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | _(pending)_ | Driver + Fleet Owner Phase 3B inspection baseline appended to PRD — Story/Reach reuse; no My Fleet bidding; extend `driver_direct_bids` preferred over new bid tables; capacity Story needs minimal posts authoring extension (no personal org). |
 | _(pending)_ | Driver + Fleet Owner Phase **3B.1 integration correction**: Business Give Load Idle capacity / Find vehicles consumes FO `VEHICLE_AVAILABILITY` via existing feed + OpportunityCard; FO Stories reuses same card language; null-org Stories/detail hardened. No bid / Boost. |
 | _(pending)_ | **NO-GO security:** lock `get_network_feed(uuid,integer,integer)` EXECUTE to authenticated only (`20270210182000`); Reach Option A deleted-source bid = campaign snapshot (`20270210183000`). Employed-driver role-blind OM RLS tracked only: [`SECURITY_TICKET_EMPLOYED_DRIVER_RLS.md`](./SECURITY_TICKET_EMPLOYED_DRIVER_RLS.md). **Do not start 3B.2 until re-audit green.** |
-| _(pending)_ | Plan lock (docs only): Trip Assignment + Counterparty Role + Trip-level Receivable + Driver/Owner Payable — support Fleet Owner→Driver **and** Driver cum Owner; Trip List/Detail payment UX on existing allocation. Canonical: [`DRIVER_TRIP_COMPENSATION_MODEL.md`](./DRIVER_TRIP_COMPENSATION_MODEL.md) Part 5; FO PRD pointer. **No implementation authorized.** |
+| _(pending)_ | Finance party tabs: one add FAB per page (customer / supplier / vehicle / driver matching the active sub-tab), with the new icon+plus chip that expands on desktop hover. Same `sales.*.create` / `fleet.*.create` surfaces. |
+| _(pending)_ | Org KYC document update: owner/admin step wizard (intro → upload → preview of **new file only**). Update stays available while pending/verified; submit queues admin-console review via `request_kyc_document_review`. Tax IDs stay frozen. |
+| _(pending)_ | Organization hub Slice 1: `workspace.kyc` lands on Organization home (summary + nav), not the giant KYC form. Business details, Verification, and Documents are separate screens. Same `workspace.kyc` / owner-admin edit surface. |
+| _(pending)_ | Organization hub Slice 3: 4-step verification + review wizard. Home status card is the next-action source of truth. Continue/Fix never opens the old tax form. Same KYC primitives / freeze / document-update lifecycle. No FO work. |
+| _(pending)_ | Verify wizard tax step: fields follow registration type; optional IDs add/remove; GSTIN+PAN (and CIN for Pvt/Public Ltd) stay mandatory. Admin console marks the same slots required. |
+| _(pending)_ | Workspace **Profile** opens in the flex-card side panel (same chrome as Account / Organization), not the full `/profile` tab. Compact hero/stats alignment for the narrower pane. |
+| _(pending)_ | Verify wizard Slice 3.2 UX: GST Yes/No (no Required+skip contradiction), Add vs Edit, Step 4 cards from `buildKycRequirementProfile`, Home “2 details and 4 documents remaining”. Admin GST check `required` follows the same skip. Hub structure unchanged. |
+| _(pending)_ | Drop leftover 5-arg `submit_business_verification` overload (GST-always-required). **Pushed** to linked remote 2026-08-15 (`20270215221500`). Live: 6-arg exists, 5-arg gone. Policy: [`docs/KYC_REQUIREMENT_POLICY.md`](./KYC_REQUIREMENT_POLICY.md). Wizard UX not reopened. No FO / 3B.2. |
 
 ---
 
@@ -237,6 +244,108 @@ An audit of `MEMBER_SURFACE_CATALOG` (85 surfaces) found 47 enforced via `canSur
 - **Nav gates still fail open while loading** (`surfaceLoading || canSurface(...)` in `app/_layout.tsx` and `app/(tabs)/_layout.tsx`) — a denied nav item flashes briefly before surfaces resolve. Cosmetic; destination screens re-check.
 
 **Verification:** `tsc --noEmit` 28 errors before and after (all pre-existing, none in touched files); `eslint` 0 errors on every edited file; `jest` 759 passed / 6 failed — identical to the clean-tree baseline (same 4 suites). No behavior was tested in a running app.
+
+## Finance party speed-dial (this session)
+
+Create entry points stay **one FAB per Finance party page**, matching the active sub-tab (customer / supplier / vehicle / driver). The chip UI is new (icon + plus, hover-expand on desktop). Permissions are unchanged.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `components/PartySpeedDialFab.tsx` | Page-matching icon+plus chip; expands label on desktop hover. Mobile: labeled chip (single action) or tap-plus dial if multiple. |
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `features/finance/components/FinanceScreen.tsx` | Replaces per-tab `FinanceFAB` with `PartySpeedDialFab` for the **active** party sub-tab only |
+| `components/PartyAddChip.tsx` | `collapsedGlyph="icon"` keeps the party glyph visible and adds a plus badge |
+| `locales/en.json` | `addCustomer`, `addParty`, `closeAddParty` |
+
+## KYC document-update wizard (this session)
+
+Owner/admin can replace a verification document even when the profile is locked (pending or verified). The wizard previews **only the new file**. Submit upserts the document as `pending` and re-queues the org for the admin console. Tax IDs and other KYC fields stay frozen.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `features/organization/components/workspace/kyc/KycDocumentUpdateWizard.tsx` | CRED-style intro → upload → new-file preview + edit |
+| `supabase/migrations/20270215184500_request_kyc_document_review.sql` | `request_kyc_document_review` RPC + freeze exception so address-proof path can sync |
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `features/organization/hooks/useInlineKycVerification.ts` | `pickKycDocumentFile` / `commitKycDocumentUpdate` (upsert pending + request review) |
+| `features/organization/services/organizationKycDocuments.service.ts` | `requestKycDocumentReview` RPC wrapper |
+| `features/organization/components/workspace/kyc/KycRequiredDocumentRow.tsx` | Upload/Update opens wizard; available when `canEdit` even if frozen |
+| `features/organization/components/workspace/WorkspaceOrgKycPanel.tsx` | Wires wizard; first-submit footer still hidden while frozen |
+| `analytics/src/lib/kycDocuments.ts` | DB `pending` maps to admin `Pending` (was treated as Valid) |
+| `analytics/src/context/AdminDataProvider.tsx` | Audit title for `document_update_resubmit` |
+
+## Organization hub Slice 1 (this session)
+
+Organization is the home. Business profile, verification, and documents are separate destinations under the same `workspace.kyc` surface. The old one-page KYC form is no longer the landing screen.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `features/organization/components/workspace/org/OrganizationHomePanel.tsx` | Status-aware summary + Business / Workspace nav |
+| `features/organization/components/workspace/org/OrganizationBusinessDetailsPanel.tsx` | Identity/profile only (name, type, address, website) |
+| `features/organization/components/workspace/org/OrganizationVerificationPanel.tsx` | Verification entry: landing + Continue for draft, status view after submit |
+| `features/organization/components/workspace/org/OrganizationDocumentsPanel.tsx` | Evidence list + existing document-update wizard |
+| `features/organization/components/workspace/org/organizationHub.util.ts` | Masked GSTIN, dates, status copy |
+| `features/organization/components/workspace/org/OrganizationVerifyWizard.tsx` | Slice 3: 4 information steps + review/submit over existing KYC saves |
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `app/workspace.tsx` | `section=details\|verification\|documents` nested under `panel=kyc` |
+| `features/organization/components/workspace/WorkspaceOrgKycPanel.tsx` | Hub router; Slice 3 wizard instead of verification tax form |
+| `components/profile/WorkspaceHubMenu.tsx` | Row label **Organization** |
+| `features/organization/components/workspace/workspacePanelUi.tsx` | Empty optional tax IDs (CIN/Udyam/TAN/IEC) no longer render as blank rows; `forceShowOptional` for wizard add-chips |
+| `lib/memberSurfaces.ts` | Surface copy: Organization / verification |
+
+## Organization hub Slice 3 (this session)
+
+4-step verification + review. Home CTAs are the only next action. Continue never returns to the long tax form.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `features/organization/components/workspace/org/OrganizationVerifyWizard.tsx` | Business type → identity → tax → documents → review & submit |
+| `features/organization/components/workspace/WorkspaceProfilePanel.tsx` | Org profile inside the workspace flex-card |
+| `features/organization/components/workspace/kyc/KycVerificationDocumentCard.tsx` | Wizard Step 4 evidence card (upload / ready-to-submit / preview+change) |
+| `docs/KYC_REQUIREMENT_POLICY.md` | Pulse / Admin / 6-arg RPC must share one type × GST matrix |
+| `supabase/migrations/20270215221500_drop_legacy_submit_business_verification_5arg.sql` | DROP leftover 5-arg submit overload (GST-always-required) |
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `features/organization/components/workspace/org/OrganizationVerifyWizard.tsx` | GST Yes/No; labeled stepper; Step 4 cards from requirement profile; review sections with Edit |
+| `features/organization/components/workspace/org/OrganizationHomePanel.tsx` | Human remaining copy from the same counts |
+| `features/organization/utils/kycVerification.util.ts` | `buildKycRequirementProfile` + `formatKycHubRemainingCopy`; GSTIN required only when GST-registered |
+| `features/organization/components/workspace/workspacePanelUi.tsx` | Empty tax fields use Add, not Edit |
+| `analytics/src/context/AdminDataProvider.tsx` | GST check `required` is false when not registered for GST |
+| `features/organization/components/workspace/org/OrganizationVerificationPanel.tsx` | Draft is a landing page, not the tax form |
+| `features/organization/components/workspace/org/organizationHub.util.ts` | Home copy matches next-action spec |
+| `features/organization/components/workspace/WorkspaceOrgKycPanel.tsx` | Opens verify wizard; submit footer only on review |
+| `features/organization/components/workspace/kyc/KycDocumentUpdateWizard.tsx` | Additive `onboarding` variant (skip intro, Save document) |
+| `features/organization/components/workspace/kyc/KycRequiredDocumentsSection.tsx` | `requiredOnly` for wizard step 4 |
+| `features/organization/components/workspace/workspacePanelUi.tsx` | Optional tax IDs are removable; GSTIN/PAN/CIN-for-companies stay required |
+| `features/organization/utils/kycVerification.util.ts` | Structure-driven tax-field helpers (`isKycTaxFieldRequired`) |
+| `analytics/src/context/AdminDataProvider.tsx` | Required flags on tax checks + document slots (CIN only for limited companies) |
+| `analytics/src/components/workspace/BusinessProfilePanel.tsx` | Required labels on GSTIN/PAN/CIN |
+| `analytics/src/components/workspace/DocumentViewportPanel.tsx` | Required / Optional badges on document tabs |
+| `app/workspace.tsx` | `panel=profile` |
+| `components/profile/WorkspaceHubMenu.tsx` | Profile / My Account stay in the workspace card |
+| `features/organization/screens/ProfileScreen.tsx` | `embedded` compact layout for the side panel |
 
 ## How to update this file
 

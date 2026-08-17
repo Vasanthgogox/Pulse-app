@@ -56,6 +56,7 @@ import {
   Store,
   Truck,
   User,
+  UserRound,
   X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -251,7 +252,7 @@ export function WorkspaceHubMenu({
     if (canSurface("workspace.kyc")) {
       rows.push({
         id: "ws-kyc",
-        label: "Org Identity & KYC",
+        label: "Organization",
         icon: hubLucideIcon(Shield),
         panelId: "kyc",
       });
@@ -506,7 +507,7 @@ export function WorkspaceHubMenu({
           <View style={hubStyles.quickRow}>
             <Pressable
               style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
-              onPress={openOrgProfileHub}
+              onPress={() => onSelectPanel("account")}
               accessibilityRole="button"
               accessibilityLabel="My account"
             >
@@ -520,6 +521,21 @@ export function WorkspaceHubMenu({
                 )}
               </View>
               <Text style={hubStyles.quickLabel}>My Account</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
+              onPress={() => onSelectPanel("profile")}
+              accessibilityRole="button"
+              accessibilityLabel="Open profile"
+            >
+              <View style={hubStyles.quickCircle}>
+                <UserRound
+                  size={HUB_MENU_ICON_SIZE}
+                  color={HUB_MENU_ICON}
+                  strokeWidth={HUB_MENU_ICON_STROKE}
+                />
+              </View>
+              <Text style={hubStyles.quickLabel}>Profile</Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
@@ -584,7 +600,7 @@ export function WorkspaceHubMenu({
           <View style={hubStyles.footerDivider} />
           <View style={hubStyles.footerRow}>
             <Pressable
-              onPress={openOrgProfileHub}
+              onPress={() => onSelectPanel("account")}
               style={({ pressed }) => [hubStyles.footerIdentity, pressed && { opacity: 0.85 }]}
               accessibilityRole="button"
               accessibilityLabel="Open my account"

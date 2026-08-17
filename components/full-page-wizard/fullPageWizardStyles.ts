@@ -1222,6 +1222,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     alignItems: "stretch",
     justifyContent: "flex-start",
   },
+  wizardKeypadRootPopup: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: "auto",
+  },
   wizardKeypadBody: {
     flex: 1,
     minHeight: 0,
@@ -1250,6 +1255,16 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingTop: 0,
     justifyContent: "center",
   },
+  /** Desktop rate/sale popup — stack from the top like driver sign-in. */
+  wizardKeypadBodyPopup: {
+    flexGrow: 0,
+    flexShrink: 0,
+    justifyContent: "flex-start",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
   wizardKeypadPartyWrap: {
     alignSelf: "stretch",
     width: "100%",
@@ -1269,6 +1284,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingBottom: 4,
     flexShrink: 0,
     alignItems: "center",
+  },
+  wizardKeypadAccessoryPopup: {
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    paddingBottom: 8,
   },
   wizardKeypadActionBar: {
     flexShrink: 0,
