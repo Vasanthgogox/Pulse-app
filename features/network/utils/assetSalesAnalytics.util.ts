@@ -288,17 +288,8 @@ function emptyEntityStats(): EntityTripStats {
   };
 }
 
-function dateRangeToWindowMonths(range: SalesDateRange): number {
-  if (range === "3m") return 3;
-  if (range === "6m") return 6;
-  if (range === "12m") return 12;
-  return 12;
-}
-
 function periodDayCount(filters: AssetSalesCrossFilters): number {
-  if (filters.dateRange === "all") return 180;
-  const months = monthsForRange(filters.dateRange);
-  return Math.max(1, months * 30);
+  return Math.max(1, monthsForRange(filters.dateRange) * 30);
 }
 
 function tripToVehicleScoreInput(trip: TripRow): VehicleScoreTripInput {
@@ -979,7 +970,9 @@ export function buildAssetVehicleTableRows(
     vehicleSlice: null,
     vehicles: new Set(),
   }).map(tripToVehicleScoreInput);
-  const windowMonths = dateRangeToWindowMonths(filters.dateRange);
+  // "all" previously meant 12 months here vs. 18 months in monthsForRange() (used by both this
+  // file and connectionSalesAnalytics.util.ts for trend month-keys) — one shared definition now.
+  const windowMonths = monthsForRange(filters.dateRange);
 
   const totalTrips = [...stats.values()].reduce((s, v) => s + v.trips, 0);
   const totalRevenue = [...stats.values()].reduce((s, v) => s + v.revenue, 0);
