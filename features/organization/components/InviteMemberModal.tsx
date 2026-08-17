@@ -450,9 +450,12 @@ export function InviteMemberFlow({
     if (result.kind) {
       setSuccessKind(result.kind);
       setSuccess(true);
+      // Pending invites show a "Share invite" button — give the admin time to
+      // use it before the modal auto-closes and refetches the roster.
+      const delay = result.kind === "pending" ? 8000 : embedded ? 600 : 900;
       setTimeout(() => {
         onInvited();
-      }, embedded ? 600 : 900);
+      }, delay);
     }
   };
 
