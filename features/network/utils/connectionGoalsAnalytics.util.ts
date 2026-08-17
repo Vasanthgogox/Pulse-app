@@ -20,6 +20,8 @@ import {
   EMPTY_ENTITY_TARGET,
   EMPTY_SALES_TARGET,
   getMonthStore,
+  getQuarterlyTarget,
+  getYearlyTarget,
   monthLabelFromKey,
   previousMonthKey,
 } from "@/features/network/services/networkGoalsStorage.service";
@@ -182,7 +184,7 @@ function transactionsInMonthKeys(
   });
 }
 
-function computeTripMetrics(trips: readonly TripRow[]): GoalsActuals {
+export function computeTripMetrics(trips: readonly TripRow[]): GoalsActuals {
   let revenueInr = 0;
   let tripCount = 0;
   let totalCost = 0;
@@ -761,3 +763,228 @@ export function recommendEntityGoalTarget(
 }
 
 export { EMPTY_SALES_TARGET };
+
+// ─── Performance: target-to-date, pacing, previous-period (Phase 1 Commit 4) ──
+//
+// These are pure calendar-math + trip-filtering helpers. None of them read
+// or write NetworkGoalsStore differently than the existing month/quarter/
+// year model already does -- no new persistent target record is introduced.
+//
+// Terminology (locked):
+//   Period Target    -- the full target for the selected period.
+//   Target-to-date    -- Period Target pro-rated by elapsed time in the period.
+//   Achievement %      -- Actual / Period Target.
+//   Pacing %           -- Actual / Target-to-date. NOT the same as Achievement % --
+//                         a partial month's actual must never be compared against
+//                         the whole month's target and called "on track".
+//
+// Deliberately NOT computed here for "pct"-unit metrics (e.g. margin %):
+// target-to-date/pacing pro-ration assumes a cumulative metric (revenue,
+// trips) that accrues over the period. A margin percentage is already a
+// period-level ratio, not a cumulative sum -- "55% of the way to a 31%
+// margin target by day 17" isn't a meaningful statement. Callers should
+// only request target-to-date/pacing for "inr"/"trips" units.
+
+function monthKeyToYM(monthKey: string): { y: number; m0: number } {
+  const [y, m] = monthKey.split("-").map(Number);
+  return { y: y || new Date().getFullYear(), m0: (m || 1) - 1 };
+}
+
+function ymToMonthKey(y: number, m0: number): string {
+  return `${y}-${String(m0 + 1).padStart(2, "0")}`;
+}
+
+/** [start, end) calendar bounds of the selected period, at day granularity. */
+export function periodBounds(
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): { start: Date; end: Date } {
+  const { y, m0 } = monthKeyToYM(selectedMonthKey);
+  if (rollup === "month") {
+    return { start: new Date(y, m0, 1), end: new Date(y, m0 + 1, 1) };
+  }
+  if (rollup === "quarter") {
+    const qStart0 = Math.floor(m0 / 3) * 3;
+    return { start: new Date(y, qStart0, 1), end: new Date(y, qStart0 + 3, 1) };
+  }
+  return { start: new Date(y, 0, 1), end: new Date(y + 1, 0, 1) };
+}
+
+/**
+ * The anchor month-key for "the same relative position, one period back" --
+ * month -> previous month; quarter -> previous quarter, same month-within-
+ * quarter offset; year -> same month, previous year. Uses native Date month
+ * arithmetic so quarter/year boundaries (Jan, Q1) roll back correctly with
+ * no manual cross-year handling.
+ */
+export function previousPeriodAnchorMonthKey(
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): string {
+  const { y, m0 } = monthKeyToYM(selectedMonthKey);
+  const shiftMonths = rollup === "month" ? 1 : rollup === "quarter" ? 3 : 12;
+  const d = new Date(y, m0 - shiftMonths, 1);
+  return ymToMonthKey(d.getFullYear(), d.getMonth());
+}
+
+/** Full (not to-date) target for the selected period, reusing the existing
+ * per-granularity storage as-is -- month.aggregate, or the independently
+ * stored quarterly/yearly target. No new storage, no derived summing. */
+export function resolvePeriodTarget(
+  store: NetworkGoalsStore,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): SalesTargetMetrics {
+  if (rollup === "month") {
+    return getMonthStore(store, selectedMonthKey).aggregate;
+  }
+  if (rollup === "quarter") {
+    return getQuarterlyTarget(store, quarterKeyFromSelectedMonth(selectedMonthKey));
+  }
+  return getYearlyTarget(store, monthKeyToYM(selectedMonthKey).y.toString());
+}
+
+function quarterKeyFromSelectedMonth(selectedMonthKey: string): string {
+  const { y, m0 } = monthKeyToYM(selectedMonthKey);
+  return `${y}-Q${Math.floor(m0 / 3) + 1}`;
+}
+
+/** 0..1, clamped. 0 before the period starts, 1 once it has fully elapsed. */
+export function elapsedFraction(start: Date, end: Date, asOf: Date): number {
+  const total = end.getTime() - start.getTime();
+  if (total <= 0) return 0;
+  const elapsed = asOf.getTime() - start.getTime();
+  return Math.max(0, Math.min(1, elapsed / total));
+}
+
+/** Period target pro-rated by elapsed time. 0 for a future period; equals
+ * the full target once the period has fully elapsed. */
+export function computeTargetToDate(
+  periodTargetValue: number,
+  start: Date,
+  end: Date,
+  asOf: Date,
+): number {
+  if (periodTargetValue <= 0) return 0;
+  return periodTargetValue * elapsedFraction(start, end, asOf);
+}
+
+/** null (not 0, not NaN) when there's no target to compare against --
+ * callers must render "No target set", never a misleading 0%. */
+export function achievementPct(actual: number, periodTargetValue: number): number | null {
+  if (periodTargetValue <= 0) return null;
+  return Math.round((actual / periodTargetValue) * 1000) / 10;
+}
+
+/** null when target-to-date is 0 (period hasn't started, or no target) --
+ * dividing by zero must never surface as 0%, Infinity, or NaN. */
+export function pacingPct(actual: number, targetToDateValue: number): number | null {
+  if (targetToDateValue <= 0) return null;
+  return Math.round((actual / targetToDateValue) * 1000) / 10;
+}
+
+function tripDate(trip: TripRow): Date | null {
+  const raw = trip.pickup_date ?? trip.completed_at ?? trip.created_at;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+/** [start, end) — start inclusive, end exclusive, matching periodBounds. */
+export function tripsInDateRange(
+  trips: readonly TripRow[],
+  start: Date,
+  end: Date,
+): TripRow[] {
+  return trips.filter((trip) => {
+    const d = tripDate(trip);
+    return d != null && d.getTime() >= start.getTime() && d.getTime() < end.getTime();
+  });
+}
+
+/**
+ * Previous-period actual, using the SAME elapsed window as the current
+ * period (e.g. Aug 1-17 vs Jul 1-17), not the full previous period --
+ * comparing a partial current period against a full previous one would
+ * overstate or understate the change. If the previous period is shorter
+ * than the elapsed window (e.g. comparing 31 elapsed days against a
+ * 28/29-day February), the window clamps to the previous period's own end
+ * rather than spilling into the period before it.
+ */
+export function computePreviousPeriodActuals(
+  trips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  asOf: Date,
+): GoalsActuals {
+  const { start: curStart, end: curEnd } = periodBounds(selectedMonthKey, rollup);
+  const elapsedMs = Math.max(
+    0,
+    Math.min(asOf.getTime(), curEnd.getTime()) - curStart.getTime(),
+  );
+  const prevAnchor = previousPeriodAnchorMonthKey(selectedMonthKey, rollup);
+  const { start: prevStart, end: prevEnd } = periodBounds(prevAnchor, rollup);
+  const windowEnd = new Date(
+    Math.min(prevStart.getTime() + elapsedMs, prevEnd.getTime()),
+  );
+  return computeTripMetrics(tripsInDateRange(trips, prevStart, windowEnd));
+}
+
+/** Percent change vs previous period. null when there's no previous actual
+ * to compare against (division by zero) -- render "No previous period
+ * data", never a fabricated +Infinity%/NaN%. */
+export function changePct(actual: number, previousActual: number): number | null {
+  if (previousActual <= 0) return null;
+  return Math.round(((actual - previousActual) / previousActual) * 1000) / 10;
+}
+
+export type PerformanceKpiRow = {
+  label: string;
+  unit: "inr" | "trips" | "pct";
+  actual: number;
+  periodTarget: number;
+  hasTarget: boolean;
+  achievement: number | null;
+  /** null for "pct"-unit metrics (see file-level note) -- pro-ration doesn't
+   * apply to a ratio metric like margin %. */
+  targetToDate: number | null;
+  pacing: number | null;
+  previousActual: number;
+  hasPreviousData: boolean;
+  changeVsPrevious: number | null;
+  variance: number;
+};
+
+/** Bundles Period Target / Target-to-date / Actual / Achievement % /
+ * Pacing % / vs Previous Period / Variance for one metric, so the panel
+ * doesn't repeat this composition three times (revenue/trips/margin). */
+export function buildPerformanceKpiRow(
+  label: string,
+  unit: "inr" | "trips" | "pct",
+  actual: number,
+  periodTargetValue: number,
+  previousActual: number,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  asOf: Date,
+): PerformanceKpiRow {
+  const hasTarget = periodTargetValue > 0;
+  const supportsPacing = unit !== "pct";
+  const { start, end } = periodBounds(selectedMonthKey, rollup);
+  const targetToDate =
+    supportsPacing && hasTarget ? computeTargetToDate(periodTargetValue, start, end, asOf) : null;
+  return {
+    label,
+    unit,
+    actual,
+    periodTarget: periodTargetValue,
+    hasTarget,
+    achievement: hasTarget ? achievementPct(actual, periodTargetValue) : null,
+    targetToDate,
+    pacing: targetToDate != null ? pacingPct(actual, targetToDate) : null,
+    previousActual,
+    hasPreviousData: previousActual > 0,
+    changeVsPrevious: changePct(actual, previousActual),
+    variance: actual - periodTargetValue,
+  };
+}

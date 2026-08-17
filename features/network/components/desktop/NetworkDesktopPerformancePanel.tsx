@@ -5,22 +5,27 @@
  * Phase 1, Commit 1 (route proof): a spinner, nothing else.
  * Phase 1, Commit 2: the PerformanceCrossFilter/perspective state model,
  *   declared but unwired.
- * Phase 1, Commit 3 (this commit): data pipeline + dashboard shell.
- *   Wires the same data hooks and existing analytics util functions Goals
- *   already uses (nothing new computed, nothing new fetched), renders the
- *   locked visual hierarchy (period + perspective + KPI band + trend +
- *   breakdown), but deliberately does NOT yet compute:
- *     - previous-period actual, target-to-date, pacing %, variance
- *     - a target-vs-actual trend overlay (trend shows Actual only)
- *     - KAM / Region / Supplier breakdown groupings (no util function for
- *       these exists yet -- those are new analytical helpers, correctly a
- *       separate, controlled commit)
- *   The cross-filter context bar renders structurally ("Showing: All
- *   business") but nothing is clickable yet -- crossFilter never changes
- *   from empty in this commit. Aggregate and Client perspectives share the
- *   same breakdown table today (both read buildEntityGoalRows("client", ...)
- *   unfiltered) since neither cross-filtering nor per-perspective grouping
- *   exists yet; they will diverge once Commits 5-6 land.
+ * Phase 1, Commit 3: data pipeline + dashboard shell. Wired the data hooks
+ *   and existing analytics util functions Goals already uses, rendered the
+ *   locked visual hierarchy, KAM/Region/Supplier breakdown groupings and
+ *   cross-filter interaction deliberately deferred.
+ * Phase 1, Commit 4 (this commit): the analytical correctness layer --
+ *   Period Target, Target-to-date, Achievement %, Pacing %, vs Previous
+ *   Period, and Variance (features/network/utils/connectionGoalsAnalytics.util.ts,
+ *   unit-tested in __tests__/connectionGoalsAnalytics.util.test.ts covering
+ *   first/mid/last day of period, zero target, zero target-to-date, no/
+ *   partial previous-period data, quarter/year boundaries, and future
+ *   periods -- never Infinity/NaN/a misleading 0%).
+ *
+ *   Still deliberately deferred to later commits:
+ *     - cross-filter interaction -- crossFilter (Commit 2) never leaves its
+ *       empty default; this commit proves the calculations are correct for
+ *       a fixed (unfiltered) dataset, Commit 5 proves they stay correct when
+ *       the dataset changes through a cross-filter
+ *     - KAM / Region / Supplier breakdown groupings (Commit 6)
+ *     - Progress modal, trip evidence table, export (Commits 7-8)
+ *   Aggregate and Client perspectives still share the same unfiltered
+ *   client-focus breakdown table (unchanged from Commit 3).
  */
 import Theme from "@/constants/Theme";
 import {
@@ -29,14 +34,15 @@ import {
   type NetworkGoalsStore,
 } from "@/features/network/services/networkGoalsStorage.service";
 import {
-  buildBalanceTrendPoints,
   buildEntityGoalRows,
-  buildGoalSummaryRows,
+  buildPerformanceKpiRow,
   computeGoalsActualsForRollup,
+  computePreviousPeriodActuals,
   getRecentMonthKeys,
+  resolvePeriodTarget,
   type EntityGoalRow,
-  type GoalTargetRow,
   type GoalsRollup,
+  type PerformanceKpiRow,
 } from "@/features/network/utils/connectionGoalsAnalytics.util";
 import { formatINRChip } from "@/lib/format";
 import { canAccessClients, canAccessDrivers, canAccessSuppliers } from "@/lib/capabilities";
@@ -104,17 +110,10 @@ const PERSPECTIVES: {
   { id: "asset", label: "Asset", requires: "drivers" },
 ];
 
-function formatMetricValue(row: GoalTargetRow): string {
-  if (row.unit === "trips") return String(Math.round(row.actual));
-  if (row.unit === "pct") return `${row.actual.toFixed(1)}%`;
-  return formatINRChip(row.actual);
-}
-
-function formatMetricTarget(row: GoalTargetRow): string {
-  if (row.target <= 0) return "Not set";
-  if (row.unit === "trips") return `${Math.round(row.target)} trips`;
-  if (row.unit === "pct") return `${row.target.toFixed(1)}%`;
-  return formatINRChip(row.target);
+function formatKpiValue(unit: PerformanceKpiRow["unit"], value: number): string {
+  if (unit === "trips") return String(Math.round(value));
+  if (unit === "pct") return `${value.toFixed(1)}%`;
+  return formatINRChip(value);
 }
 
 type Props = {
@@ -171,15 +170,61 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
   const drivers = driversQ.data ?? [];
   const vehicles = vehiclesQ.data ?? [];
 
+  // Stable per mount -- a dashboard shell doesn't need a live-ticking clock;
+  // revisit if a specific need for intra-session freshness surfaces.
+  const asOf = useMemo(() => new Date(), []);
+
   const actuals = useMemo(
     () => computeGoalsActualsForRollup(trips, selectedMonthKey, rollup),
     [trips, selectedMonthKey, rollup],
   );
 
-  const summaryRows = useMemo(
-    () => buildGoalSummaryRows(goalsStore, actuals, selectedMonthKey, rollup),
-    [goalsStore, actuals, selectedMonthKey, rollup],
+  const periodTarget = useMemo(
+    () => resolvePeriodTarget(goalsStore, selectedMonthKey, rollup),
+    [goalsStore, selectedMonthKey, rollup],
   );
+
+  const previousActuals = useMemo(
+    () => computePreviousPeriodActuals(trips, selectedMonthKey, rollup, asOf),
+    [trips, selectedMonthKey, rollup, asOf],
+  );
+
+  const kpiRows: PerformanceKpiRow[] = useMemo(
+    () => [
+      buildPerformanceKpiRow(
+        "Sales revenue",
+        "inr",
+        actuals.revenueInr,
+        periodTarget.revenueInr,
+        previousActuals.revenueInr,
+        selectedMonthKey,
+        rollup,
+        asOf,
+      ),
+      buildPerformanceKpiRow(
+        "Trips",
+        "trips",
+        actuals.tripCount,
+        periodTarget.tripCount,
+        previousActuals.tripCount,
+        selectedMonthKey,
+        rollup,
+        asOf,
+      ),
+      buildPerformanceKpiRow(
+        "Margin",
+        "pct",
+        actuals.marginPct,
+        periodTarget.marginPct,
+        previousActuals.marginPct,
+        selectedMonthKey,
+        rollup,
+        asOf,
+      ),
+    ],
+    [actuals, periodTarget, previousActuals, selectedMonthKey, rollup, asOf],
+  );
+  const revenueRow = kpiRows[0];
 
   // Aggregate and Client currently share the same unfiltered client-focus
   // breakdown -- they diverge once cross-filtering (Commit 5) and per-
@@ -200,11 +245,15 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
     );
   }, [showsClientBreakdown, goalsStore, clients, drivers, vehicles, trips, selectedMonthKey, rollup]);
 
-  const trendPoints = useMemo(
-    () => buildBalanceTrendPoints(trips, monthOptions),
-    [trips, monthOptions],
+  const trendCompareItems = useMemo(
+    () => [
+      { label: "Previous period", value: revenueRow.previousActual },
+      { label: "Target-to-date", value: revenueRow.targetToDate ?? 0 },
+      { label: "Actual", value: revenueRow.actual },
+    ],
+    [revenueRow],
   );
-  const maxTrendValue = Math.max(1, ...trendPoints.map((p) => p.receivable));
+  const maxTrendValue = Math.max(1, ...trendCompareItems.map((p) => p.value));
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -255,30 +304,63 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
       <Text style={styles.showingLine}>Showing: All business</Text>
 
       <View style={styles.kpiRow}>
-        {summaryRows.map((row) => (
-          <View key={row.id} style={styles.kpiCard}>
+        {kpiRows.map((row) => (
+          <View key={row.label} style={styles.kpiCard}>
             <Text style={styles.kpiLabel}>{row.label}</Text>
-            <Text style={styles.kpiActual}>{formatMetricValue(row)}</Text>
-            <Text style={styles.kpiTarget}>Target {formatMetricTarget(row)}</Text>
-            <Text style={styles.kpiAchievement}>
-              {row.target > 0 ? `${row.progressPct}% achieved` : "No target set"}
+            <View style={styles.kpiPrimaryRow}>
+              <View style={styles.kpiPrimaryCell}>
+                <Text style={styles.kpiPrimaryValue}>
+                  {row.hasTarget ? formatKpiValue(row.unit, row.periodTarget) : "Not set"}
+                </Text>
+                <Text style={styles.kpiPrimaryCaption}>Period target</Text>
+              </View>
+              <View style={styles.kpiPrimaryCell}>
+                <Text style={styles.kpiPrimaryValue}>{formatKpiValue(row.unit, row.actual)}</Text>
+                <Text style={styles.kpiPrimaryCaption}>Actual</Text>
+              </View>
+              <View style={styles.kpiPrimaryCell}>
+                <Text style={styles.kpiPrimaryValue}>
+                  {row.achievement != null ? `${row.achievement}%` : "—"}
+                </Text>
+                <Text style={styles.kpiPrimaryCaption}>Achievement</Text>
+              </View>
+            </View>
+            {row.targetToDate != null ? (
+              <View style={styles.kpiSecondaryRow}>
+                <Text style={styles.kpiSecondaryText}>
+                  {formatKpiValue(row.unit, row.targetToDate)} target-to-date
+                </Text>
+                <Text style={styles.kpiSecondaryText}>
+                  {row.pacing != null ? `${row.pacing}% pacing` : "Pacing unavailable"}
+                </Text>
+              </View>
+            ) : null}
+            <Text style={styles.kpiTertiaryText}>
+              {row.hasPreviousData && row.changeVsPrevious != null
+                ? `${row.changeVsPrevious >= 0 ? "↑" : "↓"} ${Math.abs(row.changeVsPrevious)}% vs previous period`
+                : "No previous period data"}
             </Text>
           </View>
         ))}
       </View>
 
       <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Actual trend</Text>
+        <Text style={styles.sectionTitle}>Actual vs Target-to-date vs Previous period</Text>
+        <Text style={styles.trendCaption}>
+          Sales revenue, same period/date basis as the KPI band above. A rolling multi-month
+          overlay is later polish, not built here -- this proves the three values agree today.
+        </Text>
         <View style={styles.trendRow}>
-          {trendPoints.map((p) => (
-            <View key={p.monthKey} style={styles.trendBarWrap}>
+          {trendCompareItems.map((item) => (
+            <View key={item.label} style={styles.trendBarWrap}>
               <View
                 style={[
                   styles.trendBar,
-                  { height: Math.max(4, (p.receivable / maxTrendValue) * 96) },
+                  { height: Math.max(4, (item.value / maxTrendValue) * 96) },
                 ]}
               />
-              <Text style={styles.trendBarLabel}>{p.label}</Text>
+              <Text style={styles.trendBarValue}>{formatINRChip(item.value)}</Text>
+              <Text style={styles.trendBarLabel}>{item.label}</Text>
             </View>
           ))}
         </View>
@@ -362,9 +444,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   kpiLabel: { fontSize: 12, fontWeight: "700", color: Theme.textMuted },
-  kpiActual: { fontSize: 22, fontWeight: "800", color: Theme.textPrimaryDark },
-  kpiTarget: { fontSize: 12, color: Theme.textSecondary },
-  kpiAchievement: { fontSize: 12, fontWeight: "700", color: Theme.primary },
+  kpiPrimaryRow: { flexDirection: "row", gap: 12 },
+  kpiPrimaryCell: { flex: 1 },
+  kpiPrimaryValue: { fontSize: 18, fontWeight: "800", color: Theme.textPrimaryDark },
+  kpiPrimaryCaption: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
+  kpiSecondaryRow: { flexDirection: "row", justifyContent: "space-between" },
+  kpiSecondaryText: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary },
+  kpiTertiaryText: { fontSize: 11, fontWeight: "700", color: Theme.primary },
   sectionCard: {
     backgroundColor: Theme.cardWhite,
     borderRadius: 12,
@@ -374,14 +460,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: { fontSize: 14, fontWeight: "800", color: Theme.textPrimaryDark },
+  trendCaption: { fontSize: 11, color: Theme.textMuted },
   trendRow: {
     flexDirection: "row",
     alignItems: "flex-end",
+    justifyContent: "space-around",
     gap: 10,
     minHeight: 120,
   },
-  trendBarWrap: { alignItems: "center", gap: 6, width: 40 },
-  trendBar: { width: 18, backgroundColor: Theme.primary, borderRadius: 4 },
+  trendBarWrap: { alignItems: "center", gap: 6, width: 96 },
+  trendBar: { width: 32, backgroundColor: Theme.primary, borderRadius: 4 },
+  trendBarValue: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
   trendBarLabel: { fontSize: 10, color: Theme.textMuted },
   breakdownHeadRow: {
     flexDirection: "row",
