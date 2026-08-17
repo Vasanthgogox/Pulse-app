@@ -42,6 +42,8 @@ type Props = {
   clientCount: number;
   supplierCount: number;
   onProfilePress?: () => void;
+  /** Hide Welcome chip and corner close — parent popup owns dismiss. */
+  hideHeaderChrome?: boolean;
 };
 
 function shortOfficeLocation(address: string): string {
@@ -64,6 +66,7 @@ export function NetworkDesktopHubHero({
   clientCount,
   supplierCount,
   onProfilePress,
+  hideHeaderChrome = false,
 }: Props) {
   const { profile } = useAuth();
   const { width } = useWindowDimensions();
@@ -182,6 +185,7 @@ export function NetworkDesktopHubHero({
       <View style={[styles.hero, heroLocal.heroNarrow]}>
         <View style={styles.heroHexOverlay} pointerEvents="none" />
         <View style={heroLocal.narrowInner}>
+          {hideHeaderChrome ? null : (
           <Pressable
             onPress={closePage}
             style={({ pressed }) => [
@@ -195,6 +199,7 @@ export function NetworkDesktopHubHero({
           >
             <X size={16} color={METRONIC.text} strokeWidth={2.4} />
           </Pressable>
+          )}
           {avatarNode}
           <View style={heroLocal.narrowTextCol}>
             <View style={heroLocal.narrowNameRow}>
@@ -236,6 +241,7 @@ export function NetworkDesktopHubHero({
               </Text>
             </View>
           </View>
+          {hideHeaderChrome ? null : (
           <Pressable
             onPress={onProfilePress}
             style={({ pressed }) => [heroLocal.narrowWelcome, pressed && { opacity: 0.8 }]}
@@ -248,6 +254,7 @@ export function NetworkDesktopHubHero({
               )}
             </View>
           </Pressable>
+          )}
         </View>
       </View>
     );
@@ -257,6 +264,7 @@ export function NetworkDesktopHubHero({
     <View style={styles.hero}>
       <View style={styles.heroHexOverlay} pointerEvents="none" />
       <View style={styles.heroInner}>
+        {hideHeaderChrome ? null : (
         <Pressable
           onPress={closePage}
           style={({ pressed }) => [styles.heroBackCorner, pressed && { opacity: 0.85 }]}
@@ -266,6 +274,8 @@ export function NetworkDesktopHubHero({
         >
           <X size={16} color={METRONIC.text} strokeWidth={2.4} />
         </Pressable>
+        )}
+        {hideHeaderChrome ? null : (
         <Pressable
           onPress={onProfilePress}
           style={({ pressed }) => [styles.heroWelcomeCorner, pressed && { opacity: 0.9 }]}
@@ -286,6 +296,7 @@ export function NetworkDesktopHubHero({
             )}
           </View>
         </Pressable>
+        )}
 
         <View style={styles.heroCenter}>
           {avatarNode}

@@ -1,6 +1,6 @@
 /**
- * Desktop Network hub — Metronic profile header, tabbed panels (details / sales /
- * network / chat).
+ * Desktop Network hub — Metronic profile header, tabbed panels (profile / sales /
+ * network / chat). Details tab was removed; `tab=details` aliases to My Profile.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
@@ -20,7 +20,7 @@ import {
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { NetworkDesktopInvitationsPanel } from "@/features/network/components/desktop/NetworkDesktopInvitationsPanel";
 import { NetworkDesktopSalesPanel } from "@/features/network/components/desktop/NetworkDesktopSalesPanel";
-import { NetworkDesktopDetailsPanel } from "@/features/network/components/desktop/NetworkDesktopDetailsPanel";
+import { NetworkDesktopChatOverlay } from "@/features/network/components/desktop/NetworkDesktopChatOverlay";
 import { NetworkDesktopGoalsPanel } from "@/features/network/components/desktop/NetworkDesktopGoalsPanel";
 import { NetworkDesktopPerformancePanel } from "@/features/network/components/desktop/NetworkDesktopPerformancePanel";
 import { NetworkDesktopHubHero } from "@/features/network/components/desktop/NetworkDesktopHubHero";
@@ -43,15 +43,11 @@ import { useCapabilities } from "@/lib/useCapabilities";
 import { canAccessDrivers, canAccessSuppliers } from "@/lib/capabilities";
 import { UserPlus, X } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-
-const NetworkDesktopChatOverlay = lazy(
-  () => import("@/features/network/components/desktop/NetworkDesktopChatOverlay")
-    .then(m => ({ default: m.NetworkDesktopChatOverlay })),
-);
+import { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
 export type NetworkDesktopTab =
+  /** @deprecated Removed — aliases to `profile`. */
   | "details"
   | "team"
   | "profile"
@@ -69,7 +65,6 @@ export type NetworkDesktopTab =
   | "chat";
 
 const TABS: { id: NetworkDesktopTab; label: string }[] = [
-  { id: "details", label: "Details" },
   { id: "team", label: "Team" },
   { id: "profile", label: "My Profile" },
   { id: "sales", label: "Sales" },
@@ -82,6 +77,7 @@ const TABS: { id: NetworkDesktopTab; label: string }[] = [
 function normalizeHubTab(raw: NetworkDesktopTab): NetworkDesktopTab {
   if (raw === "connections" || raw === "grow") return "network";
   if (raw === "asset") return "sales";
+  if (raw === "details") return "profile";
   return raw;
 }
 
@@ -145,6 +141,8 @@ type Props = {
   initialTab?: NetworkDesktopTab;
   /** Extra scroll padding for mobile tab bar / safe area. */
   bottomScrollInset?: number;
+  /** Full-page popup: hide Welcome / close chrome; parent owns dismiss. */
+  hideHeaderChrome?: boolean;
 };
 
 export function NetworkDesktopHub({
@@ -183,6 +181,7 @@ export function NetworkDesktopHub({
   onOpenInviteDetail,
   initialTab,
   bottomScrollInset = 0,
+  hideHeaderChrome = false,
 }: Props) {
   const { user, profile } = useAuth();
   const capabilities = useCapabilities();
@@ -210,7 +209,7 @@ export function NetworkDesktopHub({
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
   const [tab, setTab] = useState<NetworkDesktopTab>(
-    () => parseHubTab(initialTab) ?? "details",
+    () => parseHubTab(initialTab) ?? "profile",
   );
   const [chatOpen, setChatOpen] = useState(() => parseHubTab(initialTab) === "chat");
   const [allConnections, setAllConnections] = useState<ConnectedOrg[]>([]);
@@ -340,22 +339,6 @@ export function NetworkDesktopHub({
           onReject={onInviteReject}
           onCancel={onInviteCancel}
           onOpenInviteDetail={onOpenInviteDetail}
-        />
-      );
-    }
-
-    if (tab === "details") {
-      return (
-        <NetworkDesktopDetailsPanel
-          orgId={orgId}
-          organization={organization}
-          email={email}
-          phone={profile?.phone}
-          totalConnections={totalConnections}
-          clientCount={clientCount}
-          supplierCount={gatedSupplierCount}
-          driverCount={gatedDriverCount}
-          pendingInviteCount={pendingInviteCount}
         />
       );
     }
@@ -495,6 +478,7 @@ export function NetworkDesktopHub({
     >
       {compact ? (
         <View style={mobile.pageChrome}>
+          {hideHeaderChrome ? null : (
           <View style={mobile.chromeTopRow}>
             <Pressable
               style={mobile.chromeInlineAction}
@@ -529,6 +513,7 @@ export function NetworkDesktopHub({
               )}
             </Pressable>
           </View>
+          )}
           <View style={mobile.chromeMetaRow}>
             <ScrollView
               horizontal
@@ -574,6 +559,7 @@ export function NetworkDesktopHub({
           clientCount={clientCount}
           supplierCount={gatedSupplierCount}
           onProfilePress={() => selectTab("profile")}
+          hideHeaderChrome={hideHeaderChrome}
         />
       )}
 
@@ -688,20 +674,18 @@ export function NetworkDesktopHub({
     <>
       {hubScroll}
       {chatOpen && orgId ? (
-        <Suspense fallback={null}>
-          <NetworkDesktopChatOverlay
-            visible
-            orgId={orgId}
-            orgName={orgName}
-            onClose={() => {
-              setChatOpen(false);
-              if (tab === "chat") setTab("network");
-            }}
-            joinRequest={pendingJoinInvite}
-            integratedPartners={integratedChatPartners}
-            initialPartnerOrgId={chatPartnerOrgId}
-          />
-        </Suspense>
+        <NetworkDesktopChatOverlay
+          visible
+          orgId={orgId}
+          orgName={orgName}
+          onClose={() => {
+            setChatOpen(false);
+            if (tab === "chat") setTab("network");
+          }}
+          joinRequest={pendingJoinInvite}
+          integratedPartners={integratedChatPartners}
+          initialPartnerOrgId={chatPartnerOrgId}
+        />
       ) : null}
     </>
   );

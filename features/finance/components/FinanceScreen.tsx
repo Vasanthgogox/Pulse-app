@@ -44,12 +44,14 @@ import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import {
   countVehicleMatchedTripsInPeriod,
   pickDefaultGaragePeriod,
+  formatPeriodRangeLabel,
 } from "@/features/vehicles/pnl";
 import type { CustomersViewTab } from "@/features/clients/components/CustomersTab";
 import type { SuppliersViewTab } from "@/features/suppliers/components/SuppliersTab";
 import {
     canAccessFinance,
     canAccessFinanceSubTab,
+    financeKanbanColumnsForSupplyFilter,
     canAccessLedgerCategory,
     canUseAggregateSupply,
     canUseAssetSupply,
@@ -57,7 +59,7 @@ import {
 import { ledgerCategorySurface } from "@/lib/memberSurfaces";
 import { useCapabilities } from "@/lib/useCapabilities";
 import { useMemberAccess } from "@/lib/useMemberAccess";
-import { tripDayIso } from "@/lib/dateRangePresets";
+import { formatCalendarPeriodRangeLabel, formatFromToDateLabel, minMaxIsoDays, tripDayIso } from "@/lib/dateRangePresets";
 import { formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useDriverProfileImagesQuery } from "@/lib/queries/useDriverProfileImagesQuery";
@@ -86,7 +88,12 @@ import { useFinanceEntities } from "../hooks/useFinanceEntities";
 import { useFinanceLedger } from "../hooks/useFinanceLedger";
 import { useFinanceTransactionSubmit } from "../hooks/useFinanceTransactionSubmit";
 import type { LedgerRow } from "../services/finance.service";
-import { createReportRow } from "../lib/reportRow.util";
+import type { EntityCustomReport } from "../lib/entityDetailReports.util";
+import {
+  buildCustomersRosterReport,
+  buildSuppliersRosterReport,
+  buildDriversRosterReport,
+} from "../lib/partyRosterReport.util";
 import type { FinanceSubTab } from "../types";
 import { TABS } from "../types";
 import type { TripEntryContext } from "./EntityDetailOverlay";
@@ -838,28 +845,56 @@ export function FinanceScreen() {
         return t("ledgerReport");
     }
   }, [financeSubTab, garageViewTab, t]);
-  const reportTransactionsBase = useMemo(() => {
-    const organizationId = currentOrganization?.id ?? null;
-    const fallbackDate = new Date().toISOString();
-    const ledgerRows = ledgerTransactions ?? [];
-    const q = searchQuery.trim().toLowerCase();
-    const updateLatest = (
-      map: Record<string, string>,
-      key: string | null | undefined,
-      value: string | null | undefined,
-    ) => {
-      if (!key || !value) return;
-      if (!map[key] || value > map[key]) map[key] = value;
-    };
-
-    if (financeSubTab === "cash") {
-      return filteredLedgerForDisplay;
+  const reportPeriodLabel = useMemo(() => {
+    if (financeSubTab === "garage") {
+      return formatPeriodRangeLabel(garagePeriod);
     }
+    const selectedRange = formatCalendarPeriodRangeLabel(
+      financePeriodFilter,
+      financeDateOpts,
+    );
+    if (selectedRange) return selectedRange;
+
+    const dayIsos: Array<string | null | undefined> = [];
+    if (financeSubTab === "cash") {
+      for (const row of filteredLedgerForDisplay) {
+        dayIsos.push(row.transaction_date ?? row.created_at);
+      }
+    } else {
+      for (const trip of financeFilteredAllTripsForLedger) {
+        dayIsos.push(tripDayIso(trip));
+      }
+      for (const trip of financeFilteredTripsWhereOrgIsClient) {
+        dayIsos.push(tripDayIso(trip));
+      }
+      for (const row of filteredLedger) {
+        dayIsos.push(row.transaction_date ?? row.created_at);
+      }
+    }
+    const span = minMaxIsoDays(dayIsos);
+    if (!span) return null;
+    return formatFromToDateLabel(span.from, span.to);
+  }, [
+    financeDateOpts,
+    financeFilteredAllTripsForLedger,
+    financeFilteredTripsWhereOrgIsClient,
+    financePeriodFilter,
+    financeSubTab,
+    filteredLedger,
+    filteredLedgerForDisplay,
+    garagePeriod,
+  ]);
+  const partyRosterReport = useMemo((): EntityCustomReport | null => {
+    if (financeSubTab === "cash" || financeSubTab === "garage") {
+      return null;
+    }
+    const ledgerRows = filteredLedger;
+    const q = searchQuery.trim().toLowerCase();
 
     if (financeSubTab === "customers") {
       const { rows } = aggregateCustomers(
         clientRows,
-        allTripsForLedger,
+        financeFilteredAllTripsForLedger,
         ledgerRows,
         tripPartyMap,
         tripFinanceAdjustmentsByTripId,
@@ -878,53 +913,15 @@ export function FinanceScreen() {
       } else if (entityFilter === "no_due") {
         filteredRows = filteredRows.filter((row) => (row.pending ?? 0) === 0);
       }
-
-      const clientIdByNameKey: Record<string, string> = {};
-      clientRows.forEach((client) => {
-        const key = (client.name || client.contact_person || "")
-          .trim()
-          .toLowerCase();
-        if (key) clientIdByNameKey[key] = client.id;
-      });
-      const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(clientRows);
-      const latestTripDateByClientId: Record<string, string> = {};
-      allTripsForLedger.forEach((trip) => {
-        const nameKey = (trip.client_name || "").trim().toLowerCase();
-        let clientId =
-          trip.client_id ?? (nameKey ? clientIdByNameKey[nameKey] : undefined);
-        if (!clientId && trip.organization_id && isLoadBasedTrip(trip)) {
-          clientId =
-            linkedClientIdByOrgId.get(trip.organization_id) ?? undefined;
-        }
-        updateLatest(
-          latestTripDateByClientId,
-          clientId,
-          trip.pickup_date ?? trip.created_at ?? fallbackDate,
-        );
-      });
-
-      return filteredRows.map((row) =>
-        createReportRow({
-          id: `customer-report-${row.id}`,
-          organizationId,
-          partyName: row.name || "Customer",
-          description: `${row.subline || "Customer"} • Trips ${row.trips ?? 0}`,
-          amountIn: Number(row.received ?? 0),
-          amountOut: Number(row.pending ?? 0),
-          transactionDate: latestTripDateByClientId[row.id] ?? fallbackDate,
-          tripNumber: `${row.trips ?? 0} trips`,
-          contactId: row.id,
-          contactType: "client",
-        }),
-      );
+      return buildCustomersRosterReport(filteredRows);
     }
 
     if (financeSubTab === "suppliers") {
       const { rows } = aggregateSuppliers(
         supplierRows,
-        allTripsForLedger,
+        financeFilteredAllTripsForLedger,
         ledgerRows,
-        tripsWhereOrgIsClient,
+        financeFilteredTripsWhereOrgIsClient,
         tripPartyMap,
         tripFinanceAdjustmentsByTripId,
       );
@@ -941,55 +938,7 @@ export function FinanceScreen() {
       } else if (entityFilter === "no_due") {
         filteredRows = filteredRows.filter((row) => (row.due ?? 0) === 0);
       }
-
-      const supplierIdByNameKey: Record<string, string> = {};
-      supplierRows.forEach((supplier) => {
-        const key = (
-          supplier.name ||
-          supplier.company_name ||
-          supplier.contact_person ||
-          ""
-        )
-          .trim()
-          .toLowerCase();
-        if (key) supplierIdByNameKey[key] = supplier.id;
-      });
-      const supplierIdByLinkedOrgId = buildUniqueLinkedOrgIdMap(supplierRows);
-      const latestTripDateBySupplierId: Record<string, string> = {};
-      tripRows.forEach((trip) => {
-        const nameKey = (trip.supplier_name || "").trim().toLowerCase();
-        const supplierId =
-          trip.supplier_id ??
-          (nameKey ? supplierIdByNameKey[nameKey] : undefined);
-        updateLatest(
-          latestTripDateBySupplierId,
-          supplierId,
-          trip.pickup_date ?? trip.created_at ?? fallbackDate,
-        );
-      });
-      tripsWhereOrgIsClient.forEach((trip) => {
-        if (!isLoadBasedTrip(trip) || !trip.organization_id) return;
-        updateLatest(
-          latestTripDateBySupplierId,
-          supplierIdByLinkedOrgId.get(trip.organization_id),
-          trip.pickup_date ?? trip.created_at ?? fallbackDate,
-        );
-      });
-
-      return filteredRows.map((row) =>
-        createReportRow({
-          id: `supplier-report-${row.id}`,
-          organizationId,
-          partyName: row.name || "Supplier",
-          description: `${row.subline || "Supplier"} • Trips ${row.trips ?? 0}`,
-          amountIn: Number(row.paid ?? 0),
-          amountOut: Number(row.due ?? 0),
-          transactionDate: latestTripDateBySupplierId[row.id] ?? fallbackDate,
-          tripNumber: `${row.trips ?? 0} trips`,
-          contactId: row.id,
-          contactType: "supplier",
-        }),
-      );
+      return buildSuppliersRosterReport(filteredRows);
     }
 
     if (financeSubTab === "drivers") {
@@ -1004,7 +953,7 @@ export function FinanceScreen() {
       });
       const { rows } = aggregateDrivers(
         driverRows,
-        tripRows,
+        financeFilteredAllTripsForLedger,
         ledgerRows,
         offersForAggregation,
         tripPartyMap,
@@ -1043,68 +992,41 @@ export function FinanceScreen() {
       } else if (entityFilter === "no_due") {
         filteredRows = filteredRows.filter((row) => (row.pending ?? 0) === 0);
       }
-
-      const latestTripDateByDriverId: Record<string, string> = {};
-      tripRows.forEach((trip) => {
-        updateLatest(
-          latestTripDateByDriverId,
-          trip.driver_id,
-          trip.pickup_date ?? trip.created_at ?? fallbackDate,
-        );
-      });
-
-      return filteredRows.map((row) =>
-        createReportRow({
-          id: `driver-report-${row.id}`,
-          organizationId,
-          partyName: row.name || "Driver",
-          description: `${row.subline || "Driver"} • Trips ${row.trips ?? 0}`,
-          amountIn: Number(row.paid ?? 0),
-          amountOut: Number(row.pending ?? 0),
-          transactionDate: latestTripDateByDriverId[row.id] ?? fallbackDate,
-          tripNumber: `${row.trips ?? 0} trips`,
-          contactId: row.id,
-          contactType: "driver",
-        }),
-      );
+      return buildDriversRosterReport(filteredRows);
     }
 
-    return [];
+    return null;
   }, [
-    allTripsForLedger,
     clientRows,
-    currentOrganization?.id,
     driverOffers,
     driverRows,
     entityFilter,
-    filteredLedgerForDisplay,
+    financeFilteredAllTripsForLedger,
+    financeFilteredTripsWhereOrgIsClient,
     financeSubTab,
-    ledgerTransactions,
+    filteredLedger,
     searchQuery,
     supplierRows,
     tripPartyMap,
-    tripRows,
-    tripsWhereOrgIsClient,
-    tripsWhereOrgIsSupplier,
     tripFinanceAdjustmentsByTripId,
+    vehicleRows,
   ]);
 
-  const [garageReportTransactions, setGarageReportTransactions] = useState<
-    LedgerRow[]
-  >([]);
+  const [garageRosterReport, setGarageRosterReport] =
+    useState<EntityCustomReport | null>(null);
 
   useEffect(() => {
     if (financeSubTab !== "garage" || !showReportModal) {
-      setGarageReportTransactions((prev) => (prev.length === 0 ? prev : []));
+      setGarageRosterReport((prev) => (prev == null ? prev : null));
       return;
     }
     const organizationId = currentOrganization?.id ?? null;
     let cancelled = false;
     void import("../lib/garageReportTransactions.util").then(
-      ({ buildGarageReportTransactions }) => {
+      ({ buildGarageRosterReport }) => {
         if (cancelled) return;
-        setGarageReportTransactions(
-          buildGarageReportTransactions({
+        setGarageRosterReport(
+          buildGarageRosterReport({
             organizationId,
             tripRows,
             vehicleRows,
@@ -1136,9 +1058,12 @@ export function FinanceScreen() {
   ]);
 
   const reportTransactions = useMemo((): LedgerRow[] => {
-    if (financeSubTab === "garage") return garageReportTransactions;
-    return reportTransactionsBase ?? [];
-  }, [financeSubTab, garageReportTransactions, reportTransactionsBase]);
+    if (financeSubTab === "cash") return filteredLedgerForDisplay;
+    return [];
+  }, [financeSubTab, filteredLedgerForDisplay]);
+
+  const reportCustom =
+    financeSubTab === "garage" ? garageRosterReport : partyRosterReport;
 
   const bannerTotals = financeSubTab === "cash" ? ledgerTotalsData : tabTotals;
 
@@ -1695,11 +1620,10 @@ export function FinanceScreen() {
               embedInParentScroll={useMobileUnifiedScroll}
               financeSubTab={financeSubTab}
               visibleTabs={visibleFinanceTabs}
-              kanbanVisibleColumns={
-                (
-                  ["customers", "suppliers", "garage", "drivers"] as const
-                ).filter((col) => canAccessFinanceSubTab(capabilities, col))
-              }
+              kanbanVisibleColumns={financeKanbanColumnsForSupplyFilter(
+                capabilities,
+                sourceSupplyFilter,
+              )}
               organizationId={orgId}
               ledgerLoading={ledgerLoading}
               ledgerTransactions={ledgerTransactions}
@@ -2068,6 +1992,9 @@ export function FinanceScreen() {
         onCloseReportModal={() => setShowReportModal(false)}
         reportTransactions={reportTransactions}
         reportTitle={reportTitle}
+        reportPeriodLabel={reportPeriodLabel}
+        reportCustom={reportCustom ?? undefined}
+        hideReportCashSummary={financeSubTab !== "cash"}
         showSharedLedgerModal={showSharedLedgerModal}
         onCloseSharedLedgerModal={() => setShowSharedLedgerModal(false)}
         orgId={orgId}

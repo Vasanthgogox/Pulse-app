@@ -15,6 +15,7 @@ export function formatSettlementPct(paid: number, total: number): string {
 export function buildClientReceivableReport(
   rows: Array<{
     trip: string;
+    tripDate?: string;
     route: string;
     sales: string;
     received: string;
@@ -40,6 +41,7 @@ export function buildClientReceivableReport(
 export function buildClientPnLReport(
   rows: Array<{
     trip: string;
+    tripDate?: string;
     route: string;
     model: string;
     supplier: string;
@@ -75,6 +77,7 @@ export function buildClientPnLReport(
 export function buildSupplierPayableReport(
   rows: Array<{
     trip: string;
+    tripDate?: string;
     route: string;
     client: string;
     cost: string;
@@ -104,6 +107,7 @@ export function buildSupplierPayableReport(
 export function buildDriverPayableReport(
   rows: Array<{
     trip: string;
+    tripDate?: string;
     route: string;
     client: string;
     contract: string;

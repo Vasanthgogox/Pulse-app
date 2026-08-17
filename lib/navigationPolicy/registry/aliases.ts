@@ -9,7 +9,7 @@ export type AliasRecord = {
 };
 
 export const ALIAS_RECORDS: readonly AliasRecord[] = [
-  { id: 'alias.account', pattern: '/account', targetPattern: '/network/hub', priority: 95 },
+  { id: 'alias.account', pattern: '/account', targetPattern: '/workspace', priority: 95 },
   {
     id: 'alias.branding-settings',
     pattern: '/branding-settings',
@@ -20,6 +20,12 @@ export const ALIAS_RECORDS: readonly AliasRecord[] = [
     id: 'alias.business-verify',
     pattern: '/business-verify',
     targetPattern: '/workspace',
+    priority: 95,
+  },
+  {
+    id: 'alias.business-pulse',
+    pattern: '/business-pulse',
+    targetPattern: '/network/hub',
     priority: 95,
   },
 ];

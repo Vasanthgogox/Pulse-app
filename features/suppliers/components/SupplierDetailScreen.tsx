@@ -1084,6 +1084,9 @@ export default function SupplierDetailScreen({
       };
       return {
         trip: row.missionId,
+        tripDate: formatTripTableDate(
+          row.trip.pickup_date ?? row.trip.created_at,
+        ),
         route: row.route,
         client: resolveClientDisplayName(row.trip),
         cost: formatReportInr(row.sales),

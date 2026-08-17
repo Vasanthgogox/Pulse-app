@@ -14,6 +14,7 @@ import {
   splitLocationParts,
 } from "@/features/network/utils/storyDisplay";
 import { shouldHideLoadStoryFromAuthor } from "@/features/network/utils/storyLoadVisibility.util";
+import { isIndentStoryLive } from "@/features/network/utils/indentStoryWindow.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { formatINR } from "@/lib/format";
 import { useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
@@ -76,6 +77,13 @@ function filterOpportunityPosts(
   const matched = posts.filter((p) => {
     if (!p.is_active) return false;
     if ((p.type ?? "").toUpperCase() !== wantType) return false;
+    if (
+      wantType === "LOAD" &&
+      !p.is_sponsored &&
+      !isIndentStoryLive(p)
+    ) {
+      return false;
+    }
 
     // Fleet Owner organic capacity (null org) — include in Give Load / Find vehicles.
     // Same posts model; not connection-gated; docs/private fleet fields never in payload.

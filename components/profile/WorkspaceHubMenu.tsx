@@ -1,8 +1,8 @@
 /**
  * Workspace hub — left pane of the master/detail workspace shell.
  *
- * Metronic reference density: purple header, quick actions, Pulse banner,
- * Preferences (Language / Region), Party directory links, footer.
+ * IA: My Account (ME) · Organization · Workspace settings · Operations · Products.
+ * Language / Region live on My Account. Verification opens the existing KYC flow.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
@@ -21,19 +21,14 @@ import {
   getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { WorkspaceLanguagePanel } from "@/features/organization/components/workspace/WorkspaceLanguagePanel";
 import { WorkspaceRegionPanel } from "@/features/organization/components/workspace/WorkspaceRegionPanel";
 import type {
+  OrgHubSection,
   WorkspaceHubInlinePanelId,
   WorkspacePanelId,
 } from "@/features/organization/components/workspace/workspacePanelTypes";
-import { LOCALE_OPTIONS } from "@/lib/i18n";
-import {
-  WORKSPACE_REGION_LABELS,
-  getWorkspaceRegion,
-} from "@/lib/workspaceRegion";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { ROUTES } from "@/lib/routes";
 import { canAccessPartyKind } from "@/lib/capabilities";
@@ -45,18 +40,17 @@ import {
   Building2,
   Car,
   ChevronRight,
-  FolderOpen,
-  Globe,
   HelpCircle,
   LogOut,
-  MapPin,
   Settings,
   Shield,
+  ShieldCheck,
   Sparkles,
   Store,
+  ScanLine,
   Truck,
   User,
-  UserRound,
+  Users,
   X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -95,14 +89,17 @@ type HubRow = {
   label: string;
   icon: React.ReactNode;
   panelId?: WorkspacePanelId;
+  orgSection?: OrgHubSection;
   route?: string;
   valuePill?: string;
+  accessibilityLabel?: string;
   onPress?: () => void;
 };
 
 type Props = {
   activePanel: WorkspacePanelId | null;
   onSelectPanel: (panel: WorkspacePanelId) => void;
+  onSelectOrgSection?: (section: OrgHubSection | null) => void;
   onExit?: () => void;
   inlinePanel?: WorkspaceHubInlinePanelId | null;
   onCloseInlinePanel?: () => void;
@@ -111,6 +108,7 @@ type Props = {
 export function WorkspaceHubMenu({
   activePanel,
   onSelectPanel,
+  onSelectOrgSection,
   onExit,
   inlinePanel = null,
   onCloseInlinePanel,
@@ -120,11 +118,7 @@ export function WorkspaceHubMenu({
   const { user, profile, signOut } = useAuth();
   const capabilities = useCapabilities();
   const { can: canSurface } = useMemberAccess();
-  const { locale } = useLanguage();
   const { currentOrganization } = useOrganization();
-  const [workspaceRegion, setWorkspaceRegion] = useState<
-    keyof typeof WORKSPACE_REGION_LABELS
-  >("india");
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
@@ -186,43 +180,9 @@ export function WorkspaceHubMenu({
     };
   }, [currentOrganization?.logo_url]);
 
-  useEffect(() => {
-    let mounted = true;
-    void getWorkspaceRegion().then((region) => {
-      if (mounted) setWorkspaceRegion(region);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [activePanel]);
-
-  const openOrgProfileHub = () => {
-    onExit?.();
-    router.replace(
-      ROUTES.networkOrgHub("details") as Parameters<typeof router.replace>[0],
-    );
+  const openOrganization = () => {
+    onSelectPanel("profile");
   };
-
-  const languageLabel =
-    LOCALE_OPTIONS.find((o) => o.value === locale)?.label ?? "English";
-  const regionLabel = WORKSPACE_REGION_LABELS[workspaceRegion];
-
-  const preferenceRows: HubRow[] = [
-    {
-      id: "language",
-      label: "Language",
-      icon: hubLucideIcon(Globe),
-      panelId: "language",
-      valuePill: languageLabel,
-    },
-    {
-      id: "region",
-      label: "Region",
-      icon: hubLucideIcon(MapPin),
-      panelId: "region",
-      valuePill: regionLabel,
-    },
-  ];
 
   const commerceUrl = useMemo(() => buildPulseCommerceUrl(), []);
 
@@ -242,38 +202,76 @@ export function WorkspaceHubMenu({
   }, [commerceUrl]);
 
   /**
-   * This drawer renders above every MemberDomainGate, so each workspace row
+   * This drawer renders above every MemberDomainGate, so each row
    * needs its own surface check — otherwise a member with no access still
-   * reaches org KYC (GSTIN, identity documents), workspace settings and the
-   * Commerce app. Party rows below are already filtered via useCapabilities.
+   * reaches org KYC, workspace settings and the Commerce app.
+   * Operations rows below are already filtered via useCapabilities.
    */
-  const workspaceRows: HubRow[] = useMemo(() => {
+  const organizationRows: HubRow[] = useMemo(() => {
     const rows: HubRow[] = [];
     if (canSurface("workspace.kyc")) {
       rows.push({
-        id: "ws-kyc",
-        label: "Organization",
+        id: "org-verification",
+        label: "Verification",
+        icon: hubLucideIcon(ShieldCheck),
+        panelId: "kyc",
+        orgSection: "verification",
+      });
+      rows.push({
+        id: "org-identity",
+        label: "Business identity",
         icon: hubLucideIcon(Shield),
         panelId: "kyc",
+        orgSection: "details",
       });
     }
-    if (canSurface("workspace.settings")) {
+    if (canSurface("team.manage")) {
       rows.push({
+        id: "org-team",
+        label: "Team & access",
+        icon: hubLucideIcon(Users),
+        panelId: "team",
+      });
+    }
+    return rows;
+  }, [canSurface]);
+
+  const workspaceRows: HubRow[] = useMemo(() => {
+    if (!canSurface("workspace.settings")) return [];
+    return [
+      {
         id: "ws-settings",
-        label: "Settings",
+        label: "Workspace settings",
         icon: hubLucideIcon(Settings),
         panelId: "settings",
-      });
-    }
-    if (canSurface("workspace.products")) {
-      rows.push({
+      },
+    ];
+  }, [canSurface]);
+
+  const productRows: HubRow[] = useMemo(() => {
+    if (!canSurface("workspace.products")) return [];
+    return [
+      {
+        id: "ws-scan",
+        label: "Pulse Scan",
+        icon: hubLucideIcon(ScanLine),
+        panelId: "ocr-usage",
+        accessibilityLabel:
+          "Pulse Scan. Scan documents and track your organization's scan usage.",
+      },
+      {
+        id: "ws-products",
+        label: "Open Pulse products",
+        icon: hubLucideIcon(Sparkles),
+        panelId: "products",
+      },
+      {
         id: "ws-commerce",
         label: "Commerce",
         icon: hubLucideIcon(Store),
         onPress: openCommerce,
-      });
-    }
-    return rows;
+      },
+    ];
   }, [openCommerce, canSurface]);
 
   const partyRows: HubRow[] = useMemo(() => {
@@ -285,7 +283,7 @@ export function WorkspaceHubMenu({
         kind: "customers",
         row: {
           id: "party-customers",
-          label: "Customer",
+          label: "Customers",
           icon: hubLucideIcon(Building2),
           route: ROUTES.partyDirectory("customers"),
         },
@@ -294,7 +292,7 @@ export function WorkspaceHubMenu({
         kind: "suppliers",
         row: {
           id: "party-suppliers",
-          label: "Supplier",
+          label: "Suppliers",
           icon: hubLucideIcon(Truck),
           route: ROUTES.partyDirectory("suppliers"),
         },
@@ -303,7 +301,7 @@ export function WorkspaceHubMenu({
         kind: "drivers",
         row: {
           id: "party-drivers",
-          label: "Driver",
+          label: "Drivers",
           icon: hubLucideIcon(User),
           route: ROUTES.partyDirectory("drivers"),
         },
@@ -312,7 +310,7 @@ export function WorkspaceHubMenu({
         kind: "vehicles",
         row: {
           id: "party-vehicles",
-          label: "Vehicle",
+          label: "Vehicles",
           icon: hubLucideIcon(Car),
           route: ROUTES.partyDirectory("vehicles"),
         },
@@ -350,6 +348,10 @@ export function WorkspaceHubMenu({
                 row.onPress();
                 return;
               }
+              if (row.orgSection && onSelectOrgSection) {
+                onSelectOrgSection(row.orgSection);
+                return;
+              }
               if (row.panelId) {
                 onSelectPanel(row.panelId);
                 return;
@@ -366,6 +368,7 @@ export function WorkspaceHubMenu({
               pressed && !selected && hubStyles.menuRowPressed,
             ]}
             accessibilityRole="button"
+            accessibilityLabel={row.accessibilityLabel ?? row.label}
             accessibilityState={{ selected }}
           >
             <View style={hubStyles.menuRowIconWell}>{row.icon}</View>
@@ -457,13 +460,13 @@ export function WorkspaceHubMenu({
           <View style={hubStyles.headerBottomFade} pointerEvents="none" />
           <View style={hubStyles.headerBandRow}>
             <Pressable
-              onPress={openOrgProfileHub}
+              onPress={openOrganization}
               style={({ pressed }) => [
                 hubStyles.headerLogoWrap,
                 pressed && { opacity: 0.88 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="View public workspace profile"
+              accessibilityLabel="View organization"
             >
               {orgLogoUri ? (
                 <Image source={{ uri: orgLogoUri }} style={hubStyles.headerLogoImage} />
@@ -522,39 +525,25 @@ export function WorkspaceHubMenu({
               </View>
               <Text style={hubStyles.quickLabel}>My Account</Text>
             </Pressable>
-            <Pressable
-              style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
-              onPress={() => onSelectPanel("profile")}
-              accessibilityRole="button"
-              accessibilityLabel="Open profile"
-            >
-              <View style={hubStyles.quickCircle}>
-                <UserRound
-                  size={HUB_MENU_ICON_SIZE}
-                  color={HUB_MENU_ICON}
-                  strokeWidth={HUB_MENU_ICON_STROKE}
-                />
-              </View>
-              <Text style={hubStyles.quickLabel}>Profile</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
-              onPress={() => {
-                onExit?.();
-                navigate(ROUTES.DOCUMENTS_CENTER);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Open documents center"
-            >
-              <View style={hubStyles.quickCircle}>
-                <FolderOpen
-                  size={HUB_MENU_ICON_SIZE}
-                  color={HUB_MENU_ICON}
-                  strokeWidth={HUB_MENU_ICON_STROKE}
-                />
-              </View>
-              <Text style={hubStyles.quickLabel}>Documents</Text>
-            </Pressable>
+            {canSurface("workspace.settings") || canSurface("workspace.kyc") ? (
+              <Pressable
+                style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
+                onPress={openOrganization}
+                accessibilityRole="button"
+                accessibilityLabel="Open organization"
+              >
+                <View style={hubStyles.quickCircle}>
+                  {orgLogoUri ? (
+                    <Image source={{ uri: orgLogoUri }} style={hubStyles.quickAvatar} />
+                  ) : (
+                    <Text style={hubStyles.quickAvatarInitials}>
+                      {orgInitials(orgName || "PULSE")}
+                    </Text>
+                  )}
+                </View>
+                <Text style={hubStyles.quickLabel}>Organization</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
               onPress={() => {
@@ -591,9 +580,10 @@ export function WorkspaceHubMenu({
             </View>
           </View>
 
-          {renderHubSection("Workspace", workspaceRows, "#0f766e")}
-          {renderHubSection("Preferences", preferenceRows, "#2563eb")}
-          {renderPartyGridSection("Party", partyRows, Theme.driverEmerald)}
+          {renderHubSection("Organization", organizationRows, "#0f766e")}
+          {renderHubSection("Workspace", workspaceRows, HUB_PURPLE)}
+          {renderHubSection("Products", productRows, "#7c3aed")}
+          {renderPartyGridSection("Operations", partyRows, Theme.driverEmerald)}
         </ScrollView>
 
         <View style={[hubStyles.footerWrap, { paddingBottom: insets.bottom + 10 }]}>
@@ -650,7 +640,6 @@ export function WorkspaceHubMenu({
           <WorkspaceRegionPanel
             variant="inline"
             onBack={onCloseInlinePanel}
-            onRegionChange={(region) => setWorkspaceRegion(region)}
           />
         ) : null}
       </View>

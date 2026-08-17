@@ -303,13 +303,19 @@ function KanbanColumn({
             ({ scrollbarWidth: "thin" } as ViewStyle),
         ]}
         showsVerticalScrollIndicator={isHovered}
-        contentContainerStyle={{ paddingRight: 0 }}
+        contentContainerStyle={[
+          { paddingRight: 0 },
+          transactions.length === 0 && showPartyPromosInColumns
+            ? { flexGrow: 1 }
+            : null,
+        ]}
       >
         {transactions.length === 0 ? (
           showPartyPromosInColumns ? (
             <FinancePromoCard
               variant={FINANCE_KANBAN_COLUMN_PROMO_VARIANT[type]}
               layout="column"
+              style={styles.emptyPromoFill}
               onCtaPress={
                 onKanbanPartyAddPress
                   ? () => onKanbanPartyAddPress(type)
@@ -801,6 +807,10 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     color: Theme.primary,
     letterSpacing: 1,
+  },
+  emptyPromoFill: {
+    flex: 1,
+    minHeight: 0,
   },
   emptyColumn: {
     paddingVertical: 28,

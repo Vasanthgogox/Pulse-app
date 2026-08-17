@@ -58,6 +58,7 @@ import {
     formatINR,
     formatLedgerAmount,
     formatLedgerDate,
+    formatTripTableDate,
 } from "@/lib/format";
 import type { SalaryRequestRow } from "@/features/drivers/services/salaryRequests.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -918,6 +919,7 @@ export default function DriverDetailScreen({
   const driverPayableReport = useMemo(() => {
     const rows = filteredLedgerRows.map((r) => ({
       trip: r.missionId ?? "—",
+      tripDate: r.tripDateIso ? formatTripTableDate(r.tripDateIso) : undefined,
       route: r.dest?.trim() || "—",
       client: (r.clientName ?? "—").toUpperCase(),
       contract: formatReportInr(Number(r.col1 ?? 0)),

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
 import { shouldHideLoadStoryFromAuthor } from "@/features/network/utils/storyLoadVisibility.util";
+import { isIndentStoryLive } from "@/features/network/utils/indentStoryWindow.util";
 import {
   isDriverSwapPreviewMessage,
   resolveDriverSwapAvatars,
@@ -1654,6 +1655,13 @@ export function ChatScreen() {
     return networkFeedPosts.filter((post) => {
       if (post.type !== "LOAD" && post.type !== "VEHICLE_AVAILABILITY") return false;
       if (!integratedOrgIds.has(post.organization_id)) return false;
+      if (
+        post.type === "LOAD" &&
+        !post.is_sponsored &&
+        !isIndentStoryLive(post)
+      ) {
+        return false;
+      }
       if (
         post.type === "LOAD" &&
         shouldHideLoadStoryFromAuthor({

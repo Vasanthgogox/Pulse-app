@@ -169,6 +169,15 @@ export const PULSE_INTELLIGENCE_REPORT_CSS = `
   td.align-right, th.align-right { text-align: right; }
   td.align-center, th.align-center { text-align: center; }
 
+  .cellSub {
+    margin-top: 2px;
+    font-size: 8px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.15px;
+    line-height: 1.2;
+  }
+
   tr:nth-child(even) td { background: #f8fafc; }
 
   .footer {
@@ -227,6 +236,14 @@ function renderTable(section: PulseReportTableSection): string {
           const align = col.align ?? "left";
           const alignClass = align === "right" ? "align-right" : align === "center" ? "align-center" : "";
           const raw = row[col.key] ?? "—";
+          if (col.key === "trip") {
+            const date = String(row.tripDate ?? "").trim();
+            const dateHtml =
+              date && date !== "—"
+                ? `<div class="cellSub">${escapeHtml(date)}</div>`
+                : "";
+            return `<td class="${columnClass(col.key)} ${alignClass}">${escapeHtml(String(raw))}${dateHtml}</td>`;
+          }
           return `<td class="${columnClass(col.key)} ${alignClass}">${escapeHtml(String(raw))}</td>`;
         })
         .join("");
@@ -309,7 +326,6 @@ export function buildPulseIntelligenceReportHtml(
     </style>
   </head>
   <body>
-    ${pulseWatermarkHtmlFragment()}
     <div class="pulse-report-body">
       <div class="${pageClass}">
         <div class="topHeader">
@@ -332,6 +348,7 @@ export function buildPulseIntelligenceReportHtml(
         </div>
       </div>
     </div>
+    ${pulseWatermarkHtmlFragment()}
   </body>
 </html>`;
 }

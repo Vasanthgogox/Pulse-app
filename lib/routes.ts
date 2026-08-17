@@ -113,31 +113,50 @@ export const ROUTES = {
   BRANDING_SETTINGS: '/branding-settings' as const,
   /** Canonical org hub: logo, name, KYC, team, invoice branding. */
   WORKSPACE:         '/workspace'         as const,
+  /** Personal account inside the workspace flex-card. */
+  WORKSPACE_ACCOUNT: '/workspace?panel=account' as const,
+  /** Organization overview (logo, trust, admin sections). */
+  WORKSPACE_ORGANIZATION: '/workspace?panel=profile' as const,
+  /** Organization verification / business identity hub. */
+  WORKSPACE_KYC:     '/workspace?panel=kyc' as const,
+  WORKSPACE_KYC_VERIFICATION: '/workspace?panel=kyc&section=verification' as const,
+  /** Workspace operational settings (logo, name, operating model, invoice branding). */
+  WORKSPACE_SETTINGS: '/workspace?panel=settings' as const,
+  /** Pulse Scan usage (org OCR quota and quality). */
+  WORKSPACE_OCR_USAGE: '/workspace?panel=ocr-usage' as const,
+  /** Members & access inside the workspace flex-card (not `MODALS.TEAM`). */
+  WORKSPACE_TEAM:    '/workspace?panel=team' as const,
   /** Step-through business verification wizard (Sprint 1). */
   BUSINESS_VERIFY:   '/business-verify'   as const,
-  /** Own-org network profile hub (Details / Team / My Profile tabs on desktop). */
+  /** Own-org network profile hub (Team / My Profile / Sales tabs on desktop). */
   networkOrgHub: (
     tab:
+      /** @deprecated Removed — aliases to My Profile. */
       | "details"
       | "team"
       | "profile"
       | "sales"
       | "goals"
+      /** @deprecated Alias for Sales with Asset view (`?tab=asset`). */
       | "asset"
       | "network"
       | "connections"
       | "grow"
-      | "chat" = "details",
+      | "chat" = "profile",
   ) => {
     const normalized =
-      tab === "connections" || tab === "grow" ? "network" : tab;
-    return normalized === "details"
+      tab === "connections" || tab === "grow"
+        ? "network"
+        : tab === "details"
+          ? "profile"
+          : tab;
+    return normalized === "profile"
       ? ("/(tabs)/network/hub" as const)
       : (`/(tabs)/network/hub?tab=${normalized}` as const);
   },
-  /** Business intelligence command center with cross-filter analytics. */
+  /** @deprecated Intelligence dashboard removed — `/business-pulse` redirects to Network hub. */
   BUSINESS_PULSE:    '/business-pulse'    as const,
-  /** Personal identity: name, email, phone, personal avatar */
+  /** Personal identity: name, email, phone, personal avatar. Redirects to WORKSPACE_ACCOUNT. */
   MY_ACCOUNT:        '/account'           as const,
 
   /** Compliance & Document Intelligence hub — opened from header icons. */

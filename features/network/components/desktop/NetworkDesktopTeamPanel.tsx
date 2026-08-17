@@ -3,6 +3,7 @@
  */
 import Theme from "@/constants/Theme";
 import { InviteMemberFlow } from "@/features/organization/components/InviteMemberModal";
+import { MemberPermissionsPanel } from "@/features/organization/components/MemberPermissionsPanel/MemberPermissionsPanel";
 import { TeamMembersView } from "@/features/organization/components/TeamMembersView";
 import {
   METRONIC,
@@ -11,8 +12,7 @@ import {
 import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
 import { useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
-import { ROUTES } from "@/lib/routes";
-import { useRouter } from "expo-router";
+import type { OrgMember } from "@/types/organization";
 import { ShieldCheck, UserPlus2, X } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -31,21 +31,25 @@ export function NetworkDesktopTeamPanel({
   canManage,
 }: Props) {
   const layout = useProfileHubCompactLayout();
-  const router = useRouter();
   const { isOwner } = useOrgRole();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [editMemberId, setEditMemberId] = useState<string | null>(null);
   const [focusPending, setFocusPending] = useState(false);
   const invalidate = useInvalidateOrgMembers(orgId);
 
   const openAccessControl = () => {
-    router.push(ROUTES.MODALS.ACCESS_CONTROL as Parameters<typeof router.push>[0]);
+    setInviteOpen(false);
+    setAccessOpen(true);
   };
 
   const openInvite = () => {
     setFocusPending(false);
+    setAccessOpen(false);
     setInviteOpen(true);
   };
   const closeInvite = () => setInviteOpen(false);
+  const closeAccess = () => setAccessOpen(false);
 
   const handleInvited = () => {
     invalidate();
@@ -53,30 +57,46 @@ export function NetworkDesktopTeamPanel({
     setInviteOpen(false);
   };
 
+  if (editMemberId) {
+    return (
+      <View style={[styles.panel, layout.panel]}>
+        <MemberPermissionsPanel
+          memberId={editMemberId}
+          onBack={() => setEditMemberId(null)}
+          embedded
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.panel, layout.panel]}>
       <View style={[styles.sectionToolbar, layout.sectionToolbar]}>
         <View style={styles.teamPanelTitleCol}>
-          <Text style={[styles.sectionTitle, layout.sectionTitle]}>Team members</Text>
+          <Text style={[styles.sectionTitle, layout.sectionTitle]}>
+            {accessOpen ? "Access control" : "Team members"}
+          </Text>
           <Text style={[styles.sectionSub, layout.sectionSub]}>
-              {inviteOpen
+            {inviteOpen
               ? "Add employees by name and phone — they can join even without a Pulse account yet"
               : `Manage who can access ${orgName || "your organization"}`}
           </Text>
         </View>
         {canManage ? (
-          inviteOpen ? (
+          inviteOpen || accessOpen ? (
             <Pressable
-              onPress={closeInvite}
+              onPress={inviteOpen ? closeInvite : closeAccess}
               style={({ pressed }) => [
                 styles.teamInviteCancelBtn,
                 pressed && { opacity: 0.88 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Cancel invite"
+              accessibilityLabel={inviteOpen ? "Cancel invite" : "Back to team members"}
             >
               <X size={15} color={METRONIC.text} strokeWidth={2.3} />
-              <Text style={styles.teamInviteCancelBtnText}>Cancel</Text>
+              <Text style={styles.teamInviteCancelBtnText}>
+                {inviteOpen ? "Cancel" : "Done"}
+              </Text>
             </Pressable>
           ) : (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -123,8 +143,9 @@ export function NetworkDesktopTeamPanel({
           <TeamMembersView
             orgId={orgId}
             currentUserId={currentUserId}
-            canManage={canManage}
+            canManage={accessOpen ? isOwner : canManage}
             onInvite={canManage ? openInvite : undefined}
+            onEditMember={(member: OrgMember) => setEditMemberId(member.id)}
             initialSubTab={focusPending ? "pending" : undefined}
             embedded
             desktopMetronic

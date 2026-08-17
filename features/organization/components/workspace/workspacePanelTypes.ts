@@ -26,11 +26,11 @@ export function parseOrgHubSection(
 export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
   account: "My Account",
   "account-edit": "Edit profile",
-  profile: "Profile",
+  profile: "Organization",
   settings: "Workspace settings",
-  team: "Team members",
+  team: "Team & access",
   kyc: "Organization",
-  products: "Pulse Platform",
+  products: "Products & modules",
   "ocr-usage": "Pulse Scan usage",
   language: "Language",
   region: "Region",
@@ -39,9 +39,12 @@ export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
 export const WORKSPACE_PANEL_SUBTITLES: Partial<Record<WorkspacePanelId, string>> = {
   account: "Manage your personal identity",
   "account-edit": "Update your name, photo and status",
-  profile: "Business identity, reputation, and workspace shortcuts",
-  products: "Eight suites — execution, commerce, network, finance, and more",
-  "ocr-usage": "OCR scans, quota, and quality metrics for your workspace",
+  profile: "Organization",
+  settings: "How this organization operates Pulse",
+  team: "Members, roles, and operational access",
+  kyc: "Verification, business identity, and documents",
+  products: "Manage what's enabled for this organization",
+  "ocr-usage": "Scan documents and track your organization's scan usage",
 };
 
 export type WorkspaceHubInlinePanelId = "language" | "region";

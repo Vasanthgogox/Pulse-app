@@ -49,10 +49,14 @@ export function OrgVerificationReminderProvider({ children }: { children: ReactN
     shouldFetch && !!data && data.verification_status === 'unverified';
   const showModal = dataEligible && !sessionDismissed;
 
-  const copy = useMemo(
-    () => (data ? getOrgVerificationReminderCopy(data) : null),
-    [data],
-  );
+  const copy = useMemo(() => {
+    if (!data) return null;
+    try {
+      return getOrgVerificationReminderCopy(data);
+    } catch {
+      return getOrgVerificationReminderCopy({ created_at: null });
+    }
+  }, [data]);
 
   const onVerify = useCallback(() => {
     setSessionDismissed(true);

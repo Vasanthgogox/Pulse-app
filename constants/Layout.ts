@@ -127,12 +127,10 @@ export const Layout = {
   wizardBodyMaxWidth: 860,
   /** Multi-card desktop grid (non-wizard forms only). */
   wizardDesktopGridMinWidth: 1080,
-  /** Workspace flex card — hub-only drawer width (desktop). */
-  workspaceCardHubWidth: 420,
-  /** Workspace split view — min viewport to show hub + detail side-by-side. */
+  /** Workspace flex card — min viewport to show the desktop drawer card. */
   workspaceSplitMinWidth: 720,
-  /** Workspace flex card — max width when detail panel is open. */
-  workspaceCardMaxWidth: 960,
+  /** Workspace flex card — fixed drawer width on desktop (hub and detail alike). */
+  workspaceCardMaxWidth: 470,
   /** Detail sheet over a full-bleed map (live tracking): centered reading column. */
   trackingSheetMaxWidth: 720,
   /**

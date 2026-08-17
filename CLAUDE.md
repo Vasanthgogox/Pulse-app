@@ -84,9 +84,14 @@ Do not continue searching for alternative explanations.
 | DB change | `supabase/migrations/` (new file only) + `npm run db:push` |
 
 ## Reference Docs (load only when relevant)
+- **Account / Organization / Workspace IA (ME vs business vs Pulse config)** → `.cursor/rules/pulse-me-org-workspace-ia.mdc`
 - **Operating model RBAC (Asset / Aggregate / Hybrid)** → `docs/RBAC_OPERATING_MODEL.md`
 - **RBAC change log (new / modified files)** → `docs/RBAC_OPERATING_MODEL_CHANGELOG.md`
 - **KYC requirement policy (Pulse / Admin / RPC lockstep)** → `docs/KYC_REQUIREMENT_POLICY.md`
+- **Goals tab cross-filtering model (Power BI-style, Network Org Hub)** → `docs/GOALS_CROSS_FILTERING_MODEL.md`
+- **Goals Phase 1 commit-by-commit implementation plan** → `docs/GOALS_PHASE1_IMPLEMENTATION_PLAN.md`
+- **Performance page (Sales+Goals merge) audit & architecture** → `docs/PERFORMANCE_MERGE_AUDIT_AND_PLAN.md`
+- **Performance Phase 1 implementation map (component map, file scope, commit sequence)** → `docs/PERFORMANCE_PHASE1_IMPLEMENTATION_MAP.md`
 - Architecture & data flow → `docs/architecture.md`
 - Auth & session → `docs/auth.md`
 - Routing → `docs/routing.md`

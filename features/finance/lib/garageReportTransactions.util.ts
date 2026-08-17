@@ -5,12 +5,15 @@ import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import {
   buildTripPnLListForPeriod,
   buildVehiclePnLList,
-  resolveVehicleIdForTrip,
 } from "@/features/vehicles/pnl";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import type { LedgerRow } from "../services/finance.service";
 import type { EntityListFilter } from "../components/TreasurySummaryCard";
-import { createReportRow } from "./reportRow.util";
+import type { EntityCustomReport } from "./entityDetailReports.util";
+import {
+  buildGarageTripRosterReport,
+  buildGarageVehicleRosterReport,
+} from "./partyRosterReport.util";
 
 export type BuildGarageReportTransactionsParams = {
   organizationId: string | null;
@@ -24,7 +27,7 @@ export type BuildGarageReportTransactionsParams = {
   getVehicleNumberForTripId: (tripId: string | null) => string | null;
 };
 
-export function buildGarageReportTransactions({
+export function buildGarageRosterReport({
   organizationId,
   tripRows,
   vehicleRows,
@@ -34,8 +37,7 @@ export function buildGarageReportTransactions({
   searchQuery,
   entityFilter,
   getVehicleNumberForTripId,
-}: BuildGarageReportTransactionsParams): LedgerRow[] {
-  const fallbackDate = new Date().toISOString();
+}: BuildGarageReportTransactionsParams): EntityCustomReport {
   const q = searchQuery.trim().toLowerCase();
 
   const tripRowsForReport = buildTripPnLListForPeriod(
@@ -56,24 +58,6 @@ export function buildGarageReportTransactions({
     organizationId,
   );
 
-  const latestTripDateByVehicleId: Record<string, string> = {};
-  const updateLatest = (
-    map: Record<string, string>,
-    key: string | null | undefined,
-    value: string | null | undefined,
-  ) => {
-    if (!key || !value) return;
-    if (!map[key] || value > map[key]) map[key] = value;
-  };
-
-  tripRows.forEach((trip) => {
-    updateLatest(
-      latestTripDateByVehicleId,
-      resolveVehicleIdForTrip(trip, vehicleRows),
-      trip.pickup_date ?? trip.created_at ?? fallbackDate,
-    );
-  });
-
   if (garageViewTab === "trips") {
     const filteredTripRows = tripRowsForReport.filter((row) => {
       if (!q) return true;
@@ -88,26 +72,7 @@ export function buildGarageReportTransactions({
         vehicleName.toLowerCase().includes(q)
       );
     });
-
-    return filteredTripRows.map((row) => {
-      const vehicleName =
-        getVehicleNumberForTripId(row.id) ||
-        (row.trip.vehicle_display_number
-          ? formatIndianVehicleNumber(row.trip.vehicle_display_number)
-          : "Unassigned");
-      return createReportRow({
-        id: `garage-trip-report-${row.id}`,
-        organizationId,
-        partyName: vehicleName,
-        description: `${row.clientName} • ${row.origin} → ${row.dest}`,
-        amountIn: Number(row.sales ?? 0),
-        amountOut: Number(row.totalExpense ?? 0),
-        transactionDate:
-          row.trip.pickup_date ?? row.trip.created_at ?? fallbackDate,
-        tripNumber: row.missionId,
-        tripId: row.id,
-      });
-    });
+    return buildGarageTripRosterReport(filteredTripRows);
   }
 
   let filteredVehicleRows = vehicleRowsForReport;
@@ -131,16 +96,13 @@ export function buildGarageReportTransactions({
     filteredVehicleRows = filteredVehicleRows.filter((row) => row.expense === 0);
   }
 
-  return filteredVehicleRows.map((row) =>
-    createReportRow({
-      id: `garage-vehicle-report-${row.id}`,
-      organizationId,
-      partyName: row.name,
-      description: `${row.type || "Vehicle"} • Trips ${row.trips} • P&L ₹${row.pnl.toLocaleString("en-IN")}`,
-      amountIn: Number(row.sales ?? 0),
-      amountOut: Number(row.expense ?? 0),
-      transactionDate: latestTripDateByVehicleId[row.id] ?? fallbackDate,
-      tripNumber: `${row.trips} trips`,
-    }),
+  return buildGarageVehicleRosterReport(
+    filteredVehicleRows.map((row) => ({
+      name: formatIndianVehicleNumber(row.name) || row.name,
+      trips: row.trips,
+      sales: row.sales,
+      expense: row.expense,
+      pnl: row.pnl,
+    })),
   );
 }

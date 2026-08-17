@@ -54,22 +54,18 @@ export function HubGridToolbarRow({
 }) {
   return (
     <View style={styles.denseRow}>
-      <View style={styles.leadingCluster}>
-        <View
-          style={[
-            styles.toolbarStatusSlot,
-            statusSlot === "wide" && styles.toolbarStatusSlotWide,
-            statusSlot === "amount" && styles.toolbarStatusSlotAmount,
-          ]}
-        >
-          {status}
-        </View>
-        {share ?? <View style={styles.sharePlaceholder} />}
+      <View
+        style={[
+          styles.toolbarStatusSlot,
+          statusSlot === "wide" && styles.toolbarStatusSlotWide,
+          statusSlot === "amount" && styles.toolbarStatusSlotAmount,
+        ]}
+      >
+        {status}
       </View>
-      <View style={styles.ctaGroup}>
-        <View style={styles.primarySlot}>{primary}</View>
-        {trailing ? <View style={styles.trailingSlot}>{trailing}</View> : null}
-      </View>
+      {share ?? <View style={styles.sharePlaceholder} />}
+      <View style={styles.primarySlot}>{primary}</View>
+      {trailing ? <View style={styles.trailingSlot}>{trailing}</View> : null}
     </View>
   );
 }
@@ -188,7 +184,7 @@ export function HubGridStatusChip({
       accessibilityLabel={accessibilityLabel}
     >
       <View style={styles.statusChipIcon}>{icon}</View>
-      <View style={styles.statusChipTextWrap}>
+      <View style={[styles.statusChipTextWrap, fill && styles.statusChipTextWrapFill]}>
         <Text
           style={[
             styles.statusChipLine1,
@@ -238,7 +234,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   footerDense: {
-    paddingTop: 7,
+    paddingTop: 8,
     paddingBottom: 8,
     paddingHorizontal: 8,
     minHeight: HUB_GRID_TOOLBAR_ROW_HEIGHT + 16,
@@ -249,31 +245,20 @@ const styles = StyleSheet.create({
   denseRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    gap: 6,
     width: "100%",
     minWidth: 0,
     height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     ...Platform.select({
-      web: { columnGap: 8, rowGap: 0 } as ViewStyle,
-      default: {},
-    }),
-  },
-  leadingCluster: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexShrink: 0,
-    gap: 6,
-    height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
-    ...Platform.select({
-      web: { columnGap: 6 } as ViewStyle,
+      web: { columnGap: 6, rowGap: 0 } as ViewStyle,
       default: {},
     }),
   },
   toolbarStatusSlot: {
     width: HUB_GRID_TOOLBAR_STATUS_SLOT_W,
+    height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     flexShrink: 0,
-    alignItems: "flex-start",
+    alignItems: "stretch",
     justifyContent: "center",
   },
   toolbarStatusSlotWide: {
@@ -281,19 +266,6 @@ const styles = StyleSheet.create({
   },
   toolbarStatusSlotAmount: {
     width: HUB_GRID_TOOLBAR_AWARDED_SLOT_W,
-  },
-  ctaGroup: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    minWidth: 0,
-    overflow: "hidden",
-    gap: 6,
-    height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
-    ...Platform.select({
-      web: { columnGap: 6 } as ViewStyle,
-      default: {},
-    }),
   },
   primarySlot: {
     flex: 1,
@@ -304,17 +276,14 @@ const styles = StyleSheet.create({
   },
   trailingSlot: {
     flexShrink: 0,
-    marginLeft: 2,
+    height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     justifyContent: "center",
+    alignItems: "center",
   },
   sharePlaceholder: {
     width: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     flexShrink: 0,
-  },
-  primaryGrow: {
-    flex: 1,
-    minWidth: 0,
   },
   primaryToolbarPlaceholder: {
     width: "100%",
@@ -332,43 +301,63 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    padding: 0,
+    ...Platform.select({
+      web: { boxSizing: "border-box" } as ViewStyle,
+      default: {},
+    }),
   },
   primaryBtn: {
     backgroundColor: Theme.accentBrown,
-    flex: 1,
+    width: "100%",
     minWidth: 0,
     maxWidth: "100%",
     minHeight: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     maxHeight: HUB_GRID_TOOLBAR_ROW_HEIGHT,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    alignSelf: "center",
+    alignSelf: "stretch",
+    overflow: "hidden",
+    ...Platform.select({
+      web: { boxSizing: "border-box" } as ViewStyle,
+      default: {},
+    }),
   },
   primaryBtnText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
-    letterSpacing: 0.25,
+    letterSpacing: 0.3,
+    textAlign: "center",
     includeFontPadding: false,
+    lineHeight: 12,
   },
   statusChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    justifyContent: "center",
+    gap: 4,
     flexShrink: 0,
     width: "100%",
     maxWidth: HUB_GRID_TOOLBAR_STATUS_SLOT_W,
     minWidth: 44,
     height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
-    paddingHorizontal: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 0,
     borderRadius: 8,
     backgroundColor: Theme.cardWhite,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
+    overflow: "hidden",
+    ...Platform.select({
+      web: { boxSizing: "border-box" } as ViewStyle,
+      default: {},
+    }),
   },
   statusChipWide: {
     maxWidth: 64,
@@ -405,23 +394,28 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   statusChipIcon: {
-    width: 16,
-    height: 16,
+    width: 14,
+    height: 14,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   statusChipTextWrap: {
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
     justifyContent: "center",
+    alignItems: "flex-start",
+  },
+  statusChipTextWrapFill: {
+    flex: 1,
   },
   statusChipLine1: {
-    fontSize: 8,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: 0,
-    lineHeight: 10,
+    lineHeight: 11,
+    includeFontPadding: false,
   },
   statusChipAmount: {
     textTransform: "none",
@@ -444,7 +438,8 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.2,
-    lineHeight: 8,
+    lineHeight: 9,
+    includeFontPadding: false,
   },
   statusChipLine2Compact: {
     fontSize: 6,
@@ -454,7 +449,8 @@ const styles = StyleSheet.create({
   },
   statusChipLine2Placeholder: {
     fontSize: 7,
-    lineHeight: 8,
+    lineHeight: 9,
     opacity: 0,
+    includeFontPadding: false,
   },
 });

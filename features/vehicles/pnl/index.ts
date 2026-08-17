@@ -2,6 +2,7 @@ export {
   getTripDate,
   tripInPeriod,
   formatPeriodLabel,
+  formatPeriodRangeLabel,
   getAvailablePeriodOptions,
   countVehicleMatchedTripsInPeriod,
   pickDefaultGaragePeriod,

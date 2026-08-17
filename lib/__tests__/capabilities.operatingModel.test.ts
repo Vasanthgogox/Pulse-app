@@ -1,6 +1,7 @@
 import {
   allowedConnectionRoles,
   canAccessFinanceSubTab,
+  financeKanbanColumnsForSupplyFilter,
   canAccessSuppliers,
   canAccessVehicles,
   canUseAggregateSupply,
@@ -159,5 +160,51 @@ describe("operatingModelTransition", () => {
     expect(t.capsLost).toEqual([]);
     expect(t.capsGained).toEqual([]);
     expect(t.hiddenSurfaces).toEqual([]);
+  });
+});
+
+describe("financeKanbanColumnsForSupplyFilter", () => {
+  it("HYBRID ALL shows all four columns", () => {
+    const caps = capsFor("HYBRID");
+    expect(financeKanbanColumnsForSupplyFilter(caps, "all")).toEqual([
+      "customers",
+      "suppliers",
+      "garage",
+      "drivers",
+    ]);
+  });
+
+  it("HYBRID ASSET shows customers, garage, drivers", () => {
+    const caps = capsFor("HYBRID");
+    expect(financeKanbanColumnsForSupplyFilter(caps, "asset")).toEqual([
+      "customers",
+      "garage",
+      "drivers",
+    ]);
+  });
+
+  it("HYBRID AGGREGATE shows customers and suppliers", () => {
+    const caps = capsFor("HYBRID");
+    expect(financeKanbanColumnsForSupplyFilter(caps, "aggregate")).toEqual([
+      "customers",
+      "suppliers",
+    ]);
+  });
+
+  it("ASSET_BASED never includes suppliers even on ALL", () => {
+    const caps = capsFor("ASSET_BASED");
+    expect(financeKanbanColumnsForSupplyFilter(caps, "all")).toEqual([
+      "customers",
+      "garage",
+      "drivers",
+    ]);
+  });
+
+  it("NON_ASSET never includes garage or drivers even on ALL", () => {
+    const caps = capsFor("NON_ASSET");
+    expect(financeKanbanColumnsForSupplyFilter(caps, "all")).toEqual([
+      "customers",
+      "suppliers",
+    ]);
   });
 });

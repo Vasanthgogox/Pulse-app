@@ -6,6 +6,7 @@ import { getClientById } from "@/features/clients/services/clients.service";
 import { findIndentInMarketList } from "@/features/indents/utils/findIndentInList.util";
 import {
   deactivatePostsForIndent,
+  ensureIndentStory,
   isIndentTerminalForStory,
 } from "@/features/network/services/indentStoryPosts.service";
 import {
@@ -801,7 +802,17 @@ export async function createIndent(
       error.message;
     return { error: new Error(msg), indent: null };
   }
-  return { error: null, indent: row as IndentRow };
+  const indent = row as IndentRow;
+  if (action === "share") {
+    const { error: storyErr } = await ensureIndentStory(orgId, indent);
+    if (storyErr && __DEV__) {
+      console.warn(
+        "[indents] createIndent: default 24h story failed:",
+        storyErr.message,
+      );
+    }
+  }
+  return { error: null, indent };
 }
 
 /**
@@ -1001,7 +1012,18 @@ export async function shareDraftIndent(
       error: new Error("This indent has already been shared"),
       indent: null,
     };
-  return { error: null, indent: data as IndentRow };
+  const indent = data as IndentRow;
+  const { error: storyErr } = await ensureIndentStory(
+    indent.organization_id,
+    indent,
+  );
+  if (storyErr && __DEV__) {
+    console.warn(
+      "[indents] shareDraftIndent: default 24h story failed:",
+      storyErr.message,
+    );
+  }
+  return { error: null, indent };
 }
 
 /**

@@ -20,6 +20,7 @@ function isBookmarkableTab(route: string): route is BookmarkableTab {
 
 function isNetworkHubRoute(route: string): boolean {
   return (
+    route === ROUTES.networkOrgHub() ||
     route === ROUTES.networkOrgHub('details') ||
     route.startsWith('/(tabs)/network/hub') ||
     route.startsWith('/network/hub')
@@ -46,9 +47,10 @@ export function resolveRestorableDispatcherRoute(pathname: string): string | nul
       'chat',
     ]);
     if (tab && allowed.has(tab)) {
-      return ROUTES.networkOrgHub(tab as Parameters<typeof ROUTES.networkOrgHub>[0]);
+      const mapped = tab === 'details' ? 'profile' : tab;
+      return ROUTES.networkOrgHub(mapped as Parameters<typeof ROUTES.networkOrgHub>[0]);
     }
-    return ROUTES.networkOrgHub('details');
+    return ROUTES.networkOrgHub('profile');
   }
 
   if (path === '/trips' || path.endsWith('/trips') || path.includes('/(tabs)/trips')) {

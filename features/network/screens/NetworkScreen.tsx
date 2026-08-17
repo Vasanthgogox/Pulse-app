@@ -52,6 +52,7 @@ import {
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import { isFleetOwnerCapacityPost } from "@/features/network/utils/storyDisplay";
 import { shouldShowFeedPostForOrg } from "@/features/network/utils/storyLoadVisibility.util";
+import { isIndentStoryLive } from "@/features/network/utils/indentStoryWindow.util";
 import {
   cancelPendingConnectionRequestByOrgPair,
   type ConnectionRequestRow,
@@ -100,6 +101,7 @@ import {
   User,
   UserPlus,
   Warehouse,
+  X,
 } from "lucide-react-native";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -118,6 +120,7 @@ import {
   TextInput,
   type TextStyle,
   View,
+  type ViewStyle,
 } from "react-native";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useWebLayoutWidth } from "@/lib/useWebLayoutWidth";
@@ -426,6 +429,14 @@ function NetworkScreenInner() {
         if (!isPostVisibleForOrg(post, { allowLoadPosts })) return false;
         // Fleet Owner organic capacity has no Business org — still show on Stories.
         if (isFleetOwnerCapacityPost(post)) return post.is_active === true;
+        // 24h indent story window — Get Load / bids stay on indent lifecycle.
+        if (
+          post.type === "LOAD" &&
+          !post.is_sponsored &&
+          !isIndentStoryLive(post)
+        ) {
+          return false;
+        }
         return shouldShowFeedPostForOrg({
           authorOrgId: post.organization_id,
           viewerOrgId: orgId,
@@ -1358,7 +1369,9 @@ function NetworkScreenInner() {
     hubTabParam === "chat"
       ? hubTabParam === "connections" || hubTabParam === "grow"
         ? "network"
-        : hubTabParam
+        : hubTabParam === "details"
+          ? "profile"
+          : hubTabParam
       : undefined;
 
   const desktopHub = showDesktopHub ? (
@@ -1402,9 +1415,22 @@ function NetworkScreenInner() {
         businessConnectionModal?.presentConnectionInvite(item)
       }
       initialTab={initialHubTab}
-      bottomScrollInset={!isWideNetwork ? layout.scrollBottomPadding() : 0}
+      bottomScrollInset={0}
+      hideHeaderChrome
     />
   ) : null;
+
+  const closeHubPopup = () => {
+    // Always leave /network/hub — do not router.back() through hub tab
+    // history (Goals → Sales still looks "open"), and do not use
+    // ROUTES.NETWORK (it does not exist; replace would be a no-op).
+    router.replace(ROUTES.TABS.NETWORK);
+  };
+
+  const hubPopupWebFixed =
+    Platform.OS === "web"
+      ? ({ position: "fixed", top: 0, right: 0, bottom: 0, left: 0 } as ViewStyle)
+      : null;
 
   return (
     <View style={styles.container}>
@@ -1419,7 +1445,38 @@ function NetworkScreenInner() {
         />
       ) : null}
       {desktopHub ? (
-        <View style={styles.desktopHubShell}>{desktopHub}</View>
+        <Modal
+          visible
+          animationType="fade"
+          presentationStyle={Platform.OS === "web" ? "overFullScreen" : "fullScreen"}
+          onRequestClose={closeHubPopup}
+        >
+          <View
+            pointerEvents="box-none"
+            style={[
+              styles.desktopHubPopup,
+              hubPopupWebFixed,
+              {
+                paddingTop: insets.top,
+                paddingBottom: insets.bottom,
+              },
+            ]}
+          >
+            <View pointerEvents="auto" style={styles.desktopHubShell}>
+              {desktopHub}
+            </View>
+            <Pressable
+              onPress={closeHubPopup}
+              pointerEvents="auto"
+              style={styles.desktopHubPopupClose}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Close workspace"
+            >
+              <X size={18} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+            </Pressable>
+          </View>
+        </Modal>
       ) : (
         scrollContent
       )}
@@ -1615,6 +1672,30 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     width: "100%",
+  },
+  desktopHubPopup: {
+    flex: 1,
+    width: "100%",
+    backgroundColor: Theme.networkPageBackground,
+  },
+  desktopHubPopupClose: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    zIndex: 100,
+    elevation: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    ...Platform.select({
+      web: { cursor: "pointer" } as ViewStyle,
+      default: {},
+    }),
   },
   orgGateWrap: {
     flex: 1,

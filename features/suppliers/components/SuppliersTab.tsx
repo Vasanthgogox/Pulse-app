@@ -9,6 +9,7 @@ import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
+import { CUSTOMERS_SUPPLIERS } from "@/features/finance/constants/tableColumns";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
@@ -255,7 +256,17 @@ export function SuppliersTab({
             Trips
           </Text>
         </View>
-        <View style={styles.headerDueCol}>
+        <View style={styles.headerAmtCol}>
+          <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+            Payables
+          </Text>
+        </View>
+        <View style={styles.headerAmtCol}>
+          <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+            Paid
+          </Text>
+        </View>
+        <View style={styles.headerAmtCol}>
           <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
             Due
           </Text>
@@ -265,6 +276,7 @@ export function SuppliersTab({
         {rowsToRender.map((data) => {
           const due = data.due ?? 0;
           const paid = data.paid ?? 0;
+          const payables = data.payables ?? 0;
           const tripCount = data.trips ?? 0;
           const avatarData = supplierAvatarById.get(data.id);
           return (
@@ -278,30 +290,38 @@ export function SuppliersTab({
               }
               activeOpacity={0.7}
             >
-              <EntityAvatar
-                name={data.name ?? ""}
-                avatarUrl={avatarData?.avatar_url}
-                avatarSeed={avatarData?.avatar_seed}
-                entityType="supplier"
-                isIntegrated={!!data.is_integrated}
-                badgeOverlay
-              />
               <View style={[styles.tableCell, styles.ctEntity]}>
-                <View style={styles.tableEntityHeader}>
+                <View style={styles.tableEntityMain}>
+                  <EntityAvatar
+                    name={data.name ?? ""}
+                    avatarUrl={avatarData?.avatar_url}
+                    avatarSeed={avatarData?.avatar_seed}
+                    initialsColorSeed={data.id}
+                    entityType="supplier"
+                    isIntegrated={!!data.is_integrated}
+                    badgeOverlay
+                  />
                   <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
                     {data.name ?? "—"}
                   </Text>
                 </View>
-                <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
-                  Payables: ₹{(data.payables ?? 0) >= 1000 ? `${((data.payables ?? 0) / 1000).toFixed(1)}k` : (data.payables ?? 0).toLocaleString("en-IN")}
-                </Text>
               </View>
               <View style={[styles.tableCell, styles.ctTrips]}>
                 <View style={styles.tripsPill}>
                   <Text style={styles.tripsPillText}>{tripCount}</Text>
                 </View>
               </View>
-              <View style={[styles.tableCell, styles.ctDue]}>
+              <View style={[styles.tableCell, styles.ctAmt]}>
+                <Text style={styles.tableAmtValue} numberOfLines={1}>
+                  ₹{payables.toLocaleString("en-IN")}
+                </Text>
+              </View>
+              <View style={[styles.tableCell, styles.ctAmt]}>
+                <Text style={styles.tableAmtPaid} numberOfLines={1}>
+                  ₹{paid.toLocaleString("en-IN")}
+                </Text>
+              </View>
+              <View style={[styles.tableCell, styles.ctAmt]}>
                 <Text
                   style={[
                     styles.tableDueValue,
@@ -310,9 +330,6 @@ export function SuppliersTab({
                   numberOfLines={1}
                 >
                   ₹{due.toLocaleString("en-IN")}
-                </Text>
-                <Text style={styles.tablePaidLabel} numberOfLines={1}>
-                  Paid: ₹{paid >= 1000 ? `${(paid / 1000).toFixed(1)}k` : paid.toLocaleString("en-IN")}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -451,27 +468,31 @@ const styles = StyleSheet.create({
   ctLeft: { textAlign: "left" },
   ctCenter: { textAlign: "center" },
   ctRight: { textAlign: "right" },
-  headerEntityCol: { flex: 2.2, minWidth: 0, justifyContent: "center" },
-  headerTripsCol: { flex: 0.5, minWidth: 44, justifyContent: "center" },
-  headerDueCol: { flex: 1.5, minWidth: 0, justifyContent: "center" },
-  ctEntity: { flex: 2.2, minWidth: 0 },
-  ctTrips: { flex: 0.5, minWidth: 44, justifyContent: "center" },
-  ctDue: { flex: 1.5, minWidth: 0, alignItems: "flex-end", justifyContent: "center" },
+  headerEntityCol: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0, justifyContent: "center" },
+  headerTripsCol: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: "center" },
+  headerAmtCol: { flex: CUSTOMERS_SUPPLIERS.mission, minWidth: 0, justifyContent: "center" },
+  ctEntity: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0 },
+  ctTrips: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: "center" },
+  ctAmt: {
+    flex: CUSTOMERS_SUPPLIERS.mission,
+    minWidth: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
   tableRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    minHeight: 58,
+    minHeight: 52,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
   tableCell: { paddingHorizontal: 5, minWidth: 0 },
-  tableEntityHeader: {
+  tableEntityMain: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 10,
     minWidth: 0,
   },
   tableEntityName: {
@@ -480,13 +501,28 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
   },
-  tableEntitySub: {
-    marginTop: 4,
-    fontSize: 9,
-    fontWeight: "500",
-    color: Theme.textMuted,
+  tableDueValue: {
+    fontSize: 10,
+    fontWeight: "600",
+    fontStyle: "italic",
+    textAlign: "right",
+  },
+  tableDueUnpaid: { color: Theme.teslaRed },
+  tableDueSettled: { color: Theme.darkGreen },
+  tableAmtValue: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+  },
+  tableAmtPaid: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.darkGreen,
+    textAlign: "right",
   },
   tripsPill: {
     alignSelf: "center",
@@ -504,23 +540,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "600",
     color: Theme.textMuted,
-  },
-  tableDueValue: {
-    fontSize: 10,
-    fontWeight: "600",
-    fontStyle: "italic",
-    textAlign: "right",
-  },
-  tableDueUnpaid: { color: Theme.teslaRed },
-  tableDueSettled: { color: Theme.darkGreen },
-  tablePaidLabel: {
-    fontSize: 7,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginTop: 2,
-    textAlign: "right",
   },
   emptyState: {
     paddingVertical: 24,

@@ -312,7 +312,9 @@ const styles = StyleSheet.create({
       web: {
         display: "flex",
         flexDirection: "column",
+        alignItems: "stretch",
         height: "100%",
+        minWidth: MIN_COLUMN_WIDTH,
       } as object,
       default: {},
     }),
@@ -435,22 +437,53 @@ const styles = StyleSheet.create({
   columnScroll: {
     flex: 1,
     minHeight: 0,
+    width: "100%",
+    alignSelf: "stretch",
   },
   columnScrollContent: {
     padding: 10,
     gap: 10,
     paddingBottom: 14,
     flexGrow: 1,
+    // RN Web ScrollView defaults to alignItems:flex-start, so cards shrink
+    // to content width and sit on the left of a wider column.
+    alignItems: "stretch",
+    alignSelf: "stretch",
+    width: "100%",
+    minWidth: "100%" as unknown as number,
+    ...Platform.select({
+      web: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "stretch",
+        boxSizing: "border-box",
+      } as object,
+      default: {},
+    }),
   },
   topExtraWrap: {
     width: "100%",
+    alignSelf: "stretch",
     gap: 8,
   },
   cardWrap: {
     width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
     alignSelf: "stretch",
+    flexGrow: 0,
+    flexShrink: 0,
     borderRadius: 14,
     overflow: "visible",
+    ...Platform.select({
+      web: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "stretch",
+        boxSizing: "border-box",
+      } as object,
+      default: {},
+    }),
   },
   cardHighlighted: {
     borderWidth: 2,

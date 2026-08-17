@@ -1,47 +1,100 @@
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { InviteMemberFlow } from "@/features/organization/components/InviteMemberModal";
+import { MemberPermissionsPanel } from "@/features/organization/components/MemberPermissionsPanel/MemberPermissionsPanel";
 import { TeamMembersView } from "@/features/organization/components/TeamMembersView";
 import { WorkspaceDetailLayout } from "@/features/organization/components/workspace/WorkspaceDetailLayout";
 import { WORKSPACE_PANEL_TITLES } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
-import { ROUTES } from "@/lib/routes";
-import { useRouter } from "expo-router";
+import { useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
+import type { OrgMember } from "@/types/organization";
 import { ShieldCheck, UserPlus2, Users } from "lucide-react-native";
+import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
+type RosterView = "roster" | "access";
+type TeamView = RosterView | "invite";
+
 type Props = {
   onBack: () => void;
 };
 
 export function WorkspaceTeamPanel({ onBack }: Props) {
-  const router = useRouter();
   const { user, profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const { isOwner } = useOrgRole();
-
   const orgId = currentOrganization?.id ?? null;
   const canManage = profile?.role !== "driver";
+  const invalidate = useInvalidateOrgMembers(orgId);
 
-  const handleInvite = () => {
-    router.push(ROUTES.MODALS.INVITE_MEMBER as Parameters<typeof router.push>[0]);
+  const [view, setView] = useState<TeamView>("roster");
+  const [editMemberId, setEditMemberId] = useState<string | null>(null);
+  const [focusPending, setFocusPending] = useState(false);
+  const rosterBeforeInvite = useRef<RosterView>("roster");
+
+  const openInvite = () => {
+    rosterBeforeInvite.current = view === "access" ? "access" : "roster";
+    setFocusPending(false);
+    setView("invite");
   };
 
-  const handleAccessControl = () => {
-    router.push(ROUTES.MODALS.ACCESS_CONTROL as Parameters<typeof router.push>[0]);
+  const closeInvite = () => setView(rosterBeforeInvite.current);
+
+  const handleInvited = () => {
+    invalidate();
+    setFocusPending(true);
+    closeInvite();
   };
+
+  const handleChromeBack = () => {
+    if (view === "invite") {
+      closeInvite();
+      return;
+    }
+    if (view === "access") {
+      setView("roster");
+      return;
+    }
+    onBack();
+  };
+
+  if (editMemberId) {
+    return (
+      <MemberPermissionsPanel
+        memberId={editMemberId}
+        onBack={() => setEditMemberId(null)}
+        embedded
+      />
+    );
+  }
+
+  const title =
+    view === "invite"
+      ? "Invite member"
+      : view === "access"
+        ? "Access control"
+        : WORKSPACE_PANEL_TITLES.team;
+
+  const subtitle =
+    view === "invite"
+      ? "Add by name and phone"
+      : currentOrganization?.name ?? "Organisation";
 
   return (
     <WorkspaceDetailLayout
-      title={WORKSPACE_PANEL_TITLES.team}
-      subtitle={currentOrganization?.name ?? "Organisation"}
-      onBack={onBack}
+      title={title}
+      subtitle={subtitle}
+      onBack={handleChromeBack}
       fillBody
       rightSlot={
-        canManage ? (
+        view === "invite" || !canManage ? (
+          <View style={styles.invitePlaceholder} />
+        ) : (
           <View style={styles.rightSlot}>
-            {isOwner ? (
+            {isOwner && view === "roster" ? (
               <Pressable
-                onPress={handleAccessControl}
+                onPress={() => setView("access")}
                 style={({ pressed }) => [styles.accessBtn, pressed && { opacity: 0.85 }]}
               >
                 <ShieldCheck size={16} color={Theme.primary} strokeWidth={2.4} />
@@ -49,15 +102,13 @@ export function WorkspaceTeamPanel({ onBack }: Props) {
               </Pressable>
             ) : null}
             <Pressable
-              onPress={handleInvite}
+              onPress={openInvite}
               style={({ pressed }) => [styles.inviteBtn, pressed && { opacity: 0.85 }]}
             >
               <UserPlus2 size={16} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
               <Text style={styles.inviteBtnText}>Invite</Text>
             </Pressable>
           </View>
-        ) : (
-          <View style={styles.invitePlaceholder} />
         )
       }
     >
@@ -66,12 +117,21 @@ export function WorkspaceTeamPanel({ onBack }: Props) {
           <Users size={36} color={Theme.textSection} strokeWidth={1.5} />
           <Text style={styles.noOrgText}>No organization loaded</Text>
         </View>
+      ) : view === "invite" ? (
+        <InviteMemberFlow
+          orgId={orgId}
+          layout="embedded"
+          onClose={closeInvite}
+          onInvited={handleInvited}
+        />
       ) : (
         <TeamMembersView
           orgId={orgId}
           currentUserId={user?.uid ?? null}
-          canManage={canManage}
-          onInvite={canManage ? handleInvite : undefined}
+          canManage={view === "access" ? isOwner : canManage}
+          onInvite={canManage ? openInvite : undefined}
+          onEditMember={(member: OrgMember) => setEditMemberId(member.id)}
+          initialSubTab={focusPending ? "pending" : undefined}
         />
       )}
     </WorkspaceDetailLayout>

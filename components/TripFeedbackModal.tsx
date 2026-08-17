@@ -5,13 +5,18 @@ import {
   Platform,
   StyleSheet,
   View,
+  useWindowDimensions,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/** Shared max width for trip rating / settlement modals (web + native). */
+const DESKTOP_BREAKPOINT = 768;
+
+/** Shared max width for trip rating / settlement modals on phones. */
 export const TRIP_FEEDBACK_MODAL_MAX_WIDTH = 340;
+/** Desktop: wide enough for a 4-tag row and a centered card. */
+export const TRIP_FEEDBACK_MODAL_MAX_WIDTH_DESKTOP = 520;
 
 type TripFeedbackModalProps = {
   visible: boolean;
@@ -28,23 +33,31 @@ export function TripFeedbackModal({
   animatedCardStyle,
 }: TripFeedbackModalProps) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= DESKTOP_BREAKPOINT;
+  const edgePad = isDesktop ? 32 : 16;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose}>
       <View
         style={[
           styles.overlay,
+          isDesktop && styles.overlayDesktop,
           {
-            paddingTop: insets.top + 16,
-            paddingBottom: insets.bottom + 16,
+            paddingTop: Math.max(insets.top, 0) + edgePad,
+            paddingBottom: Math.max(insets.bottom, 0) + edgePad,
             backgroundColor: Theme.feedbackModalBackdrop,
           },
         ]}
       >
         {animatedCardStyle != null ? (
-          <Animated.View style={[styles.card, animatedCardStyle]}>{children}</Animated.View>
+          <Animated.View
+            style={[styles.card, isDesktop && styles.cardDesktop, animatedCardStyle]}
+          >
+            {children}
+          </Animated.View>
         ) : (
-          <View style={styles.card}>{children}</View>
+          <View style={[styles.card, isDesktop && styles.cardDesktop]}>{children}</View>
         )}
       </View>
     </Modal>
@@ -58,11 +71,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
+  overlayDesktop: {
+    paddingHorizontal: 40,
+  },
   card: {
     backgroundColor: Theme.screenBackground,
     borderRadius: 22,
     width: '100%',
     maxWidth: TRIP_FEEDBACK_MODAL_MAX_WIDTH,
+    alignSelf: 'center',
     overflow: 'hidden',
     ...Platform.select({
       ios: {
@@ -74,5 +91,9 @@ const styles = StyleSheet.create({
       android: { elevation: 22 },
       default: {},
     }),
+  },
+  cardDesktop: {
+    maxWidth: TRIP_FEEDBACK_MODAL_MAX_WIDTH_DESKTOP,
+    borderRadius: 24,
   },
 });

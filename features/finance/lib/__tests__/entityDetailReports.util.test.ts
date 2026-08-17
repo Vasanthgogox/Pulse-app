@@ -55,8 +55,9 @@ describe('report builders', () => {
   });
 
   it('each report builder passes rows through unchanged', () => {
-    const rows = [{ trip: 'T1', route: 'A-B', sales: '100', received: '50', due: '50', txns: 1, lastTxn: '2026-01-01' }];
+    const rows = [{ trip: 'T1', tripDate: '17 AUG 2026', route: 'A-B', sales: '100', received: '50', due: '50', txns: 1, lastTxn: '2026-01-01' }];
     expect(buildClientReceivableReport(rows).rows).toBe(rows);
+    expect(buildClientReceivableReport(rows).rows[0].tripDate).toBe('17 AUG 2026');
   });
 });
 

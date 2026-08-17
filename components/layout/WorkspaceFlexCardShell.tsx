@@ -11,7 +11,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SPLIT_MIN = Layout.workspaceSplitMinWidth;
-const HUB_ONLY_WIDTH = Layout.workspaceCardHubWidth;
 const CARD_MAX = Layout.workspaceCardMaxWidth;
 
 type WorkspaceFlexCardShellProps = {
@@ -19,36 +18,27 @@ type WorkspaceFlexCardShellProps = {
   panel?: ReactNode;
   panelOpen: boolean;
   onDismiss: () => void;
-  onClosePanel: () => void;
 };
 
 /**
- * Right-anchored workspace flex card — HubSpot / Zoho settings drawer pattern.
+ * Right-anchored workspace flex card.
  * Desktop: dimmed backdrop + card from the right; widens when a panel opens.
  * Mobile: full-screen surface (no backdrop).
+ * Always single-pane — hub and detail panel never render side by side.
  */
 export function WorkspaceFlexCardShell({
   hub,
   panel,
   panelOpen,
   onDismiss,
-  onClosePanel,
 }: WorkspaceFlexCardShellProps) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isDesktop = width >= SPLIT_MIN;
-  const useSplit = isDesktop && panelOpen && !!panel;
-  const cardWidth = isDesktop
-    ? useSplit
-      ? Math.min(Math.round(width * 0.74), CARD_MAX)
-      : HUB_ONLY_WIDTH
-    : width;
-  const hubPaneWidth = useSplit
-    ? Math.max(
-        280,
-        Math.min(Math.round(cardWidth * 0.38), Layout.workspaceCardHubWidth),
-      )
-    : cardWidth;
+  const showPanel = panelOpen && !!panel;
+  // Fixed card width regardless of hub vs. panel — the card must not resize
+  // when navigating in and out of a detail page.
+  const cardWidth = isDesktop ? Math.min(Math.round(width * 0.363), CARD_MAX) : width;
 
   if (!isDesktop) {
     return (
@@ -76,29 +66,7 @@ export function WorkspaceFlexCardShell({
           },
         ]}
       >
-        {useSplit ? (
-          <View style={styles.splitRow}>
-            <View
-              style={[styles.hubPane, { width: hubPaneWidth, maxWidth: hubPaneWidth }]}
-              // Tap-to-close only fires for clicks on the pane background itself —
-              // not on any button/link inside `hub`. Wrapping the whole pane in a
-              // Pressable (as before) nested real <button> children inside an
-              // outer <button>, which is invalid HTML and broke web hydration.
-              // `onClick` is RN-Web-only (forwarded straight to the underlying
-              // div); React Native's View types don't declare it.
-              {...({
-                onClick: (e: { target: EventTarget | null; currentTarget: EventTarget | null }) => {
-                  if (e.target === e.currentTarget) onClosePanel();
-                },
-              } as object)}
-            >
-              <View style={styles.hubPaneInner} pointerEvents="box-none">
-                {hub}
-              </View>
-            </View>
-            <View style={styles.detailPane}>{panel}</View>
-          </View>
-        ) : panelOpen && panel ? (
+        {showPanel ? (
           <View style={styles.singlePane}>{panel}</View>
         ) : (
           <View style={styles.singlePane}>{hub}</View>
@@ -138,28 +106,6 @@ const styles = StyleSheet.create({
         elevation: 20,
       },
     }),
-  },
-  splitRow: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "stretch",
-    minHeight: 0,
-  },
-  hubPane: {
-    minWidth: 0,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-  },
-  hubPaneInner: {
-    flex: 1,
-    minWidth: 0,
-    width: "100%",
-  },
-  detailPane: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: "#f5f7fb",
   },
   singlePane: {
     flex: 1,

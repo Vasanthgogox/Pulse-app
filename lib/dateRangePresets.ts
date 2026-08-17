@@ -206,3 +206,98 @@ export function tripDayMatchesHubDateFilter(
   const period = periodByPreset[preset];
   return days.some((d) => dayIsoMatchesPeriod(d, period, opts));
 }
+
+const MONTH_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/** Compact local-calendar label: `17 Aug 2026`. */
+export function formatIsoDayLabel(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  const month = MONTH_SHORT[Number(m) - 1];
+  if (!y || !month || !d) return iso;
+  return `${Number(d)} ${month} ${y}`;
+}
+
+export function formatIsoDayRangeLabel(fromIso: string, toIso: string): string {
+  if (fromIso === toIso) return formatIsoDayLabel(fromIso);
+  return `${formatIsoDayLabel(fromIso)} – ${formatIsoDayLabel(toIso)}`;
+}
+
+/** Always both ends: `From 1 Aug 2026  To 31 Aug 2026`. */
+export function formatFromToDateLabel(fromIso: string, toIso: string): string {
+  return `From ${formatIsoDayLabel(fromIso)}  To ${formatIsoDayLabel(toIso)}`;
+}
+
+export function minMaxIsoDays(
+  days: Array<string | null | undefined>,
+): { from: string; to: string } | null {
+  let from: string | null = null;
+  let to: string | null = null;
+  for (const raw of days) {
+    const d = (raw ?? "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    if (!from || d < from) from = d;
+    if (!to || d > to) to = d;
+  }
+  if (!from || !to) return null;
+  return { from, to };
+}
+
+export function getCalendarPeriodBounds(
+  period: CalendarPeriodFilter,
+  opts?: CalendarPeriodFilterOptions,
+  now: Date = new Date(),
+): { from: string; to: string } | null {
+  const today = toIsoDateLocal(now);
+  if (period === "RANGE") return null;
+  if (period === "TODAY") return { from: today, to: today };
+  if (period === "YESTERDAY") {
+    const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const iso = toIsoDateLocal(y);
+    return { from: iso, to: iso };
+  }
+  if (period === "WEEK") {
+    return {
+      from: toIsoDateLocal(startOfIsoWeekMonday(now)),
+      to: toIsoDateLocal(endOfIsoWeekMonday(now)),
+    };
+  }
+  if (period === "MONTH") {
+    return {
+      from: toIsoDateLocal(startOfMonth(now)),
+      to: toIsoDateLocal(endOfMonth(now)),
+    };
+  }
+  if (period === "CUSTOM") {
+    const from = (opts?.customFrom ?? "").slice(0, 10);
+    const to = (opts?.customTo ?? "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return null;
+    }
+    return from <= to ? { from, to } : { from: to, to: from };
+  }
+  return null;
+}
+
+/** Human date range for report headers (tiny caption under the title). */
+export function formatCalendarPeriodRangeLabel(
+  period: CalendarPeriodFilter,
+  opts?: CalendarPeriodFilterOptions,
+  now: Date = new Date(),
+): string | null {
+  const bounds = getCalendarPeriodBounds(period, opts, now);
+  if (!bounds) return null;
+  return formatFromToDateLabel(bounds.from, bounds.to);
+}

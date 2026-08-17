@@ -73,7 +73,9 @@ export function useFinanceEntities({
   const { data: tripRows = [], isPending: tripsLoading, isError: tripsError, refetch: refetchTrips } = useTripsQuery(orgId);
   const { data: supplierRows = [], isPending: suppliersLoading } = useSuppliersQuery(orgId);
   const { data: vehicleRows = [], isPending: vehiclesLoading } = useVehiclesQuery(orgId);
-  const { data: driverRows = [], isPending: driversLoading } = useDriversQuery(orgId);
+  const { data: driverRows = [], isPending: driversLoading } = useDriversQuery(orgId, {
+    membership: "ledger",
+  });
   const { data: driverOffers = {} } = useDriverOffersQuery(orgId);
   const { data: connectionRequestsSent = [] } =
     useConnectionRequestsSentQuery(orgId);

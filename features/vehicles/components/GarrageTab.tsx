@@ -11,6 +11,7 @@ import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
+import { CUSTOMERS_SUPPLIERS } from "@/features/finance/constants/tableColumns";
 import { DriverStatusDot } from "@/features/finance/components/FinancialRow";
 import {
   selectFleetProfitabilitySummary,
@@ -424,10 +425,6 @@ export function GarrageTab({
       ? 0
       : 1;
 
-  const formatSubline = (amount: number) =>
-    amount >= 1000
-      ? `₹${(amount / 1000).toFixed(1)}k`
-      : `₹${amount.toLocaleString("en-IN")}`;
   const tripRowsToRender = embedInParentScroll ? filteredTripsList : visibleTripRows;
   const vehicleRowsToRender = embedInParentScroll
     ? filteredVehiclesList
@@ -494,7 +491,17 @@ export function GarrageTab({
                 Trips
               </Text>
             </View>
-            <View style={styles.headerOutstandingCol}>
+            <View style={styles.headerAmtCol}>
+              <Text style={[styles.listHeaderCell, styles.ctHeaderRight]} numberOfLines={1}>
+                Sales
+              </Text>
+            </View>
+            <View style={styles.headerAmtCol}>
+              <Text style={[styles.listHeaderCell, styles.ctHeaderRight]} numberOfLines={1}>
+                Expense
+              </Text>
+            </View>
+            <View style={styles.headerAmtCol}>
               <Text style={[styles.listHeaderCell, styles.ctHeaderRight]} numberOfLines={1}>
                 P&L
               </Text>
@@ -538,10 +545,20 @@ export function GarrageTab({
                   </View>
                   <View style={[styles.listCell, styles.ctTrips]}>
                     <View style={styles.listTripsPill}>
-                      <Text style={styles.listTripsPillText}>—</Text>
+                      <Text style={styles.listTripsPillText}>1</Text>
                     </View>
                   </View>
-                  <View style={[styles.listCell, styles.ctOutstanding]}>
+                  <View style={[styles.listCell, styles.ctAmt]}>
+                    <Text style={styles.listAmtValue} numberOfLines={1}>
+                      {formatCurrency(row.sales ?? 0)}
+                    </Text>
+                  </View>
+                  <View style={[styles.listCell, styles.ctAmt]}>
+                    <Text style={styles.listAmtExpense} numberOfLines={1}>
+                      {formatCurrency(row.totalExpense ?? 0)}
+                    </Text>
+                  </View>
+                  <View style={[styles.listCell, styles.ctAmt]}>
                     <Text
                       style={[
                         styles.listOutstandingValue,
@@ -554,9 +571,6 @@ export function GarrageTab({
                       numberOfLines={1}
                     >
                       {formatCurrency(row.net ?? 0)}
-                    </Text>
-                    <Text style={styles.listRecdLabel} numberOfLines={1}>
-                      Exp: {(row.totalExpense ?? 0) > 0 ? formatSubline(row.totalExpense ?? 0) : "—"}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -594,18 +608,23 @@ export function GarrageTab({
                       status={driverByVehicleId[row.id]?.status ?? "available"}
                     />
                   </View>
-                  <Text style={styles.listEntitySub} numberOfLines={1} ellipsizeMode="tail">
-                    Sales: {row.sales > 0 ? formatSubline(row.sales) : "—"} · Op:{" "}
-                    {row.operationalExpense > 0 ? formatSubline(row.operationalExpense) : "—"} · Own:{" "}
-                    {row.ownershipExpense > 0 ? formatSubline(row.ownershipExpense) : "—"}
-                  </Text>
                 </View>
                 <View style={[styles.listCell, styles.ctTrips]}>
                   <View style={styles.listTripsPill}>
                     <Text style={styles.listTripsPillText}>{row.trips}</Text>
                   </View>
                 </View>
-                <View style={[styles.listCell, styles.ctOutstanding]}>
+                <View style={[styles.listCell, styles.ctAmt]}>
+                  <Text style={styles.listAmtValue} numberOfLines={1}>
+                    {formatCurrency(row.sales ?? 0)}
+                  </Text>
+                </View>
+                <View style={[styles.listCell, styles.ctAmt]}>
+                  <Text style={styles.listAmtExpense} numberOfLines={1}>
+                    {formatCurrency(row.expense ?? 0)}
+                  </Text>
+                </View>
+                <View style={[styles.listCell, styles.ctAmt]}>
                   <Text
                     style={[
                       styles.listOutstandingValue,
@@ -618,10 +637,6 @@ export function GarrageTab({
                     numberOfLines={1}
                   >
                     {formatCurrency(row.pnl)}
-                  </Text>
-                  <Text style={styles.listRecdLabel} numberOfLines={1}>
-                    Exp: {row.expense > 0 ? formatSubline(row.expense) : "—"} · Unalloc:{" "}
-                    {row.unallocatedCost > 0 ? formatSubline(row.unallocatedCost) : "—"}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -781,15 +796,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
-  ctEntity: { flex: 2.2, minWidth: 0 },
-  ctTrips: { flex: 0.5, minWidth: 44, justifyContent: "center" },
-  ctOutstanding: { flex: 1.5, minWidth: 0, alignItems: "flex-end", justifyContent: "center" },
+  ctEntity: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0 },
+  ctTrips: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: "center" },
+  ctAmt: {
+    flex: CUSTOMERS_SUPPLIERS.mission,
+    minWidth: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
   ctHeaderLeft: { textAlign: "left" as const },
   ctHeaderCenter: { textAlign: "center" as const },
   ctHeaderRight: { textAlign: "right" as const },
-  headerEntityCol: { flex: 2.2, minWidth: 0, justifyContent: "center" },
-  headerTripsCol: { flex: 0.5, minWidth: 44, justifyContent: "center" },
-  headerOutstandingCol: { flex: 1.5, minWidth: 0, justifyContent: "center" },
+  headerEntityCol: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0, justifyContent: "center" },
+  headerTripsCol: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: "center" },
+  headerAmtCol: { flex: CUSTOMERS_SUPPLIERS.mission, minWidth: 0, justifyContent: "center" },
   listRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -805,6 +825,8 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
+    flex: 1,
+    minWidth: 0,
   },
   listEntitySub: {
     fontSize: 8,
@@ -846,13 +868,16 @@ const styles = StyleSheet.create({
   listOutstandingPositive: { color: Theme.darkGreen },
   listOutstandingNegative: { color: Theme.teslaRed },
   listOutstandingMuted: { color: Theme.textMuted },
-  listRecdLabel: {
-    fontSize: 8,
-    fontWeight: "500",
+  listAmtValue: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+  },
+  listAmtExpense: {
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textMuted,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginTop: 2,
     textAlign: "right",
   },
   loading: { padding: 24, textAlign: "center", color: Theme.textSecondary },

@@ -142,6 +142,9 @@ export interface FinanceModalsProps {
   onCloseReportModal: () => void;
   reportTransactions: LedgerRow[];
   reportTitle?: string;
+  reportPeriodLabel?: string;
+  reportCustom?: import("./LedgerReportModal").LedgerReportModalProps["customReport"];
+  hideReportCashSummary?: boolean;
 
   // Shared Ledger
   showSharedLedgerModal: boolean;
@@ -231,6 +234,9 @@ export function FinanceModals(props: FinanceModalsProps) {
     onCloseReportModal,
     reportTransactions,
     reportTitle,
+    reportPeriodLabel,
+    reportCustom,
+    hideReportCashSummary,
     showSharedLedgerModal,
     onCloseSharedLedgerModal,
     orgId,
@@ -431,6 +437,9 @@ export function FinanceModals(props: FinanceModalsProps) {
         onClose={onCloseReportModal}
         transactions={reportTransactions}
         title={reportTitle ?? t("ledgerReport")}
+        periodLabel={reportPeriodLabel}
+        customReport={reportCustom}
+        hideCashSummary={hideReportCashSummary ?? !!reportCustom}
       />
 
       <SharedLedgerModal

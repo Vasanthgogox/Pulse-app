@@ -89,6 +89,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 type Props = {
   memberId: string;
   onBack: () => void;
+  /** Skip extra safe-area padding when nested in the workspace sidebar. */
+  embedded?: boolean;
 };
 
 function domainsEqual(a: MemberDomainFlags, b: MemberDomainFlags): boolean {
@@ -120,11 +122,11 @@ function formatJoined(iso: string): string {
   }
 }
 
-export function MemberPermissionsPanel({ memberId, onBack }: Props) {
+export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: Props) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const twoCol = width >= 900;
-  const widePresets = width >= 1100;
+  const twoCol = !embedded && width >= 900;
+  const widePresets = !embedded && width >= 1100;
   const { currentOrganization } = useOrganization();
   const { refresh: refreshWorkspace } = useActiveWorkspace();
   const { isOwner } = useOrgRole();
@@ -875,7 +877,7 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
 
   return (
     <View style={styles.root}>
-      <View style={{ paddingTop: insets.top }}>
+      <View style={{ paddingTop: embedded ? 0 : insets.top }}>
         <Header onBack={onBack} />
       </View>
 

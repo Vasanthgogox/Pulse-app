@@ -45,8 +45,9 @@ export function BidReceivedHammer({ visible, size = 14 }: BidReceivedHammerProps
   });
 
   if (!visible) return null;
+  const slot = size + 4;
   return (
-    <View style={styles.slot}>
+    <View style={[styles.slot, { width: slot, height: slot }]}>
       <Animated.View style={[styles.wrap, { transform: [{ rotate }] }]}>
         <FontAwesome name="gavel" size={size} color={Theme.positive} />
       </Animated.View>
@@ -56,8 +57,6 @@ export function BidReceivedHammer({ visible, size = 14 }: BidReceivedHammerProps
 
 const styles = StyleSheet.create({
   slot: {
-    width: 22,
-    height: 22,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,

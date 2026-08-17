@@ -2,12 +2,19 @@
  * Finance empty-state / promo card (borderless, aligned with network grow banner).
  */
 import Theme from "@/constants/Theme";
+import { HubPromoHeroLottie } from "@/components/hub/HubPromoLottie";
 import { PartyAddChip, type PartyAddChipIcon } from "@/components/PartyAddChip";
 import {
   FINANCE_PROMO_PRESETS,
   type FinancePromoBullet,
   type FinancePromoVariant,
 } from "@/lib/financePromoAssets";
+import {
+  FINANCE_PROMO_HERO_SLOT,
+  resolveFinancePromoHeroLottie,
+  resolveFinancePromoHeroResizeMode,
+  resolveFinancePromoHeroVisualScale,
+} from "@/lib/financePromoLottieAssets";
 import { useEffect, useRef } from "react";
 import {
   Animated,
@@ -110,9 +117,26 @@ export function FinancePromoCard({
   const resolvedCta = ctaLabel ?? preset.ctaLabel;
   const showCta = Boolean(onCtaPress && resolvedCta);
   const showHeroTextAction = showCta && Boolean(resolvedCta);
+  const compact = width < 480;
+  const heroSlot = isColumn
+    ? isDesktop
+      ? FINANCE_PROMO_HERO_SLOT.columnDesktop
+      : FINANCE_PROMO_HERO_SLOT.column
+    : compact
+      ? FINANCE_PROMO_HERO_SLOT.compact
+      : isDesktop
+        ? FINANCE_PROMO_HERO_SLOT.desktop
+        : FINANCE_PROMO_HERO_SLOT.mobile;
 
   return (
-    <View style={[styles.card, isColumn && styles.cardColumn, style]}>
+    <View
+      style={[
+        styles.card,
+        isColumn && styles.cardColumn,
+        isColumn && styles.cardFill,
+        style,
+      ]}
+    >
       <View
         style={[
           styles.cardBody,
@@ -167,6 +191,15 @@ export function FinancePromoCard({
           </View>
         ) : null}
       </View>
+      <View style={[styles.heroStage, isColumn && styles.heroStageFill]}>
+        <HubPromoHeroLottie
+          source={resolveFinancePromoHeroLottie(variant)}
+          width={heroSlot}
+          height={heroSlot}
+          renderScale={resolveFinancePromoHeroVisualScale(variant)}
+          resizeMode={resolveFinancePromoHeroResizeMode(variant)}
+        />
+      </View>
       {showCta && !showHeroTextAction ? (
         <>
           <View style={styles.divider} />
@@ -195,14 +228,19 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     borderRadius: 10,
   },
+  cardFill: {
+    flex: 1,
+    minHeight: 0,
+  },
   cardBody: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 16,
     paddingHorizontal: 16,
-    paddingVertical: 18,
-    minHeight: 132,
+    paddingTop: 18,
+    paddingBottom: 8,
+    minHeight: 0,
   },
   cardBodyColumn: {
     flexDirection: "column",
@@ -214,12 +252,26 @@ const styles = StyleSheet.create({
   },
   cardBodyColumnDesktop: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: 8,
-    paddingVertical: 14,
+    paddingTop: 14,
+    paddingBottom: 4,
     minHeight: 0,
-    gap: 20,
+    gap: 16,
+  },
+  heroStage: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  heroStageFill: {
+    flex: 1,
+    minHeight: 120,
+    paddingBottom: 16,
   },
   textCol: {
     flex: 1,
@@ -290,14 +342,15 @@ const styles = StyleSheet.create({
   },
   heroTextAction: {
     alignItems: "flex-end",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     flexShrink: 0,
     paddingLeft: 12,
+    paddingTop: 2,
   },
   heroTextActionDesktop: {
-    paddingLeft: 20,
-    alignSelf: "center",
-    justifyContent: "center",
+    paddingLeft: 16,
+    alignSelf: "flex-start",
+    justifyContent: "flex-start",
   },
   heroTextActionColumn: {
     alignItems: "flex-start",
@@ -307,9 +360,9 @@ const styles = StyleSheet.create({
   },
   heroTextActionMobile: {
     alignItems: "flex-end",
-    alignSelf: "center",
+    alignSelf: "flex-start",
     paddingLeft: 8,
-    paddingTop: 0,
+    paddingTop: 2,
     flexShrink: 0,
   },
   divider: {

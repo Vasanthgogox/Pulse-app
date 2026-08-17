@@ -181,6 +181,28 @@ export function canAccessFinanceSubTab(
   }
 }
 
+export type FinanceKanbanColumn = "customers" | "suppliers" | "garage" | "drivers";
+export type FinanceSupplyFilter = "all" | "asset" | "aggregate";
+
+const KANBAN_COLUMNS_BY_SUPPLY: Record<
+  FinanceSupplyFilter,
+  readonly FinanceKanbanColumn[]
+> = {
+  all: ["customers", "suppliers", "garage", "drivers"],
+  asset: ["customers", "garage", "drivers"],
+  aggregate: ["customers", "suppliers"],
+};
+
+/** Cash kanban columns for ALL / ASSET / AGGREGATE, then org-model RBAC. */
+export function financeKanbanColumnsForSupplyFilter(
+  capabilities: Capability[],
+  filter: FinanceSupplyFilter,
+): FinanceKanbanColumn[] {
+  return KANBAN_COLUMNS_BY_SUPPLY[filter].filter((col) =>
+    canAccessFinanceSubTab(capabilities, col),
+  );
+}
+
 /** Ledger cash-tab party filters. */
 export function canAccessLedgerCategory(
   capabilities: Capability[],

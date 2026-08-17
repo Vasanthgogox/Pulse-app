@@ -4,6 +4,10 @@
  */
 import type { LedgerRow } from "@/features/finance";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import {
+  formatFromToDateLabel,
+  toIsoDateLocal,
+} from "@/lib/dateRangePresets";
 import { formatIndianVehicleNumber, normalizeVehicleNumberForMatch } from "@/lib/format";
 import type { VehicleRow } from "../services/vehicles.service";
 
@@ -136,6 +140,36 @@ export function formatPeriodLabel(period: GarragePeriodValue): string {
   }
   const [y, m] = period.split("-");
   return `${MONTH_LABELS[m] ?? m} ${y}`;
+}
+
+/** Inclusive calendar range for garage reports. */
+export function getGaragePeriodBounds(
+  period: GarragePeriodValue,
+  now: Date = new Date(),
+): { from: string; to: string } | null {
+  if (period.startsWith("ytd-")) {
+    const y = Number(period.slice(4));
+    if (!Number.isFinite(y)) return null;
+    const from = `${y}-01-01`;
+    const to =
+      y === now.getFullYear() ? toIsoDateLocal(now) : `${y}-12-31`;
+    return { from, to };
+  }
+  const [y, m] = period.split("-");
+  if (!/^\d{4}$/.test(y) || !/^\d{2}$/.test(m)) return null;
+  const start = new Date(Number(y), Number(m) - 1, 1);
+  const end = new Date(Number(y), Number(m), 0);
+  return { from: toIsoDateLocal(start), to: toIsoDateLocal(end) };
+}
+
+/** Inclusive calendar range for garage reports, e.g. `From 1 Aug 2026  To 31 Aug 2026`. */
+export function formatPeriodRangeLabel(
+  period: GarragePeriodValue,
+  now: Date = new Date(),
+): string {
+  const bounds = getGaragePeriodBounds(period, now);
+  if (!bounds) return formatPeriodLabel(period);
+  return formatFromToDateLabel(bounds.from, bounds.to);
 }
 
 /** Build list of period options: YTD, this month, last month, then any month present in trips */
