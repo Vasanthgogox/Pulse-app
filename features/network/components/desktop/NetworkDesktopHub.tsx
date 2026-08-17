@@ -63,6 +63,8 @@ export type NetworkDesktopTab =
   | "connections"
   /** @deprecated Prefer `network` — kept for deep links / bookmarks. */
   | "grow"
+  /** Reserved for the future unified Performance page (Goals + Sales merge). Not yet wired to a tab or a render branch. */
+  | "performance"
   | "chat";
 
 const TABS: { id: NetworkDesktopTab; label: string }[] = [
@@ -92,6 +94,7 @@ function parseHubTab(raw: string | undefined): NetworkDesktopTab | null {
     raw === "network" ||
     raw === "connections" ||
     raw === "grow" ||
+    raw === "performance" ||
     raw === "chat"
   ) {
     return normalizeHubTab(raw);
