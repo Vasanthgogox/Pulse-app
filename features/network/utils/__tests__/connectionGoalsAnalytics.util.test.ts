@@ -3,6 +3,7 @@ import {
   buildAssetBreakdown,
   buildKamBreakdown,
   buildPerformanceKpiRow,
+  buildPerformanceTripEvidenceRows,
   buildRegionBreakdown,
   buildSupplierBreakdown,
   changePct,
@@ -699,5 +700,113 @@ describe('buildKamBreakdown / buildRegionBreakdown / buildSupplierBreakdown / bu
   it('all breakdown rows sort by actualRevenue descending', () => {
     const rows = buildSupplierBreakdown(trips, previousTrips, supplierById);
     expect(rows[0].actualRevenue).toBeGreaterThanOrEqual(rows[1].actualRevenue);
+  });
+});
+
+describe('Phase 2 Commit 1: entity trip evidence must be period-scoped, not just cross-filter-scoped', () => {
+  it('tripsInDateRange(entityTrips, periodBounds(...)) excludes a trip outside the selected period even though it matches the entity', () => {
+    // Mirrors exactly the composition NetworkDesktopPerformancePanel.tsx uses
+    // for progressEntityTrips -- the bug being fixed was that this period
+    // filter was never applied before feeding the evidence table/download.
+    const entityTrips = [
+      trip('2026-08-05T00:00:00', 100000, 0, { id: 'in-period' }),
+      trip('2026-07-20T00:00:00', 90000, 0, { id: 'out-of-period' }),
+    ] as TripRow[];
+    const { start, end } = periodBounds('2026-08', 'month');
+    const scoped = tripsInDateRange(entityTrips, start, end);
+    expect(scoped.map((t) => t.id)).toEqual(['in-period']);
+  });
+});
+
+describe('buildPerformanceTripEvidenceRows (Phase 2 Commit 1)', () => {
+  const supplierById = new Map([['sup-1', { name: 'Supplier One' }]]);
+  const vehicleById = new Map([['veh-1', { name: 'MH-01' }]]);
+  const driverById = new Map([['drv-1', { name: 'Driver One' }]]);
+
+  it('maps every locked evidence column, preferring lookup names over the trip\'s own denormalized fields', () => {
+    const trips = [
+      trip('2026-08-05T00:00:00', 100000, 60000, {
+        id: 't1',
+        trip_number: 'TRP001',
+        client_name: 'Apple Retail',
+        supplier_id: 'sup-1',
+        supplier_name: 'Stale Supplier Name',
+        vehicle_id: 'veh-1',
+        vehicle_display_number: 'STALE-VEH',
+        driver_id: 'drv-1',
+        driver_display_name: 'Stale Driver Name',
+        margin: 40000,
+        status: 'in_transit',
+      }),
+    ] as TripRow[];
+
+    const rows = buildPerformanceTripEvidenceRows(trips, { supplierById, vehicleById, driverById });
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
+    expect(row.id).toBe('t1');
+    expect(row.tripRef).toBe('TRP001');
+    expect(row.clientName).toBe('Apple Retail');
+    expect(row.supplierName).toBe('Supplier One'); // lookup wins over trip.supplier_name
+    expect(row.vehicleName).toBe('MH-01'); // lookup wins over trip.vehicle_display_number
+    expect(row.driverName).toBe('Driver One'); // lookup wins over trip.driver_display_name
+    expect(row.sales).toBe(100000);
+    expect(row.cost).toBe(60000);
+    expect(row.margin).toBe(40000); // uses the stored margin column, not sales - cost
+    expect(row.statusLabel).toBe('In transit');
+  });
+
+  it('falls back to the trip\'s own denormalized name fields when no lookup map entry exists', () => {
+    const trips = [
+      trip('2026-08-05T00:00:00', 50000, 30000, {
+        id: 't2',
+        supplier_id: 'sup-unknown',
+        supplier_name: 'Direct Supplier Name',
+        vehicle_id: null,
+        vehicle_display_number: 'DL01AB1234',
+        driver_id: null,
+        driver_display_name: 'Direct Driver Name',
+      }),
+    ] as TripRow[];
+
+    const rows = buildPerformanceTripEvidenceRows(trips, { supplierById, vehicleById, driverById });
+    expect(rows[0].supplierName).toBe('Direct Supplier Name');
+    expect(rows[0].vehicleName).toBe('DL01AB1234');
+    expect(rows[0].driverName).toBe('Direct Driver Name');
+  });
+
+  it('falls back to sales - cost when trip.margin is missing, and to "--" when no name is available at all', () => {
+    const trips = [
+      trip('2026-08-05T00:00:00', 80000, 50000, {
+        id: 't3',
+        margin: undefined as unknown as number,
+        client_name: '',
+        supplier_id: null,
+        supplier_name: null,
+        vehicle_id: null,
+        vehicle_display_number: null,
+        driver_id: null,
+        driver_display_name: null,
+      }),
+    ] as TripRow[];
+
+    const rows = buildPerformanceTripEvidenceRows(trips, {});
+    expect(rows[0].margin).toBe(30000); // 80000 - 50000
+    expect(rows[0].clientName).toBe('—');
+    expect(rows[0].supplierName).toBe('—');
+    expect(rows[0].vehicleName).toBe('—');
+    expect(rows[0].driverName).toBe('—');
+  });
+
+  it('sorts rows by trip date descending -- most recent evidence first', () => {
+    const trips = [
+      trip('2026-08-01T00:00:00', 10000, 0, { id: 'older' }),
+      trip('2026-08-15T00:00:00', 20000, 0, { id: 'newer' }),
+    ] as TripRow[];
+    const rows = buildPerformanceTripEvidenceRows(trips);
+    expect(rows.map((r) => r.id)).toEqual(['newer', 'older']);
+  });
+
+  it('an empty trip array produces an empty row set -- callers use this to disable Download', () => {
+    expect(buildPerformanceTripEvidenceRows([])).toEqual([]);
   });
 });

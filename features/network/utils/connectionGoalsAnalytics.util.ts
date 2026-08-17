@@ -6,9 +6,11 @@ import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import type { LedgerTx } from "@/features/finance/aggregation/types";
 import {
+  formatTripStatusLabel,
   getMonthKeys,
   type SalesDateRange,
 } from "@/features/network/utils/connectionSalesAnalytics.util";
+import { getTripOperationalDisplayCode } from "@/features/operations/display";
 import type {
   EntityTargetMetrics,
   GoalFocus,
@@ -144,7 +146,7 @@ export function rollupMonthKeys(
   return keys;
 }
 
-function rollupLabel(selectedMonthKey: string, rollup: GoalsRollup): string {
+export function rollupLabel(selectedMonthKey: string, rollup: GoalsRollup): string {
   if (rollup === "month") return monthLabelFromKey(selectedMonthKey);
   const [y, m] = selectedMonthKey.split("-").map(Number);
   if (rollup === "quarter") {
@@ -1435,4 +1437,74 @@ export function buildAssetBreakdown(
     });
   }
   return rows.sort((a, b) => b.actualRevenue - a.actualRevenue);
+}
+
+// ─── Performance: Trip evidence (Phase 2 Commit 1) ────────────────────────────
+//
+// A thin, read-only mapping over already-filtered/period-scoped trips -- no
+// recalculation, no new query. Columns are locked to exactly what the
+// Progress modal shows: Trip ID, Date, Client, Supplier/Operator, Vehicle,
+// Driver, Sales, Cost, Margin, Status. Name resolution prefers the caller's
+// own lookup maps (already built once in the panel) and falls back to the
+// trip's own denormalized name fields, same convention as
+// buildSalesTripTableRows.
+
+export type PerformanceTripEvidenceRow = {
+  id: string;
+  tripRef: string;
+  dateLabel: string;
+  clientName: string;
+  supplierName: string;
+  vehicleName: string;
+  driverName: string;
+  sales: number;
+  cost: number;
+  margin: number;
+  statusLabel: string;
+};
+
+export function buildPerformanceTripEvidenceRows(
+  trips: readonly TripRow[],
+  lookups: {
+    supplierById?: ReadonlyMap<string, { name: string }>;
+    vehicleById?: ReadonlyMap<string, { name: string }>;
+    driverById?: ReadonlyMap<string, { name: string }>;
+  } = {},
+): PerformanceTripEvidenceRow[] {
+  const sorted = [...trips].sort((a, b) => {
+    const ad = a.pickup_date ?? a.completed_at ?? a.created_at ?? "";
+    const bd = b.pickup_date ?? b.completed_at ?? b.created_at ?? "";
+    return bd.localeCompare(ad);
+  });
+
+  return sorted.map((trip) => {
+    const sales = Math.max(0, Number(trip.client_price) || 0);
+    const cost = Math.max(0, Number(trip.supplier_rate) || 0);
+    const storedMargin = Number(trip.margin);
+    const margin = Number.isFinite(storedMargin) ? storedMargin : sales - cost;
+    const rawDate = trip.pickup_date ?? trip.completed_at ?? trip.created_at;
+    const date = rawDate ? new Date(rawDate) : null;
+    return {
+      id: trip.id,
+      tripRef: getTripOperationalDisplayCode(trip),
+      dateLabel: date && Number.isFinite(date.getTime()) ? date.toLocaleDateString("en-IN") : "—",
+      clientName: trip.client_name?.trim() || "—",
+      supplierName:
+        (trip.supplier_id && lookups.supplierById?.get(trip.supplier_id)?.name) ||
+        trip.supplier_name?.trim() ||
+        "—",
+      vehicleName:
+        (trip.vehicle_id && lookups.vehicleById?.get(trip.vehicle_id)?.name) ||
+        trip.vehicle_display_number?.trim() ||
+        "—",
+      driverName:
+        (trip.driver_id && lookups.driverById?.get(trip.driver_id)?.name) ||
+        trip.driver_display_name?.trim() ||
+        "—",
+      sales,
+      cost,
+      margin,
+      statusLabel: formatTripStatusLabel(trip.status),
+    };
+  });
 }

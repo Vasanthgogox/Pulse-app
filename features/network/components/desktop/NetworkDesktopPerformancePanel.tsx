@@ -67,6 +67,7 @@ import {
   buildEntityGoalRows,
   buildKamBreakdown,
   buildPerformanceKpiRow,
+  buildPerformanceTripEvidenceRows,
   buildRegionBreakdown,
   buildSupplierBreakdown,
   computeGoalsActualsForRollup,
@@ -74,9 +75,12 @@ import {
   EMPTY_PERFORMANCE_CROSS_FILTER,
   filterTripsForCrossFilter,
   getRecentMonthKeys,
+  periodBounds,
   previousPeriodTripWindow,
   resolveClientIdsForFilter,
   resolveFilteredPeriodTarget,
+  rollupLabel,
+  tripsInDateRange,
   type EntityGoalRow,
   type GoalsRollup,
   type PerformanceCommercialBreakdownRow,
@@ -84,6 +88,7 @@ import {
   type PerformanceKpiRow,
   type PerformanceOperationalBreakdownRow,
   type PerformancePerspective,
+  type PerformanceTripEvidenceRow,
 } from "@/features/network/utils/connectionGoalsAnalytics.util";
 import {
   NetworkDesktopEntityProgressModal,
@@ -388,27 +393,75 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
     );
   }, [progressEntity, clients, goalsStore, filteredTrips, drivers, vehicles, selectedMonthKey, rollup]);
 
-  // The entity's own trips for the Progress modal's evidence preview --
-  // matches whichever kind/id is open, always scoped within filteredTrips
-  // (the page's current cross-filter), never the raw unfiltered trips.
+  // The entity's own trips for the Progress modal's evidence table -- matches
+  // whichever kind/id is open, scoped within filteredTrips (the page's
+  // current cross-filter) AND the selected Month/Quarter/Year period.
+  //
+  // Phase 2 Commit 1 fix: filteredTrips only applies the cross-filter
+  // dimensions -- the period itself was never applied to this array (only
+  // to the KPI aggregation, via computeGoalsActualsForRollup internally).
+  // Without this, the evidence table/download would silently include trips
+  // from outside the selected period. tripsInDateRange + periodBounds are
+  // both already used/tested elsewhere in this pipeline -- composed here,
+  // not reimplemented.
   const progressEntityTrips = useMemo(() => {
     if (!progressEntity) return [];
     const { kind, id } = progressEntity;
-    if (kind === "client") return filteredTrips.filter((t) => t.client_id === id);
-    if (kind === "supplier") return filteredTrips.filter((t) => t.supplier_id === id);
-    if (kind === "asset") {
-      return filteredTrips.filter((t) => t.vehicle_id === id || t.driver_id === id);
+    const withinKind = (() => {
+      if (kind === "client") return filteredTrips.filter((t) => t.client_id === id);
+      if (kind === "supplier") return filteredTrips.filter((t) => t.supplier_id === id);
+      if (kind === "asset") {
+        return filteredTrips.filter((t) => t.vehicle_id === id || t.driver_id === id);
+      }
+      // kam / region -- every trip belonging to any client under this entity
+      const scopedClientIds = new Set(
+        clients
+          .filter((c) =>
+            kind === "kam" ? goalsStore.kamAssignments[c.id] === id : goalsStore.clientRegions[c.id] === id,
+          )
+          .map((c) => c.id),
+      );
+      return filteredTrips.filter((t) => t.client_id && scopedClientIds.has(t.client_id));
+    })();
+    const { start, end } = periodBounds(selectedMonthKey, rollup);
+    return tripsInDateRange(withinKind, start, end);
+  }, [progressEntity, filteredTrips, clients, goalsStore, selectedMonthKey, rollup]);
+
+  // Display-ready evidence rows -- thin mapping only, no recalculation.
+  const progressEvidenceRows: PerformanceTripEvidenceRow[] = useMemo(
+    () => buildPerformanceTripEvidenceRows(progressEntityTrips, { supplierById, vehicleById, driverById }),
+    [progressEntityTrips, supplierById, vehicleById, driverById],
+  );
+
+  const progressPeriodLabel = rollupLabel(selectedMonthKey, rollup);
+
+  // Any OTHER active cross-filter dimension besides the entity currently
+  // open in the modal (e.g. viewing Bhujesh's KAM progress while a Region
+  // filter is simultaneously active elsewhere on the page). Reuses the same
+  // display-name lookups already built for the "Showing:" context bar.
+  const progressOtherFilterLabel: string | null = useMemo(() => {
+    if (!progressEntity) return null;
+    const parts: string[] = [];
+    if (progressEntity.kind !== "kam" && crossFilter.kamId) {
+      parts.push(kamById.get(crossFilter.kamId)?.name ?? crossFilter.kamId);
     }
-    // kam / region -- every trip belonging to any client under this entity
-    const scopedClientIds = new Set(
-      clients
-        .filter((c) =>
-          kind === "kam" ? goalsStore.kamAssignments[c.id] === id : goalsStore.clientRegions[c.id] === id,
-        )
-        .map((c) => c.id),
-    );
-    return filteredTrips.filter((t) => t.client_id && scopedClientIds.has(t.client_id));
-  }, [progressEntity, filteredTrips, clients, goalsStore]);
+    if (progressEntity.kind !== "region" && crossFilter.regionId) {
+      parts.push(crossFilter.regionId);
+    }
+    if (progressEntity.kind !== "client" && crossFilter.clientId) {
+      parts.push(clients.find((c) => c.id === crossFilter.clientId)?.name ?? crossFilter.clientId);
+    }
+    if (progressEntity.kind !== "supplier" && crossFilter.supplierId) {
+      parts.push(supplierById.get(crossFilter.supplierId)?.name ?? crossFilter.supplierId);
+    }
+    if (progressEntity.kind !== "asset" && crossFilter.assetId) {
+      parts.push(
+        (vehicleById.get(crossFilter.assetId) ?? driverById.get(crossFilter.assetId))?.name ??
+          crossFilter.assetId,
+      );
+    }
+    return parts.length > 0 ? parts.join(" · ") : null;
+  }, [progressEntity, crossFilter, kamById, clients, supplierById, vehicleById, driverById]);
 
   // The Progress modal's KPI header reuses whichever breakdown row is
   // already computed for this entity -- never a second calculation.
@@ -812,7 +865,9 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
           entityName={progressEntity.name}
           kpi={progressKpi}
           portfolioClients={progressPortfolioClients}
-          trips={progressEntityTrips}
+          evidenceRows={progressEvidenceRows}
+          periodLabel={progressPeriodLabel}
+          otherFilterLabel={progressOtherFilterLabel}
         />
       ) : null}
     </ScrollView>
