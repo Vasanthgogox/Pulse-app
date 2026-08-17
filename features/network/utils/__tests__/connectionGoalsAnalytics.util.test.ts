@@ -718,6 +718,114 @@ describe('Phase 2 Commit 1: entity trip evidence must be period-scoped, not just
   });
 });
 
+describe('Phase 2 Commit 3: breakdown Actuals must be period-scoped before grouping', () => {
+  // buildKam/Region/Supplier/AssetBreakdown only sum whatever trips they
+  // are given -- selectedMonthKey scopes targets, not Actuals. The panel
+  // therefore applies periodBounds + tripsInDateRange once
+  // (periodScopedFilteredTrips) before calling all four builders. These
+  // tests lock that composition contract so a future caller cannot
+  // silently reintroduce all-time Actuals under an August (etc.) selection.
+
+  const goalsStore: NetworkGoalsStore = {
+    version: 3,
+    months: {
+      '2026-08': {
+        aggregate: { revenueInr: 1000000, tripCount: 100, marginPct: 30 },
+        clients: { apple: { revenueInr: 120000, tripCount: 10 } },
+        vehicles: {},
+        drivers: {},
+      },
+    },
+    kamAssignments: { apple: 'bhujesh' },
+    clientRegions: { apple: 'south' },
+    yearlyTargets: {},
+    quarterlyTargets: {},
+    updatedAt: '',
+  };
+
+  const allTimeTrips = [
+    trip('2026-08-05T00:00:00', 100000, 80000, {
+      client_id: 'apple',
+      supplier_id: 'sup-1',
+      vehicle_id: 'veh-1',
+      driver_id: 'drv-1',
+    }),
+    trip('2026-07-20T00:00:00', 90000, 70000, {
+      client_id: 'apple',
+      supplier_id: 'sup-1',
+      vehicle_id: 'veh-1',
+      driver_id: 'drv-1',
+    }),
+  ] as TripRow[];
+  const previousTrips = [] as TripRow[];
+  const kamById = new Map([['bhujesh', { name: 'Bhujesh' }]]);
+  const supplierById = new Map([['sup-1', { name: 'Supplier One' }]]);
+  const vehicleById = new Map([['veh-1', { name: 'MH-01' }]]);
+  const driverById = new Map([['drv-1', { name: 'Driver One' }]]);
+
+  it('without period scoping, KAM/Region/Supplier/Asset Actuals include out-of-period trips (the bug)', () => {
+    expect(buildKamBreakdown(goalsStore, allTimeTrips, previousTrips, kamById, '2026-08', 'month')[0].actualRevenue).toBe(190000);
+    expect(buildRegionBreakdown(goalsStore, allTimeTrips, previousTrips, '2026-08', 'month')[0].actualRevenue).toBe(190000);
+    expect(buildSupplierBreakdown(allTimeTrips, previousTrips, supplierById)[0].actualRevenue).toBe(190000);
+    expect(buildAssetBreakdown(allTimeTrips, previousTrips, 'vehicle', vehicleById)[0].actualRevenue).toBe(190000);
+    expect(buildAssetBreakdown(allTimeTrips, previousTrips, 'driver', driverById)[0].actualRevenue).toBe(190000);
+  });
+
+  it('with periodScopedFilteredTrips composition, all four Actuals match August-only (the fix)', () => {
+    const { start, end } = periodBounds('2026-08', 'month');
+    const periodScoped = tripsInDateRange(allTimeTrips, start, end);
+    expect(periodScoped).toHaveLength(1);
+
+    expect(buildKamBreakdown(goalsStore, periodScoped, previousTrips, kamById, '2026-08', 'month')[0].actualRevenue).toBe(100000);
+    expect(buildRegionBreakdown(goalsStore, periodScoped, previousTrips, '2026-08', 'month')[0].actualRevenue).toBe(100000);
+    expect(buildSupplierBreakdown(periodScoped, previousTrips, supplierById)[0].actualRevenue).toBe(100000);
+    expect(buildAssetBreakdown(periodScoped, previousTrips, 'vehicle', vehicleById)[0].actualRevenue).toBe(100000);
+    expect(buildAssetBreakdown(periodScoped, previousTrips, 'driver', driverById)[0].actualRevenue).toBe(100000);
+  });
+
+  it('buildPerformanceKpiRow on a KAM row with a real target surfaces Target-to-date and Pacing (entity pacing)', () => {
+    const { start, end } = periodBounds('2026-08', 'month');
+    const periodScoped = tripsInDateRange(allTimeTrips, start, end);
+    const kam = buildKamBreakdown(goalsStore, periodScoped, previousTrips, kamById, '2026-08', 'month')[0];
+    const asOf = new Date(2026, 7, 16); // mid-August
+    const kpi = buildPerformanceKpiRow(
+      'KAM',
+      'inr',
+      kam.actualRevenue,
+      kam.targetRevenue,
+      kam.previousActualRevenue,
+      '2026-08',
+      'month',
+      asOf,
+    );
+    expect(kpi.hasTarget).toBe(true);
+    expect(kpi.periodTarget).toBe(120000);
+    expect(kpi.actual).toBe(100000);
+    expect(kpi.targetToDate).not.toBeNull();
+    expect(kpi.pacing).not.toBeNull();
+  });
+
+  it('buildPerformanceKpiRow on a Supplier row with target 0 never fabricates Target-to-date or Pacing', () => {
+    const { start, end } = periodBounds('2026-08', 'month');
+    const periodScoped = tripsInDateRange(allTimeTrips, start, end);
+    const supplier = buildSupplierBreakdown(periodScoped, previousTrips, supplierById)[0];
+    const kpi = buildPerformanceKpiRow(
+      'Supplier',
+      'inr',
+      supplier.actualRevenue,
+      0,
+      supplier.previousActualRevenue,
+      '2026-08',
+      'month',
+      new Date(2026, 7, 16),
+    );
+    expect(kpi.hasTarget).toBe(false);
+    expect(kpi.targetToDate).toBeNull();
+    expect(kpi.pacing).toBeNull();
+    expect(kpi.achievement).toBeNull();
+  });
+});
+
 describe('buildPerformanceTripEvidenceRows (Phase 2 Commit 1)', () => {
   const supplierById = new Map([['sup-1', { name: 'Supplier One' }]]);
   const vehicleById = new Map([['veh-1', { name: 'MH-01' }]]);

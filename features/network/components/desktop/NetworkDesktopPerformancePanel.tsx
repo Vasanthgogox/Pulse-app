@@ -51,10 +51,18 @@
  *   it never touches PerformanceCrossFilter, so the page's cross-filter
  *   context is exactly what it was before the modal opened.
  *
- *   Still deliberately deferred: full trip-evidence pagination (5/10/20,
- *   "View all", Download), import, advanced asset utilisation analytics, a
- *   new supplier target model, major visual redesign, new Supabase
- *   queries/RPCs.
+ * Phase 2, Commit 3 (this commit): period-scoped breakdown Actuals + entity
+ *   Progress pacing. One shared periodScopedFilteredTrips
+ *   (periodBounds + tripsInDateRange on filteredTrips) feeds KAM/Region/
+ *   Supplier/Asset builders so entity Actuals match the selected Month/
+ *   Quarter/Year (they previously summed all-time trips). Progress modal
+ *   KPIs now go through buildPerformanceKpiRow (same as the top band) so
+ *   KAM/Region/Client/Asset get Target-to-date/Pacing when a real target
+ *   exists; Supplier stays target=0 with no fabricated pacing.
+ *
+ *   Still deliberately deferred: Contribution %, utilisation/idle days,
+ *   supplier target model, target allocation UI, richer trip-evidence UX,
+ *   import, major visual redesign, new Supabase queries/RPCs.
  */
 import Theme from "@/constants/Theme";
 import {
@@ -70,7 +78,6 @@ import {
   buildPerformanceTripEvidenceRows,
   buildRegionBreakdown,
   buildSupplierBreakdown,
-  changePct,
   computeGoalsActualsForRollup,
   computePreviousPeriodActuals,
   computeTripMetrics,
@@ -289,6 +296,24 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
     [filteredTrips, selectedMonthKey, rollup, asOf],
   );
 
+  // Phase 2 Commit 3 fix: buildKamBreakdown/buildRegionBreakdown/
+  // buildSupplierBreakdown/buildAssetBreakdown only ever grouped/summed
+  // whatever trips they were given -- selectedMonthKey/rollup were used
+  // ONLY for the target sum, never to scope the trips themselves. Fed
+  // filteredTrips (cross-filter-scoped only, otherwise all-time, per
+  // useTripsQuery's own "full list, no pagination" contract) directly,
+  // that meant every breakdown row's actualRevenue/actualTrips silently
+  // included trips from outside the selected period -- inconsistent with
+  // the KPI band above (computeGoalsActualsForRollup) and with
+  // previousActualRevenue in the SAME rows (previousFilteredTrips already
+  // window-scoped). One shared periodBounds/tripsInDateRange application
+  // here, reused by all four breakdown builders below, so every one of
+  // them reads the identical period-scoped population.
+  const periodScopedFilteredTrips = useMemo(() => {
+    const { start, end } = periodBounds(selectedMonthKey, rollup);
+    return tripsInDateRange(filteredTrips, start, end);
+  }, [filteredTrips, selectedMonthKey, rollup]);
+
   const kpiRows: PerformanceKpiRow[] = useMemo(
     () => [
       buildPerformanceKpiRow(
@@ -348,24 +373,37 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
 
   const kamRows: PerformanceCommercialBreakdownRow[] = useMemo(() => {
     if (perspective !== "kam") return [];
-    return buildKamBreakdown(goalsStore, filteredTrips, previousFilteredTrips, kamById, selectedMonthKey, rollup);
-  }, [perspective, goalsStore, filteredTrips, previousFilteredTrips, kamById, selectedMonthKey, rollup]);
+    return buildKamBreakdown(
+      goalsStore,
+      periodScopedFilteredTrips,
+      previousFilteredTrips,
+      kamById,
+      selectedMonthKey,
+      rollup,
+    );
+  }, [perspective, goalsStore, periodScopedFilteredTrips, previousFilteredTrips, kamById, selectedMonthKey, rollup]);
 
   const regionRows: PerformanceCommercialBreakdownRow[] = useMemo(() => {
     if (perspective !== "region") return [];
-    return buildRegionBreakdown(goalsStore, filteredTrips, previousFilteredTrips, selectedMonthKey, rollup);
-  }, [perspective, goalsStore, filteredTrips, previousFilteredTrips, selectedMonthKey, rollup]);
+    return buildRegionBreakdown(
+      goalsStore,
+      periodScopedFilteredTrips,
+      previousFilteredTrips,
+      selectedMonthKey,
+      rollup,
+    );
+  }, [perspective, goalsStore, periodScopedFilteredTrips, previousFilteredTrips, selectedMonthKey, rollup]);
 
   const supplierRows: PerformanceOperationalBreakdownRow[] = useMemo(() => {
     if (perspective !== "supplier") return [];
-    return buildSupplierBreakdown(filteredTrips, previousFilteredTrips, supplierById);
-  }, [perspective, filteredTrips, previousFilteredTrips, supplierById]);
+    return buildSupplierBreakdown(periodScopedFilteredTrips, previousFilteredTrips, supplierById);
+  }, [perspective, periodScopedFilteredTrips, previousFilteredTrips, supplierById]);
 
   const assetRows: PerformanceOperationalBreakdownRow[] = useMemo(() => {
     if (perspective !== "asset") return [];
     const byId = assetFocus === "vehicle" ? vehicleById : driverById;
-    return buildAssetBreakdown(filteredTrips, previousFilteredTrips, assetFocus, byId);
-  }, [perspective, filteredTrips, previousFilteredTrips, assetFocus, vehicleById, driverById]);
+    return buildAssetBreakdown(periodScopedFilteredTrips, previousFilteredTrips, assetFocus, byId);
+  }, [perspective, periodScopedFilteredTrips, previousFilteredTrips, assetFocus, vehicleById, driverById]);
 
   // Portfolio (KAM/Region Progress modal only) -- clients under whichever
   // KAM/region is currently open in the modal, reusing the same
@@ -467,71 +505,89 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
 
   // The Progress modal's KPI header reuses whichever breakdown row is
   // already computed for this entity -- never a second calculation.
+  // Phase 2 Commit 3: every kind now goes through the SAME generic,
+  // already-tested buildPerformanceKpiRow the top KPI band uses -- not a
+  // hand-built object per kind. That's what gives entity-level Target-to-
+  // date/Pacing "for free": buildPerformanceKpiRow already computes them
+  // whenever periodTargetValue > 0, and already gates them to null
+  // otherwise (Supplier's periodTargetValue is always 0 -- no GoalFocus
+  // "supplier" case exists; Asset's is only nonzero when that specific
+  // vehicle/driver actually has a target set in Goals). No new util
+  // function -- resolveFilteredPeriodTarget already resolves exactly the
+  // one-asset-own-target case (vehicle if set, else driver, else 0),
+  // reused here ONLY for this modal calculation, not for the Asset
+  // breakdown TABLE (buildAssetBreakdown's operational row shape, and its
+  // own contract, are unchanged).
   const progressKpi: PerformanceKpiRow | null = useMemo(() => {
     if (!progressEntity) return null;
     const { kind, id } = progressEntity;
     if (kind === "kam" || kind === "region") {
       const row = (kind === "kam" ? kamRows : regionRows).find((r) => r.id === id);
       if (!row) return null;
-      return {
-        label: entityLabel(kind),
-        unit: "inr",
-        actual: row.actualRevenue,
-        periodTarget: row.targetRevenue,
-        hasTarget: row.hasTarget,
-        achievement: row.achievement,
-        targetToDate: null,
-        pacing: null,
-        previousActual: row.previousActualRevenue,
-        hasPreviousData: row.hasPreviousData,
-        changeVsPrevious: row.growthPct,
-        variance: row.actualRevenue - row.targetRevenue,
-      };
+      return buildPerformanceKpiRow(
+        entityLabel(kind),
+        "inr",
+        row.actualRevenue,
+        row.targetRevenue,
+        row.previousActualRevenue,
+        selectedMonthKey,
+        rollup,
+        asOf,
+      );
     }
     if (kind === "client") {
       const row = entityRows.find((r) => r.id === id);
       if (!row) return null;
-      // Phase 2 Commit 2 fix: buildEntityGoalRows (shared with the Goals
-      // tab -- not modified here) never tracked previous-period actuals, so
-      // this used to hardcode "no previous data" unconditionally. previous
-      // FilteredTrips is already the same previous-period window/cross-
-      // filter every other perspective's breakdown uses; scoping it to this
-      // one client and reusing the already-exported computeTripMetrics is
-      // the same pattern buildKamBreakdown/buildRegionBreakdown use.
+      // Phase 2 Commit 2 fix, unchanged: buildEntityGoalRows (shared with
+      // the Goals tab -- not modified here) never tracked previous-period
+      // actuals, so this is computed alongside rather than inside it.
       const previousClientTrips = previousFilteredTrips.filter((t) => t.client_id === id);
       const previousMetrics = computeTripMetrics(previousClientTrips);
-      return {
-        label: "Client",
-        unit: "inr",
-        actual: row.actualRevenue,
-        periodTarget: row.targetRevenue,
-        hasTarget: row.hasTarget,
-        achievement: row.hasTarget ? row.revenueProgressPct : null,
-        targetToDate: null,
-        pacing: null,
-        previousActual: previousMetrics.revenueInr,
-        hasPreviousData: previousMetrics.revenueInr > 0,
-        changeVsPrevious: changePct(row.actualRevenue, previousMetrics.revenueInr),
-        variance: row.actualRevenue - row.targetRevenue,
-      };
+      return buildPerformanceKpiRow(
+        "Client",
+        "inr",
+        row.actualRevenue,
+        row.targetRevenue,
+        previousMetrics.revenueInr,
+        selectedMonthKey,
+        rollup,
+        asOf,
+      );
     }
     const row = (kind === "supplier" ? supplierRows : assetRows).find((r) => r.id === id);
     if (!row) return null;
-    return {
-      label: entityLabel(kind),
-      unit: "inr",
-      actual: row.actualRevenue,
-      periodTarget: 0,
-      hasTarget: false,
-      achievement: null,
-      targetToDate: null,
-      pacing: null,
-      previousActual: row.previousActualRevenue,
-      hasPreviousData: row.hasPreviousData,
-      changeVsPrevious: row.growthPct,
-      variance: 0,
-    };
-  }, [progressEntity, kamRows, regionRows, entityRows, supplierRows, assetRows, previousFilteredTrips]);
+    // Supplier: always 0 (no target concept exists). Asset: that one
+    // vehicle/driver's own target if configured, else 0 -- independent of
+    // any client-side cross-filter, same rule already proven for the
+    // aggregate-level Asset cross-filter case.
+    const periodTargetValue =
+      kind === "asset"
+        ? resolveFilteredPeriodTarget(goalsStore, selectedMonthKey, rollup, { supplierId: null, assetId: id }, null)
+            .revenueInr
+        : 0;
+    return buildPerformanceKpiRow(
+      entityLabel(kind),
+      "inr",
+      row.actualRevenue,
+      periodTargetValue,
+      row.previousActualRevenue,
+      selectedMonthKey,
+      rollup,
+      asOf,
+    );
+  }, [
+    progressEntity,
+    kamRows,
+    regionRows,
+    entityRows,
+    supplierRows,
+    assetRows,
+    previousFilteredTrips,
+    goalsStore,
+    selectedMonthKey,
+    rollup,
+    asOf,
+  ]);
 
   // Supplier/Asset only -- Cost/Margin already computed by supplierRows/
   // assetRows, kept separate from progressKpi (a shared type also used by
