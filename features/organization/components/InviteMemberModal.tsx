@@ -344,6 +344,7 @@ export function InviteMemberFlow({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [successKind, setSuccessKind] = useState<"member" | "pending" | null>(null);
+  const [shareStatus, setShareStatus] = useState<"copied" | "shared" | null>(null);
   const [precheck, setPrecheck] = useState<TeamInvitePrecheckResult | null>(null);
 
   const handleContinue = async () => {
@@ -490,22 +491,33 @@ export function InviteMemberFlow({
               : ". They sign in with their existing Pulse account to accept."}
           </Text>
           {successKind === "pending" && phone && (
-            <Pressable
-              onPress={() =>
-                shareInvite({
-                  inviteePhone: phone.trim(),
-                  inviteeName: invitedLabel,
-                  orgName: "your workspace",
-                })
-              }
-              style={({ pressed }) => [
-                ui.secondaryBtn,
-                { marginTop: 12 },
-                pressed && { opacity: 0.8 },
-              ]}
-            >
-              <Text style={ui.secondaryBtnText}>Share invite</Text>
-            </Pressable>
+            <>
+              <Pressable
+                onPress={async () => {
+                  const result = await shareInvite({
+                    inviteePhone: phone.trim(),
+                    inviteeName: invitedLabel,
+                    orgName: "your workspace",
+                  });
+                  if (result.ok) {
+                    setShareStatus(result.method === "clipboard" ? "copied" : "shared");
+                    setTimeout(() => setShareStatus(null), 2500);
+                  }
+                }}
+                style={({ pressed }) => [
+                  ui.secondaryBtn,
+                  { marginTop: 12 },
+                  pressed && { opacity: 0.8 },
+                ]}
+              >
+                <Text style={ui.secondaryBtnText}>Share invite</Text>
+              </Pressable>
+              {shareStatus === "copied" && (
+                <Text style={[ui.successSub, { marginTop: 6, fontWeight: "600" }]}>
+                  Invite message copied to clipboard
+                </Text>
+              )}
+            </>
           )}
         </View>
       ) : step === "phone" ? (

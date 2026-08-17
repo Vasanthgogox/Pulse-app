@@ -1,6 +1,6 @@
-import { Share } from "react-native";
-import * as Sharing from "expo-sharing";
-import { composeSMS } from "@/lib/smsComposer";
+import { Platform, Share } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import { composeSms } from "@/lib/smsComposer";
 
 export interface InviteShareParams {
   inviteePhone: string;
@@ -8,6 +8,10 @@ export interface InviteShareParams {
   orgName: string;
   inviterName?: string;
 }
+
+export type ShareInviteResult =
+  | { ok: true; method: "share" | "sms" | "clipboard" }
+  | { ok: false; reason: "cancelled" | "unavailable"; message?: string };
 
 /**
  * Compose a shareable invite message with phone number and org context.
@@ -24,33 +28,57 @@ export function buildInviteShareMessage(params: InviteShareParams): string {
 }
 
 /**
- * Open the native share sheet to send the invite message.
- * Falls back to SMS composer if native Share is unavailable.
+ * Share the invite message via the best available channel for the platform:
+ * - Web: browser's native Web Share API if present, else copy-to-clipboard.
+ * - Native: OS share sheet (react-native Share), falling back to SMS composer.
  */
-export async function shareInvite(params: InviteShareParams): Promise<void> {
+export async function shareInvite(params: InviteShareParams): Promise<ShareInviteResult> {
   const message = buildInviteShareMessage(params);
 
-  try {
-    // Try native Share first (iOS 13.2+, Android 5.1+)
-    if (Share.share) {
-      const result = await Share.share({
-        message,
-        title: `Invite ${params.inviteeName}`,
-      });
-      return;
+  if (Platform.OS === "web") {
+    const nav = typeof navigator !== "undefined" ? (navigator as any) : null;
+    if (nav?.share) {
+      try {
+        await nav.share({ title: `Invite ${params.inviteeName}`, text: message });
+        return { ok: true, method: "share" };
+      } catch (err: any) {
+        if (err?.name === "AbortError") return { ok: false, reason: "cancelled" };
+        // fall through to clipboard on any other web-share failure
+      }
     }
-  } catch (error) {
-    // User cancelled or Share unavailable
+    try {
+      await Clipboard.setStringAsync(message);
+      return { ok: true, method: "clipboard" };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: "unavailable",
+        message: err instanceof Error ? err.message : "Could not copy invite message.",
+      };
+    }
   }
 
-  // Fallback: open native SMS composer
   try {
-    await composeSMS({
-      recipients: [params.inviteePhone],
-      body: message,
-    });
-  } catch (error) {
-    // SMS composer unavailable or cancelled
-    console.error("Failed to open share options:", error);
+    const result = await Share.share({ message, title: `Invite ${params.inviteeName}` });
+    if (result.action === Share.dismissedAction) {
+      return { ok: false, reason: "cancelled" };
+    }
+    return { ok: true, method: "share" };
+  } catch {
+    // Share.share threw (rare on native) — fall back to SMS composer below.
+  }
+
+  const sms = await composeSms(params.inviteePhone, message);
+  if (sms.ok) return { ok: true, method: "sms" };
+
+  try {
+    await Clipboard.setStringAsync(message);
+    return { ok: true, method: "clipboard" };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "unavailable",
+      message: sms.message ?? (err instanceof Error ? err.message : "Could not share invite."),
+    };
   }
 }
