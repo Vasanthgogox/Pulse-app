@@ -70,8 +70,10 @@ import {
   buildPerformanceTripEvidenceRows,
   buildRegionBreakdown,
   buildSupplierBreakdown,
+  changePct,
   computeGoalsActualsForRollup,
   computePreviousPeriodActuals,
+  computeTripMetrics,
   EMPTY_PERFORMANCE_CROSS_FILTER,
   filterTripsForCrossFilter,
   getRecentMonthKeys,
@@ -489,6 +491,15 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
     if (kind === "client") {
       const row = entityRows.find((r) => r.id === id);
       if (!row) return null;
+      // Phase 2 Commit 2 fix: buildEntityGoalRows (shared with the Goals
+      // tab -- not modified here) never tracked previous-period actuals, so
+      // this used to hardcode "no previous data" unconditionally. previous
+      // FilteredTrips is already the same previous-period window/cross-
+      // filter every other perspective's breakdown uses; scoping it to this
+      // one client and reusing the already-exported computeTripMetrics is
+      // the same pattern buildKamBreakdown/buildRegionBreakdown use.
+      const previousClientTrips = previousFilteredTrips.filter((t) => t.client_id === id);
+      const previousMetrics = computeTripMetrics(previousClientTrips);
       return {
         label: "Client",
         unit: "inr",
@@ -498,9 +509,9 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
         achievement: row.hasTarget ? row.revenueProgressPct : null,
         targetToDate: null,
         pacing: null,
-        previousActual: 0,
-        hasPreviousData: false,
-        changeVsPrevious: null,
+        previousActual: previousMetrics.revenueInr,
+        hasPreviousData: previousMetrics.revenueInr > 0,
+        changeVsPrevious: changePct(row.actualRevenue, previousMetrics.revenueInr),
         variance: row.actualRevenue - row.targetRevenue,
       };
     }
@@ -520,7 +531,22 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
       changeVsPrevious: row.growthPct,
       variance: 0,
     };
-  }, [progressEntity, kamRows, regionRows, entityRows, supplierRows, assetRows]);
+  }, [progressEntity, kamRows, regionRows, entityRows, supplierRows, assetRows, previousFilteredTrips]);
+
+  // Supplier/Asset only -- Cost/Margin already computed by supplierRows/
+  // assetRows, kept separate from progressKpi (a shared type also used by
+  // the top KPI band) so the modal can render it as a subordinate line
+  // rather than a fourth value competing with Target/Actual/Achievement.
+  const progressOperationalDetail: { cost: number; marginPct: number } | null = useMemo(() => {
+    if (!progressEntity || (progressEntity.kind !== "supplier" && progressEntity.kind !== "asset")) {
+      return null;
+    }
+    const row = (progressEntity.kind === "supplier" ? supplierRows : assetRows).find(
+      (r) => r.id === progressEntity.id,
+    );
+    if (!row) return null;
+    return { cost: row.actualCost, marginPct: row.marginPct };
+  }, [progressEntity, supplierRows, assetRows]);
 
   const trendCompareItems = useMemo(
     () => [
@@ -868,6 +894,7 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
           evidenceRows={progressEvidenceRows}
           periodLabel={progressPeriodLabel}
           otherFilterLabel={progressOtherFilterLabel}
+          operationalDetail={progressOperationalDetail}
         />
       ) : null}
     </ScrollView>

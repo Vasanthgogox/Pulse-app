@@ -810,3 +810,34 @@ describe('buildPerformanceTripEvidenceRows (Phase 2 Commit 1)', () => {
     expect(buildPerformanceTripEvidenceRows([])).toEqual([]);
   });
 });
+
+describe('Phase 2 Commit 2: Client Progress previous-period must reuse the SAME filtered trip population', () => {
+  it('computeTripMetrics(previousFilteredTrips filtered by client_id) matches what buildKamBreakdown/buildRegionBreakdown already compute for the same client', () => {
+    // Mirrors exactly the composition NetworkDesktopPerformancePanel.tsx now
+    // uses for progressKpi's "client" branch -- the bug being fixed was
+    // that this was hardcoded to previousActual: 0 / hasPreviousData: false
+    // unconditionally, even when previousFilteredTrips genuinely had this
+    // client's trips in it.
+    const previousFilteredTrips = [
+      trip('2026-07-10T00:00:00', 90000, 70000, { client_id: 'apple' }),
+      trip('2026-07-12T00:00:00', 30000, 20000, { client_id: 'apple' }),
+      trip('2026-07-10T00:00:00', 300000, 200000, { client_id: 'acme' }), // a different client
+    ] as TripRow[];
+
+    const appleTrips = previousFilteredTrips.filter((t) => t.client_id === 'apple');
+    const metrics = computeTripMetrics(appleTrips);
+
+    expect(metrics.revenueInr).toBe(120000); // 90000 + 30000, acme's trip excluded
+    expect(metrics.revenueInr > 0).toBe(true); // hasPreviousData would now be true, not hardcoded false
+    expect(changePct(150000, metrics.revenueInr)).toBe(25); // (150000-120000)/120000 = 25%
+  });
+
+  it('a client with no previous-period trips at all correctly reports hasPreviousData: false, not a fabricated value', () => {
+    const previousFilteredTrips = [
+      trip('2026-07-10T00:00:00', 90000, 70000, { client_id: 'acme' }),
+    ] as TripRow[];
+    const ajioTrips = previousFilteredTrips.filter((t) => t.client_id === 'ajio');
+    const metrics = computeTripMetrics(ajioTrips);
+    expect(metrics.revenueInr).toBe(0);
+  });
+});

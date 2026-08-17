@@ -73,6 +73,12 @@ type Props = {
    * (e.g. a Region filter active while viewing a KAM's modal), already
    * resolved to display names by the page. Null when none. */
   otherFilterLabel: string | null;
+  /** Supplier/Asset only -- already computed by the page's own
+   * supplierRows/assetRows breakdown, never a second calculation. Kept
+   * OUT of PerformanceKpiRow (a shared type also used by the top KPI
+   * band) so Cost/Margin stay a subordinate operational-economics line,
+   * not a fourth value competing with Target/Actual/Achievement. */
+  operationalDetail?: { cost: number; marginPct: number } | null;
 };
 
 function formatKpiValue(unit: PerformanceKpiRow["unit"], value: number): string {
@@ -91,6 +97,7 @@ export function NetworkDesktopEntityProgressModal({
   evidenceRows,
   periodLabel,
   otherFilterLabel,
+  operationalDetail,
 }: Props) {
   const { compact } = useProfileHubCompactLayout();
   const showPortfolio = (kind === "kam" || kind === "region") && (portfolioClients?.length ?? 0) > 0;
@@ -153,6 +160,12 @@ export function NetworkDesktopEntityProgressModal({
             </Text>
             {!kpi.hasTarget ? (
               <Text style={styles.noTargetNote}>No target set</Text>
+            ) : null}
+            {operationalDetail ? (
+              <Text style={styles.kpiOperationalText}>
+                Cost {formatINRChip(operationalDetail.cost)} · Margin{" "}
+                {operationalDetail.marginPct.toFixed(1)}%
+              </Text>
             ) : null}
 
             {showPortfolio ? (
@@ -380,6 +393,7 @@ const styles = StyleSheet.create({
   kpiSecondaryText: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary },
   kpiTertiaryText: { fontSize: 11, fontWeight: "700", color: Theme.primary, marginTop: 8 },
   noTargetNote: { fontSize: 11, fontWeight: "700", color: Theme.textMuted, marginTop: 4 },
+  kpiOperationalText: { fontSize: 12, fontWeight: "700", color: Theme.textSecondary, marginTop: 4 },
   section: { marginTop: 20, gap: 8 },
   sectionTitle: { fontSize: 13, fontWeight: "800", color: Theme.textPrimaryDark },
   evidenceCaption: { fontSize: 11, color: Theme.textMuted },
