@@ -7,6 +7,7 @@ import { ensureWebShellParity } from '@/lib/htmlShell';
 import '@/lib/tracking/backgroundTasks';
 import { markStartupPhase } from '@/lib/startupMetrics';
 import { AppAlertHost } from '@/components/AppAlertHost';
+import { ConfirmDialogHost } from '@/components/ConfirmDialogHost';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { initCrashReporter, captureException } from '@/lib/crashReporter';
 import { ContentErrorState } from '@/components/ContentErrorState';
@@ -481,6 +482,7 @@ function RootLayoutNav() {
           <View style={{ flex: 1 }}>
             <GlobalOperationsToast />
             <AppAlertHost />
+            <ConfirmDialogHost />
             <Stack screenOptions={routeStackScreenOptions}>
               <Stack.Screen name="index" />
               <Stack.Screen name="welcome" options={{ animation: 'fade' }} />

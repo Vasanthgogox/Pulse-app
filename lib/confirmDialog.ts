@@ -8,12 +8,31 @@ export interface ConfirmDialogOptions {
   destructive?: boolean;
 }
 
+export type ConfirmDialogImplementation = (
+  options: ConfirmDialogOptions,
+) => Promise<boolean>;
+
+let registeredImplementation: ConfirmDialogImplementation | null = null;
+
+/** Registers the themed confirm UI (see `ConfirmDialogHost`). */
+export function registerConfirmDialogImplementation(
+  impl: ConfirmDialogImplementation | null,
+): void {
+  registeredImplementation = impl;
+}
+
 /**
- * Cross-platform yes/no confirm. React Native Web's `Alert.alert` does not
- * reliably invoke multi-button callbacks (no native dialog to back it), so on
- * web this falls back to `window.confirm`. On native it uses the real Alert.
+ * Cross-platform yes/no confirm. When `ConfirmDialogHost` is mounted, shows
+ * the themed modal. Otherwise falls back to `window.confirm` on web (React
+ * Native Web's `Alert.alert` cannot invoke multi-button callbacks — there's
+ * no native dialog to back it, so its buttons silently never fire) or the
+ * real `Alert.alert` on native.
  */
 export function confirmDialog(options: ConfirmDialogOptions): Promise<boolean> {
+  if (registeredImplementation) {
+    return registeredImplementation(options);
+  }
+
   const { title, message, confirmLabel = "Confirm", cancelLabel = "Cancel" } = options;
 
   if (Platform.OS === "web") {
