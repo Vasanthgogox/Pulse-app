@@ -1,4 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+
+// Credentials live in e2e/.env.e2e (gitignored), NOT in .env — keeps QA logins out of
+// the file the dev server loads. Deliberately NOT named `.env*.local`: Expo's Metro
+// bundler treats any root-level .env*.local as a source file and fails the whole web
+// bundle with a TransformError on the first `#` comment. See e2e/.env.e2e.example.
+dotenv.config({ path: 'e2e/.env.e2e' });
 
 /**
  * Minimal Playwright config for `npm run test:web`. There was no config checked in yet —

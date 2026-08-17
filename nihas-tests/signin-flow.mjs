@@ -7,6 +7,9 @@
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { chromium } from 'playwright';
+import { loadCredentials } from './credentials.mjs';
+
+const { email: E2E_EMAIL, password: E2E_PASSWORD } = loadCredentials();
 
 const PORT = 8081;
 const ROUTE = '/terminal-website';
@@ -126,14 +129,34 @@ async function main() {
     const email = page.locator('input[type="email"]').first();
     const password = page.locator('input[type="password"]').first();
     await email.waitFor({ state: 'visible', timeout: 30_000 });
-    await email.fill('nihas@gmail.com');
-    await password.fill('nihas123');
+    // Controlled inputs need a moment after mount, or typed text gets reset to empty.
+    await page.waitForTimeout(5000);
+
+    // Type, never fill(): this is React Native Web, and fill() sets the DOM value without
+    // the key events the controlled input listens for — the form then submits empty and
+    // rejects with "Enter your email address." Retry until the value sticks.
+    const typeInto = async (field, value) => {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await field.click();
+        await field.type(value, { delay: 20 });
+        await page.waitForTimeout(400);
+        if ((await field.inputValue()) === value) return;
+        await field.fill('');
+        await page.waitForTimeout(800);
+      }
+      throw new Error('value would not stick in sign-in field');
+    };
+    await typeInto(email, E2E_EMAIL);
+    await typeInto(password, E2E_PASSWORD);
 
     log('clicking "Enter dashboard"...');
     const submit = page.locator('[data-testid="signin-submit-btn"]').first();
     await submit.click();
+    // Leaving /sign-in is the only real proof the session took. Without this the script
+    // used to print PASS while sitting on the login screen with the form rejected.
+    await page.waitForURL((u) => !u.pathname.includes('sign-in'), { timeout: 180_000 });
     await page.waitForLoadState('networkidle', { timeout: PAGE_TIMEOUT }).catch(() => {});
-    log(`✓ submitted — now at ${page.url()}`);
+    log(`✓ signed in — now at ${page.url()}`);
 
     log(`holding window open ${HOLD_MS}ms (close the window early to finish)...`);
     // A manual window close during the hold is fine — swallow that error.
