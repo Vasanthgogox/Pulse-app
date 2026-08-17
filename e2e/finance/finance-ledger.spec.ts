@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { signIn } from '../support/auth';
 
 /**
  * E2E (Playwright / web): Finance tab + ledger-sync core flows.
@@ -12,29 +13,9 @@ import { test, expect, type Page } from '@playwright/test';
  * (FinanceScreen, LedgerSyncScreen, LedgerTab, etc.) carry no testIDs today — run and adjust
  * locally with `npm run web` + `npm run test:web:headed` before trusting these in CI.
  *
- * Credentials mirror nihas-tests/signin-flow.mjs; swap for a dedicated E2E test account
- * before running against a real environment.
+ * Credentials come from e2e/.env.e2e via e2e/support/auth.ts — they used to be
+ * hardcoded here as fallbacks, which meant a real login sat in a committed file.
  */
-
-const EMAIL = process.env.E2E_EMAIL ?? 'nihas@gmail.com';
-const PASSWORD = process.env.E2E_PASSWORD ?? 'nihas123';
-
-async function signIn(page: Page) {
-  await page.goto('/terminal-website');
-  const cta = page.frameLocator('iframe[title="Pulse Website"]').getByRole('link', { name: 'Enter OS' }).first();
-  await cta.waitFor({ state: 'visible' });
-  await cta.click();
-
-  await page.waitForURL(/\/(sign-in|onboarding|welcome)/).catch(() => {});
-  const signInLink = page.getByText('Sign in', { exact: true }).first();
-  await signInLink.waitFor({ state: 'visible' });
-  await signInLink.click();
-
-  await page.locator('input[type="email"]').first().fill(EMAIL);
-  await page.locator('input[type="password"]').first().fill(PASSWORD);
-  await page.locator('[data-testid="signin-submit-btn"]').first().click();
-  await page.waitForLoadState('networkidle').catch(() => {});
-}
 
 test.describe('Finance tab', () => {
   test.beforeEach(async ({ page }) => {

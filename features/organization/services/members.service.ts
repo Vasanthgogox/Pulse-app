@@ -283,6 +283,9 @@ export async function createPendingTeamInvite(
       if (error.message.includes("already has a Pulse account")) {
         return { error: new Error(error.message), invite: null };
       }
+      if (error.message.includes("idx_org_team_invites_pending_phone") || error.message.includes("duplicate")) {
+        return { error: null, invite: null, alreadyPending: true };
+      }
       return { error: new Error(error.message), invite: null };
     }
     return { error: null, invite: data as PendingPhoneTeamInvite };

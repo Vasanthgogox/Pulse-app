@@ -26,6 +26,12 @@ export function useOrgMembersQuery(orgId: string | null) {
     },
     enabled: !!orgId,
     staleTime: STALE.slow,
+    // Roster reflects who currently has access — a persisted cache entry
+    // rehydrated from AsyncStorage can be "fresh" by staleTime's clock but
+    // wrong by now (e.g. an invite accepted after the cached fetch). Always
+    // refetch on mount/reconnect so pending/active status never renders stale.
+    refetchOnMount: 'always',
+    refetchOnReconnect: 'always',
   });
 
   useEffect(() => {
@@ -56,6 +62,8 @@ export function useOrgMembersData(orgId: string | null) {
     },
     enabled: !!orgId,
     staleTime: STALE.slow,
+    refetchOnMount: 'always',
+    refetchOnReconnect: 'always',
   });
 }
 

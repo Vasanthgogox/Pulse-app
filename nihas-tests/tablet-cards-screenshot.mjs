@@ -5,6 +5,9 @@
 
 import http from 'node:http';
 import { chromium } from 'playwright';
+import { loadCredentials } from './credentials.mjs';
+
+const { email: E2E_EMAIL, password: E2E_PASSWORD } = loadCredentials();
 
 const PORT = 8081;
 const BASE = `http://localhost:${PORT}`;
@@ -61,8 +64,8 @@ async function signIn(page) {
     throw new Error('value would not stick in sign-in field');
   };
 
-  await typeInto(email, 'nihas@gmail.com');
-  await typeInto(password, 'nihas123');
+  await typeInto(email, E2E_EMAIL);
+  await typeInto(password, E2E_PASSWORD);
   await page.locator('[data-testid="signin-submit-btn"]').first().click();
   await page
     .waitForURL((u) => !u.pathname.includes('sign-in'), { timeout: 180_000 })

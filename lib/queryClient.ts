@@ -165,6 +165,18 @@ function isMissingQueryFnError(error: unknown): boolean {
 }
 
 /**
+ * "Failed to fetch" / schema-cache-retry errors mean the browser couldn't
+ * reach Supabase at all (offline, DNS, CORS, ad-blocker) — not an app bug.
+ * TanStack already retries these, so only log a breadcrumb instead of
+ * reporting a new Sentry issue per affected user (GX-PULSE-17/21/22/23/24/25).
+ */
+function isNetworkFailure(error: unknown): boolean {
+  return /Failed to fetch|Could not query the database for the schema cache/i.test(
+    extractErrorMessage(error),
+  );
+}
+
+/**
  * Supabase/PostgREST rejects with a plain object ({message, code, details,
  * hint}), not an Error. `String(obj)` on those yields "[object Object]", which
  * collapses every distinct failure into one unreadable Sentry group with no
@@ -196,6 +208,7 @@ export function makeQueryClient() {
       onError: (error, query) => {
         if (isAbortError(error)) return;
         if (isMissingQueryFnError(error)) return;
+        if (isNetworkFailure(error)) return;
         logger.error('[query] fetch failed', {
           error: toReportableError(error),
           queryKey: JSON.stringify(query.queryKey),
@@ -205,6 +218,7 @@ export function makeQueryClient() {
     mutationCache: new MutationCache({
       onError: (error) => {
         if (isAbortError(error)) return;
+        if (isNetworkFailure(error)) return;
         logger.error('[mutation] failed', {
           error: toReportableError(error),
         });

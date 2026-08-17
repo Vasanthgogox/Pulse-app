@@ -55,7 +55,10 @@ export default function PulseLoadsScreen() {
   return (
     <View style={[styles.root, { paddingTop: contentTopInset }]}>
       <LoadCenterView
-        onCreateIndentPress={() => router.push(ROUTES.CREATE_INDENT as import("expo-router").Href)}
+        onCreateIndentPress={() => {
+          if (!canSurface("tripops.indents.create")) return;
+          router.push(ROUTES.CREATE_INDENT as import("expo-router").Href);
+        }}
         onIndentPress={(indent) => router.push(`/indent/${indent.id}` as import("expo-router").Href)}
         onShareToNetwork={(indent) => setShareLoad(indent)}
         onMyNetworkPress={() =>

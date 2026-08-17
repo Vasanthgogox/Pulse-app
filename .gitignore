@@ -91,3 +91,11 @@ IDENTITY.md
 SOUL.md
 TOOLS.md
 USER.md
+
+# Playwright E2E credentials (keep OUT of the root .env*.local pattern —
+# Metro bundles those and fails on non-JS syntax). Example file stays tracked.
+e2e/.env.e2e
+
+# QA scratch: captured permission baselines / restore targets for real members.
+# Contains member UUIDs and permission counts — no credentials, but not ours to commit.
+e2e/.qa/

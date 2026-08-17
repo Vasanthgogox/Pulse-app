@@ -189,7 +189,10 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
       sales:
         orgCaps.includes("marketplace_post") ||
         orgCaps.includes("marketplace_bid") ||
-        canAccessClients(orgCaps),
+        canAccessClients(orgCaps) ||
+        // Indents surfaces live under Sales; keep the domain unlocked for
+        // give-load orgs that have dispatch but no marketplace/client caps.
+        canAccessIndents(orgCaps),
       tripops: canAccessIndents(orgCaps) || canAccessTrips(orgCaps),
       // team_manage is never on org-model caps — any business org can grant team surfaces
       team: hasBusinessCapabilities(orgCaps),

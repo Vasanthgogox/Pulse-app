@@ -20,6 +20,7 @@ import {
   TEAM_INVITE_ROLE_OPTIONS,
   type PlatformTeamRole,
 } from "@/features/organization/utils/teamInviteRoles.util";
+import { shareInvite } from "@/features/organization/utils/inviteShare.util";
 import type { UserProfileForInvite } from "@/types/organization";
 import {
   Check,
@@ -343,6 +344,7 @@ export function InviteMemberFlow({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [successKind, setSuccessKind] = useState<"member" | "pending" | null>(null);
+  const [shareStatus, setShareStatus] = useState<"copied" | "shared" | null>(null);
   const [precheck, setPrecheck] = useState<TeamInvitePrecheckResult | null>(null);
 
   const handleContinue = async () => {
@@ -429,7 +431,7 @@ export function InviteMemberFlow({
       setSubmitError("This person is already an active member of your team.");
       return;
     }
-    if (result.alreadyInvited) {
+    if (result.alreadyInvited || result.alreadyPending) {
       setSubmitError("An invitation has already been sent to this person.");
       return;
     }
@@ -448,9 +450,12 @@ export function InviteMemberFlow({
     if (result.kind) {
       setSuccessKind(result.kind);
       setSuccess(true);
+      // Pending invites show a "Share invite" button — give the admin time to
+      // use it before the modal auto-closes and refetches the roster.
+      const delay = result.kind === "pending" ? 8000 : embedded ? 600 : 900;
       setTimeout(() => {
         onInvited();
-      }, embedded ? 600 : 900);
+      }, delay);
     }
   };
 
@@ -488,6 +493,35 @@ export function InviteMemberFlow({
               ? ". They will join when they sign up with this phone (new account only)."
               : ". They sign in with their existing Pulse account to accept."}
           </Text>
+          {successKind === "pending" && phone && (
+            <>
+              <Pressable
+                onPress={async () => {
+                  const result = await shareInvite({
+                    inviteePhone: phone.trim(),
+                    inviteeName: invitedLabel,
+                    orgName: "your workspace",
+                  });
+                  if (result.ok) {
+                    setShareStatus(result.method === "clipboard" ? "copied" : "shared");
+                    setTimeout(() => setShareStatus(null), 2500);
+                  }
+                }}
+                style={({ pressed }) => [
+                  ui.secondaryBtn,
+                  { marginTop: 12 },
+                  pressed && { opacity: 0.8 },
+                ]}
+              >
+                <Text style={ui.secondaryBtnText}>Share invite</Text>
+              </Pressable>
+              {shareStatus === "copied" && (
+                <Text style={[ui.successSub, { marginTop: 6, fontWeight: "600" }]}>
+                  Invite message copied to clipboard
+                </Text>
+              )}
+            </>
+          )}
         </View>
       ) : step === "phone" ? (
         <>
@@ -947,6 +981,25 @@ const embeddedFlow = StyleSheet.create({
     fontWeight: "700",
     color: Theme.buttonPrimaryText,
   },
+  secondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignSelf: "center",
+    minWidth: 140,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  secondaryBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+  },
   successWrap: {
     alignItems: "center",
     paddingVertical: 24,
@@ -1147,6 +1200,23 @@ const modal = StyleSheet.create({
     fontWeight: "700",
     color: Theme.buttonPrimaryText,
     letterSpacing: 0.1,
+  },
+
+  secondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    borderRadius: Theme.buttonPrimaryRadius,
+  },
+  secondaryBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textPrimary,
   },
 
   successWrap: {

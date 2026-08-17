@@ -354,3 +354,23 @@ When you change RBAC again:
 1. Add a row under **New files** or **Modified files**.
 2. Update the matrix in `docs/RBAC_OPERATING_MODEL.md` if behavior changed.
 3. Note the commit hash in **Session / commits** when landed.
+
+## Part 6 — Indents group moved from Operation to Sales
+
+**Goal:** Present the 9 Indents surfaces under **Sales** instead of **Operation** in Member access, without touching surface IDs (renaming them would orphan grants already stored in `member.permissions.surfaces`).
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `lib/memberSurfaces.ts` | All 9 `tripops.indents.*` / `tripops.pulse_loads` surfaces switched to `domain: "sales"`. The two `requires: "tripops.tab"` parents (`indents.view`, `pulse_loads`) now require `sales.tab`; the 7 children still require `tripops.indents.view` (ID unchanged). |
+| `features/organization/components/MemberPermissionsPanel/MemberPermissionsPanel.tsx` | `orgAllows.sales` now also accepts `canAccessIndents(orgCaps)` — otherwise a give-load org with dispatch but no marketplace/client caps would see the Sales section locked and could never grant Indents. |
+| `lib/useMemberCapabilities.ts` | Same `orgAllowsSales` widening, so runtime enforcement matches the editor UI. |
+
+### Notes
+
+- **IDs deliberately unchanged.** Surface IDs stay `tripops.*` even though they now render under Sales. Every `can("tripops.indents.*")` call site and every persisted grant keeps working. The ID prefix is now a naming artifact, not a domain claim.
+- **`sales.tab` already admits dispatch users** (`anyOfCaps: ["marketplace_post", "marketplace_bid", ...DISP]`), so the reparented `requires` resolves for give-load orgs.
+- **Group still renders as "Indents"** — `group: "Indents"` is unchanged; only the section it sits in moved.
+
+**Verification:** `tsc --noEmit` clean on all three touched files; `jest lib/__tests__/capabilities.operatingModel.test.ts` 16/16 passed. **Not verified in a running app** — the Member access screen was not opened to confirm the group renders under Sales.
