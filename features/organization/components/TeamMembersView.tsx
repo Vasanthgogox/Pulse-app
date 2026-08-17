@@ -48,6 +48,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { confirmDialog } from "@/lib/confirmDialog";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -687,50 +688,40 @@ export function TeamMembersView({
     );
   };
 
-  const handleBulkAssignRole = (platformRole: PlatformTeamRole) => {
+  const handleBulkAssignRole = async (platformRole: PlatformTeamRole) => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
     const label =
       TEAM_INVITE_ROLE_OPTIONS.find((o) => o.value === platformRole)?.label ??
       platformRole;
-    Alert.alert(
-      "Change role?",
-      `Set ${ids.length} member${ids.length === 1 ? "" : "s"} to ${label}? This replaces their current permissions.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Apply",
-          onPress: async () => {
-            setBulkBusy(true);
-            try {
-              const permissions = buildTeamInvitePermissions(
-                platformRole,
-                undefined,
-                orgCaps,
-              );
-              const { error, updated } = await updateBulkMemberPermissions(
-                ids,
-                platformRole,
-                permissions,
-              );
-              if (error) {
-                Alert.alert("Could not change roles", error.message);
-                return;
-              }
-              invalidate();
-              await query.refetch();
-              exitSelectMode();
-              Alert.alert(
-                "Roles updated",
-                `${updated} member${updated === 1 ? "" : "s"} set to ${label}.`,
-              );
-            } finally {
-              setBulkBusy(false);
-            }
-          },
-        },
-      ],
-    );
+
+    const confirmed = await confirmDialog({
+      title: "Change role?",
+      message: `Set ${ids.length} member${ids.length === 1 ? "" : "s"} to ${label}? This replaces their current permissions.`,
+      confirmLabel: "Apply",
+      cancelLabel: "Cancel",
+    });
+    if (!confirmed) return;
+
+    setBulkBusy(true);
+    try {
+      const permissions = buildTeamInvitePermissions(platformRole, undefined, orgCaps);
+      const { error, updated } = await updateBulkMemberPermissions(
+        ids,
+        platformRole,
+        permissions,
+      );
+      if (error) {
+        Alert.alert("Could not change roles", error.message);
+        return;
+      }
+      invalidate();
+      await query.refetch();
+      exitSelectMode();
+      Alert.alert("Roles updated", `${updated} member${updated === 1 ? "" : "s"} set to ${label}.`);
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   const roster = query.data;
@@ -781,32 +772,28 @@ export function TeamMembersView({
     setRefreshing(false);
   };
 
-  const handleCancelPhoneInvite = (invite: PendingPhoneTeamInvite) => {
-    Alert.alert(
-      "Cancel invitation?",
-      `Remove the invite for ${invite.invitee_name}? They will not be added when they sign up.`,
-      [
-        { text: "Keep", style: "cancel" },
-        {
-          text: "Cancel invite",
-          style: "destructive",
-          onPress: async () => {
-            setActionId(invite.id);
-            try {
-              const { error } = await cancelTeamInvite(invite.id, "phone_pending");
-              if (error) {
-                Alert.alert("Error", error.message);
-                return;
-              }
-              invalidate();
-              await query.refetch();
-            } finally {
-              setActionId(null);
-            }
-          },
-        },
-      ],
-    );
+  const handleCancelPhoneInvite = async (invite: PendingPhoneTeamInvite) => {
+    const confirmed = await confirmDialog({
+      title: "Cancel invitation?",
+      message: `Remove the invite for ${invite.invitee_name}? They will not be added when they sign up.`,
+      confirmLabel: "Cancel invite",
+      cancelLabel: "Keep",
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    setActionId(invite.id);
+    try {
+      const { error } = await cancelTeamInvite(invite.id, "phone_pending");
+      if (error) {
+        Alert.alert("Error", error.message);
+        return;
+      }
+      invalidate();
+      await query.refetch();
+    } finally {
+      setActionId(null);
+    }
   };
 
   if (query.isLoading && !query.data) {

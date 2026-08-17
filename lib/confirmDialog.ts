@@ -1,29 +1,32 @@
 import { Alert, Platform } from "react-native";
 
-type ConfirmOptions = {
-  confirmText?: string;
+export interface ConfirmDialogOptions {
+  title: string;
+  message?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
   destructive?: boolean;
-};
+}
 
 /**
- * Two-button confirmation. On web, uses `window.confirm` because React Native Web's
- * `Alert.alert` is unreliable for multi-button flows (see app/(driver)/index.tsx).
+ * Cross-platform yes/no confirm. React Native Web's `Alert.alert` does not
+ * reliably invoke multi-button callbacks (no native dialog to back it), so on
+ * web this falls back to `window.confirm`. On native it uses the real Alert.
  */
-export function confirmDialog(
-  title: string,
-  message: string,
-  options?: ConfirmOptions,
-): Promise<boolean> {
-  const confirmText = options?.confirmText ?? "OK";
-  if (Platform.OS === "web" && typeof window !== "undefined") {
-    return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+export function confirmDialog(options: ConfirmDialogOptions): Promise<boolean> {
+  const { title, message, confirmLabel = "Confirm", cancelLabel = "Cancel" } = options;
+
+  if (Platform.OS === "web") {
+    const body = message ? `${title}\n\n${message}` : title;
+    return Promise.resolve(typeof window !== "undefined" ? window.confirm(body) : false);
   }
+
   return new Promise((resolve) => {
     Alert.alert(title, message, [
-      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+      { text: cancelLabel, style: "cancel", onPress: () => resolve(false) },
       {
-        text: confirmText,
-        style: options?.destructive ? "destructive" : "default",
+        text: confirmLabel,
+        style: options.destructive ? "destructive" : "default",
         onPress: () => resolve(true),
       },
     ]);
