@@ -28,6 +28,14 @@ function normalizePhone(phone: string): string {
   return phone.replace(/\s+/g, "").trim();
 }
 
+/** Hide raw Postgres error text (e.g. constraint violations) behind a friendly message. */
+function friendlyMemberWriteError(message: string): Error {
+  if (/violates.*constraint/i.test(message)) {
+    return new Error("Couldn't send the invitation. Please try again.");
+  }
+  return new Error(message);
+}
+
 // ─── List members + pending phone invites ─────────────────────────────────────
 
 export async function getOrgTeamRoster(orgId: string): Promise<{
@@ -214,14 +222,14 @@ export async function inviteTeamMember(
       if (existing.status === "active") {
         return { error: null, member: null, alreadyMember: true };
       }
-      if (existing.status === "invited") {
+      if (existing.status === "pending") {
         return { error: null, member: null, alreadyInvited: true };
       }
       // Inactive → re-activate
       const { data: updated, error: updateErr } = await supabase()
         .from("organization_members")
         .update({
-          status: "invited",
+          status: "pending",
           role,
           permissions,
           joined_at: new Date().toISOString(),
@@ -229,7 +237,7 @@ export async function inviteTeamMember(
         .eq("id", existing.id)
         .select()
         .maybeSingle();
-      if (updateErr) return { error: new Error(updateErr.message), member: null };
+      if (updateErr) return { error: friendlyMemberWriteError(updateErr.message), member: null };
       return { error: null, member: updated as OrgMember };
     }
 
@@ -239,14 +247,14 @@ export async function inviteTeamMember(
         organization_id: orgId,
         user_id: userId,
         role,
-        status: "invited",
+        status: "pending",
         permissions,
         joined_at: new Date().toISOString(),
       })
       .select()
       .maybeSingle();
 
-    if (error) return { error: new Error(error.message), member: null };
+    if (error) return { error: friendlyMemberWriteError(error.message), member: null };
     return { error: null, member: data as OrgMember };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), member: null };
@@ -568,7 +576,7 @@ export async function acceptTeamInvite(orgId: string): Promise<{ error: Error | 
         .update({ status: "active" })
         .eq("organization_id", orgId)
         .eq("user_id", user.id)
-        .eq("status", "invited");
+        .eq("status", "pending");
       if (updErr) return { error: new Error(updErr.message) };
     }
     return { error: null };
@@ -590,7 +598,7 @@ export async function rejectTeamInvite(orgId: string): Promise<{ error: Error | 
         .update({ status: "inactive" })
         .eq("organization_id", orgId)
         .eq("user_id", user.id)
-        .eq("status", "invited");
+        .eq("status", "pending");
       if (updErr) return { error: new Error(updErr.message) };
     }
     return { error: null };
@@ -618,7 +626,7 @@ export async function getMyTeamInvites(): Promise<{
         .from("organization_members")
         .select("id, organization_id, role, joined_at")
         .eq("user_id", user.id)
-        .eq("status", "invited");
+        .eq("status", "pending");
       if (fbErr) return { error: new Error(fbErr.message), invites: [] };
       return { error: null, invites: (fb ?? []).map((r) => ({ ...r, org_name: "" })) as TeamInvite[] };
     }

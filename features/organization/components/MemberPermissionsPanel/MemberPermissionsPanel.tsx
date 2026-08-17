@@ -430,7 +430,7 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
     if (!member || !canEdit) return;
     const displayName =
       member.full_name || member.phone || member.email || "this member";
-    const isPending = member.status === "invited";
+    const isPending = member.status === "pending";
     Alert.alert(
       isPending ? "Cancel invitation?" : "Remove from team?",
       isPending
@@ -566,7 +566,7 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
             </View>
             <View style={styles.tag}>
               <Text style={styles.tagText}>
-                {member.status === "invited" ? "Pending" : "Active"}
+                {member.status === "pending" ? "Pending" : "Active"}
               </Text>
             </View>
           </View>
@@ -626,10 +626,10 @@ export function MemberPermissionsPanel({ memberId, onBack }: Props) {
             </View>
             <View style={styles.actionCopy}>
               <Text style={styles.removeTitle}>
-                {member.status === "invited" ? "Cancel invite" : "Remove member"}
+                {member.status === "pending" ? "Cancel invite" : "Remove member"}
               </Text>
               <Text style={styles.actionDesc}>
-                {member.status === "invited"
+                {member.status === "pending"
                   ? "Withdraw this invitation."
                   : "They lose workspace access immediately."}
               </Text>

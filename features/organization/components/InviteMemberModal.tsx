@@ -31,7 +31,7 @@ import {
   UserPlus2,
   X,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -47,6 +47,9 @@ import { METRONIC } from "@/features/network/components/desktop/networkDesktopHu
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type InviteMemberLayout = "modal" | "embedded";
+
+const MIN_PHONE_LENGTH_FOR_LIVE_CHECK = 8;
+const PHONE_LIVE_CHECK_DEBOUNCE_MS = 500;
 
 // ─── Role option ───────────────────────────────────────────────────────────────
 
@@ -346,6 +349,33 @@ export function InviteMemberFlow({
   const [successKind, setSuccessKind] = useState<"member" | "pending" | null>(null);
   const [shareStatus, setShareStatus] = useState<"copied" | "shared" | null>(null);
   const [precheck, setPrecheck] = useState<TeamInvitePrecheckResult | null>(null);
+  const [liveCheck, setLiveCheck] = useState<TeamInvitePrecheckResult | null>(null);
+  const [liveChecking, setLiveChecking] = useState(false);
+  const liveCheckIdRef = useRef(0);
+
+  // Live cross-org check as the phone is typed on step 1 — same RPC handleContinue
+  // uses, just fired earlier so the admin sees the conflict before pressing Continue.
+  useEffect(() => {
+    if (step !== "phone") return;
+    const trimmedPhone = phone.trim();
+    setLiveCheck(null);
+    if (trimmedPhone.replace(/\s+/g, "").length < MIN_PHONE_LENGTH_FOR_LIVE_CHECK) {
+      setLiveChecking(false);
+      return;
+    }
+    const id = ++liveCheckIdRef.current;
+    setLiveChecking(true);
+    const t = setTimeout(() => {
+      precheckTeamInviteContact(orgId, trimmedPhone, employeeEmail.trim() || null).then(
+        ({ error, result }) => {
+          if (liveCheckIdRef.current !== id) return;
+          setLiveChecking(false);
+          if (!error) setLiveCheck(result);
+        },
+      );
+    }, PHONE_LIVE_CHECK_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [phone, employeeEmail, orgId, step]);
 
   const handleContinue = async () => {
     const trimmedName = employeeName.trim();
@@ -564,6 +594,46 @@ export function InviteMemberFlow({
               returnKeyType="next"
             />
           </View>
+
+          {liveChecking ? (
+            <View style={ui.liveCheckRow}>
+              <LoadingIndicator size="small" color={Theme.textMuted} />
+              <Text style={ui.liveCheckText}>Checking this number…</Text>
+            </View>
+          ) : null}
+
+          {!liveChecking && liveCheck?.recommendedAction === "already_member" ? (
+            <View style={ui.conflictBannerInfo}>
+              <Text style={ui.conflictBody}>
+                {liveCheck.userName || "This person"} is already an active member of
+                your team.
+              </Text>
+            </View>
+          ) : null}
+
+          {!liveChecking && liveCheck?.recommendedAction === "already_invited" ? (
+            <View style={ui.conflictBannerInfo}>
+              <Text style={ui.conflictBody}>
+                An invitation has already been sent to{" "}
+                {liveCheck.userName || "this number"}.
+              </Text>
+            </View>
+          ) : null}
+
+          {!liveChecking &&
+          liveCheck?.otherOrgs &&
+          liveCheck.otherOrgs.length > 0 &&
+          liveCheck.recommendedAction !== "already_member" &&
+          liveCheck.recommendedAction !== "already_invited" ? (
+            <View style={ui.conflictBanner}>
+              <Text style={ui.conflictTitle}>Already on Pulse</Text>
+              <Text style={ui.conflictBody}>
+                {liveCheck.userName || "This number"} is active in{" "}
+                {liveCheck.otherOrgs.map((o) => o.name).join(", ")}. They can join your
+                workspace after signing in — no new account or duplicate signup.
+              </Text>
+            </View>
+          ) : null}
 
           <View style={[ui.inputWrap, { marginBottom: 16 }]}>
             <TextInput
@@ -928,6 +998,16 @@ const embeddedFlow = StyleSheet.create({
     color: Theme.destructive,
     lineHeight: 17,
   },
+  liveCheckRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  liveCheckText: {
+    fontSize: 12,
+    color: METRONIC.muted,
+  },
   conflictBanner: {
     marginBottom: 14,
     padding: 12,
@@ -1151,6 +1231,16 @@ const modal = StyleSheet.create({
     fontSize: 13,
     color: Theme.destructive,
     lineHeight: 18,
+  },
+  liveCheckRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
+  liveCheckText: {
+    fontSize: 13,
+    color: Theme.textMuted,
   },
   conflictBanner: {
     marginBottom: 16,

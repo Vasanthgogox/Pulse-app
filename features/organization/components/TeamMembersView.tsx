@@ -98,7 +98,7 @@ function MemberCard({
 }) {
   const displayName = member.full_name || member.phone || member.email || "Unknown";
   const isOwner = member.role === "owner";
-  const isPending = member.status === "invited";
+  const isPending = member.status === "pending";
   const canEdit = canManage && !isOwner && !isCurrentUser;
   // Owner rows and your own row are never bulk-editable (RLS rejects them too).
   const canSelect = selectable && canEdit;
@@ -728,7 +728,7 @@ export function TeamMembersView({
   const all = roster?.members ?? [];
   const pendingPhoneInvites = roster?.pendingPhoneInvites ?? [];
   const activeMembers = useMemo(() => all.filter((m) => m.status === "active"), [all]);
-  const pendingMembers = useMemo(() => all.filter((m) => m.status === "invited"), [all]);
+  const pendingMembers = useMemo(() => all.filter((m) => m.status === "pending"), [all]);
   const pendingCount = pendingMembers.length + pendingPhoneInvites.length;
 
   type PendingGridItem =
