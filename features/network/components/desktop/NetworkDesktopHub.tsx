@@ -18,9 +18,8 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
-import { NetworkDesktopAssetSalesPanel } from "@/features/network/components/desktop/NetworkDesktopAssetSalesPanel";
 import { NetworkDesktopInvitationsPanel } from "@/features/network/components/desktop/NetworkDesktopInvitationsPanel";
-import { NetworkDesktopConnectionSalesPanel } from "@/features/network/components/desktop/NetworkDesktopConnectionSalesPanel";
+import { NetworkDesktopSalesPanel } from "@/features/network/components/desktop/NetworkDesktopSalesPanel";
 import { NetworkDesktopDetailsPanel } from "@/features/network/components/desktop/NetworkDesktopDetailsPanel";
 import { NetworkDesktopGoalsPanel } from "@/features/network/components/desktop/NetworkDesktopGoalsPanel";
 import { NetworkDesktopHubHero } from "@/features/network/components/desktop/NetworkDesktopHubHero";
@@ -57,6 +56,7 @@ export type NetworkDesktopTab =
   | "profile"
   | "sales"
   | "goals"
+  /** @deprecated Prefer `sales` — opens Sales with Asset view. */
   | "asset"
   | "network"
   /** @deprecated Prefer `network` — kept for deep links / bookmarks. */
@@ -69,15 +69,15 @@ const TABS: { id: NetworkDesktopTab; label: string }[] = [
   { id: "details", label: "Details" },
   { id: "team", label: "Team" },
   { id: "profile", label: "My Profile" },
-  { id: "sales", label: "Connection sales" },
+  { id: "sales", label: "Sales" },
   { id: "goals", label: "Goals" },
-  { id: "asset", label: "Asset sales" },
   { id: "network", label: "Network" },
   { id: "chat", label: "Chat" },
 ];
 
 function normalizeHubTab(raw: NetworkDesktopTab): NetworkDesktopTab {
   if (raw === "connections" || raw === "grow") return "network";
+  if (raw === "asset") return "sales";
   return raw;
 }
 
@@ -372,8 +372,9 @@ export function NetworkDesktopHub({
 
     if (tab === "sales") {
       return (
-        <NetworkDesktopConnectionSalesPanel
+        <NetworkDesktopSalesPanel
           orgId={orgId}
+          initialScope={initialTab === "asset" ? "asset" : "aggregate"}
           onOpenProfile={onOpenProfileFromConnection}
           onOpenDiscoverProfile={onOpenProfileFromDiscover}
           onGoToGrowTab={() => setTab("network")}
@@ -386,10 +387,6 @@ export function NetworkDesktopHub({
 
     if (tab === "goals") {
       return <NetworkDesktopGoalsPanel orgId={orgId} />;
-    }
-
-    if (tab === "asset") {
-      return <NetworkDesktopAssetSalesPanel orgId={orgId} />;
     }
 
     if (tab === "network") {

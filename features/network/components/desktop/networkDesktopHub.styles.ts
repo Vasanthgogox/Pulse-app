@@ -1448,6 +1448,20 @@ const networkDesktopHubStylesDef = {
     paddingHorizontal: 12,
     lineHeight: 14,
   }),
+  salesScopeBar: view({
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 4,
+    backgroundColor: Theme.cardWhite,
+  }),
+  salesScopeBarCopy: view({
+    flex: 1,
+    minWidth: 0,
+  }),
   salesPerfViewBar: view({
     flexDirection: "row",
     alignItems: "center",

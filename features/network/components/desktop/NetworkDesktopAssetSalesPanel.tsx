@@ -1,5 +1,5 @@
 /**
- * Asset sales tab — own-fleet trip analytics with lane revenue contribution,
+ * Sales → Asset view — own-fleet trip analytics with lane revenue contribution,
  * driver & vehicle performance, and paginated fleet tables.
  */
 import Theme from "@/constants/Theme";
@@ -21,6 +21,7 @@ import {
 import { NetworkDesktopSalesDonut } from "@/features/network/components/desktop/NetworkDesktopSalesDonut";
 import { NetworkDesktopSalesLineChart } from "@/features/network/components/desktop/NetworkDesktopSalesLineChart";
 import { NetworkDesktopSidebarFeatureAd } from "@/features/network/components/desktop/NetworkDesktopSidebarFeatureAd";
+import { NetworkDesktopSalesTableOverflow } from "@/features/network/components/desktop/NetworkDesktopSalesTableOverflow";
 import {
   METRONIC,
   networkDesktopHubStyles as styles,
@@ -177,12 +178,21 @@ function KpiCard({
   sub?: string;
   icon: ReactNode;
 }) {
+  const layout = useProfileHubCompactLayout();
   return (
-    <View style={styles.salesKpiCard}>
+    <View style={[styles.salesKpiCard, layout.salesKpiCard]}>
       <View style={styles.salesKpiIcon}>{icon}</View>
-      <Text style={styles.salesKpiValue}>{value}</Text>
-      <Text style={styles.salesKpiLabel}>{label}</Text>
-      {sub ? <Text style={styles.salesKpiSub}>{sub}</Text> : null}
+      <Text style={styles.salesKpiValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.salesKpiLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      {sub ? (
+        <Text style={styles.salesKpiSub} numberOfLines={2}>
+          {sub}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -194,25 +204,35 @@ function PerformanceViewToggle({
   view: AssetPerformanceView;
   onChange: (view: AssetPerformanceView) => void;
 }) {
+  const layout = useProfileHubCompactLayout();
   return (
-    <View style={styles.salesPerfViewBar}>
+    <View style={[styles.salesPerfViewBar, layout.salesPerfViewBar]}>
       <View>
         <Text style={styles.salesPerfViewTitle}>
           {view === "drivers" ? "Driver performance" : "Vehicle performance"}
         </Text>
-        <Text style={styles.salesPerfViewSub}>
-          {view === "drivers"
-            ? "Earnings, on-time SLA, and margin by driver"
-            : "Utilization, yield, and score by fleet asset"}
-        </Text>
+        {layout.compact ? null : (
+          <Text style={styles.salesPerfViewSub}>
+            {view === "drivers"
+              ? "Earnings, on-time SLA, and margin by driver"
+              : "Utilization, yield, and score by fleet asset"}
+          </Text>
+        )}
       </View>
-      <View style={styles.salesPerfViewToggle}>
+      <View
+        style={[styles.salesPerfViewToggle, layout.salesPerfViewToggle]}
+        accessibilityRole="tablist"
+        accessibilityLabel="Asset performance view"
+      >
         <Pressable
           onPress={() => onChange("drivers")}
           style={[
             styles.salesPerfViewTab,
+            layout.salesPerfViewTab,
             view === "drivers" && styles.salesPerfViewTabOn,
           ]}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: view === "drivers" }}
         >
           <Users
             size={14}
@@ -231,8 +251,11 @@ function PerformanceViewToggle({
           onPress={() => onChange("vehicles")}
           style={[
             styles.salesPerfViewTab,
+            layout.salesPerfViewTab,
             view === "vehicles" && styles.salesPerfViewTabOn,
           ]}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: view === "vehicles" }}
         >
           <Truck
             size={14}
@@ -457,7 +480,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
 
   return (
     <View style={[styles.salesBody, layout.salesBody]}>
-      <View style={[styles.splitRow, layout.splitRow]}>
+      <View style={[styles.splitRow, layout.salesSplitRow]}>
         <View style={[styles.sidebar, layout.sidebar]}>
           <View style={[styles.salesCard, styles.salesCardPad]}>
             <Text style={styles.cardTitle}>Intelligent filters</Text>
@@ -763,7 +786,9 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
             )}
           </View>
 
-          <NetworkDesktopSidebarFeatureAd layout="square" />
+          {layout.compact ? null : (
+            <NetworkDesktopSidebarFeatureAd layout="square" />
+          )}
         </View>
 
         <View style={[styles.mainCol, layout.mainCol]}>
@@ -772,7 +797,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
             onChange={setPerformanceView}
           />
 
-          <View style={styles.salesKpiRow}>
+          <View style={[styles.salesKpiRow, layout.salesKpiRow]}>
             <KpiCard
               label="Asset trips"
               value={String(kpis.totalTrips)}
@@ -833,11 +858,12 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
           </View>
 
           <View
-            style={
+            style={[
               performanceView === "drivers"
                 ? styles.salesWidgetRowDual
-                : styles.salesWidgetRow
-            }
+                : styles.salesWidgetRow,
+              layout.salesWidgetRow,
+            ]}
           >
             <View
               style={[
@@ -928,7 +954,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
 
           {performanceView === "drivers" ? (
             <>
-              <View style={styles.salesBarRow}>
+              <View style={[styles.salesBarRow, layout.salesWidgetRow]}>
                 <View
                   style={[
                     styles.salesCard,
@@ -976,7 +1002,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
                 </View>
               </View>
 
-              <View style={styles.salesBarRowDual}>
+              <View style={[styles.salesBarRowDual, layout.salesWidgetRow]}>
                 <View
                   style={[
                     styles.salesCard,
@@ -1022,7 +1048,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
             </>
           ) : (
             <>
-              <View style={styles.salesBarRow}>
+              <View style={[styles.salesBarRow, layout.salesWidgetRow]}>
                 <View
                   style={[
                     styles.salesCard,
@@ -1115,11 +1141,12 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
           )}
 
           <View
-            style={
+            style={[
               performanceView === "drivers"
                 ? styles.salesBarRowDual
-                : styles.salesBarRow
-            }
+                : styles.salesBarRow,
+              layout.salesWidgetRow,
+            ]}
           >
             <View
               style={[
@@ -1243,7 +1270,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
 
           {performanceView === "drivers" ? (
           <View style={[styles.salesCard, styles.salesTableCard]}>
-            <View style={styles.salesTableTitleRow}>
+            <View style={[styles.salesTableTitleRow, layout.salesTableTitleRow]}>
               <Text style={styles.salesCardTitle}>Fleet drivers</Text>
               <NetworkExportMenu
                 actions={[
@@ -1263,8 +1290,8 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
               />
             </View>
 
-            <View style={styles.salesTableToolbar}>
-              <View style={styles.salesTableSearch}>
+            <View style={[styles.salesTableToolbar, layout.salesTableToolbar]}>
+              <View style={[styles.salesTableSearch, layout.salesTableSearch]}>
                 <Search size={14} color={METRONIC.muted} />
                 <TextInput
                   style={styles.searchInput}
@@ -1314,7 +1341,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
               />
             </View>
 
-            <View style={styles.salesTableScroll}>
+            <NetworkDesktopSalesTableOverflow compact={layout.compact}>
               <View style={styles.salesTableHead}>
                 <View style={styles.salesAssetTableGrid}>
                   <View style={styles.salesColCheck} />
@@ -1461,9 +1488,9 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
                   </Pressable>
                 ))
               )}
-            </View>
+            </NetworkDesktopSalesTableOverflow>
 
-            <View style={styles.salesPagination}>
+            <View style={[styles.salesPagination, layout.salesPagination]}>
               <View style={styles.salesPageSizeRow}>
                 <Text style={styles.salesPageSizeLabel}>Rows per page</Text>
                 {PAGE_SIZES.map((size) => (
@@ -1556,7 +1583,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
 
           {performanceView === "vehicles" ? (
           <View style={[styles.salesCard, styles.salesTableCard]}>
-            <View style={styles.salesTableTitleRow}>
+            <View style={[styles.salesTableTitleRow, layout.salesTableTitleRow]}>
               <View>
                 <Text style={styles.salesAssetSectionTitle}>Fleet vehicles</Text>
                 <Text style={styles.salesAssetSectionSub}>
@@ -1581,8 +1608,8 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
               />
             </View>
 
-            <View style={styles.salesTableToolbar}>
-              <View style={styles.salesTableSearch}>
+            <View style={[styles.salesTableToolbar, layout.salesTableToolbar]}>
+              <View style={[styles.salesTableSearch, layout.salesTableSearch]}>
                 <Search size={14} color={METRONIC.muted} />
                 <TextInput
                   style={styles.searchInput}
@@ -1632,7 +1659,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
               />
             </View>
 
-            <View style={styles.salesTableScroll}>
+            <NetworkDesktopSalesTableOverflow compact={layout.compact}>
               <View style={styles.salesTableHead}>
                 <View style={styles.salesAssetVehicleTableGrid}>
                   <View style={styles.salesColCheck} />
@@ -1791,9 +1818,9 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
                   </Pressable>
                 ))
               )}
-            </View>
+            </NetworkDesktopSalesTableOverflow>
 
-            <View style={styles.salesPagination}>
+            <View style={[styles.salesPagination, layout.salesPagination]}>
               <View style={styles.salesPageSizeRow}>
                 <Text style={styles.salesPageSizeLabel}>Rows per page</Text>
                 {PAGE_SIZES.map((size) => (
