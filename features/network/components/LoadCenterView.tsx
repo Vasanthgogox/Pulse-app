@@ -94,6 +94,7 @@ import {
     assignmentShellColors,
 } from "@/features/trips/styles/assignmentShellShared";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { formatINR } from "@/lib/format";
 import { ROUTES } from "@/lib/routes";
 import { resolveLoadCenterPromoVariant } from "@/lib/loadCenterPromoAssets";
@@ -162,6 +163,7 @@ export function LoadCenterView({
   const { width, height: windowHeight } = useWindowDimensions();
   const router = useRouter();
   const { currentOrganization } = useOrganization();
+  const { can: canSurface } = useMemberAccess();
   const orgId = currentOrganization?.id ?? null;
   const pendingDeployCount =
     useOptionalAwardedIndentDeployModal()?.pendingDeployCount ?? 0;
@@ -949,15 +951,18 @@ export function LoadCenterView({
     </View>
   );
 
-  const renderAddLoadButton = () => (
-    <PulsePillButton
-      label="Add Load"
-      showPlusIcon
-      size="default"
-      onPress={onCreateIndentPress}
-      accessibilityLabel="Add load"
-    />
-  );
+  const renderAddLoadButton = () => {
+    if (!canSurface("tripops.indents.create")) return null;
+    return (
+      <PulsePillButton
+        label="Add Load"
+        showPlusIcon
+        size="default"
+        onPress={onCreateIndentPress}
+        accessibilityLabel="Add load"
+      />
+    );
+  };
 
   const handleBroadcastDraft = async (load: IndentRow) => {
     if (!orgId) return;
@@ -2026,6 +2031,7 @@ export function LoadCenterView({
             <TouchableOpacity
               style={styles.modalSubmit}
               onPress={() => {
+                if (!canSurface("tripops.indents.create")) return;
                 setShowPostModal(false);
                 onCreateIndentPress();
               }}

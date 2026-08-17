@@ -16,6 +16,7 @@ import Theme from '@/constants/Theme';
 import { SemanticAddIcon } from '@/components/SemanticAddIcon';
 import { TeslaHeader } from '@/components/TeslaHeader';
 import { formatINR } from '@/lib/format';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 import { type IndentRow } from '@/features/indents/services/indents.service';
 import { useIndentsQuery } from '@/lib/queries/useIndentsQuery';
 import { DatePresetPillBar } from '@/components/DatePresetPillBar';
@@ -53,6 +54,7 @@ export function LoadBoardModal({
   embedInTab = false,
 }: LoadBoardModalProps) {
   const insets = useSafeAreaInsets();
+  const { can: canSurface } = useMemberAccess();
   const [marketMode, setMarketMode] = useState<MarketMode>('GIVE');
   const [loadDatePeriod, setLoadDatePeriod] = useState<FinancePeriodFilter>('RANGE');
   const [loadCustomFrom, setLoadCustomFrom] = useState<string | null>(null);
@@ -161,7 +163,10 @@ export function LoadBoardModal({
               </Text>
               <TouchableOpacity
                 style={styles.syncNodesBtn}
-                onPress={() => onCreateIndentPress?.()}
+                onPress={() => {
+                  if (!canSurface("tripops.indents.create")) return;
+                  onCreateIndentPress?.();
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={styles.syncNodesBtnText}>CREATE INDENT</Text>
@@ -235,7 +240,10 @@ export function LoadBoardModal({
                 <TouchableOpacity
                   style={styles.createBtn}
                   activeOpacity={0.8}
-                  onPress={() => onCreateIndentPress?.()}
+                  onPress={() => {
+                    if (!canSurface("tripops.indents.create")) return;
+                    onCreateIndentPress?.();
+                  }}
                 >
                 <SemanticAddIcon
                   IconComponent={Package}
