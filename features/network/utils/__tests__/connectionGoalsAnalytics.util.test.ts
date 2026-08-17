@@ -2,22 +2,36 @@ import {
   achievementPct,
   buildPerformanceKpiRow,
   changePct,
+  computeGoalsActualsForRollup,
   computePreviousPeriodActuals,
   computeTargetToDate,
   computeTripMetrics,
   elapsedFraction,
+  EMPTY_PERFORMANCE_CROSS_FILTER,
+  filterTripsForCrossFilter,
+  isPayableAffectedByFilter,
   pacingPct,
   periodBounds,
   previousPeriodAnchorMonthKey,
+  resolveClientIdsForFilter,
+  resolveFilteredPeriodTarget,
+  resolvePeriodTarget,
   tripsInDateRange,
+  type PerformanceCrossFilter,
 } from '../connectionGoalsAnalytics.util';
 import type { TripRow } from '@/features/trips/services/trips.service';
+import type { NetworkGoalsStore } from '@/features/network/services/networkGoalsStorage.service';
 
 // No trailing "Z" -- these must parse as LOCAL time (matching periodBounds'
 // local-time Date construction), not a UTC instant that could land on a
 // different local calendar day depending on the test machine's timezone.
-function trip(pickupDate: string, clientPrice: number, supplierRate = 0): Partial<TripRow> {
-  return { pickup_date: pickupDate, client_price: clientPrice, supplier_rate: supplierRate };
+function trip(
+  pickupDate: string,
+  clientPrice: number,
+  supplierRate = 0,
+  extra: Partial<TripRow> = {},
+): Partial<TripRow> {
+  return { pickup_date: pickupDate, client_price: clientPrice, supplier_rate: supplierRate, ...extra };
 }
 
 describe('periodBounds', () => {
@@ -267,5 +281,268 @@ describe('computeTripMetrics (exported for reuse by previous-period computation)
     expect(metrics.revenueInr).toBe(0);
     expect(metrics.tripCount).toBe(0);
     expect(metrics.marginPct).toBe(0);
+  });
+});
+
+// ─── Phase 1 Commit 5: cross-filter engine ─────────────────────────────────
+
+const CF = (patch: Partial<PerformanceCrossFilter> = {}): PerformanceCrossFilter => ({
+  ...EMPTY_PERFORMANCE_CROSS_FILTER,
+  ...patch,
+});
+
+const CLIENTS = [{ id: 'apple' }, { id: 'ajio' }, { id: 'acme' }];
+const KAM_ASSIGNMENTS = { apple: 'bhujesh', ajio: 'bhujesh', acme: 'ravi' };
+const CLIENT_REGIONS = { apple: 'south', ajio: 'north', acme: 'south' };
+
+describe('resolveClientIdsForFilter', () => {
+  it('no client-derived dimension active -> null ("no restriction"), not an empty set', () => {
+    expect(resolveClientIdsForFilter(CF(), CLIENTS, KAM_ASSIGNMENTS, CLIENT_REGIONS)).toBeNull();
+  });
+
+  it('KAM filtering -> client-derived, matches every client assigned to that KAM', () => {
+    const ids = resolveClientIdsForFilter(CF({ kamId: 'bhujesh' }), CLIENTS, KAM_ASSIGNMENTS, CLIENT_REGIONS);
+    expect(ids).toEqual(new Set(['apple', 'ajio']));
+  });
+
+  it('Region filtering -> client-derived, matches every client in that region', () => {
+    const ids = resolveClientIdsForFilter(CF({ regionId: 'south' }), CLIENTS, KAM_ASSIGNMENTS, CLIENT_REGIONS);
+    expect(ids).toEqual(new Set(['apple', 'acme']));
+  });
+
+  it('Client filtering -> direct, exactly one id', () => {
+    const ids = resolveClientIdsForFilter(CF({ clientId: 'apple' }), CLIENTS, KAM_ASSIGNMENTS, CLIENT_REGIONS);
+    expect(ids).toEqual(new Set(['apple']));
+  });
+
+  it('multiple filters combine as an intersection, not a union', () => {
+    // Bhujesh's clients: apple, ajio. South region: apple, acme. Intersection: apple only.
+    const ids = resolveClientIdsForFilter(
+      CF({ kamId: 'bhujesh', regionId: 'south' }),
+      CLIENTS,
+      KAM_ASSIGNMENTS,
+      CLIENT_REGIONS,
+    );
+    expect(ids).toEqual(new Set(['apple']));
+  });
+
+  it('KAM never fabricated for suppliers/drivers -- resolveClientIdsForFilter only ever consults client-derived fields', () => {
+    // supplierId/assetId aren't part of this function's input type at all --
+    // this test documents that boundary rather than exercising new behavior.
+    const ids = resolveClientIdsForFilter(CF({ kamId: 'bhujesh' }), CLIENTS, KAM_ASSIGNMENTS, CLIENT_REGIONS);
+    expect(ids).not.toBeNull();
+    expect([...ids!]).not.toContain('a-supplier-id');
+  });
+});
+
+describe('filterTripsForCrossFilter', () => {
+  const trips = [
+    trip('2026-08-05T00:00:00', 1000, 800, { client_id: 'apple', supplier_id: 's1', vehicle_id: 'v1' }),
+    trip('2026-08-06T00:00:00', 2000, 1500, { client_id: 'ajio', supplier_id: 's2', driver_id: 'd1' }),
+    trip('2026-08-07T00:00:00', 3000, 2000, { client_id: 'acme', supplier_id: 's1', vehicle_id: 'v2' }),
+  ] as TripRow[];
+
+  it('no cross-filter -> returns the exact same array reference (the regression-safety case)', () => {
+    const result = filterTripsForCrossFilter(trips, CF(), null);
+    expect(result).toBe(trips);
+  });
+
+  it('Client filtering -> direct client_id match', () => {
+    const clientIdSet = new Set(['apple']);
+    const result = filterTripsForCrossFilter(trips, CF({ clientId: 'apple' }), clientIdSet);
+    expect(result.map((t) => t.client_id)).toEqual(['apple']);
+  });
+
+  it('Supplier filtering -> direct trip.supplier_id match, independent of client', () => {
+    const result = filterTripsForCrossFilter(trips, CF({ supplierId: 's1' }), null);
+    expect(result.map((t) => t.client_id)).toEqual(['apple', 'acme']);
+  });
+
+  it('Vehicle asset filtering -> matches trip.vehicle_id', () => {
+    const result = filterTripsForCrossFilter(trips, CF({ assetId: 'v2' }), null);
+    expect(result).toHaveLength(1);
+    expect(result[0].client_id).toBe('acme');
+  });
+
+  it('Driver asset filtering -> the same assetId field also matches trip.driver_id', () => {
+    const result = filterTripsForCrossFilter(trips, CF({ assetId: 'd1' }), null);
+    expect(result).toHaveLength(1);
+    expect(result[0].client_id).toBe('ajio');
+  });
+
+  it('multiple filters combine as an AND across dimensions (client-set AND supplier)', () => {
+    const clientIdSet = new Set(['apple', 'acme']); // e.g. Region=south
+    const result = filterTripsForCrossFilter(trips, CF({ regionId: 'south', supplierId: 's1' }), clientIdSet);
+    expect(result.map((t) => t.client_id)).toEqual(['apple', 'acme']);
+  });
+
+  it('client-derived filter excludes trips with no client_id at all', () => {
+    const noClient = [trip('2026-08-05T00:00:00', 500, 400, { client_id: null })] as TripRow[];
+    const result = filterTripsForCrossFilter(noClient, CF({ clientId: 'apple' }), new Set(['apple']));
+    expect(result).toHaveLength(0);
+  });
+});
+
+describe('cross-filter clearing', () => {
+  it('clearing one filter (e.g. clientId) leaves the others active', () => {
+    const withBoth = CF({ kamId: 'bhujesh', clientId: 'apple' });
+    const clientCleared: PerformanceCrossFilter = { ...withBoth, clientId: null };
+    expect(clientCleared.kamId).toBe('bhujesh');
+    expect(clientCleared.clientId).toBeNull();
+  });
+
+  it('clear all returns to the exact empty default', () => {
+    const filtered = CF({ kamId: 'bhujesh', clientId: 'apple', supplierId: 's1' });
+    const cleared = EMPTY_PERFORMANCE_CROSS_FILTER;
+    expect(cleared).not.toEqual(filtered);
+    expect(cleared.kamId).toBeNull();
+    expect(cleared.clientId).toBeNull();
+    expect(cleared.supplierId).toBeNull();
+  });
+});
+
+describe('filter persistence across Month/Quarter/Year', () => {
+  it('resolveClientIdsForFilter and filterTripsForCrossFilter take no rollup/period argument at all -- '
+    + 'the same crossFilter necessarily produces the same client-id set and filtered trips regardless of '
+    + 'which Month/Quarter/Year is selected elsewhere in the panel', () => {
+    const trips = [
+      trip('2026-08-05T00:00:00', 1000, 800, { client_id: 'apple' }),
+      trip('2025-01-05T00:00:00', 500, 400, { client_id: 'apple' }), // a wildly different period
+    ] as TripRow[];
+    const clientIdSet = resolveClientIdsForFilter(CF({ clientId: 'apple' }), CLIENTS, KAM_ASSIGNMENTS, CLIENT_REGIONS);
+    const result = filterTripsForCrossFilter(trips, CF({ clientId: 'apple' }), clientIdSet);
+    // Both trips match -- the client filter itself is period-agnostic; it's
+    // computeGoalsActualsForRollup's OWN month-key filtering, not the cross-
+    // filter, that later scopes this down to whichever period is selected.
+    expect(result).toHaveLength(2);
+  });
+});
+
+describe('KPI/trend/target/previous-period recalculation under a cross-filter', () => {
+  const trips = [
+    trip('2026-08-05T00:00:00', 100000, 80000, { client_id: 'apple' }),
+    trip('2026-08-06T00:00:00', 200000, 150000, { client_id: 'ajio' }),
+    trip('2026-07-10T00:00:00', 90000, 70000, { client_id: 'apple' }), // previous period, apple
+    trip('2026-07-10T00:00:00', 300000, 200000, { client_id: 'acme' }), // previous period, NOT bhujesh's
+  ] as TripRow[];
+  const asOf = new Date(2026, 7, 17);
+
+  function store(overrides: Partial<NetworkGoalsStore['months']> = {}): NetworkGoalsStore {
+    return {
+      version: 3,
+      months: {
+        '2026-08': {
+          aggregate: { revenueInr: 1000000, tripCount: 100, marginPct: 30 },
+          clients: { apple: { revenueInr: 120000, tripCount: 10 }, ajio: { revenueInr: 90000, tripCount: 8 } },
+          vehicles: {},
+          drivers: {},
+        },
+        ...overrides,
+      },
+      kamAssignments: KAM_ASSIGNMENTS,
+      clientRegions: CLIENT_REGIONS,
+      yearlyTargets: {},
+      quarterlyTargets: {},
+      updatedAt: '',
+    };
+  }
+
+  it('KAM cross-filter recalculates actual, target, AND previous-period together -- not just a table', () => {
+    const s = store();
+    const cf = CF({ kamId: 'bhujesh' });
+    const clientIdSet = resolveClientIdsForFilter(cf, CLIENTS, s.kamAssignments, s.clientRegions);
+    const filteredTrips = filterTripsForCrossFilter(trips, cf, clientIdSet);
+
+    const actual = computeGoalsActualsForRollup(filteredTrips, '2026-08', 'month');
+    const target = resolveFilteredPeriodTarget(s, '2026-08', 'month', cf, clientIdSet);
+    const previous = computePreviousPeriodActuals(filteredTrips, '2026-08', 'month', asOf);
+
+    // Actual: apple (100000) + ajio (200000) only -- acme's trip must not leak in.
+    expect(actual.revenueInr).toBe(300000);
+    // Target: apple's (120000) + ajio's (90000) target, summed -- not the org aggregate (1000000).
+    expect(target.revenueInr).toBe(210000);
+    // Previous period: only apple's July trip (90000) -- acme's July trip excluded (not Bhujesh's client).
+    expect(previous.revenueInr).toBe(90000);
+  });
+
+  it('Margin never gets a fabricated per-client target under a cross-filter', () => {
+    const s = store();
+    const cf = CF({ clientId: 'apple' });
+    const clientIdSet = resolveClientIdsForFilter(cf, CLIENTS, s.kamAssignments, s.clientRegions);
+    const target = resolveFilteredPeriodTarget(s, '2026-08', 'month', cf, clientIdSet);
+    expect(target.marginPct).toBe(0); // "no target" -- buildPerformanceKpiRow already renders this as hasTarget=false
+  });
+
+  it('Supplier cross-filter -> no target at all, ever (no GoalFocus "supplier" case exists)', () => {
+    const s = store();
+    const cf = CF({ supplierId: 's1' });
+    const target = resolveFilteredPeriodTarget(s, '2026-08', 'month', cf, null);
+    expect(target.revenueInr).toBe(0);
+    expect(target.tripCount).toBe(0);
+  });
+
+  it('Asset cross-filter -> that one asset\'s own target, independent of any client-side filter', () => {
+    const s = store({
+      '2026-08': {
+        aggregate: { revenueInr: 0, tripCount: 0, marginPct: 0 },
+        clients: {},
+        vehicles: { v1: { revenueInr: 50000, tripCount: 5 } },
+        drivers: {},
+      },
+    });
+    const target = resolveFilteredPeriodTarget(s, '2026-08', 'month', CF({ assetId: 'v1' }), null);
+    expect(target.revenueInr).toBe(50000);
+    expect(target.tripCount).toBe(5);
+  });
+});
+
+describe('Payable attribution under KAM/Region cross-filters', () => {
+  it('KAM filter active -> Payable is NOT affected, must show the real org-wide figure with a label', () => {
+    expect(isPayableAffectedByFilter(CF({ kamId: 'bhujesh' }))).toBe(false);
+  });
+
+  it('Region filter active -> same rule', () => {
+    expect(isPayableAffectedByFilter(CF({ regionId: 'south' }))).toBe(false);
+  });
+
+  it('Client/Supplier/Asset filters alone -> Payable is unaffected by THIS rule (no KAM/Region active)', () => {
+    // isPayableAffectedByFilter only answers the KAM/Region question; it
+    // deliberately does not react to clientId/supplierId/assetId.
+    expect(isPayableAffectedByFilter(CF({ clientId: 'apple' }))).toBe(true);
+  });
+
+  it('no cross-filter at all -> Payable is (trivially) affected by nothing, no label needed', () => {
+    expect(isPayableAffectedByFilter(CF())).toBe(true);
+  });
+});
+
+describe('regression: Aggregate with no filters must equal the pre-Performance, unfiltered calculation', () => {
+  it('resolveClientIdsForFilter(empty) is null and resolveFilteredPeriodTarget(empty) equals resolvePeriodTarget', () => {
+    const s: NetworkGoalsStore = {
+      version: 3,
+      months: { '2026-08': { aggregate: { revenueInr: 500000, tripCount: 40, marginPct: 28 }, clients: {}, vehicles: {}, drivers: {} } },
+      kamAssignments: {},
+      clientRegions: {},
+      yearlyTargets: {},
+      quarterlyTargets: {},
+      updatedAt: '',
+    };
+    const clientIdSet = resolveClientIdsForFilter(CF(), CLIENTS, s.kamAssignments, s.clientRegions);
+    expect(clientIdSet).toBeNull();
+
+    const unfilteredTarget = resolvePeriodTarget(s, '2026-08', 'month');
+    const filteredTarget = resolveFilteredPeriodTarget(s, '2026-08', 'month', CF(), clientIdSet);
+    expect(filteredTarget).toEqual(unfilteredTarget);
+  });
+
+  it('filterTripsForCrossFilter(empty) returns the identical trips the old Goals calculation used -- same actual', () => {
+    const trips = [
+      trip('2026-08-05T00:00:00', 100000, 80000, { client_id: 'apple' }),
+      trip('2026-08-06T00:00:00', 200000, 150000, { client_id: 'ajio' }),
+    ] as TripRow[];
+    const filtered = filterTripsForCrossFilter(trips, CF(), null);
+    const oldActual = computeGoalsActualsForRollup(trips, '2026-08', 'month');
+    const newActual = computeGoalsActualsForRollup(filtered, '2026-08', 'month');
+    expect(newActual).toEqual(oldActual);
   });
 });

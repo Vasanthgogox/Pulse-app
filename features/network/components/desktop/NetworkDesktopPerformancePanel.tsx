@@ -9,23 +9,38 @@
  *   and existing analytics util functions Goals already uses, rendered the
  *   locked visual hierarchy, KAM/Region/Supplier breakdown groupings and
  *   cross-filter interaction deliberately deferred.
- * Phase 1, Commit 4 (this commit): the analytical correctness layer --
- *   Period Target, Target-to-date, Achievement %, Pacing %, vs Previous
- *   Period, and Variance (features/network/utils/connectionGoalsAnalytics.util.ts,
- *   unit-tested in __tests__/connectionGoalsAnalytics.util.test.ts covering
- *   first/mid/last day of period, zero target, zero target-to-date, no/
- *   partial previous-period data, quarter/year boundaries, and future
- *   periods -- never Infinity/NaN/a misleading 0%).
+ * Phase 1, Commit 4: the analytical correctness layer -- Period Target,
+ *   Target-to-date, Achievement %, Pacing %, vs Previous Period, Variance
+ *   (connectionGoalsAnalytics.util.ts, 37 unit tests), proven correct
+ *   against a fixed, unfiltered dataset.
+ * Phase 1, Commit 5 (this commit): the cross-filter engine. One shared
+ *   PerformanceCrossFilter (moved into connectionGoalsAnalytics.util.ts,
+ *   where the filtering functions live, so there's no panel -> util ->
+ *   panel dependency loop) now actually narrows the trip/client dataset
+ *   every visual below reads from -- KPI band, trend, and breakdown all
+ *   recalculate from the SAME filteredTrips/clientIdSet, not three
+ *   independent filters. Perspective is unaffected by clicking a
+ *   cross-filter -- clicking a client row narrows the filter context, it
+ *   never switches which breakdown is showing.
  *
- *   Still deliberately deferred to later commits:
- *     - cross-filter interaction -- crossFilter (Commit 2) never leaves its
- *       empty default; this commit proves the calculations are correct for
- *       a fixed (unfiltered) dataset, Commit 5 proves they stay correct when
- *       the dataset changes through a cross-filter
- *     - KAM / Region / Supplier breakdown groupings (Commit 6)
- *     - Progress modal, trip evidence table, export (Commits 7-8)
- *   Aggregate and Client perspectives still share the same unfiltered
- *   client-focus breakdown table (unchanged from Commit 3).
+ *   Only the Client breakdown table has real rows today (KAM/Region/
+ *   Supplier/Asset grouping lands in Commit 6), so clicking a row to
+ *   cross-filter is wired there; the underlying pipeline
+ *   (resolveClientIdsForFilter / filterTripsForCrossFilter /
+ *   resolveFilteredPeriodTarget) already handles all six dimensions
+ *   correctly and is unit-tested for each, independent of whether a
+ *   clickable row exists for it yet.
+ *
+ *   Payable has no valid KAM/Region/Client attribution (supplier/driver
+ *   dues aren't assigned to a KAM or region) -- isPayableAffectedByFilter()
+ *   encodes exactly when a "Not affected by this filter" label would be
+ *   needed; no Receivable/Payable KPI card exists in this dashboard yet
+ *   (Commits 3-4 never added one), so this is tested at the pipeline level
+ *   without a UI card to attach it to.
+ *
+ *   Still deliberately deferred: Progress modal, trip evidence table,
+ *   export/import, new Supabase queries, supplier targets, a full Region
+ *   perspective, UI redesign (Commits 6+).
  */
 import Theme from "@/constants/Theme";
 import {
@@ -38,11 +53,16 @@ import {
   buildPerformanceKpiRow,
   computeGoalsActualsForRollup,
   computePreviousPeriodActuals,
+  EMPTY_PERFORMANCE_CROSS_FILTER,
+  filterTripsForCrossFilter,
   getRecentMonthKeys,
-  resolvePeriodTarget,
+  resolveClientIdsForFilter,
+  resolveFilteredPeriodTarget,
   type EntityGoalRow,
   type GoalsRollup,
+  type PerformanceCrossFilter,
   type PerformanceKpiRow,
+  type PerformancePerspective,
 } from "@/features/network/utils/connectionGoalsAnalytics.util";
 import { formatINRChip } from "@/lib/format";
 import { canAccessClients, canAccessDrivers, canAccessSuppliers } from "@/lib/capabilities";
@@ -53,43 +73,7 @@ import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { useVehiclesQuery } from "@/lib/queries/useVehiclesQuery";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-
-/**
- * Which grouping/breakdown the page is currently showing -- a view mode,
- * not a filter dimension. Mirrors NetworkDesktopSalesPanel's SalesScope
- * ("aggregate" | "asset"), extended to six; that panel's own scope becomes
- * derived from this once it's wired in (not an independent second toggle).
- */
-export type PerformancePerspective =
-  | "aggregate"
-  | "kam"
-  | "client"
-  | "region"
-  | "supplier"
-  | "asset";
-
-export type PerformanceCrossFilter = {
-  kamId: string | null;
-  clientId: string | null;
-  regionId: string | null;
-  supplierId: string | null;
-  assetId: string | null;
-  performanceStatus: "behind" | "on_track" | "exceeded" | null;
-  /** Day/week/month key selected on the trend chart. Not the global Period/
-   * Granularity picker (Month/Quarter/Year) -- that remains separate global
-   * context, per the locked Global-vs-cross-filter split. */
-  trendPointKey: string | null;
-};
-
-const EMPTY_PERFORMANCE_CROSS_FILTER: PerformanceCrossFilter = {
-  kamId: null,
-  clientId: null,
-  regionId: null,
-  supplierId: null,
-  assetId: null,
-  performanceStatus: null,
-  trendPointKey: null,
-};
+import { X } from "lucide-react-native";
 
 const ROLLUPS: { id: GoalsRollup; label: string }[] = [
   { id: "month", label: "Month" },
@@ -133,13 +117,25 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
     [capabilities],
   );
 
+  // Perspective (view mode) and crossFilter (the shared filter context) are
+  // deliberately independent state -- selecting a perspective must never
+  // itself change or clear the active cross-filter, and vice versa.
   const [perspective, setPerspective] = useState<PerformancePerspective>("aggregate");
-  // Declared in Commit 2, still unconsumed by any visual/calculation/query.
   const [crossFilter, setCrossFilter] = useState<PerformanceCrossFilter>(
     EMPTY_PERFORMANCE_CROSS_FILTER,
   );
-  void crossFilter;
-  void setCrossFilter;
+  const hasActiveCrossFilter =
+    crossFilter.kamId != null ||
+    crossFilter.regionId != null ||
+    crossFilter.clientId != null ||
+    crossFilter.supplierId != null ||
+    crossFilter.assetId != null;
+  const clearAllFilters = () => setCrossFilter(EMPTY_PERFORMANCE_CROSS_FILTER);
+  const toggleClientFilter = (clientId: string) =>
+    setCrossFilter((prev) => ({
+      ...prev,
+      clientId: prev.clientId === clientId ? null : clientId,
+    }));
 
   const monthOptions = useMemo(() => getRecentMonthKeys(6), []);
   const [selectedMonthKey, setSelectedMonthKey] = useState(
@@ -174,19 +170,38 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
   // revisit if a specific need for intra-session freshness surfaces.
   const asOf = useMemo(() => new Date(), []);
 
+  // ── The one filtering pipeline every visual below reads from ──────────────
+  // Raw cached data -> clientIdSet -> filteredTrips/filteredClients -> every
+  // KPI/trend/breakdown calculation. With an empty crossFilter, clientIdSet
+  // is null and filterTripsForCrossFilter returns the exact input reference
+  // -- the "no cross-filter" case is identical to the pre-Performance,
+  // unfiltered calculation (proven in the regression test).
+  const clientIdSet = useMemo(
+    () => resolveClientIdsForFilter(crossFilter, clients, goalsStore.kamAssignments, goalsStore.clientRegions),
+    [crossFilter, clients, goalsStore],
+  );
+  const filteredTrips = useMemo(
+    () => filterTripsForCrossFilter(trips, crossFilter, clientIdSet),
+    [trips, crossFilter, clientIdSet],
+  );
+  const filteredClients = useMemo(
+    () => (clientIdSet == null ? clients : clients.filter((c) => clientIdSet.has(c.id))),
+    [clients, clientIdSet],
+  );
+
   const actuals = useMemo(
-    () => computeGoalsActualsForRollup(trips, selectedMonthKey, rollup),
-    [trips, selectedMonthKey, rollup],
+    () => computeGoalsActualsForRollup(filteredTrips, selectedMonthKey, rollup),
+    [filteredTrips, selectedMonthKey, rollup],
   );
 
   const periodTarget = useMemo(
-    () => resolvePeriodTarget(goalsStore, selectedMonthKey, rollup),
-    [goalsStore, selectedMonthKey, rollup],
+    () => resolveFilteredPeriodTarget(goalsStore, selectedMonthKey, rollup, crossFilter, clientIdSet),
+    [goalsStore, selectedMonthKey, rollup, crossFilter, clientIdSet],
   );
 
   const previousActuals = useMemo(
-    () => computePreviousPeriodActuals(trips, selectedMonthKey, rollup, asOf),
-    [trips, selectedMonthKey, rollup, asOf],
+    () => computePreviousPeriodActuals(filteredTrips, selectedMonthKey, rollup, asOf),
+    [filteredTrips, selectedMonthKey, rollup, asOf],
   );
 
   const kpiRows: PerformanceKpiRow[] = useMemo(
@@ -226,24 +241,25 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
   );
   const revenueRow = kpiRows[0];
 
-  // Aggregate and Client currently share the same unfiltered client-focus
-  // breakdown -- they diverge once cross-filtering (Commit 5) and per-
-  // perspective grouping (Commit 6) land.
+  // Aggregate and Client currently share the same client-focus breakdown --
+  // they diverge once per-perspective grouping (Commit 6) lands. Fed
+  // filteredClients/filteredTrips, so clicking a row narrows to that
+  // client's data across the whole page, not just this table.
   const showsClientBreakdown = perspective === "aggregate" || perspective === "client";
   const entityRows: EntityGoalRow[] = useMemo(() => {
     if (!showsClientBreakdown) return [];
     return buildEntityGoalRows(
       "client",
       goalsStore,
-      clients,
+      filteredClients,
       drivers,
       vehicles,
-      trips,
+      filteredTrips,
       selectedMonthKey,
       rollup,
       12,
     );
-  }, [showsClientBreakdown, goalsStore, clients, drivers, vehicles, trips, selectedMonthKey, rollup]);
+  }, [showsClientBreakdown, goalsStore, filteredClients, drivers, vehicles, filteredTrips, selectedMonthKey, rollup]);
 
   const trendCompareItems = useMemo(
     () => [
@@ -298,10 +314,31 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
         ))}
       </ScrollView>
 
-      {/* Cross-filter context bar -- structural only in this commit, no
-          chips render yet because crossFilter never leaves its empty
-          default (wiring lands in Commit 5). */}
-      <Text style={styles.showingLine}>Showing: All business</Text>
+      {/* One compact context bar, not a "Filter by..." panel per dimension.
+          Only clientId is reachable by clicking a row today (the only
+          breakdown table with real rows); kamId/regionId/supplierId/assetId
+          render here identically once Commit 6 makes them clickable. */}
+      <View style={styles.showingRow}>
+        <Text style={styles.showingLine}>
+          {hasActiveCrossFilter ? "Showing:" : "Showing: All business"}
+        </Text>
+        {crossFilter.clientId ? (
+          <Pressable
+            style={styles.filterChip}
+            onPress={() => toggleClientFilter(crossFilter.clientId!)}
+          >
+            <Text style={styles.filterChipText}>
+              Client: {clients.find((c) => c.id === crossFilter.clientId)?.name ?? crossFilter.clientId}
+            </Text>
+            <X size={12} color={Theme.textOnPrimary} />
+          </Pressable>
+        ) : null}
+        {hasActiveCrossFilter ? (
+          <Pressable onPress={clearAllFilters} hitSlop={8}>
+            <Text style={styles.clearAllText}>Clear all</Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       <View style={styles.kpiRow}>
         {kpiRows.map((row) => (
@@ -378,7 +415,14 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
           <View style={styles.breakdownEmpty} />
         ) : (
           entityRows.map((row) => (
-            <View key={row.id} style={styles.breakdownRow}>
+            <Pressable
+              key={row.id}
+              onPress={() => toggleClientFilter(row.id)}
+              style={[
+                styles.breakdownRow,
+                crossFilter.clientId === row.id && styles.breakdownRowActive,
+              ]}
+            >
               <Text style={[styles.breakdownCell, styles.breakdownColName]} numberOfLines={1}>
                 {row.name}
               </Text>
@@ -391,7 +435,7 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
               <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
                 {row.hasTarget ? `${row.revenueProgressPct}%` : "—"}
               </Text>
-            </View>
+            </Pressable>
           ))
         )}
       </View>
@@ -431,7 +475,19 @@ const styles = StyleSheet.create({
   perspectiveChipOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
   perspectiveChipText: { fontSize: 13, fontWeight: "700", color: Theme.textPrimaryDark },
   perspectiveChipTextOn: { color: Theme.textOnPrimary },
+  showingRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   showingLine: { fontSize: 12, color: Theme.textMuted, fontWeight: "600" },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: Theme.primary,
+    borderRadius: 14,
+  },
+  filterChipText: { fontSize: 11, fontWeight: "700", color: Theme.textOnPrimary },
+  clearAllText: { fontSize: 12, fontWeight: "700", color: Theme.primary },
   kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   kpiCard: {
     flexGrow: 1,
@@ -484,9 +540,11 @@ const styles = StyleSheet.create({
   breakdownRow: {
     flexDirection: "row",
     paddingVertical: 10,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  breakdownRowActive: { backgroundColor: Theme.surfaceForm, borderRadius: 8 },
   breakdownCell: { fontSize: 13, color: Theme.textPrimaryDark },
   breakdownEmpty: { minHeight: 40 },
 });

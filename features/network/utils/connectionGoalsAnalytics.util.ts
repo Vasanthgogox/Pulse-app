@@ -988,3 +988,193 @@ export function buildPerformanceKpiRow(
     variance: actual - periodTargetValue,
   };
 }
+
+// ─── Performance: cross-filter engine (Phase 1 Commit 5) ──────────────────────
+//
+// One shared filter/perspective pair drives every Performance visual -- not
+// six independent per-perspective page layouts, not a second filter system
+// inside the Sales/Asset panels underneath. Moved here (out of
+// NetworkDesktopPerformancePanel.tsx, where Commit 2 first declared them) so
+// the filtering functions below can reference the same types without a
+// panel -> util -> panel dependency loop.
+
+/** A view mode (which breakdown/grouping is showing), not a filter
+ * dimension. Selecting a perspective must never itself change or clear
+ * PerformanceCrossFilter. */
+export type PerformancePerspective =
+  | "aggregate"
+  | "kam"
+  | "client"
+  | "region"
+  | "supplier"
+  | "asset";
+
+export type PerformanceCrossFilter = {
+  kamId: string | null;
+  clientId: string | null;
+  regionId: string | null;
+  supplierId: string | null;
+  assetId: string | null;
+  performanceStatus: "behind" | "on_track" | "exceeded" | null;
+  /** Day/week/month key selected on the trend chart. Not the global Period/
+   * Granularity picker (Month/Quarter/Year) -- that remains separate global
+   * context, per the locked Global-vs-cross-filter split. */
+  trendPointKey: string | null;
+};
+
+export const EMPTY_PERFORMANCE_CROSS_FILTER: PerformanceCrossFilter = {
+  kamId: null,
+  clientId: null,
+  regionId: null,
+  supplierId: null,
+  assetId: null,
+  performanceStatus: null,
+  trendPointKey: null,
+};
+
+/**
+ * Client-id set implied by the CLIENT-DERIVED dimensions only (kamId,
+ * regionId, clientId) -- never supplierId/assetId, which are direct
+ * trip-level attributes with no client-id concept of their own.
+ *
+ * Returns null (meaning "no restriction") when none of the three client-
+ * derived fields are set -- callers must treat null as "don't narrow",
+ * not as "match nothing". When more than one is set simultaneously (e.g.
+ * kamId + clientId, from drilling into one client inside a KAM's
+ * breakdown), the result is their INTERSECTION, not a union -- narrowing
+ * further, never widening back out.
+ */
+export function resolveClientIdsForFilter(
+  crossFilter: Pick<PerformanceCrossFilter, "kamId" | "regionId" | "clientId">,
+  clients: readonly { id: string }[],
+  kamAssignments: Record<string, string>,
+  clientRegions: Record<string, string>,
+): Set<string> | null {
+  const { kamId, regionId, clientId } = crossFilter;
+  if (!kamId && !regionId && !clientId) return null;
+
+  let ids: Set<string> | null = null;
+  const narrow = (matches: (id: string) => boolean) => {
+    const next = new Set(clients.map((c) => c.id).filter(matches));
+    ids = ids == null ? next : new Set([...ids].filter((id) => next.has(id)));
+  };
+
+  if (kamId) narrow((id) => kamAssignments[id] === kamId);
+  if (regionId) narrow((id) => clientRegions[id] === regionId);
+  if (clientId) narrow((id) => id === clientId);
+
+  return ids ?? new Set();
+}
+
+/**
+ * Applies the full PerformanceCrossFilter to a trip list.
+ *   - clientIdSet (from resolveClientIdsForFilter, above) narrows by the
+ *     client-derived dimensions.
+ *   - supplierId / assetId are direct trip-field matches (trip.supplier_id;
+ *     trip.vehicle_id OR trip.driver_id -- vehicle and driver ids never
+ *     collide across tables, so a single assetId field can match either
+ *     without needing to know in advance which kind it is).
+ * With an entirely empty crossFilter (clientIdSet null, supplierId/assetId
+ * unset), returns the exact input array reference -- the "no cross-filter"
+ * case must be identical to the pre-Performance, unfiltered calculation.
+ */
+export function filterTripsForCrossFilter(
+  trips: readonly TripRow[],
+  crossFilter: Pick<PerformanceCrossFilter, "supplierId" | "assetId">,
+  clientIdSet: Set<string> | null,
+): TripRow[] {
+  const { supplierId, assetId } = crossFilter;
+  if (clientIdSet == null && !supplierId && !assetId) return trips as TripRow[];
+  return trips.filter((trip) => {
+    if (clientIdSet != null && (!trip.client_id || !clientIdSet.has(trip.client_id))) {
+      return false;
+    }
+    if (supplierId && trip.supplier_id !== supplierId) return false;
+    if (assetId && trip.vehicle_id !== assetId && trip.driver_id !== assetId) return false;
+    return true;
+  });
+}
+
+/** All month keys spanning the FULL selected period (not to-date) -- e.g.
+ * for a quarter, all three months, not just the months through the
+ * selected one the way rollupMonthKeys (actuals) computes. Used only for
+ * summing entity targets across a complete period. */
+export function monthKeysInPeriod(selectedMonthKey: string, rollup: GoalsRollup): string[] {
+  const { start, end } = periodBounds(selectedMonthKey, rollup);
+  const keys: string[] = [];
+  const cursor = new Date(start);
+  while (cursor.getTime() < end.getTime()) {
+    keys.push(ymToMonthKey(cursor.getFullYear(), cursor.getMonth()));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return keys;
+}
+
+/**
+ * Period Target under the active cross-filter -- reusing existing entity
+ * target storage, never inventing a new persistent KAM/Region/Asset target
+ * record:
+ *   - assetId set -> that one vehicle's or driver's own target (whichever
+ *     bucket has it), independent of any client-side filter also active.
+ *   - supplierId set (no assetId) -> no target exists for suppliers at all
+ *     (no GoalFocus "supplier" case) -- hasTarget must be false, never a
+ *     fabricated or allocated number.
+ *   - otherwise -> clientIdSet null means the org-wide aggregate target
+ *     (unchanged); clientIdSet non-null means the SUM of each matching
+ *     client's own target across the full period's months. Per-client
+ *     targets have no margin component (EntityTargetMetrics has no
+ *     marginPct), so marginPct is always 0 here -- correctly making
+ *     Margin show "no target set" under any entity-level filter, matching
+ *     the same "don't fabricate" rule already applied to Supplier.
+ */
+export function resolveFilteredPeriodTarget(
+  store: NetworkGoalsStore,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  crossFilter: Pick<PerformanceCrossFilter, "supplierId" | "assetId">,
+  clientIdSet: Set<string> | null,
+): SalesTargetMetrics {
+  const { supplierId, assetId } = crossFilter;
+
+  if (assetId) {
+    const keys = monthKeysInPeriod(selectedMonthKey, rollup);
+    const vehicle = sumEntityTargetsForKeys(store, keys, "vehicle", assetId);
+    const driver = sumEntityTargetsForKeys(store, keys, "driver", assetId);
+    const target = vehicle.revenueInr > 0 || vehicle.tripCount > 0 ? vehicle : driver;
+    return { revenueInr: target.revenueInr, tripCount: target.tripCount, marginPct: 0 };
+  }
+
+  if (supplierId) {
+    return { revenueInr: 0, tripCount: 0, marginPct: 0 };
+  }
+
+  if (clientIdSet == null) {
+    return resolvePeriodTarget(store, selectedMonthKey, rollup);
+  }
+
+  const keys = monthKeysInPeriod(selectedMonthKey, rollup);
+  let revenueInr = 0;
+  let tripCount = 0;
+  for (const id of clientIdSet) {
+    const t = sumEntityTargetsForKeys(store, keys, "client", id);
+    revenueInr += t.revenueInr;
+    tripCount += t.tripCount;
+  }
+  return { revenueInr, tripCount, marginPct: 0 };
+}
+
+/**
+ * Receivable is filtered by clientIdSet (a valid, direct client attribution
+ * chain) when one is active. Payable (supplier + driver dues) has NO valid
+ * KAM/Region/Client attribution -- callers must always compute Payable
+ * from the FULL, unfiltered clients/suppliers/drivers/trips/transactions
+ * and show a "Not affected by this filter" label whenever kamId or
+ * regionId is set, never a fabricated filtered number. This function does
+ * not compute Payable itself (that's computePayableReceivableSnapshot,
+ * unchanged) -- it only answers whether the label should show.
+ */
+export function isPayableAffectedByFilter(
+  crossFilter: Pick<PerformanceCrossFilter, "kamId" | "regionId">,
+): boolean {
+  return crossFilter.kamId == null && crossFilter.regionId == null;
+}
