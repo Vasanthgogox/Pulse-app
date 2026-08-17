@@ -1,6 +1,10 @@
 import {
   achievementPct,
+  buildAssetBreakdown,
+  buildKamBreakdown,
   buildPerformanceKpiRow,
+  buildRegionBreakdown,
+  buildSupplierBreakdown,
   changePct,
   computeGoalsActualsForRollup,
   computePreviousPeriodActuals,
@@ -544,5 +548,156 @@ describe('regression: Aggregate with no filters must equal the pre-Performance, 
     const oldActual = computeGoalsActualsForRollup(trips, '2026-08', 'month');
     const newActual = computeGoalsActualsForRollup(filtered, '2026-08', 'month');
     expect(newActual).toEqual(oldActual);
+  });
+});
+
+describe('buildKamBreakdown / buildRegionBreakdown / buildSupplierBreakdown / buildAssetBreakdown (Phase 1 Commit 6)', () => {
+  const goalsStore: NetworkGoalsStore = {
+    version: 3,
+    months: {
+      '2026-08': {
+        aggregate: { revenueInr: 1000000, tripCount: 100, marginPct: 30 },
+        clients: { apple: { revenueInr: 120000, tripCount: 10 }, ajio: { revenueInr: 90000, tripCount: 8 } },
+        vehicles: {},
+        drivers: {},
+      },
+    },
+    kamAssignments: KAM_ASSIGNMENTS,
+    clientRegions: CLIENT_REGIONS,
+    yearlyTargets: {},
+    quarterlyTargets: {},
+    updatedAt: '',
+  };
+
+  // apple/ajio -> bhujesh (south/north); acme -> ravi (south), but acme has
+  // no client target set in goalsStore.months['2026-08'].clients above.
+  const trips = [
+    trip('2026-08-05T00:00:00', 100000, 80000, {
+      client_id: 'apple',
+      supplier_id: 'sup-1',
+      vehicle_id: 'veh-1',
+      driver_id: 'drv-1',
+    }),
+    trip('2026-08-06T00:00:00', 200000, 150000, {
+      client_id: 'ajio',
+      supplier_id: 'sup-2',
+      vehicle_id: 'veh-2',
+      driver_id: 'drv-2',
+    }),
+    trip('2026-08-07T00:00:00', 50000, 30000, {
+      client_id: 'acme',
+      supplier_id: 'sup-1',
+      vehicle_id: 'veh-1',
+      driver_id: 'drv-1',
+    }),
+  ] as TripRow[];
+  const previousTrips = [
+    trip('2026-07-10T00:00:00', 80000, 60000, {
+      client_id: 'apple',
+      supplier_id: 'sup-1',
+      vehicle_id: 'veh-1',
+      driver_id: 'drv-1',
+    }),
+  ] as TripRow[];
+
+  const kamById = new Map([
+    ['bhujesh', { name: 'Bhujesh' }],
+    ['ravi', { name: 'Ravi' }],
+  ]);
+  const supplierById = new Map([
+    ['sup-1', { name: 'Supplier One' }],
+    ['sup-2', { name: 'Supplier Two' }],
+  ]);
+  const vehicleById = new Map([
+    ['veh-1', { name: 'MH-01' }],
+    ['veh-2', { name: 'MH-02' }],
+  ]);
+  const driverById = new Map([
+    ['drv-1', { name: 'Driver One' }],
+    ['drv-2', { name: 'Driver Two' }],
+  ]);
+
+  it('buildKamBreakdown: only KAMs with an actual matching trip appear; sums their clients\' revenue and target', () => {
+    const rows = buildKamBreakdown(goalsStore, trips, previousTrips, kamById, '2026-08', 'month');
+    expect(rows.map((r) => r.id).sort()).toEqual(['bhujesh', 'ravi']);
+
+    const bhujesh = rows.find((r) => r.id === 'bhujesh')!;
+    expect(bhujesh.actualRevenue).toBe(300000); // apple 100000 + ajio 200000
+    expect(bhujesh.actualTrips).toBe(2);
+    expect(bhujesh.targetRevenue).toBe(210000); // apple 120000 + ajio 90000, summed
+    expect(bhujesh.hasTarget).toBe(true);
+    expect(bhujesh.achievement).toBe(achievementPct(300000, 210000));
+    expect(bhujesh.previousActualRevenue).toBe(80000); // apple's July trip only
+    expect(bhujesh.hasPreviousData).toBe(true);
+
+    const ravi = rows.find((r) => r.id === 'ravi')!;
+    expect(ravi.actualRevenue).toBe(50000); // acme
+    expect(ravi.targetRevenue).toBe(0); // acme has no target set in the store
+    expect(ravi.hasTarget).toBe(false);
+    expect(ravi.achievement).toBeNull();
+  });
+
+  it('buildKamBreakdown: a KAM is excluded entirely if none of their assigned clients has a matching trip', () => {
+    const noAcmeTrips = trips.filter((t) => t.client_id !== 'acme');
+    const rows = buildKamBreakdown(goalsStore, noAcmeTrips, [], kamById, '2026-08', 'month');
+    expect(rows.map((r) => r.id)).toEqual(['bhujesh']);
+  });
+
+  it('buildRegionBreakdown: groups by clientRegions -- there is no trip.region field to read', () => {
+    const rows = buildRegionBreakdown(goalsStore, trips, previousTrips, '2026-08', 'month');
+    expect(rows.map((r) => r.id).sort()).toEqual(['north', 'south']);
+
+    const south = rows.find((r) => r.id === 'south')!; // apple + acme
+    expect(south.actualRevenue).toBe(150000);
+    expect(south.actualTrips).toBe(2);
+    expect(south.targetRevenue).toBe(120000); // only apple has a set target; acme has none
+
+    const north = rows.find((r) => r.id === 'north')!; // ajio only
+    expect(north.actualRevenue).toBe(200000);
+    expect(north.targetRevenue).toBe(90000);
+  });
+
+  it('buildSupplierBreakdown: direct trip.supplier_id grouping, no target column, cost summed from supplier_rate', () => {
+    const rows = buildSupplierBreakdown(trips, previousTrips, supplierById);
+    expect(rows.map((r) => r.id).sort()).toEqual(['sup-1', 'sup-2']);
+
+    const sup1 = rows.find((r) => r.id === 'sup-1')!; // apple's + acme's trips
+    expect(sup1.actualRevenue).toBe(150000);
+    expect(sup1.actualTrips).toBe(2);
+    expect(sup1.actualCost).toBe(110000); // 80000 + 30000
+    expect(sup1.previousActualRevenue).toBe(80000);
+    expect(sup1.hasPreviousData).toBe(true);
+
+    const sup2 = rows.find((r) => r.id === 'sup-2')!;
+    expect(sup2.actualRevenue).toBe(200000);
+    expect(sup2.previousActualRevenue).toBe(0);
+    expect(sup2.hasPreviousData).toBe(false);
+  });
+
+  it('buildSupplierBreakdown: a supplier with zero matching trips never appears in the table', () => {
+    const rows = buildSupplierBreakdown(trips, previousTrips, supplierById);
+    expect(rows.find((r) => r.id === 'sup-nonexistent')).toBeUndefined();
+  });
+
+  it('buildAssetBreakdown: vehicle focus groups by vehicle_id', () => {
+    const rows = buildAssetBreakdown(trips, previousTrips, 'vehicle', vehicleById);
+    expect(rows.map((r) => r.id).sort()).toEqual(['veh-1', 'veh-2']);
+
+    const veh1 = rows.find((r) => r.id === 'veh-1')!; // apple's + acme's trips
+    expect(veh1.actualRevenue).toBe(150000);
+    expect(veh1.actualTrips).toBe(2);
+  });
+
+  it('buildAssetBreakdown: driver focus groups by driver_id, independent of the vehicle grouping', () => {
+    const rows = buildAssetBreakdown(trips, previousTrips, 'driver', driverById);
+    expect(rows.map((r) => r.id).sort()).toEqual(['drv-1', 'drv-2']);
+
+    const drv1 = rows.find((r) => r.id === 'drv-1')!;
+    expect(drv1.actualRevenue).toBe(150000);
+  });
+
+  it('all breakdown rows sort by actualRevenue descending', () => {
+    const rows = buildSupplierBreakdown(trips, previousTrips, supplierById);
+    expect(rows[0].actualRevenue).toBeGreaterThanOrEqual(rows[1].actualRevenue);
   });
 });

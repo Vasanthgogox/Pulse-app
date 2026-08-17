@@ -911,12 +911,16 @@ export function tripsInDateRange(
  * 28/29-day February), the window clamps to the previous period's own end
  * rather than spilling into the period before it.
  */
-export function computePreviousPeriodActuals(
+/** The previous-period trip list itself (same elapsed-window/clamping
+ * logic as computePreviousPeriodActuals), for callers that need the raw
+ * trips -- e.g. the Supplier/Asset breakdowns' per-entity growth%, which
+ * can't be computed from a single pre-aggregated total. */
+export function previousPeriodTripWindow(
   trips: readonly TripRow[],
   selectedMonthKey: string,
   rollup: GoalsRollup,
   asOf: Date,
-): GoalsActuals {
+): TripRow[] {
   const { start: curStart, end: curEnd } = periodBounds(selectedMonthKey, rollup);
   const elapsedMs = Math.max(
     0,
@@ -927,7 +931,16 @@ export function computePreviousPeriodActuals(
   const windowEnd = new Date(
     Math.min(prevStart.getTime() + elapsedMs, prevEnd.getTime()),
   );
-  return computeTripMetrics(tripsInDateRange(trips, prevStart, windowEnd));
+  return tripsInDateRange(trips, prevStart, windowEnd);
+}
+
+export function computePreviousPeriodActuals(
+  trips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  asOf: Date,
+): GoalsActuals {
+  return computeTripMetrics(previousPeriodTripWindow(trips, selectedMonthKey, rollup, asOf));
 }
 
 /** Percent change vs previous period. null when there's no previous actual
@@ -1152,15 +1165,29 @@ export function resolveFilteredPeriodTarget(
     return resolvePeriodTarget(store, selectedMonthKey, rollup);
   }
 
+  const { revenueInr, tripCount } = sumClientTargetsForIds(store, selectedMonthKey, rollup, clientIdSet);
+  return { revenueInr, tripCount, marginPct: 0 };
+}
+
+/** Sums each client's own monthly target across the full selected period
+ * (all months of a quarter/year, not just to-date) for a set of client
+ * ids. Shared by resolveFilteredPeriodTarget and the KAM/Region breakdown
+ * builders below -- one summing implementation, not duplicated per caller. */
+function sumClientTargetsForIds(
+  store: NetworkGoalsStore,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  ids: Iterable<string>,
+): EntityTargetMetrics {
   const keys = monthKeysInPeriod(selectedMonthKey, rollup);
   let revenueInr = 0;
   let tripCount = 0;
-  for (const id of clientIdSet) {
+  for (const id of ids) {
     const t = sumEntityTargetsForKeys(store, keys, "client", id);
     revenueInr += t.revenueInr;
     tripCount += t.tripCount;
   }
-  return { revenueInr, tripCount, marginPct: 0 };
+  return { revenueInr, tripCount };
 }
 
 /**
@@ -1177,4 +1204,235 @@ export function isPayableAffectedByFilter(
   crossFilter: Pick<PerformanceCrossFilter, "kamId" | "regionId">,
 ): boolean {
   return crossFilter.kamId == null && crossFilter.regionId == null;
+}
+
+// ─── Performance: KAM/Region/Supplier/Asset breakdowns (Phase 1 Commit 6) ─────
+//
+// All six perspectives now read from the SAME filteredTrips/filteredClients
+// the KPI band and trend already use -- no separate analytics calculation.
+// Two shapes, matching the commercial-vs-operational split already locked:
+//   Commercial (KAM, Region, Client) -- has a real target to compare against
+//     (client targets, summed via sumClientTargetsForIds -- reused, not
+//     duplicated, from resolveFilteredPeriodTarget's own logic).
+//   Operational (Supplier, Asset) -- no target concept exists for these
+//     (no GoalFocus "supplier" case; Asset intentionally shown in the same
+//     trips/sales/cost/margin shape as Supplier here, not target/
+//     achievement, per the locked per-perspective column spec) -- shows
+//     Previous period / Growth instead, reusing computeTripMetrics +
+//     changePct, the same functions the KPI band already uses.
+//
+// Both only include entities with at least one matching trip in the
+// current filtered context -- "operators who actually operated trips",
+// not every supplier/KAM/region/asset that merely exists in the org.
+
+export type PerformanceCommercialBreakdownRow = {
+  id: string;
+  name: string;
+  actualRevenue: number;
+  actualTrips: number;
+  targetRevenue: number;
+  hasTarget: boolean;
+  achievement: number | null;
+  previousActualRevenue: number;
+  hasPreviousData: boolean;
+  growthPct: number | null;
+};
+
+export type PerformanceOperationalBreakdownRow = {
+  id: string;
+  name: string;
+  actualRevenue: number;
+  actualTrips: number;
+  actualCost: number;
+  marginPct: number;
+  previousActualRevenue: number;
+  hasPreviousData: boolean;
+  growthPct: number | null;
+};
+
+function groupTripsByKey(
+  trips: readonly TripRow[],
+  keyOf: (trip: TripRow) => string | null,
+): Map<string, TripRow[]> {
+  const map = new Map<string, TripRow[]>();
+  for (const trip of trips) {
+    const key = keyOf(trip);
+    if (!key) continue;
+    const bucket = map.get(key);
+    if (bucket) bucket.push(trip);
+    else map.set(key, [trip]);
+  }
+  return map;
+}
+
+/** KAM breakdown: only KAMs with at least one assigned client that has a
+ * matching trip in the current filtered context -- an assigned-but-inactive
+ * KAM doesn't clutter the table. Client attribution only, per the locked
+ * rule -- there is no trip.kam_id; every row here traces back through
+ * kamAssignments[client_id]. */
+export function buildKamBreakdown(
+  store: NetworkGoalsStore,
+  trips: readonly TripRow[],
+  previousTrips: readonly TripRow[],
+  kamById: ReadonlyMap<string, { name: string }>,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): PerformanceCommercialBreakdownRow[] {
+  const { kamAssignments } = store;
+  const byKam = new Map<string, Set<string>>(); // kamId -> client ids seen in trips
+  const tripsByClient = groupTripsByKey(trips, (t) => t.client_id);
+  const prevTripsByClient = groupTripsByKey(previousTrips, (t) => t.client_id);
+  for (const clientId of tripsByClient.keys()) {
+    const kamId = kamAssignments[clientId];
+    if (!kamId) continue;
+    const set = byKam.get(kamId) ?? new Set<string>();
+    set.add(clientId);
+    byKam.set(kamId, set);
+  }
+
+  const rows: PerformanceCommercialBreakdownRow[] = [];
+  for (const [kamId, clientIds] of byKam) {
+    let revenueInr = 0;
+    let tripCount = 0;
+    let prevRevenueInr = 0;
+    for (const clientId of clientIds) {
+      revenueInr += computeTripMetrics(tripsByClient.get(clientId) ?? []).revenueInr;
+      tripCount += computeTripMetrics(tripsByClient.get(clientId) ?? []).tripCount;
+      prevRevenueInr += computeTripMetrics(prevTripsByClient.get(clientId) ?? []).revenueInr;
+    }
+    const target = sumClientTargetsForIds(store, selectedMonthKey, rollup, clientIds);
+    const hasTarget = target.revenueInr > 0;
+    rows.push({
+      id: kamId,
+      name: kamById.get(kamId)?.name ?? kamId,
+      actualRevenue: revenueInr,
+      actualTrips: tripCount,
+      targetRevenue: target.revenueInr,
+      hasTarget,
+      achievement: hasTarget ? achievementPct(revenueInr, target.revenueInr) : null,
+      previousActualRevenue: prevRevenueInr,
+      hasPreviousData: prevRevenueInr > 0,
+      growthPct: changePct(revenueInr, prevRevenueInr),
+    });
+  }
+  return rows.sort((a, b) => b.actualRevenue - a.actualRevenue);
+}
+
+/** Region breakdown -- identical shape and reasoning to KAM, grouped by
+ * clientRegions[client_id] instead of kamAssignments. Same client-
+ * attribution-only rule; no trip.region field exists or is invented. */
+export function buildRegionBreakdown(
+  store: NetworkGoalsStore,
+  trips: readonly TripRow[],
+  previousTrips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): PerformanceCommercialBreakdownRow[] {
+  const { clientRegions } = store;
+  const byRegion = new Map<string, Set<string>>();
+  const tripsByClient = groupTripsByKey(trips, (t) => t.client_id);
+  const prevTripsByClient = groupTripsByKey(previousTrips, (t) => t.client_id);
+  for (const clientId of tripsByClient.keys()) {
+    const region = clientRegions[clientId];
+    if (!region) continue;
+    const set = byRegion.get(region) ?? new Set<string>();
+    set.add(clientId);
+    byRegion.set(region, set);
+  }
+
+  const rows: PerformanceCommercialBreakdownRow[] = [];
+  for (const [region, clientIds] of byRegion) {
+    let revenueInr = 0;
+    let tripCount = 0;
+    let prevRevenueInr = 0;
+    for (const clientId of clientIds) {
+      const m = computeTripMetrics(tripsByClient.get(clientId) ?? []);
+      revenueInr += m.revenueInr;
+      tripCount += m.tripCount;
+      prevRevenueInr += computeTripMetrics(prevTripsByClient.get(clientId) ?? []).revenueInr;
+    }
+    const target = sumClientTargetsForIds(store, selectedMonthKey, rollup, clientIds);
+    const hasTarget = target.revenueInr > 0;
+    rows.push({
+      id: region,
+      name: region,
+      actualRevenue: revenueInr,
+      actualTrips: tripCount,
+      targetRevenue: target.revenueInr,
+      hasTarget,
+      achievement: hasTarget ? achievementPct(revenueInr, target.revenueInr) : null,
+      previousActualRevenue: prevRevenueInr,
+      hasPreviousData: prevRevenueInr > 0,
+      growthPct: changePct(revenueInr, prevRevenueInr),
+    });
+  }
+  return rows.sort((a, b) => b.actualRevenue - a.actualRevenue);
+}
+
+/** Supplier breakdown -- direct trip.supplier_id grouping, no client
+ * indirection. Only suppliers with a matching trip appear -- never every
+ * supplier in the org roster. No target column, ever: no GoalFocus
+ * "supplier" case exists in the target model, so hasTarget is not part of
+ * this row shape at all (unlike the commercial rows, where it's an
+ * explicit null-vs-real-target distinction). */
+export function buildSupplierBreakdown(
+  trips: readonly TripRow[],
+  previousTrips: readonly TripRow[],
+  supplierById: ReadonlyMap<string, { name: string }>,
+): PerformanceOperationalBreakdownRow[] {
+  const tripsBySupplier = groupTripsByKey(trips, (t) => t.supplier_id);
+  const prevBySupplier = groupTripsByKey(previousTrips, (t) => t.supplier_id);
+
+  const rows: PerformanceOperationalBreakdownRow[] = [];
+  for (const [supplierId, supplierTrips] of tripsBySupplier) {
+    const m = computeTripMetrics(supplierTrips);
+    const prevM = computeTripMetrics(prevBySupplier.get(supplierId) ?? []);
+    rows.push({
+      id: supplierId,
+      name: supplierById.get(supplierId)?.name ?? supplierId,
+      actualRevenue: m.revenueInr,
+      actualTrips: m.tripCount,
+      actualCost: supplierTrips.reduce((sum, t) => sum + Math.max(0, Number(t.supplier_rate) || 0), 0),
+      marginPct: m.marginPct,
+      previousActualRevenue: prevM.revenueInr,
+      hasPreviousData: prevM.revenueInr > 0,
+      growthPct: changePct(m.revenueInr, prevM.revenueInr),
+    });
+  }
+  return rows.sort((a, b) => b.actualRevenue - a.actualRevenue);
+}
+
+/** Asset breakdown -- direct trip.vehicle_id or trip.driver_id grouping,
+ * same operational shape as Supplier (trips/sales/cost/margin/previous/
+ * growth), per the locked per-perspective column spec -- not the target/
+ * achievement shape, even though a per-asset target does exist in
+ * NetworkGoalsStore (that target already surfaces via the existing Goals
+ * "Asset" focus; this breakdown is deliberately the operational view). */
+export function buildAssetBreakdown(
+  trips: readonly TripRow[],
+  previousTrips: readonly TripRow[],
+  assetFocus: "vehicle" | "driver",
+  assetById: ReadonlyMap<string, { name: string }>,
+): PerformanceOperationalBreakdownRow[] {
+  const keyOf = (t: TripRow) => (assetFocus === "vehicle" ? t.vehicle_id : t.driver_id);
+  const tripsByAsset = groupTripsByKey(trips, keyOf);
+  const prevByAsset = groupTripsByKey(previousTrips, keyOf);
+
+  const rows: PerformanceOperationalBreakdownRow[] = [];
+  for (const [assetId, assetTrips] of tripsByAsset) {
+    const m = computeTripMetrics(assetTrips);
+    const prevM = computeTripMetrics(prevByAsset.get(assetId) ?? []);
+    rows.push({
+      id: assetId,
+      name: assetById.get(assetId)?.name ?? assetId,
+      actualRevenue: m.revenueInr,
+      actualTrips: m.tripCount,
+      actualCost: assetTrips.reduce((sum, t) => sum + Math.max(0, Number(t.supplier_rate) || 0), 0),
+      marginPct: m.marginPct,
+      previousActualRevenue: prevM.revenueInr,
+      hasPreviousData: prevM.revenueInr > 0,
+      growthPct: changePct(m.revenueInr, prevM.revenueInr),
+    });
+  }
+  return rows.sort((a, b) => b.actualRevenue - a.actualRevenue);
 }

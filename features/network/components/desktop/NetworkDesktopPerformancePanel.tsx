@@ -38,9 +38,23 @@
  *   (Commits 3-4 never added one), so this is tested at the pipeline level
  *   without a UI card to attach it to.
  *
- *   Still deliberately deferred: Progress modal, trip evidence table,
- *   export/import, new Supabase queries, supplier targets, a full Region
- *   perspective, UI redesign (Commits 6+).
+ * Phase 1, Commit 6 (this commit): KAM/Region/Supplier/Asset breakdowns
+ *   now show real rows, using the SAME filteredTrips/filteredClients the
+ *   KPI band already computes -- no separate analytics calculation. Only
+ *   entities with an actual matching trip appear (suppliers/KAMs/regions/
+ *   assets that merely exist in the org roster don't clutter the table).
+ *   Clicking any breakdown row cross-filters the page (same toggle pattern
+ *   as Client); it never switches the active perspective. One shared
+ *   NetworkDesktopEntityProgressModal (not six modal designs) opens on
+ *   "View progress", fed the already-computed KPI row and the entity's own
+ *   already-filtered trips -- it never recalculates anything, and closing
+ *   it never touches PerformanceCrossFilter, so the page's cross-filter
+ *   context is exactly what it was before the modal opened.
+ *
+ *   Still deliberately deferred: full trip-evidence pagination (5/10/20,
+ *   "View all", Download), import, advanced asset utilisation analytics, a
+ *   new supplier target model, major visual redesign, new Supabase
+ *   queries/RPCs.
  */
 import Theme from "@/constants/Theme";
 import {
@@ -49,26 +63,39 @@ import {
   type NetworkGoalsStore,
 } from "@/features/network/services/networkGoalsStorage.service";
 import {
+  buildAssetBreakdown,
   buildEntityGoalRows,
+  buildKamBreakdown,
   buildPerformanceKpiRow,
+  buildRegionBreakdown,
+  buildSupplierBreakdown,
   computeGoalsActualsForRollup,
   computePreviousPeriodActuals,
   EMPTY_PERFORMANCE_CROSS_FILTER,
   filterTripsForCrossFilter,
   getRecentMonthKeys,
+  previousPeriodTripWindow,
   resolveClientIdsForFilter,
   resolveFilteredPeriodTarget,
   type EntityGoalRow,
   type GoalsRollup,
+  type PerformanceCommercialBreakdownRow,
   type PerformanceCrossFilter,
   type PerformanceKpiRow,
+  type PerformanceOperationalBreakdownRow,
   type PerformancePerspective,
 } from "@/features/network/utils/connectionGoalsAnalytics.util";
+import {
+  NetworkDesktopEntityProgressModal,
+  type EntityProgressKind,
+} from "@/features/network/components/desktop/NetworkDesktopEntityProgressModal";
 import { formatINRChip } from "@/lib/format";
 import { canAccessClients, canAccessDrivers, canAccessSuppliers } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useOrgMembersQuery } from "@/lib/queries/useOrgMembersQuery";
+import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { useVehiclesQuery } from "@/lib/queries/useVehiclesQuery";
 import { useEffect, useMemo, useState } from "react";
@@ -93,6 +120,14 @@ const PERSPECTIVES: {
   { id: "supplier", label: "Supplier", requires: "suppliers" },
   { id: "asset", label: "Asset", requires: "drivers" },
 ];
+
+function entityLabel(kind: EntityProgressKind): string {
+  if (kind === "kam") return "KAM";
+  if (kind === "region") return "Region";
+  if (kind === "supplier") return "Supplier";
+  if (kind === "asset") return "Asset";
+  return "Client";
+}
 
 function formatKpiValue(unit: PerformanceKpiRow["unit"], value: number): string {
   if (unit === "trips") return String(Math.round(value));
@@ -131,11 +166,26 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
     crossFilter.supplierId != null ||
     crossFilter.assetId != null;
   const clearAllFilters = () => setCrossFilter(EMPTY_PERFORMANCE_CROSS_FILTER);
-  const toggleClientFilter = (clientId: string) =>
+  const toggleFilter = (
+    field: "kamId" | "regionId" | "clientId" | "supplierId" | "assetId",
+    value: string,
+  ) =>
     setCrossFilter((prev) => ({
       ...prev,
-      clientId: prev.clientId === clientId ? null : clientId,
+      [field]: prev[field] === value ? null : value,
     }));
+  const toggleClientFilter = (clientId: string) => toggleFilter("clientId", clientId);
+
+  // Asset perspective's own Vehicle/Driver sub-focus -- a view detail, not a
+  // cross-filter dimension, mirroring NetworkDesktopAssetSalesPanel's own
+  // driver/vehicle toggle.
+  const [assetFocus, setAssetFocus] = useState<"vehicle" | "driver">("vehicle");
+
+  const [progressEntity, setProgressEntity] = useState<{
+    kind: EntityProgressKind;
+    id: string;
+    name: string;
+  } | null>(null);
 
   const monthOptions = useMemo(() => getRecentMonthKeys(6), []);
   const [selectedMonthKey, setSelectedMonthKey] = useState(
@@ -160,11 +210,32 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
   const clientsQ = useClientsQuery(orgId);
   const driversQ = useDriversQuery(orgId);
   const vehiclesQ = useVehiclesQuery(orgId);
+  const suppliersQ = useSuppliersQuery(orgId);
+  const orgMembersQ = useOrgMembersQuery(orgId);
 
   const trips = tripsQ.data ?? [];
   const clients = clientsQ.data ?? [];
   const drivers = driversQ.data ?? [];
   const vehicles = vehiclesQ.data ?? [];
+  const suppliers = suppliersQ.data ?? [];
+  const orgMembers = orgMembersQ.data?.members ?? [];
+
+  const kamById = useMemo(
+    () => new Map(orgMembers.filter((m) => m.role !== "driver").map((m) => [m.user_id, { name: m.full_name ?? "KAM" }])),
+    [orgMembers],
+  );
+  const supplierById = useMemo(
+    () => new Map(suppliers.map((s) => [s.id, { name: s.name ?? s.company_name ?? "Supplier" }])),
+    [suppliers],
+  );
+  const vehicleById = useMemo(
+    () => new Map(vehicles.map((v) => [v.id, { name: v.vehicle_number ?? "Vehicle" }])),
+    [vehicles],
+  );
+  const driverById = useMemo(
+    () => new Map(drivers.map((d) => [d.id, { name: d.name ?? "Driver" }])),
+    [drivers],
+  );
 
   // Stable per mount -- a dashboard shell doesn't need a live-ticking clock;
   // revisit if a specific need for intra-session freshness surfaces.
@@ -201,6 +272,13 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
 
   const previousActuals = useMemo(
     () => computePreviousPeriodActuals(filteredTrips, selectedMonthKey, rollup, asOf),
+    [filteredTrips, selectedMonthKey, rollup, asOf],
+  );
+  // The previous period's trip list itself (not just the aggregated
+  // totals) -- the KAM/Region/Supplier/Asset breakdowns need it per-entity
+  // for their own Previous period/Growth columns, same window as above.
+  const previousFilteredTrips = useMemo(
+    () => previousPeriodTripWindow(filteredTrips, selectedMonthKey, rollup, asOf),
     [filteredTrips, selectedMonthKey, rollup, asOf],
   );
 
@@ -241,10 +319,10 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
   );
   const revenueRow = kpiRows[0];
 
-  // Aggregate and Client currently share the same client-focus breakdown --
-  // they diverge once per-perspective grouping (Commit 6) lands. Fed
-  // filteredClients/filteredTrips, so clicking a row narrows to that
-  // client's data across the whole page, not just this table.
+  // Aggregate and Client share the same client-focus breakdown. Every
+  // breakdown below reads filteredTrips/filteredClients -- the same
+  // dataset the KPI band uses -- so a KAM/Region filter set elsewhere
+  // narrows these tables too, not just the entity-level ones.
   const showsClientBreakdown = perspective === "aggregate" || perspective === "client";
   const entityRows: EntityGoalRow[] = useMemo(() => {
     if (!showsClientBreakdown) return [];
@@ -260,6 +338,136 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
       12,
     );
   }, [showsClientBreakdown, goalsStore, filteredClients, drivers, vehicles, filteredTrips, selectedMonthKey, rollup]);
+
+  const kamRows: PerformanceCommercialBreakdownRow[] = useMemo(() => {
+    if (perspective !== "kam") return [];
+    return buildKamBreakdown(goalsStore, filteredTrips, previousFilteredTrips, kamById, selectedMonthKey, rollup);
+  }, [perspective, goalsStore, filteredTrips, previousFilteredTrips, kamById, selectedMonthKey, rollup]);
+
+  const regionRows: PerformanceCommercialBreakdownRow[] = useMemo(() => {
+    if (perspective !== "region") return [];
+    return buildRegionBreakdown(goalsStore, filteredTrips, previousFilteredTrips, selectedMonthKey, rollup);
+  }, [perspective, goalsStore, filteredTrips, previousFilteredTrips, selectedMonthKey, rollup]);
+
+  const supplierRows: PerformanceOperationalBreakdownRow[] = useMemo(() => {
+    if (perspective !== "supplier") return [];
+    return buildSupplierBreakdown(filteredTrips, previousFilteredTrips, supplierById);
+  }, [perspective, filteredTrips, previousFilteredTrips, supplierById]);
+
+  const assetRows: PerformanceOperationalBreakdownRow[] = useMemo(() => {
+    if (perspective !== "asset") return [];
+    const byId = assetFocus === "vehicle" ? vehicleById : driverById;
+    return buildAssetBreakdown(filteredTrips, previousFilteredTrips, assetFocus, byId);
+  }, [perspective, filteredTrips, previousFilteredTrips, assetFocus, vehicleById, driverById]);
+
+  // Portfolio (KAM/Region Progress modal only) -- clients under whichever
+  // KAM/region is currently open in the modal, reusing the same
+  // buildEntityGoalRows("client", ...) the Aggregate/Client breakdown
+  // already calls, scoped to that entity's own client-id set.
+  const progressPortfolioClients: EntityGoalRow[] | undefined = useMemo(() => {
+    if (!progressEntity || (progressEntity.kind !== "kam" && progressEntity.kind !== "region")) {
+      return undefined;
+    }
+    const scopedClients = clients.filter((c) =>
+      progressEntity.kind === "kam"
+        ? goalsStore.kamAssignments[c.id] === progressEntity.id
+        : goalsStore.clientRegions[c.id] === progressEntity.id,
+    );
+    const scopedClientIds = new Set(scopedClients.map((c) => c.id));
+    const scopedTrips = filteredTrips.filter((t) => t.client_id && scopedClientIds.has(t.client_id));
+    return buildEntityGoalRows(
+      "client",
+      goalsStore,
+      scopedClients,
+      drivers,
+      vehicles,
+      scopedTrips,
+      selectedMonthKey,
+      rollup,
+      50,
+    );
+  }, [progressEntity, clients, goalsStore, filteredTrips, drivers, vehicles, selectedMonthKey, rollup]);
+
+  // The entity's own trips for the Progress modal's evidence preview --
+  // matches whichever kind/id is open, always scoped within filteredTrips
+  // (the page's current cross-filter), never the raw unfiltered trips.
+  const progressEntityTrips = useMemo(() => {
+    if (!progressEntity) return [];
+    const { kind, id } = progressEntity;
+    if (kind === "client") return filteredTrips.filter((t) => t.client_id === id);
+    if (kind === "supplier") return filteredTrips.filter((t) => t.supplier_id === id);
+    if (kind === "asset") {
+      return filteredTrips.filter((t) => t.vehicle_id === id || t.driver_id === id);
+    }
+    // kam / region -- every trip belonging to any client under this entity
+    const scopedClientIds = new Set(
+      clients
+        .filter((c) =>
+          kind === "kam" ? goalsStore.kamAssignments[c.id] === id : goalsStore.clientRegions[c.id] === id,
+        )
+        .map((c) => c.id),
+    );
+    return filteredTrips.filter((t) => t.client_id && scopedClientIds.has(t.client_id));
+  }, [progressEntity, filteredTrips, clients, goalsStore]);
+
+  // The Progress modal's KPI header reuses whichever breakdown row is
+  // already computed for this entity -- never a second calculation.
+  const progressKpi: PerformanceKpiRow | null = useMemo(() => {
+    if (!progressEntity) return null;
+    const { kind, id } = progressEntity;
+    if (kind === "kam" || kind === "region") {
+      const row = (kind === "kam" ? kamRows : regionRows).find((r) => r.id === id);
+      if (!row) return null;
+      return {
+        label: entityLabel(kind),
+        unit: "inr",
+        actual: row.actualRevenue,
+        periodTarget: row.targetRevenue,
+        hasTarget: row.hasTarget,
+        achievement: row.achievement,
+        targetToDate: null,
+        pacing: null,
+        previousActual: row.previousActualRevenue,
+        hasPreviousData: row.hasPreviousData,
+        changeVsPrevious: row.growthPct,
+        variance: row.actualRevenue - row.targetRevenue,
+      };
+    }
+    if (kind === "client") {
+      const row = entityRows.find((r) => r.id === id);
+      if (!row) return null;
+      return {
+        label: "Client",
+        unit: "inr",
+        actual: row.actualRevenue,
+        periodTarget: row.targetRevenue,
+        hasTarget: row.hasTarget,
+        achievement: row.hasTarget ? row.revenueProgressPct : null,
+        targetToDate: null,
+        pacing: null,
+        previousActual: 0,
+        hasPreviousData: false,
+        changeVsPrevious: null,
+        variance: row.actualRevenue - row.targetRevenue,
+      };
+    }
+    const row = (kind === "supplier" ? supplierRows : assetRows).find((r) => r.id === id);
+    if (!row) return null;
+    return {
+      label: entityLabel(kind),
+      unit: "inr",
+      actual: row.actualRevenue,
+      periodTarget: 0,
+      hasTarget: false,
+      achievement: null,
+      targetToDate: null,
+      pacing: null,
+      previousActual: row.previousActualRevenue,
+      hasPreviousData: row.hasPreviousData,
+      changeVsPrevious: row.growthPct,
+      variance: 0,
+    };
+  }, [progressEntity, kamRows, regionRows, entityRows, supplierRows, assetRows]);
 
   const trendCompareItems = useMemo(
     () => [
@@ -314,21 +522,48 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
         ))}
       </ScrollView>
 
-      {/* One compact context bar, not a "Filter by..." panel per dimension.
-          Only clientId is reachable by clicking a row today (the only
-          breakdown table with real rows); kamId/regionId/supplierId/assetId
-          render here identically once Commit 6 makes them clickable. */}
+      {/* One compact context bar -- not a "Filter by..." panel per
+          dimension. Built generically from crossFilter state; every
+          dimension renders the same way once it's set, regardless of
+          which breakdown table the click came from. */}
       <View style={styles.showingRow}>
         <Text style={styles.showingLine}>
           {hasActiveCrossFilter ? "Showing:" : "Showing: All business"}
         </Text>
+        {crossFilter.kamId ? (
+          <Pressable style={styles.filterChip} onPress={() => toggleFilter("kamId", crossFilter.kamId!)}>
+            <Text style={styles.filterChipText}>
+              KAM: {kamById.get(crossFilter.kamId)?.name ?? crossFilter.kamId}
+            </Text>
+            <X size={12} color={Theme.textOnPrimary} />
+          </Pressable>
+        ) : null}
+        {crossFilter.regionId ? (
+          <Pressable style={styles.filterChip} onPress={() => toggleFilter("regionId", crossFilter.regionId!)}>
+            <Text style={styles.filterChipText}>Region: {crossFilter.regionId}</Text>
+            <X size={12} color={Theme.textOnPrimary} />
+          </Pressable>
+        ) : null}
         {crossFilter.clientId ? (
-          <Pressable
-            style={styles.filterChip}
-            onPress={() => toggleClientFilter(crossFilter.clientId!)}
-          >
+          <Pressable style={styles.filterChip} onPress={() => toggleFilter("clientId", crossFilter.clientId!)}>
             <Text style={styles.filterChipText}>
               Client: {clients.find((c) => c.id === crossFilter.clientId)?.name ?? crossFilter.clientId}
+            </Text>
+            <X size={12} color={Theme.textOnPrimary} />
+          </Pressable>
+        ) : null}
+        {crossFilter.supplierId ? (
+          <Pressable style={styles.filterChip} onPress={() => toggleFilter("supplierId", crossFilter.supplierId!)}>
+            <Text style={styles.filterChipText}>
+              Supplier: {supplierById.get(crossFilter.supplierId)?.name ?? crossFilter.supplierId}
+            </Text>
+            <X size={12} color={Theme.textOnPrimary} />
+          </Pressable>
+        ) : null}
+        {crossFilter.assetId ? (
+          <Pressable style={styles.filterChip} onPress={() => toggleFilter("assetId", crossFilter.assetId!)}>
+            <Text style={styles.filterChipText}>
+              Asset: {(vehicleById.get(crossFilter.assetId) ?? driverById.get(crossFilter.assetId))?.name ?? crossFilter.assetId}
             </Text>
             <X size={12} color={Theme.textOnPrimary} />
           </Pressable>
@@ -403,42 +638,183 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
         </View>
       </View>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Performance breakdown</Text>
-        <View style={styles.breakdownHeadRow}>
-          <Text style={[styles.breakdownHeadCell, styles.breakdownColName]}>Name</Text>
-          <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Actual</Text>
-          <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Target</Text>
-          <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>%</Text>
-        </View>
-        {entityRows.length === 0 ? (
-          <View style={styles.breakdownEmpty} />
-        ) : (
-          entityRows.map((row) => (
+      {perspective === "asset" ? (
+        <View style={styles.assetFocusRow}>
+          {(["vehicle", "driver"] as const).map((f) => (
             <Pressable
-              key={row.id}
-              onPress={() => toggleClientFilter(row.id)}
-              style={[
-                styles.breakdownRow,
-                crossFilter.clientId === row.id && styles.breakdownRowActive,
-              ]}
+              key={f}
+              onPress={() => setAssetFocus(f)}
+              style={[styles.rollupChip, assetFocus === f && styles.rollupChipOn]}
             >
-              <Text style={[styles.breakdownCell, styles.breakdownColName]} numberOfLines={1}>
-                {row.name}
-              </Text>
-              <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
-                {formatINRChip(row.actualRevenue)}
-              </Text>
-              <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
-                {row.hasTarget ? formatINRChip(row.targetRevenue) : "—"}
-              </Text>
-              <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
-                {row.hasTarget ? `${row.revenueProgressPct}%` : "—"}
+              <Text style={[styles.rollupChipText, assetFocus === f && styles.rollupChipTextOn]}>
+                {f === "vehicle" ? "Vehicles" : "Drivers"}
               </Text>
             </Pressable>
-          ))
-        )}
+          ))}
+        </View>
+      ) : null}
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Performance breakdown</Text>
+
+        {showsClientBreakdown ? (
+          <>
+            <View style={styles.breakdownHeadRow}>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColName]}>Name</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Actual</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Target</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>%</Text>
+              <View style={styles.breakdownColAction} />
+            </View>
+            {entityRows.length === 0 ? (
+              <View style={styles.breakdownEmpty} />
+            ) : (
+              entityRows.map((row) => (
+                <Pressable
+                  key={row.id}
+                  onPress={() => toggleClientFilter(row.id)}
+                  style={[styles.breakdownRow, crossFilter.clientId === row.id && styles.breakdownRowActive]}
+                >
+                  <Text style={[styles.breakdownCell, styles.breakdownColName]} numberOfLines={1}>
+                    {row.name}
+                  </Text>
+                  <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    {formatINRChip(row.actualRevenue)}
+                  </Text>
+                  <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    {row.hasTarget ? formatINRChip(row.targetRevenue) : "—"}
+                  </Text>
+                  <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    {row.hasTarget ? `${row.revenueProgressPct}%` : "—"}
+                  </Text>
+                  <Pressable
+                    style={styles.breakdownColAction}
+                    onPress={() => setProgressEntity({ kind: "client", id: row.id, name: row.name })}
+                  >
+                    <Text style={styles.viewProgressText}>View progress</Text>
+                  </Pressable>
+                </Pressable>
+              ))
+            )}
+          </>
+        ) : null}
+
+        {perspective === "kam" || perspective === "region" ? (
+          <>
+            <View style={styles.breakdownHeadRow}>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColName]}>
+                {perspective === "kam" ? "KAM" : "Region"}
+              </Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Trips</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Sales</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Target</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Achievement</Text>
+              <View style={styles.breakdownColAction} />
+            </View>
+            {(perspective === "kam" ? kamRows : regionRows).length === 0 ? (
+              <View style={styles.breakdownEmpty} />
+            ) : (
+              (perspective === "kam" ? kamRows : regionRows).map((row) => {
+                const field = perspective === "kam" ? "kamId" : "regionId";
+                const active = crossFilter[field] === row.id;
+                return (
+                  <Pressable
+                    key={row.id}
+                    onPress={() => toggleFilter(field, row.id)}
+                    style={[styles.breakdownRow, active && styles.breakdownRowActive]}
+                  >
+                    <Text style={[styles.breakdownCell, styles.breakdownColName]} numberOfLines={1}>
+                      {row.name}
+                    </Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>{row.actualTrips}</Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                      {formatINRChip(row.actualRevenue)}
+                    </Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                      {row.hasTarget ? formatINRChip(row.targetRevenue) : "—"}
+                    </Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                      {row.achievement != null ? `${row.achievement}%` : "—"}
+                    </Text>
+                    <Pressable
+                      style={styles.breakdownColAction}
+                      onPress={() => setProgressEntity({ kind: perspective, id: row.id, name: row.name })}
+                    >
+                      <Text style={styles.viewProgressText}>View progress</Text>
+                    </Pressable>
+                  </Pressable>
+                );
+              })
+            )}
+          </>
+        ) : null}
+
+        {perspective === "supplier" || perspective === "asset" ? (
+          <>
+            <View style={styles.breakdownHeadRow}>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColName]}>
+                {perspective === "supplier" ? "Supplier" : assetFocus === "vehicle" ? "Vehicle" : "Driver"}
+              </Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Trips</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Sales</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Cost</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Margin</Text>
+              <Text style={[styles.breakdownHeadCell, styles.breakdownColNum]}>Growth</Text>
+              <View style={styles.breakdownColAction} />
+            </View>
+            {(perspective === "supplier" ? supplierRows : assetRows).length === 0 ? (
+              <View style={styles.breakdownEmpty} />
+            ) : (
+              (perspective === "supplier" ? supplierRows : assetRows).map((row) => {
+                const field = perspective === "supplier" ? "supplierId" : "assetId";
+                const active = crossFilter[field] === row.id;
+                return (
+                  <Pressable
+                    key={row.id}
+                    onPress={() => toggleFilter(field, row.id)}
+                    style={[styles.breakdownRow, active && styles.breakdownRowActive]}
+                  >
+                    <Text style={[styles.breakdownCell, styles.breakdownColName]} numberOfLines={1}>
+                      {row.name}
+                    </Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>{row.actualTrips}</Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                      {formatINRChip(row.actualRevenue)}
+                    </Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                      {formatINRChip(row.actualCost)}
+                    </Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                      {row.marginPct.toFixed(1)}%
+                    </Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                      {row.hasPreviousData && row.growthPct != null ? `${row.growthPct}%` : "—"}
+                    </Text>
+                    <Pressable
+                      style={styles.breakdownColAction}
+                      onPress={() => setProgressEntity({ kind: perspective, id: row.id, name: row.name })}
+                    >
+                      <Text style={styles.viewProgressText}>View progress</Text>
+                    </Pressable>
+                  </Pressable>
+                );
+              })
+            )}
+          </>
+        ) : null}
       </View>
+
+      {progressEntity && progressKpi ? (
+        <NetworkDesktopEntityProgressModal
+          visible
+          onClose={() => setProgressEntity(null)}
+          kind={progressEntity.kind}
+          entityName={progressEntity.name}
+          kpi={progressKpi}
+          portfolioClients={progressPortfolioClients}
+          trips={progressEntityTrips}
+        />
+      ) : null}
     </ScrollView>
   );
 }
@@ -546,5 +922,8 @@ const styles = StyleSheet.create({
   },
   breakdownRowActive: { backgroundColor: Theme.surfaceForm, borderRadius: 8 },
   breakdownCell: { fontSize: 13, color: Theme.textPrimaryDark },
+  breakdownColAction: { flex: 1, alignItems: "flex-end", justifyContent: "center" },
+  viewProgressText: { fontSize: 11, fontWeight: "700", color: Theme.primary },
   breakdownEmpty: { minHeight: 40 },
+  assetFocusRow: { flexDirection: "row", gap: 6 },
 });
