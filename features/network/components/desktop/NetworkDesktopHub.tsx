@@ -22,6 +22,7 @@ import { NetworkDesktopInvitationsPanel } from "@/features/network/components/de
 import { NetworkDesktopSalesPanel } from "@/features/network/components/desktop/NetworkDesktopSalesPanel";
 import { NetworkDesktopDetailsPanel } from "@/features/network/components/desktop/NetworkDesktopDetailsPanel";
 import { NetworkDesktopGoalsPanel } from "@/features/network/components/desktop/NetworkDesktopGoalsPanel";
+import { NetworkDesktopPerformancePanel } from "@/features/network/components/desktop/NetworkDesktopPerformancePanel";
 import { NetworkDesktopHubHero } from "@/features/network/components/desktop/NetworkDesktopHubHero";
 import { NetworkDesktopNetworkPanel } from "@/features/network/components/desktop/NetworkDesktopNetworkPanel";
 import { NetworkDesktopProfilePanel } from "@/features/network/components/desktop/NetworkDesktopProfilePanel";
@@ -73,6 +74,7 @@ const TABS: { id: NetworkDesktopTab; label: string }[] = [
   { id: "profile", label: "My Profile" },
   { id: "sales", label: "Sales" },
   { id: "goals", label: "Goals" },
+  { id: "performance", label: "Performance" },
   { id: "network", label: "Network" },
   { id: "chat", label: "Chat" },
 ];
@@ -390,6 +392,10 @@ export function NetworkDesktopHub({
 
     if (tab === "goals") {
       return <NetworkDesktopGoalsPanel orgId={orgId} />;
+    }
+
+    if (tab === "performance") {
+      return <NetworkDesktopPerformancePanel orgId={orgId} />;
     }
 
     if (tab === "network") {
