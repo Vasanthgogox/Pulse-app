@@ -117,56 +117,67 @@ export function NetworkDesktopEntityProgressModal({
           <View style={styles.header}>
             <View style={styles.headerText}>
               <Text style={styles.title}>{KIND_LABEL[kind]}</Text>
-              <Text style={styles.subtitle}>{entityName}</Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {entityName}
+              </Text>
             </View>
-            <Pressable onPress={onClose} hitSlop={10} accessibilityLabel="Close">
-              <X size={18} color={Theme.textMuted} />
-            </Pressable>
+            <View style={styles.headerRight}>
+              <View style={styles.periodBadge}>
+                <Text style={styles.periodBadgeText}>{periodLabel}</Text>
+              </View>
+              <Pressable onPress={onClose} hitSlop={10} accessibilityLabel="Close">
+                <X size={18} color={Theme.textMuted} />
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-            <View style={styles.kpiPrimaryRow}>
-              <View style={styles.kpiCell}>
-                <Text style={styles.kpiValue}>
-                  {kpi.hasTarget ? formatKpiValue(kpi.unit, kpi.periodTarget) : "Not set"}
-                </Text>
-                <Text style={styles.kpiCaption}>Period target</Text>
+            <View style={styles.kpiCard}>
+              <View style={styles.kpiPrimaryRow}>
+                <View style={styles.kpiCell}>
+                  <Text style={styles.kpiValue} numberOfLines={1}>
+                    {kpi.hasTarget ? formatKpiValue(kpi.unit, kpi.periodTarget) : "Not set"}
+                  </Text>
+                  <Text style={styles.kpiCaption}>Period target</Text>
+                </View>
+                <View style={styles.kpiCell}>
+                  <Text style={styles.kpiValue} numberOfLines={1}>
+                    {formatKpiValue(kpi.unit, kpi.actual)}
+                  </Text>
+                  <Text style={styles.kpiCaption}>Actual</Text>
+                </View>
+                <View style={styles.kpiCell}>
+                  <Text style={styles.kpiValue} numberOfLines={1}>
+                    {kpi.achievement != null ? `${kpi.achievement}%` : "—"}
+                  </Text>
+                  <Text style={styles.kpiCaption}>Achievement</Text>
+                </View>
               </View>
-              <View style={styles.kpiCell}>
-                <Text style={styles.kpiValue}>{formatKpiValue(kpi.unit, kpi.actual)}</Text>
-                <Text style={styles.kpiCaption}>Actual</Text>
-              </View>
-              <View style={styles.kpiCell}>
-                <Text style={styles.kpiValue}>
-                  {kpi.achievement != null ? `${kpi.achievement}%` : "—"}
-                </Text>
-                <Text style={styles.kpiCaption}>Achievement</Text>
-              </View>
-            </View>
-            {kpi.targetToDate != null ? (
-              <View style={styles.kpiSecondaryRow}>
-                <Text style={styles.kpiSecondaryText}>
-                  {formatKpiValue(kpi.unit, kpi.targetToDate)} target-to-date
-                </Text>
-                <Text style={styles.kpiSecondaryText}>
-                  {kpi.pacing != null ? `${kpi.pacing}% pacing` : "Pacing unavailable"}
-                </Text>
-              </View>
-            ) : null}
-            <Text style={styles.kpiTertiaryText}>
-              {kpi.hasPreviousData && kpi.changeVsPrevious != null
-                ? `${kpi.changeVsPrevious >= 0 ? "↑" : "↓"} ${Math.abs(kpi.changeVsPrevious)}% vs previous period`
-                : "No previous period data"}
-            </Text>
-            {!kpi.hasTarget ? (
-              <Text style={styles.noTargetNote}>No target set</Text>
-            ) : null}
-            {operationalDetail ? (
-              <Text style={styles.kpiOperationalText}>
-                Cost {formatINRChip(operationalDetail.cost)} · Margin{" "}
-                {operationalDetail.marginPct.toFixed(1)}%
+              {kpi.targetToDate != null ? (
+                <View style={styles.kpiSecondaryRow}>
+                  <Text style={styles.kpiSecondaryText}>
+                    {formatKpiValue(kpi.unit, kpi.targetToDate)} target-to-date
+                  </Text>
+                  <Text style={styles.kpiSecondaryText}>
+                    {kpi.pacing != null ? `${kpi.pacing}% pacing` : "Pacing unavailable"}
+                  </Text>
+                </View>
+              ) : null}
+              <Text style={styles.kpiTertiaryText}>
+                {kpi.hasPreviousData && kpi.changeVsPrevious != null
+                  ? `${kpi.changeVsPrevious >= 0 ? "↑" : "↓"} ${Math.abs(kpi.changeVsPrevious)}% vs previous period`
+                  : "No previous period data"}
               </Text>
-            ) : null}
+              {!kpi.hasTarget ? (
+                <Text style={styles.noTargetNote}>No target set</Text>
+              ) : null}
+              {operationalDetail ? (
+                <Text style={styles.kpiOperationalText}>
+                  Cost {formatINRChip(operationalDetail.cost)} · Margin{" "}
+                  {operationalDetail.marginPct.toFixed(1)}%
+                </Text>
+              ) : null}
+            </View>
 
             {showPortfolio ? (
               <View style={styles.section}>
@@ -183,14 +194,16 @@ export function NetworkDesktopEntityProgressModal({
                     <Text style={[styles.tableCell, styles.colName]} numberOfLines={1}>
                       {row.name}
                     </Text>
-                    <Text style={[styles.tableCell, styles.colNum]}>{row.actualTrips}</Text>
-                    <Text style={[styles.tableCell, styles.colNum]}>
+                    <Text style={[styles.tableCell, styles.colNum]} numberOfLines={1}>
+                      {row.actualTrips}
+                    </Text>
+                    <Text style={[styles.tableCell, styles.colNum]} numberOfLines={1}>
                       {formatINRChip(row.actualRevenue)}
                     </Text>
-                    <Text style={[styles.tableCell, styles.colNum]}>
+                    <Text style={[styles.tableCell, styles.colNum]} numberOfLines={1}>
                       {row.hasTarget ? formatINRChip(row.targetRevenue) : "—"}
                     </Text>
-                    <Text style={[styles.tableCell, styles.colNum]}>
+                    <Text style={[styles.tableCell, styles.colNum]} numberOfLines={1}>
                       {row.hasTarget ? `${row.revenueProgressPct}%` : "—"}
                     </Text>
                   </View>
@@ -366,8 +379,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     width: "100%",
-    maxWidth: 560,
-    maxHeight: "85%",
+    maxWidth: 920,
+    maxHeight: "88%",
     backgroundColor: Theme.cardWhite,
     borderRadius: 16,
     overflow: "hidden",
@@ -376,62 +389,110 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
-  headerText: { gap: 2 },
+  headerText: { flex: 1, minWidth: 0, gap: 2 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 0 },
+  periodBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  periodBadgeText: { fontSize: 11, fontWeight: "700", color: Theme.textSecondary },
   title: { fontSize: 16, fontWeight: "800", color: Theme.textPrimaryDark },
   subtitle: { fontSize: 12, color: Theme.textMuted, fontWeight: "600" },
   body: { padding: 18 },
+  kpiCard: {
+    backgroundColor: Theme.surfaceForm,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    gap: 8,
+  },
   kpiPrimaryRow: { flexDirection: "row", gap: 12 },
-  kpiCell: { flex: 1 },
-  kpiValue: { fontSize: 18, fontWeight: "800", color: Theme.textPrimaryDark },
-  kpiCaption: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
-  kpiSecondaryRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 10 },
-  kpiSecondaryText: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary },
-  kpiTertiaryText: { fontSize: 11, fontWeight: "700", color: Theme.primary, marginTop: 8 },
-  noTargetNote: { fontSize: 11, fontWeight: "700", color: Theme.textMuted, marginTop: 4 },
-  kpiOperationalText: { fontSize: 12, fontWeight: "700", color: Theme.textSecondary, marginTop: 4 },
+  kpiCell: { flex: 1, minWidth: 0, gap: 2 },
+  kpiValue: { fontSize: 17, fontWeight: "800", color: Theme.textPrimaryDark },
+  kpiCaption: { fontSize: 10, fontWeight: "600", color: Theme.textMuted },
+  kpiSecondaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    flexWrap: "wrap",
+    marginTop: 2,
+  },
+  kpiSecondaryText: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary, flexShrink: 1 },
+  kpiTertiaryText: { fontSize: 11, fontWeight: "700", color: Theme.primary },
+  noTargetNote: { fontSize: 11, fontWeight: "600", color: Theme.textMuted },
+  kpiOperationalText: { fontSize: 12, fontWeight: "600", color: Theme.textSecondary },
   section: { marginTop: 20, gap: 8 },
   sectionTitle: { fontSize: 13, fontWeight: "800", color: Theme.textPrimaryDark },
   evidenceCaption: { fontSize: 11, color: Theme.textMuted },
   evidenceEmpty: { fontSize: 12, color: Theme.textMuted, paddingVertical: 8 },
   tableHeadRow: {
     flexDirection: "row",
+    alignItems: "center",
     paddingBottom: 6,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
+    gap: 4,
   },
-  tableHeadCell: { fontSize: 10, fontWeight: "800", color: Theme.textMuted },
-  colName: { flex: 2 },
-  colNum: { flex: 1, textAlign: "right" },
+  tableHeadCell: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  colName: { flex: 2.2, minWidth: 0 },
+  colNum: { flex: 1, minWidth: 0, textAlign: "right" },
   tableRow: {
     flexDirection: "row",
+    alignItems: "center",
+    minHeight: 40,
     paddingVertical: 8,
-    borderBottomWidth: 1,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
+    gap: 4,
   },
-  tableCell: { fontSize: 12, color: Theme.textPrimaryDark },
-  evidenceScopeRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: -4 },
-  evidenceScopeText: { fontSize: 11, fontWeight: "700", color: Theme.textMuted },
+  tableCell: { fontSize: 12, fontWeight: "500", color: Theme.textPrimaryDark },
+  evidenceScopeRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: -2 },
+  evidenceScopeText: { fontSize: 11, fontWeight: "600", color: Theme.textMuted },
   evidenceHeadRow: {
     flexDirection: "row",
+    alignItems: "center",
     paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
     minWidth: 760,
   },
-  evidenceHeadCell: { fontSize: 10, fontWeight: "800", color: Theme.textMuted, paddingHorizontal: 4 },
+  evidenceHeadCell: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    paddingHorizontal: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.2,
+  },
   evidenceRow: {
     flexDirection: "row",
+    alignItems: "center",
+    minHeight: 40,
     paddingVertical: 8,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     minWidth: 760,
   },
-  evidenceCell: { fontSize: 12, color: Theme.textPrimaryDark, paddingHorizontal: 4 },
+  evidenceCell: { fontSize: 12, fontWeight: "500", color: Theme.textPrimaryDark, paddingHorizontal: 4 },
   evColId: { width: 90 },
   evColDate: { width: 80 },
   evColName: { width: 110 },
@@ -443,13 +504,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 8,
+    gap: 8,
+    flexWrap: "wrap",
   },
   evidencePageNavBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
   evidenceNavBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    minHeight: 32,
+    justifyContent: "center",
   },
   evidenceNavBtnDisabled: { opacity: 0.4 },
   evidenceNavBtnText: { fontSize: 11, fontWeight: "700", color: Theme.textSecondary },
@@ -457,28 +524,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 10,
+    marginTop: 12,
     flexWrap: "wrap",
     gap: 10,
   },
-  evidencePageSizeRow: { flexDirection: "row", gap: 6 },
+  evidencePageSizeRow: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
   evidencePageChip: {
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     backgroundColor: Theme.surfaceForm,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    minHeight: 32,
+    justifyContent: "center",
   },
-  evidencePageChipOn: { backgroundColor: Theme.primary },
-  evidencePageChipText: { fontSize: 11, fontWeight: "700", color: Theme.textSecondary },
-  evidencePageChipTextOn: { color: Theme.textOnPrimary },
+  evidencePageChipOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  evidencePageChipText: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary },
+  evidencePageChipTextOn: { color: Theme.textOnPrimary, fontWeight: "700" },
   evidenceDownloadBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 8,
     backgroundColor: Theme.primary,
     borderRadius: 8,
+    minHeight: 34,
   },
   evidenceDownloadBtnDisabled: { backgroundColor: Theme.surfaceForm },
   evidenceDownloadText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },

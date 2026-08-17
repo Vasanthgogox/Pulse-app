@@ -98,6 +98,7 @@ import {
   type PerformancePerspective,
   type PerformanceTripEvidenceRow,
 } from "@/features/network/utils/connectionGoalsAnalytics.util";
+import { monthLabelFromKey } from "@/features/network/services/networkGoalsStorage.service";
 import {
   NetworkDesktopEntityProgressModal,
   type EntityProgressKind,
@@ -200,11 +201,12 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
     name: string;
   } | null>(null);
 
-  const monthOptions = useMemo(() => getRecentMonthKeys(6), []);
+  const monthOptions = useMemo(() => getRecentMonthKeys(12), []);
   const [selectedMonthKey, setSelectedMonthKey] = useState(
     () => monthOptions[monthOptions.length - 1] ?? getRecentMonthKeys(1)[0],
   );
   const [rollup, setRollup] = useState<GoalsRollup>("month");
+  const periodDisplayLabel = rollupLabel(selectedMonthKey, rollup);
 
   const [goalsStore, setGoalsStore] = useState<NetworkGoalsStore>(
     DEFAULT_NETWORK_GOALS_STORE,
@@ -463,7 +465,7 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
     [progressEntityTrips, supplierById, vehicleById, driverById],
   );
 
-  const progressPeriodLabel = rollupLabel(selectedMonthKey, rollup);
+  const progressPeriodLabel = periodDisplayLabel;
 
   // Any OTHER active cross-filter dimension besides the entity currently
   // open in the modal (e.g. viewing Bhujesh's KAM progress while a Region
@@ -607,53 +609,107 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Performance</Text>
-        <View style={styles.rollupRow}>
-          {ROLLUPS.map((r) => (
-            <Pressable
-              key={r.id}
-              onPress={() => setRollup(r.id)}
-              style={[styles.rollupChip, rollup === r.id && styles.rollupChipOn]}
-            >
-              <Text style={[styles.rollupChipText, rollup === r.id && styles.rollupChipTextOn]}>
-                {r.label}
-              </Text>
-            </Pressable>
-          ))}
+        <View style={styles.headerCopy}>
+          <Text style={styles.title}>Performance</Text>
+          <Text style={styles.subtitle}>
+            Target vs actual · {periodDisplayLabel}
+          </Text>
         </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.perspectiveScroll}
-        contentContainerStyle={styles.perspectiveRow}
-      >
-        {availablePerspectives.map((p) => (
-          <Pressable
-            key={p.id}
-            onPress={() => setPerspective(p.id)}
-            style={[styles.perspectiveChip, perspective === p.id && styles.perspectiveChipOn]}
+      <View style={styles.controlsCard}>
+        <View style={styles.controlBlock}>
+          <Text style={styles.controlLabel}>Period month</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRowScroll}
           >
-            <Text
-              style={[
-                styles.perspectiveChipText,
-                perspective === p.id && styles.perspectiveChipTextOn,
-              ]}
-            >
-              {p.label}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+            {monthOptions.map((key) => {
+              const on = selectedMonthKey === key;
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => setSelectedMonthKey(key)}
+                  style={[styles.chip, on && styles.chipOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={`Period month ${monthLabelFromKey(key)}`}
+                >
+                  <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                    {monthLabelFromKey(key)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        <View style={styles.controlDivider} />
+
+        <View style={styles.controlBlock}>
+          <Text style={styles.controlLabel}>Rollup</Text>
+          <View style={styles.chipRow}>
+            {ROLLUPS.map((r) => {
+              const on = rollup === r.id;
+              return (
+                <Pressable
+                  key={r.id}
+                  onPress={() => setRollup(r.id)}
+                  style={[styles.chip, on && styles.chipOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                    {r.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.controlsCard}>
+        <Text style={styles.controlLabel}>Perspective</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRowScroll}
+        >
+          {availablePerspectives.map((p) => {
+            const on = perspective === p.id;
+            return (
+              <Pressable
+                key={p.id}
+                onPress={() => setPerspective(p.id)}
+                style={[styles.perspectiveChip, on && styles.perspectiveChipOn]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+              >
+                <Text
+                  style={[
+                    styles.perspectiveChipText,
+                    on && styles.perspectiveChipTextOn,
+                  ]}
+                >
+                  {p.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {/* One compact context bar -- not a "Filter by..." panel per
           dimension. Built generically from crossFilter state; every
           dimension renders the same way once it's set, regardless of
           which breakdown table the click came from. */}
-      <View style={styles.showingRow}>
+      <View style={styles.showingCard}>
         <Text style={styles.showingLine}>
-          {hasActiveCrossFilter ? "Showing:" : "Showing: All business"}
+          {hasActiveCrossFilter
+            ? `Showing · ${periodDisplayLabel}:`
+            : `Showing · ${periodDisplayLabel}: All business`}
         </Text>
         {crossFilter.kamId ? (
           <Pressable style={styles.filterChip} onPress={() => toggleFilter("kamId", crossFilter.kamId!)}>
@@ -706,17 +762,19 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
             <Text style={styles.kpiLabel}>{row.label}</Text>
             <View style={styles.kpiPrimaryRow}>
               <View style={styles.kpiPrimaryCell}>
-                <Text style={styles.kpiPrimaryValue}>
+                <Text style={styles.kpiPrimaryValue} numberOfLines={1}>
                   {row.hasTarget ? formatKpiValue(row.unit, row.periodTarget) : "Not set"}
                 </Text>
                 <Text style={styles.kpiPrimaryCaption}>Period target</Text>
               </View>
               <View style={styles.kpiPrimaryCell}>
-                <Text style={styles.kpiPrimaryValue}>{formatKpiValue(row.unit, row.actual)}</Text>
+                <Text style={styles.kpiPrimaryValue} numberOfLines={1}>
+                  {formatKpiValue(row.unit, row.actual)}
+                </Text>
                 <Text style={styles.kpiPrimaryCaption}>Actual</Text>
               </View>
               <View style={styles.kpiPrimaryCell}>
-                <Text style={styles.kpiPrimaryValue}>
+                <Text style={styles.kpiPrimaryValue} numberOfLines={1}>
                   {row.achievement != null ? `${row.achievement}%` : "—"}
                 </Text>
                 <Text style={styles.kpiPrimaryCaption}>Achievement</Text>
@@ -744,8 +802,7 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Actual vs Target-to-date vs Previous period</Text>
         <Text style={styles.trendCaption}>
-          Sales revenue, same period/date basis as the KPI band above. A rolling multi-month
-          overlay is later polish, not built here -- this proves the three values agree today.
+          Sales revenue · {periodDisplayLabel}. Same period basis as the KPI band above.
         </Text>
         <View style={styles.trendRow}>
           {trendCompareItems.map((item) => (
@@ -756,7 +813,9 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
                   { height: Math.max(4, (item.value / maxTrendValue) * 96) },
                 ]}
               />
-              <Text style={styles.trendBarValue}>{formatINRChip(item.value)}</Text>
+              <Text style={styles.trendBarValue} numberOfLines={1}>
+                {formatINRChip(item.value)}
+              </Text>
               <Text style={styles.trendBarLabel}>{item.label}</Text>
             </View>
           ))}
@@ -765,22 +824,28 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
 
       {perspective === "asset" ? (
         <View style={styles.assetFocusRow}>
-          {(["vehicle", "driver"] as const).map((f) => (
-            <Pressable
-              key={f}
-              onPress={() => setAssetFocus(f)}
-              style={[styles.rollupChip, assetFocus === f && styles.rollupChipOn]}
-            >
-              <Text style={[styles.rollupChipText, assetFocus === f && styles.rollupChipTextOn]}>
-                {f === "vehicle" ? "Vehicles" : "Drivers"}
-              </Text>
-            </Pressable>
-          ))}
+          {(["vehicle", "driver"] as const).map((f) => {
+            const on = assetFocus === f;
+            return (
+              <Pressable
+                key={f}
+                onPress={() => setAssetFocus(f)}
+                style={[styles.chip, on && styles.chipOn]}
+              >
+                <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                  {f === "vehicle" ? "Vehicles" : "Drivers"}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       ) : null}
 
       <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Performance breakdown</Text>
+        <View style={styles.sectionTitleRow}>
+          <Text style={styles.sectionTitle}>Performance breakdown</Text>
+          <Text style={styles.sectionMeta}>{periodDisplayLabel}</Text>
+        </View>
 
         {showsClientBreakdown ? (
           <>
@@ -792,7 +857,9 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
               <View style={styles.breakdownColAction} />
             </View>
             {entityRows.length === 0 ? (
-              <View style={styles.breakdownEmpty} />
+              <View style={styles.breakdownEmpty}>
+                <Text style={styles.breakdownEmptyText}>No clients in this period.</Text>
+              </View>
             ) : (
               entityRows.map((row) => (
                 <Pressable
@@ -803,20 +870,21 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
                   <Text style={[styles.breakdownCell, styles.breakdownColName]} numberOfLines={1}>
                     {row.name}
                   </Text>
-                  <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                  <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                     {formatINRChip(row.actualRevenue)}
                   </Text>
-                  <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                  <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                     {row.hasTarget ? formatINRChip(row.targetRevenue) : "—"}
                   </Text>
-                  <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                  <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                     {row.hasTarget ? `${row.revenueProgressPct}%` : "—"}
                   </Text>
                   <Pressable
                     style={styles.breakdownColAction}
                     onPress={() => setProgressEntity({ kind: "client", id: row.id, name: row.name })}
+                    hitSlop={6}
                   >
-                    <Text style={styles.viewProgressText}>View progress</Text>
+                    <Text style={styles.viewProgressText}>Progress</Text>
                   </Pressable>
                 </Pressable>
               ))
@@ -837,7 +905,11 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
               <View style={styles.breakdownColAction} />
             </View>
             {(perspective === "kam" ? kamRows : regionRows).length === 0 ? (
-              <View style={styles.breakdownEmpty} />
+              <View style={styles.breakdownEmpty}>
+                <Text style={styles.breakdownEmptyText}>
+                  No {perspective === "kam" ? "KAM" : "region"} activity in this period.
+                </Text>
+              </View>
             ) : (
               (perspective === "kam" ? kamRows : regionRows).map((row) => {
                 const field = perspective === "kam" ? "kamId" : "regionId";
@@ -851,21 +923,24 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
                     <Text style={[styles.breakdownCell, styles.breakdownColName]} numberOfLines={1}>
                       {row.name}
                     </Text>
-                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>{row.actualTrips}</Text>
-                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
+                      {row.actualTrips}
+                    </Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                       {formatINRChip(row.actualRevenue)}
                     </Text>
-                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                       {row.hasTarget ? formatINRChip(row.targetRevenue) : "—"}
                     </Text>
-                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                       {row.achievement != null ? `${row.achievement}%` : "—"}
                     </Text>
                     <Pressable
                       style={styles.breakdownColAction}
                       onPress={() => setProgressEntity({ kind: perspective, id: row.id, name: row.name })}
+                      hitSlop={6}
                     >
-                      <Text style={styles.viewProgressText}>View progress</Text>
+                      <Text style={styles.viewProgressText}>Progress</Text>
                     </Pressable>
                   </Pressable>
                 );
@@ -888,7 +963,11 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
               <View style={styles.breakdownColAction} />
             </View>
             {(perspective === "supplier" ? supplierRows : assetRows).length === 0 ? (
-              <View style={styles.breakdownEmpty} />
+              <View style={styles.breakdownEmpty}>
+                <Text style={styles.breakdownEmptyText}>
+                  No {perspective === "supplier" ? "supplier" : assetFocus} activity in this period.
+                </Text>
+              </View>
             ) : (
               (perspective === "supplier" ? supplierRows : assetRows).map((row) => {
                 const field = perspective === "supplier" ? "supplierId" : "assetId";
@@ -902,24 +981,27 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
                     <Text style={[styles.breakdownCell, styles.breakdownColName]} numberOfLines={1}>
                       {row.name}
                     </Text>
-                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>{row.actualTrips}</Text>
-                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
+                      {row.actualTrips}
+                    </Text>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                       {formatINRChip(row.actualRevenue)}
                     </Text>
-                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                       {formatINRChip(row.actualCost)}
                     </Text>
-                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                       {row.marginPct.toFixed(1)}%
                     </Text>
-                    <Text style={[styles.breakdownCell, styles.breakdownColNum]}>
+                    <Text style={[styles.breakdownCell, styles.breakdownColNum]} numberOfLines={1}>
                       {row.hasPreviousData && row.growthPct != null ? `${row.growthPct}%` : "—"}
                     </Text>
                     <Pressable
                       style={styles.breakdownColAction}
                       onPress={() => setProgressEntity({ kind: perspective, id: row.id, name: row.name })}
+                      hitSlop={6}
                     >
-                      <Text style={styles.viewProgressText}>View progress</Text>
+                      <Text style={styles.viewProgressText}>Progress</Text>
                     </Pressable>
                   </Pressable>
                 );
@@ -948,110 +1030,194 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f5f7fb" },
-  content: { padding: 20, gap: 16 },
+  root: { flex: 1, backgroundColor: Theme.analyticsCanvas },
+  content: { padding: 20, gap: 14, paddingBottom: 32 },
   headerRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
   },
-  title: { fontSize: 20, fontWeight: "800", color: Theme.textPrimaryDark },
-  rollupRow: { flexDirection: "row", gap: 6 },
-  rollupChip: {
+  headerCopy: { flex: 1, minWidth: 0, gap: 4 },
+  title: { fontSize: 20, fontWeight: "800", color: Theme.textPrimaryDark, letterSpacing: -0.2 },
+  subtitle: { fontSize: 12, fontWeight: "600", color: Theme.textMuted },
+  controlsCard: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    gap: 10,
+  },
+  controlBlock: { gap: 8 },
+  controlLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  controlDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+    marginVertical: 2,
+  },
+  chipRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  chipRowScroll: { flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 8 },
+  chip: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     backgroundColor: Theme.surfaceForm,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    minHeight: 32,
+    justifyContent: "center",
   },
-  rollupChipOn: { backgroundColor: Theme.primary },
-  rollupChipText: { fontSize: 12, fontWeight: "700", color: Theme.textSecondary },
-  rollupChipTextOn: { color: Theme.textOnPrimary },
-  perspectiveScroll: { flexGrow: 0 },
-  perspectiveRow: { flexDirection: "row", gap: 8 },
+  chipOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  chipText: { fontSize: 12, fontWeight: "600", color: Theme.textSecondary },
+  chipTextOn: { color: Theme.textOnPrimary, fontWeight: "700" },
   perspectiveChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: Theme.surfaceForm,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     borderRadius: 20,
+    minHeight: 34,
+    justifyContent: "center",
   },
   perspectiveChipOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
-  perspectiveChipText: { fontSize: 13, fontWeight: "700", color: Theme.textPrimaryDark },
-  perspectiveChipTextOn: { color: Theme.textOnPrimary },
-  showingRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  perspectiveChipText: { fontSize: 13, fontWeight: "600", color: Theme.textPrimaryDark },
+  perspectiveChipTextOn: { color: Theme.textOnPrimary, fontWeight: "700" },
+  showingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
   showingLine: { fontSize: 12, color: Theme.textMuted, fontWeight: "600" },
   filterChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     backgroundColor: Theme.primary,
     borderRadius: 14,
+    maxWidth: 220,
   },
-  filterChipText: { fontSize: 11, fontWeight: "700", color: Theme.textOnPrimary },
+  filterChipText: { fontSize: 11, fontWeight: "700", color: Theme.textOnPrimary, flexShrink: 1 },
   clearAllText: { fontSize: 12, fontWeight: "700", color: Theme.primary },
   kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   kpiCard: {
     flexGrow: 1,
-    flexBasis: 180,
+    flexBasis: 220,
+    minWidth: 200,
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    gap: 4,
+    gap: 10,
   },
-  kpiLabel: { fontSize: 12, fontWeight: "700", color: Theme.textMuted },
-  kpiPrimaryRow: { flexDirection: "row", gap: 12 },
-  kpiPrimaryCell: { flex: 1 },
-  kpiPrimaryValue: { fontSize: 18, fontWeight: "800", color: Theme.textPrimaryDark },
-  kpiPrimaryCaption: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
-  kpiSecondaryRow: { flexDirection: "row", justifyContent: "space-between" },
-  kpiSecondaryText: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary },
+  kpiLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  kpiPrimaryRow: { flexDirection: "row", gap: 10 },
+  kpiPrimaryCell: { flex: 1, minWidth: 0, gap: 2 },
+  kpiPrimaryValue: { fontSize: 16, fontWeight: "800", color: Theme.textPrimaryDark },
+  kpiPrimaryCaption: { fontSize: 10, fontWeight: "600", color: Theme.textMuted },
+  kpiSecondaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    flexWrap: "wrap",
+    paddingTop: 2,
+  },
+  kpiSecondaryText: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary, flexShrink: 1 },
   kpiTertiaryText: { fontSize: 11, fontWeight: "700", color: Theme.primary },
   sectionCard: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     gap: 12,
   },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   sectionTitle: { fontSize: 14, fontWeight: "800", color: Theme.textPrimaryDark },
-  trendCaption: { fontSize: 11, color: Theme.textMuted },
+  sectionMeta: { fontSize: 11, fontWeight: "600", color: Theme.textMuted },
+  trendCaption: { fontSize: 11, color: Theme.textMuted, lineHeight: 15 },
   trendRow: {
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-around",
     gap: 10,
     minHeight: 120,
+    paddingTop: 4,
   },
-  trendBarWrap: { alignItems: "center", gap: 6, width: 96 },
-  trendBar: { width: 32, backgroundColor: Theme.primary, borderRadius: 4 },
+  trendBarWrap: { alignItems: "center", gap: 6, flex: 1, minWidth: 0, maxWidth: 120 },
+  trendBar: { width: 28, backgroundColor: Theme.primary, borderRadius: 4 },
   trendBarValue: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
-  trendBarLabel: { fontSize: 10, color: Theme.textMuted },
+  trendBarLabel: { fontSize: 10, color: Theme.textMuted, textAlign: "center" },
   breakdownHeadRow: {
     flexDirection: "row",
+    alignItems: "center",
     paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  breakdownHeadCell: { fontSize: 11, fontWeight: "800", color: Theme.textMuted },
-  breakdownColName: { flex: 2 },
-  breakdownColNum: { flex: 1, textAlign: "right" },
-  breakdownRow: {
-    flexDirection: "row",
-    paddingVertical: 10,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
+    gap: 4,
+  },
+  breakdownHeadCell: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  breakdownColName: { flex: 2.2, minWidth: 0 },
+  breakdownColNum: { flex: 1, minWidth: 0, textAlign: "right" },
+  breakdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    gap: 4,
   },
   breakdownRowActive: { backgroundColor: Theme.surfaceForm, borderRadius: 8 },
-  breakdownCell: { fontSize: 13, color: Theme.textPrimaryDark },
-  breakdownColAction: { flex: 1, alignItems: "flex-end", justifyContent: "center" },
+  breakdownCell: { fontSize: 13, fontWeight: "500", color: Theme.textPrimaryDark },
+  breakdownColAction: {
+    width: 72,
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
   viewProgressText: { fontSize: 11, fontWeight: "700", color: Theme.primary },
-  breakdownEmpty: { minHeight: 40 },
-  assetFocusRow: { flexDirection: "row", gap: 6 },
+  breakdownEmpty: {
+    minHeight: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+  },
+  breakdownEmptyText: { fontSize: 12, fontWeight: "600", color: Theme.textMuted },
+  assetFocusRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
 });
