@@ -22,6 +22,7 @@ import {
   resolveFilteredPeriodTarget,
   resolvePeriodTarget,
   tripsInDateRange,
+  tripsInSelectedRollup,
   type PerformanceCrossFilter,
 } from '../connectionGoalsAnalytics.util';
 import type { TripRow } from '@/features/trips/services/trips.service';
@@ -704,27 +705,23 @@ describe('buildKamBreakdown / buildRegionBreakdown / buildSupplierBreakdown / bu
 });
 
 describe('Phase 2 Commit 1: entity trip evidence must be period-scoped, not just cross-filter-scoped', () => {
-  it('tripsInDateRange(entityTrips, periodBounds(...)) excludes a trip outside the selected period even though it matches the entity', () => {
-    // Mirrors exactly the composition NetworkDesktopPerformancePanel.tsx uses
-    // for progressEntityTrips -- the bug being fixed was that this period
-    // filter was never applied before feeding the evidence table/download.
+  it('tripsInSelectedRollup excludes a trip outside the selected month even though it matches the entity', () => {
+    // Mirrors NetworkDesktopPerformancePanel progressEntityTrips composition.
     const entityTrips = [
       trip('2026-08-05T00:00:00', 100000, 0, { id: 'in-period' }),
       trip('2026-07-20T00:00:00', 90000, 0, { id: 'out-of-period' }),
     ] as TripRow[];
-    const { start, end } = periodBounds('2026-08', 'month');
-    const scoped = tripsInDateRange(entityTrips, start, end);
+    const scoped = tripsInSelectedRollup(entityTrips, '2026-08', 'month');
     expect(scoped.map((t) => t.id)).toEqual(['in-period']);
   });
 });
 
-describe('Phase 2 Commit 3: breakdown Actuals must be period-scoped before grouping', () => {
+describe('Phase 2 Commit 3: breakdown Actuals must match aggregate KPI period (not full calendar Q/Y)', () => {
   // buildKam/Region/Supplier/AssetBreakdown only sum whatever trips they
-  // are given -- selectedMonthKey scopes targets, not Actuals. The panel
-  // therefore applies periodBounds + tripsInDateRange once
-  // (periodScopedFilteredTrips) before calling all four builders. These
-  // tests lock that composition contract so a future caller cannot
-  // silently reintroduce all-time Actuals under an August (etc.) selection.
+  // are given. Callers must pre-scope with tripsInSelectedRollup -- the
+  // same month-key window computeGoalsActualsForRollup uses. periodBounds
+  // is the FULL quarter/year (for Target-to-date pacing) and must NOT be
+  // used for Actuals, or Quarter/Year breakdowns disagree with the KPI.
 
   const goalsStore: NetworkGoalsStore = {
     version: 3,
@@ -771,10 +768,10 @@ describe('Phase 2 Commit 3: breakdown Actuals must be period-scoped before group
     expect(buildAssetBreakdown(allTimeTrips, previousTrips, 'driver', driverById)[0].actualRevenue).toBe(190000);
   });
 
-  it('with periodScopedFilteredTrips composition, all four Actuals match August-only (the fix)', () => {
-    const { start, end } = periodBounds('2026-08', 'month');
-    const periodScoped = tripsInDateRange(allTimeTrips, start, end);
+  it('with tripsInSelectedRollup, all four Actuals match August-only and the aggregate KPI', () => {
+    const periodScoped = tripsInSelectedRollup(allTimeTrips, '2026-08', 'month');
     expect(periodScoped).toHaveLength(1);
+    expect(computeGoalsActualsForRollup(allTimeTrips, '2026-08', 'month').revenueInr).toBe(100000);
 
     expect(buildKamBreakdown(goalsStore, periodScoped, previousTrips, kamById, '2026-08', 'month')[0].actualRevenue).toBe(100000);
     expect(buildRegionBreakdown(goalsStore, periodScoped, previousTrips, '2026-08', 'month')[0].actualRevenue).toBe(100000);
@@ -783,9 +780,38 @@ describe('Phase 2 Commit 3: breakdown Actuals must be period-scoped before group
     expect(buildAssetBreakdown(periodScoped, previousTrips, 'driver', driverById)[0].actualRevenue).toBe(100000);
   });
 
+  it('Quarter selected as August is Jul+Aug (YTD within Q), NOT full Jul-Sep -- periodBounds would wrongly include Sep', () => {
+    const qTrips = [
+      trip('2026-07-10T00:00:00', 10000, 0, { id: 'jul', client_id: 'apple', supplier_id: 'sup-1', vehicle_id: 'veh-1', driver_id: 'drv-1' }),
+      trip('2026-08-10T00:00:00', 20000, 0, { id: 'aug', client_id: 'apple', supplier_id: 'sup-1', vehicle_id: 'veh-1', driver_id: 'drv-1' }),
+      trip('2026-09-10T00:00:00', 40000, 0, { id: 'sep', client_id: 'apple', supplier_id: 'sup-1', vehicle_id: 'veh-1', driver_id: 'drv-1' }),
+    ] as TripRow[];
+
+    // Full calendar Q3 (the Target-to-date window) would include Sep.
+    const { start, end } = periodBounds('2026-08', 'quarter');
+    expect(tripsInDateRange(qTrips, start, end).map((t) => t.id).sort()).toEqual(['aug', 'jul', 'sep']);
+
+    // Aggregate Actuals and breakdown Actuals share the YTD-within-quarter window.
+    const scoped = tripsInSelectedRollup(qTrips, '2026-08', 'quarter');
+    expect(scoped.map((t) => t.id).sort()).toEqual(['aug', 'jul']);
+    expect(computeGoalsActualsForRollup(qTrips, '2026-08', 'quarter').revenueInr).toBe(30000);
+    expect(buildKamBreakdown(goalsStore, scoped, previousTrips, kamById, '2026-08', 'quarter')[0].actualRevenue).toBe(30000);
+  });
+
+  it('Year selected as March is Jan-Mar YTD, NOT full Jan-Dec', () => {
+    const yTrips = [
+      trip('2026-02-10T00:00:00', 10000, 0, { id: 'feb', client_id: 'apple', supplier_id: 'sup-1', vehicle_id: 'veh-1', driver_id: 'drv-1' }),
+      trip('2026-03-10T00:00:00', 20000, 0, { id: 'mar', client_id: 'apple', supplier_id: 'sup-1', vehicle_id: 'veh-1', driver_id: 'drv-1' }),
+      trip('2026-11-10T00:00:00', 80000, 0, { id: 'nov', client_id: 'apple', supplier_id: 'sup-1', vehicle_id: 'veh-1', driver_id: 'drv-1' }),
+    ] as TripRow[];
+    const scoped = tripsInSelectedRollup(yTrips, '2026-03', 'year');
+    expect(scoped.map((t) => t.id).sort()).toEqual(['feb', 'mar']);
+    expect(computeGoalsActualsForRollup(yTrips, '2026-03', 'year').revenueInr).toBe(30000);
+    expect(buildSupplierBreakdown(scoped, previousTrips, supplierById)[0].actualRevenue).toBe(30000);
+  });
+
   it('buildPerformanceKpiRow on a KAM row with a real target surfaces Target-to-date and Pacing (entity pacing)', () => {
-    const { start, end } = periodBounds('2026-08', 'month');
-    const periodScoped = tripsInDateRange(allTimeTrips, start, end);
+    const periodScoped = tripsInSelectedRollup(allTimeTrips, '2026-08', 'month');
     const kam = buildKamBreakdown(goalsStore, periodScoped, previousTrips, kamById, '2026-08', 'month')[0];
     const asOf = new Date(2026, 7, 16); // mid-August
     const kpi = buildPerformanceKpiRow(
@@ -806,8 +832,7 @@ describe('Phase 2 Commit 3: breakdown Actuals must be period-scoped before group
   });
 
   it('buildPerformanceKpiRow on a Supplier row with target 0 never fabricates Target-to-date or Pacing', () => {
-    const { start, end } = periodBounds('2026-08', 'month');
-    const periodScoped = tripsInDateRange(allTimeTrips, start, end);
+    const periodScoped = tripsInSelectedRollup(allTimeTrips, '2026-08', 'month');
     const supplier = buildSupplierBreakdown(periodScoped, previousTrips, supplierById)[0];
     const kpi = buildPerformanceKpiRow(
       'Supplier',
@@ -947,5 +972,175 @@ describe('Phase 2 Commit 2: Client Progress previous-period must reuse the SAME 
     const ajioTrips = previousFilteredTrips.filter((t) => t.client_id === 'ajio');
     const metrics = computeTripMetrics(ajioTrips);
     expect(metrics.revenueInr).toBe(0);
+  });
+});
+
+describe('Phase 2 Commit 3: breakdown builders must only sum the SELECTED-period trips, not all-time', () => {
+  // Mirrors exactly the composition NetworkDesktopPerformancePanel.tsx now
+  // applies before calling buildKamBreakdown/buildRegionBreakdown/
+  // buildSupplierBreakdown/buildAssetBreakdown -- previously these were fed
+  // filteredTrips directly (cross-filter-scoped only, otherwise all-time),
+  // so an entity's "actual" silently included trips from every period the
+  // org has ever had, while previousActualRevenue (fed previousFilteredTrips,
+  // already window-scoped) did not -- an inconsistency within the same row.
+  const goalsStore: NetworkGoalsStore = {
+    version: 3,
+    months: {
+      '2026-08': {
+        aggregate: { revenueInr: 0, tripCount: 0, marginPct: 0 },
+        clients: { apple: { revenueInr: 120000, tripCount: 10 } },
+        vehicles: {},
+        drivers: {},
+      },
+    },
+    kamAssignments: KAM_ASSIGNMENTS,
+    clientRegions: CLIENT_REGIONS,
+    yearlyTargets: {},
+    quarterlyTargets: {},
+    updatedAt: '',
+  };
+
+  const mixedPeriodTrips = [
+    trip('2026-08-05T00:00:00', 100000, 60000, {
+      client_id: 'apple',
+      supplier_id: 'sup-1',
+      vehicle_id: 'veh-1',
+    }),
+    // Same client/supplier/vehicle, but from a different (earlier) month --
+    // must be excluded once the panel's period-scoping wrapper is applied.
+    trip('2026-01-05T00:00:00', 900000, 500000, {
+      client_id: 'apple',
+      supplier_id: 'sup-1',
+      vehicle_id: 'veh-1',
+    }),
+  ] as TripRow[];
+
+  function periodScope(trips: TripRow[]): TripRow[] {
+    return tripsInSelectedRollup(trips, '2026-08', 'month');
+  }
+
+  it('KAM actual only includes the selected period once periodScope is applied, not the January trip', () => {
+    const scoped = periodScope(mixedPeriodTrips);
+    const rows = buildKamBreakdown(goalsStore, scoped, [], new Map([['bhujesh', { name: 'Bhujesh' }]]), '2026-08', 'month');
+    const bhujesh = rows.find((r) => r.id === 'bhujesh')!;
+    expect(bhujesh.actualRevenue).toBe(100000); // NOT 100000 + 900000
+  });
+
+  it('without period-scoping, the same builder would wrongly include the January trip -- proving the bug this fixes', () => {
+    // Deliberately calling the builder with the UNscoped array to document
+    // the exact failure mode being closed, not just the fix.
+    const rows = buildKamBreakdown(goalsStore, mixedPeriodTrips, [], new Map([['bhujesh', { name: 'Bhujesh' }]]), '2026-08', 'month');
+    const bhujesh = rows.find((r) => r.id === 'bhujesh')!;
+    expect(bhujesh.actualRevenue).toBe(1000000); // 100000 + 900000 -- the bug
+  });
+
+  it('Supplier actual only includes the selected period once periodScope is applied', () => {
+    const scoped = periodScope(mixedPeriodTrips);
+    const rows = buildSupplierBreakdown(scoped, [], new Map([['sup-1', { name: 'Supplier One' }]]));
+    expect(rows.find((r) => r.id === 'sup-1')!.actualRevenue).toBe(100000);
+  });
+
+  it('Asset actual only includes the selected period once periodScope is applied', () => {
+    const scoped = periodScope(mixedPeriodTrips);
+    const rows = buildAssetBreakdown(scoped, [], 'vehicle', new Map([['veh-1', { name: 'MH-01' }]]));
+    expect(rows.find((r) => r.id === 'veh-1')!.actualRevenue).toBe(100000);
+  });
+});
+
+describe('Phase 2 Commit 3: buildPerformanceKpiRow reused for entity-level Progress -- no special-casing needed', () => {
+  const selectedMonthKey = '2026-08';
+  const rollup = 'month';
+  const asOf = new Date(2026, 7, 17); // Aug 17 -- mid-period
+
+  it('entity target present -> real target-to-date and pacing (KAM/Region/Client shape)', () => {
+    const row = buildPerformanceKpiRow(
+      'KAM', 'inr', 155000 /* actual */, 330000 /* target */, 100000 /* previous */,
+      selectedMonthKey, rollup, asOf,
+    );
+    expect(row.hasTarget).toBe(true);
+    expect(row.targetToDate).not.toBeNull();
+    expect(row.pacing).not.toBeNull();
+    expect(row.achievement).toBe(achievementPct(155000, 330000));
+  });
+
+  it('no entity target at all -> targetToDate/pacing both null, never fabricated (Supplier shape)', () => {
+    const row = buildPerformanceKpiRow('Supplier', 'inr', 155000, 0, 100000, selectedMonthKey, rollup, asOf);
+    expect(row.hasTarget).toBe(false);
+    expect(row.targetToDate).toBeNull();
+    expect(row.pacing).toBeNull();
+    expect(row.achievement).toBeNull();
+  });
+
+  it('Asset target exists (resolved via resolveFilteredPeriodTarget) -> real target-to-date and pacing', () => {
+    const store: NetworkGoalsStore = {
+      version: 3,
+      months: {
+        '2026-08': {
+          aggregate: { revenueInr: 0, tripCount: 0, marginPct: 0 },
+          clients: {},
+          vehicles: { 'veh-1': { revenueInr: 200000, tripCount: 10 } },
+          drivers: {},
+        },
+      },
+      kamAssignments: {},
+      clientRegions: {},
+      yearlyTargets: {},
+      quarterlyTargets: {},
+      updatedAt: '',
+    };
+    const target = resolveFilteredPeriodTarget(
+      store, selectedMonthKey, rollup, { supplierId: null, assetId: 'veh-1' }, null,
+    );
+    expect(target.revenueInr).toBe(200000);
+    const row = buildPerformanceKpiRow('Asset', 'inr', 90000, target.revenueInr, 0, selectedMonthKey, rollup, asOf);
+    expect(row.hasTarget).toBe(true);
+    expect(row.targetToDate).not.toBeNull();
+    expect(row.pacing).not.toBeNull();
+  });
+
+  it('Asset target absent -> resolveFilteredPeriodTarget returns 0, no fabricated pacing', () => {
+    const store: NetworkGoalsStore = {
+      version: 3,
+      months: { '2026-08': { aggregate: { revenueInr: 0, tripCount: 0, marginPct: 0 }, clients: {}, vehicles: {}, drivers: {} } },
+      kamAssignments: {},
+      clientRegions: {},
+      yearlyTargets: {},
+      quarterlyTargets: {},
+      updatedAt: '',
+    };
+    const target = resolveFilteredPeriodTarget(
+      store, selectedMonthKey, rollup, { supplierId: null, assetId: 'veh-unknown' }, null,
+    );
+    expect(target.revenueInr).toBe(0);
+    const row = buildPerformanceKpiRow('Asset', 'inr', 90000, target.revenueInr, 0, selectedMonthKey, rollup, asOf);
+    expect(row.hasTarget).toBe(false);
+    expect(row.targetToDate).toBeNull();
+    expect(row.pacing).toBeNull();
+  });
+
+  it('Vehicle/Driver focus does not alter target resolution incorrectly -- a driver-only target still resolves when no vehicle target exists for that id', () => {
+    const store: NetworkGoalsStore = {
+      version: 3,
+      months: {
+        '2026-08': {
+          aggregate: { revenueInr: 0, tripCount: 0, marginPct: 0 },
+          clients: {},
+          vehicles: {}, // no vehicle target for this id
+          drivers: { 'drv-1': { revenueInr: 80000, tripCount: 6 } },
+        },
+      },
+      kamAssignments: {},
+      clientRegions: {},
+      yearlyTargets: {},
+      quarterlyTargets: {},
+      updatedAt: '',
+    };
+    // resolveFilteredPeriodTarget takes no assetFocus parameter at all --
+    // it resolves independent of whichever sub-focus the panel's own UI
+    // toggle happens to be showing.
+    const target = resolveFilteredPeriodTarget(
+      store, selectedMonthKey, rollup, { supplierId: null, assetId: 'drv-1' }, null,
+    );
+    expect(target.revenueInr).toBe(80000);
   });
 });

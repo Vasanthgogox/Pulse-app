@@ -156,7 +156,7 @@ export function rollupLabel(selectedMonthKey: string, rollup: GoalsRollup): stri
   return `YTD '${String(y).slice(2)}`;
 }
 
-function tripsInMonthKeys(
+export function tripsInMonthKeys(
   trips: readonly TripRow[],
   monthKeys: readonly string[],
 ): TripRow[] {
@@ -165,6 +165,21 @@ function tripsInMonthKeys(
     const key = tripMonthKey(trip);
     return key != null && set.has(key);
   });
+}
+
+/** Trips in the same Month/Quarter/Year window the aggregate KPI uses
+ * (`computeGoalsActualsForRollup`). Prefer this over composing
+ * `periodBounds` + `tripsInDateRange` for Actuals -- those calendar
+ * bounds are the FULL quarter/year (for Target-to-date pacing), while
+ * rollup Actuals are YTD within the selected quarter/year through the
+ * selected month. Mixing them made KAM/Region/Supplier/Asset breakdowns
+ * disagree with the headline KPI on Quarter/Year. */
+export function tripsInSelectedRollup(
+  trips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): TripRow[] {
+  return tripsInMonthKeys(trips, rollupMonthKeys(selectedMonthKey, rollup));
 }
 
 function txMonthKey(tx: LedgerTx): string | null {

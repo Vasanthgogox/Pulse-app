@@ -52,13 +52,13 @@
  *   context is exactly what it was before the modal opened.
  *
  * Phase 2, Commit 3 (this commit): period-scoped breakdown Actuals + entity
- *   Progress pacing. One shared periodScopedFilteredTrips
- *   (periodBounds + tripsInDateRange on filteredTrips) feeds KAM/Region/
- *   Supplier/Asset builders so entity Actuals match the selected Month/
- *   Quarter/Year (they previously summed all-time trips). Progress modal
- *   KPIs now go through buildPerformanceKpiRow (same as the top band) so
- *   KAM/Region/Client/Asset get Target-to-date/Pacing when a real target
- *   exists; Supplier stays target=0 with no fabricated pacing.
+ *   Progress pacing. One shared tripsInSelectedRollup (same month-key window
+ *   as computeGoalsActualsForRollup -- YTD within Quarter/Year, not full
+ *   calendar periodBounds) feeds KAM/Region/Supplier/Asset builders so
+ *   entity Actuals match the headline KPI. Progress modal KPIs go through
+ *   buildPerformanceKpiRow so KAM/Region/Client/Asset get Target-to-date/
+ *   Pacing when a real target exists; Supplier stays target=0 with no
+ *   fabricated pacing.
  *
  *   Still deliberately deferred: Contribution %, utilisation/idle days,
  *   supplier target model, target allocation UI, richer trip-evidence UX,
@@ -84,12 +84,11 @@ import {
   EMPTY_PERFORMANCE_CROSS_FILTER,
   filterTripsForCrossFilter,
   getRecentMonthKeys,
-  periodBounds,
   previousPeriodTripWindow,
   resolveClientIdsForFilter,
   resolveFilteredPeriodTarget,
   rollupLabel,
-  tripsInDateRange,
+  tripsInSelectedRollup,
   type EntityGoalRow,
   type GoalsRollup,
   type PerformanceCommercialBreakdownRow,
@@ -296,23 +295,18 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
     [filteredTrips, selectedMonthKey, rollup, asOf],
   );
 
-  // Phase 2 Commit 3 fix: buildKamBreakdown/buildRegionBreakdown/
-  // buildSupplierBreakdown/buildAssetBreakdown only ever grouped/summed
-  // whatever trips they were given -- selectedMonthKey/rollup were used
-  // ONLY for the target sum, never to scope the trips themselves. Fed
-  // filteredTrips (cross-filter-scoped only, otherwise all-time, per
-  // useTripsQuery's own "full list, no pagination" contract) directly,
-  // that meant every breakdown row's actualRevenue/actualTrips silently
-  // included trips from outside the selected period -- inconsistent with
-  // the KPI band above (computeGoalsActualsForRollup) and with
-  // previousActualRevenue in the SAME rows (previousFilteredTrips already
-  // window-scoped). One shared periodBounds/tripsInDateRange application
-  // here, reused by all four breakdown builders below, so every one of
-  // them reads the identical period-scoped population.
-  const periodScopedFilteredTrips = useMemo(() => {
-    const { start, end } = periodBounds(selectedMonthKey, rollup);
-    return tripsInDateRange(filteredTrips, start, end);
-  }, [filteredTrips, selectedMonthKey, rollup]);
+  // Phase 2 Commit 3 fix (+ QA correction): breakdown builders only sum
+  // whatever trips they are given -- selectedMonthKey/rollup used to scope
+  // targets only. Feeding filteredTrips (cross-filter only, otherwise
+  // all-time) made Actuals disagree with the KPI band
+  // (computeGoalsActualsForRollup). Use the SAME rollup month-key window
+  // the aggregate uses -- not periodBounds (full calendar quarter/year,
+  // reserved for Target-to-date pacing). One shared tripsInSelectedRollup
+  // here feeds all four breakdown builders below.
+  const periodScopedFilteredTrips = useMemo(
+    () => tripsInSelectedRollup(filteredTrips, selectedMonthKey, rollup),
+    [filteredTrips, selectedMonthKey, rollup],
+  );
 
   const kpiRows: PerformanceKpiRow[] = useMemo(
     () => [
@@ -437,13 +431,10 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
   // whichever kind/id is open, scoped within filteredTrips (the page's
   // current cross-filter) AND the selected Month/Quarter/Year period.
   //
-  // Phase 2 Commit 1 fix: filteredTrips only applies the cross-filter
-  // dimensions -- the period itself was never applied to this array (only
-  // to the KPI aggregation, via computeGoalsActualsForRollup internally).
-  // Without this, the evidence table/download would silently include trips
-  // from outside the selected period. tripsInDateRange + periodBounds are
-  // both already used/tested elsewhere in this pipeline -- composed here,
-  // not reimplemented.
+  // Phase 2 Commit 1 fix (+ QA): evidence must match aggregate Actuals
+  // window (rollupMonthKeys / YTD within quarter-year), not full
+  // periodBounds. tripsInSelectedRollup is the same helper the breakdown
+  // Actuals now use.
   const progressEntityTrips = useMemo(() => {
     if (!progressEntity) return [];
     const { kind, id } = progressEntity;
@@ -463,8 +454,7 @@ export function NetworkDesktopPerformancePanel({ orgId }: Props) {
       );
       return filteredTrips.filter((t) => t.client_id && scopedClientIds.has(t.client_id));
     })();
-    const { start, end } = periodBounds(selectedMonthKey, rollup);
-    return tripsInDateRange(withinKind, start, end);
+    return tripsInSelectedRollup(withinKind, selectedMonthKey, rollup);
   }, [progressEntity, filteredTrips, clients, goalsStore, selectedMonthKey, rollup]);
 
   // Display-ready evidence rows -- thin mapping only, no recalculation.
