@@ -7,6 +7,7 @@ import {
 } from "@/components/driver/DriverTripSheetLayout";
 import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
 import { JobRequestCard } from "@/components/JobRequestCard";
+import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import { DriverMapAvatarMarker } from "@/components/driver/DriverMapAvatarMarker";
 import {
     LeafletMap,
@@ -369,6 +370,7 @@ export default function DriverRadarScreen() {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const [acceptLoading, setAcceptLoading] = useState(false);
   const [declineLoading, setDeclineLoading] = useState(false);
+  const [declineConfirmTripId, setDeclineConfirmTripId] = useState<string | null>(null);
   const [acceptError, setAcceptError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -879,15 +881,10 @@ export default function DriverRadarScreen() {
 
   const confirmDeclineTrip = useCallback(
     (tripId: string) => {
-      // Use web-native confirm window for the web, otherwise Expo's Alert.alert
-      // silently fails to block/render if window.confirm isn't hooked up correctly
-      if (Platform.OS === "web" && typeof window !== "undefined") {
-        const confirmed = window.confirm(
-          `${DECLINE_WARNING_TITLE}\n\n${DECLINE_WARNING_MSG}`,
-        );
-        if (confirmed) {
-          void runDeclineTrip(tripId);
-        }
+      // Some mobile browsers (in-app/WebView tabs) silently block window.confirm,
+      // so use the app's own themed modal on web instead of relying on it.
+      if (Platform.OS === "web") {
+        setDeclineConfirmTripId(tripId);
         return;
       }
 
@@ -6061,6 +6058,20 @@ export default function DriverRadarScreen() {
           </View>
         </>
       )}
+      <ThemedConfirmModal
+        variant="warning"
+        confirmVariant="destructive"
+        visible={declineConfirmTripId != null}
+        title={DECLINE_WARNING_TITLE}
+        message={DECLINE_WARNING_MSG}
+        confirmText="Decline trip"
+        onCancel={() => setDeclineConfirmTripId(null)}
+        onConfirm={() => {
+          const tripId = declineConfirmTripId;
+          setDeclineConfirmTripId(null);
+          if (tripId) void runDeclineTrip(tripId);
+        }}
+      />
     </View>
   );
 }
