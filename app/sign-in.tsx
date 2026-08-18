@@ -20,7 +20,7 @@ import { signUpMobileContentInner } from '@/features/auth/signup/signUpMobile.st
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS } from '@/features/auth/signup/signUpPulseTheme';
 import { createPulseSignUpTextStyles, PULSE_SIGNUP_TYPO } from '@/features/auth/signup/signUpTypography';
 import { SIGN_IN_BRAND } from '@/lib/auth/signInContent';
-import { buildSuiteSignUpHref, navigateAfterSuiteAuth } from '@/lib/suite/suiteAuth';
+import { navigateAfterSuiteAuth } from '@/lib/suite/suiteAuth';
 import { suiteSignInCopy } from '@/lib/suite/suiteAuthContent';
 import { validateEmailRequired } from '@/lib/emailValidation';
 import { getKeepSignedIn } from '@/lib/keepSignedInPreference';
@@ -71,7 +71,7 @@ export default function SignIn() {
     password_reset?: string | string[];
     returnTo?: string | string[];
   }>();
-  const { productId, product, returnTo } = useSuiteAuthContext();
+  const { productId, returnTo } = useSuiteAuthContext();
   const signInCopy = suiteSignInCopy(productId);
   const isOnline = useIsOnline();
   const { user, signIn, signInWithGoogle, restoreError, clearRestoreError } = useAuth();
@@ -334,7 +334,7 @@ export default function SignIn() {
         <Text style={styles.signUpMuted}>{signInCopy.footerPrompt} </Text>
         <Pressable
           onPress={() => {
-            router.push(buildSuiteSignUpHref({ productId, returnTo: product.activationPath }) as Href);
+            router.push(ROUTES.ONBOARDING.HUB as Href);
           }}
         >
           <Text style={styles.signUpLink}>{signInCopy.footerLink}</Text>

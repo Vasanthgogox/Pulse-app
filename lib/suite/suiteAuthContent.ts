@@ -22,8 +22,8 @@ const DEFAULT_SIGN_IN_COPY: SuiteSignInCopy = {
   primaryCta: 'Sign in',
   googleCta: 'Continue with Google',
   forgotPassword: 'Forgot password?',
-  footerPrompt: "Don't have a workspace?",
-  footerLink: 'Create one',
+  footerPrompt: '',
+  footerLink: 'New here? Get started',
 };
 
 const COMMERCE_SIGN_IN_COPY: SuiteSignInCopy = {
@@ -35,8 +35,8 @@ const COMMERCE_SIGN_IN_COPY: SuiteSignInCopy = {
   primaryCta: 'Sign in',
   googleCta: 'Continue with Google',
   forgotPassword: 'Forgot password?',
-  footerPrompt: "Don't have a Commerce workspace?",
-  footerLink: 'Create one',
+  footerPrompt: '',
+  footerLink: 'New here? Get started',
 };
 
 export function suiteSignInCopy(productId: SuiteProductId | null): SuiteSignInCopy {
