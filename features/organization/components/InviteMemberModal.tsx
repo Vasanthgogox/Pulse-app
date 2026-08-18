@@ -960,16 +960,16 @@ const phoneField = StyleSheet.create({
 
 const embeddedFlow = StyleSheet.create({
   root: {
+    flex: 1,
+    minHeight: 320,
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 20,
-    minHeight: 320,
   },
   scroll: {
-    flexGrow: 0,
+    flex: 1,
   },
   body: {
-    paddingBottom: 8,
+    paddingBottom: 20,
   },
   stepRow: {
     flexDirection: "row",
