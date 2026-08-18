@@ -5,6 +5,7 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import { PartyEntityAvatarGlow } from "@/components/PartyEntityAvatarGlow";
 import Theme from "@/constants/Theme";
 import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
+import { NetworkProfileAvatarRating } from "@/features/network/components/desktop/NetworkDesktopSalesStars";
 import { networkProfileInviteStyles as s } from "@/features/network/components/networkProfileInvite.styles";
 import { publicProfileInviteCompact as compactS } from "@/features/party/components/publicProfileMobile.styles";
 import {
@@ -70,14 +71,14 @@ export function NetworkProfileInviteHero({
   metaChips,
   phone,
   onPressPhone,
-  avatarSize = 80,
+  avatarSize = 96,
   style,
   footer,
   compact = false,
 }: NetworkProfileInviteHeroProps) {
   const accent = partyAccentFromConnectionRole(roleLabel);
   const resolvedEntity = entityType ?? roleToEntityType(roleLabel);
-  const resolvedAvatarSize = compact ? Math.min(avatarSize, 68) : avatarSize;
+  const resolvedAvatarSize = compact ? Math.min(avatarSize, 88) : Math.max(avatarSize, 96);
   const verificationState: OrgVerificationState =
     verificationStateProp ??
     resolveOrgVerificationState({ is_kyc_verified: showVerified });
@@ -87,28 +88,17 @@ export function NetworkProfileInviteHero({
     (subtitle.trim().length > 0
       ? [{ label: subtitle }]
       : []);
+  const parsedRating = Number(String(ratingDisplay).replace(/[^\d.]/g, ""));
+  const ratingValue =
+    ratingEmpty || !Number.isFinite(parsedRating) ? null : parsedRating;
 
   return (
+    <View style={{ width: "100%", alignItems: "center" }}>
     <View style={[s.card, compact && compactS.card, style]}>
       <View style={[s.inviteCover, compact && compactS.inviteCover]}>
         <View style={s.coverOrbLarge} />
         <View style={s.coverOrbSmall} />
         <View style={s.coverPlane} />
-        <View
-          style={[
-            s.coverRatingNode,
-            ratingEmpty && s.coverRatingNodeEmpty,
-          ]}
-        >
-          <Text
-            style={[
-              s.coverRatingText,
-              ratingEmpty && s.coverRatingTextEmpty,
-            ]}
-          >
-            {ratingDisplay}
-          </Text>
-        </View>
         <View style={s.cardHeader}>
           <View style={s.roleBadge}>
             <Text style={[s.roleBadgeText, compact && compactS.roleBadgeText]}>
@@ -124,35 +114,36 @@ export function NetworkProfileInviteHero({
       </View>
 
       <View style={[s.inviteBody, compact && compactS.inviteBody]}>
-        <View style={[s.avatarLift, compact && compactS.avatarLift, { position: "relative" }]}>
-          <PartyEntityAvatarGlow accent={accent} size={resolvedAvatarSize}>
-            <PartyAvatar
-              name={name}
-              avatarUrl={avatarUrl}
-              avatarSeed={avatarSeed}
-              entityType={resolvedEntity}
-              size={resolvedAvatarSize}
-              borderStyle={{ borderWidth: 0 }}
-            />
-          </PartyEntityAvatarGlow>
-          {isKycVerified ? (
-            <View style={s.verifiedDot} pointerEvents="none">
-              <Verified size={10} color={Theme.textOnPrimary} strokeWidth={2.6} />
-            </View>
-          ) : null}
+        <View style={[s.avatarLift, compact && compactS.avatarLift]}>
+          <View style={{ position: "relative", alignItems: "center" }}>
+            <PartyEntityAvatarGlow accent={accent} size={resolvedAvatarSize}>
+              <PartyAvatar
+                name={name}
+                avatarUrl={avatarUrl}
+                avatarSeed={avatarSeed}
+                entityType={resolvedEntity}
+                size={resolvedAvatarSize}
+                borderStyle={{ borderWidth: 0 }}
+                style={{ borderWidth: 0 }}
+              />
+            </PartyEntityAvatarGlow>
+            {isKycVerified ? (
+              <View style={s.verifiedDot} pointerEvents="none">
+                <Verified size={10} color={Theme.textOnPrimary} strokeWidth={2.6} />
+              </View>
+            ) : null}
+          </View>
+          <NetworkProfileAvatarRating
+            rating={ratingValue}
+            size={compact ? 10 : 11}
+            compact={compact}
+          />
         </View>
 
         <View style={s.innerText}>
           <Text style={[s.name, compact && compactS.name]} numberOfLines={1}>
             {name.toUpperCase()}
           </Text>
-          {showVerificationTags ? (
-            <OrgVerificationBadges
-              state={verificationState}
-              compact={compact}
-              style={{ marginTop: 6, marginBottom: 2 }}
-            />
-          ) : null}
           {subtitle ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4, maxWidth: "100%" }}>
               <MapPin size={compact ? 8 : 9} color={Theme.textMutedDemo} strokeWidth={2} />
@@ -199,6 +190,14 @@ export function NetworkProfileInviteHero({
         </Pressable>
       ) : null}
       {footer}
+    </View>
+    {showVerificationTags ? (
+      <OrgVerificationBadges
+        state={verificationState}
+        compact={compact}
+        style={{ marginTop: 8 }}
+      />
+    ) : null}
     </View>
   );
 }

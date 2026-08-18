@@ -3,13 +3,14 @@
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
+import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
 import {
   METRONIC,
   networkDesktopHubStyles as hubStyles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { platformShadow } from "@/lib/platformShadow";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
+import { NetworkProfileAvatarRating } from "@/features/network/components/desktop/NetworkDesktopSalesStars";
 import type { LucideIcon } from "lucide-react-native";
 import {
   BadgeCheck,
@@ -53,6 +54,8 @@ type Props = {
   memberSinceYear?: number | null;
   connectionStatus?: string;
   stats: NetworkProfileHubHeroStat[];
+  /** Partner average rating — shown under the avatar, not in the stats tiles. */
+  ratingValue?: number | null;
   onClose?: () => void;
   /** Profile modal on narrow viewports — stacked meta, stat grid, lighter type. */
   compact?: boolean;
@@ -149,7 +152,7 @@ function MetaRow({
 }) {
   return (
     <View style={styles.metaRow}>
-      <IconWell Icon={icon} tone={tone} size={13} />
+      <IconWell Icon={icon} tone={tone} size={12} />
       <Text style={styles.metaRowText} numberOfLines={2}>
         {text}
       </Text>
@@ -170,7 +173,7 @@ function StatTile({
   const Icon = statIcon(label);
   return (
     <View style={[styles.statTile, compact && styles.statTileCompact]}>
-      <IconWell Icon={Icon} tone={tone} size={13} />
+      <IconWell Icon={Icon} tone={tone} size={12} />
       <Text style={styles.statTileValue}>{value}</Text>
       <Text style={styles.statTileLabel}>{label}</Text>
     </View>
@@ -229,6 +232,7 @@ export function NetworkProfileHubHero({
   memberSinceYear = null,
   connectionStatus,
   stats,
+  ratingValue = null,
   onClose,
   compact = false,
   vehicleCount = 0,
@@ -253,6 +257,17 @@ export function NetworkProfileHubHero({
   const indentsLabel = profileStatsLoading
     ? "Indents shared · …"
     : `${indentCount} indent${indentCount === 1 ? "" : "s"} shared to network`;
+  const visibleStats = stats.filter(
+    (stat) => !stat.label.trim().toLowerCase().includes("rating"),
+  );
+  const statusLabel = (connectionStatus ?? "").trim();
+  const pendingConnection = /request\s*sent/i.test(statusLabel);
+  const redundantLive =
+    isSignedIn && /^(live|connected)$/i.test(statusLabel);
+  const showConnectionPill =
+    Boolean(statusLabel) && !pendingConnection && !redundantLive;
+  const showStatusRow =
+    isSignedIn || memberSinceYear != null || showConnectionPill;
 
   return (
     <View
@@ -279,43 +294,58 @@ export function NetworkProfileHubHero({
       ) : null}
 
       <View style={[hubStyles.heroInner, compact && styles.heroInnerCompact]}>
-        <View
-          style={[
-            hubStyles.heroAvatarPressable,
-            compact && styles.heroAvatarPressableCompact,
-          ]}
-        >
+        <View style={styles.avatarStack}>
           <View
             style={[
-              hubStyles.heroAvatarRing,
-              compact && styles.heroAvatarRingCompact,
+              hubStyles.heroAvatarPressable,
+              compact && styles.heroAvatarPressableCompact,
             ]}
           >
-            <PartyAvatar
-              name={name}
-              entityType={entityType}
-              avatarUrl={avatarUrl}
-              avatarSeed={avatarSeed}
-              size={avatarSize}
-              shape="circle"
+            <View
+              style={[
+                hubStyles.heroAvatarRing,
+                compact && styles.heroAvatarRingCompact,
+              ]}
+            >
+              <PartyAvatar
+                name={name}
+                entityType={entityType}
+                avatarUrl={avatarUrl}
+                avatarSeed={avatarSeed}
+                size={avatarSize}
+                shape="circle"
+                style={{ borderWidth: 0 }}
+              />
+            </View>
+          </View>
+          <View style={styles.heroRatingRow}>
+            <NetworkProfileAvatarRating
+              rating={ratingValue}
+              size={compact ? 20 : 24}
+              compact={compact}
+              variant="single"
             />
           </View>
-        </View>
-
-        <View style={[hubStyles.heroNameRow, compact && styles.heroNameRowCompact]}>
-          <Text
-            style={[hubStyles.heroName, compact && styles.heroNameCompact]}
-            numberOfLines={2}
-          >
-            {name}
-          </Text>
-          {isKycVerified ? (
-            <BadgeCheck
-              size={compact ? 16 : 18}
-              color={Theme.darkGreen}
-              strokeWidth={2.2}
-            />
-          ) : null}
+          <View style={[hubStyles.heroNameRow, compact && styles.heroNameRowCompact]}>
+            <Text
+              style={[hubStyles.heroName, compact && styles.heroNameCompact]}
+              numberOfLines={2}
+            >
+              {name}
+            </Text>
+            {isKycVerified ? (
+              <BadgeCheck
+                size={compact ? 14 : 18}
+                color={Theme.darkGreen}
+                strokeWidth={2.2}
+              />
+            ) : null}
+          </View>
+          <OrgVerificationBadges
+            state={verificationState}
+            compact={compact}
+            style={styles.nameRowBadges}
+          />
         </View>
 
         {compact ? (
@@ -342,7 +372,7 @@ export function NetworkProfileHubHero({
 
         {compact ? (
           <View style={styles.statsRow}>
-            {stats.map((stat) => (
+            {visibleStats.map((stat) => (
               <StatTile
                 key={stat.label}
                 value={stat.value}
@@ -353,7 +383,7 @@ export function NetworkProfileHubHero({
           </View>
         ) : (
           <View style={styles.statsRow}>
-            {stats.map((stat) => (
+            {visibleStats.map((stat) => (
               <StatTile
                 key={stat.label}
                 value={stat.value}
@@ -364,37 +394,34 @@ export function NetworkProfileHubHero({
           </View>
         )}
 
-        <View style={[styles.statusRow, compact && styles.statusRowCompact]}>
-          <OrgVerificationBadges
-            state={verificationState}
-            compact={compact}
-            style={styles.verificationBadgesInStatus}
-          />
-          {isSignedIn ? (
-            <StatusPill
-              compact={compact}
-              variant="signedIn"
-              label="Signed in"
-              icon={<View style={styles.liveDot} />}
-            />
-          ) : null}
-          {memberSinceYear != null ? (
-            <StatusPill
-              compact={compact}
-              variant="since"
-              label={`Since ${memberSinceYear}`}
-              icon={<Calendar size={11} color={METRONIC.subtle} strokeWidth={2.4} />}
-            />
-          ) : null}
-          {connectionStatus ? (
-            <StatusPill
-              compact={compact}
-              variant="connection"
-              label={connectionStatus}
-              icon={<Radio size={11} color={Theme.textOnPrimary} strokeWidth={2.4} />}
-            />
-          ) : null}
-        </View>
+        {showStatusRow ? (
+          <View style={[styles.statusRow, compact && styles.statusRowCompact]}>
+            {isSignedIn ? (
+              <StatusPill
+                compact={compact}
+                variant="signedIn"
+                label="Signed in"
+                icon={<View style={styles.liveDot} />}
+              />
+            ) : null}
+            {memberSinceYear != null ? (
+              <StatusPill
+                compact={compact}
+                variant="since"
+                label={`Since ${memberSinceYear}`}
+                icon={<Calendar size={11} color={METRONIC.subtle} strokeWidth={2.4} />}
+              />
+            ) : null}
+            {showConnectionPill ? (
+              <StatusPill
+                compact={compact}
+                variant="connection"
+                label={statusLabel}
+                icon={<Radio size={11} color={Theme.textOnPrimary} strokeWidth={2.4} />}
+              />
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -402,9 +429,9 @@ export function NetworkProfileHubHero({
 
 const styles = StyleSheet.create({
   heroCompact: {
-    paddingTop: 20,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 10,
+    paddingHorizontal: 16,
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
@@ -419,21 +446,38 @@ const styles = StyleSheet.create({
   },
   heroInnerCompact: {
     alignItems: "stretch",
-    gap: 14,
+    gap: 8,
     width: "100%",
   },
   heroAvatarPressableCompact: {
     alignSelf: "center",
   },
-  heroAvatarRingCompact: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 3,
-    borderColor: Theme.cardWhite,
-    backgroundColor: Theme.brandBlueSoft,
+  avatarStack: {
+    alignSelf: "stretch",
+    width: "100%",
+    alignItems: "center",
+    gap: 6,
+  },
+  heroRatingRow: {
+    alignSelf: "center",
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 24,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  avatarBadges: {
+    maxWidth: "100%",
+  },
+  heroAvatarRingCompact: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
     ...platformShadow("0 4px 12px rgba(77, 54, 54, 0.08)", {
       color: Theme.primary,
       opacity: 0.08,
@@ -443,22 +487,34 @@ const styles = StyleSheet.create({
     }),
   },
   heroNameCompact: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
     textAlign: "center",
     flexShrink: 1,
     color: METRONIC.text,
   },
   heroNameRowCompact: {
-    width: "100%",
+    alignSelf: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "center",
+    maxWidth: "100%",
+    paddingHorizontal: 8,
+    marginTop: 0,
+    gap: 4,
+  },
+  nameRowBadges: {
     alignSelf: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
+    maxWidth: "100%",
   },
   closeBtnCompact: {
-    top: 10,
-    right: 10,
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
   },
   closeBtn: {
     position: "absolute",
@@ -482,9 +538,9 @@ const styles = StyleSheet.create({
     }),
   },
   iconWell: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -494,11 +550,11 @@ const styles = StyleSheet.create({
   metaCard: {
     alignSelf: "stretch",
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    paddingHorizontal: 12,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
   },
   metaCardInline: {
     alignSelf: "stretch",
@@ -516,48 +572,50 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     minWidth: 0,
-    paddingVertical: 9,
+    paddingVertical: 6,
   },
   metaDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.borderLight,
-    marginLeft: 38,
+    backgroundColor: Theme.separatorLight,
+    alignSelf: "stretch",
+    width: "100%",
   },
   metaRowText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "400",
     color: METRONIC.text,
-    lineHeight: 16,
+    lineHeight: 15,
     includeFontPadding: false,
   },
   statsRow: {
     alignSelf: "stretch",
+    width: "100%",
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
   statTile: {
     flex: 1,
     minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 14,
+    gap: 3,
+    paddingVertical: 10,
     paddingHorizontal: 8,
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: Theme.surface,
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
   statTileCompact: {
-    paddingVertical: 12,
-    minHeight: 88,
+    paddingVertical: 8,
+    minHeight: 64,
   },
   statTileValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     color: METRONIC.text,
     letterSpacing: -0.35,
@@ -575,16 +633,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexWrap: "wrap",
-    gap: 8,
-    marginTop: 2,
+    gap: 6,
+    marginTop: 0,
   },
   statusRowCompact: {
     alignSelf: "stretch",
     justifyContent: "center",
     marginTop: 0,
-  },
-  verificationBadgesInStatus: {
-    justifyContent: "flex-start",
   },
   statusPill: {
     flexDirection: "row",

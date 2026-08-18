@@ -1,19 +1,25 @@
 /**
- * Your connections — Metronic user-directory tile (avatar + name + verified + handle).
+ * Your connections — Metronic partner tile with business-card identity.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
 import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";
-import { NetworkDesktopSalesStars } from "@/features/network/components/desktop/NetworkDesktopSalesStars";
+import {
+  connectionCardStyles as styles,
+  growConnectionCardStyles as growStyles,
+} from "@/features/network/components/desktop/networkDesktopConnectionCard.styles";
 import { OrgVerificationBadges } from "@/features/network/components/OrgVerificationBadges";
 import { formatPartyContactPhone } from "@/features/network/utils/partyContactDisplay.util";
 import { isOrgKycVerified } from "@/features/network/utils/orgVerification.util";
+import { formatConnectionRatingValue } from "@/features/network/utils/businessConnectionOffer.util";
+import { firstFiniteRating } from "@/features/ratings/services/ratings.service";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { BadgeCheck, MessageCircle } from "lucide-react-native";
-import { connectionCardStyles as styles } from "@/features/network/components/desktop/networkDesktopConnectionCard.styles";
+import { BadgeCheck, MessageCircle, Star } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
+
+const AVATAR_SIZE = 52;
 
 function slugHandle(name: string, id: string): string {
   const base = name
@@ -23,6 +29,19 @@ function slugHandle(name: string, id: string): string {
     .slice(0, 18);
   const tail = id.replace(/-/g, "").slice(0, 6);
   return `${base || "partner"}${tail}.pulse`;
+}
+
+function connectionLocation(item: ConnectedOrg): string | null {
+  const cityState = [item.city, item.state]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join(", ")
+    .trim();
+  if (cityState) return cityState;
+  const direct =
+    item.business_location ?? item.location ?? item.headquarters ?? null;
+  const trimmed = direct?.trim();
+  return trimmed ? trimmed : null;
 }
 
 function roleTone(role: ConnectedOrg["role"]) {
@@ -45,16 +64,6 @@ function roleTone(role: ConnectedOrg["role"]) {
     text: Theme.networkBadgeSupplierText,
     border: Theme.networkBadgeSupplierBorder,
   };
-}
-
-function ratingFilledCount(rating: number | null | undefined): number {
-  if (rating == null || !Number.isFinite(rating)) return 0;
-  return Math.max(0, Math.min(5, Math.round(rating)));
-}
-
-function formatRating(rating: number | null | undefined): string {
-  if (rating == null || !Number.isFinite(rating)) return "—";
-  return rating.toFixed(1);
 }
 
 const INTEGRATED_PILL = {
@@ -86,27 +95,39 @@ export function NetworkDesktopConnectionCard({
   const handle = item.phone
     ? formatPartyContactPhone(item.phone)
     : slugHandle(item.name, item.id);
+  const location = connectionLocation(item);
   const inApp = item.is_integrated;
   const isKycVerified = isOrgKycVerified(item);
   const inviteDisabled = inApp || actionLoading;
   const tone = roleTone(item.role);
-  const ratingValue = item.rating ?? null;
-  const filledStars = ratingFilledCount(ratingValue);
-  const ratingLabel = formatRating(ratingValue);
+  const rating = firstFiniteRating(item.rating);
+  const trips =
+    typeof item.total_trips === "number" && item.total_trips > 0
+      ? Math.floor(item.total_trips)
+      : null;
+
+  const identityStats: string[] = [];
+  if (rating != null) {
+    identityStats.push(formatConnectionRatingValue(rating));
+  }
+  if (trips != null) {
+    identityStats.push(`${trips} trip${trips === 1 ? "" : "s"}`);
+  }
 
   return (
     <View style={styles.card}>
       <Pressable
         onPress={onPress}
+        disabled={!onPress}
         style={({ pressed }) => [
-          styles.cardBody,
-          pressed && styles.cardPressed,
+          growStyles.bizBody,
+          pressed && onPress && styles.cardPressed,
         ]}
         accessibilityRole="button"
         accessibilityLabel={`Open ${item.name}`}
       >
-        <View style={styles.topMetaRow}>
-          <View style={styles.topMetaLeft}>
+        <View style={growStyles.bizHeader}>
+          <View style={styles.topLeadRoleRow}>
             <View
               style={[
                 styles.roleTag,
@@ -121,50 +142,68 @@ export function NetworkDesktopConnectionCard({
               <NetworkHubGlassBadge pill={INTEGRATED_PILL} size="compact" />
             ) : null}
           </View>
-          <View style={styles.ratingWrap}>
-            <NetworkDesktopSalesStars filledStars={filledStars} size={10} />
-            <Text
-              style={[
-                styles.ratingText,
-                ratingValue == null && styles.ratingTextEmpty,
-              ]}
-            >
-              {ratingLabel}
-            </Text>
+        </View>
+
+        <View style={growStyles.bizIdentity}>
+          <View style={growStyles.bizAvatar}>
+            <PartyAvatar
+              name={item.name}
+              entityType={entityType}
+              avatarUrl={item.avatar_url}
+              avatarSeed={item.avatar_seed}
+              size={AVATAR_SIZE}
+              shape="circle"
+            />
+            {inApp ? <View style={styles.onlineDot} /> : null}
+          </View>
+          <View style={growStyles.bizIdentityText}>
+            <View style={growStyles.bizNameRow}>
+              <Text style={growStyles.bizName} numberOfLines={1}>
+                {item.name}
+              </Text>
+              {isKycVerified || inApp ? (
+                <BadgeCheck size={14} color={Theme.darkGreen} strokeWidth={2.2} />
+              ) : null}
+            </View>
+            {location ? (
+              <Text style={growStyles.bizLocation} numberOfLines={1}>
+                {location}
+              </Text>
+            ) : (
+              <Text style={growStyles.bizLocation} numberOfLines={1}>
+                {handle}
+              </Text>
+            )}
+            {identityStats.length > 0 ? (
+              <View style={growStyles.bizStatsLine}>
+                {rating != null ? (
+                  <Star
+                    size={11}
+                    color={Theme.driverGold}
+                    fill={Theme.driverGold}
+                    strokeWidth={0}
+                  />
+                ) : null}
+                {identityStats.map((part, idx) => (
+                  <View key={part} style={growStyles.bizStatPart}>
+                    {idx > 0 ? (
+                      <Text style={growStyles.bizStatDot}>·</Text>
+                    ) : null}
+                    <Text style={growStyles.bizStatText}>{part}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         </View>
 
-        <View style={styles.avatarWrap}>
-          <PartyAvatar
-            name={item.name}
-            entityType={entityType}
-            avatarUrl={item.avatar_url}
-            avatarSeed={item.avatar_seed}
-            size={56}
-            shape="circle"
+        {item.role !== "DRIVER" ? (
+          <OrgVerificationBadges
+            verification={item}
+            compact
+            style={growStyles.bizTrustBadges}
           />
-          {inApp ? <View style={styles.onlineDot} /> : null}
-        </View>
-        <View style={styles.nameRow}>
-          <Text style={styles.name} numberOfLines={1}>
-            {item.name}
-          </Text>
-          {isKycVerified || inApp ? (
-            <BadgeCheck size={14} color={Theme.darkGreen} strokeWidth={2.2} />
-          ) : null}
-        </View>
-        <View style={styles.trustBadgesSlot}>
-          {item.role !== "DRIVER" ? (
-            <OrgVerificationBadges
-              verification={item}
-              compact
-              style={styles.trustBadgesRow}
-            />
-          ) : null}
-        </View>
-        <Text style={styles.handle} numberOfLines={1}>
-          {handle}
-        </Text>
+        ) : null}
       </Pressable>
 
       <View style={styles.footerRow}>

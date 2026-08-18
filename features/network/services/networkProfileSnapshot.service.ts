@@ -9,7 +9,6 @@
  * status instead of placeholder defaults.
  */
 import { supabase } from "@/lib/supabase";
-import { getMutualConnections } from "@/features/network/services/mutual-connections.service";
 
 export type NetworkProfileSnapshotRole = "CLIENT" | "SUPPLIER" | "DRIVER";
 export type NetworkProfileSnapshotStatus = "CONNECTED" | "REQUEST SENT" | "LIVE";
@@ -21,7 +20,8 @@ export type NetworkProfileSnapshot = {
   location: string;
   status: NetworkProfileSnapshotStatus;
   rating: number | null;
-  mutuals: number;
+  /** Unique approved orgs connected to both viewer and target. Null = fetch failed. */
+  mutuals: number | null;
   phone: string | null;
   avatar_url: string | null;
   avatar_seed: string | null;
@@ -242,19 +242,86 @@ export async function getOrgProfileSnapshot(
     return { error: null, snapshot: null };
   }
 
-  // 1) Partner display — prefer batch (avoids redundant single RPC). SECURITY DEFINER
-  //    so Discover orgs remain readable when direct `organizations` SELECT is RLS-blocked.
-  //    Fall back to single RPC only when batch misses this org.
-  const [partnerDisplayRes, orgLoadRes] = await Promise.all([
+  const isSelf = viewerOrgId === targetOrgId;
+  const connectionOrFilter = [
+    `and(from_organization_id.eq.${viewerOrgId},to_organization_id.eq.${targetOrgId})`,
+    `and(from_organization_id.eq.${targetOrgId},to_organization_id.eq.${viewerOrgId})`,
+  ].join(",");
+
+  const emptyCount = Promise.resolve({ count: 0 as number | null, error: null });
+
+  const [
+    partnerDisplayRes,
+    orgLoadRes,
+    connRes,
+    clientLinkRes,
+    supplierLinkRes,
+    locationsRes,
+    clientTripsRes,
+    supplierTripsRes,
+    ratingRes,
+  ] = await Promise.all([
     supabase().rpc("get_connection_partner_display_batch", {
       p_linked_organization_ids: [targetOrgId],
     }),
     loadOrganizationRow(targetOrgId),
+    supabase()
+      .from("connection_requests")
+      .select(
+        "status, from_organization_id, to_organization_id, request_shipper_client, request_carrier_supplier",
+      )
+      .or(connectionOrFilter)
+      .limit(1)
+      .maybeSingle(),
+    supabase()
+      .from("clients")
+      .select("id, name")
+      .eq("organization_id", viewerOrgId)
+      .eq("linked_organization_id", targetOrgId)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle(),
+    supabase()
+      .from("suppliers")
+      .select("id")
+      .eq("organization_id", viewerOrgId)
+      .eq("linked_organization_id", targetOrgId)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle(),
+    supabase()
+      .from("organization_locations")
+      .select("id, location_type, address_line, city, state")
+      .eq("organization_id", targetOrgId)
+      .order("sort_order", { ascending: true }),
+    isSelf
+      ? emptyCount
+      : supabase()
+          .from("trips")
+          .select("id, clients!inner(linked_organization_id)", {
+            count: "exact",
+            head: true,
+          })
+          .eq("organization_id", viewerOrgId)
+          .eq("clients.linked_organization_id", targetOrgId)
+          .is("deleted_at", null),
+    isSelf
+      ? emptyCount
+      : supabase()
+          .from("trips")
+          .select("id, suppliers!inner(linked_organization_id)", {
+            count: "exact",
+            head: true,
+          })
+          .eq("organization_id", viewerOrgId)
+          .eq("suppliers.linked_organization_id", targetOrgId)
+          .is("deleted_at", null),
+    supabase()
+      .from("ratings")
+      .select("score")
+      .eq("organization_id", viewerOrgId)
+      .eq("rated_id", targetOrgId),
   ]);
-
-  if (orgLoadRes.error) {
-    return { error: orgLoadRes.error, snapshot: null };
-  }
 
   const partnerBatchMap = partnerDisplayRes.error
     ? null
@@ -276,7 +343,7 @@ export async function getOrgProfileSnapshot(
     buildOrganizationRowFromPartnerDisplay(targetOrgId, partnerBatch, partnerProfile);
 
   if (!orgRow) {
-    return { error: null, snapshot: null };
+    return { error: orgLoadRes.error, snapshot: null };
   }
 
   const partnerSignupAt =
@@ -295,9 +362,9 @@ export async function getOrgProfileSnapshot(
     orgRow = { ...orgRow, verification_status: partnerVerificationStatus };
   }
 
-  let phone =
+  const phone =
     nonEmptyString(partnerBatch?.phone) ?? nonEmptyString(partnerProfile?.phone);
-  let ownerAvatarUrl =
+  const ownerAvatarUrl =
     nonEmptyString(partnerBatch?.avatarUrl) ?? nonEmptyString(partnerProfile?.avatarUrl);
   const partnerTripCount =
     typeof partnerBatch?.tripCount === "number"
@@ -311,19 +378,6 @@ export async function getOrgProfileSnapshot(
       : typeof partnerProfile?.averageRating === "number"
         ? partnerProfile.averageRating
         : null;
-  const connRes = await supabase()
-    .from("connection_requests")
-    .select(
-      "status, from_organization_id, to_organization_id, request_shipper_client, request_carrier_supplier",
-    )
-    .or(
-      [
-        `and(from_organization_id.eq.${viewerOrgId},to_organization_id.eq.${targetOrgId})`,
-        `and(from_organization_id.eq.${targetOrgId},to_organization_id.eq.${viewerOrgId})`,
-      ].join(","),
-    )
-    .limit(1)
-    .maybeSingle();
 
   let status: NetworkProfileSnapshotStatus = "LIVE";
   let isIntegrated = false;
@@ -338,60 +392,21 @@ export async function getOrgProfileSnapshot(
     }
   }
 
-  // 2) Connection request between viewer and target (either direction).
   let role: NetworkProfileSnapshotRole = "SUPPLIER";
-  let linkedClientId: string | null = null;
-  let linkedSupplierId: string | null = null;
-
-  const clientLink = await supabase()
-    .from("clients")
-    .select("id, name")
-    .eq("organization_id", viewerOrgId)
-    .eq("linked_organization_id", targetOrgId)
-    .is("deleted_at", null)
-    .limit(1)
-    .maybeSingle();
-  if (clientLink.data?.id) {
+  if (clientLinkRes.data?.id) {
     role = "CLIENT";
-    linkedClientId = clientLink.data.id;
-  } else {
-    const supplierLink = await supabase()
-      .from("suppliers")
-      .select("id")
-      .eq("organization_id", viewerOrgId)
-      .eq("linked_organization_id", targetOrgId)
-      .is("deleted_at", null)
-      .limit(1)
-      .maybeSingle();
-    if (supplierLink.data?.id) {
-      role = "SUPPLIER";
-      linkedSupplierId = supplierLink.data.id;
-    }
+  } else if (supplierLinkRes.data?.id) {
+    role = "SUPPLIER";
   }
 
-  // 3) Existing relationship in viewer's clients / suppliers / drivers tables.
   const resolvedLogoUrl =
     orgRow.logo_url && orgRow.logo_url.trim().length > 0
       ? orgRow.logo_url
       : null;
   const resolvedAvatarUrl = resolvedLogoUrl ?? ownerAvatarUrl;
 
-  // 5) Mutual connections (best-effort).
-  let mutuals = 0;
-  if (viewerOrgId !== targetOrgId) {
-    const mutualsRes = await getMutualConnections(viewerOrgId, targetOrgId);
-    mutuals = mutualsRes.error ? 0 : mutualsRes.mutuals.length;
-  }
-
-  // 6b) Location count and workspace profile fields on organizations row.
   let branchCount = 0;
   let registeredAddress: string | null = null;
-
-  const locationsRes = await supabase()
-    .from("organization_locations")
-    .select("id, location_type, address_line, city, state")
-    .eq("organization_id", targetOrgId)
-    .order("sort_order", { ascending: true });
   if (!locationsRes.error && Array.isArray(locationsRes.data)) {
     branchCount = locationsRes.data.length;
     const regOff = (
@@ -421,29 +436,8 @@ export async function getOrgProfileSnapshot(
   const gstin = orgRow.gstin?.trim() || nonEmptyString(partnerProfile?.gstin);
   const operatingModel = orgRow.operating_model?.trim() || null;
 
-  // 6) Shared trips with viewer (when linked); else partner trip count from RPC.
   let totalTrips = partnerTripCount ?? 0;
-  if (viewerOrgId !== targetOrgId) {
-    const [clientTripsRes, supplierTripsRes] = await Promise.all([
-      supabase()
-        .from("trips")
-        .select("id, clients!inner(linked_organization_id)", {
-          count: "exact",
-          head: true,
-        })
-        .eq("organization_id", viewerOrgId)
-        .eq("clients.linked_organization_id", targetOrgId)
-        .is("deleted_at", null),
-      supabase()
-        .from("trips")
-        .select("id, suppliers!inner(linked_organization_id)", {
-          count: "exact",
-          head: true,
-        })
-        .eq("organization_id", viewerOrgId)
-        .eq("suppliers.linked_organization_id", targetOrgId)
-        .is("deleted_at", null),
-    ]);
+  if (!isSelf) {
     const sharedCount =
       (clientTripsRes.count ?? 0) + (supplierTripsRes.count ?? 0);
     if (sharedCount > 0) {
@@ -451,8 +445,6 @@ export async function getOrgProfileSnapshot(
     }
   }
 
-  // 6c) Partner fleet assets + indents shared to the network (SECURITY DEFINER RPC).
-  // Direct vehicle/indent reads on other orgs are RLS-blocked.
   const vehicleCount =
     typeof partnerBatch?.vehicleCount === "number"
       ? partnerBatch.vehicleCount
@@ -466,16 +458,7 @@ export async function getOrgProfileSnapshot(
         ? partnerProfile.networkIndentCount
         : 0;
 
-  // 7) Rating — viewer trip feedback on linked CRM rows / org id; else partner aggregate.
   let rating: number | null = null;
-  const ratedIds = [targetOrgId, linkedClientId, linkedSupplierId].filter(
-    (id): id is string => Boolean(id),
-  );
-  const ratingRes = await supabase()
-    .from("ratings")
-    .select("score")
-    .eq("organization_id", viewerOrgId)
-    .in("rated_id", ratedIds);
   if (!ratingRes.error && Array.isArray(ratingRes.data) && ratingRes.data.length > 0) {
     const rows = ratingRes.data as Array<{ score: number | null }>;
     const total = rows.reduce((acc, r) => acc + Number(r.score ?? 0), 0);
@@ -495,7 +478,7 @@ export async function getOrgProfileSnapshot(
         : nonEmptyString(partnerProfile?.address) ?? "Not available",
     status,
     rating,
-    mutuals,
+    mutuals: null,
     phone,
     avatar_url: resolvedAvatarUrl,
     avatar_seed: orgRow.avatar_seed,

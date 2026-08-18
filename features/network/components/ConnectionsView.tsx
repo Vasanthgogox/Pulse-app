@@ -29,6 +29,7 @@ import { supabase } from "@/lib/supabase";
 import {
     averageRatingForRatedParty,
     averageScoreDeduped,
+    firstFiniteRating,
     getRatingsForClients,
     getRatingsForDrivers,
     getRatingsForSuppliers,
@@ -493,11 +494,6 @@ export function ConnectionsView({
     Record<string, number | null>
   >({});
   const [ratingsVersion, setRatingsVersion] = useState(0);
-  const [globalAverages, setGlobalAverages] = useState<{
-    client: number | null;
-    supplier: number | null;
-    driver: number | null;
-  }>({ client: null, supplier: null, driver: null });
   const gridNumColumns = hubMode
     ? windowWidth >= SPLIT_STACK_BREAKPOINT
       ? NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS
@@ -718,7 +714,6 @@ export function ConnectionsView({
       .filter((id): id is string => Boolean(id));
     if (clientIds.length === 0) {
       setClientRatingsById({});
-      setGlobalAverages((prev) => ({ ...prev, client: null }));
       return;
     }
     getRatingsForClients(clientIds).then(({ byClientId }) => {
@@ -745,10 +740,6 @@ export function ConnectionsView({
         }
       }
       setClientRatingsById(next);
-      setGlobalAverages((prev) => ({
-        ...prev,
-        client: averageScoreDeduped(Object.values(byClientId).flat()),
-      }));
     });
     return () => {
       cancelled = true;
@@ -767,7 +758,6 @@ export function ConnectionsView({
       .filter((id): id is string => Boolean(id));
     if (supplierIds.length === 0) {
       setSupplierRatingsById({});
-      setGlobalAverages((prev) => ({ ...prev, supplier: null }));
       return;
     }
     getRatingsForSuppliers(supplierIds).then(({ bySupplierId }) => {
@@ -794,10 +784,6 @@ export function ConnectionsView({
         }
       }
       setSupplierRatingsById(next);
-      setGlobalAverages((prev) => ({
-        ...prev,
-        supplier: averageScoreDeduped(Object.values(bySupplierId).flat()),
-      }));
     });
     return () => {
       cancelled = true;
@@ -811,7 +797,6 @@ export function ConnectionsView({
       .map((d) => d.id);
     if (driverIds.length === 0) {
       setDriverRatingsById({});
-      setGlobalAverages((prev) => ({ ...prev, driver: null }));
       return;
     }
     getRatingsForDrivers(driverIds).then(({ byDriverId }) => {
@@ -821,10 +806,6 @@ export function ConnectionsView({
         next[id] = averageScoreDeduped(byDriverId[id] ?? []);
       });
       setDriverRatingsById(next);
-      setGlobalAverages((prev) => ({
-        ...prev,
-        driver: averageScoreDeduped(Object.values(byDriverId).flat()),
-      }));
     });
     return () => {
       cancelled = true;
@@ -880,12 +861,12 @@ export function ConnectionsView({
       avatar_url: c.avatar_url ?? null,
       avatar_seed: c.avatar_seed ?? null,
       mutual_count: c.mutual_count ?? c.mutual_connections_count ?? null,
-      rating:
-        clientRatingsById[c.id] ??
-        clientRatingsById[c.linked_organization_id ?? ""] ??
-        c.rating ??
-        c.average_rating ??
-        globalAverages.client,
+      rating: firstFiniteRating(
+        clientRatingsById[c.id],
+        c.linked_organization_id
+          ? clientRatingsById[c.linked_organization_id]
+          : null,
+      ),
       phone: c.phone ?? null,
       linked_organization_id: c.linked_organization_id ?? null,
       city:
@@ -940,12 +921,12 @@ export function ConnectionsView({
       avatar_url: s.avatar_url ?? null,
       avatar_seed: s.avatar_seed ?? null,
       mutual_count: s.mutual_count ?? s.mutual_connections_count ?? null,
-      rating:
-        supplierRatingsById[s.id] ??
-        supplierRatingsById[s.linked_organization_id ?? ""] ??
-        s.rating ??
-        s.average_rating ??
-        globalAverages.supplier,
+      rating: firstFiniteRating(
+        supplierRatingsById[s.id],
+        s.linked_organization_id
+          ? supplierRatingsById[s.linked_organization_id]
+          : null,
+      ),
       phone: s.phone ?? null,
       linked_organization_id: s.linked_organization_id ?? null,
       city:
@@ -990,13 +971,7 @@ export function ConnectionsView({
             }
           ).mutual_connections_count ??
           null,
-        rating:
-          driverRatingsById[d.id] ??
-          (d as { rating?: number | null; average_rating?: number | null })
-            .rating ??
-          (d as { rating?: number | null; average_rating?: number | null })
-            .average_rating ??
-          globalAverages.driver,
+        rating: firstFiniteRating(driverRatingsById[d.id]),
         phone: (d as { phone?: string | null }).phone ?? null,
         city: (d as { city?: string | null }).city ?? null,
         state: (d as { state?: string | null }).state ?? null,
@@ -1036,7 +1011,6 @@ export function ConnectionsView({
     clientRatingsById,
     supplierRatingsById,
     driverRatingsById,
-    globalAverages,
     organizationLocationById,
     organizationLocationByName,
     kycByLinkedOrgId,

@@ -41,7 +41,7 @@ import {
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
 import { NetworkProfileDirectMessageButton } from "@/features/network/components/NetworkProfileDirectMessageButton";
 import { NetworkProfileModalBody } from "@/features/network/components/NetworkProfileModalBody";
-import { getOrgProfileSnapshot } from "@/features/network/services/networkProfileSnapshot.service";
+import { useNetworkProfileSnapshotQuery } from "@/lib/queries/useNetworkProfileSnapshotQuery";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
 import { StoryReel } from "@/features/network/components/StoryReel";
@@ -124,6 +124,7 @@ import {
 } from "react-native";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useWebLayoutWidth } from "@/lib/useWebLayoutWidth";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -241,6 +242,7 @@ function NetworkScreenInner() {
   const segments = useSegments();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
   const isMobileLayout = width < 820;
+  const hubCompact = useProfileHubCompact();
   /** Org welcome bar — mobile + tablet only; hidden on desktop web. */
   const showHomePageHeader = Platform.OS !== "web" || width < 1180;
   const isCompactPhone = width < 420;
@@ -281,7 +283,6 @@ function NetworkScreenInner() {
   const [selectedProfileStats, setSelectedProfileStats] = useState<{ totalTrips: number | null }>({
     totalTrips: null,
   });
-  const [profileStatsLoading, setProfileStatsLoading] = useState(false);
   const [discoverInviteCount, setDiscoverInviteCount] = useState(0);
   const [discoverInviteLimit, setDiscoverInviteLimit] = useState(5);
   const { t } = useLanguage();
@@ -488,75 +489,57 @@ function NetworkScreenInner() {
     invalidateNetwork,
   ]);
 
+  const profileTargetId =
+    selectedProfileNode && isRegisteredOrgId(selectedProfileNode.id)
+      ? selectedProfileNode.id
+      : null;
+  const profileSnapshotQ = useNetworkProfileSnapshotQuery(orgId, profileTargetId);
+  const profileStatsLoading = Boolean(profileTargetId && profileSnapshotQ.isPending);
+
   useEffect(() => {
-    let cancelled = false;
-    const nodeOrgId = selectedProfileNode?.id ?? null;
-    /** Whenever we point the modal at a different org, drop any
-     *  in-flight role picker / cancel state so it can't leak across
-     *  profiles. */
     setProtocolRoleModalOpen(false);
     setProtocolSending(false);
     setProtocolCancelling(false);
-    const isUuid = isRegisteredOrgId(nodeOrgId);
+  }, [selectedProfileNode?.id]);
 
-    if (!nodeOrgId || !isUuid) {
-      setSelectedProfileStats({ totalTrips: null });
-      setProfileStatsLoading(false);
-      return;
-    }
-
-    setProfileStatsLoading(true);
-    void (async () => {
-      try {
-        const snapshotRes = orgId
-          ? getOrgProfileSnapshot(orgId, nodeOrgId)
-          : Promise.resolve({ error: null, snapshot: null });
-        const { snapshot: snap } = await snapshotRes;
-        if (cancelled) return;
-        setSelectedProfileStats({ totalTrips: snap?.total_trips ?? 0 });
-        if (snap) {
-          setSelectedProfileNode((prev) => {
-            if (!prev || prev.id !== nodeOrgId) return prev;
-            return {
-              ...prev,
-              name: snap.name?.trim() || prev.name,
-              type: snap.type ?? prev.type,
-              location:
-                snap.location && snap.location !== "Not available"
-                  ? snap.location
-                  : prev.location && prev.location !== "Not available"
-                    ? prev.location
-                    : snap.location,
-              status: snap.status ?? prev.status,
-              rating: snap.rating ?? prev.rating,
-              mutuals: snap.mutuals ?? prev.mutuals,
-              phone: snap.phone ?? prev.phone,
-              avatar_url: snap.avatar_url ?? prev.avatar_url,
-              avatar_seed: snap.avatar_seed ?? prev.avatar_seed,
-              is_integrated: snap.is_integrated ?? prev.is_integrated,
-              is_kyc_verified: snap.is_kyc_verified ?? prev.is_kyc_verified,
-              // Enriched profile data
-              registered_address: snap.registered_address ?? null,
-              branch_count: snap.branch_count ?? 0,
-              sector: snap.sector ?? null,
-              website: snap.website ?? null,
-              gstin: maskGstin(snap.gstin),
-              operating_model: snap.operating_model ?? null,
-              member_since_year: snap.member_since_year ?? prev.member_since_year ?? null,
-              vehicle_count: snap.vehicle_count ?? 0,
-              indent_count: snap.indent_count ?? 0,
-            };
-          });
-        }
-      } finally {
-        if (!cancelled) setProfileStatsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedProfileNode?.id, orgId]);
+  useEffect(() => {
+    const snap = profileSnapshotQ.data;
+    const nodeOrgId = profileTargetId;
+    if (!snap || !nodeOrgId || snap.id !== nodeOrgId) return;
+    setSelectedProfileStats({ totalTrips: snap.total_trips ?? 0 });
+    setSelectedProfileNode((prev) => {
+      if (!prev || prev.id !== nodeOrgId) return prev;
+      return {
+        ...prev,
+        name: snap.name?.trim() || prev.name,
+        type: snap.type ?? prev.type,
+        location:
+          snap.location && snap.location !== "Not available"
+            ? snap.location
+            : prev.location && prev.location !== "Not available"
+              ? prev.location
+              : snap.location,
+        status: snap.status ?? prev.status,
+        rating: snap.rating ?? prev.rating,
+        mutuals:
+          typeof snap.mutuals === "number" ? snap.mutuals : prev.mutuals,
+        phone: snap.phone ?? prev.phone,
+        avatar_url: snap.avatar_url ?? prev.avatar_url,
+        avatar_seed: snap.avatar_seed ?? prev.avatar_seed,
+        is_integrated: snap.is_integrated ?? prev.is_integrated,
+        is_kyc_verified: snap.is_kyc_verified ?? prev.is_kyc_verified,
+        registered_address: snap.registered_address ?? null,
+        branch_count: snap.branch_count ?? 0,
+        sector: snap.sector ?? null,
+        website: snap.website ?? null,
+        gstin: maskGstin(snap.gstin),
+        operating_model: snap.operating_model ?? null,
+        member_since_year: snap.member_since_year ?? prev.member_since_year ?? null,
+        vehicle_count: snap.vehicle_count ?? 0,
+        indent_count: snap.indent_count ?? 0,
+      };
+    });
+  }, [profileSnapshotQ.data, profileTargetId]);
 
   const handleOpenProfileFromDiscover = useCallback(
     (org: {
@@ -624,8 +607,8 @@ function NetworkScreenInner() {
         id: row.id,
         name: row.name,
         connection_status: "approved",
-        mutual_count: 0,
-        mutual_connections_count: 0,
+        mutual_count: undefined,
+        mutual_connections_count: undefined,
         rating_value: null,
         location_value: undefined,
       });
@@ -917,6 +900,18 @@ function NetworkScreenInner() {
     }
   };
 
+  const discoverToolsPanel = (
+    <NetworkPhoneAndContactsPanel
+      orgId={orgId}
+      search={discoverSearch}
+      connectedOrgIds={integratedPartnerOrgIds}
+      totalConnections={totalConnections}
+      inviteDailyCapReached={discoverInviteCount >= discoverInviteLimit}
+      onSearchChange={setDiscoverSearch}
+      onOpenProfile={handleOpenProfileFromDiscover}
+    />
+  );
+
   const scrollContent = (
     <ScrollView
       style={styles.scroll}
@@ -1172,6 +1167,7 @@ function NetworkScreenInner() {
             ]}
           >
             <View style={[styles.sectionBody, styles.sectionBodyDiscover]}>
+              {!isMobileLayout ? discoverToolsPanel : null}
               {isMobileLayout && discoverSearchOpen ? (
                 <View style={[styles.sectionHeadingRowSpread, styles.discoverHeaderStackMobile]}>
                   <View style={styles.discoverHeaderTitleRowMobile}>
@@ -1231,6 +1227,7 @@ function NetworkScreenInner() {
                   style={[
                     styles.sectionHeadingRowSpread,
                     styles.sectionHeadingRowDiscoverLead,
+                    !isMobileLayout && styles.sectionHeadingRowDiscoverAfterTools,
                     isMobileLayout && styles.sectionHeadingRowSpreadDiscoverMobile,
                   ]}
                 >
@@ -1321,15 +1318,7 @@ function NetworkScreenInner() {
                   </View>
                 </View>
               )}
-              <NetworkPhoneAndContactsPanel
-                orgId={orgId}
-                search={discoverSearch}
-                connectedOrgIds={integratedPartnerOrgIds}
-                totalConnections={totalConnections}
-                inviteDailyCapReached={discoverInviteCount >= discoverInviteLimit}
-                onSearchChange={setDiscoverSearch}
-                onOpenProfile={handleOpenProfileFromDiscover}
-              />
+              {isMobileLayout ? discoverToolsPanel : null}
               <DiscoverView
                 orgId={orgId}
                 embedded
@@ -1374,6 +1363,13 @@ function NetworkScreenInner() {
           : hubTabParam
       : undefined;
 
+  const closeHubPopup = () => {
+    // Always leave /network/hub — do not router.back() through hub tab
+    // history (Goals → Sales still looks "open"), and do not use
+    // ROUTES.NETWORK (it does not exist; replace would be a no-op).
+    router.replace(ROUTES.TABS.NETWORK);
+  };
+
   const desktopHub = showDesktopHub ? (
     <NetworkDesktopHub
       organization={organization}
@@ -1417,15 +1413,9 @@ function NetworkScreenInner() {
       initialTab={initialHubTab}
       bottomScrollInset={0}
       hideHeaderChrome
+      onClose={closeHubPopup}
     />
   ) : null;
-
-  const closeHubPopup = () => {
-    // Always leave /network/hub — do not router.back() through hub tab
-    // history (Goals → Sales still looks "open"), and do not use
-    // ROUTES.NETWORK (it does not exist; replace would be a no-op).
-    router.replace(ROUTES.TABS.NETWORK);
-  };
 
   const hubPopupWebFixed =
     Platform.OS === "web"
@@ -1465,16 +1455,24 @@ function NetworkScreenInner() {
             <View pointerEvents="auto" style={styles.desktopHubShell}>
               {desktopHub}
             </View>
+            {hubCompact ? null : (
             <Pressable
               onPress={closeHubPopup}
               pointerEvents="auto"
-              style={styles.desktopHubPopupClose}
+              style={[
+                styles.desktopHubPopupClose,
+                {
+                  top: insets.top + 12,
+                  left: 12 + insets.left,
+                },
+              ]}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Close workspace"
             >
               <X size={18} color={Theme.textPrimaryDark} strokeWidth={2.4} />
             </Pressable>
+            )}
           </View>
         </Modal>
       ) : (
@@ -1517,12 +1515,13 @@ function NetworkScreenInner() {
                     isMobileLayout && styles.profileModalScrollMobile,
                     isWideNetwork && styles.profileModalScrollDesktop,
                     isMobileLayout && {
-                      paddingBottom: 16 + insets.bottom,
+                      paddingBottom: 10 + insets.bottom,
                     },
                   ]}
                 >
                   <NetworkProfileModalBody
                     node={selectedProfileNode}
+                    viewerOrgId={orgId}
                     isMobile={isMobileLayout}
                     profileStatsLoading={profileStatsLoading}
                     totalTrips={selectedProfileStats.totalTrips ?? 0}
@@ -1545,21 +1544,9 @@ function NetworkScreenInner() {
                          *  the left mirrors the discover card so the
                          *  user remembers whether they invited as a
                          *  CLIENT or SUPPLIER. */
-                        <View
-                          style={[
-                            styles.profileRequestSentRow,
-                            (isMobileLayout || isWideNetwork) &&
-                              styles.profileRequestSentRowStacked,
-                          ]}
-                        >
+                        <View style={styles.profileRequestSentRow}>
                           {profileLivePending?.role ? (
-                            <View
-                              style={[
-                                styles.profilePendingRolePill,
-                                (isMobileLayout || isWideNetwork) &&
-                                  styles.profilePendingRolePillStacked,
-                              ]}
-                            >
+                            <View style={styles.profilePendingRolePill}>
                               <Text
                                 style={styles.profilePendingRolePillText}
                                 numberOfLines={1}
@@ -1573,8 +1560,6 @@ function NetworkScreenInner() {
                           <Pressable
                             style={({ pressed }) => [
                               styles.profileRequestSentBtn,
-                              (isMobileLayout || isWideNetwork) &&
-                                styles.profileRequestSentBtnStacked,
                               protocolCancelling &&
                                 styles.profileRequestSentBtnDisabled,
                               pressed && { opacity: 0.85 },
@@ -1586,7 +1571,7 @@ function NetworkScreenInner() {
                             accessibilityRole="button"
                             accessibilityLabel={
                               protocolCancelling
-                                ? t("networkDiscoverRequestSent")
+                                ? t("cancel")
                                 : `${t("networkDiscoverRequestSent")} — ${t("cancel")}`
                             }
                           >
@@ -1598,7 +1583,7 @@ function NetworkScreenInner() {
                             <Text style={styles.profileRequestSentBtnText}>
                               {protocolCancelling
                                 ? `${t("cancel")}…`
-                                : `${t("networkDiscoverRequestSent")} · ${t("cancel")}`}
+                                : t("cancel")}
                             </Text>
                           </Pressable>
                         </View>
@@ -2087,13 +2072,13 @@ const styles = StyleSheet.create({
   },
   profileModalScroll: {
     padding: 0,
-    paddingBottom: 16,
+    paddingBottom: 10,
     gap: 0,
     alignItems: "stretch",
     flexGrow: 0,
   },
   profileModalScrollDesktop: {
-    paddingBottom: 20,
+    paddingBottom: 12,
     alignItems: "stretch",
   },
   profileModalScrollMobile: {
@@ -2394,22 +2379,22 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     alignItems: "stretch",
-    gap: 10,
-    paddingHorizontal: 20,
+    gap: 8,
+    paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
   },
   profileCtaStackMobile: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 8,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 6,
+    gap: 8,
   },
   profileCtaStackDesktop: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 8,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 6,
+    gap: 8,
     width: "100%",
     alignSelf: "stretch",
     maxWidth: "100%",
@@ -2417,8 +2402,8 @@ const styles = StyleSheet.create({
   profilePrimaryBtn: {
     width: "100%",
     alignSelf: "stretch",
-    minHeight: 46,
-    borderRadius: 12,
+    minHeight: 42,
+    borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
@@ -2440,29 +2425,22 @@ const styles = StyleSheet.create({
   profileRequestSentRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    width: "100%",
-  },
-  profileRequestSentRowStacked: {
-    flexDirection: "column",
-    alignItems: "stretch",
     gap: 8,
+    width: "100%",
+    alignSelf: "stretch",
   },
   profileRequestSentBtn: {
     flex: 1,
-    minHeight: 32,
+    minHeight: 42,
+    borderRadius: 10,
     backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 10,
-  },
-  profileRequestSentBtnStacked: {
-    minHeight: 44,
-    width: "100%",
-    flex: undefined,
-    alignSelf: "stretch",
+    paddingHorizontal: 12,
   },
   profileRequestSentBtnDisabled: {
     opacity: 0.6,
@@ -2472,17 +2450,19 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   profilePendingRolePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    minHeight: 42,
+    borderRadius: 10,
     backgroundColor: Theme.primary + "1A",
-    alignSelf: "flex-start",
-  },
-  profilePendingRolePillStacked: {
-    alignSelf: "center",
+    borderWidth: 1,
+    borderColor: Theme.primary + "33",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   profilePendingRolePillText: {
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.primary,
     letterSpacing: 0.2,
     textTransform: "capitalize",
@@ -2940,6 +2920,9 @@ const styles = StyleSheet.create({
   sectionHeadingRowDiscoverLead: {
     paddingTop: 4,
     paddingBottom: 10,
+  },
+  sectionHeadingRowDiscoverAfterTools: {
+    paddingTop: 16,
   },
   sectionHeadingRowDiscoverSplit: {
     flexDirection: "column",

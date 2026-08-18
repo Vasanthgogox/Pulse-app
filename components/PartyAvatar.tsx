@@ -231,8 +231,6 @@ export function PartyAvatar({
           height: size,
           borderRadius: radius,
           backgroundColor: bg,
-          borderWidth: 1,
-          borderColor: Theme.border,
         },
         style,
       ]}
@@ -270,8 +268,6 @@ const styles = StyleSheet.create({
   },
   photoFrame: {
     backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.border,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",

@@ -221,6 +221,16 @@ export function averageScoreDeduped(rows: RatingRow[]): number | null {
   return averageScore(dedupeRatingRowsById(rows));
 }
 
+/** First finite party score. Never invent a default (especially not 5.0). */
+export function firstFiniteRating(
+  ...values: Array<number | null | undefined>
+): number | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
 /**
  * Resolve `clients.id` for storing rated_type=client. Trips often have display name only;
  * without this, UI allows submit but DB insert is skipped.

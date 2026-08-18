@@ -4,6 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspaceOrgLogo } from "@/features/organization/hooks/useWorkspaceOrgLogo";
@@ -143,6 +144,8 @@ type Props = {
   bottomScrollInset?: number;
   /** Full-page popup: hide Welcome / close chrome; parent owns dismiss. */
   hideHeaderChrome?: boolean;
+  /** When set, mobile chrome close uses this instead of router.back(). */
+  onClose?: () => void;
 };
 
 export function NetworkDesktopHub({
@@ -182,6 +185,7 @@ export function NetworkDesktopHub({
   initialTab,
   bottomScrollInset = 0,
   hideHeaderChrome = false,
+  onClose,
 }: Props) {
   const { user, profile } = useAuth();
   const capabilities = useCapabilities();
@@ -196,6 +200,10 @@ export function NetworkDesktopHub({
   const gatedDriverCount = canUseFleet ? driverCount : 0;
   const router = useRouter();
   const closePage = () => {
+    if (onClose) {
+      onClose();
+      return;
+    }
     if (router.canGoBack()) {
       router.back();
       return;
@@ -204,6 +212,7 @@ export function NetworkDesktopHub({
   };
   const layout = useProfileHubCompactLayout();
   const compact = layout.compact;
+  const showMobileCloseChrome = compact && (!hideHeaderChrome || Boolean(onClose));
   const layoutInsets = useLayoutInsets();
   const { logoUri } = useWorkspaceOrgLogo();
   const clientsQ = useClientsQuery(orgId);
@@ -478,10 +487,17 @@ export function NetworkDesktopHub({
     >
       {compact ? (
         <View style={mobile.pageChrome}>
-          {hideHeaderChrome ? null : (
+          {showMobileCloseChrome ? (
           <View style={mobile.chromeTopRow}>
             <Pressable
-              style={mobile.chromeInlineAction}
+              style={[
+                mobile.chromeInlineAction,
+                {
+                  width: Layout.minTouchTargetSize,
+                  height: Layout.minTouchTargetSize,
+                  borderRadius: Layout.minTouchTargetSize / 2,
+                },
+              ]}
               onPress={closePage}
               hitSlop={8}
               accessibilityRole="button"
@@ -513,7 +529,7 @@ export function NetworkDesktopHub({
               )}
             </Pressable>
           </View>
-          )}
+          ) : null}
           <View style={mobile.chromeMetaRow}>
             <ScrollView
               horizontal

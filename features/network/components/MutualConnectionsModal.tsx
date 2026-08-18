@@ -9,6 +9,7 @@ import {
   getMutualConnections,
   type MutualConnectionRow,
 } from "@/features/network/services/mutual-connections.service";
+import { platformShadow } from "@/lib/platformShadow";
 import { X } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -76,17 +77,17 @@ export function MutualConnectionsModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <View
+        style={[
+          styles.backdrop,
+          {
+            paddingTop: Math.max(insets.top, 16) + 8,
+            paddingBottom: Math.max(insets.bottom, 16) + 8,
+          },
+        ]}
+      >
         <Pressable style={styles.backdropTouch} onPress={onClose} accessibilityLabel="Close" />
-        <View
-          style={[
-            styles.card,
-            {
-              paddingTop: insets.top + 12,
-              paddingBottom: Math.max(insets.bottom, 16),
-            },
-          ]}
-        >
+        <View style={styles.card}>
           <View style={styles.head}>
             <View style={styles.headText}>
               <Text style={styles.kicker}>{t("networkDiscoverMutualsSection")}</Text>
@@ -101,7 +102,7 @@ export function MutualConnectionsModal({
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
-              <X size={18} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+              <X size={15} color={Theme.textPrimaryDark} strokeWidth={2.4} />
             </Pressable>
           </View>
 
@@ -118,6 +119,7 @@ export function MutualConnectionsModal({
               style={styles.list}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
               {mutuals.map((row) => (
                 <Pressable
@@ -136,14 +138,16 @@ export function MutualConnectionsModal({
                     avatarUrl={row.avatar_url}
                     avatarSeed={row.avatar_seed}
                     entityType="client"
-                    size={40}
+                    size={36}
                     borderStyle={styles.avatarBorder}
                   />
                   <View style={styles.rowInfo}>
                     <Text style={styles.rowName} numberOfLines={1}>
                       {row.name}
                     </Text>
-                    <Text style={styles.rowHint}>{t("networkMutualConnectionsViewProfile")}</Text>
+                    <Text style={styles.rowHint}>
+                      {t("networkMutualConnectionsViewProfile")}
+                    </Text>
                   </View>
                 </Pressable>
               ))}
@@ -158,32 +162,45 @@ export function MutualConnectionsModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(15,23,42,0.58)",
-    justifyContent: "flex-end",
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
   },
   backdropTouch: {
     ...StyleSheet.absoluteFillObject,
   },
   card: {
-    maxHeight: "78%",
-    backgroundColor: Theme.screenBackground,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    paddingHorizontal: 20,
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "72%",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 20,
+    overflow: "hidden",
+    alignSelf: "center",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    ...platformShadow("0 16px 48px rgba(24, 28, 50, 0.12)", {
+      color: "#0F172A",
+      opacity: 0.12,
+      radius: 28,
+      offsetY: 12,
+      elevation: 10,
+    }),
   },
   head: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   headText: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: 2,
+    paddingTop: 2,
   },
   kicker: {
     fontSize: 8,
@@ -193,51 +210,54 @@ const styles = StyleSheet.create({
     color: Theme.textSection,
   },
   title: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.2,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
   },
   loading: {
-    minHeight: 120,
+    minHeight: 88,
     alignItems: "center",
     justifyContent: "center",
   },
   errorText: {
     fontSize: 13,
     color: Theme.teslaRed,
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   emptyText: {
     fontSize: 13,
     color: Theme.textSecondary,
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   list: {
     flexGrow: 0,
+    maxHeight: 360,
   },
   listContent: {
-    gap: 8,
-    paddingBottom: 8,
+    gap: 6,
+    paddingBottom: 4,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 10,
+    gap: 10,
+    paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.cardWhite,
   },
   avatarBorder: {
     borderWidth: 1,
@@ -246,13 +266,12 @@ const styles = StyleSheet.create({
   rowInfo: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
   },
   rowName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
   },
   rowHint: {
     fontSize: 11,
