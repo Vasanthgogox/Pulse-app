@@ -330,23 +330,19 @@ export default function SignIn() {
 
       <View style={styles.sectionDivider} />
 
-      <View style={styles.signUpRow}>
-        <Text style={styles.signUpMuted}>{signInCopy.footerPrompt} </Text>
+      <View style={styles.footerLinksRow}>
         <Pressable
-          onPress={() => {
-            router.push(ROUTES.ONBOARDING.HUB as Href);
-          }}
+          onPress={() => router.push(ROUTES.ONBOARDING.HUB as Href)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={styles.signUpLink}>{signInCopy.footerLink}</Text>
+          <Text style={styles.footerLinkText}>{signInCopy.footerLink}</Text>
         </Pressable>
-      </View>
-
-      <View style={styles.sectionDivider} />
-
-      <View style={styles.signUpRow}>
-        <Text style={styles.signUpMuted}>Driver? </Text>
-        <Pressable onPress={() => router.push(ROUTES.DRIVER_SIGN_IN as Href)}>
-          <Text style={styles.signUpLink}>Sign in with your phone number</Text>
+        <Text style={styles.footerLinkDot}>·</Text>
+        <Pressable
+          onPress={() => router.push(ROUTES.DRIVER_SIGN_IN as Href)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.footerLinkText}>Sign in as a driver</Text>
         </Pressable>
       </View>
     </View>
@@ -625,17 +621,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   backFloatingText: pulseText.back,
-  signUpRow: {
+  footerLinksRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 0,
-    paddingBottom: 4,
+    gap: 8,
   },
-  signUpMuted: pulseText.linkSmall,
-  signUpLink: {
+  footerLinkText: {
     ...pulseText.linkSmall,
     color: SIGN_IN_BRAND.ink,
     fontWeight: '600',
+  },
+  footerLinkDot: {
+    ...pulseText.linkSmall,
+    color: PULSE_SIGNUP.muted,
   },
 });

@@ -4,6 +4,7 @@ import {
   checkExistingUserByPhone,
   checkEmailRegisteredForSignup,
   checkOrganizationNameTaken,
+  checkOrgForEmailDomain,
   applyPendingOAuthMetadata,
   getMyPendingDomainJoinRequest,
   OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE,
@@ -181,6 +182,14 @@ export function useBusinessSignUpFlow() {
   const [resendingSecs, setResendingSecs] = useState(0);
   const resendEmailCountdown = useCountdown();
 
+  // Live check as the account email is typed: does its domain already have an
+  // org (e.g. vasanth@gogox.com after nihas@gogox.com created the workspace)?
+  const [emailDomainMatch, setEmailDomainMatch] = useState<{
+    organizationId: string;
+    organizationName: string;
+  } | null>(null);
+  const emailDomainCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Set when signup's email domain already matched an existing org: org
   // creation was skipped server-side and a join request was filed instead.
   const [domainJoinOrgName, setDomainJoinOrgName] = useState<string | null>(null);
@@ -332,6 +341,18 @@ export function useBusinessSignUpFlow() {
     }, DEBOUNCE_MS);
     return () => { if (orgCheckRef.current) clearTimeout(orgCheckRef.current); };
   }, [orgName, isOnline]);
+
+  useEffect(() => {
+    const raw = email.trim();
+    setEmailDomainMatch(null);
+    if (emailDomainCheckRef.current) clearTimeout(emailDomainCheckRef.current);
+    if (!raw || validateEmail(raw) || !isOnline) return;
+    emailDomainCheckRef.current = setTimeout(async () => {
+      const r = await checkOrgForEmailDomain(raw);
+      if (!r.error && r.match) setEmailDomainMatch(r.match);
+    }, DEBOUNCE_MS);
+    return () => { if (emailDomainCheckRef.current) clearTimeout(emailDomainCheckRef.current); };
+  }, [email, isOnline]);
 
   // Restore branding steps after auth refresh / navigation bounce.
   useEffect(() => {
@@ -1194,8 +1215,13 @@ export function useBusinessSignUpFlow() {
     }
 
     setLoading(true);
-    const ok = await guardOrgName();
-    if (!ok) { setLoading(false); return; }
+    // No workspace is created when the email's domain already matched an org
+    // (signUp() routes to a join request instead), so a company-name
+    // collision here is moot — only guard it for the real owner-signup path.
+    if (!emailDomainMatch) {
+      const ok = await guardOrgName();
+      if (!ok) { setLoading(false); return; }
+    }
 
     const result = await signUp({
       email: email.trim(),
@@ -1584,6 +1610,7 @@ export function useBusinessSignUpFlow() {
     toggleShowConfirmPassword,
     loading,
     googleLoading,
+    emailDomainMatch,
     step5Attempted,
     step5Errors,
     accountOrgConflictMessage,

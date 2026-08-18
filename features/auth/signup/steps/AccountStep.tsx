@@ -1,3 +1,4 @@
+import Theme from '@/constants/Theme';
 import { GoogleBrandIcon } from '@/features/auth/components/GoogleBrandIcon';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text } from 'react-native';
@@ -18,11 +19,13 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
     !flow.loading &&
     !flow.googleLoading;
 
+  const joinOrgName = flow.emailDomainMatch?.organizationName ?? null;
+
   return (
     <SignUpPulseFormStep
       title="Create account"
       subtitle="Enter your email and password to finish."
-      primaryLabel="Create account"
+      primaryLabel={joinOrgName ? `Request to join ${joinOrgName}` : 'Create account'}
       onPrimary={flow.createAccount}
       primaryDisabled={!canSubmit}
       primaryLoading={flow.loading}
@@ -67,6 +70,13 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         editable={!flow.loading}
         errorMessage={flow.step5Attempted ? flow.step5Errors.email : null}
       />
+
+      {joinOrgName ? (
+        <Text style={styles.domainMatchHint}>
+          {joinOrgName} already has a workspace on Pulse. Finish below to send a request to
+          join it — no new workspace will be created.
+        </Text>
+      ) : null}
 
       <SignUpPulseField
         label="Password"
@@ -155,6 +165,13 @@ const styles = StyleSheet.create({
   eyeBtn: {
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  domainMatchHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: Theme.warning,
+    marginTop: -8,
+    marginBottom: 12,
   },
   googleBtn: {
     flexDirection: 'row',
