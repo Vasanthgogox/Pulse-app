@@ -461,7 +461,7 @@ export function InviteMemberFlow({
       setSubmitError("This person is already an active member of your team.");
       return;
     }
-    if (result.alreadyInvited || result.alreadyPending) {
+    if (result.alreadyInvited) {
       setSubmitError("An invitation has already been sent to this person.");
       return;
     }

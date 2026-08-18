@@ -1,12 +1,26 @@
-import { hydrateMemberSurfaces, memberHasSurface, capabilitiesFromMemberSurfaces } from "@/lib/memberSurfaces";
-import { getCapabilitiesFromProfile, canAccessFinanceSubTab } from "@/lib/capabilities";
+import {
+  hydrateMemberSurfaces,
+  memberHasSurface,
+  capabilitiesFromMemberSurfaces,
+  type MemberSurfaceId,
+  type MemberSurfaceMap,
+} from "@/lib/memberSurfaces";
+import {
+  getCapabilitiesFromProfile,
+  canAccessFinanceSubTab,
+  type OperatingModelForCapabilities,
+} from "@/lib/capabilities";
 
-const caps = (m: any) => getCapabilitiesFromProfile({} as any, m);
-const resolve = (stored: any, model: any = "HYBRID", bypass = false) => {
+const caps = (m: OperatingModelForCapabilities) => getCapabilitiesFromProfile({ role: "" }, m);
+const resolve = (
+  stored: MemberSurfaceMap,
+  model: OperatingModelForCapabilities = "HYBRID",
+  bypass = false,
+) => {
   const o = caps(model);
   const h = hydrateMemberSurfaces(stored, o);
   return {
-    can: (id: string) => memberHasSurface(o, h, id as any, bypass),
+    can: (id: MemberSurfaceId) => memberHasSurface(o, h, id, bypass),
     memberCaps: capabilitiesFromMemberSurfaces(o, h, bypass),
   };
 };
@@ -14,7 +28,8 @@ const resolve = (stored: any, model: any = "HYBRID", bypass = false) => {
 describe("OFF states", () => {
   test("empty map denies everything", () => {
     const r = resolve({});
-    for (const id of ["finance.tab","finance.view","finance.subtab.cash","finance.reports","sales.clients.detail"]) {
+    const ids: MemberSurfaceId[] = ["finance.tab","finance.view","finance.subtab.cash","finance.reports","sales.clients.detail"];
+    for (const id of ids) {
       expect(r.can(id)).toBe(false);
     }
   });
@@ -92,13 +107,13 @@ describe("FINANCE SUBTAB matrix (real screen filter)", () => {
   for (const [name, surfaces] of rows) {
     test(name, () => {
       const o = caps("HYBRID");
-      const h = hydrateMemberSurfaces(surfaces as any, o);
+      const h = hydrateMemberSurfaces(surfaces as MemberSurfaceMap, o);
       const mc = capabilitiesFromMemberSurfaces(o, h, false);
       const visible = (["cash","customers","suppliers","garage","drivers"] as const).filter((t) => {
         if (!canAccessFinanceSubTab(mc, t)) return false;
-        if (!memberHasSurface(o, h, `finance.subtab.${t}` as any, false)) return false;
-        if (t === "garage") return memberHasSurface(o, h, "fleet.vehicles.view" as any, false);
-        if (t === "drivers") return memberHasSurface(o, h, "fleet.drivers.view" as any, false);
+        if (!memberHasSurface(o, h, `finance.subtab.${t}` as MemberSurfaceId, false)) return false;
+        if (t === "garage") return memberHasSurface(o, h, "fleet.vehicles.view", false);
+        if (t === "drivers") return memberHasSurface(o, h, "fleet.drivers.view", false);
         return true;
       });
       console.log(`TABS [${name}] =>`, visible.join(", ") || "(none)");

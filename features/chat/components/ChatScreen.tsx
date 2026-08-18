@@ -1653,7 +1653,7 @@ export function ChatScreen() {
     }
     return networkFeedPosts.filter((post) => {
       if (post.type !== "LOAD" && post.type !== "VEHICLE_AVAILABILITY") return false;
-      if (!integratedOrgIds.has(post.organization_id)) return false;
+      if (!post.organization_id || !integratedOrgIds.has(post.organization_id)) return false;
       if (
         post.type === "LOAD" &&
         shouldHideLoadStoryFromAuthor({

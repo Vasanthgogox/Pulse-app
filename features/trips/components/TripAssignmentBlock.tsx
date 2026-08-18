@@ -1293,11 +1293,6 @@ export function TripAssignmentBlock({
     ],
   );
 
-  const executeFleetWorkspaceAssign = useCallback(async () => {
-    if (!previewDriverId || !previewVehicleId) return;
-    await executeFleetWorkspaceAssignWithIds(previewDriverId, previewVehicleId);
-  }, [previewDriverId, previewVehicleId, executeFleetWorkspaceAssignWithIds]);
-
   const pilotCodeFromName = (name: string) => {
     const p = name.trim().split(/\s+/).filter(Boolean);
     const a = (p[0]?.[0] ?? "?").toUpperCase();

@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 
 let usePreventScreenCaptureHook: (() => void) | null = null;
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional native module, guarded by try/catch
   const screenCapture = require('expo-screen-capture');
   usePreventScreenCaptureHook = screenCapture.usePreventScreenCapture ?? null;
 } catch {

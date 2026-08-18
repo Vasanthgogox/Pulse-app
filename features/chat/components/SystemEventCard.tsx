@@ -301,6 +301,7 @@ export const SystemEventCard = React.memo(function SystemEventCard({
       // Import it lazily only when needed to avoid bundling its deps upfront.
       // We render a placeholder if the component is not yet loaded — the card
       // handles its own async resolution internally.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional lazy require for bundle splitting
       const DocumentShareCard = require('./DocumentShareCard').DocumentShareCard;
       return <DocumentShareCard message={message} />;
     }
@@ -309,6 +310,7 @@ export const SystemEventCard = React.memo(function SystemEventCard({
     case 'ledger': {
       if (financialViewerBlocked) return null;
       if (!currentOrgId || !onAddToBook || !onDispute) return null;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional lazy require for bundle splitting
       const { ChatLedgerEventCard } = require('./ChatEventCard');
       return (
         <ChatLedgerEventCard

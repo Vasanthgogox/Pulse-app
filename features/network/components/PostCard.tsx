@@ -266,14 +266,14 @@ function LoadCard({
 
 export function PostCard({ post, orgId, onBid, onDetail, onBoost }: PostCardProps) {
   const router = useRouter();
-  const color = seedColor(post.organization_id);
+  const color = seedColor(post.organization_id ?? "");
   const isOwner = post.organization_id === orgId;
 
   const opportunity = useMemo(
     () =>
       resolveCommercialOpportunity({
         viewerOrgId: orgId || null,
-        ownerOrgId: post.organization_id,
+        ownerOrgId: post.organization_id ?? "",
         isLoad: post.type === "LOAD",
         postIsActive: post.is_active,
         bidCount: post.bid_count ?? 0,

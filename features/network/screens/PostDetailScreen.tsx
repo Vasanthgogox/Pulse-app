@@ -162,7 +162,7 @@ export default function PostDetailScreen() {
     [myCampaignsQ.data, post?.id],
   );
   const markSourceDeletedMutation = useMarkReachCampaignSourceDeletedMutation();
-  const color = post ? orgColor(post.organization_id) : Theme.primary;
+  const color = post ? orgColor(post.organization_id ?? '') : Theme.primary;
   const bids = bidsQ.data ?? [];
   const [bidderBrandingByOrgId, setBidderBrandingByOrgId] = useState<
     Record<string, LinkedOrgDisplay>
@@ -275,20 +275,23 @@ export default function PostDetailScreen() {
   const handleDeletePost = useCallback(async () => {
     if (!post || !isOwner || !orgId || isDeleting) return;
     const ok = activeCampaignForPost
-      ? await confirmDialog(
-          'Delete story?',
-          'This story has an active Pulse Reach campaign.\n\nThe story will be removed, but your paid campaign continues:\n' +
+      ? await confirmDialog({
+          title: 'Delete story?',
+          message:
+            'This story has an active Pulse Reach campaign.\n\nThe story will be removed, but your paid campaign continues:\n' +
             '• Delivery keeps running from the campaign snapshot\n' +
             '• Analytics and campaign history stay intact\n' +
             '• The campaign ends on its normal schedule\n\n' +
             'Deleting the story cannot be undone.',
-          { confirmText: 'Delete', destructive: true },
-        )
-      : await confirmDialog(
-          'Delete post?',
-          'This broadcast will be removed from your network feed.',
-          { confirmText: 'Delete', destructive: true },
-        );
+          confirmLabel: 'Delete',
+          destructive: true,
+        })
+      : await confirmDialog({
+          title: 'Delete post?',
+          message: 'This broadcast will be removed from your network feed.',
+          confirmLabel: 'Delete',
+          destructive: true,
+        });
     if (!ok) return;
     setIsDeleting(true);
     if (activeCampaignForPost) {

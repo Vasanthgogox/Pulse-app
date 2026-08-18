@@ -25,6 +25,7 @@ import { isRetryableHttpResponse } from '@/lib/supabaseHttp.util';
 // Lazy-load SecureStore so we can fall back to AsyncStorage if native module is missing (Expo Go, etc.)
 let SecureStore: typeof import('expo-secure-store') | null = null;
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional native module, guarded by try/catch
   SecureStore = require('expo-secure-store');
 } catch {
   if (__DEV__) console.warn('[auth] SecureStore unavailable, falling back to AsyncStorage');

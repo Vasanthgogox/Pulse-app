@@ -154,6 +154,7 @@ export function deviceLanguageToLocale(deviceLanguageCode: string | undefined): 
 export function getDefaultLocale(stored: string | null): AppLocale {
   if (stored && isSupportedLocale(stored)) return stored;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional native module, guarded by try/catch
     const { getLocales } = require("expo-localization");
     const device = getLocales?.()?.[0]?.languageCode;
     const mapped = deviceLanguageToLocale(device);

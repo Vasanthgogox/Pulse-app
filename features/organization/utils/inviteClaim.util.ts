@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@/lib/supabase";
+
 /**
  * Detect if the current user was just claimed via a pending team invite.
  * Called post-signup when `claim_pending_team_invites` trigger auto-claimed them.
@@ -6,7 +8,7 @@
  * welcome-to-team banner if true.
  */
 export async function wasUserJustClaimedByTeamInvite(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
 ): Promise<{
   claimed: boolean;
@@ -48,9 +50,10 @@ export async function wasUserJustClaimedByTeamInvite(
         .maybeSingle();
 
       if (invitedViaTeam.data) {
+        const org = Array.isArray(data.organizations) ? data.organizations[0] : data.organizations;
         return {
           claimed: true,
-          teamName: data.organizations?.name || "your team",
+          teamName: org?.name || "your team",
         };
       }
     }

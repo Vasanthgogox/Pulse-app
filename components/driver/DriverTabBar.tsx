@@ -8,7 +8,7 @@ import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -63,7 +63,7 @@ export function DriverTabBar({ state, descriptors, navigation }: BottomTabBarPro
   // can sit on the safe area (phone + iPad + web) without overlapping the dock.
   const focusedTabBarStyle = StyleSheet.flatten(
     focusedRoute ? descriptors[focusedRoute.key]?.options?.tabBarStyle : undefined,
-  );
+  ) as ViewStyle | undefined;
   if (focusedTabBarStyle?.display === 'none') {
     return null;
   }

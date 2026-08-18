@@ -12,7 +12,7 @@ import { getSignupPresetAvatars } from '@/constants/DriverLevels';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
-import { checkExistingUserByPhone, setPendingOAuthMetadata } from '@/features/auth';
+import { checkExistingUserByPhone, setPendingOAuthMetadata } from '@/features/auth/services/auth.service';
 import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
@@ -57,10 +57,10 @@ import { SignUpPulseTitle } from '@/features/auth/signup/SignUpPulseTitle';
 import { SignUpOtpBoxes } from '@/features/auth/signup/SignUpOtpBoxes';
 import { formatSignupPhoneDisplay } from '@/features/auth/signup/signUpKeypad.util';
 import { DRIVER_SIGNUP } from '@/features/auth/signup/signUpDriverTheme';
-import { DRIVER_SIGNUP_HERO_MASCOT, DRIVER_SIGNUP_LOTTIE } from '@/features/auth/signup/signUpDriverLottieAssets';
+import { DRIVER_SIGNUP_HERO_MASCOT } from '@/features/auth/signup/signUpDriverLottieAssets';
 import { createPulseSignUpTextStyles } from '@/features/auth/signup/signUpTypography';
 import { suiteSignUpCopy } from '@/lib/suite/suiteAuthContent';
-import { updateProfile } from '@/features/auth';
+import { updateProfile } from '@/features/auth/services/auth.service';
 import { pickLocalAvatar, uploadAvatarFromLocal } from '@/lib/avatarUpload';
 import {
   clearDriverSignupSuccess,

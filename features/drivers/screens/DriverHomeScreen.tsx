@@ -117,7 +117,6 @@ import {
   formatEtaArrivalClock,
   formatTripDistance,
   type TripStage,
-  type TripStageGuidance,
 } from "@/features/trips/domain";
 import {
   reverseGeocodeCityStateLabel,
@@ -190,8 +189,6 @@ const DRIVER_MAP_BOOT_TS_KEY = "@pulse/driver-map-native-boot-ts";
 const DRIVER_MAP_OVERVIEW_MAX_ZOOM = 11;
 /** Center-on-me / locate close-up. */
 const DRIVER_MAP_MY_LOCATION_ZOOM = 15;
-/** Minimized job-card peek — closer than route overview, under blank-tile overzoom. */
-const DRIVER_MAP_PEEK_ZOOM = 13;
 /** User +/- / pin taps — still below blank-tile range. */
 const DRIVER_MAP_MAX_ZOOM = 16;
 
@@ -209,20 +206,6 @@ function mapControlsTopInset(
   );
 }
 
-function mapControlsBarTop(
-  controlsVariant: "modal" | "embedded",
-  safeTop: number,
-): number {
-  return controlsVariant === "embedded" ? safeTop + 96 : safeTop + 10;
-}
-
-function mapTrackingCardTop(
-  controlsVariant: "modal" | "embedded",
-  safeTop: number,
-): number {
-  return mapControlsBarTop(controlsVariant, safeTop) + MAP_CONTROLS_BAR_HEIGHT + 4;
-}
-
 /** Trip is in progress so "Accept" does not reappear after refresh (includes started_at). */
 function isTripInProgress(t: tripsService.TripRow) {
   if (isCompletedStatus(t.status)) return false;
@@ -235,7 +218,6 @@ function isTripInProgress(t: tripsService.TripRow) {
 // features/driver/components/DriverTripFlowCard.tsx all consume the same
 // canonical logic instead of each keeping their own copy.
 type DriverGuidanceStep = Exclude<TripStage, "lr">;
-type DriverGuidanceConfig = TripStageGuidance;
 const deriveDriverGuidanceStep = deriveTripStage as (
   t: tripsService.TripRow,
 ) => DriverGuidanceStep;
@@ -512,7 +494,6 @@ export default function DriverRadarScreen() {
   const truckRafRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(
     null,
   );
-  const truckLastUpdateMsRef = useRef(0);
   const lastAnimatedStepKeyRef = useRef<string | null>(null);
   const lastAnimatedTripIdRef = useRef<string | null>(null);
   const mapRef = useRef<MapViewRef | null>(null);
@@ -543,7 +524,6 @@ export default function DriverRadarScreen() {
     Platform.OS === "web" ? TextInput : BottomSheetTextInput;
   const otpInputRef = useRef<TextInput | null>(null);
   const lastGuidanceKeyRef = useRef<string | null>(null);
-  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [isFollowingLocation, setIsFollowingLocation] = useState(false);
   /** Tap Tracking pill to show distance + ETA card (toggle). */
   const [showTrackingInfoCard, setShowTrackingInfoCard] = useState(false);
@@ -3486,60 +3466,6 @@ export default function DriverRadarScreen() {
   const driverName =
     profile?.full_name?.trim() || profile?.displayName?.trim() || "Pilot";
 
-  const applyCameraToCoordinate = useCallback(
-    (
-      currentPos: { latitude: number; longitude: number },
-      zoom = DRIVER_MAP_MY_LOCATION_ZOOM,
-    ): boolean => {
-      lastCameraCenterRef.current = null;
-      lastCameraAnimTsRef.current = 0;
-      const showLeaflet =
-        Platform.OS === "web" || useLeafletFallback || leafLetForced;
-      if (showLeaflet) {
-        const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
-        targetRef.current?.focusCurrentLocation(currentPos, zoom);
-        return true;
-      }
-      const targetRef = isFullMapVisible ? fullMapRef : mapRef;
-      const map = targetRef.current;
-      if (!map) return false;
-      try {
-        if (map.animateCamera) {
-          map.animateCamera(
-            {
-              center: {
-                latitude: currentPos.latitude,
-                longitude: currentPos.longitude,
-              },
-              zoom,
-              pitch: 0,
-              heading: Number(youHeadingSv.value) || 0,
-            },
-            { duration: 500 },
-          );
-        } else if (map.animateToRegion) {
-          map.animateToRegion(
-            {
-              latitude: currentPos.latitude,
-              longitude: currentPos.longitude,
-              latitudeDelta: 0.02,
-              longitudeDelta: 0.02,
-            },
-            500,
-          );
-        } else {
-          return false;
-        }
-      } catch {
-        return false;
-      }
-      lastCameraCenterRef.current = currentPos;
-      lastCameraAnimTsRef.current = Date.now();
-      return true;
-    },
-    [isFullMapVisible, leafLetForced, useLeafletFallback, youHeadingSv],
-  );
-
   /**
    * Minimized card keeps the full-route overview framing (corridor in view).
    * Disable follow-me so GPS recenter cannot steal the camera, then re-fit.
@@ -3578,109 +3504,6 @@ export default function DriverRadarScreen() {
     canMinimizeMissionSheet,
     scheduleFit,
     isFollowingLocation,
-  ]);
-
-  const handleFocusCurrentLocation = useCallback(async (): Promise<boolean> => {
-    // Instant focus if we already know you (avatar on map) — never wait on GPS for UI.
-    const known = driverMapPosition ?? truckPosition;
-    if (known) {
-      commitMapPosition(known, { force: true });
-      youLatSv.value = withTiming(known.latitude, { duration: 450 });
-      youLonSv.value = withTiming(known.longitude, { duration: 450 });
-      applyCameraToCoordinate(known, DRIVER_MAP_MY_LOCATION_ZOOM);
-    }
-
-    // Optional GPS refresh — capped timeout so the spinner cannot hang.
-    const GPS_BUDGET_MS = 4_000;
-    // Only show spinner when we have nowhere to center yet.
-    if (!known) setIsFetchingLocation(true);
-    let refreshed: { latitude: number; longitude: number } | null = null;
-    try {
-      const withBudget = <T,>(p: Promise<T>): Promise<T | null> =>
-        Promise.race([
-          p,
-          new Promise<null>((resolve) => {
-            setTimeout(() => resolve(null), GPS_BUDGET_MS);
-          }),
-        ]);
-
-      if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.geolocation) {
-        refreshed = await withBudget(
-          new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
-            let settled = false;
-            const done = (v: { latitude: number; longitude: number } | null) => {
-              if (settled) return;
-              settled = true;
-              resolve(v);
-            };
-            const timer = setTimeout(() => done(null), GPS_BUDGET_MS);
-            try {
-              navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                  clearTimeout(timer);
-                  done({
-                    latitude: pos.coords.latitude,
-                    longitude: pos.coords.longitude,
-                  });
-                },
-                () => {
-                  clearTimeout(timer);
-                  done(null);
-                },
-                {
-                  enableHighAccuracy: false,
-                  maximumAge: 30_000,
-                  timeout: GPS_BUDGET_MS,
-                },
-              );
-            } catch {
-              clearTimeout(timer);
-              done(null);
-            }
-          }),
-        );
-      } else {
-        const expoLocation = await getExpoLocation();
-        if (expoLocation) {
-          refreshed = await withBudget(
-            (async () => {
-              // Do not prompt here — FG is requested on Go Online / active-trip resume.
-              const { status } =
-                await expoLocation.getForegroundPermissionsAsync();
-              if (status !== "granted") return null;
-              const current = await expoLocation.getCurrentPositionAsync({
-                accuracy: expoLocation.Accuracy.Balanced,
-              });
-              return {
-                latitude: current.coords.latitude,
-                longitude: current.coords.longitude,
-              };
-            })(),
-          );
-        }
-      }
-    } catch {
-      refreshed = null;
-    } finally {
-      setIsFetchingLocation(false);
-    }
-
-    if (refreshed) {
-      commitMapPosition(refreshed, { force: true });
-      youLatSv.value = withTiming(refreshed.latitude, { duration: 450 });
-      youLonSv.value = withTiming(refreshed.longitude, { duration: 450 });
-      applyCameraToCoordinate(refreshed, DRIVER_MAP_MY_LOCATION_ZOOM);
-      return true;
-    }
-
-    return Boolean(known);
-  }, [
-    applyCameraToCoordinate,
-    commitMapPosition,
-    driverMapPosition,
-    truckPosition,
-    youLatSv,
-    youLonSv,
   ]);
 
   // Live follow mode: keep centering on device GPS until toggled off.
@@ -4144,32 +3967,6 @@ export default function DriverRadarScreen() {
       activeGuidanceTrip && pinnedPosition && activeNavigationRoute
         ? activeNavigationRoute.distance / 1000
         : null;
-
-    // Fit Leaflet map to show all route points
-    const handleFitBoundsLeaflet = () => {
-      setIsFollowingLocation(false);
-      setShowTrackingInfoCard(false);
-      const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
-      if (!leafRef.current) return;
-      const pts = [
-        ...(shouldShowDriverToDropRoute(activeGuidanceStep)
-          ? optimalRoute?.coordinates ?? []
-          : shouldShowDriverApproachRoute(activeGuidanceStep)
-            ? approachRoute?.coordinates ?? []
-            : tripLegRoute?.coordinates ?? []),
-        pinnedPosition,
-        ...(shouldShowDriverToDropRoute(activeGuidanceStep) ? [drop] : [pickup, drop]),
-        navStartCoordinate,
-      ].filter((p): p is { latitude: number; longitude: number } => !!p);
-      const bounds = boundsFromCoordinates(pts);
-      if (!bounds) return;
-      leafRef.current.fitBounds(
-        bounds.ne,
-        bounds.sw,
-        80,
-        DRIVER_MAP_OVERVIEW_MAX_ZOOM,
-      );
-    };
 
     // Locate: 1st tap = close-up on driver; 2nd tap = full route overview.
     const handleZoomToDriver = () => {

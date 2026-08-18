@@ -31,7 +31,7 @@ export function ensureBackgroundTaskRegistered(): void {
   _defined = true;
 
   try {
-     
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional native module, guarded by try/catch
     const TaskManager = require('expo-task-manager') as {
       defineTask: <T>(name: string, handler: (body: TaskManagerBody<T>) => void) => void;
     };

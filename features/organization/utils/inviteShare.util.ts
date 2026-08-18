@@ -36,13 +36,16 @@ export async function shareInvite(params: InviteShareParams): Promise<ShareInvit
   const message = buildInviteShareMessage(params);
 
   if (Platform.OS === "web") {
-    const nav = typeof navigator !== "undefined" ? (navigator as any) : null;
+    const nav =
+      typeof navigator !== "undefined"
+        ? (navigator as Navigator & { share?: (data: { title?: string; text?: string }) => Promise<void> })
+        : null;
     if (nav?.share) {
       try {
         await nav.share({ title: `Invite ${params.inviteeName}`, text: message });
         return { ok: true, method: "share" };
-      } catch (err: any) {
-        if (err?.name === "AbortError") return { ok: false, reason: "cancelled" };
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return { ok: false, reason: "cancelled" };
         // fall through to clipboard on any other web-share failure
       }
     }

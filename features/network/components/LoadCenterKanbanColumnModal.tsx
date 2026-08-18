@@ -162,7 +162,6 @@ function StageBookmarkArrow({
       onPress={handlePress}
       // @ts-expect-error web mouse events
       onMouseEnter={() => setHovered(true)}
-      // @ts-expect-error web mouse events
       onMouseLeave={() => {
         setHovered(false);
         setPeeked(false);

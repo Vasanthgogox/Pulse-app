@@ -22,7 +22,7 @@ export type OrgMemberRole =
   | 'dispatcher'
   | 'finance'
   | 'driver';
-export type OrgMemberStatus = 'active' | 'inactive' | 'invited';
+export type OrgMemberStatus = 'active' | 'inactive' | 'pending';
 
 export interface OrgMember {
   id: string;

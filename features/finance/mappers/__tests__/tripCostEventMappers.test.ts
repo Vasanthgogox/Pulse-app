@@ -21,7 +21,7 @@ function fuelRow(overrides: Partial<TripFuelEntry>): TripFuelEntry {
 describe('mapFuelEntryToTripCostEvent', () => {
   it('marks the event reimbursable and driver-paid when the driver reported and paid it', () => {
     const event = mapFuelEntryToTripCostEvent({
-      row: fuelRow({ payment_owner: 'driver', approval_state: 'reported' } as any),
+      row: fuelRow({ payment_owner: 'driver', approval_state: 'reported' }),
       tripOperationalCode: 'TRP001',
     });
     expect(event.payer).toBe('driver');
@@ -36,7 +36,7 @@ describe('mapFuelEntryToTripCostEvent', () => {
         payment_owner: 'organization',
         approval_state: 'reported',
         reimbursement_state: 'reported',
-      } as any),
+      }),
       tripOperationalCode: 'TRP001',
     });
     expect(event.payer).toBe('driver');
@@ -44,7 +44,7 @@ describe('mapFuelEntryToTripCostEvent', () => {
 
   it('marks posting state "reversed" when the linked ledger row is voided, regardless of approval', () => {
     const event = mapFuelEntryToTripCostEvent({
-      row: fuelRow({ ledger_state: 'void', approval_state: 'approved' } as any),
+      row: fuelRow({ ledger_state: 'void', approval_state: 'approved' }),
       tripOperationalCode: 'TRP001',
     });
     expect(event.postingState).toBe('reversed');
@@ -52,7 +52,7 @@ describe('mapFuelEntryToTripCostEvent', () => {
 
   it('marks posting state "posted" once a ledgerTransactionId is attached', () => {
     const event = mapFuelEntryToTripCostEvent({
-      row: fuelRow({ approval_state: 'approved' } as any),
+      row: fuelRow({ approval_state: 'approved' }),
       tripOperationalCode: 'TRP001',
       ledgerTransactionId: 'ledger-1',
     });
@@ -62,7 +62,7 @@ describe('mapFuelEntryToTripCostEvent', () => {
 
   it('normalizes negative or missing amounts to a rounded non-negative value', () => {
     const event = mapFuelEntryToTripCostEvent({
-      row: fuelRow({ amount_inr: -50 } as any),
+      row: fuelRow({ amount_inr: -50 }),
       tripOperationalCode: 'TRP001',
     });
     expect(event.amount).toBe(0);
@@ -70,7 +70,7 @@ describe('mapFuelEntryToTripCostEvent', () => {
 
   it('marks settlementState settled once reimbursement_state is reimbursed', () => {
     const event = mapFuelEntryToTripCostEvent({
-      row: fuelRow({ reimbursement_state: 'reimbursed' } as any),
+      row: fuelRow({ reimbursement_state: 'reimbursed' }),
       tripOperationalCode: 'TRP001',
     });
     expect(event.settlementState).toBe('settled');
@@ -120,14 +120,14 @@ describe('mapTripOperationalRowsToCostEvents', () => {
 
 describe('deriveTripCostFinancialSnapshot', () => {
   const baseEvent = mapFuelEntryToTripCostEvent({
-    row: fuelRow({ approval_state: 'approved' } as any),
+    row: fuelRow({ approval_state: 'approved' }),
     tripOperationalCode: 'TRP001',
     ledgerTransactionId: 'ledger-1',
   });
 
   it('tallies counts and cost totals across events', () => {
     const pendingEvent = mapFuelEntryToTripCostEvent({
-      row: fuelRow({ id: 'fuel-2', approval_state: 'pending' } as any),
+      row: fuelRow({ id: 'fuel-2', approval_state: 'pending' }),
       tripOperationalCode: 'TRP001',
     });
     const snapshot = deriveTripCostFinancialSnapshot({ events: [baseEvent, pendingEvent] });

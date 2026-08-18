@@ -289,11 +289,12 @@ export function useAwardQuote({
       );
       return;
     }
-    const confirmed = await confirmDialog(
-      "Confirm Award",
-      `Award this load to ${winner.bidder_organization_name ?? "this supplier"} for ₹${Number(winner.amount ?? 0).toLocaleString("en-IN")}?`,
-      { confirmText: "Award", destructive: true },
-    );
+    const confirmed = await confirmDialog({
+      title: "Confirm Award",
+      message: `Award this load to ${winner.bidder_organization_name ?? "this supplier"} for ₹${Number(winner.amount ?? 0).toLocaleString("en-IN")}?`,
+      confirmLabel: "Award",
+      destructive: true,
+    });
     if (!confirmed) return;
 
     try {

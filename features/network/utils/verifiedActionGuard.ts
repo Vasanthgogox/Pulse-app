@@ -53,8 +53,10 @@ export function useEnsureVerified() {
     // A tap during load is a no-op, not a false denial — abort without prompting.
     if (isLoading) return false;
     if (isVerified) return true;
-    const ok = await confirmDialog(PROMPT_TITLE, PROMPT_BODY, {
-      confirmText: 'Verify now',
+    const ok = await confirmDialog({
+      title: PROMPT_TITLE,
+      message: PROMPT_BODY,
+      confirmLabel: 'Verify now',
     });
     if (ok) router.push(KYC_PANEL_ROUTE as Parameters<typeof router.push>[0]);
     return false;

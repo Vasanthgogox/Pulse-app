@@ -73,12 +73,12 @@ export default function MilestoneScreen() {
   const experience = useMemo(
     () =>
       computeExperienceProgress({
-        hasSignedUp: Boolean(user?.id || profile?.uid),
+        hasSignedUp: Boolean(user?.uid || profile?.uid),
         completedTrips,
         isVerified: Boolean(orgId),
         fiveStarCount: ratingBundle?.fiveStarCount ?? 0,
       }),
-    [user?.id, profile?.uid, completedTrips, orgId, ratingBundle?.fiveStarCount],
+    [user?.uid, profile?.uid, completedTrips, orgId, ratingBundle?.fiveStarCount],
   );
 
   const {

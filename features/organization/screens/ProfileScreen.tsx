@@ -372,13 +372,13 @@ export default function ProfileScreen({
   const experience = useMemo(
     () =>
       computeExperienceProgress({
-        hasSignedUp: Boolean(user?.id || profile?.uid),
+        hasSignedUp: Boolean(user?.uid || profile?.uid),
         completedTrips,
         isVerified: Boolean(orgId),
         fiveStarCount: receivedCustomerRatingData?.fiveStarCount ?? 0,
       }),
     [
-      user?.id,
+      user?.uid,
       profile?.uid,
       completedTrips,
       orgId,

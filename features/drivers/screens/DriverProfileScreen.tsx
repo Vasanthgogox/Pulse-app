@@ -330,12 +330,12 @@ export default function DriverProfileScreen() {
   const experience = useMemo(
     () =>
       computeExperienceProgress({
-        hasSignedUp: Boolean(profile?.uid || user?.id),
+        hasSignedUp: Boolean(profile?.uid || user?.uid),
         completedTrips: tripsCount,
         isVerified: Boolean(kycStatus?.isVerified),
         fiveStarCount: countFiveStarRatings(driverRatings),
       }),
-    [profile?.uid, user?.id, tripsCount, kycStatus?.isVerified, driverRatings],
+    [profile?.uid, user?.uid, tripsCount, kycStatus?.isVerified, driverRatings],
   );
   const {
     currentLevel,

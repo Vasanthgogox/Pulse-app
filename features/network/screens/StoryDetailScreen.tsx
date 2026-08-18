@@ -489,20 +489,23 @@ export default function StoryDetailScreen() {
   const handleDeletePost = useCallback(async () => {
     if (!post || !isOwnPost || isDeletingCurrent) return;
     const ok = activeCampaignForPost
-      ? await confirmDialog(
-          "Delete story?",
-          "This story has an active Pulse Reach campaign.\n\nThe story will be removed, but your paid campaign continues:\n" +
+      ? await confirmDialog({
+          title: "Delete story?",
+          message:
+            "This story has an active Pulse Reach campaign.\n\nThe story will be removed, but your paid campaign continues:\n" +
             "• Delivery keeps running from the campaign snapshot\n" +
             "• Analytics and campaign history stay intact\n" +
             "• The campaign ends on its normal schedule\n\n" +
             "Deleting the story cannot be undone.",
-          { confirmText: "Delete", destructive: true },
-        )
-      : await confirmDialog(
-          "Delete story?",
-          "This story will be removed from your network broadcasts.",
-          { confirmText: "Delete", destructive: true },
-        );
+          confirmLabel: "Delete",
+          destructive: true,
+        })
+      : await confirmDialog({
+          title: "Delete story?",
+          message: "This story will be removed from your network broadcasts.",
+          confirmLabel: "Delete",
+          destructive: true,
+        });
     if (!ok) return;
     setDeletingPostId(post.id);
     if (activeCampaignForPost) {

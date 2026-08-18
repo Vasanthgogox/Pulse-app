@@ -121,12 +121,12 @@ export default function LevelProgressionScreen() {
   const experience = useMemo(
     () =>
       computeExperienceProgress({
-        hasSignedUp: Boolean(profile?.uid || user?.id),
+        hasSignedUp: Boolean(profile?.uid || user?.uid),
         completedTrips: tripsCount,
         isVerified,
         fiveStarCount: countFiveStarRatings(ratings),
       }),
-    [profile?.uid, user?.id, tripsCount, isVerified, ratings],
+    [profile?.uid, user?.uid, tripsCount, isVerified, ratings],
   );
 
   const {

@@ -18,7 +18,6 @@ import type {
   TripConversationRow,
   TripMessageRow,
 } from '@/features/chat/types/chat.types';
-import type { TripRow } from '@/features/trips/services/trips.service';
 import { notifyTripChatMessagesChanged } from '@/lib/tripChatInvalidate';
 import {
   appendDriverChatMessageToCache,

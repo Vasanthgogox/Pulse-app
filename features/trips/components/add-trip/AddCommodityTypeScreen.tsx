@@ -95,11 +95,12 @@ export function AddCommodityTypeScreen({ kind, onClose }: AddCommodityTypeScreen
 
   const handleRemove = async (label: string) => {
     if (!userId) return;
-    const ok = await confirmDialog(
-      "Remove type?",
-      `"${label}" will be removed from your list.`,
-      { confirmText: "Remove", destructive: true },
-    );
+    const ok = await confirmDialog({
+      title: "Remove type?",
+      message: `"${label}" will be removed from your list.`,
+      confirmLabel: "Remove",
+      destructive: true,
+    });
     if (!ok) return;
     const store = await removeUserCommodityType(userId, kind, label);
     setCustomList(kind === "vehicle" ? store.vehicleTypes : store.productTypes);

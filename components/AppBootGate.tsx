@@ -28,7 +28,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
 import { dumpStartupMetrics, markStartupPhase } from '@/lib/startupMetrics';
 import { isColdStartResolved, shouldShowBootOverlay } from '@/lib/bootGate';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { pe } from '@/lib/platformViewStyle.util';
 import { Platform, StyleSheet, View } from 'react-native';
 import { usePathname } from 'expo-router';

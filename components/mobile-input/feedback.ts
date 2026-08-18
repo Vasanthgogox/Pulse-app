@@ -13,18 +13,18 @@ import type { FeedbackEvent } from './types';
 
 // Lazily import expo-haptics so the web bundle doesn't include native modules
 let Haptics: typeof import('expo-haptics') | null = null;
+let hapticsLoadStarted = false;
 
-function getHaptics(): typeof import('expo-haptics') | null {
-  if (Platform.OS === 'web') return null;
-  if (!Haptics) {
-    try {
-       
-      Haptics = require('expo-haptics') as typeof import('expo-haptics');
-    } catch {
+function loadHaptics(): void {
+  if (Platform.OS === 'web' || hapticsLoadStarted) return;
+  hapticsLoadStarted = true;
+  import('expo-haptics')
+    .then((mod) => {
+      Haptics = mod;
+    })
+    .catch(() => {
       Haptics = null;
-    }
-  }
-  return Haptics;
+    });
 }
 
 /**
@@ -32,7 +32,8 @@ function getHaptics(): typeof import('expo-haptics') | null {
  * Safe to call from any platform — silently no-ops on web.
  */
 export function triggerFeedback(event: FeedbackEvent): void {
-  const h = getHaptics();
+  loadHaptics();
+  const h = Haptics;
   if (!h) return;
 
   switch (event) {

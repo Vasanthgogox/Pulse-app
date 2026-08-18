@@ -32,7 +32,6 @@ const ASIDE_MAX = 320;
 const CONTRACTS_PAGE_SIZE = 5;
 
 type EditPanel = "BASIC" | "WAREHOUSES" | "CONTRACTS" | "KYC";
-type ClientEditPanelTarget = "BASIC" | "WAREHOUSES" | "CONTRACTS";
 type ViewTab = "OVERVIEW" | "FINANCE" | "PERFORMANCE" | "MARGIN";
 
 type EditTab = {
@@ -98,8 +97,6 @@ export type CounterpartyProfileSystemCardProps = {
   onClose: () => void;
   /** Opens full edit flow (router / modal) */
   onEditPress?: () => void;
-  /** Opens the working client edit modal on a specific tab. */
-  onOpenClientEditPanel?: (panel: ClientEditPanelTarget) => void;
   /** Enables inline hub/lane CRUD in edit mode (client profiles). */
   organizationId?: string;
   clientId?: string;
@@ -216,7 +213,6 @@ export function CounterpartyProfileSystemCard({
   kycDocs = [],
   onClose,
   onEditPress,
-  onOpenClientEditPanel,
   organizationId,
   clientId,
   supplierId,
@@ -410,14 +406,6 @@ export function CounterpartyProfileSystemCard({
 
   const handleSynchronize = () => {
     onEditPress?.();
-  };
-
-  const openClientEditPanel = (panel: ClientEditPanelTarget) => {
-    if (onOpenClientEditPanel) {
-      onOpenClientEditPanel(panel);
-      return;
-    }
-    setEditPanel(panel === "WAREHOUSES" ? "WAREHOUSES" : panel === "CONTRACTS" ? "CONTRACTS" : "BASIC");
   };
 
   const canEditEntities = Boolean(

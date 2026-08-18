@@ -82,7 +82,7 @@ describe('buildLedgerReceiptDetails', () => {
 
 describe('ledgerReceiptFromRow', () => {
   it('labels a pending synthetic salary request as "Payment pending" regardless of direction', () => {
-    const receipt = ledgerReceiptFromRow(row({ amount_out: 500, is_pending_request: true } as any));
+    const receipt = ledgerReceiptFromRow(row({ amount_out: 500, is_pending_request: true }));
     expect(receipt.statusLabel).toBe('Payment pending');
     expect(receipt.isIn).toBe(false);
     expect(receipt.amount).toBe(500);
@@ -104,6 +104,7 @@ describe('ledgerReceiptFromRow', () => {
 describe('ledgerReceiptFromFinancialRowData', () => {
   it('builds a receipt from FinancialRowData, joining category and desc as a note', () => {
     const receipt = ledgerReceiptFromFinancialRowData({
+      id: 'row-1',
       in: 0,
       out: 300,
       name: 'Driver Bob',
@@ -114,7 +115,7 @@ describe('ledgerReceiptFromFinancialRowData', () => {
       desc: 'Highway toll',
       transactionTypeLabel: 'Driver payment',
       tripId: 'trip-1',
-    } as any);
+    });
     expect(receipt.statusLabel).toBe('Payment sent');
     expect(receipt.title).toBe('Driver payment');
     expect(receipt.details.some((d) => d.label === 'Note' && d.value === 'FUEL · Highway toll')).toBe(true);
@@ -122,13 +123,14 @@ describe('ledgerReceiptFromFinancialRowData', () => {
 
   it('omits the note when category/desc combine to "GENERAL"', () => {
     const receipt = ledgerReceiptFromFinancialRowData({
+      id: 'row-2',
       in: 100,
       out: 0,
       name: 'Client A',
       transaction_date: '2026-04-01',
       category: 'GENERAL',
       desc: '',
-    } as any);
+    });
     expect(receipt.details.some((d) => d.label === 'Note')).toBe(false);
   });
 });

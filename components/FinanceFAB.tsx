@@ -13,6 +13,7 @@ import {
 import { resolveFabLottie } from "@/lib/fabLottieAssets";
 import { useGlobalFabAnimation } from "@/lib/hooks/useGlobalFabAnimation";
 import { PartyAddChip, type PartyAddChipIcon } from "@/components/PartyAddChip";
+import * as Haptics from "expo-haptics";
 import LottieView from "lottie-react-native";
 import {
   Building2,
@@ -58,12 +59,7 @@ export interface FinanceFABProps {
 }
 
 function triggerHapticMedium() {
-  try {
-    const Haptics = require("expo-haptics");
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-  } catch {
-    // expo-haptics not installed or unavailable
-  }
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 }
 
 function getLucideIcon(name: FABIconName): LucideIcon {

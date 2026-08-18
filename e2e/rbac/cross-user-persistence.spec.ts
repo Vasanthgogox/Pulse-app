@@ -295,13 +295,13 @@ test.describe('Cross-user permission persistence and enforcement', () => {
       originalDomain = await domainToggle.isChecked();
       originalSurface = await isSurfaceChecked(checkbox(ownerPage, LOADS_HUB_SURFACE));
 
-      // eslint-disable-next-line no-console
+       
       console.log(`[baseline] domain=${originalDomain} surface=${originalSurface}`);
 
       // --- Context B: QA member's access BEFORE any change -----------------
       await signIn(qaPage, qaCredentials());
       const before = await probeLoadsHub(qaPage);
-      // eslint-disable-next-line no-console
+       
       console.log(`[probe] before mutation: ${before}`);
 
       // --- GRANT -----------------------------------------------------------
@@ -321,7 +321,7 @@ test.describe('Cross-user permission persistence and enforcement', () => {
         await isSurfaceChecked(checkbox(ownerPage, LOADS_HUB_SURFACE)),
         'persistence: the granted surface must still be ticked after reopening',
       ).toBe(true);
-      // eslint-disable-next-line no-console
+       
       console.log('[persistence] grant survived panel reopen: YES');
 
       // Does a plain reload pick the grant up, or is capability state cached for
@@ -329,7 +329,7 @@ test.describe('Cross-user permission persistence and enforcement', () => {
       // whether every later phase needs a fresh login.
       await qaPage.reload();
       const afterReload = await probeLoadsHub(qaPage);
-      // eslint-disable-next-line no-console
+       
       console.log(`[probe] after grant + reload: ${afterReload}`);
       await qaPage.screenshot({ path: 'e2e/.qa/evidence/xuser-02-qa-after-reload.png' });
 
@@ -341,13 +341,13 @@ test.describe('Cross-user permission persistence and enforcement', () => {
         const freshPage = await qaCtx.newPage();
         await signIn(freshPage, qaCredentials());
         afterReauth = await probeLoadsHub(freshPage);
-        // eslint-disable-next-line no-console
+         
         console.log(`[probe] after grant + fresh login: ${afterReauth}`);
         await freshPage.screenshot({ path: 'e2e/.qa/evidence/xuser-03-qa-after-reauth.png' });
         await freshPage.close();
       }
 
-      // eslint-disable-next-line no-console
+       
       console.log(
         `[FINDING] reload sufficient: ${reloadSufficient ? 'YES' : 'NO'} | ` +
           `fresh login required: ${reloadSufficient ? 'NO' : 'YES'}`,
@@ -375,7 +375,7 @@ test.describe('Cross-user permission persistence and enforcement', () => {
         await signIn(revokedPage, qaCredentials());
       }
       const afterRevoke = await probeLoadsHub(revokedPage);
-      // eslint-disable-next-line no-console
+       
       console.log(`[probe] after revoke: ${afterRevoke}`);
       await revokedPage.screenshot({ path: 'e2e/.qa/evidence/xuser-05-qa-denied.png' });
 
@@ -412,7 +412,7 @@ test.describe('Cross-user permission persistence and enforcement', () => {
           const surfaceNow = await isSurfaceChecked(checkbox(ownerPage, LOADS_HUB_SURFACE));
           await ownerPage.screenshot({ path: 'e2e/.qa/evidence/xuser-06-restored.png' });
 
-          // eslint-disable-next-line no-console
+           
           console.log(
             `[restore] domain=${domainNow} (want ${originalDomain}) ` +
               `surface=${surfaceNow} (want ${originalSurface})`,
@@ -426,7 +426,7 @@ test.describe('Cross-user permission persistence and enforcement', () => {
             );
           }
         } catch (err) {
-          // eslint-disable-next-line no-console
+           
           console.error('[restore] FAILED — QA member may not be at baseline:', err);
           throw err;
         }

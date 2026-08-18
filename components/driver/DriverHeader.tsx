@@ -1,5 +1,4 @@
 import Layout from '@/constants/Layout';
-import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { DriverHeaderTripOpsButtons } from '@/components/driver/DriverHeaderTripOpsButtons';

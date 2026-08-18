@@ -2,7 +2,7 @@
  * Contract lane row — labeled columns so From / To / rate stay separate.
  */
 import type { ClientLaneRate, ClientWarehouseExtended } from '@/features/clients/types/clientManagement.types';
-import { clientProfileStyles as cpStyles, METRONIC } from '@/features/clients/components/desktop/clientProfileHub.styles';
+import { clientProfileStyles as cpStyles } from '@/features/clients/components/desktop/clientProfileHub.styles';
 import { formatINR } from '@/lib/format';
 import { Text, View } from 'react-native';
 

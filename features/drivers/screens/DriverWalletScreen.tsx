@@ -1,6 +1,5 @@
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { SearchBar } from '@/components/SearchBar';
-import { TripPaymentAmountGrid } from '@/features/driver/components/TripPaymentAmountGrid';
 import { DriverWalletEarningsPanel } from '@/features/drivers/components/DriverWalletEarningsPanel';
 import { DriverSelfLedgerPanel } from '@/features/drivers/components/DriverSelfLedgerPanel';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
@@ -66,7 +65,6 @@ import {
     Image,
     Linking,
     Platform,
-    Pressable,
     ScrollView,
     Share,
     StyleSheet,
@@ -161,27 +159,12 @@ function formatEmploymentPeriod(from: string, to?: string | null): string {
   return `${fmt(new Date(from))} – ${to ? fmt(new Date(to)) : 'Present'}`;
 }
 
-function formatPaymentModeLabel(mode: string | null | undefined): string {
-  const raw = (mode ?? '').trim();
-  if (!raw || raw === '—') return '—';
-  return raw
-    .toLowerCase()
-    .split(/\s+/)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-/** List area below Trips filters — same gray strip as business Trips / Load Center. */
-const DRIVER_TRIPS_LIST_BG = '#eef2f6';
-
 export default function DriverWalletScreen() {
   usePreventScreenCapture();
   const insets = useSafeAreaInsets();
   const { theme } = useDriverTheme();
   const colors = useDriverThemeColors();
   const isDark = theme === 'dark';
-  const tripsListBg = isDark ? colors.background : DRIVER_TRIPS_LIST_BG;
-  const tripsCardBg = isDark ? colors.surface : Theme.cardWhite;
   const router = useRouter();
 
   // Note: We intentionally do not deep-link to the Trip tab from Wallet.
@@ -208,7 +191,7 @@ export default function DriverWalletScreen() {
   const [transactionFilter, _setTransactionFilter] = useState<'all' | 'pending' | 'received'>('all');
   /** Expand/collapse transaction detail (trip id or null). No redirect. */
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
-  const [expandedTripReceiptId, setExpandedTripReceiptId] = useState<string | null>(null);
+  const [, setExpandedTripReceiptId] = useState<string | null>(null);
   const [markPaidLoadingTripId, setMarkPaidLoadingTripId] = useState<string | null>(null);
   const [requestPaymentLoadingTripId, setRequestPaymentLoadingTripId] = useState<string | null>(null);
   const [earningsPdfSharingTripId, setEarningsPdfSharingTripId] = useState<string | null>(null);
@@ -229,8 +212,8 @@ export default function DriverWalletScreen() {
   const [journeySearch, setJourneySearch] = useState('');
   const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'fleet_trips' | 'open_trips' | 'fleet_marked' | 'fleet_attributed' | 'settled'>('all');
   const [leaveFleetLoading, setLeaveFleetLoading] = useState(false);
-  const [markFleetTripLoadingId, setMarkFleetTripLoadingId] = useState<string | null>(null);
-  const [tripsSubTab, setTripsSubTab] = useState<'fleet' | 'open' | 'attributed'>('fleet');
+  const [_markFleetTripLoadingId, setMarkFleetTripLoadingId] = useState<string | null>(null);
+  const [tripsSubTab] = useState<'fleet' | 'open' | 'attributed'>('fleet');
   const [_copiedTripId, setCopiedTripId] = useState<string | null>(null);
   const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{
     trip: tripsService.TripRow;
@@ -923,7 +906,7 @@ export default function DriverWalletScreen() {
 </html>`;
   }, []);
 
-  const shareTripSettlementPdf = useCallback(
+  const _shareTripSettlementPdf = useCallback(
     async (p: {
       fleetName: string;
       displayId: string;
@@ -954,7 +937,7 @@ export default function DriverWalletScreen() {
     [buildTripSettlementHtml],
   );
 
-  const claimTripInAppAndShare = useCallback(
+  const _claimTripInAppAndShare = useCallback(
     async (p: { trip: tripsService.TripRow; displayId: string; fleetName: string; amount: number; from: string; to: string; status: string }) => {
       const { trip, displayId, fleetName, amount, from, to, status } = p;
       const driverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
@@ -1940,7 +1923,7 @@ export default function DriverWalletScreen() {
   }, [pastLinkedDrivers, completedTrips, invites, orgNameById]);
 
   /** Trip IDs the driver has attributed to their current employer via trip_based salary requests. */
-  const fleetAttributedTripIds = useMemo(() => {
+  const _fleetAttributedTripIds = useMemo(() => {
     const set = new Set<string>();
     if (!currentEmployer) return set;
     const employerOrgId = String(currentEmployer.orgId ?? '');
@@ -2012,7 +1995,7 @@ export default function DriverWalletScreen() {
     return filteredTripJourneyItems.filter((i) => i.status === 'Action Required' || (i.status === 'Pending' && !i.fleetPendingLedger));
   }, [filteredTripJourneyItems]);
 
-  const claimAllPendingTrips = useCallback(async () => {
+  const _claimAllPendingTrips = useCallback(async () => {
     if (claimAllLoading) return;
     if (pendingTripJourneyItems.length === 0) return;
     setClaimAllLoading(true);
@@ -2142,7 +2125,7 @@ export default function DriverWalletScreen() {
    * Find which employer the driver was connected to at the time of a given trip.
    * Checks ALL linked orgs (including left) with a pay arrangement, matching by date window.
    */
-  const findEmployerAtTripDate = useCallback(
+  const _findEmployerAtTripDate = useCallback(
     (trip: tripsService.TripRow): { orgId: string; orgName: string; driverRowId: string } | null => {
       const tripDateRaw = trip.pickup_date ?? trip.started_at ?? trip.created_at ?? '';
       const tripTs = tripDateRaw ? new Date(tripDateRaw).getTime() : Date.now();
@@ -2171,7 +2154,7 @@ export default function DriverWalletScreen() {
     [linkedDrivers, employerOrgIdSet, orgNameById, invites],
   );
 
-  const handleMarkAsFleetTrip = useCallback(
+  const _handleMarkAsFleetTrip = useCallback(
     async (trip: tripsService.TripRow, employer?: { orgId: string; orgName: string; driverRowId: string }) => {
       const target = employer ?? (currentEmployer ? { orgId: String(currentEmployer.orgId), orgName: currentEmployer.orgName, driverRowId: linkedDrivers.find((d) => !d.left_at && String(d.organization_id ?? '') === String(currentEmployer.orgId ?? ''))?.id ?? '' } : null);
       if (!target || !target.driverRowId) return;
@@ -2220,7 +2203,7 @@ export default function DriverWalletScreen() {
     [currentEmployer, linkedDrivers, profile?.uid, load, driverTripNumberById],
   );
 
-  const filteredTripJourneySections = useMemo(() => {
+  const _filteredTripJourneySections = useMemo(() => {
     const map = new Map<string, typeof filteredTripJourneyItems>();
     filteredTripJourneyItems.forEach((item) => {
       const bucket = map.get(item.date) ?? [];
@@ -2365,7 +2348,7 @@ export default function DriverWalletScreen() {
   );
 
   /** Confirm then mark trip as paid. */
-  const confirmMarkAsPaid = useCallback(
+  const _confirmMarkAsPaid = useCallback(
     (
       trip: tripsService.TripRow,
       amount: number,

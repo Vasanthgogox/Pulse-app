@@ -1705,9 +1705,9 @@ export function LoadCenterView({
                   usePartnerSidebar ? styles.loadDesktopMain : undefined
                 }
               >
-                {/* Mobile / Awarded: opportunity strip above list.
+                {/* Mobile: opportunity strip above list.
                     Desktop Get Load network indents live in Open Market. */}
-                {isMobileView || loadSubTab === "AWARDED" ? (
+                {isMobileView ? (
                   <LoadCenterOpportunityExchange
                     orgId={orgId}
                     mode={loadSubTab === "GET_LOAD" ? "get" : "give"}

@@ -1,5 +1,6 @@
 import { buildMonthlyDriverStatement } from '../driverMonthlyStatement';
 import type { TripForStatement, DriverLedgerEntryForStatement } from '../driverMonthlyStatement';
+import type { DriverOfferForAggregation } from '../types';
 
 describe('buildMonthlyDriverStatement', () => {
   const driverId = 'drv-1';
@@ -16,7 +17,7 @@ describe('buildMonthlyDriverStatement', () => {
 
   it('adds a fixed monthly salary from the driver offer to totalEarnings', () => {
     const trips: TripForStatement[] = [{ id: 't1', driver_id: driverId, pickup_date: '2026-01-10' } as TripForStatement];
-    const { rows } = buildMonthlyDriverStatement(driverId, trips, [], { payableAmount: 5000 } as any);
+    const { rows } = buildMonthlyDriverStatement(driverId, trips, [], { payableAmount: 5000 } as DriverOfferForAggregation);
     const jan = rows.find((r) => r.monthKey === '2026-01');
     expect(jan?.fixedSalary).toBe(5000);
     expect(jan?.totalEarnings).toBeGreaterThanOrEqual(5000);

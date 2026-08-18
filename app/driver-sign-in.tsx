@@ -13,7 +13,7 @@
  */
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
-import { checkExistingUserByPhone, signInDriverByPhoneUnverified } from '@/features/auth';
+import { checkExistingUserByPhone, signInDriverByPhoneUnverified } from '@/features/auth/services/auth.service';
 import { SignUpMobileShell } from '@/features/auth/signup/SignUpMobileShell';
 import { SignUpOtpBoxes } from '@/features/auth/signup/SignUpOtpBoxes';
 import { SignUpPulseKeypadStep } from '@/features/auth/signup/SignUpPulseKeypadStep';

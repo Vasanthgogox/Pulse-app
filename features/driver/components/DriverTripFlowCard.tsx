@@ -77,7 +77,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { Pressable as HoldPressable } from 'react-native-gesture-handler';
 import {
   compressLocalImageForUpload,
   PROOF_IMAGE_JPEG_QUALITY,
@@ -97,17 +96,9 @@ import Animated, {
 const ACTION_BTN_HEIGHT = 52;
 const PRIMARY_BTN_HEIGHT = 58;
 
-const HOLD_DURATION_MS = 1500;
-/** So finger drift / parent scroll do not end the hold (sheet / ScrollView). */
-const HOLD_PRESS_RETENTION = 100;
 const DRIVER_ACCEPTED_TRIP_ID_KEY = 'driver_accepted_trip_id';
 const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_POD_IMAGE_BYTES = 5 * 1024 * 1024;
-
-const holdCompleteWebStyle = {
-  touchAction: 'none' as 'none' | 'auto' | 'manipulation',
-  userSelect: 'none' as 'none' | 'auto' | 'text' | 'contain' | 'all',
-};
 
 /** RN Alert.alert is unreliable on web; use window.confirm so POD delete always prompts. */
 function confirmRemovePod(): Promise<boolean> {
@@ -368,9 +359,9 @@ export function DriverTripFlowCard({
   trip,
   commissionAmount,
   distanceToTargetKm,
-  driverLatitude = null,
-  driverLongitude = null,
-  driverLocationLabel = null,
+  driverLatitude: _driverLatitude = null,
+  driverLongitude: _driverLongitude = null,
+  driverLocationLabel: _driverLocationLabel = null,
   onRefresh,
   onTripUpdated,
   onToggleCollapse,
@@ -471,15 +462,12 @@ export function DriverTripFlowCard({
   const lastLrTripIdRef = useRef<string | null>(null);
   const [lrDeletingId, setLrDeletingId] = useState<string | null>(null);
   const lrUploadCancelledRef = useRef(false);
-  const [lrHoldProgress, setLrHoldProgress] = useState(0);
+  const [_lrHoldProgress, setLrHoldProgress] = useState(0);
   const [_isLrHolding, setIsLrHolding] = useState(false);
   const lrHoldTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lrHoldStartRef = useRef(0);
 
-  const [holdProgress, setHoldProgress] = useState(0);
+  const [_holdProgress, setHoldProgress] = useState(0);
   const [_isHolding, setIsHolding] = useState(false);
-  const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const holdStartRef = useRef(0);
 
   // Quick update panel state
   const [stagePhotoUploading, setStagePhotoUploading] = useState(false);
@@ -674,27 +662,6 @@ export function DriverTripFlowCard({
       return url;
     },
     [lrViewUrls],
-  );
-
-  const openLrPreview = useCallback(
-    async (doc: tripDocumentsService.TripDocumentRow) => {
-      setViewingPodError(false);
-      setViewingPodLoading(true);
-      setViewingPodUrl(null);
-      try {
-        const url = await resolveLrPreviewUrl(doc);
-        if (url) {
-          setViewingPodUrl(url);
-        } else {
-          setViewingPodError(true);
-        }
-      } catch {
-        setViewingPodError(true);
-      } finally {
-        setViewingPodLoading(false);
-      }
-    },
-    [resolveLrPreviewUrl],
   );
 
   const cancelPodUpload = useCallback(() => {
@@ -1355,62 +1322,6 @@ export function DriverTripFlowCard({
     onTripUpdated?.(next);
     await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
     onTripCompleted?.();
-  };
-
-  const startHold = () => {
-    setIsHolding(true);
-    setHoldProgress(0);
-    setStepError(null);
-    holdStartRef.current = Date.now();
-    holdTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - holdStartRef.current;
-      const pct = Math.min((elapsed / HOLD_DURATION_MS) * 100, 100);
-      setHoldProgress(pct);
-      if (pct >= 100) {
-        if (holdTimerRef.current) clearInterval(holdTimerRef.current);
-        holdTimerRef.current = null;
-        // Await-less call would leave a rejected promise unhandled; surface it instead.
-        void completeTrip().catch((e: unknown) => {
-          setCompleting(false);
-          setStepError(e instanceof Error ? e.message : 'Could not complete delivery.');
-        });
-      }
-    }, 20);
-  };
-
-  const cancelHold = () => {
-    if (holdTimerRef.current) {
-      clearInterval(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    setHoldProgress(0);
-    setIsHolding(false);
-  };
-
-  const startLrHold = () => {
-    setIsLrHolding(true);
-    setLrHoldProgress(0);
-    setStepError(null);
-    lrHoldStartRef.current = Date.now();
-    lrHoldTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - lrHoldStartRef.current;
-      const pct = Math.min((elapsed / HOLD_DURATION_MS) * 100, 100);
-      setLrHoldProgress(pct);
-      if (pct >= 100) {
-        if (lrHoldTimerRef.current) clearInterval(lrHoldTimerRef.current);
-        lrHoldTimerRef.current = null;
-        void engageTransit();
-      }
-    }, 20);
-  };
-
-  const cancelLrHold = () => {
-    if (lrHoldTimerRef.current) {
-      clearInterval(lrHoldTimerRef.current);
-      lrHoldTimerRef.current = null;
-    }
-    setLrHoldProgress(0);
-    setIsLrHolding(false);
   };
 
   const peekCopy = missionStagePeekCopy(step, pickupLabel, dropLabel);

@@ -402,7 +402,7 @@ export default function DriverStoriesScreen() {
             ? counter != null
               ? 'Shipper sent a counter — tap to revise'
               : 'Tap to update your quoted bid'
-            : cta.badge,
+            : cta.badge ?? undefined,
           onPress: () => {
             setViewerStartPostId(null);
             openBid(viewerStory);

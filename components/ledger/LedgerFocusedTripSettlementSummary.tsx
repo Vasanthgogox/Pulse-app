@@ -1,7 +1,6 @@
 import { memo, useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 
-import { LedgerSyncPalette } from "@/constants/LedgerSyncPalette";
 import Theme from "@/constants/Theme";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { TripEntryFinancialSnapshot } from "@/features/finance/utils/computeTripEntryFinancials.util";

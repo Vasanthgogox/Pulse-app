@@ -44,7 +44,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AppState,
-    Image,
     Platform,
     StyleSheet,
     Text,
