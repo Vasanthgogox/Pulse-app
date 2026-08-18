@@ -557,8 +557,11 @@ const styles = StyleSheet.create({
   },
   cardWrapGrid: {
     flex: 1,
-    marginBottom: 0,
+    width: "100%",
+    maxWidth: "100%",
     minWidth: 0,
+    alignSelf: "stretch",
+    marginBottom: 0,
   },
   card: {
     backgroundColor: Theme.cardWhite,
@@ -582,6 +585,9 @@ const styles = StyleSheet.create({
   cardGrid: {
     flex: 1,
     width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
     minHeight: HUB_GRID_CARD_MIN_HEIGHT,
     flexDirection: "column",
   },

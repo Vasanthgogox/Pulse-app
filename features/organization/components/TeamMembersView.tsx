@@ -6,7 +6,6 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { PartyAvatar } from "@/components/PartyAvatar";
-import { partyInitialsFromName } from "@/lib/partyAvatarDisplay";
 import { useOrgMembersQuery, useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
 import {
   cancelTeamInvite,
@@ -76,6 +75,75 @@ function formatRelative(iso: string): string {
   return `${Math.max(1, m)}m ago`;
 }
 
+const AVATAR_SIZE = 52;
+const AVATAR_RING = 56;
+const AVATAR_OVERLAP = AVATAR_RING / 2;
+
+function RolePill({
+  label,
+  color,
+}: {
+  label: string;
+  color: string;
+}) {
+  return (
+    <View style={[cardStyles.pill, { borderColor: color }]}>
+      <Shield size={9} color={color} strokeWidth={2.4} />
+      <Text style={[cardStyles.pillText, { color }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function TeamRosterCardShell({
+  selected = false,
+  checkbox,
+  leftBadges,
+  rightBadge,
+  avatarName,
+  avatarSeed,
+  avatarUrl,
+  children,
+  footer,
+}: {
+  selected?: boolean;
+  checkbox?: React.ReactNode;
+  leftBadges: React.ReactNode;
+  rightBadge: React.ReactNode;
+  avatarName: string;
+  avatarSeed: string;
+  avatarUrl?: string | null;
+  children: React.ReactNode;
+  footer: React.ReactNode;
+}) {
+  return (
+    <View style={[cardStyles.card, selected && cardStyles.cardSelected]}>
+      {checkbox}
+      <View style={cardStyles.cardCover}>
+        <View style={cardStyles.badgeRow}>
+          <View style={cardStyles.badgeCluster}>{leftBadges}</View>
+          {rightBadge}
+        </View>
+        <View style={cardStyles.avatarOverlap} pointerEvents="none">
+          <View style={cardStyles.avatarRing}>
+            <PartyAvatar
+              name={avatarName}
+              initialsColorSeed={avatarSeed}
+              avatarUrl={avatarUrl ?? null}
+              size={AVATAR_SIZE}
+              shape="circle"
+              style={cardStyles.avatarInner}
+            />
+          </View>
+        </View>
+      </View>
+      <View style={cardStyles.cardBody}>{children}</View>
+      <View style={cardStyles.footerSlot}>{footer}</View>
+    </View>
+  );
+}
+
 // ─── Member Card ──────────────────────────────────────────────────────────────
 
 function MemberCard({
@@ -104,81 +172,53 @@ function MemberCard({
   const canSelect = selectable && canEdit;
 
   return (
-    <View style={[cardStyles.card, selected && cardStyles.cardSelected]}>
-      {canSelect ? (
-        <Pressable
-          onPress={() => onToggleSelect?.(member)}
-          hitSlop={8}
-          style={cardStyles.checkboxWrap}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: selected }}
-          accessibilityLabel={`Select ${displayName}`}
-        >
-          {selected ? (
-            <CheckSquare size={18} color={Theme.primary} strokeWidth={2.4} />
-          ) : (
-            <Square size={18} color={Theme.textSecondary} strokeWidth={2.2} />
-          )}
-        </Pressable>
-      ) : null}
-      <View style={cardStyles.cardCover}>
-        <View style={cardStyles.coverGradient} />
-        <View style={cardStyles.badgeRow}>
-          <View style={[cardStyles.rolePill, { borderColor: roleBadgeColor(member) }]}>
-            <Shield size={9} color={roleBadgeColor(member)} strokeWidth={2.4} />
-            <Text style={[cardStyles.rolePillText, { color: roleBadgeColor(member) }]}>
-              {roleLabel(member)}
-            </Text>
-          </View>
-          {isPending ? (
-            <View style={cardStyles.pendingPill}>
-              <Text style={cardStyles.pendingPillText}>PENDING</Text>
-            </View>
-          ) : (
-            <View style={cardStyles.activePill}>
-              <Check size={9} color={Theme.darkGreen} strokeWidth={2.8} />
-              <Text style={cardStyles.activePillText}>ACTIVE</Text>
-            </View>
-          )}
+    <TeamRosterCardShell
+      selected={selected}
+      avatarName={displayName}
+      avatarSeed={member.id}
+      avatarUrl={member.avatar_url}
+      checkbox={
+        canSelect ? (
+          <Pressable
+            onPress={() => onToggleSelect?.(member)}
+            hitSlop={8}
+            style={cardStyles.checkboxWrap}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: selected }}
+            accessibilityLabel={`Select ${displayName}`}
+          >
+            {selected ? (
+              <CheckSquare size={18} color={Theme.primary} strokeWidth={2.4} />
+            ) : (
+              <Square size={18} color={Theme.textSecondary} strokeWidth={2.2} />
+            )}
+          </Pressable>
+        ) : null
+      }
+      leftBadges={
+        <>
+          <RolePill label={roleLabel(member)} color={roleBadgeColor(member)} />
           {isCurrentUser ? (
-            <View style={cardStyles.youPill}>
-              <Text style={cardStyles.youPillText}>YOU</Text>
+            <View style={[cardStyles.pill, cardStyles.youPill]}>
+              <Text style={[cardStyles.pillText, cardStyles.youPillText]}>YOU</Text>
             </View>
           ) : null}
-        </View>
-      </View>
-
-      <View style={cardStyles.cardBody}>
-        <View style={cardStyles.avatarWrap}>
-          <PartyAvatar
-            name={displayName}
-            avatarUrl={member.avatar_url ?? null}
-            entityType="client"
-            size={54}
-            borderStyle={cardStyles.avatarBorder}
-          />
-        </View>
-        <Text style={cardStyles.name} numberOfLines={1}>
-          {displayName}
-        </Text>
-        {!!member.phone && (
-          <Text style={cardStyles.phone} numberOfLines={1}>
-            {member.phone}
-          </Text>
-        )}
-        {!!member.email && (
-          <Text style={cardStyles.email} numberOfLines={1}>
-            {member.email}
-          </Text>
-        )}
-        <View style={cardStyles.metaRow}>
-          <Text style={cardStyles.metaText}>{formatRelative(member.joined_at)}</Text>
-        </View>
-      </View>
-
-      {/* Always reserve footer height so Owner / Operator cards share one baseline. */}
-      <View style={cardStyles.footerSlot}>
-        {canSelect ? (
+        </>
+      }
+      rightBadge={
+        isPending ? (
+          <View style={[cardStyles.pill, cardStyles.pendingPill]}>
+            <Text style={[cardStyles.pillText, cardStyles.pendingPillText]}>PENDING</Text>
+          </View>
+        ) : (
+          <View style={[cardStyles.pill, cardStyles.activePill]}>
+            <Check size={9} color={Theme.darkGreen} strokeWidth={2.8} />
+            <Text style={[cardStyles.pillText, cardStyles.activePillText]}>ACTIVE</Text>
+          </View>
+        )
+      }
+      footer={
+        canSelect ? (
           <Pressable
             onPress={() => onToggleSelect?.(member)}
             style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
@@ -197,9 +237,28 @@ function MemberCard({
           </Pressable>
         ) : (
           <View style={cardStyles.footerSpacer} />
+        )
+      }
+    >
+      <View style={cardStyles.identityBlock}>
+        <Text style={cardStyles.name} numberOfLines={1}>
+          {displayName}
+        </Text>
+        {!!member.phone && (
+          <Text style={cardStyles.phone} numberOfLines={1}>
+            {member.phone}
+          </Text>
         )}
+        {!!member.email && (
+          <Text style={cardStyles.email} numberOfLines={1}>
+            {member.email}
+          </Text>
+        )}
+        <View style={cardStyles.metaPill}>
+          <Text style={cardStyles.metaPillText}>{formatRelative(member.joined_at)}</Text>
+        </View>
       </View>
-    </View>
+    </TeamRosterCardShell>
   );
 }
 
@@ -220,33 +279,38 @@ function PendingPhoneInviteCard({
   });
 
   return (
-    <View style={cardStyles.card}>
-      <View style={cardStyles.cardCover}>
-        <View style={cardStyles.coverOrbLarge} />
-        <View style={cardStyles.coverOrbSmall} />
-        <View style={cardStyles.badgeRow}>
-          <View style={[cardStyles.rolePill, { borderColor: Theme.warning }]}>
-            <Shield size={9} color={Theme.warning} strokeWidth={2.4} />
-            <Text style={[cardStyles.rolePillText, { color: Theme.warning }]}>
-              {roleText}
-            </Text>
-          </View>
-          <View style={cardStyles.pendingPill}>
-            <Text style={cardStyles.pendingPillText}>
-              {invite.email_conflict ? "ACCOUNT EXISTS" : "AWAITING SIGNUP"}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={cardStyles.cardBody}>
-        <View style={cardStyles.pendingAvatarWrap}>
-          <Text style={cardStyles.pendingInitials} numberOfLines={1}>
-            {partyInitialsFromName(invite.invitee_name)}
+    <TeamRosterCardShell
+      avatarName={invite.invitee_name}
+      avatarSeed={invite.id}
+      leftBadges={<RolePill label={roleText} color={Theme.accentBrown} />}
+      rightBadge={
+        <View style={[cardStyles.pill, cardStyles.pendingPill]}>
+          <Text style={[cardStyles.pillText, cardStyles.pendingPillText]} numberOfLines={1}>
+            {invite.email_conflict ? "ACCOUNT EXISTS" : "AWAITING SIGNUP"}
           </Text>
         </View>
+      }
+      footer={
+        canManage ? (
+          <Pressable
+            onPress={() => onCancel(invite)}
+            style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Cancel invite for ${invite.invitee_name}`}
+          >
+            <Trash2 size={12} color={Theme.destructive} strokeWidth={2.2} />
+            <Text style={[cardStyles.editBtnText, { color: Theme.destructive }]}>
+              Cancel invite
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={cardStyles.footerSpacer} />
+        )
+      }
+    >
+      <View style={cardStyles.identityBlock}>
         <Text style={cardStyles.name} numberOfLines={1}>
-          {invite.invitee_name.toUpperCase()}
+          {invite.invitee_name}
         </Text>
         <Text style={cardStyles.phone} numberOfLines={1}>
           {invite.invitee_phone}
@@ -260,22 +324,10 @@ function PendingPhoneInviteCard({
             No email on invite
           </Text>
         )}
-        {invite.email_conflict ? (
-          <View style={cardStyles.conflictBox}>
-            <Text style={cardStyles.conflictTitle}>Pulse account found</Text>
-            <Text style={cardStyles.conflictText}>
-              {invite.conflict_org_names?.length
-                ? `Linked to ${invite.conflict_org_names.join(", ")}. They must sign in — not sign up again.`
-                : "This email is already registered. Ask them to sign in to accept."}
-            </Text>
-          </View>
-        ) : null}
-        <View style={cardStyles.metaRow}>
-          <View style={cardStyles.metaChip}>
-            <Text style={cardStyles.metaChipText}>
-              Invited {formatRelative(invite.created_at)}
-            </Text>
-          </View>
+        <View style={cardStyles.metaPill}>
+          <Text style={cardStyles.metaPillText}>
+            Invited {formatRelative(invite.created_at)}
+          </Text>
         </View>
         <Text style={cardStyles.phoneHint}>
           {invite.email_conflict
@@ -283,16 +335,17 @@ function PendingPhoneInviteCard({
             : "Joins when they sign up with this phone number."}
         </Text>
       </View>
-
-      {canManage ? (
-        <Pressable
-          onPress={() => onCancel(invite)}
-          style={({ pressed }) => [cardStyles.actionBtn, pressed && { opacity: 0.7 }]}
-        >
-          <Trash2 size={14} color={Theme.destructive} strokeWidth={2.2} />
-        </Pressable>
+      {invite.email_conflict ? (
+        <View style={cardStyles.conflictBox}>
+          <Text style={cardStyles.conflictTitle}>Pulse account found</Text>
+          <Text style={cardStyles.conflictText}>
+            {invite.conflict_org_names?.length
+              ? `Linked to ${invite.conflict_org_names.join(", ")}. They must sign in — not sign up again.`
+              : "This email is already registered. Ask them to sign in to accept."}
+          </Text>
+        </View>
       ) : null}
-    </View>
+    </TeamRosterCardShell>
   );
 }
 
@@ -311,10 +364,6 @@ const cardStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
     overflow: "hidden",
-    minHeight: 220,
-    ...Platform.select({
-      web: { height: "100%" as unknown as number },
-    }),
   },
   cardSelected: {
     borderColor: Theme.primary,
@@ -333,163 +382,139 @@ const cardStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   cardCover: {
-    height: 56,
-    overflow: "hidden",
+    height: 48,
+    backgroundColor: Theme.surfaceGray,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
-  },
-  coverGradient: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Theme.surfaceGray,
-    opacity: 0.95,
-  },
-  // TODO(types): restored from pre-migration (commit d3522420 dropped these while JSX kept referencing them)
-  coverOrbLarge: {
-    position: "absolute",
-    width: 120,
-    height: 64,
-    borderRadius: 60,
-    top: -16,
-    left: -24,
-    backgroundColor: Theme.borderLight,
-    transform: [{ rotate: "-10deg" }],
-  },
-  coverOrbSmall: {
-    position: "absolute",
-    width: 80,
-    height: 48,
-    borderRadius: 40,
-    right: -18,
-    bottom: -12,
-    backgroundColor: Theme.surface,
-    transform: [{ rotate: "14deg" }],
+    overflow: "visible",
+    zIndex: 1,
   },
   badgeRow: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    right: 8,
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 6,
+    paddingHorizontal: 10,
   },
-  rolePill: {
-    minHeight: 20,
+  badgeCluster: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  pill: {
+    height: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 4,
-    paddingHorizontal: 7,
-    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    flexShrink: 0,
   },
-  rolePillText: {
+  pillText: {
     fontSize: 8,
     fontWeight: "700",
-    letterSpacing: 0.25,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+    lineHeight: 10,
   },
   pendingPill: {
-    minHeight: 20,
-    justifyContent: "center",
-    paddingHorizontal: 7,
     backgroundColor: Theme.warningMuted,
+    borderColor: Theme.warningMuted,
+    flexShrink: 1,
+    maxWidth: "58%",
   },
   pendingPillText: {
-    fontSize: 8,
-    fontWeight: "700",
     color: Theme.warning,
-    letterSpacing: 0.25,
   },
   activePill: {
-    minHeight: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 7,
     backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positiveMuted,
   },
   activePillText: {
-    fontSize: 8,
-    fontWeight: "700",
     color: Theme.darkGreen,
-    letterSpacing: 0.25,
   },
   youPill: {
-    minHeight: 20,
-    justifyContent: "center",
-    paddingHorizontal: 7,
     backgroundColor: Theme.aggregatePillBg,
+    borderColor: Theme.aggregatePillBg,
   },
   youPillText: {
-    fontSize: 8,
-    fontWeight: "700",
     color: Theme.aggregatePillText,
   },
-  cardBody: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingTop: 0,
-    paddingBottom: 10,
-    alignItems: "center",
-    gap: 2,
-  },
-  avatarWrap: {
-    marginTop: -26,
-    marginBottom: 4,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  pendingAvatarWrap: {
-    marginTop: -22,
+  avatarOverlap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: -AVATAR_OVERLAP,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 36,
+    zIndex: 2,
   },
-  pendingInitials: {
-    fontSize: 24,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.4,
-    textAlign: "center",
+  avatarRing: {
+    width: AVATAR_RING,
+    height: AVATAR_RING,
+    borderRadius: AVATAR_OVERLAP,
+    borderWidth: 2,
+    borderColor: Theme.cardWhite,
+    backgroundColor: Theme.cardWhite,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
-  avatarBorder: {
+  avatarInner: {
+    borderWidth: 0,
+  },
+  cardBody: {
+    flexGrow: 1,
+    paddingHorizontal: 12,
+    paddingTop: AVATAR_OVERLAP + 10,
+    paddingBottom: 12,
+    alignItems: "center",
+  },
+  identityBlock: {
+    width: "100%",
+    alignItems: "center",
+    gap: 5,
   },
   name: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.15,
+    letterSpacing: -0.2,
     textAlign: "center",
-    lineHeight: 15,
-    marginTop: 6,
+    lineHeight: 18,
   },
   phone: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
     color: Theme.textPrimaryDark,
     textAlign: "center",
+    lineHeight: 15,
   },
   email: {
-    fontSize: 9,
-    fontWeight: "500",
-    color: Theme.textPrimaryDark,
+    fontSize: 11,
+    fontWeight: "400",
+    color: Theme.textSecondary,
     textAlign: "center",
-    paddingHorizontal: 6,
+    lineHeight: 15,
+    paddingHorizontal: 4,
   },
   emailMuted: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: "400",
     fontStyle: "italic",
     color: Theme.textMuted,
     textAlign: "center",
-    marginTop: 2,
+    lineHeight: 15,
   },
   conflictBox: {
-    marginTop: 8,
+    marginTop: 10,
     paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 10,
@@ -514,44 +539,28 @@ const cardStyles = StyleSheet.create({
     lineHeight: 11,
   },
   phoneHint: {
-    fontSize: 8,
+    fontSize: 10,
     color: Theme.textMuted,
     textAlign: "center",
-    marginTop: 6,
-    lineHeight: 11,
-    paddingHorizontal: 8,
+    lineHeight: 14,
+    paddingHorizontal: 4,
+    marginTop: 2,
   },
-  metaRow: {
-    marginTop: 6,
-  },
-  metaText: {
-    fontSize: 9,
-    fontWeight: "500",
-    color: Theme.textMuted,
-  },
-  // TODO(types): restored from pre-migration (commit d3522420 dropped these while JSX kept referencing them)
-  metaChip: {
-    minHeight: 20,
-    justifyContent: "center",
+  metaPill: {
+    height: 20,
+    marginTop: 2,
     paddingHorizontal: 8,
     borderRadius: 10,
-    backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-  },
-  metaChipText: {
-    fontSize: 8,
-    fontWeight: "500",
-    fontStyle: "italic",
-    color: Theme.textSecondary,
-  },
-  actionBtn: {
-    height: 38,
+    backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+  },
+  metaPillText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
   },
   footerSlot: {
     flexShrink: 0,
@@ -629,6 +638,7 @@ export function TeamMembersView({
   currentUserId,
   canManage,
   onInvite,
+  onEditMember,
   embedded = false,
   desktopMetronic = false,
   initialSubTab,
@@ -637,6 +647,8 @@ export function TeamMembersView({
   currentUserId: string | null;
   canManage: boolean;
   onInvite?: () => void;
+  /** When set, Edit stays in the current layout instead of opening the full-page permissions modal. */
+  onEditMember?: (member: OrgMember) => void;
   /** When true, omit outer ScrollView (parent scrolls). */
   embedded?: boolean;
   /** Metronic desktop hub — underline sub-tabs, tighter padding. */
@@ -667,6 +679,10 @@ export function TeamMembersView({
   const router = useRouter();
 
   const handleEditMember = (member: OrgMember) => {
+    if (onEditMember) {
+      onEditMember(member);
+      return;
+    }
     router.push(
       (`/(modals)/member-permissions?memberId=${encodeURIComponent(member.id)}`) as Parameters<
         typeof router.push

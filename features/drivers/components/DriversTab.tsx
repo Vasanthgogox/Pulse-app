@@ -26,6 +26,7 @@ import type { TripRow } from '@/features/trips/services/trips.service';
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
 import { aggregateDrivers, type DriverOfferForAggregation, type TripPartyMap } from "@/features/finance/aggregation";
+import { CUSTOMERS_SUPPLIERS } from "@/features/finance/constants/tableColumns";
 import { useDriversQuery } from '@/lib/queries/useDriversQuery';
 import { useTripsQuery } from '@/lib/queries/useTripsQuery';
 import { usePaginatedScroll } from '@/lib/usePaginatedScroll';
@@ -115,10 +116,13 @@ export function DriversTab({
   );
 
   const driversRaw = isControlled ? (driversProp ?? []) : driversFromQuery;
-  /** Party roster only — active fleet relationship (active_employee/independent). driversRaw may come from a controlled prop, not just useDriversQuery, so this is not always redundant. */
+  /** Uncontrolled: party roster. Controlled (Finance): parent already applied ledger membership. */
   const drivers = useMemo(
-    () => filterActiveFleetRelationshipDrivers(driversRaw),
-    [driversRaw],
+    () =>
+      isControlled
+        ? driversRaw
+        : filterActiveFleetRelationshipDrivers(driversRaw),
+    [driversRaw, isControlled],
   );
   const trips = isControlled ? (tripsProp ?? []) : tripsFromQuery;
   const transactions = transactionsProp ?? [];
@@ -318,7 +322,17 @@ export function DriversTab({
               Trips
             </Text>
           </View>
-          <View style={styles.headerPendingCol}>
+          <View style={styles.headerAmtCol}>
+            <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+              Earned
+            </Text>
+          </View>
+          <View style={styles.headerAmtCol}>
+            <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+              Paid
+            </Text>
+          </View>
+          <View style={styles.headerAmtCol}>
             <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
               Pending
             </Text>
@@ -330,6 +344,7 @@ export function DriversTab({
           {rowsToRender.map((data) => {
             const pending = data.pending ?? 0;
             const paid = data.paid ?? 0;
+            const earned = data.due ?? 0;
             const tripCount = data.trips ?? 0;
             const isDisconnected =
               data.left_at != null && String(data.left_at).trim() !== '';
@@ -346,30 +361,38 @@ export function DriversTab({
                 }
                 activeOpacity={0.7}
               >
-                <EntityAvatar
-                  name={data.name ?? ''}
-                  avatarUrl={driver?.avatar_url}
-                  avatarSeed={driver?.avatar_seed}
-                  entityType="driver"
-                  isIntegrated={isIntegrated}
-                  badgeOverlay
-                />
                 <View style={[styles.tableCell, styles.ctEntity]}>
-                  <View style={styles.tableEntityHeader}>
+                  <View style={styles.tableEntityMain}>
+                    <EntityAvatar
+                      name={data.name ?? ''}
+                      avatarUrl={driver?.avatar_url}
+                      avatarSeed={driver?.avatar_seed}
+                      initialsColorSeed={data.id}
+                      entityType="driver"
+                      isIntegrated={isIntegrated}
+                      badgeOverlay
+                    />
                     <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
                       {data.name ?? '—'}
                     </Text>
                   </View>
-                  <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
-                    Earned: ₹{(data.due ?? 0) >= 1000 ? `${((data.due ?? 0) / 1000).toFixed(1)}k` : (data.due ?? 0).toLocaleString('en-IN')}
-                  </Text>
                 </View>
                 <View style={[styles.tableCell, styles.ctTrips]}>
                   <View style={styles.tripsPill}>
                     <Text style={styles.tripsPillText}>{tripCount}</Text>
                   </View>
                 </View>
-                <View style={[styles.tableCell, styles.ctPending]}>
+                <View style={[styles.tableCell, styles.ctAmt]}>
+                  <Text style={styles.tableAmtValue} numberOfLines={1}>
+                    ₹{earned.toLocaleString('en-IN')}
+                  </Text>
+                </View>
+                <View style={[styles.tableCell, styles.ctAmt]}>
+                  <Text style={styles.tableAmtPaid} numberOfLines={1}>
+                    ₹{paid.toLocaleString('en-IN')}
+                  </Text>
+                </View>
+                <View style={[styles.tableCell, styles.ctAmt]}>
                   <Text
                     style={[
                       styles.tablePendingValue,
@@ -378,9 +401,6 @@ export function DriversTab({
                     numberOfLines={1}
                   >
                     ₹{pending.toLocaleString('en-IN')}
-                  </Text>
-                  <Text style={styles.tablePaidLabel} numberOfLines={1}>
-                    Paid: ₹{paid >= 1000 ? `${(paid / 1000).toFixed(1)}k` : paid.toLocaleString('en-IN')}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -523,28 +543,32 @@ const styles = StyleSheet.create({
   ctLeft: { textAlign: 'left' },
   ctCenter: { textAlign: 'center' },
   ctRight: { textAlign: 'right' },
-  headerEntityCol: { flex: 2.2, minWidth: 0, justifyContent: 'center' },
-  headerTripsCol: { flex: 0.5, minWidth: 44, justifyContent: 'center' },
-  headerPendingCol: { flex: 1.5, minWidth: 0, justifyContent: 'center' },
-  ctEntity: { flex: 2.2, minWidth: 0 },
-  ctTrips: { flex: 0.5, minWidth: 44, justifyContent: 'center' },
-  ctPending: { flex: 1.5, minWidth: 0, alignItems: 'flex-end', justifyContent: 'center' },
+  headerEntityCol: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0, justifyContent: 'center' },
+  headerTripsCol: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: 'center' },
+  headerAmtCol: { flex: CUSTOMERS_SUPPLIERS.mission, minWidth: 0, justifyContent: 'center' },
+  ctEntity: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0 },
+  ctTrips: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: 'center' },
+  ctAmt: {
+    flex: CUSTOMERS_SUPPLIERS.mission,
+    minWidth: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
+    minHeight: 52,
+    paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
   tableCell: { paddingHorizontal: 5, minWidth: 0 },
-  tableEntityHeader: {
+  tableEntityMain: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     minWidth: 0,
-    flexWrap: 'wrap',
   },
   tableEntityName: {
     fontSize: 11,
@@ -552,15 +576,8 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: Theme.textPrimaryDark,
     textTransform: 'uppercase',
-    flexShrink: 1,
-  },
-  tableEntitySub: {
-    fontSize: 8,
-    fontWeight: '500',
-    color: Theme.textMuted,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginTop: 2,
+    flex: 1,
+    minWidth: 0,
   },
   tripsPill: {
     alignSelf: 'center',
@@ -587,13 +604,16 @@ const styles = StyleSheet.create({
   },
   tablePendingDue: { color: Theme.teslaRed },
   tablePendingSettled: { color: Theme.darkGreen },
-  tablePaidLabel: {
-    fontSize: 8,
-    fontWeight: '500',
-    color: Theme.textMuted,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginTop: 2,
+  tableAmtValue: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    textAlign: 'right',
+  },
+  tableAmtPaid: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Theme.darkGreen,
     textAlign: 'right',
   },
   emptyBanner: {

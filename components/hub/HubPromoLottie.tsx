@@ -28,11 +28,14 @@ export function HubPromoHeroLottie({
   width,
   height,
   renderScale = 1,
+  resizeMode = "contain",
 }: {
   source: AnimationObject;
   width: number;
   height: number;
   renderScale?: number;
+  /** `cover` for wide canvases (e.g. driving scene) so the figure fills the square slot. */
+  resizeMode?: "contain" | "cover" | "center";
 }) {
   const renderW = Math.round(width * renderScale);
   const renderH = Math.round(height * renderScale);
@@ -42,14 +45,20 @@ export function HubPromoHeroLottie({
         source={source}
         autoPlay
         loop
-        resizeMode="contain"
+        resizeMode={resizeMode}
         style={[
           {
             width: renderW,
             height: renderH,
             position: "absolute",
           },
-          Platform.OS === "web" ? styles.heroLottieWeb : null,
+          Platform.OS === "web"
+            ? ({
+                maxWidth: "100%",
+                maxHeight: "100%",
+                objectFit: resizeMode,
+              } as object)
+            : null,
         ]}
       />
     </View>
@@ -69,9 +78,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  heroLottieWeb: {
-    maxWidth: "100%",
-    maxHeight: "100%",
-    objectFit: "contain",
-  } as object,
 });

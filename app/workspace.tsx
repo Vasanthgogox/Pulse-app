@@ -12,6 +12,7 @@ import { WorkspaceOcrUsagePanel } from "@/features/organization/components/works
 import { WorkspaceProductsPanel } from "@/features/organization/components/workspace/WorkspaceProductsPanel";
 import { WorkspaceProfilePanel } from "@/features/organization/components/workspace/WorkspaceProfilePanel";
 import { WorkspaceSettingsPanel } from "@/features/organization/components/workspace/WorkspaceSettingsPanel";
+import { WorkspaceTeamPanel } from "@/features/organization/components/workspace/WorkspaceTeamPanel";
 import {
   isWorkspaceHubInlinePanel,
   parseOrgHubSection,
@@ -21,7 +22,7 @@ import {
 } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 
 export default function WorkspaceScreen() {
@@ -40,6 +41,8 @@ export default function WorkspaceScreen() {
     [params.section],
   );
 
+  const previousPanelRef = useRef<WorkspacePanelId | null>(null);
+
   const closeOverlay = useCallback(() => {
     if (router.canGoBack()) router.back();
     else router.replace(ROUTES.TABS.NETWORK as Parameters<typeof router.replace>[0]);
@@ -47,28 +50,51 @@ export default function WorkspaceScreen() {
 
   const openPanel = useCallback(
     (panel: WorkspacePanelId) => {
+      previousPanelRef.current = activePanel;
       router.setParams({ panel, section: "" });
     },
-    [router],
+    [activePanel, router],
   );
 
   const closePanel = useCallback(() => {
     router.setParams({ panel: "", section: "" });
   }, [router]);
 
+  const closeTeamPanel = useCallback(() => {
+    const previous = previousPanelRef.current;
+    if (previous && previous !== "team") {
+      openPanel(previous);
+      return;
+    }
+    closePanel();
+  }, [closePanel, openPanel]);
+
+  const closeOcrUsagePanel = useCallback(() => {
+    const previous = previousPanelRef.current;
+    if (previous && previous !== "ocr-usage") {
+      openPanel(previous);
+      return;
+    }
+    closePanel();
+  }, [closePanel, openPanel]);
+
   const openOrgSection = useCallback(
     (section: OrgHubSection | null) => {
-      router.setParams({ panel: "kyc", section: section ?? "" });
+      if (section) {
+        previousPanelRef.current = activePanel;
+        router.setParams({ panel: "kyc", section });
+        return;
+      }
+      const previous = previousPanelRef.current;
+      if (previous && previous !== "kyc") {
+        previousPanelRef.current = null;
+        openPanel(previous);
+        return;
+      }
+      router.setParams({ panel: "kyc", section: "" });
     },
-    [router],
+    [activePanel, openPanel, router],
   );
-
-  useEffect(() => {
-    if (activePanel !== "team") return;
-    closeOverlay();
-    router.replace(ROUTES.MODALS.TEAM as Parameters<typeof router.replace>[0]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePanel]);
 
   const panelContent = useMemo(() => {
     if (activePanel === "account") {
@@ -92,11 +118,19 @@ export default function WorkspaceScreen() {
         <WorkspaceProfilePanel
           onBack={closePanel}
           onOpenPanel={openPanel}
+          onOpenOrgSection={openOrgSection}
+          onOpenRoute={(path) => {
+            closeOverlay();
+            router.replace(path as Parameters<typeof router.replace>[0]);
+          }}
         />
       );
     }
     if (activePanel === "settings") {
       return <WorkspaceSettingsPanel onBack={closePanel} />;
+    }
+    if (activePanel === "team") {
+      return <WorkspaceTeamPanel onBack={closeTeamPanel} />;
     }
     if (activePanel === "kyc") {
       return (
@@ -105,10 +139,6 @@ export default function WorkspaceScreen() {
           section={orgSection}
           onOpenSection={openOrgSection}
           onOpenPanel={openPanel}
-          onOpenRoute={(path) => {
-            closeOverlay();
-            router.replace(path as Parameters<typeof router.replace>[0]);
-          }}
         />
       );
     }
@@ -116,10 +146,10 @@ export default function WorkspaceScreen() {
       return <WorkspaceProductsPanel onBack={closePanel} />;
     }
     if (activePanel === "ocr-usage") {
-      return <WorkspaceOcrUsagePanel onBack={closePanel} />;
+      return <WorkspaceOcrUsagePanel onBack={closeOcrUsagePanel} />;
     }
     return null;
-  }, [activePanel, closeOverlay, closePanel, openOrgSection, openPanel, orgSection, router]);
+  }, [activePanel, closeOverlay, closePanel, closeOcrUsagePanel, closeTeamPanel, openOrgSection, openPanel, orgSection, router]);
 
   const shellPanelOpen = !!activePanel && !isWorkspaceHubInlinePanel(activePanel);
 
@@ -127,6 +157,7 @@ export default function WorkspaceScreen() {
     <WorkspaceHubMenu
       activePanel={activePanel}
       onSelectPanel={openPanel}
+      onSelectOrgSection={openOrgSection}
       onExit={closeOverlay}
       inlinePanel={isWorkspaceHubInlinePanel(activePanel) ? activePanel : null}
       onCloseInlinePanel={closePanel}
@@ -141,7 +172,6 @@ export default function WorkspaceScreen() {
           panel={panelContent}
           panelOpen={shellPanelOpen}
           onDismiss={closeOverlay}
-          onClosePanel={closePanel}
         />
       </WorkspaceFeedbackProvider>
     </View>

@@ -6,6 +6,7 @@ import {
   type CreatePostInput,
   type PostRow,
 } from '@/features/network/services/posts.service';
+import type { IndentStoryState } from '@/features/network/services/indentStoryPosts.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
@@ -42,6 +43,26 @@ export function useInvalidatePosts(orgId: string | null) {
   return () => {
     if (orgId) void qc.invalidateQueries({ queryKey: queryKeys.posts.all(orgId) });
   };
+}
+
+export function useIndentStoryStatesQuery(
+  orgId: string | null,
+  indentIds: string[],
+) {
+  const stableKey = indentIds.length ? [...indentIds].sort().join(',') : '';
+  return useQuery<Record<string, IndentStoryState>>({
+    queryKey: queryKeys.posts.indentStories(orgId ?? '', stableKey),
+    queryFn: async () => {
+      const { getIndentStoryStates } = await import(
+        '@/features/network/services/indentStoryPosts.service'
+      );
+      const res = await getIndentStoryStates(orgId!, indentIds);
+      if (res.error) throw res.error;
+      return res.byIndentId;
+    },
+    enabled: !!orgId && indentIds.length > 0,
+    staleTime: STALE.frequent,
+  });
 }
 
 /**

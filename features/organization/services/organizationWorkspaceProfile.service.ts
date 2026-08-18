@@ -1,4 +1,37 @@
 import { supabase } from '@/lib/supabase';
+import {
+  isVerificationFrozen,
+  type KycVerificationStatus,
+} from '@/types/organization';
+
+const ADDRESS_PATCH_KEYS = [
+  'address_line',
+  'locality',
+  'pincode',
+  'city',
+  'state',
+] as const;
+
+async function rejectFrozenAddressWrite(
+  orgId: string,
+  payload: UpdateOrganizationWorkspaceProfileData,
+): Promise<Error | null> {
+  const touchingAddress = ADDRESS_PATCH_KEYS.some(
+    (key) => payload[key] !== undefined,
+  );
+  if (!touchingAddress) return null;
+  const { data, error } = await supabase()
+    .from('organizations')
+    .select('verification_status')
+    .eq('id', orgId)
+    .maybeSingle();
+  if (error) return new Error(error.message);
+  const status = (data?.verification_status ?? 'unverified') as KycVerificationStatus;
+  if (!isVerificationFrozen(status)) return null;
+  return new Error(
+    'Registered office is locked after verification. Upload a new address proof for Pulse admin to change it.',
+  );
+}
 
 export type OrganizationWorkspaceProfile = {
   id: string;
@@ -67,6 +100,9 @@ export async function updateOrganizationWorkspaceProfile(
   orgId: string,
   payload: UpdateOrganizationWorkspaceProfileData,
 ): Promise<{ error: Error | null; profile: OrganizationWorkspaceProfile | null }> {
+  const frozenErr = await rejectFrozenAddressWrite(orgId, payload);
+  if (frozenErr) return { error: frozenErr, profile: null };
+
   const patch: Record<string, unknown> = {};
 
   if (payload.profile_about !== undefined) {

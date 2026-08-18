@@ -271,7 +271,6 @@ export function buildLedgerReportHtml(
     </style>
   </head>
   <body>
-    ${pulseWatermarkHtmlFragment()}
     <div class="pulse-report-body">
     <div class="page">
       <div class="topHeader">
@@ -328,6 +327,7 @@ export function buildLedgerReportHtml(
       </div>
     </div>
     </div>
+    ${pulseWatermarkHtmlFragment()}
   </body>
 </html>`;
 }

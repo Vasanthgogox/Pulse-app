@@ -18,6 +18,7 @@ import {
     resolveSupplierTargetDisplayRate,
 } from "@/features/indents/services/indents.service";
 import { BroadcastPickIndentCard } from "@/features/network/components/BroadcastPickIndentCard";
+import { ensureIndentStory } from "@/features/network/services/indentStoryPosts.service";
 import { createPost, type PostType } from "@/features/network/services/posts.service";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { useDirectQuoteCountsQuery, useIndentsQuery, useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
@@ -444,21 +445,9 @@ export default function CreatePostScreen() {
         Alert.alert("Select a load", "Choose an indent from the list.");
         return;
       }
-      const w = indent.weight != null ? indent.weight / 1000 : undefined;
-      const res = await createPost({
-        organizationId: orgId,
-        type: "LOAD",
+      const res = await ensureIndentStory(orgId, indent, {
         content: content.trim() || undefined,
-        origin: indent.pickup_area || undefined,
-        destination: indent.drop_location || undefined,
-        loadDate: indent.pickup_date ?? undefined,
-        vehicleType: indent.vehicle_type ?? undefined,
-        weightTonnes: w,
-        rateOffer:
-          resolveSupplierTargetDisplayRate(indent.supplier_target, indent.client_price) ??
-          undefined,
-        material: indent.load_type ?? undefined,
-        sourceIndentId: selectedIndentId,
+        reboost: true,
       });
       error = res.error;
     } else if (type === "LOAD" && loadEntryMode === "manual") {
@@ -488,17 +477,9 @@ export default function CreatePostScreen() {
       if (indentErr || !pulseIndent) {
         error = indentErr ?? new Error("Could not create indent for this story");
       } else {
-        const res = await createPost({
-          organizationId: orgId,
-          type: "LOAD",
+        const res = await ensureIndentStory(orgId, pulseIndent, {
           content: content.trim() || undefined,
-          origin: origin.trim() || undefined,
-          destination: destination.trim() || undefined,
-          vehicleType: veh || undefined,
-          weightTonnes: weightTonnes,
-          rateOffer: rateNum,
-          material: mat || undefined,
-          sourceIndentId: pulseIndent.id,
+          reboost: true,
         });
         error = res.error;
       }

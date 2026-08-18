@@ -353,6 +353,7 @@ export function TripRatingsBlock({
   embeddedSidebar = false,
 }: TripRatingsBlockProps) {
   const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   const { currentOrganization } = useOrganization();
   void paymentCaptured;
   const [ratings, setRatings] = useState<RatingRow[]>([]);
@@ -1773,15 +1774,15 @@ export function TripRatingsBlock({
               </Animated.View>
             ) : (
               <>
-                <View style={[styles.heroHeaderPulse, { backgroundColor: pulseUi.headerBg }]}>
+                <View style={[styles.heroHeaderPulse, { backgroundColor: pulseUi.headerBg }, isDesktop && styles.heroHeaderPulseDesktop]}>
                   <View style={[styles.heroGlowOnePulse, { backgroundColor: pulseUi.glowStrong }]} />
                   <View style={[styles.heroGlowTwoPulse, { backgroundColor: pulseUi.glowSoft }]} />
                   <View style={styles.heroTopRowPulse}>
-                    <View style={styles.avatarWrapPulse}>
+                    <View style={[styles.avatarWrapPulse, isDesktop && styles.avatarWrapPulseDesktop]}>
                       <SharedPartyAvatar
                         name={activeSubjectName}
                         entityType={pulseModalEntityType}
-                        size={44}
+                        size={isDesktop ? 56 : 44}
                         avatarUrl={pulseModalAvatarUrl}
                         avatarSeed={
                           pulseModalPartyFields?.avatarSeed ??
@@ -1814,11 +1815,11 @@ export function TripRatingsBlock({
                       </View>
                     </View>
                     <View style={styles.heroTextWrapPulse}>
-                      <Text style={styles.heroEyebrowPulse}>{pulseUi.eyebrow}</Text>
-                      <Text style={styles.heroNamePulse} numberOfLines={2}>
+                      <Text style={[styles.heroEyebrowPulse, isDesktop && styles.heroEyebrowPulseDesktop]}>{pulseUi.eyebrow}</Text>
+                      <Text style={[styles.heroNamePulse, isDesktop && styles.heroNamePulseDesktop]} numberOfLines={2}>
                         {activeSubjectName}
                       </Text>
-                      <Text style={styles.heroMetaPulse} numberOfLines={1}>
+                      <Text style={[styles.heroMetaPulse, isDesktop && styles.heroMetaPulseDesktop]} numberOfLines={1}>
                         {activeSubjectMeta}
                       </Text>
                     </View>
@@ -1834,14 +1835,14 @@ export function TripRatingsBlock({
                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.modalBodyPulse}>
-                  <Text style={styles.ratingHeadlinePulse}>
+                <View style={[styles.modalBodyPulse, isDesktop && styles.modalBodyPulseDesktop]}>
+                  <Text style={[styles.ratingHeadlinePulse, isDesktop && styles.ratingHeadlinePulseDesktop]}>
                     How was your{' '}
                     <Text style={styles.ratingHeadlineAccent}>{pulseUi.promptWord}</Text>
                     ?
                   </Text>
 
-                  <View style={styles.starsPulse}>
+                  <View style={[styles.starsPulse, isDesktop && styles.starsPulseDesktop]}>
                     {[1, 2, 3, 4, 5].map((n) => (
                       <TouchableOpacity
                         key={n}
@@ -1855,7 +1856,7 @@ export function TripRatingsBlock({
                       >
                         <FontAwesome
                           name={n <= score ? 'star' : 'star-o'}
-                          size={24}
+                          size={isDesktop ? 32 : 24}
                           color={
                             n <= score
                               ? Theme.feedbackModalStarActive
@@ -1876,7 +1877,7 @@ export function TripRatingsBlock({
                         },
                       ]}
                     >
-                      <View style={styles.tagsWrapPulse}>
+                      <View style={[styles.tagsWrapPulse, isDesktop && styles.tagsWrapPulseDesktop]}>
                         {activeQuickTags.map((tag) => {
                           const selected = selectedTags.includes(tag.id);
                           return (
@@ -1885,6 +1886,7 @@ export function TripRatingsBlock({
                               onPress={() => handleTagToggle(tag.id)}
                               style={[
                                 styles.tagChipPulse,
+                                isDesktop && styles.tagChipPulseDesktop,
                                 selected ? styles.tagChipPulseActive : styles.tagChipPulseIdle,
                               ]}
                               activeOpacity={0.85}
@@ -1918,7 +1920,7 @@ export function TripRatingsBlock({
                       ) : (
                         <View style={styles.commentBoxWrapPulse}>
                           <TextInput
-                            style={styles.commentInputPulse}
+                            style={[styles.commentInputPulse, isDesktop && styles.commentInputPulseDesktop]}
                             value={comment}
                             onChangeText={setComment}
                             placeholder="Tell us more about the experience..."
@@ -1935,7 +1937,7 @@ export function TripRatingsBlock({
                       )}
 
                       <TouchableOpacity
-                        style={styles.modalSubmitPulse}
+                        style={[styles.modalSubmitPulse, isDesktop && styles.modalSubmitPulseDesktop]}
                         onPress={handleSubmit}
                         disabled={submitting}
                         activeOpacity={0.85}
@@ -1967,13 +1969,13 @@ export function TripRatingsBlock({
         visible={showClientFeedbackModal}
         onRequestClose={() => setShowClientFeedbackModal(false)}
       >
-            <View style={[styles.heroHeaderPulse, { backgroundColor: Theme.primary }]}>
+            <View style={[styles.heroHeaderPulse, { backgroundColor: Theme.primary }, isDesktop && styles.heroHeaderPulseDesktop]}>
               <View style={styles.heroTopRowPulse}>
-                <View style={styles.avatarWrapPulse}>
+                <View style={[styles.avatarWrapPulse, isDesktop && styles.avatarWrapPulseDesktop]}>
                   <SharedPartyAvatar
                     name={clientDisplayName}
                     entityType="client"
-                    size={44}
+                    size={isDesktop ? 56 : 44}
                     avatarUrl={clientModalAvatarUrl}
                     avatarSeed={
                       clientPartyAvatarFieldsProp?.avatarSeed ??
@@ -2002,11 +2004,11 @@ export function TripRatingsBlock({
                   </View>
                 </View>
                 <View style={styles.heroTextWrapPulse}>
-                  <Text style={styles.heroEyebrowPulse}>Settlement feedback</Text>
-                  <Text style={styles.heroNamePulse} numberOfLines={2}>
-                    {clientDisplayName}
-                  </Text>
-                  <Text style={styles.heroMetaPulse}>Payment captured</Text>
+                      <Text style={[styles.heroEyebrowPulse, isDesktop && styles.heroEyebrowPulseDesktop]}>Settlement feedback</Text>
+                      <Text style={[styles.heroNamePulse, isDesktop && styles.heroNamePulseDesktop]} numberOfLines={2}>
+                        {clientDisplayName}
+                      </Text>
+                      <Text style={[styles.heroMetaPulse, isDesktop && styles.heroMetaPulseDesktop]}>Payment captured</Text>
                 </View>
               </View>
               <TouchableOpacity
@@ -2018,9 +2020,9 @@ export function TripRatingsBlock({
                 <Feather name="x" size={18} color={Theme.textOnPrimary} />
               </TouchableOpacity>
             </View>
-            <View style={styles.modalBodyPulse}>
-              <Text style={styles.ratingHeadlinePulse}>How was this client?</Text>
-              <View style={styles.starsPulse}>
+            <View style={[styles.modalBodyPulse, isDesktop && styles.modalBodyPulseDesktop]}>
+              <Text style={[styles.ratingHeadlinePulse, isDesktop && styles.ratingHeadlinePulseDesktop]}>How was this client?</Text>
+              <View style={[styles.starsPulse, isDesktop && styles.starsPulseDesktop]}>
                 {[1, 2, 3, 4, 5].map((n) => (
                   <TouchableOpacity
                     key={`client-rate-${n}`}
@@ -2030,13 +2032,13 @@ export function TripRatingsBlock({
                   >
                     <FontAwesome
                       name={n <= clientScore ? 'star' : 'star-o'}
-                      size={24}
+                      size={isDesktop ? 32 : 24}
                       color={n <= clientScore ? Theme.feedbackModalStarActive : Theme.borderMedium}
                     />
                   </TouchableOpacity>
                 ))}
               </View>
-              <View style={[styles.tagsWrapPulse, styles.clientTagsWrapPulse]}>
+              <View style={[styles.tagsWrapPulse, styles.clientTagsWrapPulse, isDesktop && styles.clientTagsWrapPulseDesktop]}>
                 {CLIENT_RATING_TAGS.map((tag) => {
                   const selected = clientTags.includes(tag.id);
                   return (
@@ -2046,6 +2048,7 @@ export function TripRatingsBlock({
                       style={[
                         styles.tagChipPulse,
                         styles.clientTagChipPulse,
+                        isDesktop && styles.clientTagChipPulseDesktop,
                         selected ? styles.tagChipPulseActive : styles.tagChipPulseIdle,
                       ]}
                       activeOpacity={0.85}
@@ -2053,6 +2056,7 @@ export function TripRatingsBlock({
                       <Text
                         style={[
                           styles.tagChipTextPulse,
+                          isDesktop && styles.tagChipTextPulseDesktop,
                           selected
                             ? styles.tagChipTextPulseActive
                             : styles.tagChipTextPulseIdle,
@@ -2067,7 +2071,7 @@ export function TripRatingsBlock({
               </View>
               <View style={styles.commentBoxWrapPulse}>
                 <TextInput
-                  style={styles.commentInputPulse}
+                  style={[styles.commentInputPulse, isDesktop && styles.commentInputPulseDesktop]}
                   value={clientComment}
                   onChangeText={setClientComment}
                   placeholder="Optional note"
@@ -2079,7 +2083,7 @@ export function TripRatingsBlock({
                 />
               </View>
               <TouchableOpacity
-                style={styles.modalSubmitPulse}
+                style={[styles.modalSubmitPulse, isDesktop && styles.modalSubmitPulseDesktop]}
                 disabled={clientScore < 1 || clientSubmitting}
                 onPress={async () => {
                   if (clientScore < 1) return;
@@ -3017,6 +3021,11 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
   },
+  heroHeaderPulseDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
+    paddingBottom: 20,
+  },
   heroGlowOnePulse: {
     position: 'absolute',
     width: 110,
@@ -3062,6 +3071,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.onPrimaryMuted,
     overflow: 'visible',
   },
+  avatarWrapPulseDesktop: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+  },
   avatarBadgePulse: {
     position: 'absolute',
     right: -3,
@@ -3087,6 +3101,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: Theme.textOnDarkMuted,
   },
+  heroEyebrowPulseDesktop: {
+    fontSize: 10,
+    letterSpacing: 3.2,
+  },
   heroNamePulse: {
     fontSize: 16,
     fontWeight: '900',
@@ -3094,6 +3112,11 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
     letterSpacing: -0.3,
     textTransform: 'uppercase',
+  },
+  heroNamePulseDesktop: {
+    fontSize: 20,
+    letterSpacing: -0.4,
+    lineHeight: 24,
   },
   heroMetaPulse: {
     marginTop: 2,
@@ -3103,12 +3126,22 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: 'rgba(248, 250, 252, 0.45)',
   },
+  heroMetaPulseDesktop: {
+    fontSize: 11,
+    letterSpacing: 2.2,
+  },
   modalBodyPulse: {
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 16,
     backgroundColor: Theme.screenBackground,
     alignItems: 'center',
+  },
+  modalBodyPulseDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 22,
+    paddingBottom: 24,
+    gap: 4,
   },
   ratingHeadlinePulse: {
     fontSize: 16,
@@ -3121,6 +3154,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     lineHeight: 21,
   },
+  ratingHeadlinePulseDesktop: {
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.5,
+    marginBottom: 14,
+  },
   ratingHeadlineAccent: {
     color: Theme.primary,
     fontWeight: '900',
@@ -3132,6 +3171,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     marginBottom: 2,
+  },
+  starsPulseDesktop: {
+    gap: 10,
+    marginBottom: 8,
   },
   starBtnPulse: {
     paddingVertical: 2,
@@ -3149,11 +3192,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
+  tagsWrapPulseDesktop: {
+    gap: 10,
+  },
   clientTagsWrapPulse: {
     width: '100%',
     justifyContent: 'space-between',
     rowGap: 8,
     columnGap: 0,
+  },
+  clientTagsWrapPulseDesktop: {
+    flexWrap: 'nowrap',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   tagChipPulse: {
     borderRadius: 8,
@@ -3161,12 +3212,23 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderWidth: 1,
   },
+  tagChipPulseDesktop: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
   clientTagChipPulse: {
     width: '48%',
     minHeight: 34,
     paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  clientTagChipPulseDesktop: {
+    width: 'auto',
+    flex: 1,
+    minWidth: 0,
+    minHeight: 40,
+    paddingHorizontal: 6,
   },
   tagChipPulseIdle: {
     backgroundColor: Theme.surface,
@@ -3181,6 +3243,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     letterSpacing: 0.35,
     textTransform: 'uppercase',
+  },
+  tagChipTextPulseDesktop: {
+    fontSize: 10,
+    letterSpacing: 0.2,
   },
   tagChipTextPulseIdle: {
     color: Theme.textSecondary,
@@ -3216,6 +3282,13 @@ const styles = StyleSheet.create({
     minHeight: 76,
     marginBottom: 4,
   },
+  commentInputPulseDesktop: {
+    minHeight: 96,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    borderRadius: 14,
+  },
   commentCounterPulse: {
     fontSize: 11,
     fontWeight: '500',
@@ -3232,6 +3305,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
+  },
+  modalSubmitPulseDesktop: {
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginTop: 4,
   },
   modalSubmitTextPulse: {
     fontSize: 13,

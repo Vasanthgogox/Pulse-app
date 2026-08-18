@@ -25,6 +25,7 @@ import {
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { PULSE_METRONIC } from '@/features/business-pulse/components/pulseEnterpriseStyles';
@@ -117,9 +118,11 @@ function ledgerToHtml(
   totalIn: number,
   totalOut: number,
   reportTitle = 'Ledger Report',
+  dateRangeLabel?: string,
 ): string {
   return buildPulseIntelligenceReportHtml({
     title: reportTitle,
+    dateRangeLabel,
     summaryCards: [
       { label: 'Received', value: formatAmount(totalIn), tone: 'in' },
       { label: 'Paid', value: formatAmount(totalOut), tone: 'out' },
@@ -146,7 +149,12 @@ function ledgerToHtml(
   });
 }
 
-function buildLedgerWorkbook(rows: LedgerRow[], totalIn: number, totalOut: number): XLSX.WorkBook {
+function buildLedgerWorkbook(
+  rows: LedgerRow[],
+  totalIn: number,
+  totalOut: number,
+  periodLabel?: string,
+): XLSX.WorkBook {
   const sheetRows = prependPulseExcelBanner(
     [
       ['Party', 'Description', 'Trip/Ref', 'Date', 'Amount In', 'Amount Out'],
@@ -162,7 +170,7 @@ function buildLedgerWorkbook(rows: LedgerRow[], totalIn: number, totalOut: numbe
       ['Total Received', '', '', '', totalIn, ''],
       ['Total Paid', '', '', '', '', totalOut],
     ],
-    'Ledger report',
+    periodLabel ?? 'Ledger report',
   );
   const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
   const workbook = XLSX.utils.book_new();
@@ -196,6 +204,8 @@ function parseReportTitle(title: string): { primary: string; secondary?: string 
 
 function getCustomColumnWidth(key: string): number {
   switch (key) {
+    case 'entity': return 176;
+    case 'trips': return 56;
     case 'trip': return 118;
     case 'route': return 232;
     case 'model': return 96;
@@ -208,6 +218,9 @@ function getCustomColumnWidth(key: string): number {
     case 'cost':
     case 'paid':
     case 'received':
+    case 'earned':
+    case 'payables':
+    case 'expense':
     case 'contract':
       return 92;
     case 'mySales':
@@ -253,6 +266,9 @@ function isMoneyColumn(key: string): boolean {
     key === 'cost' ||
     key === 'paid' ||
     key === 'received' ||
+    key === 'earned' ||
+    key === 'payables' ||
+    key === 'expense' ||
     key === 'due' ||
     key === 'pnl' ||
     key === 'margin' ||
@@ -273,6 +289,8 @@ export interface LedgerReportModalProps {
   title?: string;
   /** When true, hides Cash In / Cash Out summary (e.g. custom shared-ledger export). */
   hideCashSummary?: boolean;
+  /** Inclusive calendar range shown in tiny type under the title. */
+  periodLabel?: string;
   customReport?: {
     columns: Array<{
       key: string;
@@ -289,6 +307,7 @@ export function LedgerReportModal({
   transactions,
   title,
   hideCashSummary = false,
+  periodLabel,
   customReport,
 }: LedgerReportModalProps) {
   const { t } = useLanguage();
@@ -307,16 +326,21 @@ export function LedgerReportModal({
   const netAmount = totalIn - totalOut;
   const plainText = ledgerToPlainText(sortedTransactions, totalIn, totalOut);
   const csv = ledgerToCsv(sortedTransactions);
-  const html = ledgerToHtml(sortedTransactions, totalIn, totalOut, displayTitle);
+  const html = ledgerToHtml(sortedTransactions, totalIn, totalOut, displayTitle, periodLabel);
   const isCustomReport = !!customReport;
   const activePlainText = useMemo(() => {
-    if (!customReport) return plainText;
+    const periodLine = periodLabel?.trim() || null;
+    if (!customReport) {
+      return periodLine ? `${displayTitle}\n${periodLine}\n\n${plainText}` : plainText;
+    }
     const header = customReport.columns.map((c) => c.label).join(' | ');
     const lines = customReport.rows.map((row) =>
       customReport.columns.map((c) => String(row[c.key] ?? '—').replace(/\|/g, ' ')).join(' | ')
     );
-    return [displayTitle.toUpperCase(), '—', header, ...lines].join('\n');
-  }, [customReport, plainText, displayTitle]);
+    return [displayTitle.toUpperCase(), periodLine, '—', header, ...lines]
+      .filter((line) => line != null && line !== '')
+      .join('\n');
+  }, [customReport, plainText, displayTitle, periodLabel]);
   const activeCsv = useMemo(() => {
     if (!customReport) return csv;
     const escape = (v: unknown) => {
@@ -334,6 +358,7 @@ export function LedgerReportModal({
     const colWidth = `${Math.max(8, Math.floor(100 / customReport.columns.length))}%`;
     return buildPulseIntelligenceReportHtml({
       title: displayTitle,
+      dateRangeLabel: periodLabel,
       columns: customReport.columns.map((col) => ({
         key: col.key,
         label: col.label,
@@ -346,11 +371,14 @@ export function LedgerReportModal({
           const value = row[col.key];
           out[col.key] = value == null || value === '' ? '—' : String(value);
         }
+        if (row.tripDate != null && String(row.tripDate).trim() !== '') {
+          out.tripDate = String(row.tripDate);
+        }
         return out;
       }),
       landscape: customReport.columns.length > 7,
     });
-  }, [customReport, html, displayTitle]);
+  }, [customReport, html, displayTitle, periodLabel]);
 
   const reportTitleParts = useMemo(
     () => parseReportTitle(displayTitle),
@@ -378,11 +406,20 @@ export function LedgerReportModal({
 
   const getCustomValueColor = (key: string, value: string): string | undefined => {
     const v = value.trim();
-    const isDashOrZero = v === '—' || v === '₹0' || v === '0' || v === '0.0%';
+    const isDashOrZero =
+      v === '—' ||
+      v === '₹0' ||
+      v === '₹ 0' ||
+      v === '-₹0' ||
+      v === '0' ||
+      v === '0.0%';
     if (key === 'sync') return v === 'Fix' ? Theme.teslaRed : Theme.darkGreen;
-    if (key === 'due') return isDashOrZero ? Theme.textPrimary : Theme.teslaRed;
+    if (key === 'due') return isDashOrZero ? Theme.darkGreen : Theme.teslaRed;
+    if (key === 'pnl') {
+      if (isDashOrZero) return Theme.textMuted;
+      return v.startsWith('-') ? Theme.teslaRed : Theme.darkGreen;
+    }
     if (
-      key === 'pnl' ||
       key === 'margin' ||
       key === 'received' ||
       key === 'paid' ||
@@ -485,6 +522,9 @@ export function LedgerReportModal({
   const handleExcelAction = async (mode: 'download' | 'share') => {
     if (downloadInProgress) return;
     setDownloadInProgress(true);
+    const excelSubtitle = periodLabel
+      ? `${displayTitle} · ${periodLabel}`
+      : displayTitle;
     try {
       if (Platform.OS === 'web') {
         const workbook = isCustomReport
@@ -497,14 +537,14 @@ export function LedgerReportModal({
                       customReport!.columns.map((c) => row[c.key] ?? ''),
                     ),
                   ],
-                  displayTitle,
+                  excelSubtitle,
                 ),
               );
               const wb = XLSX.utils.book_new();
               XLSX.utils.book_append_sheet(wb, ws, 'Report');
               return wb;
             })()
-          : buildLedgerWorkbook(sortedTransactions, totalIn, totalOut);
+          : buildLedgerWorkbook(sortedTransactions, totalIn, totalOut, periodLabel);
         const arrayBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
         const blob = new Blob(
           [arrayBuffer],
@@ -528,14 +568,14 @@ export function LedgerReportModal({
                     customReport!.columns.map((c) => row[c.key] ?? ''),
                   ),
                 ],
-                displayTitle,
+                excelSubtitle,
               ),
             );
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Report');
             return wb;
           })()
-        : buildLedgerWorkbook(sortedTransactions, totalIn, totalOut);
+        : buildLedgerWorkbook(sortedTransactions, totalIn, totalOut, periodLabel);
       const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
       const uri = `${cacheDirectory}ledger-report-${Date.now()}.xlsx`;
       await FileSystem.writeAsStringAsync(uri, base64, { encoding: 'base64' });
@@ -607,6 +647,11 @@ export function LedgerReportModal({
               <Text style={styles.headerTitle} numberOfLines={2}>
                 {reportTitleParts.primary}
               </Text>
+              {periodLabel ? (
+                <Text style={styles.headerPeriod} numberOfLines={1}>
+                  {periodLabel}
+                </Text>
+              ) : null}
               {reportTitleParts.secondary ? (
                 <Text style={styles.headerReportKind} numberOfLines={1}>
                   {reportTitleParts.secondary}
@@ -642,6 +687,7 @@ export function LedgerReportModal({
             </View>
           ) : null}
 
+          <View style={styles.previewCanvas}>
           {!isCustomReport ? (
             <View style={[styles.tableHeader, styles.ledgerTableHeader]}>
               <Text style={[styles.th, styles.thEntity]}>Party / ref</Text>
@@ -716,24 +762,47 @@ export function LedgerReportModal({
                             const valueColor =
                               getCustomValueColor(col.key, raw) ?? PULSE_METRONIC.text;
                             const money = isMoneyColumn(col.key);
+                            const tripDate =
+                              col.key === 'trip'
+                                ? String(row.tripDate ?? '').trim()
+                                : '';
+                            const cellStyle = [
+                              styles.cellFixed,
+                              money ? styles.cellMoney : undefined,
+                              col.align === 'right' ? styles.cellNum : undefined,
+                              {
+                                width: getCustomColumnWidth(col.key),
+                                textAlign:
+                                  col.align === 'right'
+                                    ? 'right'
+                                    : col.align === 'center'
+                                      ? 'center'
+                                      : 'left',
+                                color: valueColor,
+                              },
+                            ];
+                            if (col.key === 'trip' && tripDate && tripDate !== '—') {
+                              return (
+                                <View
+                                  key={`${idx}-${col.key}`}
+                                  style={{ width: getCustomColumnWidth(col.key) }}
+                                >
+                                  <Text
+                                    style={cellStyle}
+                                    numberOfLines={getCustomCellMaxLines(col.key)}
+                                  >
+                                    {raw}
+                                  </Text>
+                                  <Text style={styles.tripDateSub} numberOfLines={1}>
+                                    {tripDate}
+                                  </Text>
+                                </View>
+                              );
+                            }
                             return (
                               <Text
                                 key={`${idx}-${col.key}`}
-                                style={[
-                                  styles.cellFixed,
-                                  money ? styles.cellMoney : undefined,
-                                  col.align === 'right' ? styles.cellNum : undefined,
-                                  {
-                                    width: getCustomColumnWidth(col.key),
-                                    textAlign:
-                                      col.align === 'right'
-                                        ? 'right'
-                                        : col.align === 'center'
-                                          ? 'center'
-                                          : 'left',
-                                    color: valueColor,
-                                  },
-                                ]}
+                                style={cellStyle}
                                 numberOfLines={getCustomCellMaxLines(col.key)}
                               >
                                 {raw}
@@ -779,6 +848,20 @@ export function LedgerReportModal({
               )}
             </ScrollView>
           )}
+            <View
+              pointerEvents="none"
+              style={styles.previewWatermarkLayer}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <View style={styles.previewWatermarkMark}>
+                <PulseBrandMark
+                  size="display"
+                  textStyle={styles.previewWatermarkText}
+                />
+              </View>
+            </View>
+          </View>
 
           <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom }]}>
             <TouchableOpacity style={styles.actionBtn} onPress={handlePrint} activeOpacity={0.85}>
@@ -918,6 +1001,13 @@ const styles = StyleSheet.create({
     color: PULSE_METRONIC.text,
     letterSpacing: -0.2,
     lineHeight: 22,
+  },
+  headerPeriod: {
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: '500',
+    color: PULSE_METRONIC.muted,
+    letterSpacing: 0.1,
   },
   headerReportKind: {
     fontSize: 13,
@@ -1079,6 +1169,29 @@ const styles = StyleSheet.create({
     minHeight: 120,
     backgroundColor: Theme.cardWhite,
   },
+  previewCanvas: {
+    flex: 1,
+    minHeight: 120,
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: Theme.cardWhite,
+  },
+  previewWatermarkLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 4,
+  },
+  previewWatermarkMark: {
+    opacity: 0.2,
+    transform: [{ rotate: '-22deg' }],
+  },
+  previewWatermarkText: {
+    fontSize: 80,
+    lineHeight: 88,
+    fontWeight: '700',
+    letterSpacing: -1.6,
+  },
   scrollHintRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1178,6 +1291,14 @@ const styles = StyleSheet.create({
     color: PULSE_METRONIC.text,
     flexShrink: 0,
     lineHeight: 17,
+  },
+  tripDateSub: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: '500',
+    color: PULSE_METRONIC.muted,
+    letterSpacing: 0.15,
+    lineHeight: 12,
   },
   cellMoney: {
     fontWeight: '600',

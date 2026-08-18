@@ -15,13 +15,14 @@ import {
 import {
     type FinancialRowData
 } from "@/features/finance/components/FinancialRow";
+import { CUSTOMERS_SUPPLIERS } from "@/features/finance/constants/tableColumns";
 import type { TripDetailMap } from "@/features/finance/components/LedgerTransactionListView";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import type { TripRow } from "@/features/trips/services/trips.service";
-import { formatLedgerAmount, formatLedgerDate } from "@/lib/format";
+import { formatLedgerDate } from "@/lib/format";
 import { useClientsQuery, useTripsQuery } from "@/lib/queries";
 import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -45,14 +46,6 @@ import type { ClientRow } from "../services/clients.service";
 export type EntityType = "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
 
 export type CustomersViewTab = "list" | "analytics";
-
-/** Compact ₹ for secondary lines when space is tight. */
-function formatCustomerAmountCompact(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 100000) return `${(value / 100000).toFixed(1)}L`;
-  if (abs >= 1000) return `${(value / 1000).toFixed(1)}k`;
-  return formatLedgerAmount(value);
-}
 
 /** Format date as "11 MAR" for receivables-by-trip row. */
 function formatTripDateShort(iso: string | null | undefined): string {
@@ -1893,7 +1886,23 @@ export function CustomersTab({
             Trips
           </Text>
         </View>
-        <View style={styles.customerTableHeaderDueCol}>
+        <View style={styles.customerTableHeaderAmtCol}>
+          <Text
+            style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
+            numberOfLines={1}
+          >
+            Sales
+          </Text>
+        </View>
+        <View style={styles.customerTableHeaderAmtCol}>
+          <Text
+            style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
+            numberOfLines={1}
+          >
+            Received
+          </Text>
+        </View>
+        <View style={styles.customerTableHeaderAmtCol}>
           <Text
             style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
             numberOfLines={1}
@@ -1909,7 +1918,6 @@ export function CustomersTab({
           const received = data.received ?? Math.max(0, sales - due);
           const tripCount = data.trips ?? 0;
           const avatarData = clientAvatarById.get(data.id);
-          const receivedDisplay = formatCustomerAmountCompact(received);
           return (
             <TouchableOpacity
               key={data.id}
@@ -1917,32 +1925,25 @@ export function CustomersTab({
               onPress={() => handleRowSelect(data)}
               activeOpacity={0.7}
             >
-              <EntityAvatar
-                name={data.name ?? ""}
-                avatarUrl={avatarData?.avatar_url}
-                avatarSeed={avatarData?.avatar_seed}
-                entityType="client"
-                isIntegrated={!!data.is_integrated}
-                badgeOverlay
-              />
               <View style={[styles.customerTableCell, styles.ctEntity]}>
-                <Text
-                  style={styles.customerTableEntityName}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {data.name ?? "—"}
-                </Text>
-                <Text
-                  style={styles.customerTableEntitySub}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  Sales: ₹
-                  {sales >= 1000
-                    ? `${(sales / 1000).toFixed(1)}k`
-                    : sales.toLocaleString("en-IN")}
-                </Text>
+                <View style={styles.customerTableEntityMain}>
+                  <EntityAvatar
+                    name={data.name ?? ""}
+                    avatarUrl={avatarData?.avatar_url}
+                    avatarSeed={avatarData?.avatar_seed}
+                    initialsColorSeed={data.id}
+                    entityType="client"
+                    isIntegrated={!!data.is_integrated}
+                    badgeOverlay
+                  />
+                  <Text
+                    style={styles.customerTableEntityName}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {data.name ?? "—"}
+                  </Text>
+                </View>
               </View>
               <View style={[styles.customerTableCell, styles.ctTrips]}>
                 <View style={styles.customerTableTripsPill}>
@@ -1951,7 +1952,17 @@ export function CustomersTab({
                   </Text>
                 </View>
               </View>
-              <View style={[styles.customerTableCell, styles.ctDue]}>
+              <View style={[styles.customerTableCell, styles.ctAmt]}>
+                <Text style={styles.customerTableAmtValue} numberOfLines={1}>
+                  ₹{sales.toLocaleString("en-IN")}
+                </Text>
+              </View>
+              <View style={[styles.customerTableCell, styles.ctAmt]}>
+                <Text style={styles.customerTableAmtReceived} numberOfLines={1}>
+                  ₹{received.toLocaleString("en-IN")}
+                </Text>
+              </View>
+              <View style={[styles.customerTableCell, styles.ctAmt]}>
                 <Text
                   style={[
                     styles.customerTableDueValue,
@@ -1962,9 +1973,6 @@ export function CustomersTab({
                   numberOfLines={1}
                 >
                   ₹{due.toLocaleString("en-IN")}
-                </Text>
-                <Text style={styles.customerTableReceivedLabel} numberOfLines={1}>
-                  Received: ₹{receivedDisplay}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -2132,36 +2140,57 @@ const styles = StyleSheet.create({
   ctHeaderLeft: { textAlign: "left" },
   ctHeaderCenter: { textAlign: "center" },
   ctHeaderRight: { textAlign: "right" },
-  customerTableHeaderEntityCol: { flex: 2.2, minWidth: 0, justifyContent: "center" },
-  customerTableHeaderTripsCol: { flex: 0.5, minWidth: 44, justifyContent: "center" },
-  customerTableHeaderDueCol: { flex: 1.5, minWidth: 0, justifyContent: "center" },
-  ctEntity: { flex: 2.2, minWidth: 0 },
-  ctTrips: { flex: 0.5, minWidth: 44, justifyContent: "center" },
-  ctDue: { flex: 1.5, minWidth: 0, alignItems: "flex-end", justifyContent: "center" },
+  customerTableHeaderEntityCol: {
+    flex: CUSTOMERS_SUPPLIERS.node,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  customerTableHeaderTripsCol: {
+    flex: CUSTOMERS_SUPPLIERS.trips,
+    minWidth: 44,
+    justifyContent: "center",
+  },
+  customerTableHeaderAmtCol: {
+    flex: CUSTOMERS_SUPPLIERS.mission,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  ctEntity: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0 },
+  ctTrips: {
+    flex: CUSTOMERS_SUPPLIERS.trips,
+    minWidth: 44,
+    justifyContent: "center",
+  },
+  ctAmt: {
+    flex: CUSTOMERS_SUPPLIERS.mission,
+    minWidth: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
   customerTableRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    minHeight: 58,
+    minHeight: 52,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
   customerTableCell: { paddingHorizontal: 5, minWidth: 0 },
+  customerTableEntityMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+  },
   customerTableEntityName: {
     fontSize: 10,
     fontWeight: "600",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
-    flexShrink: 1,
-  },
-  customerTableEntitySub: {
-    marginTop: 4,
-    fontSize: 9,
-    fontWeight: "500",
-    color: Theme.textMuted,
+    flex: 1,
+    minWidth: 0,
   },
   customerTableTripsPill: {
     alignSelf: "center",
@@ -2188,13 +2217,16 @@ const styles = StyleSheet.create({
   },
   customerTableDueUnpaid: { color: Theme.teslaRed },
   customerTableDueSettled: { color: Theme.darkGreen },
-  customerTableReceivedLabel: {
-    fontSize: 7,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginTop: 2,
+  customerTableAmtValue: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+  },
+  customerTableAmtReceived: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.darkGreen,
     textAlign: "right",
   },
   customerTableFooter: {

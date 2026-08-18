@@ -6,7 +6,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { type IndentRow, getIndentDisplayNumber, resolveSupplierTargetDisplayRate } from "@/features/indents";
-import { createPost } from "@/features/network/services/posts.service";
+import { ensureIndentStory } from "@/features/network/services/indentStoryPosts.service";
 import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
 import { formatINR } from "@/lib/format";
 import { buildPulseStoryPublicUrl } from "@/lib/routes";
@@ -353,24 +353,14 @@ export function ShareLoadSheet({
     setLoading(true);
     setError(null);
 
-    const weight = indent.weight != null ? indent.weight / 1000 : undefined;
-    // P0.1: indent lifecycle owns marketplace visibility — do not stamp a 24h posts.expires_at.
-
-    const { error: err, postId: newPostId } = await createPost({
-      organizationId: orgId,
-      type: "LOAD",
-      content: note.trim() || undefined,
-      origin: indent.pickup_area || undefined,
-      destination: indent.drop_location || undefined,
-      loadDate: indent.pickup_date ?? undefined,
-      vehicleType: indent.vehicle_type ?? undefined,
-      weightTonnes: weight,
-      rateOffer:
-        resolveSupplierTargetDisplayRate(indent.supplier_target, indent.client_price) ??
-        undefined,
-      material: indent.load_type ?? undefined,
-      sourceIndentId: indent.id,
-    });
+    const { error: err, postId: newPostId } = await ensureIndentStory(
+      orgId,
+      indent,
+      {
+        content: note.trim() || undefined,
+        reboost: true,
+      },
+    );
 
     setLoading(false);
 

@@ -3,8 +3,12 @@
  * Matches AddDriverModal / AddClientModal patterns.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { IndiaFlagIcon } from "@/components/party/IndiaFlagIcon";
 import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { formatSignupPhoneDisplay } from "@/features/auth/signup/signUpKeypad.util";
+import { formatMobileNumber } from "@/lib/format";
+import { normalizeIndianPhoneForMetadata } from "@/lib/phoneValidation";
 import {
   lookupUserByPhone,
   inviteTeamMemberByContact,
@@ -377,15 +381,16 @@ export function InviteMemberFlow({
     return () => clearTimeout(t);
   }, [phone, employeeEmail, orgId, step]);
 
+  const canonicalPhone = normalizeIndianPhoneForMetadata(phone);
+
   const handleContinue = async () => {
     const trimmedName = employeeName.trim();
-    const trimmedPhone = phone.trim();
     if (!trimmedName) {
       setSearchError("Enter the employee's name.");
       return;
     }
-    if (!trimmedPhone) {
-      setSearchError("Enter a mobile number.");
+    if (!canonicalPhone) {
+      setSearchError("Enter a 10-digit Indian mobile number.");
       return;
     }
     setSearching(true);
@@ -395,8 +400,8 @@ export function InviteMemberFlow({
     setPrecheck(null);
 
     const [{ error, profile }, pre] = await Promise.all([
-      lookupUserByPhone(trimmedPhone),
-      precheckTeamInviteContact(orgId, trimmedPhone, employeeEmail.trim() || null),
+      lookupUserByPhone(canonicalPhone),
+      precheckTeamInviteContact(orgId, canonicalPhone, employeeEmail.trim() || null),
     ]);
     setSearching(false);
 
@@ -442,13 +447,12 @@ export function InviteMemberFlow({
 
   const handleInvite = async () => {
     const trimmedName = employeeName.trim();
-    const trimmedPhone = phone.trim();
-    if (!trimmedName || !trimmedPhone) return;
+    if (!trimmedName || !canonicalPhone) return;
     setSubmitting(true);
     setSubmitError(null);
 
     const result = await inviteTeamMemberByContact(orgId, {
-      phone: trimmedPhone,
+      phone: canonicalPhone,
       name: trimmedName,
       email: employeeEmail.trim() || null,
       platformRole: selectedRole,
@@ -523,12 +527,12 @@ export function InviteMemberFlow({
               ? ". They will join when they sign up with this phone (new account only)."
               : ". They sign in with their existing Pulse account to accept."}
           </Text>
-          {successKind === "pending" && phone && (
+          {successKind === "pending" && canonicalPhone && (
             <>
               <Pressable
                 onPress={async () => {
                   const result = await shareInvite({
-                    inviteePhone: phone.trim(),
+                    inviteePhone: canonicalPhone,
                     inviteeName: invitedLabel,
                     orgName: "your workspace",
                   });
@@ -581,19 +585,32 @@ export function InviteMemberFlow({
           </View>
 
           <View style={ui.inputWrap}>
-            <TextInput
-              style={ui.input}
-              placeholder="+91 98765 43210"
-              placeholderTextColor={Theme.textMuted}
-              value={phone}
-              onChangeText={(v) => {
-                setPhone(v);
-                setSearchError(null);
-              }}
-              keyboardType="phone-pad"
-              returnKeyType="next"
-            />
+            <View style={phoneField.row}>
+              <View style={phoneField.ccBlock} accessibilityLabel="India +91">
+                <IndiaFlagIcon width={20} height={14} />
+                <Text style={phoneField.ccText}>+91</Text>
+              </View>
+              <TextInput
+                style={[ui.input, phoneField.digits]}
+                placeholder="000 000 0000"
+                placeholderTextColor={Theme.textMuted}
+                value={formatSignupPhoneDisplay(phone)}
+                onChangeText={(v) => {
+                  setPhone(formatMobileNumber(v));
+                  setSearchError(null);
+                }}
+                keyboardType="phone-pad"
+                inputMode="tel"
+                maxLength={12}
+                textContentType="telephoneNumber"
+                autoComplete="tel"
+                returnKeyType="next"
+              />
+            </View>
           </View>
+          {phone.length > 0 && phone.length < 10 ? (
+            <Text style={phoneField.hint}>{phone.length}/10 digits</Text>
+          ) : null}
 
           {liveChecking ? (
             <View style={ui.liveCheckRow}>
@@ -684,7 +701,11 @@ export function InviteMemberFlow({
             profile={foundProfile}
             isNewEmployee={isNewEmployee}
             fallbackName={employeeName.trim()}
-            fallbackPhone={phone.trim()}
+            fallbackPhone={
+              canonicalPhone
+                ? `+91 ${formatSignupPhoneDisplay(phone)}`
+                : phone.trim()
+            }
           />
 
           {precheck?.otherOrgs && precheck.otherOrgs.length > 0 ? (
@@ -892,6 +913,50 @@ export function InviteMemberFlow({
 export function InviteMemberModal(props: InviteMemberFlowProps) {
   return <InviteMemberFlow {...props} layout="modal" />;
 }
+
+const phoneField = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    minWidth: 0,
+    minHeight: 22,
+  },
+  ccBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 12,
+    marginRight: 12,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: Theme.borderLight,
+    flexShrink: 0,
+  },
+  ccText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+  },
+  digits: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    letterSpacing: 0.4,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as object,
+      default: {},
+    }),
+  },
+  hint: {
+    marginTop: -6,
+    marginBottom: 10,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+});
 
 const embeddedFlow = StyleSheet.create({
   root: {

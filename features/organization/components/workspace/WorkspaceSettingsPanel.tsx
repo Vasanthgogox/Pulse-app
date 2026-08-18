@@ -2,17 +2,17 @@
  * Workspace Settings — hub-aligned detail pane (matches WorkspaceHubMenu density).
  *
  *   Card 1: Workspace logo + Upload New / Remove
- *   KYC insight banner (when incomplete)
  *   Card 2: General Details (workspace name, operating model)
  *   Card 3: Invoice Branding preview
  *   Sticky footer: Cancel + Save Changes
+ *
+ * Business verification lives on Organization, not here.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   changeOperatingModel,
-  getWorkspaceKyc,
   looksLikeModelChangeCooldownError,
   type OperatingModel,
   updateOrganizationLogo,
@@ -25,7 +25,6 @@ import { WorkspaceDetailLayout } from "@/features/organization/components/worksp
 import { useWorkspaceFeedback } from "@/features/organization/components/workspace/WorkspaceFeedbackProvider";
 import { WORKSPACE_PANEL_TITLES } from "@/features/organization/components/workspace/workspacePanelTypes";
 import {
-  AMBER,
   modelLabel,
   orgInitials,
   PURPLE,
@@ -40,7 +39,6 @@ import {
   pickAndUploadOrgLogo,
 } from "@/lib/avatarUpload";
 import {
-  AlertTriangle,
   Camera,
   Lock,
   Trash2,
@@ -55,7 +53,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import type { WorkspaceKyc } from "@/types/organization";
 
 type Props = {
   onBack: () => void;
@@ -74,7 +71,6 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
   const [logoUri, setLogoUri] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [nameSaving, setNameSaving] = useState(false);
-  const [kyc, setKyc] = useState<WorkspaceKyc | null>(null);
   const [modelModalOpen, setModelModalOpen] = useState(false);
   const [modelSaving, setModelSaving] = useState(false);
   const nameInputRef = useRef<TextInput>(null);
@@ -120,13 +116,6 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
   useEffect(() => {
     if (storedName) setOrgName(storedName);
   }, [storedName]);
-
-  useEffect(() => {
-    if (!orgId) return;
-    getWorkspaceKyc(orgId).then(({ kyc: data }) => {
-      if (data) setKyc(data);
-    });
-  }, [orgId]);
 
   useEffect(() => {
     let mounted = true;
@@ -238,14 +227,11 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
   };
 
   const previewName = orgName.trim() || storedName || "YOUR ORG";
-  const kycMissing = kyc
-    ? (["gstin", "business_pan", "cin"] as const).filter((f) => !kyc[f]).length
-    : 3;
 
   return (
     <WorkspaceDetailLayout
       title={WORKSPACE_PANEL_TITLES.settings}
-      subtitle="Manage organisational details"
+      subtitle="How this organization operates Pulse"
       onBack={onBack}
       footerSlot={
         canEdit ? (
@@ -353,22 +339,6 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
             </View>
           </View>
         </View>
-
-        {canEdit && kycMissing > 0 ? (
-          <View style={styles.kycBanner}>
-            <AlertTriangle size={13} color={AMBER} strokeWidth={2.2} />
-            <View style={local.bannerText}>
-              <Text style={styles.kycBannerTitle}>
-                {kycMissing === 3
-                  ? "KYC not started"
-                  : `${kycMissing} compliance field${kycMissing > 1 ? "s" : ""} missing`}
-              </Text>
-              <Text style={styles.kycBannerSub}>
-                Complete org identity &amp; KYC to unlock billing
-              </Text>
-            </View>
-          </View>
-        ) : null}
 
         <View style={styles.detailCard}>
           <SectionHeader label="General Details" />

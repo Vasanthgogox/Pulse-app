@@ -40,7 +40,7 @@ type Props = {
 
 const SECTION_TITLES: Record<WorkspaceProfileEditSection, string> = {
   highlights: "Edit highlights",
-  contact: "Edit headquarter & contact",
+  contact: "Edit contact",
   about: "Edit about",
   products: "Edit products",
 };
@@ -98,9 +98,6 @@ export function NetworkDesktopWorkspaceProfileModal({
   const [facebook, setFacebook] = useState("");
   const [youtube, setYoutube] = useState("");
   const [phoneValue, setPhoneValue] = useState("");
-  const [addressLine, setAddressLine] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
   const [about, setAbout] = useState("");
   const [productsText, setProductsText] = useState("");
 
@@ -113,9 +110,6 @@ export function NetworkDesktopWorkspaceProfileModal({
     setFacebook(profile.profile_facebook?.trim() ?? "");
     setYoutube(profile.profile_youtube?.trim() ?? "");
     setPhoneValue(phone?.trim() ?? "");
-    setAddressLine(profile.address_line?.trim() ?? "");
-    setCity(profile.city?.trim() ?? "");
-    setState(profile.state?.trim() ?? "");
     setAbout(profile.profile_about?.trim() ?? "");
     setProductsText((profile.profile_products ?? []).join(", "));
     setError(null);
@@ -149,9 +143,6 @@ export function NetworkDesktopWorkspaceProfileModal({
         profile_website: website,
         profile_facebook: facebook,
         profile_youtube: youtube,
-        address_line: addressLine,
-        city,
-        state,
       };
       if (phoneValue.trim() !== (phone?.trim() ?? "")) {
         const { error: phoneErr } = await updateProfile({ phone: phoneValue.trim() });
@@ -215,12 +206,9 @@ export function NetworkDesktopWorkspaceProfileModal({
                 <Field label="Website" value={website} onChangeText={setWebsite} placeholder="https://company.com" keyboardType="url" />
                 <Field label="Facebook" value={facebook} onChangeText={setFacebook} placeholder="@company" />
                 <Field label="YouTube" value={youtube} onChangeText={setYoutube} placeholder="@company" />
-                <Field label="Address line" value={addressLine} onChangeText={setAddressLine} placeholder="Street / plot" />
-                <Field label="City" value={city} onChangeText={setCity} placeholder="City" />
-                <Field label="State" value={state} onChangeText={setState} placeholder="State" />
                 <Field label="Phone" value={phoneValue} onChangeText={setPhoneValue} placeholder="+91 98765 43210" keyboardType="numeric" />
                 <Text style={modalStyles.readOnlyHint}>
-                  Email {email || "—"} is managed in account settings.
+                  Email {email || "—"} is managed in account settings. Registered office is edited in My Profile → Workspace branding, and locks after verification.
                 </Text>
               </>
             ) : null}

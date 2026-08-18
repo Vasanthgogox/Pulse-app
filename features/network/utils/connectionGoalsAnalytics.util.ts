@@ -6,9 +6,11 @@ import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import type { LedgerTx } from "@/features/finance/aggregation/types";
 import {
+  formatTripStatusLabel,
   getMonthKeys,
   type SalesDateRange,
 } from "@/features/network/utils/connectionSalesAnalytics.util";
+import { getTripOperationalDisplayCode } from "@/features/operations/display";
 import type {
   EntityTargetMetrics,
   GoalFocus,
@@ -20,6 +22,8 @@ import {
   EMPTY_ENTITY_TARGET,
   EMPTY_SALES_TARGET,
   getMonthStore,
+  getQuarterlyTarget,
+  getYearlyTarget,
   monthLabelFromKey,
   previousMonthKey,
 } from "@/features/network/services/networkGoalsStorage.service";
@@ -142,7 +146,7 @@ export function rollupMonthKeys(
   return keys;
 }
 
-function rollupLabel(selectedMonthKey: string, rollup: GoalsRollup): string {
+export function rollupLabel(selectedMonthKey: string, rollup: GoalsRollup): string {
   if (rollup === "month") return monthLabelFromKey(selectedMonthKey);
   const [y, m] = selectedMonthKey.split("-").map(Number);
   if (rollup === "quarter") {
@@ -152,7 +156,7 @@ function rollupLabel(selectedMonthKey: string, rollup: GoalsRollup): string {
   return `YTD '${String(y).slice(2)}`;
 }
 
-function tripsInMonthKeys(
+export function tripsInMonthKeys(
   trips: readonly TripRow[],
   monthKeys: readonly string[],
 ): TripRow[] {
@@ -161,6 +165,21 @@ function tripsInMonthKeys(
     const key = tripMonthKey(trip);
     return key != null && set.has(key);
   });
+}
+
+/** Trips in the same Month/Quarter/Year window the aggregate KPI uses
+ * (`computeGoalsActualsForRollup`). Prefer this over composing
+ * `periodBounds` + `tripsInDateRange` for Actuals -- those calendar
+ * bounds are the FULL quarter/year (for Target-to-date pacing), while
+ * rollup Actuals are YTD within the selected quarter/year through the
+ * selected month. Mixing them made KAM/Region/Supplier/Asset breakdowns
+ * disagree with the headline KPI on Quarter/Year. */
+export function tripsInSelectedRollup(
+  trips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): TripRow[] {
+  return tripsInMonthKeys(trips, rollupMonthKeys(selectedMonthKey, rollup));
 }
 
 function txMonthKey(tx: LedgerTx): string | null {
@@ -182,7 +201,7 @@ function transactionsInMonthKeys(
   });
 }
 
-function computeTripMetrics(trips: readonly TripRow[]): GoalsActuals {
+export function computeTripMetrics(trips: readonly TripRow[]): GoalsActuals {
   let revenueInr = 0;
   let tripCount = 0;
   let totalCost = 0;
@@ -761,3 +780,746 @@ export function recommendEntityGoalTarget(
 }
 
 export { EMPTY_SALES_TARGET };
+
+// ─── Performance: target-to-date, pacing, previous-period (Phase 1 Commit 4) ──
+//
+// These are pure calendar-math + trip-filtering helpers. None of them read
+// or write NetworkGoalsStore differently than the existing month/quarter/
+// year model already does -- no new persistent target record is introduced.
+//
+// Terminology (locked):
+//   Period Target    -- the full target for the selected period.
+//   Target-to-date    -- Period Target pro-rated by elapsed time in the period.
+//   Achievement %      -- Actual / Period Target.
+//   Pacing %           -- Actual / Target-to-date. NOT the same as Achievement % --
+//                         a partial month's actual must never be compared against
+//                         the whole month's target and called "on track".
+//
+// Deliberately NOT computed here for "pct"-unit metrics (e.g. margin %):
+// target-to-date/pacing pro-ration assumes a cumulative metric (revenue,
+// trips) that accrues over the period. A margin percentage is already a
+// period-level ratio, not a cumulative sum -- "55% of the way to a 31%
+// margin target by day 17" isn't a meaningful statement. Callers should
+// only request target-to-date/pacing for "inr"/"trips" units.
+
+function monthKeyToYM(monthKey: string): { y: number; m0: number } {
+  const [y, m] = monthKey.split("-").map(Number);
+  return { y: y || new Date().getFullYear(), m0: (m || 1) - 1 };
+}
+
+function ymToMonthKey(y: number, m0: number): string {
+  return `${y}-${String(m0 + 1).padStart(2, "0")}`;
+}
+
+/** [start, end) calendar bounds of the selected period, at day granularity. */
+export function periodBounds(
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): { start: Date; end: Date } {
+  const { y, m0 } = monthKeyToYM(selectedMonthKey);
+  if (rollup === "month") {
+    return { start: new Date(y, m0, 1), end: new Date(y, m0 + 1, 1) };
+  }
+  if (rollup === "quarter") {
+    const qStart0 = Math.floor(m0 / 3) * 3;
+    return { start: new Date(y, qStart0, 1), end: new Date(y, qStart0 + 3, 1) };
+  }
+  return { start: new Date(y, 0, 1), end: new Date(y + 1, 0, 1) };
+}
+
+/**
+ * The anchor month-key for "the same relative position, one period back" --
+ * month -> previous month; quarter -> previous quarter, same month-within-
+ * quarter offset; year -> same month, previous year. Uses native Date month
+ * arithmetic so quarter/year boundaries (Jan, Q1) roll back correctly with
+ * no manual cross-year handling.
+ */
+export function previousPeriodAnchorMonthKey(
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): string {
+  const { y, m0 } = monthKeyToYM(selectedMonthKey);
+  const shiftMonths = rollup === "month" ? 1 : rollup === "quarter" ? 3 : 12;
+  const d = new Date(y, m0 - shiftMonths, 1);
+  return ymToMonthKey(d.getFullYear(), d.getMonth());
+}
+
+/** Full (not to-date) target for the selected period, reusing the existing
+ * per-granularity storage as-is -- month.aggregate, or the independently
+ * stored quarterly/yearly target. No new storage, no derived summing. */
+export function resolvePeriodTarget(
+  store: NetworkGoalsStore,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): SalesTargetMetrics {
+  if (rollup === "month") {
+    return getMonthStore(store, selectedMonthKey).aggregate;
+  }
+  if (rollup === "quarter") {
+    return getQuarterlyTarget(store, quarterKeyFromSelectedMonth(selectedMonthKey));
+  }
+  return getYearlyTarget(store, monthKeyToYM(selectedMonthKey).y.toString());
+}
+
+function quarterKeyFromSelectedMonth(selectedMonthKey: string): string {
+  const { y, m0 } = monthKeyToYM(selectedMonthKey);
+  return `${y}-Q${Math.floor(m0 / 3) + 1}`;
+}
+
+/** 0..1, clamped. 0 before the period starts, 1 once it has fully elapsed. */
+export function elapsedFraction(start: Date, end: Date, asOf: Date): number {
+  const total = end.getTime() - start.getTime();
+  if (total <= 0) return 0;
+  const elapsed = asOf.getTime() - start.getTime();
+  return Math.max(0, Math.min(1, elapsed / total));
+}
+
+/** Period target pro-rated by elapsed time. 0 for a future period; equals
+ * the full target once the period has fully elapsed. */
+export function computeTargetToDate(
+  periodTargetValue: number,
+  start: Date,
+  end: Date,
+  asOf: Date,
+): number {
+  if (periodTargetValue <= 0) return 0;
+  return periodTargetValue * elapsedFraction(start, end, asOf);
+}
+
+/** null (not 0, not NaN) when there's no target to compare against --
+ * callers must render "No target set", never a misleading 0%. */
+export function achievementPct(actual: number, periodTargetValue: number): number | null {
+  if (periodTargetValue <= 0) return null;
+  return Math.round((actual / periodTargetValue) * 1000) / 10;
+}
+
+/** null when target-to-date is 0 (period hasn't started, or no target) --
+ * dividing by zero must never surface as 0%, Infinity, or NaN. */
+export function pacingPct(actual: number, targetToDateValue: number): number | null {
+  if (targetToDateValue <= 0) return null;
+  return Math.round((actual / targetToDateValue) * 1000) / 10;
+}
+
+function tripDate(trip: TripRow): Date | null {
+  const raw = trip.pickup_date ?? trip.completed_at ?? trip.created_at;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+/** [start, end) — start inclusive, end exclusive, matching periodBounds. */
+export function tripsInDateRange(
+  trips: readonly TripRow[],
+  start: Date,
+  end: Date,
+): TripRow[] {
+  return trips.filter((trip) => {
+    const d = tripDate(trip);
+    return d != null && d.getTime() >= start.getTime() && d.getTime() < end.getTime();
+  });
+}
+
+/**
+ * Previous-period actual, using the SAME elapsed window as the current
+ * period (e.g. Aug 1-17 vs Jul 1-17), not the full previous period --
+ * comparing a partial current period against a full previous one would
+ * overstate or understate the change. If the previous period is shorter
+ * than the elapsed window (e.g. comparing 31 elapsed days against a
+ * 28/29-day February), the window clamps to the previous period's own end
+ * rather than spilling into the period before it.
+ */
+/** The previous-period trip list itself (same elapsed-window/clamping
+ * logic as computePreviousPeriodActuals), for callers that need the raw
+ * trips -- e.g. the Supplier/Asset breakdowns' per-entity growth%, which
+ * can't be computed from a single pre-aggregated total. */
+export function previousPeriodTripWindow(
+  trips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  asOf: Date,
+): TripRow[] {
+  const { start: curStart, end: curEnd } = periodBounds(selectedMonthKey, rollup);
+  const elapsedMs = Math.max(
+    0,
+    Math.min(asOf.getTime(), curEnd.getTime()) - curStart.getTime(),
+  );
+  const prevAnchor = previousPeriodAnchorMonthKey(selectedMonthKey, rollup);
+  const { start: prevStart, end: prevEnd } = periodBounds(prevAnchor, rollup);
+  const windowEnd = new Date(
+    Math.min(prevStart.getTime() + elapsedMs, prevEnd.getTime()),
+  );
+  return tripsInDateRange(trips, prevStart, windowEnd);
+}
+
+export function computePreviousPeriodActuals(
+  trips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  asOf: Date,
+): GoalsActuals {
+  return computeTripMetrics(previousPeriodTripWindow(trips, selectedMonthKey, rollup, asOf));
+}
+
+/** Percent change vs previous period. null when there's no previous actual
+ * to compare against (division by zero) -- render "No previous period
+ * data", never a fabricated +Infinity%/NaN%. */
+export function changePct(actual: number, previousActual: number): number | null {
+  if (previousActual <= 0) return null;
+  return Math.round(((actual - previousActual) / previousActual) * 1000) / 10;
+}
+
+export type PerformanceKpiRow = {
+  label: string;
+  unit: "inr" | "trips" | "pct";
+  actual: number;
+  periodTarget: number;
+  hasTarget: boolean;
+  achievement: number | null;
+  /** null for "pct"-unit metrics (see file-level note) -- pro-ration doesn't
+   * apply to a ratio metric like margin %. */
+  targetToDate: number | null;
+  pacing: number | null;
+  previousActual: number;
+  hasPreviousData: boolean;
+  changeVsPrevious: number | null;
+  variance: number;
+};
+
+/** Bundles Period Target / Target-to-date / Actual / Achievement % /
+ * Pacing % / vs Previous Period / Variance for one metric, so the panel
+ * doesn't repeat this composition three times (revenue/trips/margin). */
+export function buildPerformanceKpiRow(
+  label: string,
+  unit: "inr" | "trips" | "pct",
+  actual: number,
+  periodTargetValue: number,
+  previousActual: number,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  asOf: Date,
+): PerformanceKpiRow {
+  const hasTarget = periodTargetValue > 0;
+  const supportsPacing = unit !== "pct";
+  const { start, end } = periodBounds(selectedMonthKey, rollup);
+  const targetToDate =
+    supportsPacing && hasTarget ? computeTargetToDate(periodTargetValue, start, end, asOf) : null;
+  return {
+    label,
+    unit,
+    actual,
+    periodTarget: periodTargetValue,
+    hasTarget,
+    achievement: hasTarget ? achievementPct(actual, periodTargetValue) : null,
+    targetToDate,
+    pacing: targetToDate != null ? pacingPct(actual, targetToDate) : null,
+    previousActual,
+    hasPreviousData: previousActual > 0,
+    changeVsPrevious: changePct(actual, previousActual),
+    variance: actual - periodTargetValue,
+  };
+}
+
+// ─── Performance: cross-filter engine (Phase 1 Commit 5) ──────────────────────
+//
+// One shared filter/perspective pair drives every Performance visual -- not
+// six independent per-perspective page layouts, not a second filter system
+// inside the Sales/Asset panels underneath. Moved here (out of
+// NetworkDesktopPerformancePanel.tsx, where Commit 2 first declared them) so
+// the filtering functions below can reference the same types without a
+// panel -> util -> panel dependency loop.
+
+/** A view mode (which breakdown/grouping is showing), not a filter
+ * dimension. Selecting a perspective must never itself change or clear
+ * PerformanceCrossFilter. */
+export type PerformancePerspective =
+  | "aggregate"
+  | "kam"
+  | "client"
+  | "region"
+  | "supplier"
+  | "asset";
+
+export type PerformanceCrossFilter = {
+  kamId: string | null;
+  clientId: string | null;
+  regionId: string | null;
+  supplierId: string | null;
+  assetId: string | null;
+  performanceStatus: "behind" | "on_track" | "exceeded" | null;
+  /** Day/week/month key selected on the trend chart. Not the global Period/
+   * Granularity picker (Month/Quarter/Year) -- that remains separate global
+   * context, per the locked Global-vs-cross-filter split. */
+  trendPointKey: string | null;
+};
+
+export const EMPTY_PERFORMANCE_CROSS_FILTER: PerformanceCrossFilter = {
+  kamId: null,
+  clientId: null,
+  regionId: null,
+  supplierId: null,
+  assetId: null,
+  performanceStatus: null,
+  trendPointKey: null,
+};
+
+/**
+ * Client-id set implied by the CLIENT-DERIVED dimensions only (kamId,
+ * regionId, clientId) -- never supplierId/assetId, which are direct
+ * trip-level attributes with no client-id concept of their own.
+ *
+ * Returns null (meaning "no restriction") when none of the three client-
+ * derived fields are set -- callers must treat null as "don't narrow",
+ * not as "match nothing". When more than one is set simultaneously (e.g.
+ * kamId + clientId, from drilling into one client inside a KAM's
+ * breakdown), the result is their INTERSECTION, not a union -- narrowing
+ * further, never widening back out.
+ */
+export function resolveClientIdsForFilter(
+  crossFilter: Pick<PerformanceCrossFilter, "kamId" | "regionId" | "clientId">,
+  clients: readonly { id: string }[],
+  kamAssignments: Record<string, string>,
+  clientRegions: Record<string, string>,
+): Set<string> | null {
+  const { kamId, regionId, clientId } = crossFilter;
+  if (!kamId && !regionId && !clientId) return null;
+
+  let ids: Set<string> | null = null;
+  const narrow = (matches: (id: string) => boolean) => {
+    const next = new Set(clients.map((c) => c.id).filter(matches));
+    ids = ids == null ? next : new Set([...ids].filter((id) => next.has(id)));
+  };
+
+  if (kamId) narrow((id) => kamAssignments[id] === kamId);
+  if (regionId) narrow((id) => clientRegions[id] === regionId);
+  if (clientId) narrow((id) => id === clientId);
+
+  return ids ?? new Set();
+}
+
+/**
+ * Applies the full PerformanceCrossFilter to a trip list.
+ *   - clientIdSet (from resolveClientIdsForFilter, above) narrows by the
+ *     client-derived dimensions.
+ *   - supplierId / assetId are direct trip-field matches (trip.supplier_id;
+ *     trip.vehicle_id OR trip.driver_id -- vehicle and driver ids never
+ *     collide across tables, so a single assetId field can match either
+ *     without needing to know in advance which kind it is).
+ * With an entirely empty crossFilter (clientIdSet null, supplierId/assetId
+ * unset), returns the exact input array reference -- the "no cross-filter"
+ * case must be identical to the pre-Performance, unfiltered calculation.
+ */
+export function filterTripsForCrossFilter(
+  trips: readonly TripRow[],
+  crossFilter: Pick<PerformanceCrossFilter, "supplierId" | "assetId">,
+  clientIdSet: Set<string> | null,
+): TripRow[] {
+  const { supplierId, assetId } = crossFilter;
+  if (clientIdSet == null && !supplierId && !assetId) return trips as TripRow[];
+  return trips.filter((trip) => {
+    if (clientIdSet != null && (!trip.client_id || !clientIdSet.has(trip.client_id))) {
+      return false;
+    }
+    if (supplierId && trip.supplier_id !== supplierId) return false;
+    if (assetId && trip.vehicle_id !== assetId && trip.driver_id !== assetId) return false;
+    return true;
+  });
+}
+
+/** All month keys spanning the FULL selected period (not to-date) -- e.g.
+ * for a quarter, all three months, not just the months through the
+ * selected one the way rollupMonthKeys (actuals) computes. Used only for
+ * summing entity targets across a complete period. */
+export function monthKeysInPeriod(selectedMonthKey: string, rollup: GoalsRollup): string[] {
+  const { start, end } = periodBounds(selectedMonthKey, rollup);
+  const keys: string[] = [];
+  const cursor = new Date(start);
+  while (cursor.getTime() < end.getTime()) {
+    keys.push(ymToMonthKey(cursor.getFullYear(), cursor.getMonth()));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return keys;
+}
+
+/**
+ * Period Target under the active cross-filter -- reusing existing entity
+ * target storage, never inventing a new persistent KAM/Region/Asset target
+ * record:
+ *   - assetId set -> that one vehicle's or driver's own target (whichever
+ *     bucket has it), independent of any client-side filter also active.
+ *   - supplierId set (no assetId) -> no target exists for suppliers at all
+ *     (no GoalFocus "supplier" case) -- hasTarget must be false, never a
+ *     fabricated or allocated number.
+ *   - otherwise -> clientIdSet null means the org-wide aggregate target
+ *     (unchanged); clientIdSet non-null means the SUM of each matching
+ *     client's own target across the full period's months. Per-client
+ *     targets have no margin component (EntityTargetMetrics has no
+ *     marginPct), so marginPct is always 0 here -- correctly making
+ *     Margin show "no target set" under any entity-level filter, matching
+ *     the same "don't fabricate" rule already applied to Supplier.
+ */
+export function resolveFilteredPeriodTarget(
+  store: NetworkGoalsStore,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  crossFilter: Pick<PerformanceCrossFilter, "supplierId" | "assetId">,
+  clientIdSet: Set<string> | null,
+): SalesTargetMetrics {
+  const { supplierId, assetId } = crossFilter;
+
+  if (assetId) {
+    const keys = monthKeysInPeriod(selectedMonthKey, rollup);
+    const vehicle = sumEntityTargetsForKeys(store, keys, "vehicle", assetId);
+    const driver = sumEntityTargetsForKeys(store, keys, "driver", assetId);
+    const target = vehicle.revenueInr > 0 || vehicle.tripCount > 0 ? vehicle : driver;
+    return { revenueInr: target.revenueInr, tripCount: target.tripCount, marginPct: 0 };
+  }
+
+  if (supplierId) {
+    return { revenueInr: 0, tripCount: 0, marginPct: 0 };
+  }
+
+  if (clientIdSet == null) {
+    return resolvePeriodTarget(store, selectedMonthKey, rollup);
+  }
+
+  const { revenueInr, tripCount } = sumClientTargetsForIds(store, selectedMonthKey, rollup, clientIdSet);
+  return { revenueInr, tripCount, marginPct: 0 };
+}
+
+/** Sums each client's own monthly target across the full selected period
+ * (all months of a quarter/year, not just to-date) for a set of client
+ * ids. Shared by resolveFilteredPeriodTarget and the KAM/Region breakdown
+ * builders below -- one summing implementation, not duplicated per caller. */
+function sumClientTargetsForIds(
+  store: NetworkGoalsStore,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  ids: Iterable<string>,
+): EntityTargetMetrics {
+  const keys = monthKeysInPeriod(selectedMonthKey, rollup);
+  let revenueInr = 0;
+  let tripCount = 0;
+  for (const id of ids) {
+    const t = sumEntityTargetsForKeys(store, keys, "client", id);
+    revenueInr += t.revenueInr;
+    tripCount += t.tripCount;
+  }
+  return { revenueInr, tripCount };
+}
+
+/**
+ * Receivable is filtered by clientIdSet (a valid, direct client attribution
+ * chain) when one is active. Payable (supplier + driver dues) has NO valid
+ * KAM/Region/Client attribution -- callers must always compute Payable
+ * from the FULL, unfiltered clients/suppliers/drivers/trips/transactions
+ * and show a "Not affected by this filter" label whenever kamId or
+ * regionId is set, never a fabricated filtered number. This function does
+ * not compute Payable itself (that's computePayableReceivableSnapshot,
+ * unchanged) -- it only answers whether the label should show.
+ */
+export function isPayableAffectedByFilter(
+  crossFilter: Pick<PerformanceCrossFilter, "kamId" | "regionId">,
+): boolean {
+  return crossFilter.kamId == null && crossFilter.regionId == null;
+}
+
+// ─── Performance: KAM/Region/Supplier/Asset breakdowns (Phase 1 Commit 6) ─────
+//
+// All six perspectives now read from the SAME filteredTrips/filteredClients
+// the KPI band and trend already use -- no separate analytics calculation.
+// Two shapes, matching the commercial-vs-operational split already locked:
+//   Commercial (KAM, Region, Client) -- has a real target to compare against
+//     (client targets, summed via sumClientTargetsForIds -- reused, not
+//     duplicated, from resolveFilteredPeriodTarget's own logic).
+//   Operational (Supplier, Asset) -- no target concept exists for these
+//     (no GoalFocus "supplier" case; Asset intentionally shown in the same
+//     trips/sales/cost/margin shape as Supplier here, not target/
+//     achievement, per the locked per-perspective column spec) -- shows
+//     Previous period / Growth instead, reusing computeTripMetrics +
+//     changePct, the same functions the KPI band already uses.
+//
+// Both only include entities with at least one matching trip in the
+// current filtered context -- "operators who actually operated trips",
+// not every supplier/KAM/region/asset that merely exists in the org.
+
+export type PerformanceCommercialBreakdownRow = {
+  id: string;
+  name: string;
+  actualRevenue: number;
+  actualTrips: number;
+  targetRevenue: number;
+  hasTarget: boolean;
+  achievement: number | null;
+  previousActualRevenue: number;
+  hasPreviousData: boolean;
+  growthPct: number | null;
+};
+
+export type PerformanceOperationalBreakdownRow = {
+  id: string;
+  name: string;
+  actualRevenue: number;
+  actualTrips: number;
+  actualCost: number;
+  marginPct: number;
+  previousActualRevenue: number;
+  hasPreviousData: boolean;
+  growthPct: number | null;
+};
+
+function groupTripsByKey(
+  trips: readonly TripRow[],
+  keyOf: (trip: TripRow) => string | null,
+): Map<string, TripRow[]> {
+  const map = new Map<string, TripRow[]>();
+  for (const trip of trips) {
+    const key = keyOf(trip);
+    if (!key) continue;
+    const bucket = map.get(key);
+    if (bucket) bucket.push(trip);
+    else map.set(key, [trip]);
+  }
+  return map;
+}
+
+/** KAM breakdown: only KAMs with at least one assigned client that has a
+ * matching trip in the current filtered context -- an assigned-but-inactive
+ * KAM doesn't clutter the table. Client attribution only, per the locked
+ * rule -- there is no trip.kam_id; every row here traces back through
+ * kamAssignments[client_id]. */
+export function buildKamBreakdown(
+  store: NetworkGoalsStore,
+  trips: readonly TripRow[],
+  previousTrips: readonly TripRow[],
+  kamById: ReadonlyMap<string, { name: string }>,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): PerformanceCommercialBreakdownRow[] {
+  const { kamAssignments } = store;
+  const byKam = new Map<string, Set<string>>(); // kamId -> client ids seen in trips
+  const tripsByClient = groupTripsByKey(trips, (t) => t.client_id);
+  const prevTripsByClient = groupTripsByKey(previousTrips, (t) => t.client_id);
+  for (const clientId of tripsByClient.keys()) {
+    const kamId = kamAssignments[clientId];
+    if (!kamId) continue;
+    const set = byKam.get(kamId) ?? new Set<string>();
+    set.add(clientId);
+    byKam.set(kamId, set);
+  }
+
+  const rows: PerformanceCommercialBreakdownRow[] = [];
+  for (const [kamId, clientIds] of byKam) {
+    let revenueInr = 0;
+    let tripCount = 0;
+    let prevRevenueInr = 0;
+    for (const clientId of clientIds) {
+      revenueInr += computeTripMetrics(tripsByClient.get(clientId) ?? []).revenueInr;
+      tripCount += computeTripMetrics(tripsByClient.get(clientId) ?? []).tripCount;
+      prevRevenueInr += computeTripMetrics(prevTripsByClient.get(clientId) ?? []).revenueInr;
+    }
+    const target = sumClientTargetsForIds(store, selectedMonthKey, rollup, clientIds);
+    const hasTarget = target.revenueInr > 0;
+    rows.push({
+      id: kamId,
+      name: kamById.get(kamId)?.name ?? kamId,
+      actualRevenue: revenueInr,
+      actualTrips: tripCount,
+      targetRevenue: target.revenueInr,
+      hasTarget,
+      achievement: hasTarget ? achievementPct(revenueInr, target.revenueInr) : null,
+      previousActualRevenue: prevRevenueInr,
+      hasPreviousData: prevRevenueInr > 0,
+      growthPct: changePct(revenueInr, prevRevenueInr),
+    });
+  }
+  return rows.sort((a, b) => b.actualRevenue - a.actualRevenue);
+}
+
+/** Region breakdown -- identical shape and reasoning to KAM, grouped by
+ * clientRegions[client_id] instead of kamAssignments. Same client-
+ * attribution-only rule; no trip.region field exists or is invented. */
+export function buildRegionBreakdown(
+  store: NetworkGoalsStore,
+  trips: readonly TripRow[],
+  previousTrips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): PerformanceCommercialBreakdownRow[] {
+  const { clientRegions } = store;
+  const byRegion = new Map<string, Set<string>>();
+  const tripsByClient = groupTripsByKey(trips, (t) => t.client_id);
+  const prevTripsByClient = groupTripsByKey(previousTrips, (t) => t.client_id);
+  for (const clientId of tripsByClient.keys()) {
+    const region = clientRegions[clientId];
+    if (!region) continue;
+    const set = byRegion.get(region) ?? new Set<string>();
+    set.add(clientId);
+    byRegion.set(region, set);
+  }
+
+  const rows: PerformanceCommercialBreakdownRow[] = [];
+  for (const [region, clientIds] of byRegion) {
+    let revenueInr = 0;
+    let tripCount = 0;
+    let prevRevenueInr = 0;
+    for (const clientId of clientIds) {
+      const m = computeTripMetrics(tripsByClient.get(clientId) ?? []);
+      revenueInr += m.revenueInr;
+      tripCount += m.tripCount;
+      prevRevenueInr += computeTripMetrics(prevTripsByClient.get(clientId) ?? []).revenueInr;
+    }
+    const target = sumClientTargetsForIds(store, selectedMonthKey, rollup, clientIds);
+    const hasTarget = target.revenueInr > 0;
+    rows.push({
+      id: region,
+      name: region,
+      actualRevenue: revenueInr,
+      actualTrips: tripCount,
+      targetRevenue: target.revenueInr,
+      hasTarget,
+      achievement: hasTarget ? achievementPct(revenueInr, target.revenueInr) : null,
+      previousActualRevenue: prevRevenueInr,
+      hasPreviousData: prevRevenueInr > 0,
+      growthPct: changePct(revenueInr, prevRevenueInr),
+    });
+  }
+  return rows.sort((a, b) => b.actualRevenue - a.actualRevenue);
+}
+
+/** Supplier breakdown -- direct trip.supplier_id grouping, no client
+ * indirection. Only suppliers with a matching trip appear -- never every
+ * supplier in the org roster. No target column, ever: no GoalFocus
+ * "supplier" case exists in the target model, so hasTarget is not part of
+ * this row shape at all (unlike the commercial rows, where it's an
+ * explicit null-vs-real-target distinction). */
+export function buildSupplierBreakdown(
+  trips: readonly TripRow[],
+  previousTrips: readonly TripRow[],
+  supplierById: ReadonlyMap<string, { name: string }>,
+): PerformanceOperationalBreakdownRow[] {
+  const tripsBySupplier = groupTripsByKey(trips, (t) => t.supplier_id);
+  const prevBySupplier = groupTripsByKey(previousTrips, (t) => t.supplier_id);
+
+  const rows: PerformanceOperationalBreakdownRow[] = [];
+  for (const [supplierId, supplierTrips] of tripsBySupplier) {
+    const m = computeTripMetrics(supplierTrips);
+    const prevM = computeTripMetrics(prevBySupplier.get(supplierId) ?? []);
+    rows.push({
+      id: supplierId,
+      name: supplierById.get(supplierId)?.name ?? supplierId,
+      actualRevenue: m.revenueInr,
+      actualTrips: m.tripCount,
+      actualCost: supplierTrips.reduce((sum, t) => sum + Math.max(0, Number(t.supplier_rate) || 0), 0),
+      marginPct: m.marginPct,
+      previousActualRevenue: prevM.revenueInr,
+      hasPreviousData: prevM.revenueInr > 0,
+      growthPct: changePct(m.revenueInr, prevM.revenueInr),
+    });
+  }
+  return rows.sort((a, b) => b.actualRevenue - a.actualRevenue);
+}
+
+/** Asset breakdown -- direct trip.vehicle_id or trip.driver_id grouping,
+ * same operational shape as Supplier (trips/sales/cost/margin/previous/
+ * growth), per the locked per-perspective column spec -- not the target/
+ * achievement shape, even though a per-asset target does exist in
+ * NetworkGoalsStore (that target already surfaces via the existing Goals
+ * "Asset" focus; this breakdown is deliberately the operational view). */
+export function buildAssetBreakdown(
+  trips: readonly TripRow[],
+  previousTrips: readonly TripRow[],
+  assetFocus: "vehicle" | "driver",
+  assetById: ReadonlyMap<string, { name: string }>,
+): PerformanceOperationalBreakdownRow[] {
+  const keyOf = (t: TripRow) => (assetFocus === "vehicle" ? t.vehicle_id : t.driver_id);
+  const tripsByAsset = groupTripsByKey(trips, keyOf);
+  const prevByAsset = groupTripsByKey(previousTrips, keyOf);
+
+  const rows: PerformanceOperationalBreakdownRow[] = [];
+  for (const [assetId, assetTrips] of tripsByAsset) {
+    const m = computeTripMetrics(assetTrips);
+    const prevM = computeTripMetrics(prevByAsset.get(assetId) ?? []);
+    rows.push({
+      id: assetId,
+      name: assetById.get(assetId)?.name ?? assetId,
+      actualRevenue: m.revenueInr,
+      actualTrips: m.tripCount,
+      actualCost: assetTrips.reduce((sum, t) => sum + Math.max(0, Number(t.supplier_rate) || 0), 0),
+      marginPct: m.marginPct,
+      previousActualRevenue: prevM.revenueInr,
+      hasPreviousData: prevM.revenueInr > 0,
+      growthPct: changePct(m.revenueInr, prevM.revenueInr),
+    });
+  }
+  return rows.sort((a, b) => b.actualRevenue - a.actualRevenue);
+}
+
+// ─── Performance: Trip evidence (Phase 2 Commit 1) ────────────────────────────
+//
+// A thin, read-only mapping over already-filtered/period-scoped trips -- no
+// recalculation, no new query. Columns are locked to exactly what the
+// Progress modal shows: Trip ID, Date, Client, Supplier/Operator, Vehicle,
+// Driver, Sales, Cost, Margin, Status. Name resolution prefers the caller's
+// own lookup maps (already built once in the panel) and falls back to the
+// trip's own denormalized name fields, same convention as
+// buildSalesTripTableRows.
+
+export type PerformanceTripEvidenceRow = {
+  id: string;
+  tripRef: string;
+  dateLabel: string;
+  clientName: string;
+  supplierName: string;
+  vehicleName: string;
+  driverName: string;
+  sales: number;
+  cost: number;
+  margin: number;
+  statusLabel: string;
+};
+
+export function buildPerformanceTripEvidenceRows(
+  trips: readonly TripRow[],
+  lookups: {
+    supplierById?: ReadonlyMap<string, { name: string }>;
+    vehicleById?: ReadonlyMap<string, { name: string }>;
+    driverById?: ReadonlyMap<string, { name: string }>;
+  } = {},
+): PerformanceTripEvidenceRow[] {
+  const sorted = [...trips].sort((a, b) => {
+    const ad = a.pickup_date ?? a.completed_at ?? a.created_at ?? "";
+    const bd = b.pickup_date ?? b.completed_at ?? b.created_at ?? "";
+    return bd.localeCompare(ad);
+  });
+
+  return sorted.map((trip) => {
+    const sales = Math.max(0, Number(trip.client_price) || 0);
+    const cost = Math.max(0, Number(trip.supplier_rate) || 0);
+    const storedMargin = Number(trip.margin);
+    const margin = Number.isFinite(storedMargin) ? storedMargin : sales - cost;
+    const rawDate = trip.pickup_date ?? trip.completed_at ?? trip.created_at;
+    const date = rawDate ? new Date(rawDate) : null;
+    return {
+      id: trip.id,
+      tripRef: getTripOperationalDisplayCode(trip),
+      dateLabel: date && Number.isFinite(date.getTime()) ? date.toLocaleDateString("en-IN") : "—",
+      clientName: trip.client_name?.trim() || "—",
+      supplierName:
+        (trip.supplier_id && lookups.supplierById?.get(trip.supplier_id)?.name) ||
+        trip.supplier_name?.trim() ||
+        "—",
+      vehicleName:
+        (trip.vehicle_id && lookups.vehicleById?.get(trip.vehicle_id)?.name) ||
+        trip.vehicle_display_number?.trim() ||
+        "—",
+      driverName:
+        (trip.driver_id && lookups.driverById?.get(trip.driver_id)?.name) ||
+        trip.driver_display_name?.trim() ||
+        "—",
+      sales,
+      cost,
+      margin,
+      statusLabel: formatTripStatusLabel(trip.status),
+    };
+  });
+}

@@ -4,6 +4,7 @@
  * Dense / grid: single row — [status chip] [share] [primary] [pulse?]
  */
 import {
+  HUB_GRID_TOOLBAR_PULSE_SLOT_W,
   HUB_GRID_TOOLBAR_ROW_HEIGHT,
 } from "@/components/hub/hubGridCardLayout";
 import {
@@ -32,9 +33,7 @@ import {
 } from "react-native";
 
 const FOOTER_BORDER = "rgba(15, 23, 42, 0.06)";
-const ROW_HEIGHT = 32;
-const TOOLBAR_STATUS_SLOT_W = 52;
-const TOOLBAR_PULSE_SLOT_W = 48;
+const ROW_HEIGHT = HUB_GRID_TOOLBAR_ROW_HEIGHT;
 /** Expand 32px controls to a ~44pt touch target without growing the row. */
 const TOOLBAR_HIT_SLOP = { top: 6, bottom: 6, left: 6, right: 6 } as const;
 
@@ -160,30 +159,46 @@ function PrimaryButton({
 
 function PulseButton({
   dense,
+  live,
+  busy,
   onPress,
 }: {
   dense?: boolean;
+  live: boolean;
+  busy?: boolean;
   onPress: () => void;
 }) {
+  const color = live ? Theme.positive : Theme.destructive;
   return (
     <TouchableOpacity
-      style={[styles.pulseBtn, dense && styles.pulseBtnDense]}
+      style={[
+        styles.pulseBtn,
+        dense && styles.pulseBtnDense,
+        live ? styles.pulseBtnLive : styles.pulseBtnExpired,
+        busy && { opacity: 0.7 },
+      ]}
       onPress={onPress}
       activeOpacity={0.85}
-      accessibilityLabel="Broadcast indent to Pulse network as story"
+      disabled={busy}
+      accessibilityLabel={
+        live
+          ? "Pulse story is live"
+          : "Reboost indent as a 24 hour Pulse story"
+      }
+      accessibilityState={{ disabled: busy, selected: live }}
+      hitSlop={TOOLBAR_HIT_SLOP}
     >
-      <Zap
-        size={dense ? 10 : 12}
-        color={Theme.pulseIndigo}
-        strokeWidth={2.2}
-      />
-      {dense ? (
-        <Text style={[styles.pulseBtnText, styles.pulseBtnTextDense]}>
-          Pulse
-        </Text>
-      ) : (
-        <Text style={styles.pulseBtnText}>Pulse</Text>
-      )}
+      <Zap size={dense ? 11 : 12} color={color} strokeWidth={2.2} />
+      <Text
+        style={[
+          styles.pulseBtnText,
+          dense && styles.pulseBtnTextDense,
+          { color },
+        ]}
+        numberOfLines={1}
+      >
+        Pulse
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -411,6 +426,11 @@ export type GiveLoadIndentCardActionsProps = LoadCenterIndentCardActionsLayout &
   isAwardedPendingTrip: boolean;
   isAwaitingSupplierDeploy: boolean;
   showPulseToNetwork: boolean;
+  /** True while the linked LOAD story is inside its 24h window. */
+  pulseStoryLive?: boolean;
+  pulseBusy?: boolean;
+  onPulseStory?: (load: IndentRow) => void;
+  /** @deprecated Use onPulseStory — kept so older call sites still compile. */
   onShareToNetwork?: (load: IndentRow) => void;
   onIndentPress: (load: IndentRow) => void;
   onShareIndent: (load: IndentRow) => void;
@@ -428,6 +448,9 @@ export function GiveLoadIndentCardActions({
   isAwardedPendingTrip,
   isAwaitingSupplierDeploy,
   showPulseToNetwork,
+  pulseStoryLive = false,
+  pulseBusy = false,
+  onPulseStory,
   onShareToNetwork,
   onIndentPress,
   onShareIndent,
@@ -439,7 +462,8 @@ export function GiveLoadIndentCardActions({
   style,
 }: GiveLoadIndentCardActionsProps) {
   const shareOpensDetail = isDone || isAwardedPendingTrip;
-  const showPulse = showPulseToNetwork && Boolean(onShareToNetwork);
+  const pulseHandler = onPulseStory ?? onShareToNetwork;
+  const showPulse = showPulseToNetwork && Boolean(pulseHandler);
 
   const statusChip = (
     <GiveLoadBidChip
@@ -484,7 +508,12 @@ export function GiveLoadIndentCardActions({
     );
 
   const pulse = showPulse ? (
-    <PulseButton dense={dense} onPress={() => onShareToNetwork!(load)} />
+    <PulseButton
+      dense={dense}
+      live={pulseStoryLive}
+      busy={pulseBusy}
+      onPress={() => pulseHandler!(load)}
+    />
   ) : null;
 
   const primarySlot =
@@ -743,51 +772,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: "center",
   },
-  footerDense: {
-    paddingTop: 7,
-    paddingBottom: 8,
-    paddingHorizontal: 8,
-    minHeight: ROW_HEIGHT + 16,
-    justifyContent: "center",
-  },
-  denseRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    width: "100%",
-    minWidth: 0,
-    height: ROW_HEIGHT,
-    ...Platform.select({
-      web: { columnGap: 6, rowGap: 0 } as ViewStyle,
-      default: {},
-    }),
-  },
-  toolbarStatusSlot: {
-    width: TOOLBAR_STATUS_SLOT_W,
-    flexShrink: 0,
-    alignItems: "flex-start",
-  },
-  ctaGroup: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    minWidth: 0,
-    overflow: "hidden",
-    gap: 6,
-    ...Platform.select({
-      web: { columnGap: 6 } as ViewStyle,
-      default: {},
-    }),
-  },
-  primarySlot: {
-    flex: 1,
-    minWidth: 0,
-    overflow: "hidden",
-  },
-  trailingSlot: {
-    flexShrink: 0,
-    marginLeft: 2,
-  },
   primaryToolbarPlaceholder: {
     width: "100%",
     minHeight: ROW_HEIGHT,
@@ -797,14 +781,12 @@ const styles = StyleSheet.create({
   inlineRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "nowrap",
-    gap: 8,
+    gap: 6,
     width: "100%",
     minWidth: 0,
     height: ROW_HEIGHT,
     ...Platform.select({
-      web: { columnGap: 8, rowGap: 0 } as ViewStyle,
+      web: { columnGap: 6, rowGap: 0 } as ViewStyle,
       default: {},
     }),
   },
@@ -824,34 +806,28 @@ const styles = StyleSheet.create({
     minWidth: 0,
     height: ROW_HEIGHT,
     justifyContent: "center",
-    alignSelf: "center",
+    alignSelf: "stretch",
   },
   statusChip: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 4,
     flexShrink: 0,
     maxWidth: 72,
     minWidth: 48,
     height: ROW_HEIGHT,
     paddingHorizontal: 6,
+    paddingVertical: 0,
     borderRadius: 8,
     backgroundColor: Theme.cardWhite,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-  },
-  statusChipDense: {
-    height: ROW_HEIGHT,
-    gap: 3,
-    paddingHorizontal: 3,
+    overflow: "hidden",
   },
   statusChipQuote: {
     minWidth: 52,
     maxWidth: 76,
-  },
-  statusChipQuoteDense: {
-    minWidth: 44,
-    maxWidth: 64,
   },
   statusChipAmount: {
     textTransform: "none",
@@ -865,14 +841,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  statusChipIconDense: {
-    width: 16,
-    height: 16,
-  },
   statusChipTextWrap: {
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
     justifyContent: "center",
+    alignItems: "flex-start",
   },
   statusChipLine1: {
     fontSize: 10,
@@ -883,10 +856,6 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     includeFontPadding: false,
   },
-  statusChipLine1Dense: {
-    fontSize: 10,
-    lineHeight: 12,
-  },
   statusChipLine2: {
     fontSize: 9,
     fontWeight: "600",
@@ -895,10 +864,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.25,
     lineHeight: 11,
     includeFontPadding: false,
-  },
-  statusChipLine2Dense: {
-    fontSize: 10,
-    lineHeight: 12,
   },
   shareBtn: {
     width: ROW_HEIGHT,
@@ -910,11 +875,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-  },
-  shareBtnDense: {
-    width: ROW_HEIGHT,
-    height: ROW_HEIGHT,
-    borderRadius: 8,
+    padding: 0,
   },
   pulseBtn: {
     flexDirection: "row",
@@ -923,26 +884,43 @@ const styles = StyleSheet.create({
     gap: 4,
     flexShrink: 0,
     flexGrow: 0,
-    minWidth: 52,
+    minWidth: 56,
     height: ROW_HEIGHT,
+    maxHeight: ROW_HEIGHT,
+    minHeight: ROW_HEIGHT,
     backgroundColor: Theme.pulseIndigoWash,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.pulseIndigoRing,
     borderRadius: 8,
     paddingHorizontal: 8,
+    paddingVertical: 0,
+    overflow: "hidden",
+    ...Platform.select({
+      web: { boxSizing: "border-box" } as ViewStyle,
+      default: {},
+    }),
+  },
+  pulseBtnLive: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positive,
+  },
+  pulseBtnExpired: {
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.destructive,
   },
   pulseBtnDense: {
-    minWidth: 48,
-    maxWidth: TOOLBAR_PULSE_SLOT_W,
+    minWidth: HUB_GRID_TOOLBAR_PULSE_SLOT_W,
     height: ROW_HEIGHT,
-    paddingHorizontal: 6,
-    gap: 3,
+    paddingHorizontal: 8,
+    gap: 4,
   },
   pulseBtnText: {
     fontSize: 11,
     fontWeight: "700",
     color: Theme.pulseIndigo,
     letterSpacing: 0.1,
+    includeFontPadding: false,
+    lineHeight: 13,
   },
   pulseBtnTextDense: {
     fontSize: 11,
@@ -960,6 +938,11 @@ const styles = StyleSheet.create({
     width: "100%",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+    ...Platform.select({
+      web: { boxSizing: "border-box" } as ViewStyle,
+      default: {},
+    }),
   },
   primaryBtnDense: {
     minHeight: ROW_HEIGHT,
@@ -973,7 +956,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     maxWidth: "100%",
-    alignSelf: "center",
+    alignSelf: "stretch",
   },
   primaryBtnText: {
     fontSize: 11,

@@ -43,6 +43,7 @@ import {
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
+import { ensureIndentStory } from "@/features/network/services/indentStoryPosts.service";
 import {
     DONE_SUB_TABS,
     getLoadCenterStatusTabLabel,
@@ -104,6 +105,8 @@ import {
     useDriversQuery,
     useIndentsQuery,
     useInvalidateIndents,
+    useInvalidatePosts,
+    useIndentStoryStatesQuery,
     useMarketIndentsQuery,
     useMyDirectQuotesQuery,
     useSuppliersQuery,
@@ -144,7 +147,7 @@ interface LoadCenterViewProps {
   onCreateIndentPress: () => void;
   onIndentPress: (indent: IndentRow) => void;
   highlightedIndentId?: string | null;
-  /** Opens ShareLoadSheet to broadcast this indent to the Pulse network. */
+  /** @deprecated Pulse reboost is handled inside Load Center. */
   onShareToNetwork?: (indent: IndentRow) => void;
 }
 
@@ -156,7 +159,6 @@ export function LoadCenterView({
   onCreateIndentPress,
   onIndentPress,
   highlightedIndentId,
-  onShareToNetwork,
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
@@ -252,6 +254,8 @@ export function LoadCenterView({
   }, [onMyNetworkPress, router]);
 
   const invalidateIndents = useInvalidateIndents();
+  const invalidatePosts = useInvalidatePosts(orgId);
+  const [pulsingIndentId, setPulsingIndentId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   useFocusEffect(
@@ -326,6 +330,8 @@ export function LoadCenterView({
   );
   const { data: quoteCounts = {}, refetch: refetchQuoteCounts } =
     useIndentOfferCountsQuery(orgId, giveLoadIds);
+  const { data: indentStoryStates = {}, refetch: refetchIndentStories } =
+    useIndentStoryStatesQuery(orgId, giveLoadIds);
 
   const filters = useLoadCenterFilters({
     orgId,
@@ -972,7 +978,30 @@ export function LoadCenterView({
       return;
     }
     invalidateIndents(orgId);
+    invalidatePosts();
     triggerSuccess("Load broadcasted to network");
+  };
+
+  const handlePulseStory = async (load: IndentRow) => {
+    if (!orgId || pulsingIndentId) return;
+    const live = indentStoryStates[load.id]?.isLive === true;
+    if (live) {
+      triggerSuccess("Story is live for 24 hours");
+      return;
+    }
+    setPulsingIndentId(load.id);
+    try {
+      const { error } = await ensureIndentStory(orgId, load, { reboost: true });
+      if (error) {
+        Alert.alert("Could not Pulse story", error.message);
+        return;
+      }
+      invalidatePosts();
+      await refetchIndentStories();
+      triggerSuccess("Story live for 24 hours");
+    } finally {
+      setPulsingIndentId(null);
+    }
   };
 
   const handleShareIndent = async (load: IndentRow) => {
@@ -1165,9 +1194,9 @@ export function LoadCenterView({
         parseAmount(load.supplier_target) ??
         parseAmount(load.client_price);
       const showPulseToNetwork =
-        Boolean(onShareToNetwork) &&
         indentCanBroadcastToPulseNetwork(load) &&
-        !isDone;
+        !isDone &&
+        !isDraft;
 
       const avatar = giveLoadIndentAvatarProps(
         load,
@@ -1229,11 +1258,13 @@ export function LoadCenterView({
                   isAwardedPendingTrip={isAwardedPendingTrip}
                   isAwaitingSupplierDeploy={isAwaitingSupplierDeploy}
                   showPulseToNetwork={showPulseToNetwork}
+                  pulseStoryLive={indentStoryStates[load.id]?.isLive === true}
+                  pulseBusy={pulsingIndentId === load.id}
                   awardedAmountLabel={
                     awardedAmount != null ? formatINR(awardedAmount) : null
                   }
                   awardedAmount={awardedAmount}
-                  onShareToNetwork={onShareToNetwork}
+                  onPulseStory={handlePulseStory}
                   onIndentPress={handleCardIndentPress}
                   onShareIndent={handleShareIndent}
                   onBroadcastDraft={handleBroadcastDraft}
@@ -1250,12 +1281,14 @@ export function LoadCenterView({
       awardModal.open,
       clientById,
       handleBroadcastDraft,
+      handlePulseStory,
       handleShareIndent,
       indentIdsWithTrip,
+      indentStoryStates,
       isMobileView,
       linkedOrgByOrganizationId,
       handleCardIndentPress,
-      onShareToNetwork,
+      pulsingIndentId,
       quoteCounts,
       statusFilterTab,
       tripAllocationForLoad,
@@ -1761,12 +1794,10 @@ export function LoadCenterView({
                         </View>
                       </View>
                     </View>
-                    {onShareToNetwork ? (
-                      <Text style={styles.loadSectionSub}>
-                        Indents not yet awarded: use Pulse to broadcast a 24h
-                        story to your network.
-                      </Text>
-                    ) : null}
+                    <Text style={styles.loadSectionSub}>
+                      Indents not yet awarded go out as a 24h story. Green Pulse
+                      is live; red Pulse reboosts after expiry.
+                    </Text>
                   </View>
                   {filteredHirePartnerLoads.map((load) => (
                         <View
@@ -1795,12 +1826,10 @@ export function LoadCenterView({
                           </View>
                         </View>
                       </View>
-                      {onShareToNetwork ? (
-                        <Text style={styles.loadSectionSub}>
-                          Indents not yet awarded: use Pulse to broadcast a 24h
-                          story to your network.
-                        </Text>
-                      ) : null}
+                      <Text style={styles.loadSectionSub}>
+                        Indents not yet awarded go out as a 24h story. Green Pulse
+                        is live; red Pulse reboosts after expiry.
+                      </Text>
                     </View>
                   ) : null}
                   {filteredHirePartnerLoads.map((load) => (

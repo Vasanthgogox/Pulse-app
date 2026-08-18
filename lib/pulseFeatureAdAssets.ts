@@ -127,7 +127,7 @@ export const PULSE_FEATURE_ADS: readonly PulseFeatureAd[] = [
     wash: "rgba(0, 158, 247, 0.08)",
     illustration: Illustration3,
     aspect: 600 / 520,
-    lottie: require("@/assets/Animated folder/delivery-man.json"),
+    lottie: require("@/assets/Animated folder/person-driving-car.json"),
     lottieScale: 1.08,
     href: ROUTES.partyDirectory("drivers"),
   },

@@ -82,6 +82,30 @@ describe('aggregateDrivers', () => {
     expect(rows[0].subline).toContain('Disconnected');
   });
 
+  it('keeps stamped asset-trip commission settleable after the driver leaves', () => {
+    const former: DriverLike[] = [
+      {
+        id: 'd1',
+        name: 'Sadam',
+        left_at: '2026-08-17T00:00:00.000Z',
+        relationship_status: 'disconnected',
+      } as DriverLike,
+    ];
+    const trips: TripForDriver[] = [
+      { driver_id: 'd1', driver_commission: 3500, client_price: 35000 } as TripForDriver,
+    ];
+    const unpaid = aggregateDrivers(former, trips, []);
+    expect(unpaid.rows[0].due).toBe(3500);
+    expect(unpaid.rows[0].pending).toBe(3500);
+    expect(unpaid.rows[0].status).toBe('DISCONNECTED');
+
+    const afterPay = aggregateDrivers(former, trips, [
+      { contact_type: 'driver', contact_id: 'd1', amount_out: 3500 } as LedgerTx,
+    ]);
+    expect(afterPay.rows[0].paid).toBe(3500);
+    expect(afterPay.rows[0].pending).toBe(0);
+  });
+
   it('counts trips per driver and totals in/out across all drivers', () => {
     const trips: TripForDriver[] = [
       { driver_id: 'd1', driver_commission: 100 } as TripForDriver,

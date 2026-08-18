@@ -16,6 +16,7 @@ import type {
   AssetDriverTableRow,
   AssetSalesKpis,
 } from "@/features/network/utils/assetSalesAnalytics.util";
+import type { PerformanceTripEvidenceRow } from "@/features/network/utils/connectionGoalsAnalytics.util";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -448,4 +449,62 @@ export async function exportConnectionsExcel(
   XLSX.utils.book_append_sheet(wb, sheet, "Connections");
 
   await shareOrSave(wb, "pulse-network-connections", "Connections Export (Excel)");
+}
+
+// ── Performance trip evidence (Phase 2 Commit 1) ───────────────────────────────
+//
+// Rows are already scoped by the caller to the active perspective, KAM/
+// Region/Client/Supplier/Asset cross-filter, AND the selected period --
+// this function only builds a sheet from whatever it's given. No query, no
+// re-filtering, so the export can never silently widen to the org-wide
+// dataset.
+
+export function buildPerformanceEvidenceWorkbook(
+  rows: PerformanceTripEvidenceRow[],
+  entityName: string,
+  periodLabel: string,
+): XLSX.WorkBook {
+  const wb = XLSX.utils.book_new();
+
+  const header = [
+    "Trip ID", "Date", "Client", "Supplier/Operator", "Vehicle", "Driver",
+    "Sales (₹)", "Cost (₹)", "Margin (₹)", "Status",
+  ];
+  const dataRows = rows.map((row) => [
+    row.tripRef,
+    row.dateLabel,
+    row.clientName,
+    row.supplierName,
+    row.vehicleName,
+    row.driverName,
+    inr(row.sales),
+    inr(row.cost),
+    inr(row.margin),
+    row.statusLabel,
+  ]);
+
+  const sheet = XLSX.utils.aoa_to_sheet([
+    [`Pulse Performance — Trip Evidence · ${entityName}`],
+    [`Period: ${periodLabel}`],
+    [`Generated ${new Date().toLocaleDateString("en-IN")}`],
+    [],
+    header,
+    ...dataRows,
+  ]);
+  sheet["!cols"] = [
+    { wch: 16 }, { wch: 12 }, { wch: 22 }, { wch: 22 }, { wch: 14 }, { wch: 18 },
+    { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+  ];
+  XLSX.utils.book_append_sheet(wb, sheet, "Trip Evidence");
+
+  return wb;
+}
+
+export async function exportPerformanceEvidenceExcel(
+  rows: PerformanceTripEvidenceRow[],
+  entityName: string,
+  periodLabel: string,
+): Promise<void> {
+  const wb = buildPerformanceEvidenceWorkbook(rows, entityName, periodLabel);
+  await shareOrSave(wb, "pulse-performance-evidence", `${entityName} Trip Evidence (Excel)`);
 }

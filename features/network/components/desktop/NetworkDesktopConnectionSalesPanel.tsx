@@ -1,5 +1,5 @@
 /**
- * Connection sales tab — KPI widgets, cross-filtered charts, and partner table.
+ * Sales → Aggregate view — KPI widgets, cross-filtered charts, and partner table.
  */
 import Theme from "@/constants/Theme";
 import {
@@ -69,12 +69,21 @@ function KpiCard({
   sub?: string;
   icon: ReactNode;
 }) {
+  const layout = useProfileHubCompactLayout();
   return (
-    <View style={styles.salesKpiCard}>
+    <View style={[styles.salesKpiCard, layout.salesKpiCard]}>
       <View style={styles.salesKpiIcon}>{icon}</View>
-      <Text style={styles.salesKpiValue}>{value}</Text>
-      <Text style={styles.salesKpiLabel}>{label}</Text>
-      {sub ? <Text style={styles.salesKpiSub}>{sub}</Text> : null}
+      <Text style={styles.salesKpiValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.salesKpiLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      {sub ? (
+        <Text style={styles.salesKpiSub} numberOfLines={2}>
+          {sub}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -157,7 +166,7 @@ export function NetworkDesktopConnectionSalesPanel({
 
   return (
     <View style={[styles.salesBody, layout.salesBody]}>
-      <View style={[styles.splitRow, layout.splitRow]}>
+      <View style={[styles.splitRow, layout.salesSplitRow]}>
         <View style={[styles.sidebar, layout.sidebar]}>
           <View style={[styles.salesCard, styles.salesCardPad]}>
             <Text style={styles.cardTitle}>Top contributors</Text>
@@ -205,13 +214,16 @@ export function NetworkDesktopConnectionSalesPanel({
             inviteDailyCapReached={inviteDailyCapReached}
           />
 
-          <NetworkDesktopSidebarPromoBanners />
-
-          <NetworkDesktopSidebarFeatureAd layout="stack" />
+          {layout.compact ? null : (
+            <>
+              <NetworkDesktopSidebarPromoBanners />
+              <NetworkDesktopSidebarFeatureAd layout="stack" />
+            </>
+          )}
         </View>
 
         <View style={[styles.mainCol, layout.mainCol]}>
-          <View style={styles.salesKpiRow}>
+          <View style={[styles.salesKpiRow, layout.salesKpiRow]}>
             <KpiCard
               label="Total trips"
               value={String(kpis.totalTrips)}
@@ -256,7 +268,7 @@ export function NetworkDesktopConnectionSalesPanel({
             />
           </View>
 
-          <View style={styles.salesWidgetRow}>
+          <View style={[styles.salesWidgetRow, layout.salesWidgetRow]}>
             <View
               style={[
                 styles.salesCard,
@@ -367,7 +379,7 @@ export function NetworkDesktopConnectionSalesPanel({
             </View>
           </View>
 
-          <View style={styles.salesBarRow}>
+          <View style={[styles.salesBarRow, layout.salesWidgetRow]}>
             <View
               style={[
                 styles.salesCard,

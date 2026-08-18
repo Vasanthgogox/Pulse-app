@@ -235,6 +235,8 @@ export const queryKeys = {
         ? (["q", "posts", orgId, "feed", opts] as const)
         : (["q", "posts", orgId, "feed"] as const),
     detail: (postId: string) => ["q", "posts", "detail", postId] as const,
+    indentStories: (orgId: string, indentIdsKey: string) =>
+      ["q", "posts", orgId, "indent-stories", indentIdsKey] as const,
   },
 
   bids: {

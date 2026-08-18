@@ -8,7 +8,11 @@ import { supabase } from "@/lib/supabase";
 import { normalizeInfrastructureErrorMessage } from "@/lib/supabaseHttp.util";
 import { uuidv7 } from "@/lib/uuidv7";
 import type { MemberSurfaceMap } from "@/lib/memberSurfaces";
-import type { CurrentOrganization, WorkspaceKyc } from "@/types/organization";
+import {
+  isVerificationFrozen,
+  type CurrentOrganization,
+  type WorkspaceKyc,
+} from "@/types/organization";
 import type { PlatformTeamRole } from "@/features/organization/utils/teamInviteRoles.util";
 
 const defaultCapabilities = {
@@ -408,7 +412,7 @@ export async function getOrgProfileFields(orgId: string): Promise<{
 
 export type OrgVerificationBannerFields = {
   verification_status: import('@/types/organization').KycVerificationStatus;
-  created_at: string;
+  created_at: string | null;
 };
 
 /** Lightweight — for the post-signup/persistent verification reminder banner. Do not use for the KYC panel itself (use getWorkspaceKyc). */
@@ -493,6 +497,28 @@ export async function updateWorkspaceKyc(
   }
 
   if (hasExtUpdate) {
+    const touchingAddress =
+      fields.address_line !== undefined ||
+      fields.city !== undefined ||
+      fields.state !== undefined;
+    if (touchingAddress) {
+      const { data: statusRow, error: statusErr } = await supabase()
+        .from('organizations')
+        .select('verification_status')
+        .eq('id', orgId)
+        .maybeSingle();
+      if (statusErr) return { error: new Error(statusErr.message), kyc: null };
+      const status = ((statusRow as { verification_status?: string } | null)
+        ?.verification_status ?? 'unverified') as WorkspaceKyc['verification_status'];
+      if (isVerificationFrozen(status)) {
+        return {
+          error: new Error(
+            'Registered office is locked after verification. Upload a new address proof for Pulse admin to change it.',
+          ),
+          kyc: null,
+        };
+      }
+    }
     const patch: Record<string, unknown> = {};
     if (fields.msme_number !== undefined) {
       patch.msme_number = fields.msme_number?.trim().toUpperCase() || null;

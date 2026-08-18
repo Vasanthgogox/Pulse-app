@@ -9,12 +9,14 @@ import {
   SalesTripRefCell,
   SalesTripStatusCell,
 } from "@/features/network/components/desktop/NetworkDesktopSalesTripTableCells";
+import { NetworkDesktopSalesTableOverflow } from "@/features/network/components/desktop/NetworkDesktopSalesTableOverflow";
 import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import {
   buildSalesTripTableRows,
   hasActiveCrossFilters,
@@ -44,6 +46,7 @@ export function NetworkDesktopConnectionSalesTripsTable({
   trips,
   filters,
 }: Props) {
+  const layout = useProfileHubCompactLayout();
   const [tablePage, setTablePage] = useState(1);
   const [rowsPerPage, setRowsPerPage] =
     useState<(typeof PAGE_SIZES)[number]>(10);
@@ -65,7 +68,7 @@ export function NetworkDesktopConnectionSalesTripsTable({
 
   return (
     <View style={[styles.salesCard, styles.salesTableCard]}>
-      <View style={styles.salesTableTitleRow}>
+      <View style={[styles.salesTableTitleRow, layout.salesTableTitleRow]}>
         <View style={styles.salesTripTableTitleCol}>
           <Text style={styles.salesCardTitle}>Trips</Text>
           <Text style={styles.salesTripTableSub}>
@@ -79,8 +82,8 @@ export function NetworkDesktopConnectionSalesTripsTable({
         </Pressable>
       </View>
 
-      <View style={styles.salesTableToolbar}>
-        <View style={styles.salesTableSearch}>
+      <View style={[styles.salesTableToolbar, layout.salesTableToolbar]}>
+        <View style={[styles.salesTableSearch, layout.salesTableSearch]}>
           <Search size={14} color={METRONIC.muted} />
           <TextInput
             style={styles.searchInput}
@@ -99,7 +102,7 @@ export function NetworkDesktopConnectionSalesTripsTable({
         </Pressable>
       </View>
 
-      <View style={styles.salesTableScroll}>
+      <NetworkDesktopSalesTableOverflow compact={layout.compact}>
         <View style={styles.salesTableHead}>
           <View style={styles.salesTripTableGrid}>
             <View style={styles.salesColCheck} />
@@ -209,9 +212,9 @@ export function NetworkDesktopConnectionSalesTripsTable({
             </View>
           ))
         )}
-      </View>
+      </NetworkDesktopSalesTableOverflow>
 
-      <View style={styles.salesPagination}>
+      <View style={[styles.salesPagination, layout.salesPagination]}>
         <View style={styles.salesPageSizeRow}>
           <Text style={styles.salesPageSizeLabel}>Rows per page</Text>
           {PAGE_SIZES.map((size) => (

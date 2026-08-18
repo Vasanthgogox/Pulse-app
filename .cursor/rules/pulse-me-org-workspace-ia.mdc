@@ -1,0 +1,31 @@
+---
+description: ME / ORGANIZATION / WORKSPACE information architecture — personal vs business vs Pulse config
+globs: app/account/**/*.tsx,app/workspace.tsx,components/profile/WorkspaceHubMenu.tsx,features/organization/**/*.{ts,tsx},features/network/components/desktop/NetworkDesktopProfilePanel.tsx,lib/routes.ts
+alwaysApply: false
+---
+
+# Pulse: ME → ORGANIZATION → WORKSPACE
+
+Personal data belongs to the person. Business data belongs to the organization. Operational configuration belongs to the workspace.
+
+Do not mix these scopes on one screen merely because they used to share a route.
+
+| Scope | Question | Examples | Canonical entry |
+|---|---|---|---|
+| **ME** | Who am I? | Name, photo, phone, email, login, language, region, workspaces I belong to | `/workspace?panel=account` (`ROUTES.MY_ACCOUNT` redirects here) |
+| **ORGANIZATION** | What is my business? | Logo, legal/KYC, verification, customers/suppliers/drivers/vehicles, team & access | `/workspace?panel=profile` overview; KYC at `panel=kyc` |
+| **WORKSPACE** | How does this business operate Pulse? | Workspace settings, operating model, invoice branding, enabled modules | `/workspace?panel=settings` and `panel=products` |
+| **PRODUCTS** | What Pulse capabilities does this workspace run? | Pulse Scan, Commerce, Pulse Platform catalogue | Hub Products (open/use); Organization Products & modules (catalogue / usage) |
+
+Personal data belongs to the person. Business data belongs to the organization. Operational configuration belongs to the workspace. Pulse capabilities belong to the workspace/product layer.
+
+## Rules
+
+1. **My Account** must not contain org admin (team, KYC, party directories, invoice branding, workspace settings).
+2. **Organization** must not dump personal identity (phone/email as profile fields). "Managed by" may link to My Account.
+3. **Workspace settings** must not be the verification flow. Verification is Organization → Verification (existing wizard: Business → Identity → Tax → Documents → Review).
+4. **Network → My Profile** is the public/network-facing org profile. It is not My Account. Do not redirect `/account` there.
+5. Hub **Operations** vs Organization **Operations** may both exist (index vs admin). Same for Hub **Open Pulse products** (launcher) vs Organization **Products & modules** (catalogue). Keep copy distinct; do not merge them for cleanliness.
+6. Do not invent KYC steps. Reuse `OrganizationVerifyWizard`.
+7. Preserve deep links: `/account` → My Account, `/workspace?panel=kyc&section=verification`, `/business-verify`, `/branding-settings` → settings, `ROUTES.WORKSPACE_TEAM`, `/workspace?panel=ocr-usage`. Organization **Business dashboard** card opens Network hub (`ROUTES.networkOrgHub("profile")`). `/business-pulse` redirects there. Do not restore the Intelligence KPI dashboard.
+8. **Pulse Scan** is a workspace/product capability, not a personal setting. Hub Products → Pulse Scan opens `panel=ocr-usage`. Do not put Scan/OCR usage, credits, or limits under My Account, Personal Identity, Account & Access, or Preferences. Do not invent Scan configuration that does not exist — usage is the current destination.

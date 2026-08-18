@@ -4,12 +4,10 @@ import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import {
     DEFAULT_USER_2D_AVATAR_SEED,
-    getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { EditProfileModal } from "@/features/auth/components/EditProfileModal";
 import {
   computeExperienceProgress,
   countFiveStarRatings,
@@ -25,13 +23,17 @@ import {
 } from "@/features/ratings/services/ratings.service";
 import { getSignedAvatarUrl, pickAndUploadOrgLogo, updateOrganizationLogo } from "@/lib/avatarUpload";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { canAccessPartyKind } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
+import { useOrgRole } from "@/lib/hooks/useOrgRole";
+import { getOrgVerificationBannerFields } from "@/features/organization/services/organization.service";
+import { orgHubStatusCopy } from "@/features/organization/components/workspace/org/organizationHub.util";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
-import { buildPulseCommerceUrl, openSuiteProductApp } from "@/lib/suite/suiteAuth";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
@@ -41,10 +43,9 @@ import { useRouter } from "expo-router";
 import {
     BarChart3,
     ChevronLeft,
+    ChevronRight,
     Crown,
     MapPin,
-    MousePointer2,
-    ExternalLink,
     Star,
     Trophy,
     Truck,
@@ -54,8 +55,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Image,
-    Linking,
-    Modal,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -95,6 +94,17 @@ type ProfileItemRowProps = {
   showChevron?: boolean;
 };
 
+const ORG_PARTY_TILES: {
+  kind: "customers" | "suppliers" | "drivers" | "vehicles";
+  icon: React.ComponentProps<typeof FontAwesome>["name"];
+  label: string;
+}[] = [
+  { kind: "customers", icon: "building", label: "Customers" },
+  { kind: "suppliers", icon: "truck", label: "Suppliers" },
+  { kind: "drivers", icon: "user", label: "Drivers" },
+  { kind: "vehicles", icon: "car", label: "Vehicles" },
+];
+
 function ProfileItemRow({
   icon,
   label,
@@ -102,77 +112,36 @@ function ProfileItemRow({
   onPress,
   showChevron,
 }: ProfileItemRowProps) {
-  const content = (
-    <>
-      <View style={styles.profileItemLeft}>
-        <View style={styles.profileItemIconBox}>
-          <FontAwesome name={icon} size={16} color={Theme.textMuted} />
-        </View>
-        <View style={styles.profileItemTextWrap}>
-          <Text style={styles.profileItemLabel} numberOfLines={1}>
-            {label}
-          </Text>
-          <Text style={styles.profileItemValue} numberOfLines={1}>
-            {value}
-          </Text>
-        </View>
+  const inner = (
+    <View style={styles.profileItemRowInner}>
+      <View style={styles.profileItemIconBox}>
+        <FontAwesome name={icon} size={14} color={Theme.primary} />
+      </View>
+      <View style={styles.profileItemTextWrap}>
+        <Text style={styles.profileItemLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.profileItemValue} numberOfLines={1}>
+          {value}
+        </Text>
       </View>
       {showChevron ? (
-        <FontAwesome name="chevron-right" size={14} color={Theme.textSection} />
-      ) : (
-        <View style={styles.profileItemRightSpacer} />
-      )}
-    </>
+        <ChevronRight size={13} color={Theme.textMuted} strokeWidth={2} />
+      ) : null}
+    </View>
   );
 
   if (!onPress) {
-    return <View style={styles.profileItemRow}>{content}</View>;
+    return inner;
   }
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.profileItemRow,
-        pressed && styles.profileItemRowPressed,
-      ]}
+      style={({ pressed }) => [pressed && { opacity: 0.8 }]}
       accessibilityRole="button"
     >
-      {({ pressed }) => (
-        <View style={styles.profileItemRowInner}>
-          <View style={styles.profileItemLeft}>
-            <View
-              style={[
-                styles.profileItemIconBox,
-                pressed && styles.profileItemIconBoxPressed,
-              ]}
-            >
-              <FontAwesome
-                name={icon}
-                size={16}
-                color={pressed ? Theme.textOnDark : Theme.textMuted}
-              />
-            </View>
-            <View style={styles.profileItemTextWrap}>
-              <Text style={styles.profileItemLabel} numberOfLines={1}>
-                {label}
-              </Text>
-              <Text style={styles.profileItemValue} numberOfLines={1}>
-                {value}
-              </Text>
-            </View>
-          </View>
-          {showChevron ? (
-            <FontAwesome
-              name="chevron-right"
-              size={14}
-              color={Theme.textSection}
-            />
-          ) : (
-            <View style={styles.profileItemRightSpacer} />
-          )}
-        </View>
-      )}
+      {inner}
     </Pressable>
   );
 }
@@ -229,7 +198,12 @@ function BusinessRoadmapPanel({ experience, onBack }: RoadmapPanelProps) {
         <Text style={styles.roadmapTitle}>Experience roadmap</Text>
         <View style={{ width: 40 }} />
       </View>
-      <LinearGradient colors={["#0f172a", "#020617"]} style={styles.roadmapHero}>
+      <LinearGradient
+        colors={[Theme.accentBrownDeep, "#3f2c2c"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.roadmapHero}
+      >
         <View style={styles.roadmapWatermark}>
           <MapPin size={100} color="rgba(255,255,255,0.05)" />
         </View>
@@ -301,12 +275,27 @@ export type ProfileScreenProps = {
   embedded?: boolean;
   onClose?: () => void;
   onOpenAccount?: () => void;
+  /** When embedded, opens the workspace team panel (members & access). */
+  onOpenTeam?: () => void;
+  onOpenVerification?: () => void;
+  onOpenBusinessIdentity?: () => void;
+  onOpenWorkspaceSettings?: () => void;
+  onOpenProducts?: () => void;
+  onOpenScanUsage?: () => void;
+  onOpenRoute?: (path: string) => void;
 };
 
 export default function ProfileScreen({
   embedded = false,
   onClose,
   onOpenAccount,
+  onOpenTeam,
+  onOpenVerification,
+  onOpenBusinessIdentity,
+  onOpenWorkspaceSettings,
+  onOpenProducts,
+  onOpenScanUsage,
+  onOpenRoute,
 }: ProfileScreenProps = {}) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
@@ -315,7 +304,9 @@ export default function ProfileScreen({
   const queryClient = useQueryClient();
   const { currentOrganization, refreshOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
-  const { signOut, user, profile, refreshSession } = useAuth();
+  const { user, profile, refreshSession } = useAuth();
+  const { role } = useOrgRole();
+  const { can: canSurface } = useMemberAccess();
 
   const { data: trips = [], isLoading: tripsLoading } = useTripsQuery(orgId);
   const { data: drivers = [] } = useDriversQuery(orgId);
@@ -403,19 +394,32 @@ export default function ProfileScreen({
     }
   }, [profile?.avatar_seed]);
 
-  const [_avatarUri, setAvatarUri] = useState<string>(() =>
-    getUser2DAvatarUriForSeed(profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED),
-  );
-
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
   const [orgLogoUploading, setOrgLogoUploading] = useState(false);
 
   const capabilities = useCapabilities();
+  const visiblePartyTiles = useMemo(
+    () => ORG_PARTY_TILES.filter((p) => canAccessPartyKind(capabilities, p.kind)),
+    [capabilities],
+  );
   const hasDispatcherOrFleetAccess =
     capabilities.includes("finance_view") ||
     capabilities.includes("finance_manage") ||
     capabilities.includes("dispatch") ||
     capabilities.includes("dispatch_for_own_fleet");
+
+  const { data: verificationStatus } = useQuery({
+    queryKey: queryKeys.workspace.verificationBanner(orgId ?? ""),
+    queryFn: async () => {
+      if (!orgId) return "unverified" as const;
+      const { fields, error } = await getOrgVerificationBannerFields(orgId);
+      if (error) throw error;
+      return fields?.verification_status ?? "unverified";
+    },
+    enabled: !!orgId,
+    staleTime: 60_000,
+  });
+  const verificationCopy = orgHubStatusCopy(verificationStatus ?? "unverified");
 
   const handleClose = () => {
     if (onClose) {
@@ -429,9 +433,6 @@ export default function ProfileScreen({
     }
   };
 
-  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
-  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
-  const [signOutLoading, setSignOutLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -465,43 +466,13 @@ export default function ProfileScreen({
     }, [orgId, queryClient]),
   );
 
-  const handleEditProfile = () => {
-    setShowEditProfileModal(true);
-  };
-
-  const openSignOutConfirm = () => {
-    if (signOutLoading) return;
-    setShowSignOutConfirm(true);
-  };
-
-  const closeSignOutConfirm = () => {
-    if (signOutLoading) return;
-    setShowSignOutConfirm(false);
-  };
-
-  const confirmSignOut = async () => {
-    if (signOutLoading) return;
-    setSignOutLoading(true);
-    try {
-      await signOut();
-      setShowSignOutConfirm(false);
-      router.replace(ROUTES.SIGN_IN_DIRECT);
-    } finally {
-      setSignOutLoading(false);
-    }
-  };
-
   const displayName =
     profile?.full_name ||
     profile?.displayName ||
     user?.email?.split("@")[0] ||
     "User";
-  const roleLabel = profile?.aggregated
-    ? "Dispatcher + Fleet Owner"
-    : "Fleet User";
-  const email = user?.email ?? "—";
-  const phone = profile?.phone ?? "Not added";
-  const companyName = profile?.company_name ?? "Not added";
+  const membershipLabel =
+    role === "owner" ? "Owner" : role === "admin" ? "Admin" : "Member";
 
   const operatingModelLabel = useMemo(() => {
     switch (currentOrganization?.operatingModel) {
@@ -520,25 +491,63 @@ export default function ProfileScreen({
     [hasDispatcherOrFleetAccess],
   );
 
-  const handleDialPhone = async () => {
-    if (phone === "Not added") return;
-    const normalized = phone.replace(/[^\d+]/g, "");
-    if (!normalized) {
-      Alert.alert("Unable to call", "No valid phone number.");
+  const openMembersAndAccess = () => {
+    if (onOpenTeam) {
+      onOpenTeam();
       return;
     }
-    const url = `tel:${normalized}`;
-    try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert(
-        "Unable to call",
-        "Phone calls are not available on this device (for example, a simulator) or the number could not be opened.",
-      );
-    }
+    router.push(ROUTES.WORKSPACE_TEAM as Parameters<typeof router.push>[0]);
   };
-  const statusText =
-    profile?.status_text?.trim() || "Hey there! I am using Pulse.";
+
+  const openPath = (path: string) => {
+    if (onOpenRoute) {
+      onOpenRoute(path);
+      return;
+    }
+    if (embedded && onClose) onClose();
+    router.push(path as Parameters<typeof router.push>[0]);
+  };
+
+  const openVerification = () => {
+    if (onOpenVerification) {
+      onOpenVerification();
+      return;
+    }
+    openPath(ROUTES.WORKSPACE_KYC_VERIFICATION);
+  };
+
+  const openBusinessIdentity = () => {
+    if (onOpenBusinessIdentity) {
+      onOpenBusinessIdentity();
+      return;
+    }
+    openPath(ROUTES.WORKSPACE_KYC);
+  };
+
+  const openWorkspaceSettings = () => {
+    if (onOpenWorkspaceSettings) {
+      onOpenWorkspaceSettings();
+      return;
+    }
+    openPath(`${ROUTES.WORKSPACE}?panel=settings`);
+  };
+
+  const openProducts = () => {
+    if (onOpenProducts) {
+      onOpenProducts();
+      return;
+    }
+    openPath(`${ROUTES.WORKSPACE}?panel=products`);
+  };
+
+  const openScanUsage = () => {
+    if (onOpenScanUsage) {
+      onOpenScanUsage();
+      return;
+    }
+    openPath(ROUTES.WORKSPACE_OCR_USAGE);
+  };
+
   const appVersion = Constants.expoConfig?.version ?? "1.0.0";
   const buildNumber =
     Constants.expoConfig?.ios?.buildNumber ??
@@ -578,34 +587,13 @@ export default function ProfileScreen({
     combinedPartnerStats.count > 0;
 
   const statMiddleAvg = combinedPartnerStats.avg;
-  const statMiddleLabel = "PARTNER AVG";
+  const statMiddleLabel = "Partner avg";
   const statMiddleLoading =
     !!orgId &&
     (receivedCustomerRatingsLoading ||
       (clientIds.length > 0 && partnerRatingsLoading));
   const showStatMiddleStars =
     statMiddleAvg != null && statMiddleAvg > 0;
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const fallback = getUser2DAvatarUriForSeed(avatarSeed);
-      const raw = profile?.avatar_url?.trim();
-      if (!raw) {
-        if (mounted) setAvatarUri(fallback);
-        return;
-      }
-      if (raw.startsWith("http://") || raw.startsWith("https://")) {
-        if (mounted) setAvatarUri(raw);
-        return;
-      }
-      const signed = await getSignedAvatarUrl(raw);
-      if (mounted) setAvatarUri(signed ?? fallback);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [profile?.avatar_url, avatarSeed]);
 
   useEffect(() => {
     let mounted = true;
@@ -692,22 +680,15 @@ export default function ProfileScreen({
               >
                 <ChevronLeft size={20} color={Theme.textOnDark} />
               </Pressable>
-              <Text style={styles.driverLikeTopTitle}>PROFILE</Text>
-              <Pressable
-                onPress={handleEditProfile}
-                style={({ pressed }) => [styles.driverLikeTopBtn, pressed && { opacity: 0.8 }]}
-                accessibilityRole="button"
-                hitSlop={Layout.touchTargetHitSlop}
-              >
-                <FontAwesome name="pencil" size={15} color={Theme.textOnDark} />
-              </Pressable>
+              <Text style={styles.driverLikeTopTitle}>ORGANIZATION</Text>
+              <View style={styles.driverLikeTopBtn} />
             </View>
             ) : null}
 
             <View style={[styles.contentWrapDriverLike, embedded && styles.contentWrapEmbedded]}>
               {/* Hero bleeds to screen edges via negative margins — sits flush under the dark top bar */}
               <LinearGradient
-                colors={["#1e1b4b", "#312e81", "#4D3636"]}
+                colors={[Theme.accentBrown, Theme.accentBrownDeep, "#3f2c2c"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.driverLikeHero, embedded && styles.driverLikeHeroEmbedded]}
@@ -736,9 +717,9 @@ export default function ProfileScreen({
                     )}
                     <View style={styles.orgDpCameraBadge}>
                       {orgLogoUploading ? (
-                        <LoadingIndicator size="small" color="#fff" />
+                        <LoadingIndicator size="small" color={Theme.primary} />
                       ) : (
-                        <FontAwesome name="camera" size={12} color="#fff" />
+                        <FontAwesome name="camera" size={12} color={Theme.primary} />
                       )}
                     </View>
                   </Pressable>
@@ -788,10 +769,6 @@ export default function ProfileScreen({
                   )}
                 </View>
 
-                <Text style={styles.aboutText} numberOfLines={2}>
-                  {statusText}
-                </Text>
-
                 <Pressable
                   onPress={() => setViewMode("roadmap")}
                   style={({ pressed }) => [styles.xpCard, pressed && { opacity: 0.92 }]}
@@ -804,7 +781,7 @@ export default function ProfileScreen({
                   </View>
                   <View style={[styles.xpTrack, embedded && styles.xpTrackEmbedded]}>
                     <LinearGradient
-                      colors={["#10b981", "#0ea5e9"]}
+                      colors={[Theme.accentBrownLight, Theme.accentGold]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={[styles.xpFill, { width: `${experiencePct}%` }]}
@@ -825,19 +802,20 @@ export default function ProfileScreen({
 
               <View style={[styles.statsGrid, embedded && styles.statsGridEmbedded]}>
                 <View style={[styles.statTile, embedded && styles.statTileEmbedded]}>
-                  <Truck size={20} color={Theme.primary} />
-                  <Text style={styles.statTileNum}>
+                  <Truck size={16} color={Theme.primary} strokeWidth={2} />
+                  <Text style={styles.statTileNum} numberOfLines={1}>
                     {tripsLoading ? "—" : completedTrips}
                   </Text>
-                  <Text style={styles.statTileLbl}>TRIPS</Text>
+                  <Text style={styles.statTileLbl}>Trips</Text>
                 </View>
                 <View style={[styles.statTile, embedded && styles.statTileEmbedded]}>
                   <Star
-                    size={20}
+                    size={16}
                     color={AMBER_500}
                     fill={showStatMiddleStars ? AMBER_500 : "transparent"}
+                    strokeWidth={2}
                   />
-                  <Text style={styles.statTileNum}>
+                  <Text style={styles.statTileNum} numberOfLines={1}>
                     {statMiddleLoading
                       ? "…"
                       : showStatMiddleStars
@@ -847,13 +825,13 @@ export default function ProfileScreen({
                   <Text style={styles.statTileLbl}>{statMiddleLabel}</Text>
                 </View>
                 <View style={[styles.statTile, embedded && styles.statTileEmbedded]}>
-                  <Users size={20} color="#8b5cf6" />
-                  <Text style={styles.statTileNum}>{drivers.length}</Text>
-                  <Text style={styles.statTileLbl}>DRIVERS</Text>
+                  <Users size={16} color={Theme.primary} strokeWidth={2} />
+                  <Text style={styles.statTileNum} numberOfLines={1}>{drivers.length}</Text>
+                  <Text style={styles.statTileLbl}>Drivers</Text>
                 </View>
               </View>
 
-              {/* Managed By — admin identity link to personal account */}
+              {/* Managed By — link to personal account only */}
               <Pressable
                 style={({ pressed }) => [styles.managedByCard, pressed && { opacity: 0.9 }]}
                 onPress={() => {
@@ -861,242 +839,183 @@ export default function ProfileScreen({
                   else router.push(ROUTES.MY_ACCOUNT as Parameters<typeof router.push>[0]);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel="View admin account"
+                accessibilityLabel="View personal account"
               >
-                <Text style={styles.managedByEyebrow}>MANAGED BY</Text>
+                <View style={styles.managedByHeader}>
+                  <View style={styles.managedByAccent} />
+                  <Text style={styles.managedByEyebrow}>Managed by</Text>
+                </View>
                 <View style={styles.managedByRow}>
                   <View style={styles.managedByAvatarWrap}>
                     <PartyAvatar
                       name={displayName}
                       avatarUrl={profile?.avatar_url ?? null}
                       avatarSeed={avatarSeed}
-                      size={44}
+                      size={34}
                     />
                   </View>
                   <View style={styles.managedByInfo}>
                     <View style={styles.managedByNameRow}>
                       <Text style={styles.managedByName} numberOfLines={1}>{displayName}</Text>
                       <View style={styles.managedByRoleBadge}>
-                        <Text style={styles.managedByRoleText}>OWNER</Text>
+                        <Text style={styles.managedByRoleText}>{membershipLabel}</Text>
                       </View>
                     </View>
-                    <Text style={styles.managedByMeta} numberOfLines={1}>{email}</Text>
+                    <Text style={styles.managedByMeta} numberOfLines={1}>
+                      Personal account
+                    </Text>
                   </View>
-                  <FontAwesome name="chevron-right" size={14} color={Theme.textSection} />
+                  <ChevronRight size={13} color={Theme.textMuted} strokeWidth={2} />
                 </View>
-                <Text style={styles.managedByCaption}>Personal login · shown in chat &amp; communications</Text>
               </Pressable>
 
-              <View style={styles.premiumCard}>
+              <Pressable
+                style={({ pressed }) => [styles.premiumCard, pressed && { opacity: 0.92 }]}
+                onPress={() => openPath(ROUTES.networkOrgHub("profile"))}
+                accessibilityRole="button"
+                accessibilityLabel="Open business dashboard"
+              >
                 <View style={styles.premiumCardInner}>
                   <View style={styles.interactiveRow}>
                     <View style={styles.interactiveRowLeft}>
                       <View style={styles.dashIcon}>
-                        <BarChart3 size={20} color={Theme.primary} />
+                        <BarChart3 size={16} color={Theme.primary} strokeWidth={2} />
                       </View>
                       <View style={styles.interactiveCopy}>
-                        <Text style={styles.interactiveEyebrow}>OPERATIONS PULSE</Text>
+                        <Text style={styles.interactiveEyebrow}>Overview</Text>
                         <Text style={styles.interactiveTitle}>Business dashboard</Text>
                         <Text style={styles.interactiveSub}>
-                          Trips, fleet reputation, and tier progress update as your team runs loads.
+                          Open the Network hub for trips, fleet reputation, and tier progress.
                         </Text>
                       </View>
                     </View>
-                    <MousePointer2 size={18} color={Theme.textMuted} />
+                    <ChevronRight size={13} color={Theme.textMuted} strokeWidth={2} />
                   </View>
                 </View>
-              </View>
+              </Pressable>
 
-              <View style={styles.premiumCard}>
-                <View style={styles.premiumCardInner}>
-                  <ProfileItemRow
-                    icon="user"
-                    label="Name"
-                    value={displayName}
-                    onPress={handleEditProfile}
-                    showChevron
-                  />
-                  <View style={styles.premiumDivider} />
-                  <ProfileItemRow
-                    icon="phone"
-                    label="Phone"
-                    value={phone}
-                    onPress={handleDialPhone}
-                    showChevron
-                  />
-                  <View style={styles.premiumDivider} />
-                  <ProfileItemRow icon="envelope" label="Email" value={email} />
-                  <View style={styles.premiumDivider} />
-                  <ProfileItemRow
-                    icon="building"
-                    label="Company"
-                    value={companyName}
-                  />
+              {canSurface("workspace.kyc") ? (
+                <View style={styles.premiumCard}>
+                  <View style={styles.premiumCardInner}>
+                    <ProfileItemRow
+                      icon="shield"
+                      label="Verification & Trust"
+                      value={verificationCopy.body || verificationCopy.kicker}
+                      onPress={openVerification}
+                      showChevron
+                    />
+                    <View style={styles.premiumDivider} />
+                    <ProfileItemRow
+                      icon="building"
+                      label="Business Identity"
+                      value="Legal name, tax details, documents"
+                      onPress={openBusinessIdentity}
+                      showChevron
+                    />
+                  </View>
                 </View>
-              </View>
+              ) : null}
 
-
-              <View style={styles.premiumCard}>
-                <View style={styles.premiumCardInner}>
-                  <ProfileItemRow icon="shield" label="Role" value={roleLabel} />
-                  <View style={styles.premiumDivider} />
-                  <ProfileItemRow icon="key" label="Access" value={accessLabel} />
+              {visiblePartyTiles.length > 0 ? (
+                <View style={styles.premiumCard}>
+                  <View style={styles.premiumCardInner}>
+                    <View style={styles.managedByHeader}>
+                      <View style={styles.managedByAccent} />
+                      <Text style={styles.managedByEyebrow}>Operations</Text>
+                    </View>
+                    <View style={styles.premiumDivider} />
+                    <View style={styles.opsPartyRow}>
+                      {visiblePartyTiles.map((party) => (
+                        <Pressable
+                          key={party.kind}
+                          style={({ pressed }) => [
+                            styles.opsPartyCell,
+                            pressed && { opacity: 0.8 },
+                          ]}
+                          onPress={() => openPath(ROUTES.partyDirectory(party.kind))}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${party.label} directory`}
+                        >
+                          <View style={styles.profileItemIconBox}>
+                            <FontAwesome name={party.icon} size={14} color={Theme.primary} />
+                          </View>
+                          <Text style={styles.opsPartyLabel} numberOfLines={1}>
+                            {party.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
                 </View>
-              </View>
+              ) : null}
 
-              <View style={styles.premiumCard}>
-                <View style={styles.premiumCardInner}>
-                  <ProfileItemRow
-                    icon="users"
-                    label="Team Members"
-                    value="Invite and manage your team"
-                    onPress={() => router.push(ROUTES.MODALS.TEAM as Parameters<typeof router.push>[0])}
-                    showChevron
-                  />
+              {canSurface("team.manage") ? (
+                <View style={styles.premiumCard}>
+                  <View style={styles.premiumCardInner}>
+                    <ProfileItemRow
+                      icon="users"
+                      label="Team & Access"
+                      value={`${membershipLabel} · ${accessLabel}`}
+                      onPress={openMembersAndAccess}
+                      showChevron
+                    />
+                  </View>
                 </View>
-              </View>
+              ) : null}
 
-              <View style={styles.premiumCard}>
-                <View style={styles.premiumCardInner}>
-                  <ProfileItemRow
-                    icon="file-text-o"
-                    label="POD"
-                    value="Manage proof of delivery"
-                    onPress={() => router.push("/pod-reconciliation")}
-                    showChevron
-                  />
-                  <View style={styles.premiumDivider} />
-                  <ProfileItemRow
-                    icon="file-text"
-                    label="Invoice"
-                    value="Execute Invoicing"
-                    onPress={() => router.push("/invoicing-execute")}
-                    showChevron
-                  />
+              {canSurface("workspace.settings") ? (
+                <View style={styles.premiumCard}>
+                  <View style={styles.premiumCardInner}>
+                    <ProfileItemRow
+                      icon="cog"
+                      label="Workspace"
+                      value="Settings, branding, operating model"
+                      onPress={openWorkspaceSettings}
+                      showChevron
+                    />
+                    {canSurface("workspace.products") ? (
+                      <>
+                        <View style={styles.premiumDivider} />
+                        <ProfileItemRow
+                          icon="th-large"
+                          label="Products & modules"
+                          value={`Manage what's enabled for ${currentOrganization?.name?.trim() || "this organization"}`}
+                          onPress={openProducts}
+                          showChevron
+                        />
+                        <View style={styles.premiumDivider} />
+                        <ProfileItemRow
+                          icon="barcode"
+                          label="Pulse Scan"
+                          value={`Scan usage for ${currentOrganization?.name?.trim() || "this organization"}`}
+                          onPress={openScanUsage}
+                          showChevron
+                        />
+                      </>
+                    ) : null}
+                    <View style={styles.premiumDivider} />
+                    <ProfileItemRow
+                      icon="info-circle"
+                      label="Version"
+                      value={`Version ${appVersion} (${buildNumber})`}
+                    />
+                  </View>
                 </View>
-              </View>
-
-              <View style={styles.premiumCard}>
-                <View style={styles.premiumCardInner}>
-                  <ProfileItemRow
-                    icon="cog"
-                    label="Workspace"
-                    value="Organization, verification & invoice branding"
-                    onPress={() => {
-                      if (embedded && onClose) onClose();
-                      else router.push(ROUTES.WORKSPACE as Parameters<typeof router.push>[0]);
-                    }}
-                    showChevron
-                  />
-                  <View style={styles.premiumDivider} />
-                  <ProfileItemRow
-                    icon="info-circle"
-                    label="Version"
-                    value={`Version ${appVersion} (${buildNumber})`}
-                  />
+              ) : (
+                <View style={styles.premiumCard}>
+                  <View style={styles.premiumCardInner}>
+                    <ProfileItemRow
+                      icon="info-circle"
+                      label="Version"
+                      value={`Version ${appVersion} (${buildNumber})`}
+                    />
+                  </View>
                 </View>
-              </View>
-
-              <View style={styles.suiteActionRow}>
-                <Pressable
-                  onPress={() => openSuiteProductApp(buildPulseCommerceUrl())}
-                  style={({ pressed }) => [
-                    styles.switchCommerceBtn,
-                    pressed && styles.switchCommerceBtnPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Switch to Pulse Commerce"
-                >
-                  <ExternalLink size={15} color={Theme.textPrimaryDark} strokeWidth={2.2} />
-                  <Text style={styles.switchCommerceText}>Switch to Pulse Commerce</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={openSignOutConfirm}
-                  style={({ pressed }) => [
-                    styles.signOutBtn,
-                    styles.signOutBtnInline,
-                    pressed && styles.signOutBtnPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Sign out"
-                >
-                  <FontAwesome
-                    name="sign-out"
-                    size={16}
-                    color={Theme.textOnDark}
-                  />
-                  <Text style={styles.signOutText}>Sign out</Text>
-                </Pressable>
-              </View>
+              )}
             </View>
           </>
         ) : null}
       </ScrollView>
-
-      <EditProfileModal
-        visible={showEditProfileModal}
-        onClose={() => setShowEditProfileModal(false)}
-        initialFullName={profile?.full_name ?? profile?.displayName ?? ""}
-        initialPhone={profile?.phone ?? ""}
-        initialCompanyName={profile?.company_name ?? ""}
-        email={user?.email ?? ""}
-        initialStatusText={profile?.status_text ?? ""}
-        onPhotoUpdated={async (payload) => {
-          if (payload?.avatarUri?.trim()) {
-            setAvatarUri(payload.avatarUri);
-          }
-          await refreshSession();
-        }}
-        initialAvatarSeed={avatarSeed}
-        avatarPresetStyle="user-2d"
-        onPresetSelected={(seed) => {
-          setAvatarSeed(seed);
-        }}
-      />
-      <Modal
-        visible={showSignOutConfirm}
-        transparent
-        animationType="fade"
-        onRequestClose={closeSignOutConfirm}
-      >
-        <View style={styles.signOutConfirmBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={closeSignOutConfirm} />
-          <View style={styles.signOutConfirmCard}>
-            <Text style={styles.signOutConfirmTitle}>Sign out</Text>
-            <Text style={styles.signOutConfirmBody}>
-              Are you sure you want to sign out?
-            </Text>
-            <View style={styles.signOutConfirmActions}>
-              <Pressable
-                onPress={closeSignOutConfirm}
-                style={({ pressed }) => [
-                  styles.signOutConfirmCancelBtn,
-                  pressed && styles.signOutConfirmCancelBtnPressed,
-                ]}
-                accessibilityRole="button"
-                disabled={signOutLoading}
-              >
-                <Text style={styles.signOutConfirmCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => void confirmSignOut()}
-                style={({ pressed }) => [
-                  styles.signOutConfirmCtaBtn,
-                  pressed && styles.signOutConfirmCtaBtnPressed,
-                  signOutLoading && styles.signOutConfirmCtaBtnDisabled,
-                ]}
-                accessibilityRole="button"
-                disabled={signOutLoading}
-              >
-                <Text style={styles.signOutConfirmCtaText}>
-                  {signOutLoading ? "Signing out..." : "Sign out"}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -1233,7 +1152,7 @@ const styles = StyleSheet.create({
     width: 132,
     height: 132,
     borderRadius: 66,
-    backgroundColor: "rgba(139,92,246,0.18)",
+    backgroundColor: Theme.accentBrownMuted,
   },
   avatarGlowEmbedded: {
     width: 104,
@@ -1432,8 +1351,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.1)",
   },
   xpTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  xpEyebrow: { fontSize: 9, fontWeight: "900", color: "rgba(148,163,184,0.95)", letterSpacing: 2 },
-  xpPct: { fontSize: 11, fontWeight: "900", color: "#5eead4" },
+  xpEyebrow: { fontSize: 9, fontWeight: "900", color: "rgba(239,228,216,0.72)", letterSpacing: 2 },
+  xpPct: { fontSize: 11, fontWeight: "900", color: Theme.accentGold },
   xpTrack: {
     height: 10,
     borderRadius: 999,
@@ -1445,7 +1364,7 @@ const styles = StyleSheet.create({
   },
   xpFill: { height: "100%", borderRadius: 999 },
   xpFooter: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
-  xpFooterTxt: { fontSize: 8, fontWeight: "700", color: "rgba(148,163,184,0.9)", letterSpacing: 0.6 },
+  xpFooterTxt: { fontSize: 8, fontWeight: "700", color: "rgba(239,228,216,0.7)", letterSpacing: 0.6 },
 
   contentWrap: {
     marginTop: -18,
@@ -1455,150 +1374,164 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "stretch",
+    gap: 8,
   },
   statsGridEmbedded: {
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
   },
   statTile: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: Theme.cardWhite,
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
-    paddingVertical: 16,
+    borderColor: Theme.borderInput,
+    paddingVertical: 14,
     paddingHorizontal: 8,
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
-    shadowColor: "#4D3636",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 2,
   },
   statTileEmbedded: {
-    minWidth: 96,
     flexGrow: 1,
-    flexBasis: 96,
+    flexBasis: 0,
+    minWidth: 0,
     paddingVertical: 12,
-    borderRadius: 16,
+    borderRadius: 18,
   },
   statTileNum: {
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 17,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.5,
+    letterSpacing: -0.2,
   },
   statTileLbl: {
-    fontSize: 7,
-    fontWeight: "900",
-    color: Theme.textSecondary,
-    letterSpacing: 1.2,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    textAlign: "center",
   },
   interactiveRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  interactiveRowLeft: { flex: 1, flexDirection: "row", gap: 12, minWidth: 0 },
+  interactiveRowLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12, minWidth: 0 },
   interactiveCopy: { flex: 1, minWidth: 0 },
   interactiveEyebrow: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: Theme.textSecondary,
-    letterSpacing: 1.5,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
     marginBottom: 2,
   },
   interactiveTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
+    fontSize: 12,
+    fontWeight: "400",
+    color: Theme.textPrimary,
   },
   interactiveSub: {
     fontSize: 11,
+    fontWeight: "400",
     color: Theme.textSecondary,
-    lineHeight: 16,
-    marginTop: 4,
+    lineHeight: 15,
+    marginTop: 2,
   },
   dashIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: Theme.surface,
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
 
   premiumCard: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 24,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 2,
+    borderColor: Theme.borderInput,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   premiumCardInner: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   premiumDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.cinematicDivider,
-    marginLeft: 52,
+    backgroundColor: Theme.borderLight,
+    marginLeft: 60,
+  },
+  opsPartyRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    paddingHorizontal: 6,
+    paddingBottom: 8,
+    gap: 2,
+  },
+  opsPartyCell: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: Layout.minTouchTargetSize,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 2,
+  },
+  opsPartyLabel: {
+    fontSize: 10,
+    fontWeight: "400",
+    color: Theme.textPrimary,
+    letterSpacing: 0.2,
+    textAlign: "center",
   },
 
-  profileItemRow: {
-    minHeight: 44,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    justifyContent: "center",
-  },
-  profileItemRowPressed: {
-    opacity: 0.9,
-  },
   profileItemRowInner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-  profileItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    minWidth: 0,
     gap: 12,
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   profileItemIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: Theme.surface,
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
-  profileItemIconBoxPressed: {
-    backgroundColor: Theme.darkBackground,
-  },
-  profileItemTextWrap: { flex: 1, minWidth: 0 },
+  profileItemTextWrap: { flex: 1, minWidth: 0, justifyContent: "center" },
   profileItemLabel: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9,
+    fontWeight: "500",
     textTransform: "uppercase",
-    letterSpacing: 2.2,
-    color: Theme.textSecondary,
+    letterSpacing: 0.4,
+    color: Theme.textMuted,
     marginBottom: 2,
   },
   profileItemValue: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
+    fontSize: 12,
+    fontWeight: "400",
+    color: Theme.textPrimary,
+    lineHeight: 16,
   },
-  profileItemRightSpacer: { width: 14, height: 14 },
 
   suiteActionRow: {
     flexDirection: "row",
@@ -1830,7 +1763,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 3,
     borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "#1e293b",
+    backgroundColor: Theme.accentBrownDeep,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1851,11 +1784,11 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 10,
-    backgroundColor: Theme.buttonPrimary,
+    backgroundColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2.5,
-    borderColor: SLATE_900,
+    borderColor: Theme.accentBrownDeep,
   },
 
   // ── Hero badge row ─────────────────────────────────────────────
@@ -1868,17 +1801,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modelBadge: {
-    backgroundColor: "rgba(99,102,241,0.22)",
+    backgroundColor: "rgba(239, 228, 216, 0.16)",
     borderRadius: 8,
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "rgba(99,102,241,0.35)",
+    borderColor: "rgba(239, 228, 216, 0.38)",
   },
   modelBadgeText: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#a5b4fc",
+    color: Theme.accentBrownSoft,
     letterSpacing: 1.5,
   },
   tierBadge: {
@@ -1901,80 +1834,97 @@ const styles = StyleSheet.create({
 
   // ── Managed By card ────────────────────────────────────────────
   managedByCard: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 24,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(79,70,229,0.2)",
-    borderLeftWidth: 4,
-    borderLeftColor: "#4D3636",
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 12,
-    gap: 10,
-    shadowColor: "#4D3636",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
-    elevation: 2,
+    borderColor: Theme.borderInput,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  managedByHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  managedByAccent: {
+    width: 3,
+    height: 14,
+    borderRadius: 2,
+    backgroundColor: Theme.primary,
   },
   managedByEyebrow: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: "#4D3636",
-    letterSpacing: 2.2,
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
   managedByRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
   },
   managedByAvatarWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     overflow: "hidden",
     flexShrink: 0,
   },
   managedByInfo: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
   },
   managedByNameRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    flexWrap: "wrap",
   },
   managedByName: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
     flex: 1,
+    minWidth: 0,
   },
   managedByRoleBadge: {
-    backgroundColor: Theme.primary + "20",
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: Theme.primary + "35",
+    borderColor: Theme.borderInput,
+    flexShrink: 0,
   },
   managedByRoleText: {
-    fontSize: 8,
-    fontWeight: "900",
+    fontSize: 9,
+    fontWeight: "800",
     color: Theme.primary,
-    letterSpacing: 1.5,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
   managedByMeta: {
-    fontSize: 11,
+    fontSize: 12,
     color: Theme.textSecondary,
+    marginTop: 1,
   },
   managedByCaption: {
     fontSize: 10,
     color: Theme.textMuted,
-    paddingTop: 8,
+    lineHeight: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.cinematicDivider,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
   },
 });

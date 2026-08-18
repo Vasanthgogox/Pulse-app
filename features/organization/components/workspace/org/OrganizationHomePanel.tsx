@@ -212,21 +212,11 @@ export function OrganizationHomePanel({
       </View>
 
       <View style={panelStyles.detailCard}>
-        <SectionHeader label="Business" />
+        <SectionHeader label="Verification & Trust" />
         <HubRow
-          label="Business details"
-          trailing="chevron"
-          onPress={() => onOpenSection('details')}
-        />
-        <HubRow
-          label="Verification"
+          label="Business verification"
           trailing={verificationTrailing}
           onPress={() => onOpenSection('verification')}
-        />
-        <HubRow
-          label="Documents"
-          trailing={documentsTrailing}
-          onPress={() => onOpenSection('documents')}
         />
         {status === 'unverified' ? (
           <Text style={styles.hint}>
@@ -235,31 +225,47 @@ export function OrganizationHomePanel({
         ) : null}
       </View>
 
-      {showMembers || showPreferences ? (
+      <View style={panelStyles.detailCard}>
+        <SectionHeader label="Business Identity" />
+        <HubRow
+          label="Business details"
+          trailing="chevron"
+          onPress={() => onOpenSection('details')}
+        />
+        <HubRow
+          label="Documents"
+          trailing={documentsTrailing}
+          onPress={() => onOpenSection('documents')}
+        />
+      </View>
+
+      {showMembers ? (
+        <View style={panelStyles.detailCard}>
+          <SectionHeader label="Team & Access" />
+          <Pressable
+            onPress={onOpenMembers}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          >
+            <Users size={14} color={Theme.textMuted} strokeWidth={2} />
+            <Text style={[styles.rowLabel, styles.rowLabelFlex]}>Members & access</Text>
+            <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {showPreferences ? (
         <View style={panelStyles.detailCard}>
           <SectionHeader label="Workspace" />
-          {showMembers ? (
-            <Pressable
-              onPress={onOpenMembers}
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-            >
-              <Users size={14} color={Theme.textMuted} strokeWidth={2} />
-              <Text style={[styles.rowLabel, styles.rowLabelFlex]}>Members & access</Text>
-              <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2} />
-            </Pressable>
-          ) : null}
-          {showPreferences ? (
-            <Pressable
-              onPress={onOpenPreferences}
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-            >
-              <Settings2 size={14} color={Theme.textMuted} strokeWidth={2} />
-              <Text style={[styles.rowLabel, styles.rowLabelFlex]}>
-                Business preferences
-              </Text>
-              <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2} />
-            </Pressable>
-          ) : null}
+          <Pressable
+            onPress={onOpenPreferences}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          >
+            <Settings2 size={14} color={Theme.textMuted} strokeWidth={2} />
+            <Text style={[styles.rowLabel, styles.rowLabelFlex]}>
+              Workspace settings
+            </Text>
+            <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2} />
+          </Pressable>
         </View>
       ) : null}
 

@@ -12,6 +12,7 @@
  * Customers:  ENTITY 34% | TRIPS 12% | BILLED 18% | COLLECTED 18% | TO COLLECT 18%
  * Suppliers:  ENTITY 34% | TRIPS 12% | SOURCED 18% | PAID 18% | DUE 18%
  * Drivers:    DRIVER 34% | TRIPS 12% | EARNINGS 18% | PAID 18% | DUE 18% (aligned with Customers/Suppliers)
+ * Garage:     VEHICLE 34% | TRIPS 12% | SALES 18% | EXPENSE 18% | P&L 18%
  *
  * --- UX recommendations (top-tier table UX) ---
  * • Keep header and row flex in sync via this file only.
@@ -48,4 +49,13 @@ export const DRIVERS = {
   earnings: CUSTOMERS_SUPPLIERS.mission,
   paid: CUSTOMERS_SUPPLIERS.credit,
   due: CUSTOMERS_SUPPLIERS.debit,
+} as const;
+
+/** Garage: same 5-column flex — vehicle | trips | sales | expense | P&L */
+export const GARAGE = {
+  node: CUSTOMERS_SUPPLIERS.node,
+  trips: CUSTOMERS_SUPPLIERS.trips,
+  sales: CUSTOMERS_SUPPLIERS.mission,
+  expense: CUSTOMERS_SUPPLIERS.credit,
+  pnl: CUSTOMERS_SUPPLIERS.debit,
 } as const;

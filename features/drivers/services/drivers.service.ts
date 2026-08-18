@@ -20,7 +20,8 @@ const DRIVER_COLUMNS = [
   "id", "organization_id", "user_id", "name", "phone", "email",
   "license_number", "emergency_name", "emergency_contact", "status",
   "assigned_vehicle_id", "created_at", "updated_at", "left_at",
-  "tracking_only", "payable_amount", "commission_percent", "commission_per_km",
+  "tracking_only", "relationship_origin", "relationship_status",
+  "payable_amount", "commission_percent", "commission_per_km",
   "avatar_url", "avatar_seed",
 ].join(",");
 
@@ -142,6 +143,26 @@ export function isActiveFleetRelationshipDriver(
 }
 
 /**
+ * Finance Drivers ledger — settle current fleet members and former members
+ * who left (`left_at` / disconnected). Tracking-only trip stubs stay out:
+ * a phone-assign on a trip is not a roster identity.
+ */
+export function isFinanceLedgerDriver(
+  d: Pick<DriverRow, "relationship_status" | "left_at" | "tracking_only" | "status">,
+): boolean {
+  if (d.tracking_only === true) return false;
+  if (isActiveFleetRelationshipDriver(d)) return true;
+  if (d.relationship_status === "disconnected") return true;
+  if (d.left_at != null && String(d.left_at).trim() !== "") return true;
+  if (d.status === "inactive") return true;
+  return false;
+}
+
+export function filterFinanceLedgerDrivers(drivers: DriverRow[]): DriverRow[] {
+  return drivers.filter(isFinanceLedgerDriver);
+}
+
+/**
  * Deduplicates drivers by identity (user_id or normalized phone).
  * When the same physical driver has an active row (left_at = null) AND an old
  * disconnected row, only the active row is kept for the list.  The disconnected
@@ -176,6 +197,50 @@ function deduplicateDriversByIdentity(drivers: DriverRow[]): DriverRow[] {
 function normalizeDriverRow<T extends { name?: string | null; full_name?: string | null }>(row: T): T {
   const name = (row.name ?? (row as { full_name?: string | null }).full_name ?? "").trim() || "—";
   return { ...row, name };
+}
+
+/**
+ * `get_drivers_with_profiles` historically omitted relationship columns.
+ * The client filter needs them; hydrate from `drivers` when missing.
+ */
+async function attachRelationshipFields(
+  orgId: string,
+  rows: DriverRow[],
+): Promise<DriverRow[]> {
+  if (rows.length === 0) return rows;
+  const needsHydration = rows.some(
+    (row) => row.relationship_status === undefined,
+  );
+  if (!needsHydration) return rows;
+
+  const { data, error } = await supabase()
+    .from("drivers")
+    .select("id, relationship_status, relationship_origin")
+    .eq("organization_id", orgId)
+    .in(
+      "id",
+      rows.map((row) => row.id),
+    );
+  if (error || !data) return rows;
+
+  const byId = new Map(
+    (
+      data as {
+        id: string;
+        relationship_status: string | null;
+        relationship_origin: string | null;
+      }[]
+    ).map((row) => [row.id, row]),
+  );
+  return rows.map((row) => {
+    const rel = byId.get(row.id);
+    if (!rel) return row;
+    return {
+      ...row,
+      relationship_status: rel.relationship_status,
+      relationship_origin: rel.relationship_origin,
+    };
+  });
 }
 
 /**
@@ -216,7 +281,11 @@ export async function getDriversByOrganization(
         const raw = deduplicateDriversByIdentity(
           excludeTrackingOnly((data ?? []) as DriverRow[]),
         );
-        return { error: null, drivers: raw.map((d) => normalizeDriverRow(d)) };
+        const normalized = raw.map((d) => normalizeDriverRow(d));
+        return {
+          error: null,
+          drivers: await attachRelationshipFields(orgId, normalized),
+        };
       }
     } catch {
       // Fall through to direct select
@@ -308,7 +377,7 @@ export async function syncDriversWithCache(orgId: string, currentRows: DriverRow
     const drivers = await syncDomainRows<DriverRow>({
       domain: "drivers",
       orgId,
-      schemaVersion: "1",
+      schemaVersion: "2",
       policy: { maxDeltaLagMs: 5 * 60_000, fullSyncEveryMs: 8 * 60 * 60_000 },
       currentRows,
       getFull: async () => {

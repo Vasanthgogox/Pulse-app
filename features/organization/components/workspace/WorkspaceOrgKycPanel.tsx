@@ -9,6 +9,7 @@ import { useInlineKycVerification } from '@/features/organization/hooks/useInlin
 import { WorkspaceDetailLayout } from '@/features/organization/components/workspace/WorkspaceDetailLayout';
 import { useWorkspaceFeedback } from '@/features/organization/components/workspace/WorkspaceFeedbackProvider';
 import {
+  WORKSPACE_PANEL_SUBTITLES,
   WORKSPACE_PANEL_TITLES,
   type OrgHubSection,
   type WorkspacePanelId,
@@ -22,7 +23,6 @@ import { OrganizationVerifyWizard } from '@/features/organization/components/wor
 import type { OrganizationKycDocDefinition } from '@/features/organization/types/organizationKycDocuments.types';
 import { useOrgRole } from '@/lib/hooks/useOrgRole';
 import { useMemberAccess } from '@/lib/useMemberAccess';
-import { ROUTES } from '@/lib/routes';
 import { useCallback, useState } from 'react';
 
 type Props = {
@@ -30,7 +30,6 @@ type Props = {
   section?: OrgHubSection | null;
   onOpenSection: (section: OrgHubSection | null) => void;
   onOpenPanel: (panel: WorkspacePanelId) => void;
-  onOpenRoute: (path: string) => void;
 };
 
 const SECTION_TITLES: Record<OrgHubSection, string> = {
@@ -44,7 +43,6 @@ export function WorkspaceOrgKycPanel({
   section = null,
   onOpenSection,
   onOpenPanel,
-  onOpenRoute,
 }: Props) {
   const { user } = useAuth();
   const { currentOrganization } = useOrganization();
@@ -189,6 +187,9 @@ export function WorkspaceOrgKycPanel({
   const status = kyc?.verification_status ?? 'unverified';
   const isDraft = status === 'unverified' || status === 'rejected';
   const title = section ? SECTION_TITLES[section] : WORKSPACE_PANEL_TITLES.kyc;
+  const subtitle = section
+    ? orgName || 'Organisation'
+    : WORKSPACE_PANEL_SUBTITLES.kyc ?? orgName;
   const handleBack = section ? () => onOpenSection(null) : onBack;
 
   const startVerify = useCallback(() => {
@@ -227,7 +228,7 @@ export function WorkspaceOrgKycPanel({
 
   if (loading && !kyc) {
     return (
-      <WorkspaceDetailLayout title={title} subtitle={orgName || 'Organisation'} onBack={handleBack}>
+      <WorkspaceDetailLayout title={title} subtitle={subtitle} onBack={handleBack}>
         <CenteredLoadingView />
       </WorkspaceDetailLayout>
     );
@@ -276,7 +277,7 @@ export function WorkspaceOrgKycPanel({
       showPreferences={can('workspace.settings')}
       onOpenSection={onOpenSection}
       onStartVerify={startVerify}
-      onOpenMembers={() => onOpenRoute(ROUTES.MODALS.TEAM)}
+      onOpenMembers={() => onOpenPanel('team')}
       onOpenPreferences={() => onOpenPanel('settings')}
     />
   ) : section === 'details' ? (
@@ -316,7 +317,7 @@ export function WorkspaceOrgKycPanel({
   return (
     <WorkspaceDetailLayout
       title={title}
-      subtitle={orgName || 'Organisation'}
+      subtitle={subtitle}
       onBack={handleBack}
     >
       {body}

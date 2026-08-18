@@ -46,6 +46,7 @@ export {
   useCreatePostMutation,
   useInvalidatePosts,
   useAfterPostDeleted,
+  useIndentStoryStatesQuery,
 } from './usePostsQuery';
 export {
   useBidsForPostQuery,

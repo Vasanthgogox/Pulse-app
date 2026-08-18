@@ -1,8 +1,10 @@
 import type { KycVerificationStatus, WorkspaceKyc } from '@/types/organization';
 
 export function formatOrgHubDate(iso: string | null | undefined): string {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-IN', {
+  if (!iso?.trim()) return '';
+  const d = new Date(iso.trim().replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-IN', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

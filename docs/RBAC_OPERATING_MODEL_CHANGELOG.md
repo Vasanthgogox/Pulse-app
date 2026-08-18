@@ -14,7 +14,8 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `943c7241` | `useCapabilities` + ModelAccessGate + finance/trip/party/supplier/vehicle gates |
 | `3af2fdaf` | Party directory gate; give-load blocked for asset; nav policy + capability merge fix |
 | `6cef06c4` | Docs + cursor rule: operating model blueprint |
-| `e1670210` | Org KYC reminder: `hasBusinessCapabilities` instead of `role !== 'driver'` |
+| _(pending)_ | Account & Organization IA: `/account` → My Account panel (not Network My Profile); hub PARTY → Operations; personal prefs on My Account; org admin on Organization. Same `workspace.*` / `team.manage` surfaces, no new gates. |
+| _(pending)_ | Organization Overview **Business dashboard** card stays; it opens Network hub (`ROUTES.networkOrgHub("profile")`). Intelligence `/business-pulse` page is a redirect stub to that hub (no KPI landing page). Nav alias inherits `/network/hub`, not `finance_view`. Workspace org avatar still opens Organization overview. |
 | _(pending)_ | Network page: counterparty-aware connect roles; asset hides supplier tab/count/create-post; aggregate hides driver (FLEET) tab/count |
 | _(pending)_ | Operating-model switching: owner-only, 30-day cooldown, audited RPC; impact-preview modal; capability re-gate with no data loss |
 | _(pending)_ | Desktop hub sub-panels (details / hero / grow) gated on `canAccessSuppliers`/`canAccessDrivers`; `database.types.ts` regen (change_operating_model RPC + operating_model_changed_at); Hybrid model verified full-union (no gates to add, covered by tests) |
@@ -41,6 +42,9 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | _(pending)_ | Workspace **Profile** opens in the flex-card side panel (same chrome as Account / Organization), not the full `/profile` tab. Compact hero/stats alignment for the narrower pane. |
 | _(pending)_ | Verify wizard Slice 3.2 UX: GST Yes/No (no Required+skip contradiction), Add vs Edit, Step 4 cards from `buildKycRequirementProfile`, Home “2 details and 4 documents remaining”. Admin GST check `required` follows the same skip. Hub structure unchanged. |
 | _(pending)_ | Drop leftover 5-arg `submit_business_verification` overload (GST-always-required). **Pushed** to linked remote 2026-08-15 (`20270215221500`). Live: 6-arg exists, 5-arg gone. Policy: [`docs/KYC_REQUIREMENT_POLICY.md`](./KYC_REQUIREMENT_POLICY.md). Wizard UX not reopened. No FO / 3B.2. |
+| _(pending)_ | Network hub opens as a full-page popup (covers tab dock). Welcome / corner close hidden; org profile + all tabs (Details → Chat, including Goals) stay in the same flow. Close X is painted above the hub shell and `replace`s to Network (not `back()` through hub tabs). No FO / 3B.2. |
+| _(pending)_ | Hub **Sales** tab merges Connection sales + Asset sales. Toggle when the org has both clients and fleet (`canAccessClients` + `canAccessDrivers`). Aggregate-only: Connection view only. `?tab=asset` still opens Sales on Asset. |
+| _(pending)_ | Workspace hub "Documents" quick-action tile removed. Documents Center still reachable from the header folder icon. No FO / 3B.2. |
 
 ---
 
@@ -95,6 +99,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `lib/queries/useMyCapacityStoriesQuery.ts` | FO “My availability” query |
 | `features/driver/components/CapacityStoryComposerScreen.tsx` | Minimal capacity Story composer |
 | `app/(driver)/capacity-story.tsx` | Route entry |
+| `features/network/components/desktop/NetworkDesktopSalesPanel.tsx` | Hub Sales tab: Aggregate (connection) / Asset (fleet) toggle gated on `canAccessClients` + `canAccessDrivers` |
 
 ---
 
@@ -105,7 +110,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `lib/capabilities.ts` | Org model flags; finance/party helpers; asset = no indent create; hybrid merge safe; `hasBusinessCapabilities`; `allowedConnectionRoles` (counterparty-aware client/supplier); `operatingModelTransition` (impact preview); removed hardcoded driver limits |
 | `features/organization/services/organization.service.ts` | `changeOperatingModel` RPC wrapper + `looksLikeModelChangeCooldownError` |
 | `features/organization/services/members.service.ts` | `transferOwnership` RPC wrapper + `looksLikeTransferTargetError`; `updateMemberRole` → `set_member_role`; new `updateMemberPermissions` for domain toggles + `looksLikeNotOwnerError`; new `updateBulkMemberPermissions` |
-| `lib/routes.ts` | `MODALS.ACCESS_CONTROL` + `MODALS.MEMBER_PERMISSIONS`; driver FO routes incl. `driverCapacityStory` (3B.1) |
+| `lib/routes.ts` | `MODALS.ACCESS_CONTROL` + `MODALS.MEMBER_PERMISSIONS`; driver FO routes incl. `driverCapacityStory` (3B.1); `?tab=asset` documented as Sales Asset-view alias |
 | `features/reach/screens/DriverStoriesScreen.tsx` | FO “My availability” + Share capacity entry (3B.1); no bidding |
 | `app/(modals)/_layout.tsx` | Register `access-control` + `member-permissions` fullScreenModal screens |
 | `features/organization/components/workspace/WorkspaceTeamPanel.tsx` | Owner-only "Access" button → `ROUTES.MODALS.ACCESS_CONTROL` |
@@ -119,7 +124,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 | `features/organization/components/workspace/WorkspaceSettingsPanel.tsx` | Owner-only editable Operating Model field → opens modal; refresh + `['q',…]` cache purge on switch |
 | `features/organization/components/workspace/workspacePanelUi.tsx` | `panelFieldHint` style |
 | `features/network/screens/NetworkScreen.tsx` | Asset: hide supplier tab/count/create-post, connect as client only. Aggregate: hide DRIVER tab + FLEET count. Empty-role connect blocked with alert |
-| `features/network/components/desktop/NetworkDesktopHub.tsx` | Hub stats: drop SUPPLIERS tile (asset) / FLEET tile (aggregate) via `canAccessSuppliers`/`canAccessDrivers`. Zero gated counts (`gatedSupplierCount`/`gatedDriverCount`) into details/hero/grow sub-panels so no hidden-surface count leaks |
+| `features/network/components/desktop/NetworkDesktopHub.tsx` | Hub stats: drop SUPPLIERS tile (asset) / FLEET tile (aggregate) via `canAccessSuppliers`/`canAccessDrivers`. Zero gated counts (`gatedSupplierCount`/`gatedDriverCount`) into details/hero/grow sub-panels so no hidden-surface count leaks. Connection sales + Asset sales merged into one **Sales** tab (`asset` deep-link alias) |
 | `lib/database.types.ts` | Regenerated — adds `change_operating_model` RPC + `organizations.operating_model_changed_at` |
 | `features/network/components/ConnectionRoleModal.tsx` | `allowedRoles` prop; preselect + render only valid roles |
 | `features/network/components/StoryReel.tsx` | `canCreatePost` prop; hide create bubble/`+` badge for asset |
@@ -322,7 +327,6 @@ Organization is the home. Business profile, verification, and documents are sepa
 | `features/organization/components/workspace/WorkspaceProfilePanel.tsx` | Org profile inside the workspace flex-card |
 | `features/organization/components/workspace/kyc/KycVerificationDocumentCard.tsx` | Wizard Step 4 evidence card (upload / ready-to-submit / preview+change) |
 | `docs/KYC_REQUIREMENT_POLICY.md` | Pulse / Admin / 6-arg RPC must share one type × GST matrix |
-| `supabase/migrations/20270215221500_drop_legacy_submit_business_verification_5arg.sql` | DROP leftover 5-arg submit overload (GST-always-required) |
 
 ### Modified files
 
@@ -374,3 +378,144 @@ When you change RBAC again:
 - **Group still renders as "Indents"** — `group: "Indents"` is unchanged; only the section it sits in moved.
 
 **Verification:** `tsc --noEmit` clean on all three touched files; `jest lib/__tests__/capabilities.operatingModel.test.ts` 16/16 passed. **Not verified in a running app** — the Member access screen was not opened to confirm the group renders under Sales.
+
+---
+
+## Workspace hub — Org Profile tile gate
+
+| Commit | Summary |
+|--------|---------|
+| _(pending)_ | Workspace hub "Org Profile" quick-action tile (`components/profile/WorkspaceHubMenu.tsx`): swapped the generic person icon for the org logo/initials avatar (same `orgLogoUri`/`orgInitials` resolution already used for the header logo), relabeled "Profile" → "Org Profile", and gated visibility on `canSurface("workspace.settings")` — the same `useMemberAccess` surface check the adjacent "Settings" row already uses. No new capability introduced. |
+
+**Verification:** `tsc --noEmit` clean on the touched file. **Not verified in a running app** — did not open the workspace hub as a non-admin member to confirm the tile disappears.
+
+---
+
+## Registered office on Workspace branding (this session)
+
+Registered-office map moved from Details → Company profile to My Profile → Workspace branding. Address follows KYC freeze (`pending` / `verified`): no inline edit; change is the existing address-proof document upload for Pulse admin. Draft/rejected orgs can still edit the address on branding. KYC wizard UX not reopened.
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `features/network/components/desktop/NetworkDesktopProfilePanel.tsx` | Map + contact + About/Products + Locations & offices on Workspace branding; verified registered office locked (upload address proof) |
+| `features/network/components/desktop/NetworkDesktopDetailsPanel.tsx` | Headquarter map, contact, About, Products, and Locations moved off Details; completion chips open My Profile |
+| `features/network/components/desktop/NetworkDesktopHub.tsx` | `onOpenProfileTab` from Details |
+| `features/network/components/desktop/NetworkDesktopWorkspaceProfileModal.tsx` | Contact edit no longer writes address |
+| `features/organization/services/organizationWorkspaceProfile.service.ts` | Reject address writes while KYC is frozen |
+| `features/organization/services/organization.service.ts` | Same freeze guard on `updateWorkspaceKyc` address fields |
+| `features/network/components/desktop/networkDesktopHub.styles.ts` | Branding map / lock styles |
+
+**Verification:** not typechecked here. **Not verified in a running app.**
+
+---
+
+## Details tab body removed (this session)
+
+Details tab chrome stays (tabs, + Invites, branding hint). The Details **body** is gone: stats, Overview, Open protocols, Tags, Company profile completion, Network growth. Hub open / Org Profile / `/account` land on **My Profile**.
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `features/network/components/desktop/NetworkDesktopDetailsPanel.tsx` | Empty stub — no Metronic Details body |
+| `features/network/components/desktop/NetworkDesktopHub.tsx` | Details renders stub; default tab is My Profile |
+| `lib/routes.ts` | `networkOrgHub()` default tab is `profile` |
+| `components/profile/WorkspaceHubMenu.tsx` | Org Profile opens My Profile |
+| `app/account/index.tsx` | Redirect to My Profile |
+| `lib/lastRoute.ts` | Hub restore without `?tab=` uses My Profile |
+
+**Verification:** not typechecked here. **Not verified in a running app.**
+
+---
+
+## Details tab removed (this session)
+
+Details tab is gone from the hub chrome. Old `?tab=details` / `networkOrgHub("details")` open **My Profile**. `NetworkDesktopDetailsPanel.tsx` deleted.
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `features/network/components/desktop/NetworkDesktopHub.tsx` | No Details tab; `details` alias → profile |
+| `features/network/screens/NetworkScreen.tsx` | Hub `?tab=details` lands on My Profile |
+| `lib/routes.ts` | `details` URL aliases to profile |
+| `lib/lastRoute.ts` | Restore maps details → profile |
+| `features/network/components/desktop/NetworkDesktopDetailsPanel.tsx` | Deleted |
+
+**Verification:** not typechecked here. **Not verified in a running app.**
+
+---
+
+## Profile Access + Team Members stay in workspace card (this session)
+
+Access and Team Members on the org profile were pushing `/(modals)/team` (full page). Both now open `panel=team` in the workspace flex-card — same destination as Organization → Members & access. Network hub Access also stays in the Team tab instead of `/(modals)/access-control`.
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `lib/routes.ts` | `WORKSPACE_TEAM` (`/workspace?panel=team`) |
+| `features/organization/screens/ProfileScreen.tsx` | Access + Team Members → workspace team panel |
+| `features/organization/components/workspace/WorkspaceProfilePanel.tsx` | `onOpenTeam` → `panel=team` |
+| `app/workspace.tsx` | Team back returns to the panel that opened it |
+| `features/network/components/desktop/NetworkDesktopTeamPanel.tsx` | Access / member edit stay in the hub Team tab |
+
+**Verification:** not typechecked here. **Not verified in a running app.**
+
+---
+
+## Members & access stays in Organization sidebar (this session)
+
+`panel=team` no longer closes the workspace card and replaces with `/(modals)/team`. Members & access (and Account → Team members) render `WorkspaceTeamPanel` in the same sidebar. Back returns to Organization home, not the full-page profile tab.
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `app/workspace.tsx` | Removed team→modal redirect; render `WorkspaceTeamPanel` |
+| `features/organization/components/workspace/WorkspaceOrgKycPanel.tsx` | Members & access → `panel=team` |
+| `features/organization/components/workspace/WorkspaceAccountPanel.tsx` | Team members → `panel=team` |
+
+**Verification:** not typechecked here. **Not verified in a running app.**
+
+---
+
+## Team invite / access stay in Organization sidebar (this session)
+
+Invite member, Access control, and member Edit no longer push full-page modals from the workspace team panel. They swap inside `WorkspaceTeamPanel` (embedded invite flow + `MemberPermissionsPanel embedded`). Back stays in the Organization card.
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `features/organization/components/workspace/WorkspaceTeamPanel.tsx` | Invite / Access / Edit are in-panel views |
+| `features/organization/components/TeamMembersView.tsx` | Optional `onEditMember` intercepts Edit |
+| `features/organization/components/MemberPermissionsPanel/MemberPermissionsPanel.tsx` | `embedded` skips extra safe-area and two-col |
+
+**Verification:** not typechecked here. **Not verified in a running app.**
+
+---
+
+## Cash kanban columns follow ALL / ASSET / AGGREGATE (this session)
+
+Hybrid cash kanban was showing all four party columns even when AGGREGATE or ASSET was selected. Columns now follow the supply filter, then org-model RBAC. Remaining columns flex to fill the row.
+
+| Filter | Columns |
+|--------|---------|
+| ALL | Customers, Suppliers, Garage, Drivers |
+| ASSET | Customers, Garage, Drivers |
+| AGGREGATE | Customers, Suppliers |
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `lib/capabilities.ts` | `financeKanbanColumnsForSupplyFilter` |
+| `features/finance/components/FinanceScreen.tsx` | Kanban uses supply-filter columns |
+| `lib/__tests__/capabilities.operatingModel.test.ts` | Column-set tests |
+
+**Verification:** unit tests passed. **Not verified in a running app.**
+
+---

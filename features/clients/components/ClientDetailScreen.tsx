@@ -1396,6 +1396,9 @@ export default function ClientDetailScreen({
         row.sales > 0 ? `${((pnl / row.sales) * 100).toFixed(1)}%` : "0.0%";
       return {
         trip: row.missionId,
+        tripDate: formatTripTableDate(
+          row.trip.pickup_date ?? row.trip.created_at,
+        ),
         route: row.route,
         model: isAggregateTrip ? "Aggregate" : "Asset",
         supplier: supplierForReport,
@@ -1427,6 +1430,7 @@ export default function ClientDetailScreen({
         ? buildClientReceivableReport(
             clientTripReportRows.map((row) => ({
               trip: row.trip,
+              tripDate: row.tripDate,
               route: row.route,
               sales: row.sales,
               received: row.received,

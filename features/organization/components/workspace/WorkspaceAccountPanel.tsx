@@ -7,31 +7,48 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import { WorkspaceDetailLayout } from "@/features/organization/components/workspace/WorkspaceDetailLayout";
+import { useWorkspaceOrgLogo } from "@/features/organization/hooks/useWorkspaceOrgLogo";
+import {
+  modelLabel,
+  orgInitials,
+} from "@/features/organization/components/workspace/workspacePanelUi";
 import {
   WORKSPACE_PANEL_SUBTITLES,
   WORKSPACE_PANEL_TITLES,
 } from "@/features/organization/components/workspace/workspacePanelTypes";
+import { orgHubStatusCopy } from "@/features/organization/components/workspace/org/organizationHub.util";
+import { getOrgVerificationBannerFields } from "@/features/organization/services/organization.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { WorkspacePanelId } from "@/features/organization/components/workspace/workspacePanelTypes";
+import { useOrgRole } from "@/lib/hooks/useOrgRole";
+import { LOCALE_OPTIONS } from "@/lib/i18n";
+import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
-import { buildPulseCommerceUrl, openSuiteProductApp } from "@/lib/suite/suiteAuth";
+import { useCapabilities } from "@/lib/useCapabilities";
+import {
+  WORKSPACE_REGION_LABELS,
+  getWorkspaceRegion,
+} from "@/lib/workspaceRegion";
+import { useQuery } from "@tanstack/react-query";
 import {
   Building2,
   ChevronRight,
+  Globe,
+  HelpCircle,
   Lock,
+  MapPin,
   MessageSquare,
   Pencil,
-  ScanLine,
-  Settings2,
   Shield,
-  Sparkles,
-  Store,
-  Users,
 } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 const PURPLE = "#4D3636";
 const PURPLE_TINT = "rgba(79,70,229,0.08)";
@@ -132,8 +149,9 @@ const rowStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    minHeight: Layout.minTouchTargetSize,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   iconBox: {
     width: 34,
@@ -142,17 +160,23 @@ const rowStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
+    flexShrink: 0,
   },
-  textWrap: { flex: 1, minWidth: 0 },
+  textWrap: { flex: 1, minWidth: 0, justifyContent: "center" },
   label: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9,
+    fontWeight: "500",
     color: Theme.textMuted,
-    letterSpacing: 0.6,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
-    marginBottom: 1,
+    marginBottom: 2,
   },
-  value: { fontSize: 14, fontWeight: "600", color: Theme.textPrimaryDark },
+  value: {
+    fontSize: 12,
+    fontWeight: "400",
+    color: Theme.textPrimary,
+    lineHeight: 16,
+  },
   lockBadge: {
     width: 22,
     height: 22,
@@ -162,6 +186,7 @@ const rowStyles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   editBadge: {
     width: 22,
@@ -172,6 +197,7 @@ const rowStyles = StyleSheet.create({
     borderColor: PURPLE_BORDER,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
 });
 
@@ -179,10 +205,12 @@ function ManagementRow({
   label,
   icon,
   onPress,
+  value,
 }: {
   label: string;
   icon: React.ReactNode;
   onPress: () => void;
+  value?: string;
 }) {
   return (
     <Pressable
@@ -190,8 +218,9 @@ function ManagementRow({
       style={({ pressed }) => [mgmtStyles.row, pressed && { opacity: 0.85 }]}
       accessibilityRole="button"
     >
-      <View style={mgmtStyles.icon}>{icon}</View>
+      <View style={mgmtStyles.iconBox}>{icon}</View>
       <Text style={mgmtStyles.label}>{label}</Text>
+      {value ? <Text style={mgmtStyles.value}>{value}</Text> : null}
       <ChevronRight size={13} color={Theme.textMuted} strokeWidth={2} />
     </Pressable>
   );
@@ -201,14 +230,36 @@ const mgmtStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
+    minHeight: Layout.minTouchTargetSize,
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
-  icon: { width: 28, alignItems: "center" },
-  label: { flex: 1, fontSize: 12, fontWeight: "600", color: Theme.textPrimaryDark },
+  iconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+    flexShrink: 0,
+  },
+  label: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "400",
+    color: Theme.textPrimary,
+  },
+  value: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    maxWidth: 120,
+    flexShrink: 0,
+  },
 });
 
 export function WorkspaceAccountPanel({
@@ -218,13 +269,62 @@ export function WorkspaceAccountPanel({
   onOpenRoute,
 }: Props) {
   const { profile, user, status } = useAuth();
+  const { currentOrganization } = useOrganization();
+  const { logoUri } = useWorkspaceOrgLogo();
+  const { role } = useOrgRole();
+  const capabilities = useCapabilities();
+  const { locale } = useLanguage();
+  const [regionLabel, setRegionLabel] = useState(WORKSPACE_REGION_LABELS.india);
 
   const isLoading = status === "restoring";
+  const orgId = currentOrganization?.id ?? "";
+
+  const { data: verificationStatus } = useQuery({
+    queryKey: queryKeys.workspace.verificationBanner(orgId),
+    queryFn: async () => {
+      const { fields, error } = await getOrgVerificationBannerFields(orgId);
+      if (error) throw error;
+      return fields?.verification_status ?? "unverified";
+    },
+    enabled: !!orgId,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    void getWorkspaceRegion().then((region) => {
+      if (mounted) setRegionLabel(WORKSPACE_REGION_LABELS[region]);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const fullName = profile?.full_name ?? profile?.displayName ?? "";
   const phone = profile?.phone ?? "";
   const email = user?.email ?? profile?.email ?? "";
   const company = profile?.company_name ?? "";
+  const orgName = currentOrganization?.name?.trim() || company || "Organization";
+  const orgModel = modelLabel(currentOrganization?.operatingModel);
+  const orgInitialsLabel = orgInitials(orgName);
+  const languageLabel =
+    LOCALE_OPTIONS.find((o) => o.value === locale)?.label ?? "English";
+  const roleLabel =
+    role === "owner" ? "Owner" : role === "admin" ? "Admin" : role === "member" ? "Member" : "Member";
+  const hasOperationalAccess =
+    capabilities.includes("finance_view") ||
+    capabilities.includes("finance_manage") ||
+    capabilities.includes("dispatch") ||
+    capabilities.includes("dispatch_for_own_fleet");
+  const accessLabel = hasOperationalAccess
+    ? "Operational access"
+    : "Limited access";
+  const verificationCopy = orgHubStatusCopy(verificationStatus ?? "unverified");
+
+  const openOrganization = () => {
+    if (onOpenPanel) onOpenPanel("profile");
+    else if (onOpenRoute) onOpenRoute(ROUTES.WORKSPACE_ORGANIZATION);
+  };
 
   const editButton = (
     <Pressable
@@ -326,7 +426,7 @@ export function WorkspaceAccountPanel({
             <IdentityRow
               icon={<Building2 size={14} color={PURPLE} strokeWidth={2.2} />}
               iconBg={PURPLE_TINT}
-              label="Registered Company"
+              label="Company (signup)"
               value={company}
               locked
             />
@@ -363,59 +463,79 @@ export function WorkspaceAccountPanel({
             <Text style={styles.identityTitle}>Network & partner visibility</Text>
             <Text style={styles.identityBody}>
               Your org logo represents the business on the load board, partner profiles
-              and invoices. Manage it in Workspace settings.
+              and invoices. Manage it in Organization.
             </Text>
           </View>
         </View>
       </View>
 
-      {(onOpenPanel || onOpenRoute) ? (
+      {currentOrganization ? (
+        <Pressable
+          style={({ pressed }) => [styles.orgCard, pressed && { opacity: 0.9 }]}
+          onPress={openOrganization}
+          accessibilityRole="button"
+          accessibilityLabel="Open organization"
+        >
+          <View style={styles.orgCardHeader}>
+            <View style={styles.orgCardAccent} />
+            <Text style={styles.orgCardEyebrow}>My Workspaces</Text>
+          </View>
+          <View style={styles.orgCardRow}>
+            <View style={styles.orgCardLogoWrap}>
+              {logoUri ? (
+                <Image source={{ uri: logoUri }} style={styles.orgCardLogo} />
+              ) : (
+                <Text style={styles.orgCardLogoInitials}>{orgInitialsLabel}</Text>
+              )}
+            </View>
+            <View style={styles.orgCardInfo}>
+              <View style={styles.orgCardNameRow}>
+                <Text style={styles.orgCardName} numberOfLines={1}>
+                  {orgName}
+                </Text>
+                <View style={styles.orgCardBadge}>
+                  <Text style={styles.orgCardBadgeText}>{orgModel}</Text>
+                </View>
+              </View>
+              <Text style={styles.orgCardMeta} numberOfLines={1}>
+                {`${roleLabel} · ${accessLabel}`}
+              </Text>
+            </View>
+            <ChevronRight size={13} color={Theme.textMuted} strokeWidth={2} />
+          </View>
+          <Text style={styles.orgCardCaption}>
+            {verificationCopy.kicker}
+            {verificationCopy.body ? ` · ${verificationCopy.body}` : ""}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {onOpenPanel ? (
         <View style={styles.card}>
-          <SectionHeader label="Suite products" />
+          <SectionHeader label="Preferences" />
           <ManagementRow
-            label="Switch to Pulse Commerce"
-            icon={<Store size={15} color={PURPLE} strokeWidth={1.8} />}
-            onPress={() => openSuiteProductApp(buildPulseCommerceUrl())}
+            label="Language"
+            icon={<Globe size={15} color={PURPLE} strokeWidth={1.8} />}
+            value={languageLabel}
+            onPress={() => onOpenPanel("language")}
+          />
+          <ManagementRow
+            label="Region"
+            icon={<MapPin size={15} color={PURPLE} strokeWidth={1.8} />}
+            value={regionLabel}
+            onPress={() => onOpenPanel("region")}
           />
         </View>
       ) : null}
 
-      {(onOpenPanel || onOpenRoute) ? (
+      {onOpenRoute ? (
         <View style={styles.card}>
-          <SectionHeader label="Workspace Management" />
-          {onOpenPanel ? (
-            <>
-              <ManagementRow
-                label="Workspace settings"
-                icon={<Building2 size={15} color={PURPLE} strokeWidth={1.8} />}
-                onPress={() => onOpenPanel("settings")}
-              />
-              <ManagementRow
-                label="Organization"
-                icon={<Settings2 size={15} color={PURPLE} strokeWidth={1.8} />}
-                onPress={() => onOpenPanel("kyc")}
-              />
-              <ManagementRow
-                label="Pulse Scan usage"
-                icon={<ScanLine size={15} color={PURPLE} strokeWidth={1.8} />}
-                onPress={() => onOpenPanel("ocr-usage")}
-              />
-            </>
-          ) : null}
-          {onOpenRoute ? (
-            <>
-              <ManagementRow
-                label="Team members"
-                icon={<Users size={15} color={PURPLE} strokeWidth={1.8} />}
-                onPress={() => onOpenRoute(ROUTES.MODALS.TEAM)}
-              />
-              <ManagementRow
-                label="Business Pulse intelligence"
-                icon={<Sparkles size={15} color={PURPLE} strokeWidth={1.8} />}
-                onPress={() => onOpenRoute(ROUTES.BUSINESS_PULSE)}
-              />
-            </>
-          ) : null}
+          <SectionHeader label="Support" />
+          <ManagementRow
+            label="Support"
+            icon={<HelpCircle size={15} color={PURPLE} strokeWidth={1.8} />}
+            onPress={() => onOpenRoute(ROUTES.CHAT)}
+          />
         </View>
       ) : null}
 
@@ -523,12 +643,119 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 14,
   },
-  identityRow: {
+  orgCard: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  orgCardHeader: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  orgCardAccent: {
+    width: 3,
+    height: 14,
+    borderRadius: 2,
+    backgroundColor: PURPLE,
+  },
+  orgCardEyebrow: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  orgCardRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingBottom: 12,
+  },
+  orgCardLogoWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    overflow: "hidden",
+    flexShrink: 0,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  orgCardLogo: {
+    width: 34,
+    height: 34,
+  },
+  orgCardLogoInitials: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: PURPLE,
+    letterSpacing: 0.4,
+  },
+  orgCardInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  orgCardNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  orgCardName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    flex: 1,
+    minWidth: 0,
+  },
+  orgCardBadge: {
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    flexShrink: 0,
+  },
+  orgCardBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: PURPLE,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  orgCardMeta: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    marginTop: 1,
+  },
+  orgCardCaption: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    lineHeight: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+  },
+  identityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   identityDivider: {
     height: StyleSheet.hairlineWidth,
@@ -541,14 +768,19 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 1,
+    flexShrink: 0,
   },
-  identityText: { flex: 1 },
+  identityText: { flex: 1, minWidth: 0, justifyContent: "center" },
   identityTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    marginBottom: 3,
+    fontSize: 12,
+    fontWeight: "400",
+    color: Theme.textPrimary,
+    marginBottom: 2,
   },
-  identityBody: { fontSize: 12, color: Theme.textSecondary, lineHeight: 17 },
+  identityBody: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: Theme.textSecondary,
+    lineHeight: 15,
+  },
 });

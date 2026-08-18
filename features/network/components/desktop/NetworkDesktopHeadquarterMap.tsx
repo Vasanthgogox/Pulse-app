@@ -6,13 +6,14 @@ import {
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import Theme from "@/constants/Theme";
 import { MapPin } from "lucide-react-native";
-import { Image, Text, View } from "react-native";
+import { Image, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 type Props = {
   orgName: string;
   addressLabel: string;
   coordinate: OfficeMapCoordinate | null;
   loading?: boolean;
+  style?: StyleProp<ViewStyle>;
 };
 
 export function NetworkDesktopHeadquarterMap({
@@ -20,6 +21,7 @@ export function NetworkDesktopHeadquarterMap({
   addressLabel,
   coordinate,
   loading = false,
+  style,
 }: Props) {
   const staticUrl =
     coordinate != null
@@ -33,14 +35,14 @@ export function NetworkDesktopHeadquarterMap({
 
   if (loading) {
     return (
-      <View style={[styles.mapPlaceholder, styles.mapPlaceholderLoading]}>
+      <View style={[styles.mapPlaceholder, styles.mapPlaceholderLoading, style]}>
         <LoadingIndicator color={Theme.primary} size="small" />
       </View>
     );
   }
 
   return (
-    <View style={staticUrl ? styles.mapFrame : styles.mapPlaceholder}>
+    <View style={[staticUrl ? styles.mapFrame : styles.mapPlaceholder, style]}>
       {staticUrl ? (
         <Image
           source={{ uri: staticUrl }}

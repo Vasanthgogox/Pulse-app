@@ -693,7 +693,7 @@ export function computeSalesKpis(
   };
 }
 
-function formatTripStatusLabel(status: string | null | undefined): string {
+export function formatTripStatusLabel(status: string | null | undefined): string {
   const raw = (status ?? "pending").replace(/_/g, " ").trim();
   if (!raw) return "Pending";
   return raw.charAt(0).toUpperCase() + raw.slice(1);

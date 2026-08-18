@@ -1,34 +1,43 @@
 /**
  * Shared print/PDF watermark for downloadable reports.
- * Uses position:fixed so the mark repeats on every printed page.
+ * Overlay sits above table cells (z-index) so it remains visible on white rows.
+ * Uses rgba color instead of opacity — print engines often drop CSS opacity.
  */
 
 export const PULSE_WATERMARK_PRINT_CSS = `
-  .pulse-watermark {
+  .pulse-watermark-layer {
     position: fixed;
-    top: 50%;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    overflow: hidden;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    color-adjust: exact;
+  }
+  .pulse-watermark {
+    position: absolute;
+    top: 48%;
     left: 50%;
-    transform: translate(-50%, -50%) rotate(-24deg);
-    font-size: 68px;
+    transform: translate(-50%, -50%) rotate(-22deg);
+    font-size: 108px;
     font-weight: 700;
     font-style: italic;
     letter-spacing: -0.04em;
-    color: #4D3636;
-    opacity: 0.07;
-    z-index: 0;
-    pointer-events: none;
+    line-height: 1;
+    color: rgba(77, 54, 54, 0.22);
     white-space: nowrap;
     user-select: none;
   }
   .pulse-watermark-dot {
-    color: #FFCE44;
+    color: rgba(255, 206, 68, 0.62);
   }
   .pulse-report-body {
     position: relative;
     z-index: 1;
   }
   @media print {
-    .pulse-watermark {
+    .pulse-watermark-layer {
       position: fixed;
       print-color-adjust: exact;
       -webkit-print-color-adjust: exact;
@@ -37,7 +46,7 @@ export const PULSE_WATERMARK_PRINT_CSS = `
 `;
 
 export function pulseWatermarkHtmlFragment(): string {
-  return `<div class="pulse-watermark" aria-hidden="true">pulse<span class="pulse-watermark-dot">.</span></div>`;
+  return `<div class="pulse-watermark-layer" aria-hidden="true"><div class="pulse-watermark">pulse<span class="pulse-watermark-dot">.</span></div></div>`;
 }
 
 export type WrapPrintableReportHtmlOptions = {
@@ -63,10 +72,10 @@ export function wrapPrintableReportHtml(options: WrapPrintableReportHtmlOptions)
   </style>
 </head>
 <body>
-  ${pulseWatermarkHtmlFragment()}
   <div class="pulse-report-body">
     ${bodyHtml}
   </div>
+  ${pulseWatermarkHtmlFragment()}
 </body>
 </html>`;
 }
@@ -79,7 +88,11 @@ export function injectPulseWatermarkIntoHtml(html: string): string {
   if (result.includes("</head>")) {
     result = result.replace("</head>", `<style>${PULSE_WATERMARK_PRINT_CSS}</style></head>`);
   }
-  result = result.replace(/<body([^>]*)>/i, `<body$1>${pulseWatermarkHtmlFragment()}`);
+  if (/<\/body>/i.test(result)) {
+    result = result.replace(/<\/body>/i, `${pulseWatermarkHtmlFragment()}</body>`);
+  } else {
+    result = result.replace(/<body([^>]*)>/i, `<body$1>${pulseWatermarkHtmlFragment()}`);
+  }
   return result;
 }
 
