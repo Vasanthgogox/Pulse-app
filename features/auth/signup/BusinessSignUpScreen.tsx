@@ -16,6 +16,7 @@ import { InviteAcceptanceStep } from './steps/InviteAcceptanceStep';
 import { InviteExistingAccountStep } from './steps/InviteExistingAccountStep';
 import { InviteExpiredStep } from './steps/InviteExpiredStep';
 import { InviteNotFoundStep } from './steps/InviteNotFoundStep';
+import { JoinRequestSentStep } from './steps/JoinRequestSentStep';
 import { OrgLogoStep } from './steps/OrgLogoStep';
 import { OrgStep } from './steps/OrgStep';
 import { OtpStep } from './steps/OtpStep';
@@ -58,6 +59,8 @@ function BusinessStepContent({
       return <ProfilePhotoStep flow={flow} />;
     case 8:
       return <SuccessStep flow={flow} />;
+    case 9:
+      return <JoinRequestSentStep flow={flow} />;
     default:
       return null;
   }
@@ -67,7 +70,7 @@ export default function BusinessSignUpScreen() {
   const flow = useBusinessSignUpFlow();
   const { productId, product } = useSuiteAuthContext();
   const signUpCopy = suiteSignUpCopy(productId);
-  const backLabel = flow.step === 0 ? 'Back' : flow.step === 8 ? '' : 'Back';
+  const backLabel = flow.step === 0 ? 'Back' : flow.step === 8 || flow.step === 9 ? '' : 'Back';
 
   return (
     <View style={styles.screenRoot}>

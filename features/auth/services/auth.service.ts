@@ -142,6 +142,89 @@ export interface SignInResult {
    * and use OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE (or their own copy) to inform the user.
    */
   metadataStatus?: 'partial_failure';
+  /**
+   * Set when the signup email's company domain already has an org. Org creation
+   * was skipped (onboarding_type forced to 'member') — caller must call
+   * createOrgDomainJoinRequest(domainOrgMatch.organizationId) to file the
+   * pending join request the existing org's owner/admin approves.
+   */
+  domainOrgMatch?: { organizationId: string; organizationName: string };
+}
+
+export interface OrgForEmailDomainMatch {
+  organizationId: string;
+  organizationName: string;
+  emailDomain: string;
+}
+
+/** Does this email's company domain already have an org? Free/public domains (gmail.com etc.) never match. */
+export async function checkOrgForEmailDomain(
+  email: string,
+): Promise<{ error: Error | null; match: OrgForEmailDomainMatch | null }> {
+  const trimmed = (email ?? '').trim();
+  if (!trimmed || !trimmed.includes('@')) return { error: null, match: null };
+  try {
+    const { data, error } = await supabase().rpc('check_org_for_email_domain', {
+      p_email: trimmed,
+    });
+    if (error) return { error: new Error(error.message), match: null };
+    const row = (data ?? null) as Record<string, unknown> | null;
+    if (!row || row.org_found !== true) return { error: null, match: null };
+    return {
+      error: null,
+      match: {
+        organizationId: String(row.organization_id ?? ''),
+        organizationName: String(row.organization_name ?? 'Organization'),
+        emailDomain: String(row.email_domain ?? ''),
+      },
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), match: null };
+  }
+}
+
+/** File the pending join request after a domain-matched signup. Requires an authenticated session. */
+export async function createOrgDomainJoinRequest(
+  organizationId: string,
+): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase().rpc('create_org_domain_join_request', {
+      p_organization_id: organizationId,
+    });
+    if (error) return { error: new Error(error.message) };
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
+/**
+ * Checks whether handle_new_user already filed a domain join request for the
+ * signed-in user (org creation was skipped server-side). Google OAuth signup
+ * runs the trigger during exchangeCodeForSession — before any client code —
+ * so this is how the client discovers the domain-match outcome after the fact.
+ */
+export async function getMyPendingDomainJoinRequest(): Promise<{
+  error: Error | null;
+  request: { organizationId: string; organizationName: string } | null;
+}> {
+  try {
+    const { data, error } = await supabase()
+      .rpc('get_my_pending_domain_join_request')
+      .maybeSingle();
+    if (error) return { error: new Error(error.message), request: null };
+    if (!data) return { error: null, request: null };
+    const row = data as Record<string, unknown>;
+    return {
+      error: null,
+      request: {
+        organizationId: String(row.organization_id ?? ''),
+        organizationName: String(row.organization_name ?? 'Organization'),
+      },
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), request: null };
+  }
 }
 
 export interface SignUpOptions {
@@ -238,6 +321,16 @@ export async function signUp({
     const phoneErr = validatePhone(phone);
     if (phoneErr) return { error: new Error(phoneErr) };
   }
+  const wantsOwnerOnboarding =
+    (onboardingTypeOption ?? (skipOrgCreation ? 'member' : 'owner')) === 'owner';
+
+  let domainOrgMatch: OrgForEmailDomainMatch | null = null;
+  if (wantsOwnerOnboarding) {
+    const domainCheck = await checkOrgForEmailDomain(email);
+    if (domainCheck.error) return { error: domainCheck.error };
+    domainOrgMatch = domainCheck.match;
+  }
+
   if (companyName != null && String(companyName).trim()) {
     const c = companyName.trim();
     const companyErr = maxLength(
@@ -245,10 +338,15 @@ export async function signUp({
       `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
     )(c);
     if (companyErr) return { error: new Error(companyErr) };
-    const dup = await checkOrganizationNameTaken(c);
-    if (dup.error) return { error: dup.error };
-    if (dup.taken) {
-      return { error: new Error("Company name already exists.") };
+    // Skip the name-uniqueness check when the email's company domain already
+    // matched an org — that match takes precedence and routes to a join
+    // request instead of org creation, so a name collision here is moot.
+    if (!domainOrgMatch) {
+      const dup = await checkOrganizationNameTaken(c);
+      if (dup.error) return { error: dup.error };
+      if (dup.taken) {
+        return { error: new Error("Company name already exists.") };
+      }
     }
   }
   try {
@@ -280,9 +378,9 @@ export async function signUp({
     if (fleetSizeBand?.trim()) metadata.fleet_size_band = fleetSizeBand.trim();
     if (monthlyVolumeBand?.trim()) metadata.monthly_volume_band = monthlyVolumeBand.trim();
 
-    const onboardingType: OnboardingType =
-      onboardingTypeOption ??
-      (skipOrgCreation ? 'member' : 'owner');
+    const onboardingType: OnboardingType = domainOrgMatch
+      ? 'member'
+      : (onboardingTypeOption ?? (skipOrgCreation ? 'member' : 'owner'));
     Object.assign(metadata, onboardingTypeToMetadata(onboardingType));
 
     // Canonical E.164-style India (+91…) for profiles.phone and metadata; RPCs normalize to 10 digits for lookup.
@@ -315,7 +413,18 @@ export async function signUp({
     // Org, organization_members, and (if driver) drivers row are created by DB trigger on auth.users INSERT.
     // email_confirmed_at is null when Supabase email confirmation is enabled.
     const emailVerificationRequired = !data.user.email_confirmed_at;
-    return { error: null, emailVerificationRequired };
+    return {
+      error: null,
+      emailVerificationRequired,
+      ...(domainOrgMatch
+        ? {
+            domainOrgMatch: {
+              organizationId: domainOrgMatch.organizationId,
+              organizationName: domainOrgMatch.organizationName,
+            },
+          }
+        : {}),
+    };
   } catch (e) {
     if (isNetworkError(e)) {
       return {

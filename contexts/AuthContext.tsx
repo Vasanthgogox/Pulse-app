@@ -83,7 +83,11 @@ interface AuthContextType {
   signInWithGoogle: (
     keepSignedIn?: boolean,
   ) => Promise<{ error: Error | null; metadataStatus?: 'partial_failure' }>;
-  signUp: (options: authService.SignUpOptions) => Promise<{ error: Error | null; emailVerificationRequired?: boolean }>;
+  signUp: (options: authService.SignUpOptions) => Promise<{
+    error: Error | null;
+    emailVerificationRequired?: boolean;
+    domainOrgMatch?: { organizationId: string; organizationName: string };
+  }>;
   signOut: () => Promise<void>;
 }
 
@@ -704,7 +708,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRestoreError(null);
       await refreshSessionInternal();
     }
-    return { ...wrapActionResult(result), emailVerificationRequired: result.emailVerificationRequired };
+    return {
+      ...wrapActionResult(result),
+      emailVerificationRequired: result.emailVerificationRequired,
+      domainOrgMatch: result.domainOrgMatch,
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshSessionInternal = async () => {

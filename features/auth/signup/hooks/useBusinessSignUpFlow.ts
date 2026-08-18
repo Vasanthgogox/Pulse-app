@@ -5,6 +5,7 @@ import {
   checkEmailRegisteredForSignup,
   checkOrganizationNameTaken,
   applyPendingOAuthMetadata,
+  getMyPendingDomainJoinRequest,
   OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE,
   resendVerificationEmail,
   setPendingOAuthMetadata,
@@ -179,6 +180,10 @@ export function useBusinessSignUpFlow() {
   const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const [resendingSecs, setResendingSecs] = useState(0);
   const resendEmailCountdown = useCountdown();
+
+  // Set when signup's email domain already matched an existing org: org
+  // creation was skipped server-side and a join request was filed instead.
+  const [domainJoinOrgName, setDomainJoinOrgName] = useState<string | null>(null);
 
   // Step 6 — workspace logo (post-auth)
   const [provisionedOrgId, setProvisionedOrgId] = useState<string | null>(null);
@@ -558,7 +563,7 @@ export function useBusinessSignUpFlow() {
       goToPage(1);
       return;
     }
-    if (step === 8) {
+    if (step === 8 || step === 9) {
       clearBusinessSignupBranding();
       router.replace('/');
       return;
@@ -1163,6 +1168,20 @@ export function useBusinessSignUpFlow() {
     if (orgId) setProvisionedOrgId(orgId);
   };
 
+  /**
+   * Signup's email domain matched an existing org — the handle_new_user
+   * trigger already filed the pending join request server-side and skipped
+   * org creation for this user. Routes straight to the "request sent" step,
+   * skipping workspace-logo/profile-photo (there is no org to brand yet).
+   */
+  const enterDomainJoinRequestFlow = async (
+    match: { organizationId: string; organizationName: string },
+  ) => {
+    await ensureAuthSession();
+    setDomainJoinOrgName(match.organizationName);
+    goToPage(9);
+  };
+
   const createAccount = async () => {
     if (!isOnline) return Alert.alert('No internet', 'Connect to create an account.');
     setStep5Attempted(true);
@@ -1203,6 +1222,13 @@ export function useBusinessSignUpFlow() {
     setLoading(false);
     if (result.error) return Alert.alert('Error', result.error.message);
     if (result.emailVerificationRequired) setEmailVerificationRequired(true);
+
+    if (result.domainOrgMatch) {
+      setLoading(true);
+      await enterDomainJoinRequestFlow(result.domainOrgMatch);
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     await enterPostAuthBranding();
@@ -1254,6 +1280,16 @@ export function useBusinessSignUpFlow() {
       Alert.alert("You're signed in", OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE);
     }
 
+    // The signup trigger runs during exchangeCodeForSession, before this code —
+    // check whether it found a domain match and filed a join request instead
+    // of creating an org, same outcome as the email/password path.
+    const { request: domainJoinRequest } = await getMyPendingDomainJoinRequest();
+    if (domainJoinRequest) {
+      setDomainJoinOrgName(domainJoinRequest.organizationName);
+      goToPage(9);
+      return;
+    }
+
     // Follow the same post-auth progression as the email/password path (createAccount)
     // instead of leaving the user on this screen with no way forward.
     await enterPostAuthBranding();
@@ -1276,6 +1312,17 @@ export function useBusinessSignUpFlow() {
     if (error) return Alert.alert('Error', error.message);
     if (metadataStatus === 'partial_failure') {
       Alert.alert("You're signed in", OAUTH_METADATA_PARTIAL_FAILURE_MESSAGE);
+    }
+
+    // Same as continueWithGoogle: the trigger already ran during sign-in — if
+    // it found a domain match, org creation was skipped and a join request
+    // was filed. No point collecting Org/Profile/City for an org that won't
+    // be created.
+    const { request: domainJoinRequest } = await getMyPendingDomainJoinRequest();
+    if (domainJoinRequest) {
+      setDomainJoinOrgName(domainJoinRequest.organizationName);
+      goToPage(9);
+      return;
     }
 
     // Keep the user on signup to collect Org → Profile → City (do not dump into workspace).
@@ -1581,6 +1628,7 @@ export function useBusinessSignUpFlow() {
       clearBusinessSignupBranding();
       clearOwnerBusinessProfileRequired();
     },
+    domainJoinOrgName,
 
     // invitation resolver
     signupTrack,

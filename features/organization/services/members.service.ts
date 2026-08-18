@@ -77,6 +77,61 @@ export async function getPendingPhoneTeamInvites(orgId: string): Promise<{
   }
 }
 
+// ─── Domain join requests (Team → Action needed) ───────────────────────────
+
+export type OrgDomainJoinRequest = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  email: string;
+  requester_name: string | null;
+  status: string;
+  created_at: string;
+};
+
+export async function getOrgDomainJoinRequests(orgId: string): Promise<{
+  error: Error | null;
+  requests: OrgDomainJoinRequest[];
+}> {
+  try {
+    const { data, error } = await supabase().rpc("get_org_domain_join_requests", {
+      p_org_id: orgId,
+    });
+    if (error) return { error: new Error(error.message), requests: [] };
+    return { error: null, requests: (data ?? []) as OrgDomainJoinRequest[] };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), requests: [] };
+  }
+}
+
+export async function approveOrgDomainJoinRequest(
+  requestId: string,
+): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase().rpc("approve_org_domain_join_request", {
+      p_request_id: requestId,
+    });
+    if (error) return { error: new Error(error.message) };
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
+export async function declineOrgDomainJoinRequest(
+  requestId: string,
+): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase().rpc("decline_org_domain_join_request", {
+      p_request_id: requestId,
+    });
+    if (error) return { error: new Error(error.message) };
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
 export function subscribeToOrgTeamRoster(
   orgId: string,
   onChange: () => void,

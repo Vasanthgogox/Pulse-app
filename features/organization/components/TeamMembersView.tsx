@@ -6,6 +6,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { DomainJoinRequestsPanel } from "@/features/organization/components/DomainJoinRequestsPanel";
 import { useOrgMembersQuery, useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
 import {
   cancelTeamInvite,
@@ -833,6 +834,8 @@ export function TeamMembersView({
 
   const body = (
     <>
+      <DomainJoinRequestsPanel orgId={orgId} canManage={canManage} />
+
       <View
         style={[
           styles.tabRow,
