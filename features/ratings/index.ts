@@ -2,6 +2,7 @@ export {
   averageRatingForRatedParty,
   averageScore,
   averageScoreDeduped,
+  firstFiniteRating,
   createRating,
   getRatingsForClient,
   getRatingsForClients,

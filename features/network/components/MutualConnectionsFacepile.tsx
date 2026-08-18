@@ -36,13 +36,19 @@ export function MutualConnectionsFacepile({
   onPressViewAll,
 }: MutualConnectionsFacepileProps) {
   const canQuery = Boolean(viewerOrgId && targetOrgId);
-  const { data: mutuals = [], isLoading } = useMutualConnectionsQuery(
+  const { data: mutuals = [], isLoading, isError } = useMutualConnectionsQuery(
     viewerOrgId,
     targetOrgId,
     mutualCount > 0 && canQuery,
   );
 
   if (mutualCount <= 0) return null;
+
+  const liveCount =
+    canQuery && !isLoading && !isError ? mutuals.length : null;
+  const displayCount =
+    liveCount != null && liveCount > 0 ? liveCount : mutualCount;
+  if (displayCount <= 0) return null;
 
   const faces: MutualFace[] = mutuals.map((row) => ({
     id: row.id,
@@ -64,7 +70,7 @@ export function MutualConnectionsFacepile({
   const stack = (
     <MutualAvatarStack
       orgId={targetOrgId}
-      mutualCount={mutualCount}
+      mutualCount={displayCount}
       mutuals={faces.length > 0 ? faces : undefined}
       faceSize={faceSize}
       showLabel={false}
@@ -106,7 +112,7 @@ export function MutualConnectionsFacepile({
       onPress={openViewAll}
       style={({ pressed }) => [pressed && { opacity: 0.88 }]}
       accessibilityRole="button"
-      accessibilityLabel={`${mutualCount} mutual connections`}
+      accessibilityLabel={`${displayCount} mutual connections`}
       hitSlop={6}
     >
       {inner}

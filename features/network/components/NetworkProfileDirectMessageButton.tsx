@@ -61,8 +61,8 @@ const styles = StyleSheet.create({
   button: {
     width: "100%",
     alignSelf: "stretch",
-    minHeight: 46,
-    borderRadius: 12,
+    minHeight: 42,
+    borderRadius: 10,
     backgroundColor: Theme.textPrimaryDark,
     flexDirection: "row",
     alignItems: "center",
@@ -83,8 +83,8 @@ const styles = StyleSheet.create({
     }),
   },
   buttonCompact: {
-    minHeight: 46,
-    borderRadius: 12,
+    minHeight: 42,
+    borderRadius: 10,
   },
   buttonDisabled: {
     opacity: 0.6,

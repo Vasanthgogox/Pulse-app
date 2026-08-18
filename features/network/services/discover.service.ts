@@ -11,8 +11,41 @@ type PartnerDisplayBatch = Record<
     avatarSeed?: string | null;
     verificationStatus?: string | null;
     verification_status?: string | null;
+    averageRating?: number | string | null;
+    average_rating?: number | string | null;
+    tripCount?: number | string | null;
+    trip_count?: number | string | null;
+    vehicleCount?: number | string | null;
+    vehicle_count?: number | string | null;
+    ratingCount?: number | string | null;
+    rating_count?: number | string | null;
+    orgCreatedAt?: string | null;
+    org_created_at?: string | null;
+    networkIndentCount?: number | string | null;
+    network_indent_count?: number | string | null;
   }
 >;
+
+function parseRating(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function parseCount(value: unknown): number | null {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+function parseTimestamp(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 /**
  * Resolve org logo / owner photo + KYC verification via SECURITY DEFINER batch RPC —
@@ -50,6 +83,19 @@ async function enrichDiscoverOrgsWithPartnerDisplay(
       )
         .toString()
         .trim() || null;
+    const batchRating = parseRating(row?.averageRating ?? row?.average_rating);
+    const orgRating = parseRating(org.average_rating ?? org.rating);
+    const rating = batchRating ?? orgRating;
+    const tripCount =
+      parseCount(row?.tripCount ?? row?.trip_count) ?? parseCount(org.trip_count);
+    const vehicleCount = parseCount(row?.vehicleCount ?? row?.vehicle_count);
+    const ratingCount = parseCount(row?.ratingCount ?? row?.rating_count);
+    const orgCreatedAt =
+      parseTimestamp(row?.orgCreatedAt ?? row?.org_created_at) ??
+      parseTimestamp(org.org_created_at);
+    const networkIndentCount = parseCount(
+      row?.networkIndentCount ?? row?.network_indent_count,
+    );
     return {
       ...org,
       avatar_url: (org.avatar_url ?? "").trim() || batchUrl || null,
@@ -59,6 +105,13 @@ async function enrichDiscoverOrgsWithPartnerDisplay(
         verification_status: verificationStatus,
         is_kyc_verified: org.is_kyc_verified,
       }),
+      average_rating: rating,
+      rating,
+      trip_count: tripCount,
+      vehicle_count: vehicleCount,
+      rating_count: ratingCount,
+      org_created_at: orgCreatedAt,
+      network_indent_count: networkIndentCount,
     };
   });
 }
@@ -85,6 +138,10 @@ export interface DiscoverOrg {
   rating?: number | null;
   average_rating?: number | null;
   trip_count?: number | null;
+  rating_count?: number | null;
+  vehicle_count?: number | null;
+  network_indent_count?: number | null;
+  org_created_at?: string | null;
   lane_overlap_count?: number | null;
   recommendation_score?: number | null;
   is_in_user_trip_city?: boolean | null;

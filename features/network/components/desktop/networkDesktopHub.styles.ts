@@ -2627,6 +2627,7 @@ const networkDesktopHubStylesDef = {
     ...({
       display: "flex",
       alignSelf: "stretch",
+      flex: 1,
     } as unknown as ViewStyle),
   }),
   growListStack: view({

@@ -281,6 +281,9 @@ export const queryKeys = {
   mutualConnections: (viewerOrgId: string, targetOrgId: string) =>
     ["q", "network", "mutual-connections", viewerOrgId, targetOrgId] as const,
 
+  networkProfileSnapshot: (viewerOrgId: string, targetOrgId: string) =>
+    ["q", "network", "profile-snapshot", viewerOrgId, targetOrgId] as const,
+
   unlinkedCounterparties: (orgId: string) =>
     ["q", "network", "unlinked-counterparties", orgId] as const,
 

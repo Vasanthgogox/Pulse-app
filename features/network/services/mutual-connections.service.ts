@@ -22,6 +22,51 @@ type MutualConnectionRpcRow = {
   avatar_url: string | null;
 };
 
+function unwrapRpcRows(data: unknown): unknown[] {
+  if (data == null) return [];
+  if (Array.isArray(data)) return data;
+  if (typeof data !== "object") return [];
+  const record = data as Record<string, unknown>;
+  if (Array.isArray(record.data)) return record.data;
+  const values = Object.values(record);
+  if (
+    values.length > 0 &&
+    values.every(
+      (value) =>
+        value != null &&
+        typeof value === "object" &&
+        "id" in (value as object),
+    )
+  ) {
+    return values;
+  }
+  if ("id" in record) return [record];
+  return [];
+}
+
+function rowId(entry: unknown): string {
+  if (entry == null || typeof entry !== "object") return "";
+  const raw = (entry as { id?: unknown }).id;
+  if (raw == null) return "";
+  return String(raw).trim();
+}
+
+function asMutualRows(data: unknown): MutualConnectionRpcRow[] {
+  const byId = new Map<string, MutualConnectionRpcRow>();
+  for (const entry of unwrapRpcRows(data)) {
+    const id = rowId(entry);
+    if (!id || byId.has(id)) continue;
+    const row = entry as Partial<MutualConnectionRpcRow>;
+    byId.set(id, {
+      id,
+      name: typeof row.name === "string" ? row.name : "",
+      avatar_seed: row.avatar_seed ?? null,
+      avatar_url: row.avatar_url ?? null,
+    });
+  }
+  return [...byId.values()];
+}
+
 export async function getMutualConnections(
   viewerOrgId: string,
   targetOrgId: string,
@@ -39,10 +84,9 @@ export async function getMutualConnections(
     return { error: new Error(error.message), mutuals: [] };
   }
 
-  const rows = (data ?? []) as MutualConnectionRpcRow[];
   return {
     error: null,
-    mutuals: rows.map((row) => ({
+    mutuals: asMutualRows(data).map((row) => ({
       id: row.id,
       name: row.name,
       avatar_seed: row.avatar_seed ?? null,

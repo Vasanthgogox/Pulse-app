@@ -5,6 +5,7 @@ import Theme from "@/constants/Theme";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { NetworkProfileHubHero } from "@/features/network/components/NetworkProfileHubHero";
 import { isOrgKycVerified, resolveOrgVerificationState } from "@/features/network/utils/orgVerification.util";
+import { useMutualConnectionsQuery } from "@/lib/queries/useMutualConnectionsQuery";
 import {
     Building2,
     Globe,
@@ -41,6 +42,8 @@ export type NetworkProfileModalNode = {
 
 export type NetworkProfileModalBodyProps = {
   node: NetworkProfileModalNode;
+  /** Viewer org — used to load the live mutual-connection count. */
+  viewerOrgId?: string | null;
   /** @deprecated Modal is always compact; kept for call-site compatibility. */
   isMobile?: boolean;
   profileStatsLoading: boolean;
@@ -79,15 +82,31 @@ function shouldShowRegisteredAddress(
 
 export function NetworkProfileModalBody({
   node,
+  viewerOrgId = null,
   profileStatsLoading,
   totalTrips,
   onClose,
 }: NetworkProfileModalBodyProps) {
   const connectionLabel = formatConnectionStatus(node.status);
   const ratingNum = node.rating;
-  const ratingEmpty = ratingNum == null;
-  const ratingValue = ratingEmpty ? "—" : ratingNum.toFixed(1);
   const tripsValue = profileStatsLoading ? "…" : String(totalTrips);
+  const mutualsQuery = useMutualConnectionsQuery(
+    viewerOrgId,
+    node.id,
+    Boolean(viewerOrgId && node.id && viewerOrgId !== node.id),
+  );
+  const seededMutuals =
+    typeof node.mutuals === "number" && Number.isFinite(node.mutuals)
+      ? Math.max(0, Math.floor(node.mutuals))
+      : 0;
+  const fetchedMutuals = mutualsQuery.isSuccess
+    ? mutualsQuery.data.length
+    : null;
+  const mutualsKnown = fetchedMutuals ?? seededMutuals;
+  const mutualsValue =
+    mutualsQuery.isLoading && fetchedMutuals == null && seededMutuals <= 0
+      ? "…"
+      : String(mutualsKnown);
   const inApp =
     node.is_integrated ?? (node.status === "CONNECTED" || node.status === "LIVE");
   const isKycVerified = isOrgKycVerified(node);
@@ -126,10 +145,10 @@ export function NetworkProfileModalBody({
         profileStatsLoading={profileStatsLoading}
         onClose={onClose}
         compact
+        ratingValue={ratingNum}
         stats={[
           { value: tripsValue, label: "trips" },
-          { value: ratingValue, label: "rating" },
-          { value: String(node.mutuals), label: "mutuals" },
+          { value: mutualsValue, label: "mutuals" },
         ]}
       />
 
