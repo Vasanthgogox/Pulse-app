@@ -71,19 +71,31 @@ function KpiCard({
 }) {
   const layout = useProfileHubCompactLayout();
   return (
-    <View style={[styles.salesKpiCard, layout.salesKpiCard]}>
-      <View style={styles.salesKpiIcon}>{icon}</View>
-      <Text style={styles.salesKpiValue} numberOfLines={1}>
-        {value}
-      </Text>
-      <Text style={styles.salesKpiLabel} numberOfLines={1}>
-        {label}
-      </Text>
-      {sub ? (
-        <Text style={styles.salesKpiSub} numberOfLines={2}>
-          {sub}
+    <View
+      style={[
+        styles.salesKpiCard,
+        layout.salesKpiCard,
+        {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        },
+      ]}
+    >
+      <View style={[styles.salesKpiIcon, { marginBottom: 0 }]}>{icon}</View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.salesKpiValue} numberOfLines={1}>
+          {value}
         </Text>
-      ) : null}
+        <Text style={styles.salesKpiLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        {sub ? (
+          <Text style={styles.salesKpiSub} numberOfLines={2}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }

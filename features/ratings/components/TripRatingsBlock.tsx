@@ -3252,7 +3252,7 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   tagChipTextPulseActive: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   noteTogglePulse: {
     flexDirection: 'row',

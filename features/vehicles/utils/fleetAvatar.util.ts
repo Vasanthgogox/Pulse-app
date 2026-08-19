@@ -35,7 +35,7 @@ export function getFleetAvatarSeedForOrg(orgId: string, orgName?: string): strin
  * Uses the user-2D preset pool — NOT driver cartoon presets.
  */
 export function getFleetAvatarUriForOrg(orgId: string, orgName?: string): string {
-  return getUser2DAvatarUriForSeed(getFleetAvatarSeedForOrg(orgId, orgName));
+  return getUser2DAvatarUriForSeed(getFleetAvatarSeedForOrg(orgId, orgName))!;
 }
 
 /**

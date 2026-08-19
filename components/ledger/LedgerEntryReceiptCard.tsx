@@ -10,6 +10,7 @@ import {
   type ViewStyle,
 } from "react-native";
 
+import { PartyAvatar, type PartyEntityType } from "@/components/PartyAvatar";
 import { LEDGER_RECEIPT } from "@/components/ledger/ledgerEntryReceiptPalette";
 import { formatINR } from "@/lib/format";
 import { LEDGER_RECON_LOTTIE } from "@/lib/ledgerReconLottieAssets";
@@ -56,6 +57,17 @@ export interface LedgerEntryReceiptDetailRow {
   multiline?: boolean;
 }
 
+export interface LedgerEntryReceiptPartyAvatar {
+  name: string;
+  entityType?: PartyEntityType;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  isIntegrated?: boolean;
+  initialsColorSeed?: string | null;
+}
+
 export interface LedgerEntryReceiptCardProps {
   statusLabel: string;
   title: string;
@@ -64,6 +76,8 @@ export interface LedgerEntryReceiptCardProps {
   details: LedgerEntryReceiptDetailRow[];
   primaryAction?: { label: string; onPress: () => void };
   secondaryAction?: { label: string; onPress: () => void };
+  /** Party avatar shown between the hero glyph and the status pill. */
+  partyAvatar?: LedgerEntryReceiptPartyAvatar;
   style?: StyleProp<ViewStyle>;
   /** Wider max width on desktop web. */
   desktop?: boolean;
@@ -118,25 +132,63 @@ export const LedgerEntryReceiptCard = memo(function LedgerEntryReceiptCard(
         props.style,
       ]}
     >
-      <View style={styles.hero}>
-        {heroLottie ? (
-          <ReceiptLottieGlyph
-            source={heroLottie}
-            size={heroAnimation === "success" ? 72 : 56}
-            loop={heroAnimation !== "success"}
-            speed={heroAnimation === "success" ? 1 : 0.85}
-          />
-        ) : null}
-        <View style={styles.heroTextBlock}>
-          <View style={styles.statusPill}>
-            <Text style={styles.statusPillText}>{props.statusLabel}</Text>
-          </View>
-          <Text style={styles.headline}>{props.title}</Text>
-        </View>
-        <Text style={[styles.amount, { color: amountColor }]}>
-          {props.isIn ? "+" : "−"}
-          {formatINR(props.amount)}
-        </Text>
+      <View style={styles.cardContent}>
+      <View style={[styles.hero, props.partyAvatar && styles.heroWithParty]}>
+        {props.partyAvatar ? (
+          <>
+            <View style={styles.heroTopRow}>
+              <View style={styles.statusPillSmall}>
+                <Text style={styles.statusPillSmallText}>{props.statusLabel}</Text>
+              </View>
+            </View>
+            <View style={styles.heroRow}>
+              <View style={styles.heroPartyRow}>
+                <PartyAvatar
+                  name={props.partyAvatar.name}
+                  initialsColorSeed={props.partyAvatar.initialsColorSeed}
+                  entityType={props.partyAvatar.entityType ?? "client"}
+                  avatarUrl={props.partyAvatar.avatarUrl}
+                  avatarSeed={props.partyAvatar.avatarSeed}
+                  organizationImageUrl={props.partyAvatar.organizationImageUrl}
+                  organizationAvatarSeed={props.partyAvatar.organizationAvatarSeed}
+                  isIntegrated={props.partyAvatar.isIntegrated}
+                  size={48}
+                  shape="circle"
+                />
+                <Text style={styles.partyNameInline} numberOfLines={2}>
+                  {props.partyAvatar.name}
+                </Text>
+              </View>
+              <View style={styles.heroPayCol}>
+                <Text style={styles.headlineInline} numberOfLines={2}>
+                  {props.title}
+                </Text>
+                <Text
+                  style={[styles.amountInline, { color: amountColor }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
+                >
+                  {props.isIn ? "+" : "−"}
+                  {formatINR(props.amount)}
+                </Text>
+              </View>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.heroTextBlock}>
+              <View style={styles.statusPill}>
+                <Text style={styles.statusPillText}>{props.statusLabel}</Text>
+              </View>
+              <Text style={styles.headline}>{props.title}</Text>
+              <Text style={[styles.amount, { color: amountColor }]}>
+                {props.isIn ? "+" : "−"}
+                {formatINR(props.amount)}
+              </Text>
+            </View>
+          </>
+        )}
       </View>
 
       <LedgerEntryReceiptDetailTable rows={props.details} />
@@ -165,6 +217,17 @@ export const LedgerEntryReceiptCard = memo(function LedgerEntryReceiptCard(
           ) : null}
         </View>
       ) : null}
+      </View>
+      {heroLottie ? (
+        <View style={styles.cardWatermark} pointerEvents="none">
+          <ReceiptLottieGlyph
+            source={heroLottie}
+            size={172}
+            loop={heroAnimation !== "success"}
+            speed={heroAnimation === "success" ? 1 : 0.85}
+          />
+        </View>
+      ) : null}
     </View>
   );
 });
@@ -178,7 +241,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderWidth: 1,
     borderColor: LEDGER_RECEIPT.border,
-    gap: 12,
     maxWidth: 360,
     width: "100%",
     alignSelf: "center",
@@ -187,6 +249,21 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
+    overflow: "hidden",
+    position: "relative",
+  },
+  cardContent: {
+    position: "relative",
+    zIndex: 1,
+    width: "100%",
+    gap: 12,
+  },
+  cardWatermark: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+    opacity: 0.22,
   },
   cardDesktop: {
     maxWidth: 380,
@@ -201,14 +278,100 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingBottom: 2,
   },
+  heroWithParty: {
+    alignItems: "stretch",
+    gap: 8,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+  },
+  heroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    gap: 10,
+  },
+  heroPartyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: "52%",
+  },
+  heroPayCol: {
+    flexShrink: 0,
+    flexGrow: 0,
+    minWidth: 0,
+    maxWidth: "48%",
+    gap: 2,
+    alignItems: "flex-end",
+    alignSelf: "stretch",
+    justifyContent: "center",
+  },
+  statusPillSmall: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: LEDGER_RECEIPT.statusBg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LEDGER_RECEIPT.statusBorder,
+  },
+  statusPillSmallText: {
+    fontSize: 7,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: LEDGER_RECEIPT.statusText,
+  },
+  partyNameInline: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: "700",
+    color: LEDGER_RECEIPT.headline,
+    textAlign: "left",
+    lineHeight: 17,
+  },
+  headlineInline: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: LEDGER_RECEIPT.title,
+    textAlign: "right",
+    alignSelf: "stretch",
+    letterSpacing: -0.1,
+    lineHeight: 15,
+  },
+  amountInline: {
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.35,
+    fontVariant: ["tabular-nums"],
+    textAlign: "right",
+    alignSelf: "stretch",
+    lineHeight: 24,
+  },
   heroTextBlock: {
     alignItems: "center",
     width: "100%",
     gap: 4,
     marginTop: 2,
   },
+  titleAmountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  titleAmountCol: {
+    alignItems: "center",
+  },
   lottieSlot: {
-    overflow: "hidden",
+    overflow: "visible",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 0,

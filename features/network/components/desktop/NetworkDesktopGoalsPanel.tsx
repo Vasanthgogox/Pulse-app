@@ -1657,43 +1657,74 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
               </View>
 
               <View style={styles.salesKpiRow}>
-                <View style={styles.salesKpiCard}>
-                  <View style={styles.salesKpiIcon}>
+                <View
+                  style={[
+                    styles.salesKpiCard,
+                    { flexDirection: "row", alignItems: "center", gap: 8 },
+                  ]}
+                >
+                  <View style={[styles.salesKpiIcon, { marginBottom: 0 }]}>
                     <Wallet size={16} color={METRONIC.link} />
                   </View>
-                  <Text style={styles.salesKpiValue}>
-                    {formatINRChip(balanceSnapshot.receivableDue)}
-                  </Text>
-                  <Text style={styles.salesKpiLabel}>Open receivable</Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.salesKpiValue}>
+                      {formatINRChip(balanceSnapshot.receivableDue)}
+                    </Text>
+                    <Text style={styles.salesKpiLabel}>Open receivable</Text>
+                  </View>
                 </View>
-                <View style={styles.salesKpiCard}>
-                  <View style={styles.salesKpiIcon}>
+
+                <View
+                  style={[
+                    styles.salesKpiCard,
+                    { flexDirection: "row", alignItems: "center", gap: 8 },
+                  ]}
+                >
+                  <View style={[styles.salesKpiIcon, { marginBottom: 0 }]}>
                     <TrendingUp size={16} color="#50CD89" />
                   </View>
-                  <Text style={styles.salesKpiValue}>
-                    {formatINRChip(actuals.revenueInr)}
-                  </Text>
-                  <Text style={styles.salesKpiLabel}>
-                    {periodSummary.rollupLabel} sales
-                  </Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.salesKpiValue}>
+                      {formatINRChip(actuals.revenueInr)}
+                    </Text>
+                    <Text style={styles.salesKpiLabel}>
+                      {periodSummary.rollupLabel} sales
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.salesKpiCard}>
-                  <View style={styles.salesKpiIcon}>
+
+                <View
+                  style={[
+                    styles.salesKpiCard,
+                    { flexDirection: "row", alignItems: "center", gap: 8 },
+                  ]}
+                >
+                  <View style={[styles.salesKpiIcon, { marginBottom: 0 }]}>
                     <Target size={16} color={Theme.driverGold} />
                   </View>
-                  <Text style={styles.salesKpiValue}>
-                    {actuals.marginPct.toFixed(1)}%
-                  </Text>
-                  <Text style={styles.salesKpiLabel}>Actual margin</Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.salesKpiValue}>
+                      {actuals.marginPct.toFixed(1)}%
+                    </Text>
+                    <Text style={styles.salesKpiLabel}>Actual margin</Text>
+                  </View>
                 </View>
-                <View style={styles.salesKpiCard}>
-                  <View style={styles.salesKpiIcon}>
+
+                <View
+                  style={[
+                    styles.salesKpiCard,
+                    { flexDirection: "row", alignItems: "center", gap: 8 },
+                  ]}
+                >
+                  <View style={[styles.salesKpiIcon, { marginBottom: 0 }]}>
                     <ArrowUpRight size={16} color="#F1416C" />
                   </View>
-                  <Text style={styles.salesKpiValue}>
-                    {targetsSetCount}/3
-                  </Text>
-                  <Text style={styles.salesKpiLabel}>Aggregate targets set</Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.salesKpiValue}>
+                      {targetsSetCount}/3
+                    </Text>
+                    <Text style={styles.salesKpiLabel}>Aggregate targets set</Text>
+                  </View>
                 </View>
               </View>
             </>

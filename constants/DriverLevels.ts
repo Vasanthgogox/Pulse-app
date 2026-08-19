@@ -76,31 +76,30 @@ export function getSignupPresetAvatars(): PresetAvatar[] {
   return signupCatalogCache;
 }
 
-function findPresetForSeed(seed?: string | null): PresetAvatar {
+function findPresetForSeed(seed?: string | null): PresetAvatar | null {
   const s = (seed ?? '').trim();
+  if (!s) return null;
   const fromDrivers = DRIVER_PRESET_AVATARS.find((av) => av.seed === s);
-  if (fromDrivers) return fromDrivers;
-  // Do NOT call getSignupPresetAvatars() here — map markers share this path and
-  // loading 64+ user PNGs blanks Expo Go react-native-maps. Signup UI must call
-  // getSignupPresetAvatars() directly.
-  return DRIVER_PRESET_AVATARS[0]!;
+  return fromDrivers ?? null;
 }
 
 /** Bundled `require()` source for a driver preset seed (preferred for `<Image source={…} />`). */
 export function getPresetImageSourceForSeed(
   seed?: string | null,
 ): ImageSourcePropType {
-  return findPresetForSeed(seed).image;
+  const preset = findPresetForSeed(seed);
+  return preset ? preset.image : DRIVER_PRESET_AVATARS[0]!.image;
 }
 
-/** Resolve stored avatarSeed to display URI. */
-export function getAvatarUriForSeed(seed: string): string {
-  return getPresetAvatarUri(findPresetForSeed(seed));
+/** Resolve stored avatarSeed to display URI, or null when seed is unrecognised. */
+export function getAvatarUriForSeed(seed: string): string | null {
+  const preset = findPresetForSeed(seed);
+  return preset ? getPresetAvatarUri(preset) : null;
 }
 
 /** Preset row for a driver seed (falls back to driver-1). */
 export function getDriverPresetForSeed(seed?: string | null): PresetAvatar {
-  return findPresetForSeed(seed);
+  return findPresetForSeed(seed) ?? DRIVER_PRESET_AVATARS[0]!;
 }
 
 /** Image source for driver UI: uploaded photo URL or bundled preset. */
@@ -129,7 +128,8 @@ export function resolveDriverAvatarImageSource(
 
 /** Display URI for map markers / web img src. */
 export function resolveDriverAvatarUriForSeed(seed?: string | null): string {
-  return getPresetAvatarUri(findPresetForSeed(seed));
+  const preset = findPresetForSeed(seed);
+  return preset ? getPresetAvatarUri(preset) : getPresetAvatarUri(DRIVER_PRESET_AVATARS[0]!);
 }
 
 /** @deprecated Use getAvatarUriForSeed. Kept for compatibility. */

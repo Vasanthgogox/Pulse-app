@@ -1,15 +1,18 @@
 /**
  * Shared reconciliation summary card — inline (mobile review) or inside modal.
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
+import type { PartyEntityType } from "@/components/PartyAvatar";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { LedgerSyncPalette } from "@/constants/LedgerSyncPalette";
 import Theme from "@/constants/Theme";
 import { LEDGER_RECON_LOTTIE } from "@/lib/ledgerReconLottieAssets";
 import LottieView from "lottie-react-native";
 import type { LottieSource } from "@/lib/lottieSource";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   ScrollView,
   StyleSheet,
   Text,
@@ -59,6 +62,13 @@ function ReconLottieGlyph({
   );
 }
 
+export type LedgerReconSummaryPartyAvatar = {
+  name: string;
+  entityType?: PartyEntityType;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+};
+
 export type LedgerReconSummaryCardProps = {
   amountText: string;
   direction: "in" | "out";
@@ -67,6 +77,7 @@ export type LedgerReconSummaryCardProps = {
   phase?: LedgerReconSummaryPhase;
   /** Inline mobile review — no outer card chrome. */
   variant?: "card" | "flat";
+  partyAvatar?: LedgerReconSummaryPartyAvatar;
 };
 
 export function LedgerReconSummaryCard({
@@ -76,6 +87,7 @@ export function LedgerReconSummaryCard({
   isEditMode = false,
   phase = "review",
   variant = "card",
+  partyAvatar,
 }: LedgerReconSummaryCardProps) {
   const isSuccess = phase === "success";
   const isSubmitting = phase === "submitting";
@@ -96,15 +108,48 @@ export function LedgerReconSummaryCard({
 
   const rootStyle = variant === "card" ? styles.card : styles.flat;
 
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const [showOverlay, setShowOverlay] = useState(false);
+  const overlayPlayedRef = useRef(false);
+
+  useEffect(() => {
+    if (isSuccess && !overlayPlayedRef.current) {
+      overlayPlayedRef.current = true;
+      setShowOverlay(true);
+      overlayOpacity.setValue(1);
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 600,
+        delay: 1400,
+        useNativeDriver: true,
+      }).start(() => setShowOverlay(false));
+    }
+    if (!isSuccess) {
+      overlayPlayedRef.current = false;
+    }
+  }, [isSuccess, overlayOpacity]);
+
   return (
     <View style={rootStyle}>
       <View style={styles.header}>
-        <ReconLottieGlyph
-          source={heroLottie}
-          size={isSuccess ? 48 : 40}
-          loop={!isSuccess}
-          speed={isSuccess ? 1 : 0.85}
-        />
+        {partyAvatar ? (
+          <PartyAvatar
+            name={partyAvatar.name}
+            entityType={partyAvatar.entityType ?? "client"}
+            avatarUrl={partyAvatar.avatarUrl}
+            avatarSeed={partyAvatar.avatarSeed}
+            size={48}
+            shape="circle"
+            style={{ borderWidth: 0 }}
+          />
+        ) : !isSuccess ? (
+          <ReconLottieGlyph
+            source={heroLottie}
+            size={isSubmitting ? 40 : 40}
+            loop={!isSuccess}
+            speed={isSuccess ? 1 : 0.85}
+          />
+        ) : null}
         <View style={styles.headerText}>
           <Text style={styles.sectionEyebrow}>
             {isSuccess
@@ -113,6 +158,11 @@ export function LedgerReconSummaryCard({
                 ? "Authorizing"
                 : "Reconciliation Summary"}
           </Text>
+          {partyAvatar ? (
+            <Text style={styles.partyName} numberOfLines={1}>
+              {partyAvatar.name}
+            </Text>
+          ) : null}
           <View style={styles.amountRow}>
             <Text style={[styles.amountPrefix, { color: amountColor }]}>₹</Text>
             <Text
@@ -174,6 +224,20 @@ export function LedgerReconSummaryCard({
           ))}
         </ScrollView>
       )}
+
+      {showOverlay ? (
+        <Animated.View
+          style={[styles.successOverlay, { opacity: overlayOpacity }]}
+          pointerEvents="none"
+        >
+          <ReconLottieGlyph
+            source={LEDGER_RECON_LOTTIE.success}
+            size={40}
+            loop={false}
+            speed={1}
+          />
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -215,6 +279,12 @@ const styles = StyleSheet.create({
   sectionEyebrow: {
     ...FinanceTxnTypography.columnTitle,
     color: Theme.textMuted,
+    marginBottom: 2,
+  },
+  partyName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
     marginBottom: 2,
   },
   amountRow: {
@@ -322,6 +392,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textMuted,
     textAlign: "center",
+  },
+  successOverlay: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 10,
   },
   lottieSlot: {
     alignItems: "center",

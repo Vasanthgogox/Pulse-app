@@ -237,6 +237,34 @@ export function resolvedIdentityToEntityAvatarProps(
   };
 }
 
+/** Receipt / preview modals — same avatar hierarchy as ledger list rows. */
+export function resolveLedgerReceiptPartyAvatar(
+  row: LedgerRow,
+  ctx: LedgerIdentityContext,
+): {
+  name: string;
+  entityType: PartyEntityType;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  isIntegrated?: boolean;
+  initialsColorSeed?: string | null;
+} | undefined {
+  const identity = resolveLedgerRowPartyIdentity(row, ctx);
+  if (!identity) return undefined;
+  return {
+    name: identity.displayName,
+    entityType: identity.entityType,
+    avatarUrl: identity.avatarUrl,
+    avatarSeed: identity.avatarSeed,
+    organizationImageUrl: identity.organizationImageUrl,
+    organizationAvatarSeed: identity.organizationAvatarSeed,
+    isIntegrated: identity.isIntegrated,
+    initialsColorSeed: row.contact_id ?? row.party_name,
+  };
+}
+
 /** Tooltip / accessibility: full name + role. */
 export function getEntityDisplayLabel(
   id: ResolvedPartyAvatarIdentity,

@@ -14,6 +14,7 @@ import {
     getLedgerFlowForRow,
     LedgerFlowChip,
 } from "@/features/finance/components/LedgerFlowChip";
+import type { LedgerEntryReceiptPartyAvatar } from "@/components/ledger/LedgerEntryReceiptCard";
 import { LedgerTransactionPreviewModal } from "@/features/finance/components/LedgerTransactionPreviewModal";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { getTripOperationalDisplay } from "@/features/operations/display";
@@ -258,6 +259,8 @@ export interface LedgerTransactionListViewProps {
   onExportPress?: (rowId?: string) => void;
   /** Optional: custom avatar renderer for party; when provided, used instead of initials circle (e.g. contact profile picture). */
   renderPartyAvatar?: (row: LedgerRow) => ReactNode;
+  /** Same identity resolver as list avatars, for receipt preview modal. */
+  resolveReceiptPartyAvatar?: (row: LedgerRow) => LedgerEntryReceiptPartyAvatar | undefined;
   /** Fleet drivers (avatar_url / avatar_seed) for default driver avatars when `renderPartyAvatar` is unset or returns null. */
   driverRows?: DriverRow[];
   /** Optional signed/public image URLs by driver id (e.g. FinanceScreen `getProfileImage`). */
@@ -288,6 +291,7 @@ export function LedgerTransactionListView({
   embedInParentScroll = false,
   fullWidth = false,
   renderPartyAvatar,
+  resolveReceiptPartyAvatar,
   driverRows = [],
   driverProfileImageUrls,
   onLoadMore,
@@ -1629,6 +1633,8 @@ export function LedgerTransactionListView({
         transaction={previewTransaction}
         onClose={() => setPreviewTransaction(null)}
         onViewAllOnTrip={onViewAllOnTrip}
+        resolveReceiptPartyAvatar={resolveReceiptPartyAvatar}
+        tripDetailsMap={tripDetailsMap}
       />
     </View>
   );

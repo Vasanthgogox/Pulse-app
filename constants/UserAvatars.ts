@@ -84,12 +84,12 @@ export const FEMALE_USER_2D_AVATARS: UserAvatarPreset[] = USER_2D_AVATARS.filter
 
 export const DEFAULT_USER_2D_AVATAR_SEED = USER_2D_AVATARS[0]?.seed ?? 'user-1';
 
-export function getUser2DAvatarUriForSeed(seed: string): string {
+export function getUser2DAvatarUriForSeed(seed: string): string | null {
   const preset = USER_2D_AVATARS.find((a) => a.seed === seed);
-  return getPresetAvatarUri(preset ?? USER_2D_AVATARS[0]!);
+  return preset ? getPresetAvatarUri(preset) : null;
 }
 
-export function getUser2DPresetImageSourceForSeed(seed: string): ImageSourcePropType {
+export function getUser2DPresetImageSourceForSeed(seed: string): ImageSourcePropType | null {
   const preset = USER_2D_AVATARS.find((a) => a.seed === seed);
-  return (preset ?? USER_2D_AVATARS[0]!).image;
+  return preset ? preset.image : null;
 }

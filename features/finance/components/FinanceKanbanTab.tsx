@@ -29,6 +29,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import {
+  resolveLedgerReceiptPartyAvatar,
   resolveLedgerRowPartyIdentity,
 } from "@/lib/entityIdentity";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
@@ -423,6 +424,29 @@ export function FinanceKanbanTab({
     return "—";
   }, [clientById, supplierById, tripPartyMap, tripDetailsMap]);
 
+  const resolveReceiptPartyAvatar = useCallback(
+    (row: LedgerRow) =>
+      resolveLedgerReceiptPartyAvatar(row, {
+        clientById,
+        supplierById,
+        driverById,
+        linkedOrgDisplayMap,
+        profileImages,
+        driverProfileImageUrls: profileImages,
+        tripPartyMap,
+        partyDisplayName: getResolvedPartyName(row),
+      }),
+    [
+      clientById,
+      supplierById,
+      driverById,
+      linkedOrgDisplayMap,
+      profileImages,
+      tripPartyMap,
+      getResolvedPartyName,
+    ],
+  );
+
   // Memoize so columns useMemo can depend on it — tripPartyMap arrives async and
   // changes categorization for rows that have no explicit contact_type.
   const getRowCategory = useCallback((row: LedgerRow): ColumnType | 'other' => {
@@ -573,6 +597,8 @@ export function FinanceKanbanTab({
           visible
           transaction={previewTransaction}
           onClose={() => setPreviewTransaction(null)}
+          resolveReceiptPartyAvatar={resolveReceiptPartyAvatar}
+          tripDetailsMap={tripDetailsMap}
         />
       ) : null}
     </>

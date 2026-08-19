@@ -1026,7 +1026,7 @@ const styles = StyleSheet.create({
     borderColor:     Theme.primary,
   },
   chipText:       { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
-  chipTextSelected: { color: Theme.screenBackground },
+  chipTextSelected: { color: Theme.textOnPrimary },
 
   validateButton: { alignSelf: 'flex-end', marginTop: -space[3], marginBottom: space[3] },
   validateButtonText: { fontSize: 13, fontWeight: '600', color: Theme.primary },

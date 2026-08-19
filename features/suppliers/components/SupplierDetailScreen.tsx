@@ -69,6 +69,7 @@ import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate, formatTripTableDate } from "@/lib/format";
 import {
   type LedgerIdentityContext,
+  resolveLedgerReceiptPartyAvatar,
   resolveLedgerRowPartyIdentity,
 } from "@/lib/entityIdentity";
 import { useDisputeMapQuery } from "@/lib/queries";
@@ -2054,6 +2055,24 @@ export default function SupplierDetailScreen({
                     badgeOverlay
                   />
                 );
+              }}
+              resolveReceiptPartyAvatar={(row) => {
+                const name = resolveLedgerPartyName(row, {
+                  clientById: clientByIdForLedger,
+                  supplierById: supplierByIdForLedger,
+                  tripPartyMap: tripPartyMapForCash,
+                  tripDetailsMap: supplierTripDetailsMap,
+                });
+                return resolveLedgerReceiptPartyAvatar(row, {
+                  clientById: clientByIdForLedger,
+                  supplierById: supplierByIdForLedger,
+                  driverById: driverByIdForCashExpand,
+                  linkedOrgDisplayMap,
+                  profileImages: cashFlowDriverProfileUrls,
+                  driverProfileImageUrls: cashFlowDriverProfileUrls,
+                  tripPartyMap: tripPartyMapForCash,
+                  partyDisplayName: name,
+                });
               }}
             />
           </View>

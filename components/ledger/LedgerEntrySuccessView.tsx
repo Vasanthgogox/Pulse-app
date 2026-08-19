@@ -81,6 +81,16 @@ export const LedgerEntrySuccessView = memo(function LedgerEntrySuccessView(
           title={title}
           amount={props.amount}
           isIn={isIn}
+          partyAvatar={
+            props.partyName
+              ? {
+                  name: props.partyName,
+                  entityType: props.partyEntityType ?? "client",
+                  avatarUrl: props.partyAvatarUrl,
+                  avatarSeed: props.partyAvatarSeed,
+                }
+              : undefined
+          }
           details={details}
         />
       </View>

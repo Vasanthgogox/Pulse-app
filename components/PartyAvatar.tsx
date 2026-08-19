@@ -181,14 +181,23 @@ export function PartyAvatar({
         avatarSeed,
         entityType,
       });
-  const uri = resolvedPhotoUri ?? syncUri;
+  const seedUri = resolvePartyDisplayUri({
+    // If a photo fails to load, prefer a deterministic seed-based avatar instead
+    // of dropping straight to initials.
+    organizationImageUrl: null,
+    avatarUrl: null,
+    organizationAvatarSeed,
+    avatarSeed,
+    entityType,
+  });
+  const uri = !imageFailed ? resolvedPhotoUri ?? syncUri : seedUri;
   const displayName = (name ?? "").trim() || "Party";
   const colorSeed = (initialsColorSeed ?? avatarSeed ?? "").trim() || displayName;
   const initials = partyInitialsFromName(displayName);
   const bg = partyAvatarBackgroundColor(colorSeed);
   const initialsColor = partyAvatarInitialsTextColor(bg);
 
-  if (uri && !imageFailed) {
+  if (uri) {
     const resizeMode = partyAvatarImageResizeMode(entityType, organizationImageUrl);
     return (
       <View

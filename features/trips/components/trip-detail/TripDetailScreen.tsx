@@ -787,6 +787,28 @@ export default function TripDetailScreen({
     [detail, vehicleGalleryPageWidth],
   );
 
+  // Asset Vault (non-vehicle) gallery nav.
+  // Used for "previous/next" image preview inside the asset vault modal.
+  const assetVaultPreviewDocs = detail.computedTripDocs.filter(
+    (doc) => !!doc.storagePath && doc.type !== "PDF",
+  );
+  const assetVaultPreviewIndex = assetVaultPreviewDocs.findIndex(
+    (d) => d.id === detail.selectedDoc?.id,
+  );
+  const canGoAssetVaultPrev = assetVaultPreviewIndex > 0;
+  const canGoAssetVaultNext =
+    assetVaultPreviewIndex >= 0 &&
+    assetVaultPreviewIndex < assetVaultPreviewDocs.length - 1;
+  const goToAssetVaultPreviewIndex = (nextIndex: number) => {
+    if (assetVaultPreviewDocs.length <= 0) return;
+    const clamped = Math.max(
+      0,
+      Math.min(nextIndex, assetVaultPreviewDocs.length - 1),
+    );
+    const nextDoc = assetVaultPreviewDocs[clamped];
+    if (nextDoc) detail.setSelectedDoc(nextDoc);
+  };
+
   // One-shot scroll sync when the gallery first becomes visible, so the
   // hook's auto-jump to the first uploaded doc lines up with the carousel.
   // After that, scroll position and `vehiclePreviewIndex` stay in sync via
@@ -5718,6 +5740,10 @@ export default function TripDetailScreen({
                 <Text style={styles.docModalSubtitle} numberOfLines={1}>
                   {detail.isVehicleGalleryDoc && detail.activeVehiclePreviewDoc
                     ? `${detail.vehiclePreviewIndex + 1}/${detail.vehiclePreviewDocs.length} · ${detail.activeVehiclePreviewDoc.label}`
+                    : !detail.isVehicleGalleryDoc &&
+                        assetVaultPreviewDocs.length > 1 &&
+                        assetVaultPreviewIndex >= 0
+                      ? `${assetVaultPreviewIndex + 1}/${assetVaultPreviewDocs.length}`
                     : "Preview"}
                 </Text>
               </View>
@@ -5887,11 +5913,63 @@ export default function TripDetailScreen({
                   </View>
                 )
               ) : detail.docPreviewUrl ? (
-                <Image
-                  source={{ uri: detail.docPreviewUrl }}
-                  style={styles.docModalImage}
-                  resizeMode="contain"
-                />
+                <View style={styles.docGalleryWrap}>
+                  <Image
+                    source={{ uri: detail.docPreviewUrl }}
+                    style={styles.docModalImage}
+                    resizeMode="contain"
+                  />
+
+                  {assetVaultPreviewDocs.length > 1 && assetVaultPreviewIndex >= 0 ? (
+                    <>
+                      <TouchableOpacity
+                        accessibilityLabel="Previous document"
+                        activeOpacity={0.85}
+                        disabled={!canGoAssetVaultPrev}
+                        onPress={() =>
+                          goToAssetVaultPreviewIndex(
+                            assetVaultPreviewIndex - 1,
+                          )
+                        }
+                        style={[
+                          styles.docGalleryNavBtn,
+                          styles.docGalleryNavBtnLeft,
+                          !canGoAssetVaultPrev && styles.docGalleryNavBtnDisabled,
+                        ]}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <FontAwesome
+                          name="chevron-left"
+                          size={16}
+                          color="#0f172a"
+                        />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        accessibilityLabel="Next document"
+                        activeOpacity={0.85}
+                        disabled={!canGoAssetVaultNext}
+                        onPress={() =>
+                          goToAssetVaultPreviewIndex(
+                            assetVaultPreviewIndex + 1,
+                          )
+                        }
+                        style={[
+                          styles.docGalleryNavBtn,
+                          styles.docGalleryNavBtnRight,
+                          !canGoAssetVaultNext && styles.docGalleryNavBtnDisabled,
+                        ]}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <FontAwesome
+                          name="chevron-right"
+                          size={16}
+                          color="#0f172a"
+                        />
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+                </View>
               ) : detail.docPreviewError ? (
                 <View style={styles.docModalCenter}>
                   <FontAwesome
@@ -5963,6 +6041,18 @@ export default function TripDetailScreen({
           setActiveTab("finance");
           setFinanceSubTab("transactions");
         }}
+        tripDetailsMap={
+          trip?.id
+            ? {
+                [trip.id]: {
+                  trip_number: getTripDisplayNumber(trip, currentOrganization?.id),
+                  pickup_area: trip.pickup_area ?? null,
+                  drop_location: trip.drop_location ?? null,
+                  pickup_date: trip.pickup_date ?? trip.created_at ?? null,
+                },
+              }
+            : undefined
+        }
       />
 
       <Suspense fallback={null}>

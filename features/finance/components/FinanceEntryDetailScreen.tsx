@@ -43,6 +43,7 @@ export function FinanceEntryDetailScreen({
       title={receipt.title}
       amount={receipt.amount}
       isIn={receipt.isIn}
+      partyAvatar={receipt.partyAvatar}
       details={receipt.details}
       secondaryAction={showViewAll ? { label: "Close", onPress: onBack } : undefined}
       primaryAction={

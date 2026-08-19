@@ -440,6 +440,7 @@ export function DriverTripFlowCard({
   const podViewUrlsRequestedRef = useRef<Set<string>>(new Set());
   const lastPodTripIdRef = useRef<string | null>(null);
   const [viewingPodUrl, setViewingPodUrl] = useState<string | null>(null);
+  const [viewingPodDocId, setViewingPodDocId] = useState<string | null>(null);
   const [viewingPodLoading, setViewingPodLoading] = useState(false);
   const [viewingPodError, setViewingPodError] = useState(false);
   const [podDeletingId, setPodDeletingId] = useState<string | null>(null);
@@ -635,6 +636,7 @@ export function DriverTripFlowCard({
       setViewingPodError(false);
       setViewingPodLoading(true);
       setViewingPodUrl(null);
+      setViewingPodDocId(doc.id);
       try {
         const url = await resolvePodPreviewUrl(doc);
         if (url) {
@@ -1430,6 +1432,15 @@ export function DriverTripFlowCard({
     );
   }
 
+  const viewingPodIndex = viewingPodDocId
+    ? podDocuments.findIndex((d) => d.id === viewingPodDocId)
+    : -1;
+  const viewingPodPrevDoc = viewingPodIndex > 0 ? podDocuments[viewingPodIndex - 1] : null;
+  const viewingPodNextDoc =
+    viewingPodIndex >= 0 && viewingPodIndex < podDocuments.length - 1
+      ? podDocuments[viewingPodIndex + 1]
+      : null;
+
   return (
     <View
       style={[
@@ -1904,6 +1915,7 @@ export function DriverTripFlowCard({
         animationType="fade"
         onRequestClose={() => {
           setViewingPodUrl(null);
+          setViewingPodDocId(null);
           setViewingPodLoading(false);
           setViewingPodError(false);
         }}
@@ -1912,23 +1924,76 @@ export function DriverTripFlowCard({
           style={styles.podModalBackdrop}
           onPress={() => {
             setViewingPodUrl(null);
+            setViewingPodDocId(null);
             setViewingPodLoading(false);
             setViewingPodError(false);
           }}
         >
           <Pressable style={styles.podModalContent} onPress={() => {}}>
-            <TouchableOpacity
-              style={[styles.podModalClose, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}
-              onPress={() => {
-                setViewingPodUrl(null);
-                setViewingPodLoading(false);
-                setViewingPodError(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <FontAwesome name="times" size={18} color={Theme.textPrimaryDark} />
-              <Text style={[styles.podModalCloseText, { color: Theme.textPrimaryDark }]}>Close</Text>
-            </TouchableOpacity>
+            <View style={styles.podModalTopBar}>
+              <TouchableOpacity
+                style={[
+                  styles.podModalNavBtn,
+                  (!viewingPodPrevDoc || viewingPodLoading) && styles.podModalNavBtnDisabled,
+                ]}
+                onPress={() => {
+                  if (!viewingPodPrevDoc || viewingPodLoading) return;
+                  void openPodPreview(viewingPodPrevDoc);
+                }}
+                disabled={!viewingPodPrevDoc || viewingPodLoading}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Previous POD image"
+              >
+                <FontAwesome name="chevron-left" size={16} color={Theme.textPrimaryDark} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.podModalClose,
+                  {
+                    marginBottom: 0,
+                    backgroundColor: Theme.screenBackground,
+                    borderColor: Theme.border,
+                  },
+                ]}
+                onPress={() => {
+                  setViewingPodUrl(null);
+                  setViewingPodDocId(null);
+                  setViewingPodLoading(false);
+                  setViewingPodError(false);
+                }}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Close POD preview"
+              >
+                <FontAwesome name="times" size={18} color={Theme.textPrimaryDark} />
+                <Text style={[styles.podModalCloseText, { color: Theme.textPrimaryDark }]}>Close</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.podModalNavBtn,
+                  (!viewingPodNextDoc || viewingPodLoading) && styles.podModalNavBtnDisabled,
+                ]}
+                onPress={() => {
+                  if (!viewingPodNextDoc || viewingPodLoading) return;
+                  void openPodPreview(viewingPodNextDoc);
+                }}
+                disabled={!viewingPodNextDoc || viewingPodLoading}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Next POD image"
+              >
+                <FontAwesome name="chevron-right" size={16} color={Theme.textPrimaryDark} />
+              </TouchableOpacity>
+            </View>
+
+            {podDocuments.length > 1 && viewingPodIndex >= 0 ? (
+              <Text style={styles.podModalCounterText}>
+                {viewingPodIndex + 1}/{podDocuments.length}
+              </Text>
+            ) : null}
             {viewingPodLoading ? (
               <View style={styles.podModalImage}>
                 <LoadingIndicator size="large" color={colors.emerald} />
@@ -2247,6 +2312,36 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 360,
     alignItems: 'center',
+  },
+  podModalTopBar: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 16,
+  },
+  podModalNavBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: Theme.screenBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  podModalNavBtnDisabled: {
+    opacity: 0.4,
+  },
+  podModalCounterText: {
+    width: '100%',
+    marginTop: -8,
+    marginBottom: 12,
+    textAlign: 'center',
+    color: Theme.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
   },
   podModalClose: {
     flexDirection: 'row',

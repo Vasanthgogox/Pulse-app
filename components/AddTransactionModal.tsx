@@ -6720,6 +6720,16 @@ export function AddTransactionModal({
                 ? "submitting"
                 : "review"
           }
+          partyAvatar={
+            ledgerPartyVisual.name && ledgerPartyVisual.name !== "—"
+              ? {
+                  name: ledgerPartyVisual.name,
+                  entityType: ledgerPartyVisual.partyEntityType,
+                  avatarUrl: ledgerPartyVisual.partyAvatarUrl,
+                  avatarSeed: ledgerPartyVisual.partyAvatarSeed,
+                }
+              : undefined
+          }
           onClose={() => {
             if (ledgerSubmitting || ledgerReconSucceeded) return;
             setLedgerSubmitConfirmVisible(false);

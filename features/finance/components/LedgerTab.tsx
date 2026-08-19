@@ -16,6 +16,7 @@ import { getTripOperationalDisplay } from "@/features/operations/display";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import {
     type LedgerIdentityContext,
+    resolveLedgerReceiptPartyAvatar,
     resolveLedgerRowPartyIdentity,
     resolvedIdentityToEntityAvatarProps,
 } from "@/lib/entityIdentity";
@@ -211,6 +212,32 @@ export function LedgerTab({
     setPreviewLedgerRow(row);
   }
 
+  const resolveReceiptPartyAvatar = useCallback(
+    (row: financeService.LedgerRow) => {
+      const name = getResolvedPartyName(row);
+      return resolveLedgerReceiptPartyAvatar(row, {
+        clientById,
+        supplierById,
+        driverById,
+        linkedOrgDisplayMap,
+        profileImages,
+        driverProfileImageUrls,
+        tripPartyMap,
+        partyDisplayName: name,
+      });
+    },
+    [
+      clientById,
+      supplierById,
+      driverById,
+      linkedOrgDisplayMap,
+      profileImages,
+      driverProfileImageUrls,
+      tripPartyMap,
+      getResolvedPartyName,
+    ],
+  );
+
   const transactionContent = (
     <LedgerTransactionListView
       transactions={transactionListRows}
@@ -257,6 +284,7 @@ export function LedgerTab({
           />
         );
       }}
+      resolveReceiptPartyAvatar={resolveReceiptPartyAvatar}
       driverRows={driverRows}
       driverProfileImageUrls={{
         ...driverProfileImageUrls,
@@ -442,6 +470,8 @@ export function LedgerTab({
           visible
           transaction={previewLedgerRow}
           onClose={() => setPreviewLedgerRow(null)}
+          resolveReceiptPartyAvatar={resolveReceiptPartyAvatar}
+          tripDetailsMap={tripDetailsMap}
         />
       ) : null}
     </>

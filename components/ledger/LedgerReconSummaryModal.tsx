@@ -3,6 +3,7 @@
  */
 import { LedgerReconSummaryCard } from "@/components/ledger/LedgerReconSummaryCard";
 import type {
+  LedgerReconSummaryPartyAvatar,
   LedgerReconSummaryPhase,
   LedgerReconSummaryRow,
 } from "@/components/ledger/LedgerReconSummaryCard";
@@ -20,7 +21,7 @@ import {
   View,
 } from "react-native";
 
-export type { LedgerReconSummaryPhase, LedgerReconSummaryRow } from "@/components/ledger/LedgerReconSummaryCard";
+export type { LedgerReconSummaryPartyAvatar, LedgerReconSummaryPhase, LedgerReconSummaryRow } from "@/components/ledger/LedgerReconSummaryCard";
 
 export type LedgerReconSummaryModalProps = {
   visible: boolean;
@@ -31,6 +32,7 @@ export type LedgerReconSummaryModalProps = {
   phase?: LedgerReconSummaryPhase;
   /** Mobile wizard: overlay only during submit/success (review is inline). */
   progressOnly?: boolean;
+  partyAvatar?: LedgerReconSummaryPartyAvatar;
   onClose: () => void;
   onConfirm: () => void;
   onSuccessComplete?: () => void;
@@ -44,6 +46,7 @@ export function LedgerReconSummaryModal({
   isEditMode = false,
   phase = "review",
   progressOnly = false,
+  partyAvatar,
   onClose,
   onConfirm,
   onSuccessComplete,
@@ -69,7 +72,7 @@ export function LedgerReconSummaryModal({
     <Modal
       transparent
       visible={visible}
-      animationType="fade"
+      animationType="none"
       onRequestClose={dismissBlocked ? undefined : onClose}
     >
       <View style={styles.backdrop}>
@@ -87,6 +90,7 @@ export function LedgerReconSummaryModal({
             isEditMode={isEditMode}
             phase={phase}
             variant="card"
+            partyAvatar={partyAvatar}
           />
 
           {showActions ? (

@@ -931,7 +931,15 @@ export function useTripDetail({
     if (!selectedDoc) return undefined;
     if (selectedDoc.storagePath) return selectedDoc.storagePath;
     if (selectedDoc.id.startsWith("pod")) {
-      return tripDocuments.find((d) => d.document_type === 'pod')?.storage_path;
+      const selectedPodDocumentId = selectedDoc.documentId ?? null;
+      if (selectedPodDocumentId) {
+        return (
+          tripDocuments.find((d) => d.id === selectedPodDocumentId)
+            ?.storage_path ?? undefined
+        );
+      }
+      // Fallback: keep legacy behavior if we can't identify the specific pod row.
+      return tripDocuments.find((d) => d.document_type === "pod")?.storage_path;
     }
     return undefined;
   }, [selectedDoc, tripDocuments]);
