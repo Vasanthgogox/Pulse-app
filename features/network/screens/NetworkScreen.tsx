@@ -266,6 +266,7 @@ function NetworkScreenInner() {
   /** Aggregate-only orgs have no own fleet: no driver tab, no FLEET count. */
   const canUseFleet =
     canAccessDrivers(capabilities) && canSurface("fleet.drivers.view");
+  const canDiscover = canSurface("sales.network.discover");
   const [refreshing, setRefreshing] = useState(false);
   const [connSearch, setConnSearch] = useState("");
   const [connFilter, setConnFilter] = useState<ConnectionFilterTab>("ALL");
@@ -1159,6 +1160,7 @@ function NetworkScreenInner() {
             </View>
           </View>
 
+          {canDiscover ? (
           <View
             style={[
               styles.sectionBlock,
@@ -1337,6 +1339,7 @@ function NetworkScreenInner() {
               />
             </View>
           </View>
+          ) : null}
         </View>
         <NetworkSupportHelpCards />
       </>

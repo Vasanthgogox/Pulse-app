@@ -20,6 +20,7 @@ import {
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { MoreVertical, UserPlus } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -106,6 +107,8 @@ export function NetworkDesktopNetworkPanel({
   onChatIntegrated,
 }: Props) {
   const compact = useProfileHubCompact();
+  const { can: canSurface } = useMemberAccess();
+  const canDiscover = canSurface("sales.network.discover");
   const growAnchorRef = useRef<View>(null);
   const [connections, setConnections] = useState<ConnectedOrg[]>([]);
   const [sortMode, setSortMode] = useState<ConnSortMode>("recommended");
@@ -319,26 +322,30 @@ export function NetworkDesktopNetworkPanel({
             embedded
           />
 
-          <View style={local.sectionDivider} />
+          {canDiscover ? (
+            <>
+              <View style={local.sectionDivider} />
 
-          <View ref={growAnchorRef} collapsable={false}>
-            <NetworkDesktopGrowPanel
-              orgId={orgId}
-              search={discoverSearch}
-              orgSearch={discoverOrgSearch}
-              onSearchChange={onDiscoverSearchChange}
-              totalConnections={totalConnections}
-              clientCount={clientCount}
-              supplierCount={supplierCount}
-              discoverInviteCount={discoverInviteCount}
-              discoverInviteLimit={discoverInviteLimit}
-              onInviteCountChange={onDiscoverInviteCountChange}
-              onOpenProfile={onOpenProfileFromDiscover}
-              onPressMutuals={onPressMutuals}
-              onOpenMutualProfile={onOpenMutualProfile}
-              embedded
-            />
-          </View>
+              <View ref={growAnchorRef} collapsable={false}>
+                <NetworkDesktopGrowPanel
+                  orgId={orgId}
+                  search={discoverSearch}
+                  orgSearch={discoverOrgSearch}
+                  onSearchChange={onDiscoverSearchChange}
+                  totalConnections={totalConnections}
+                  clientCount={clientCount}
+                  supplierCount={supplierCount}
+                  discoverInviteCount={discoverInviteCount}
+                  discoverInviteLimit={discoverInviteLimit}
+                  onInviteCountChange={onDiscoverInviteCountChange}
+                  onOpenProfile={onOpenProfileFromDiscover}
+                  onPressMutuals={onPressMutuals}
+                  onOpenMutualProfile={onOpenMutualProfile}
+                  embedded
+                />
+              </View>
+            </>
+          ) : null}
         </View>
       </View>
     </View>

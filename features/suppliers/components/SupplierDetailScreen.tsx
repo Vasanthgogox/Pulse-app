@@ -2203,6 +2203,7 @@ export default function SupplierDetailScreen({
               },
             ]}
             onClose={() => setShowProfileModal(false)}
+            canEdit={canSurface("sales.suppliers.edit")}
             onEditPress={() => {
               setShowProfileModal(false);
               setShowEditModal(true);
@@ -2254,7 +2255,7 @@ export default function SupplierDetailScreen({
       </Modal>
 
       <EditSupplierModal
-        visible={showEditModal}
+        visible={showEditModal && canSurface("sales.suppliers.edit")}
         supplier={supplier}
         onClose={() => setShowEditModal(false)}
         onSave={handleEditSave}

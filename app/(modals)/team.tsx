@@ -6,6 +6,7 @@ import { TeamMembersView } from "@/features/organization/components/TeamMembersV
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { ROUTES } from "@/lib/routes";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useRouter } from "expo-router";
 import {
   ChevronLeft,
@@ -20,12 +21,14 @@ export default function TeamScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const { currentOrganization } = useOrganization();
+  const { can: canSurface } = useMemberAccess();
 
   const orgId = currentOrganization?.id ?? null;
 
   // team_manage is not emitted by getCapabilitiesFromProfile (it comes from org membership role).
   // Show invite/manage controls to all non-driver org users; backend RLS handles authorization.
   const canManage = profile?.role !== "driver";
+  const canInvite = canManage && canSurface("team.invite");
 
   const handleInvite = () => {
     router.push(ROUTES.MODALS.INVITE_MEMBER as Parameters<typeof router.push>[0]);
@@ -57,7 +60,7 @@ export default function TeamScreen() {
             </Text>
           ) : null}
         </View>
-        {canManage ? (
+        {canInvite ? (
           <Pressable
             onPress={handleInvite}
             style={({ pressed }) => [styles.inviteBtn, pressed && { opacity: 0.8 }]}
@@ -82,7 +85,7 @@ export default function TeamScreen() {
           orgId={orgId}
           currentUserId={user?.uid ?? null}
           canManage={canManage}
-          onInvite={canManage ? handleInvite : undefined}
+          onInvite={canInvite ? handleInvite : undefined}
         />
       )}
     </View>

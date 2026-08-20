@@ -8,6 +8,7 @@ import { WorkspaceDetailLayout } from "@/features/organization/components/worksp
 import { WORKSPACE_PANEL_TITLES } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
 import { useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import type { OrgMember } from "@/types/organization";
 import { ShieldCheck, UserPlus2, Users } from "lucide-react-native";
 import { useRef, useState } from "react";
@@ -24,8 +25,10 @@ export function WorkspaceTeamPanel({ onBack }: Props) {
   const { user, profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const { isOwner } = useOrgRole();
+  const { can: canSurface } = useMemberAccess();
   const orgId = currentOrganization?.id ?? null;
   const canManage = profile?.role !== "driver";
+  const canInvite = canManage && canSurface("team.invite");
   const invalidate = useInvalidateOrgMembers(orgId);
 
   const [view, setView] = useState<TeamView>("roster");
@@ -101,13 +104,15 @@ export function WorkspaceTeamPanel({ onBack }: Props) {
                 <Text style={styles.accessBtnText}>Access</Text>
               </Pressable>
             ) : null}
-            <Pressable
-              onPress={openInvite}
-              style={({ pressed }) => [styles.inviteBtn, pressed && { opacity: 0.85 }]}
-            >
-              <UserPlus2 size={16} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
-              <Text style={styles.inviteBtnText}>Invite</Text>
-            </Pressable>
+            {canInvite ? (
+              <Pressable
+                onPress={openInvite}
+                style={({ pressed }) => [styles.inviteBtn, pressed && { opacity: 0.85 }]}
+              >
+                <UserPlus2 size={16} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
+                <Text style={styles.inviteBtnText}>Invite</Text>
+              </Pressable>
+            ) : null}
           </View>
         )
       }
@@ -117,7 +122,7 @@ export function WorkspaceTeamPanel({ onBack }: Props) {
           <Users size={36} color={Theme.textSection} strokeWidth={1.5} />
           <Text style={styles.noOrgText}>No organization loaded</Text>
         </View>
-      ) : view === "invite" ? (
+      ) : view === "invite" && canInvite ? (
         <InviteMemberFlow
           orgId={orgId}
           layout="embedded"
@@ -129,7 +134,7 @@ export function WorkspaceTeamPanel({ onBack }: Props) {
           orgId={orgId}
           currentUserId={user?.uid ?? null}
           canManage={view === "access" ? isOwner : canManage}
-          onInvite={canManage ? openInvite : undefined}
+          onInvite={canInvite ? openInvite : undefined}
           onEditMember={(member: OrgMember) => setEditMemberId(member.id)}
           initialSubTab={focusPending ? "pending" : undefined}
         />

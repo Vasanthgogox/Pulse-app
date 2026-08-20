@@ -1,0 +1,154 @@
+{
+  "source": "lib/memberSurfaces.ts:MEMBER_SURFACE_CATALOG",
+  "domains": {
+    "finance": {
+      "label": "FINANCE",
+      "groups": {
+        "_root": [
+          { "id": "finance.tab", "label": "Finance tab", "hint": "Open the Fiscal tab" },
+          { "id": "finance.view", "label": "View finance", "hint": "Ledgers, balances, reports (read)", "requires": "finance.tab" },
+          { "id": "finance.manage", "label": "Manage finance", "hint": "Create/edit ledger entries and fiscal actions", "requires": "finance.view" }
+        ],
+        "Sub-tabs": [
+          { "id": "finance.subtab.cash", "label": "Cash sub-tab", "hint": "Finance → Cash", "requires": "finance.view" },
+          { "id": "finance.subtab.customers", "label": "Customers sub-tab", "hint": "Finance → Customers", "requires": "finance.view" },
+          { "id": "finance.subtab.suppliers", "label": "Suppliers sub-tab", "hint": "Finance → Suppliers (aggregate / hybrid)", "requires": "finance.view" },
+          { "id": "finance.subtab.garage", "label": "Garage sub-tab", "hint": "Finance → Garage (asset / hybrid)", "requires": "finance.view" },
+          { "id": "finance.subtab.drivers", "label": "Drivers sub-tab", "hint": "Finance → Drivers (asset / hybrid)", "requires": "finance.view" }
+        ],
+        "Ledger access": [
+          { "id": "finance.ledger.customers", "label": "Ledger · customers", "hint": "Cash-tab party filter: customers", "requires": "finance.subtab.cash" },
+          { "id": "finance.ledger.suppliers", "label": "Ledger · suppliers", "hint": "Cash-tab party filter: suppliers", "requires": "finance.subtab.cash" },
+          { "id": "finance.ledger.vehicle", "label": "Ledger · vehicles", "hint": "Cash-tab party filter: vehicles", "requires": "finance.subtab.cash" },
+          { "id": "finance.ledger.driver", "label": "Ledger · drivers", "hint": "Cash-tab party filter: drivers", "requires": "finance.subtab.cash" }
+        ],
+        "Transactions": [
+          { "id": "finance.add_transaction", "label": "Add transaction", "hint": "Add ledger entry from party / trip screens", "requires": "finance.manage" },
+          { "id": "finance.edit_transaction", "label": "Edit transaction", "hint": "Edit existing ledger entries", "requires": "finance.manage" },
+          { "id": "finance.void_adjustments", "label": "Void / adjust entries", "hint": "Trip finance adjustments, voids, provisions", "requires": "finance.manage" }
+        ],
+        "Billing & POD": [
+          { "id": "finance.invoicing", "label": "Invoicing", "hint": "Execute invoices & PDF preview", "requires": "finance.view" },
+          { "id": "finance.pod_reconciliation", "label": "POD reconciliation", "hint": "POD reconcile & log incoming PODs", "requires": "finance.view" },
+          { "id": "finance.branding", "label": "Invoice branding", "hint": "Branding settings for invoice PDFs", "requires": "finance.invoicing" }
+        ],
+        "Reports & insights": [
+          { "id": "finance.business_pulse", "label": "Business Pulse", "hint": "Business pulse dashboard", "requires": "finance.view" },
+          { "id": "finance.reports", "label": "Finance reports", "hint": "Report tab / export summaries", "requires": "finance.view" },
+          { "id": "finance.shared_ledger", "label": "Shared ledger", "hint": "Integrated party shared ledger views", "requires": "finance.view" },
+          { "id": "finance.trip_ledger", "label": "Trip ledger page", "hint": "Open /trip-ledger and trip cash history", "requires": "finance.view" },
+          { "id": "finance.documents_center", "label": "Documents center", "hint": "Org documents vault / documents-center", "requires": "finance.view" }
+        ],
+        "Trip expenses": [
+          { "id": "finance.expenses.view", "label": "View trip expenses", "hint": "Fuel / toll / other expense hub (read)", "requires": "finance.view" },
+          { "id": "finance.expenses.approve", "label": "Approve trip expenses", "hint": "Approve / settle driver expense claims", "requires": "finance.expenses.view" }
+        ]
+      }
+    },
+    "sales": {
+      "label": "SALES / NETWORK",
+      "groups": {
+        "_root": [
+          { "id": "sales.tab", "label": "Network tab", "hint": "Open Network / sales home" }
+        ],
+        "Clients": [
+          { "id": "sales.clients.view", "label": "View clients", "hint": "Clients list & party customers", "requires": "sales.tab" },
+          { "id": "sales.clients.create", "label": "Add client", "hint": "Create client records", "requires": "sales.clients.view" },
+          { "id": "sales.clients.edit", "label": "Edit client", "hint": "Edit client profiles", "requires": "sales.clients.view" },
+          { "id": "sales.clients.detail", "label": "Client detail", "hint": "Open client detail & trips", "requires": "sales.clients.view" },
+          { "id": "sales.clients.analytics", "label": "Client analytics", "hint": "Client analytics / ranking views", "requires": "sales.clients.detail" }
+        ],
+        "Marketplace & network": [
+          { "id": "sales.marketplace.post", "label": "Post loads / give-load", "hint": "Marketplace post & create-post (aggregate / hybrid)", "requires": "sales.tab" },
+          { "id": "sales.marketplace.bid", "label": "Marketplace bid", "hint": "Bid on marketplace listings (asset / hybrid)", "requires": "sales.tab" },
+          { "id": "sales.network.connect", "label": "Network connect", "hint": "Send connection requests", "requires": "sales.tab" },
+          { "id": "sales.network.discover", "label": "Discover network", "hint": "Discover orgs / grow network", "requires": "sales.tab" },
+          { "id": "sales.network.stories", "label": "Stories & feed", "hint": "View / interact with network stories", "requires": "sales.tab" },
+          { "id": "sales.load_board", "label": "Load board", "hint": "Open load board marketplace", "requires": "sales.tab" },
+          { "id": "sales.from_clients", "label": "From clients", "hint": "Loads / requests from clients hub", "requires": "sales.tab" },
+          { "id": "sales.chat", "label": "Business chat", "hint": "Org / partner chat threads", "requires": "sales.tab" }
+        ],
+        "Suppliers": [
+          { "id": "sales.suppliers.view", "label": "View suppliers", "hint": "Supplier directory (aggregate / hybrid)", "requires": "sales.tab" },
+          { "id": "sales.suppliers.create", "label": "Add supplier", "hint": "Create supplier records", "requires": "sales.suppliers.view" },
+          { "id": "sales.suppliers.edit", "label": "Edit supplier", "hint": "Edit supplier profiles", "requires": "sales.suppliers.view" },
+          { "id": "sales.suppliers.detail", "label": "Supplier detail", "hint": "Open supplier detail & trips", "requires": "sales.suppliers.view" },
+          { "id": "sales.suppliers.analytics", "label": "Supplier analytics", "hint": "Supplier analytics views", "requires": "sales.suppliers.detail" }
+        ],
+        "Indents": [
+          { "id": "tripops.indents.view", "label": "View indents / pulse loads", "hint": "Indent list & detail", "requires": "sales.tab" },
+          { "id": "tripops.indents.create", "label": "Create indent", "hint": "Give-load create (aggregate / hybrid)", "requires": "tripops.indents.view" },
+          { "id": "tripops.indents.edit", "label": "Edit indent", "hint": "Edit draft / open loads", "requires": "tripops.indents.view" },
+          { "id": "tripops.indents.cancel", "label": "Cancel indent", "hint": "Cancel / close a load", "requires": "tripops.indents.view" },
+          { "id": "tripops.indents.broadcast", "label": "Broadcast / share load", "hint": "Share draft to network / stories", "requires": "tripops.indents.view" },
+          { "id": "tripops.indents.bid", "label": "Bid on indent", "hint": "Submit supplier quotes", "requires": "tripops.indents.view" },
+          { "id": "tripops.indents.award", "label": "Award bid", "hint": "Accept a quote / award partner", "requires": "tripops.indents.view" },
+          { "id": "tripops.indents.allocate", "label": "Allocate indent", "hint": "Indent allocation & supplier assign vehicle", "requires": "tripops.indents.view" },
+          { "id": "tripops.pulse_loads", "label": "Pulse loads hub", "hint": "Pulse loads / load center home", "requires": "sales.tab" }
+        ]
+      },
+      "note": "tripops.indents.* and tripops.pulse_loads are catalogued under domain:'sales' even though the id prefix is 'tripops' — see TC-13 changelog entry for why defaultSurfacesForRole must special-case this."
+    },
+    "tripops": {
+      "label": "TRIPS",
+      "groups": {
+        "_root": [
+          { "id": "tripops.tab", "label": "Trips tab", "hint": "Open Trips home" }
+        ],
+        "Trips": [
+          { "id": "tripops.trips.view", "label": "View trips", "hint": "Trips list", "requires": "tripops.tab" },
+          { "id": "tripops.trips.detail", "label": "Trip detail", "hint": "Open trip detail page", "requires": "tripops.trips.view" },
+          { "id": "tripops.trips.create_asset", "label": "Create trip · own fleet", "hint": "Asset / hybrid supply mode", "requires": "tripops.trips.view" },
+          { "id": "tripops.trips.create_aggregate", "label": "Create trip · partner", "hint": "Aggregate / hybrid supply mode", "requires": "tripops.trips.view" },
+          { "id": "tripops.trips.assign", "label": "Assign driver / vehicle", "hint": "First assignment on trip cards & detail", "requires": "tripops.trips.detail" },
+          { "id": "tripops.trips.reassign", "label": "Reassign assets", "hint": "Change driver / vehicle mid-trip", "requires": "tripops.trips.assign" }
+        ],
+        "Trip execution": [
+          { "id": "tripops.trips.tracking", "label": "Trip tracking", "hint": "Live map, ping, location trail", "requires": "tripops.trips.detail" },
+          { "id": "tripops.trips.docs", "label": "Trip documents", "hint": "POD / LR / trip docs tab", "requires": "tripops.trips.detail" },
+          { "id": "tripops.trips.expenses", "label": "Trip expenses tab", "hint": "Expense hub on trip detail", "requires": "tripops.trips.detail" },
+          { "id": "tripops.trips.finance", "label": "Trip finance tab", "hint": "Trip-level finance / settlement tab", "requires": "tripops.trips.detail" },
+          { "id": "tripops.trips.verification", "label": "Trip verification", "hint": "Pickup / drop verification flows", "requires": "tripops.trips.detail" },
+          { "id": "tripops.trips.simulate", "label": "Simulate trip status", "hint": "Business-simulated status advances", "requires": "tripops.trips.detail" },
+          { "id": "tripops.trips.ratings", "label": "Trip ratings", "hint": "View / submit trip ratings", "requires": "tripops.trips.detail" }
+        ]
+      }
+    },
+    "fleet": {
+      "label": "FLEET",
+      "groups": {
+        "Vehicles": [
+          { "id": "fleet.vehicles.view", "label": "View vehicles", "hint": "Resources / party vehicles" },
+          { "id": "fleet.vehicles.create", "label": "Add vehicle", "hint": "Create vehicle records", "requires": "fleet.vehicles.view" },
+          { "id": "fleet.vehicles.edit", "label": "Edit vehicle", "hint": "Edit vehicle profile & docs", "requires": "fleet.vehicles.view" },
+          { "id": "fleet.vehicles.analytics", "label": "Vehicle analytics", "hint": "Vehicle PnL / analytics", "requires": "fleet.vehicles.view" },
+          { "id": "fleet.vehicles.documents", "label": "Vehicle documents", "hint": "RC / insurance / fitness vault", "requires": "fleet.vehicles.view" }
+        ],
+        "Drivers": [
+          { "id": "fleet.drivers.view", "label": "View drivers", "hint": "Resources / party drivers" },
+          { "id": "fleet.drivers.create", "label": "Add driver", "hint": "Create driver records", "requires": "fleet.drivers.view" },
+          { "id": "fleet.drivers.edit", "label": "Edit driver", "hint": "Edit driver profile", "requires": "fleet.drivers.view" },
+          { "id": "fleet.drivers.invite", "label": "Invite driver to app", "hint": "Send fleet driver invite / OTP link", "requires": "fleet.drivers.view" },
+          { "id": "fleet.drivers.analytics", "label": "Driver analytics", "hint": "Driver ranking / analytics", "requires": "fleet.drivers.view" },
+          { "id": "fleet.drivers.assign_vehicle", "label": "Assign vehicle to driver", "hint": "Link driver ↔ vehicle on roster", "requires": "fleet.drivers.view" }
+        ]
+      }
+    },
+    "team": {
+      "label": "TEAM / WORKSPACE",
+      "groups": {
+        "Access control": [
+          { "id": "team.manage", "label": "Manage team", "hint": "Access control & member roles" },
+          { "id": "team.invite", "label": "Invite members", "hint": "Send team invites", "requires": "team.manage" },
+          { "id": "team.audit", "label": "Audit trail", "hint": "Workspace audit log", "requires": "team.manage" }
+        ],
+        "Workspace settings": [
+          { "id": "workspace.settings", "label": "Workspace settings", "hint": "Org settings / operating model (non-owner fields)" },
+          { "id": "workspace.kyc", "label": "Organization / verification", "hint": "Organization home, business details, verification, and documents" },
+          { "id": "workspace.products", "label": "Workspace products", "hint": "Product catalog / modules panel" },
+          { "id": "workspace.notifications", "label": "Notifications", "hint": "Org notification center" }
+        ]
+      }
+    }
+  }
+}

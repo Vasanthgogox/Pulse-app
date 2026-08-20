@@ -97,6 +97,8 @@ export type CounterpartyProfileSystemCardProps = {
   onClose: () => void;
   /** Opens full edit flow (router / modal) */
   onEditPress?: () => void;
+  /** Hides the Edit Profile affordance when the viewer lacks edit permission. Defaults to true. */
+  canEdit?: boolean;
   /** Enables inline hub/lane CRUD in edit mode (client profiles). */
   organizationId?: string;
   clientId?: string;
@@ -213,6 +215,7 @@ export function CounterpartyProfileSystemCard({
   kycDocs = [],
   onClose,
   onEditPress,
+  canEdit = true,
   organizationId,
   clientId,
   supplierId,
@@ -825,10 +828,12 @@ export function CounterpartyProfileSystemCard({
           </View>
           <View style={styles.viewStickyRight}>
             <Badge variant={type === "client" ? "blue" : "orange"}>{typeBadge}</Badge>
-            <TouchableOpacity style={[styles.editProfileBtn, isPage && styles.editProfileBtnPage]} onPress={() => setMode("edit")} activeOpacity={0.9}>
-              <FontAwesome name="pencil" size={12} color={Theme.textOnPrimary} />
-              <Text style={[styles.editProfileBtnText, isPage && styles.editProfileBtnTextPage]}>Edit Profile</Text>
-            </TouchableOpacity>
+            {canEdit ? (
+              <TouchableOpacity style={[styles.editProfileBtn, isPage && styles.editProfileBtnPage]} onPress={() => setMode("edit")} activeOpacity={0.9}>
+                <FontAwesome name="pencil" size={12} color={Theme.textOnPrimary} />
+                <Text style={[styles.editProfileBtnText, isPage && styles.editProfileBtnTextPage]}>Edit Profile</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       </View>

@@ -294,6 +294,8 @@ export const ROUTES = {
   PULSE_LOADS:   '/pulse-loads'   as const,
   /** DBA audit tool — web only. */
   DBA_AUDIT:     '/audit'          as const,
+  /** Workspace audit trail — who changed what (KYC, members, branding, trips). */
+  AUDIT_LOG:     '/audit-log'      as const,
   /** Scalability & Reliability Platform Health (P0 engineering homepage). */
   PLATFORM_HEALTH: '/platform-health' as const,
   REACH: {

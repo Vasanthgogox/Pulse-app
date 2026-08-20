@@ -1156,7 +1156,12 @@ export function defaultSurfacesForRole(
     case "tripops":
       return allOn(
         MEMBER_SURFACE_CATALOG.filter(
-          (s) => s.domain === "tripops" || s.domain === "fleet",
+          (s) =>
+            s.domain === "tripops" ||
+            s.domain === "fleet" ||
+            s.id.startsWith("tripops.indents.") ||
+            s.id === "tripops.pulse_loads" ||
+            s.id === "sales.tab",
         ).map((s) => s.id),
       );
     case "planner":
@@ -1325,6 +1330,17 @@ export function applyDomainToggle(
   if (domain === "team") {
     for (const id of ids) {
       if (orgAllowsSurface(orgCaps, id)) out[id] = true;
+    }
+    return out;
+  }
+  // A domain that already has any surface explicitly set has been individually
+  // configured — re-enabling the tab must only flip the tab gate itself, never
+  // bulk-restore role defaults over an admin's individual on/off choices
+  // (that would silently undo a deliberate revoke — see TC-20).
+  const alreadyConfigured = ids.some((id) => current[id] !== undefined);
+  if (alreadyConfigured) {
+    for (const id of ids) {
+      if (id.endsWith(".tab") && orgAllowsSurface(orgCaps, id)) out[id] = true;
     }
     return out;
   }

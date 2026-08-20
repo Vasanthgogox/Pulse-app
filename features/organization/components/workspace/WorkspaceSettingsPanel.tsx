@@ -34,6 +34,7 @@ import {
   workspacePanelStyles as styles,
 } from "@/features/organization/components/workspace/workspacePanelUi";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import {
   getSignedAvatarUrl,
   pickAndUploadOrgLogo,
@@ -61,6 +62,8 @@ type Props = {
 export function WorkspaceSettingsPanel({ onBack }: Props) {
   const { currentOrganization, refreshOrganization } = useOrganization();
   const { canEdit, isOwner } = useOrgRole();
+  const { can } = useMemberAccess();
+  const canBranding = can("finance.branding");
   const { notice, confirm } = useWorkspaceFeedback();
   const queryClient = useQueryClient();
 
@@ -389,29 +392,31 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
           </View>
         </View>
 
-        <View style={styles.detailCard}>
-          <SectionHeader label="Invoice Branding" />
-          <View style={styles.previewPaper}>
-            <Text style={styles.previewWatermark}>{previewName}</Text>
-            <View style={styles.previewLogoRow}>
-              {logoUri ? (
-                <Image source={{ uri: logoUri }} style={styles.previewLogo} />
-              ) : (
-                <View style={styles.previewLogoFallback}>
-                  <Text style={styles.previewLogoInitials}>
-                    {orgInitials(previewName)}
+        {canBranding ? (
+          <View style={styles.detailCard}>
+            <SectionHeader label="Invoice Branding" />
+            <View style={styles.previewPaper}>
+              <Text style={styles.previewWatermark}>{previewName}</Text>
+              <View style={styles.previewLogoRow}>
+                {logoUri ? (
+                  <Image source={{ uri: logoUri }} style={styles.previewLogo} />
+                ) : (
+                  <View style={styles.previewLogoFallback}>
+                    <Text style={styles.previewLogoInitials}>
+                      {orgInitials(previewName)}
+                    </Text>
+                  </View>
+                )}
+                <View>
+                  <Text style={styles.previewCompanyName}>
+                    {previewName.toUpperCase()}
                   </Text>
+                  <Text style={styles.previewDocType}>Commercial Invoice</Text>
                 </View>
-              )}
-              <View>
-                <Text style={styles.previewCompanyName}>
-                  {previewName.toUpperCase()}
-                </Text>
-                <Text style={styles.previewDocType}>Commercial Invoice</Text>
               </View>
             </View>
           </View>
-        </View>
+        ) : null}
       </View>
       {isOwner && orgId ? (
         <ChangeOperatingModelModal

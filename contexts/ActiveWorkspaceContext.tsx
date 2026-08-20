@@ -19,6 +19,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { supabase } from '@/lib/supabase';
+import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import {
   clearPlatformWorkspaceStore,
   syncPlatformWorkspaceFromActive,
@@ -361,6 +362,29 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
       signal.cancelled = true;
     };
   }, [userId, authStatus, loadWorkspaces]); // authStatus guard prevents ghost requests during startup race
+
+  // ── Live permission/role updates ────────────────────────────────────────────
+  // Revokes (e.g. removing "create indent") are enforced server-side via RLS
+  // immediately, but the cached memberSurfaces here would otherwise only
+  // refresh on next load/relogin — so the UI could show stale capabilities.
+  // Subscribe to this user's own organization_members rows and re-fetch on change.
+  useEffect(() => {
+    if (authStatus === 'restoring' || !userId) return;
+    return subscribeSharedPostgresChanges(
+      `active-workspace-membership:${userId}`,
+      [
+        {
+          event: '*',
+          schema: 'public',
+          table: 'organization_members',
+          filter: `user_id=eq.${userId}`,
+        },
+      ],
+      () => {
+        void loadWorkspaces(sessionSignalRef.current);
+      },
+    );
+  }, [userId, authStatus, loadWorkspaces]);
 
   // ── Public actions ──────────────────────────────────────────────────────────
 

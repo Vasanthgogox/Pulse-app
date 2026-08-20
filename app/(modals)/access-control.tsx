@@ -13,9 +13,11 @@ import { TeamMembersView } from "@/features/organization/components/TeamMembersV
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { ROUTES } from "@/lib/routes";
+import type { Href } from "expo-router";
 import { useRouter } from "expo-router";
-import { ChevronLeft, ShieldCheck, UserPlus2 } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, ClipboardList, ShieldCheck, UserPlus2 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -25,8 +27,15 @@ export default function AccessControlScreen() {
   const { user } = useAuth();
   const { currentOrganization } = useOrganization();
   const { isOwner, isLoading } = useOrgRole();
+  const { can: canSurface } = useMemberAccess();
 
   const orgId = currentOrganization?.id ?? null;
+  const canInvite = isOwner && canSurface("team.invite");
+  const canViewAudit = canSurface("team.audit");
+
+  const handleOpenAuditLog = () => {
+    router.push(ROUTES.AUDIT_LOG as Href);
+  };
 
   const handleInvite = () => {
     router.push(ROUTES.MODALS.INVITE_MEMBER as Parameters<typeof router.push>[0]);
@@ -58,7 +67,7 @@ export default function AccessControlScreen() {
             </Text>
           ) : null}
         </View>
-        {isOwner ? (
+        {canInvite ? (
           <Pressable
             onPress={handleInvite}
             style={({ pressed }) => [styles.inviteBtn, pressed && { opacity: 0.8 }]}
@@ -70,6 +79,17 @@ export default function AccessControlScreen() {
           <View style={styles.inviteBtnPlaceholder} />
         )}
       </View>
+
+      {canViewAudit && isOwner ? (
+        <Pressable
+          onPress={handleOpenAuditLog}
+          style={({ pressed }) => [styles.auditLinkRow, pressed && { opacity: 0.8 }]}
+        >
+          <ClipboardList size={16} color={Theme.textSecondary} strokeWidth={2.2} />
+          <Text style={styles.auditLinkText}>View audit trail</Text>
+          <ChevronRight size={16} color={Theme.textMuted} strokeWidth={2.2} />
+        </Pressable>
+      ) : null}
 
       {isLoading ? (
         <View style={styles.centered}>
@@ -94,7 +114,7 @@ export default function AccessControlScreen() {
           orgId={orgId}
           currentUserId={user?.uid ?? null}
           canManage={isOwner}
-          onInvite={handleInvite}
+          onInvite={canInvite ? handleInvite : undefined}
         />
       )}
     </View>
@@ -165,6 +185,19 @@ const styles = StyleSheet.create({
     color: Theme.buttonPrimaryText,
   },
   inviteBtnPlaceholder: { width: 38 },
+  auditLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  auditLinkText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
 
   centered: {
     flex: 1,

@@ -12,6 +12,7 @@ import {
 import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
 import { useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import type { OrgMember } from "@/types/organization";
 import { ShieldCheck, UserPlus2, X } from "lucide-react-native";
 import { useState } from "react";
@@ -32,6 +33,8 @@ export function NetworkDesktopTeamPanel({
 }: Props) {
   const layout = useProfileHubCompactLayout();
   const { isOwner } = useOrgRole();
+  const { can: canSurface } = useMemberAccess();
+  const canInvite = canManage && canSurface("team.invite");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [accessOpen, setAccessOpen] = useState(false);
   const [editMemberId, setEditMemberId] = useState<string | null>(null);
@@ -114,25 +117,27 @@ export function NetworkDesktopTeamPanel({
                   <Text style={styles.teamInviteCancelBtnText}>Access</Text>
                 </Pressable>
               ) : null}
-              <Pressable
-                onPress={openInvite}
-                style={({ pressed }) => [
-                  styles.teamInviteBtn,
-                  pressed && { opacity: 0.88 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Invite team member"
-              >
-                <UserPlus2 size={15} color={Theme.textOnPrimary} strokeWidth={2.3} />
-                <Text style={styles.teamInviteBtnText}>Invite member</Text>
-              </Pressable>
+              {canInvite ? (
+                <Pressable
+                  onPress={openInvite}
+                  style={({ pressed }) => [
+                    styles.teamInviteBtn,
+                    pressed && { opacity: 0.88 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Invite team member"
+                >
+                  <UserPlus2 size={15} color={Theme.textOnPrimary} strokeWidth={2.3} />
+                  <Text style={styles.teamInviteBtnText}>Invite member</Text>
+                </Pressable>
+              ) : null}
             </View>
           )
         ) : null}
       </View>
 
       <View style={[styles.salesCard, styles.teamPanelCard]}>
-        {inviteOpen ? (
+        {inviteOpen && canInvite ? (
           <InviteMemberFlow
             orgId={orgId}
             layout="embedded"
@@ -144,7 +149,7 @@ export function NetworkDesktopTeamPanel({
             orgId={orgId}
             currentUserId={currentUserId}
             canManage={accessOpen ? isOwner : canManage}
-            onInvite={canManage ? openInvite : undefined}
+            onInvite={canInvite ? openInvite : undefined}
             onEditMember={(member: OrgMember) => setEditMemberId(member.id)}
             initialSubTab={focusPending ? "pending" : undefined}
             embedded

@@ -3,6 +3,7 @@
  * Shows: who changed what, when (KYC updates, member changes, branding, trip assignments).
  * Data source: workspace_audit_log table (append-only, written by DB triggers).
  */
+import { SurfaceAccessGate } from '@/components/SurfaceAccessGate';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
@@ -62,7 +63,15 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function AuditLogScreen() {
+export default function AuditLogRoute() {
+  return (
+    <SurfaceAccessGate surface="team.audit">
+      <AuditLogScreen />
+    </SurfaceAccessGate>
+  );
+}
+
+function AuditLogScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { currentOrganization } = useOrganization();

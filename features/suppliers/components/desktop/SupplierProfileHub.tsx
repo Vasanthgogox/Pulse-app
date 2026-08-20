@@ -42,6 +42,7 @@ import { supplierToPublicEntity } from "@/features/public-profile/mappers";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import { SupplierProfileHubHero } from "@/features/suppliers/components/desktop/SupplierProfileHubHero";
 import { useLayoutInsets } from "@/lib/layoutInsets";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { ROUTES } from "@/lib/routes";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
 import { getLinkedOrgProfileForSupplier, updateSupplier } from "@/features/suppliers/services/suppliers.service";
@@ -248,6 +249,8 @@ export function SupplierProfileHub({
   const _router = useRouter();
   const compact = useProfileHubCompact();
   const layoutInsets = useLayoutInsets();
+  const { can: canSurface } = useMemberAccess();
+  const canEditSupplier = canSurface("sales.suppliers.edit");
   const [tab, setTab] = useState<SupplierProfileTab>(initialTab);
   const [chatOpen, setChatOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -480,7 +483,7 @@ export function SupplierProfileHub({
               kycScore={kycScore}
               perfScore={perfScore}
               onTabChange={setTab}
-              onEdit={() => setEditOpen(true)}
+              onEdit={canEditSupplier ? () => setEditOpen(true) : undefined}
             />
           </View>
           <View style={supplierStyles.hubMainCol}>
@@ -501,7 +504,7 @@ export function SupplierProfileHub({
         {hubScroll}
       </ProfileHubChatSplitLayout>
       <EditSupplierModal
-        visible={editOpen}
+        visible={editOpen && canEditSupplier}
         supplier={supplier}
         onClose={() => setEditOpen(false)}
         onSave={async (patch) => {
