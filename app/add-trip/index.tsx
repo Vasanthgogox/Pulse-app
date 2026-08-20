@@ -17,12 +17,40 @@ import { getTripOtpForDisplay } from '@/features/trips/services/tripOtp.service'
 import type { AddTripCompleteResult } from '@/features/trips/components/add-trip/types';
 import { useInvalidateTrips } from '@/lib/queries/useTripsQuery';
 import { useVisibleIndentQuery } from '@/lib/queries/useIndentsQuery';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 import { showAppAlert } from '@/lib/appAlert';
 
 export default function AddTripPage() {
+  const router = useRouter();
+  const { can: canSurface, isLoading: isMemberAccessLoading } = useMemberAccess();
+  const canAddTrip =
+    canSurface('tripops.trips.create_asset') ||
+    canSurface('tripops.trips.create_aggregate');
+
+  if (isMemberAccessLoading) {
+    return <View style={{ flex: 1 }} />;
+  }
+
+  if (!canAddTrip) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
+        <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+          No access
+        </Text>
+        <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center' }}>
+          You don't have permission to create trips.
+        </Text>
+      </View>
+    );
+  }
+
+  return <AddTripPageContent />;
+}
+
+function AddTripPageContent() {
   const router = useRouter();
   const { indentId } = useLocalSearchParams<{ indentId?: string }>();
   const { currentOrganization } = useOrganization();

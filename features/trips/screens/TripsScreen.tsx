@@ -73,6 +73,7 @@ import { buildTripHubPartyMetaByTripId } from "@/features/trips/utils/tripHubPar
 import { tripNonSupplierOutflowTotal } from "@/features/trips/utils/tripManifestFreightCost";
 import { canAccessTrips } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import {
   compareTripsByScheduleAsc,
   compareTripsByScheduleDesc,
@@ -294,6 +295,11 @@ export default function TripsScreen() {
 
   const capabilities = useCapabilities();
   const canAccess = canAccessTrips(capabilities);
+  const { can: canSurface } = useMemberAccess();
+  const canAddTrip =
+    canAccess &&
+    (canSurface("tripops.trips.create_asset") ||
+      canSurface("tripops.trips.create_aggregate"));
   const attributionRequests = useMemo(
     () =>
       salaryRequestRows.filter(
@@ -2050,7 +2056,7 @@ export default function TripsScreen() {
                     }
                   }}
                   onOpenDateRangePicker={() => setShowDateRangePicker(true)}
-                  onAddTrip={canAccess ? () => router.push("/add-trip") : undefined}
+                  onAddTrip={canAddTrip ? () => router.push("/add-trip") : undefined}
                   addTripLabel={tr("addTrip")}
                     onExportLedger={() => setTripLedgerExportOpen(true)}
                   clientNameByTripId={shipperNameByTripId}
@@ -2062,7 +2068,7 @@ export default function TripsScreen() {
                     <TripsPromoCard
                       variant={tripsEmptyPromoVariant}
                       onCtaPress={
-                        canAccess && tripsEmptyPromoVariant === "first_trip"
+                        canAddTrip && tripsEmptyPromoVariant === "first_trip"
                           ? () => router.push("/add-trip")
                           : undefined
                       }
@@ -2100,7 +2106,7 @@ export default function TripsScreen() {
                   }
                 }}
                 onOpenDateRangePicker={() => setShowDateRangePicker(true)}
-                onAddTrip={canAccess ? () => router.push("/add-trip") : undefined}
+                onAddTrip={canAddTrip ? () => router.push("/add-trip") : undefined}
                 addTripLabel={tr("addTrip")}
                 onExportLedger={() => setTripLedgerExportOpen(true)}
                 clientNameByTripId={shipperNameByTripId}
@@ -2112,7 +2118,7 @@ export default function TripsScreen() {
                       <TripsPromoCard
                         variant={tripsEmptyPromoVariant}
                         onCtaPress={
-                          canAccess && tripsEmptyPromoVariant === "first_trip"
+                          canAddTrip && tripsEmptyPromoVariant === "first_trip"
                             ? () => router.push("/add-trip")
                             : undefined
                         }
