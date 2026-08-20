@@ -29,7 +29,6 @@ import type { LedgerRow } from "../services/finance.service";
 import { EntityDetailOverlay } from "./EntityDetailOverlay";
 import type { FinancialRowData } from "./FinancialRow";
 import { LedgerReportModal } from "./LedgerReportModal";
-import { SharedLedgerModal } from "./SharedLedgerModal";
 import { TripPnLDetailSheet } from "./TripPnLDetailSheet";
 import type { FinanceSubTab } from "../types";
 
@@ -146,13 +145,7 @@ export interface FinanceModalsProps {
   reportCustom?: import("./LedgerReportModal").LedgerReportModalProps["customReport"];
   hideReportCashSummary?: boolean;
 
-  // Shared Ledger
-  showSharedLedgerModal: boolean;
-  onCloseSharedLedgerModal: () => void;
   orgId: string | null;
-  clientsForSharedLedger: { id: string; name: string }[];
-  suppliersList: { id: string; name: string }[];
-  tripCountByParty: Record<string, number>;
 }
 
 export function FinanceModals(props: FinanceModalsProps) {
@@ -237,12 +230,7 @@ export function FinanceModals(props: FinanceModalsProps) {
     reportPeriodLabel,
     reportCustom,
     hideReportCashSummary,
-    showSharedLedgerModal,
-    onCloseSharedLedgerModal,
     orgId,
-    clientsForSharedLedger,
-    suppliersList,
-    tripCountByParty,
   } = props;
 
   const { t } = useLanguage();
@@ -440,19 +428,6 @@ export function FinanceModals(props: FinanceModalsProps) {
         periodLabel={reportPeriodLabel}
         customReport={reportCustom}
         hideCashSummary={hideReportCashSummary ?? !!reportCustom}
-      />
-
-      <SharedLedgerModal
-        visible={showSharedLedgerModal}
-        onClose={onCloseSharedLedgerModal}
-        organizationId={orgId}
-        transactions={ledgerTransactions ?? []}
-        clients={clientsForSharedLedger}
-        suppliers={suppliersList}
-        tripCountByParty={tripCountByParty}
-        tripRows={tripRows}
-        clientRows={entityOverlayClientRows}
-        supplierRows={entityOverlaySupplierRows}
       />
     </>
   );

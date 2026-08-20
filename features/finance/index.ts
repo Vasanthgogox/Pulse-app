@@ -51,15 +51,6 @@ export {
 } from './components/TreasuryDetailLayout';
 export { LedgerReportModal, type LedgerReportModalProps } from './components/LedgerReportModal';
 export {
-  SharedLedgerContent,
-  type SharedLedgerContentProps,
-  type SharedLedgerPartyRow,
-} from './components/SharedLedgerContent';
-export {
-  SharedLedgerModal,
-  type SharedLedgerModalProps,
-} from './components/SharedLedgerModal';
-export {
   DisputeAuditSheet,
   type DisputeAuditSheetProps,
   type DisputedItem,

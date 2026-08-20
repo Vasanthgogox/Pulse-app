@@ -514,7 +514,6 @@ export function FinanceScreen() {
 
   const [showEntityListModal, setShowEntityListModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [showSharedLedgerModal, setShowSharedLedgerModal] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<{
     data: FinancialRowData;
     entityType: "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
@@ -1359,7 +1358,6 @@ export function FinanceScreen() {
       showEditSupplierModal ||
       selectedEntity != null ||
       showReportModal ||
-      showSharedLedgerModal ||
       garageTripIdForPnL != null,
     [
       showTransactionModal,
@@ -1371,7 +1369,6 @@ export function FinanceScreen() {
       showEditSupplierModal,
       selectedEntity,
       showReportModal,
-      showSharedLedgerModal,
       garageTripIdForPnL,
     ],
   );
@@ -1995,15 +1992,7 @@ export function FinanceScreen() {
         reportPeriodLabel={reportPeriodLabel}
         reportCustom={reportCustom ?? undefined}
         hideReportCashSummary={financeSubTab !== "cash"}
-        showSharedLedgerModal={showSharedLedgerModal}
-        onCloseSharedLedgerModal={() => setShowSharedLedgerModal(false)}
         orgId={orgId}
-        clientsForSharedLedger={clients.map((c) => ({
-          id: c.id,
-          name: c.name,
-        }))}
-        suppliersList={suppliersList}
-        tripCountByParty={tripCountByParty}
         linkedClientIdByOrgId={uniqueLinkedClientIdByOrgId}
         linkedSupplierIdByOrgId={uniqueLinkedSupplierIdByOrgId}
         viewerOrgId={orgId}
