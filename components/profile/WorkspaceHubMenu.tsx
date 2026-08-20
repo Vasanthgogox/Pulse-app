@@ -33,6 +33,7 @@ import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { ROUTES } from "@/lib/routes";
 import { canAccessPartyKind } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import type { MemberSurfaceId } from "@/lib/memberSurfaces";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import { buildPulseCommerceUrl, openSuiteProductApp, openSuiteProductAppInNewTab } from "@/lib/suite/suiteAuth";
 import { useRouter } from "expo-router";
@@ -316,10 +317,20 @@ export function WorkspaceHubMenu({
         },
       },
     ];
+    const surfaceIdByKind: Record<typeof all[number]["kind"], MemberSurfaceId> = {
+      customers: "sales.clients.view",
+      suppliers: "sales.suppliers.view",
+      drivers: "fleet.drivers.view",
+      vehicles: "fleet.vehicles.view",
+    };
     return all
-      .filter(({ kind }) => canAccessPartyKind(capabilities, kind))
+      .filter(
+        ({ kind }) =>
+          canAccessPartyKind(capabilities, kind) &&
+          canSurface(surfaceIdByKind[kind]),
+      )
       .map(({ row }) => row);
-  }, [capabilities]);
+  }, [capabilities, canSurface]);
 
   const navigate = (path: string) => {
     router.replace(path as Parameters<typeof router.replace>[0]);

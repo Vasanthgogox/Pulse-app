@@ -1,9 +1,11 @@
 import { ModelAccessGate, type ModelAccessKind } from "@/components/ModelAccessGate";
+import { SurfaceAccessGate } from "@/components/SurfaceAccessGate";
 import { PartyDirectoryScreen } from "@/features/party/components/PartyDirectoryScreen";
 import {
   parsePartyKind,
   type PartyKind,
 } from "@/features/party/types/partyDirectory.types";
+import type { MemberSurfaceId } from "@/lib/memberSurfaces";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { useLocalSearchParams } from "expo-router";
 import { Text, View } from "react-native";
@@ -22,6 +24,19 @@ function partyKindToAccess(kind: PartyKind): ModelAccessKind {
   }
 }
 
+function partyKindToSurface(kind: PartyKind): MemberSurfaceId {
+  switch (kind) {
+    case "customers":
+      return "sales.clients.view";
+    case "suppliers":
+      return "sales.suppliers.view";
+    case "drivers":
+      return "fleet.drivers.view";
+    case "vehicles":
+      return "fleet.vehicles.view";
+  }
+}
+
 export default function PartyDirectoryRoute() {
   const { kind } = useLocalSearchParams<{ kind: string }>();
   const safeBack = useSafeBack();
@@ -37,7 +52,9 @@ export default function PartyDirectoryRoute() {
 
   return (
     <ModelAccessGate kind={partyKindToAccess(parsed)}>
-      <PartyDirectoryScreen kind={parsed} onBack={safeBack} />
+      <SurfaceAccessGate surface={partyKindToSurface(parsed)}>
+        <PartyDirectoryScreen kind={parsed} onBack={safeBack} />
+      </SurfaceAccessGate>
     </ModelAccessGate>
   );
 }
