@@ -10,6 +10,7 @@ import {
   HubMobileSearchRow,
   hubMobileChromeStyles as chrome,
 } from "@/components/hub";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useEffect, useRef, useState } from "react";
 import {
   ScrollView,
@@ -98,19 +99,23 @@ export function LoadCenterHubMobileShell({
   };
 
   const hasSearchQuery = searchQuery.trim().length > 0;
+  const { can: canSurface } = useMemberAccess();
+  const canCreateIndent = canSurface("tripops.indents.create");
 
   return (
     <View style={chrome.shell}>
       <HubMobileScreenHeader
         title="My Loads"
         action={
-          <PulsePillButton
-            label="Add Load"
-            showPlusIcon
-            size="compact"
-            onPress={onCreateIndentPress}
-            accessibilityLabel="Add load"
-          />
+          canCreateIndent ? (
+            <PulsePillButton
+              label="Add Load"
+              showPlusIcon
+              size="compact"
+              onPress={onCreateIndentPress}
+              accessibilityLabel="Add load"
+            />
+          ) : undefined
         }
       />
 

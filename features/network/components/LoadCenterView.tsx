@@ -578,7 +578,8 @@ export function LoadCenterView({
           <LoadCenterPromoCard
             variant={loadCenterPromoVariant}
             onCtaPress={
-              loadCenterPromoVariant === "give_open"
+              loadCenterPromoVariant === "give_open" &&
+              canSurface("tripops.indents.create")
                 ? onCreateIndentPress
                 : undefined
             }
@@ -594,6 +595,7 @@ export function LoadCenterView({
       openNetworkForParties,
       loadCenterPromoVariant,
       onCreateIndentPress,
+      canSurface,
     ],
   );
 

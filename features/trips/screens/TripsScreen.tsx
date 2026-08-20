@@ -1733,13 +1733,15 @@ export default function TripsScreen() {
                   <HubMobileScreenHeader
                     title={tr("myTrips")}
                     action={
-                      <PulsePillButton
-                        label={tr("addTrip")}
-                        showPlusIcon
-                        size="compact"
-                        onPress={() => router.push("/add-trip")}
-                        accessibilityLabel={tr("addTrip")}
-                      />
+                      canAddTrip ? (
+                        <PulsePillButton
+                          label={tr("addTrip")}
+                          showPlusIcon
+                          size="compact"
+                          onPress={() => router.push("/add-trip")}
+                          accessibilityLabel={tr("addTrip")}
+                        />
+                      ) : undefined
                     }
                   />
                   <View style={hubChrome.tabHeaderRow}>

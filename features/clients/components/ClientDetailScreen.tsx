@@ -2691,6 +2691,7 @@ export default function ClientDetailScreen({
             warehouses={profileWarehousesForCard}
             contracts={profileContractsForCard}
             onClose={() => setShowProfileModal(false)}
+            canEdit={canSurface("sales.clients.edit")}
             onEditPress={() => {
               setShowProfileModal(false);
               if (!client?.id) return;

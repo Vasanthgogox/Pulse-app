@@ -204,14 +204,16 @@ export function NetworkDesktopNetworkPanel({
             ) : null}
           </View>
 
-          <NetworkDesktopSalesGrowWidget
-            orgId={orgId}
-            onOpenProfile={onOpenProfileFromDiscover}
-            onViewAllGrow={scrollToGrow}
-            inviteDailyCapReached={
-              discoverInviteCount >= discoverInviteLimit
-            }
-          />
+          {canDiscover ? (
+            <NetworkDesktopSalesGrowWidget
+              orgId={orgId}
+              onOpenProfile={onOpenProfileFromDiscover}
+              onViewAllGrow={scrollToGrow}
+              inviteDailyCapReached={
+                discoverInviteCount >= discoverInviteLimit
+              }
+            />
+          ) : null}
 
           <NetworkDesktopSidebarPromoBanners />
 

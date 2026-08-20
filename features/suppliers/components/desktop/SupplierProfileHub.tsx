@@ -61,6 +61,10 @@ type SupplierSidebarProps = {
 
 function SupplierPartyDetailSidebar({ bundle, kycScore, perfScore, onTabChange, onEdit }: SupplierSidebarProps) {
   const router = useRouter();
+  const { can: canSurface } = useMemberAccess();
+  const canCreateTrip =
+    canSurface("tripops.trips.create_asset") ||
+    canSurface("tripops.trips.create_aggregate");
   const { supplier } = bundle;
   const isIntegrated = supplier.supplier_type === "integrated" || Boolean(supplier.linked_organization_id);
   const isVerified = supplier.is_verified;
@@ -169,14 +173,16 @@ function SupplierPartyDetailSidebar({ bundle, kycScore, perfScore, onTabChange, 
       {/* Actions */}
       <View style={supplierStyles.sidebarCard}>
         <Text style={supplierStyles.sidebarCardTitle}>Actions</Text>
-        <Pressable
-          style={[supplierStyles.sidebarActionBtn, supplierStyles.sidebarActionBtnPrimary]}
-          onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
-          accessibilityRole="button"
-        >
-          <Plus size={13} color="#fff" strokeWidth={2.5} />
-          <Text style={[supplierStyles.sidebarActionBtnText, supplierStyles.sidebarActionBtnTextPrimary]}>Create trip</Text>
-        </Pressable>
+        {canCreateTrip ? (
+          <Pressable
+            style={[supplierStyles.sidebarActionBtn, supplierStyles.sidebarActionBtnPrimary]}
+            onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
+            accessibilityRole="button"
+          >
+            <Plus size={13} color="#fff" strokeWidth={2.5} />
+            <Text style={[supplierStyles.sidebarActionBtnText, supplierStyles.sidebarActionBtnTextPrimary]}>Create trip</Text>
+          </Pressable>
+        ) : null}
         <Pressable style={supplierStyles.sidebarActionBtn} onPress={() => onTabChange("contracts")} accessibilityRole="button">
           <FileText size={13} color={METRONIC.text} strokeWidth={2} />
           <Text style={supplierStyles.sidebarActionBtnText}>Contracts ({bundle.contracts.length})</Text>
