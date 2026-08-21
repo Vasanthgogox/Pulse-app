@@ -155,6 +155,21 @@ A second, orthogonal RBAC axis layered on top of the operating model above. Owne
 
 ---
 
+## Department Manager (surface-only delegation)
+
+A narrow, opt-in delegation on top of the owner-only model above — the owner can let one member per department edit *surface* toggles for their own teammates, without becoming an org admin.
+
+| Aspect | Rule |
+|--------|------|
+| Grant | `permissions.isDepartmentManager: true` — **owner-only** to set, via the existing owner-only `set_member_role` RPC (same as any other permissions field). Toggle lives in Member Access. |
+| Scope | Manager can edit `permissions.surfaces` only, only for members whose `permissions.platformRole` matches the manager's own. Cannot change `platformRole`, `domains`, `grants`, or `isDepartmentManager` itself — cannot touch owner/admin rows — cannot edit their own row. |
+| Write path | `set_member_surfaces_as_manager(p_member_id, p_surfaces)` RPC (SECURITY DEFINER) — a second, narrower function alongside `set_member_role`; merges only the `surfaces` key. Service: `updateMemberSurfacesAsManager` in `features/organization/services/members.service.ts`. |
+| UI | `MemberPermissionsPanel` — `canEditAsManager` gates edit rights for non-owners; role-preset tiles and domain master switches stay locked (`canEditRolePreset`, owner-only) — a manager only sees the leaf surface toggles as editable. |
+| Audit | `workspace_audit_log` event `member.surfaces_update_by_manager` `{member_id, department, surfaces}`. |
+| Migration | `supabase/migrations/20270220120000_department_manager_surface_write.sql` |
+
+**Example:** a Finance Manager (Priya) can toggle `finance.garage.edit` on for another Finance member (Ayush), but cannot touch a Sales member (Meera), cannot promote Ayush to Finance Manager, and cannot grant herself any surface outside Finance.
+
 ## Owner-only Access Control
 
 Role/access changes are **owner-only** and enforced server-side.

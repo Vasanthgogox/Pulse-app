@@ -11,6 +11,7 @@ Canonical matrix: [`docs/RBAC_OPERATING_MODEL.md`](./RBAC_OPERATING_MODEL.md)
 
 | Commit | Summary |
 |--------|---------|
+| _(pending)_ | Department Manager delegation: `permissions.isDepartmentManager` flag (owner-only to set); new narrow `set_member_surfaces_as_manager` RPC lets a flagged member edit `surfaces` for teammates sharing their own `platformRole` only — never role/domains/the flag itself, never owner/admin rows, never their own row; `MemberPermissionsPanel` adds `canEditAsManager` edit path (surfaces-only) alongside existing owner path, plus an owner-only toggle to grant the flag |
 | `943c7241` | `useCapabilities` + ModelAccessGate + finance/trip/party/supplier/vehicle gates |
 | `3af2fdaf` | Party directory gate; give-load blocked for asset; nav policy + capability merge fix |
 | `6cef06c4` | Docs + cursor rule: operating model blueprint |

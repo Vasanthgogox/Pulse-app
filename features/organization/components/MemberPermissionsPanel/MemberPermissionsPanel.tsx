@@ -14,11 +14,13 @@ import {
 } from "@/features/organization/components/MemberPermissionsPanel/DomainPermissionToggleRow";
 import {
   cancelTeamInvite,
+  looksLikeNotDepartmentManagerError,
   looksLikeNotOwnerError,
   looksLikeTransferTargetError,
   removeMember,
   transferOwnership,
   updateMemberPermissions,
+  updateMemberSurfacesAsManager,
 } from "@/features/organization/services/members.service";
 import {
   deleteCustomRolePreset,
@@ -32,12 +34,14 @@ import {
   domainsFromPlatformRole,
   memberDisplayRoleLabel,
   platformRoleFromDomains,
+  platformRoleLabel,
   platformRoleFromMember,
   surfacesFromMember,
   TEAM_INVITE_ROLE_OPTIONS,
   type MemberDomainFlags,
   type PlatformTeamRole,
   type FunctionalRole,
+  type TeamInvitePermissions,
 } from "@/features/organization/utils/teamInviteRoles.util";
 import {
   canAccessClients,
@@ -60,6 +64,7 @@ import {
   type MemberSurfaceMap,
 } from "@/lib/memberSurfaces";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
+import { useAuth } from "@/contexts/AuthContext";
 import { useInvalidateOrgMembers, useOrgMembersQuery } from "@/lib/queries/useOrgMembersQuery";
 import { useOrgCapabilities } from "@/lib/useCapabilities";
 import { LinearGradient } from "expo-linear-gradient";
@@ -79,6 +84,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   useWindowDimensions,
@@ -130,6 +136,7 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
   const { currentOrganization } = useOrganization();
   const { refresh: refreshWorkspace } = useActiveWorkspace();
   const { isOwner } = useOrgRole();
+  const { user } = useAuth();
   const orgCaps = useOrgCapabilities();
   const orgId = currentOrganization?.id ?? null;
   const { data: roster, isLoading, refetch } = useOrgMembersQuery(orgId);
@@ -139,15 +146,50 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
     return (roster?.members ?? []).find((m) => m.id === memberId) ?? null;
   }, [roster, memberId]);
 
+  const viewer = useMemo(() => {
+    if (!user?.uid) return null;
+    return (roster?.members ?? []).find((m) => m.user_id === user.uid) ?? null;
+  }, [roster, user?.uid]);
+
+  const viewerIsDepartmentManager = useMemo(() => {
+    const perms = viewer?.permissions as TeamInvitePermissions | null | undefined;
+    return perms?.isDepartmentManager === true;
+  }, [viewer]);
+
+  const viewerDepartment = useMemo(() => {
+    const perms = viewer?.permissions as TeamInvitePermissions | null | undefined;
+    return perms?.platformRole ?? null;
+  }, [viewer]);
+
+  const targetDepartment = member ? platformRoleFromMember(member) : null;
+
+  // A department manager can only edit surfaces for a member in their own
+  // department, never role/domains/the manager flag, and never an owner/admin.
+  // The owner keeps full edit rights regardless of department.
+  const canEditAsManager =
+    !isOwner &&
+    viewerIsDepartmentManager &&
+    !!member &&
+    member.id !== viewer?.id &&
+    member.role !== "owner" &&
+    member.role !== "admin" &&
+    viewerDepartment !== null &&
+    targetDepartment === viewerDepartment;
+
   const [platformRole, setPlatformRole] = useState<PlatformTeamRole>("tripops");
   const [domains, setDomains] = useState<MemberDomainFlags>(
     domainsFromPlatformRole("tripops"),
   );
   const [surfaces, setSurfaces] = useState<MemberSurfaceMap>({});
+  // Owner-only grant: lets this member edit surfaces for teammates in their
+  // own department via set_member_surfaces_as_manager. Never touched by the
+  // manager-edit save path (canEditAsManager).
+  const [isDepartmentManager, setIsDepartmentManager] = useState(false);
   const [baseline, setBaseline] = useState<{
     role: PlatformTeamRole;
     domains: MemberDomainFlags;
     surfaces: MemberSurfaceMap;
+    isDepartmentManager: boolean;
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -165,10 +207,19 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
     const role = platformRoleFromMember(member) ?? "tripops";
     const nextSurfaces = surfacesFromMember(member, orgCaps);
     const nextDomains = domainsFromMember(member);
+    const nextIsManager =
+      (member.permissions as TeamInvitePermissions | null | undefined)
+        ?.isDepartmentManager === true;
     setPlatformRole(role);
     setSurfaces(nextSurfaces);
     setDomains(nextDomains);
-    setBaseline({ role, domains: nextDomains, surfaces: nextSurfaces });
+    setIsDepartmentManager(nextIsManager);
+    setBaseline({
+      role,
+      domains: nextDomains,
+      surfaces: nextSurfaces,
+      isDepartmentManager: nextIsManager,
+    });
     setError(null);
   }, [member, orgCaps]);
 
@@ -210,14 +261,17 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
     [surfaces],
   );
 
-  const canEdit = isOwner && member?.role !== "owner";
+  const canEdit = (isOwner && member?.role !== "owner") || canEditAsManager;
+  // A manager may only ever change surface toggles, never the role/domain preset.
+  const canEditRolePreset = isOwner && member?.role !== "owner";
   const canTransfer =
     isOwner && !!member && member.status === "active" && member.role !== "owner";
   const dirty =
     !!baseline &&
     (platformRole !== baseline.role ||
       !domainsEqual(domains, baseline.domains) ||
-      !surfacesEqual(surfaces, baseline.surfaces));
+      !surfacesEqual(surfaces, baseline.surfaces) ||
+      isDepartmentManager !== baseline.isDepartmentManager);
   const busy = saving || actionBusy;
 
   const enabledSurfaceCount = useMemo(
@@ -386,11 +440,40 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
     setSaving(true);
     setError(null);
     try {
-      const permissions = buildPermissionsFromSurfaces(surfaces, {
-        platformRole,
-        preferAdmin: platformRole === "admin",
-        orgCaps,
-      });
+      if (canEditAsManager) {
+        // Manager path: surfaces only, via the department-scoped RPC.
+        const { error: saveError } = await updateMemberSurfacesAsManager(
+          member.id,
+          surfaces,
+        );
+        if (saveError) {
+          setError(
+            looksLikeNotDepartmentManagerError(saveError.message)
+              ? "You can only edit permissions for members in your own department."
+              : saveError.message,
+          );
+          return;
+        }
+        setBaseline({
+          role: platformRole,
+          domains,
+          surfaces,
+          isDepartmentManager: baseline?.isDepartmentManager ?? false,
+        });
+        invalidate();
+        await Promise.all([refetch(), refreshWorkspace()]);
+        onBack();
+        return;
+      }
+
+      const permissions = {
+        ...buildPermissionsFromSurfaces(surfaces, {
+          platformRole,
+          preferAdmin: platformRole === "admin",
+          orgCaps,
+        }),
+        isDepartmentManager,
+      };
       const { error: saveError } = await updateMemberPermissions(
         member.id,
         permissions,
@@ -407,6 +490,7 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
         role: permissions.platformRole,
         domains: permissions.domains ?? domainsFromSurfaces(surfaces),
         surfaces: permissions.surfaces ?? surfaces,
+        isDepartmentManager,
       });
       setPlatformRole(permissions.platformRole);
       invalidate();
@@ -418,9 +502,13 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
   }, [
     member,
     canEdit,
+    canEditAsManager,
     dirty,
     surfaces,
+    domains,
     platformRole,
+    isDepartmentManager,
+    baseline,
     orgCaps,
     invalidate,
     refetch,
@@ -663,13 +751,13 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
           return (
             <Pressable
               key={option.value}
-              onPress={() => canEdit && handleSelectRole(option.value)}
-              disabled={!canEdit || busy}
+              onPress={() => canEditRolePreset && handleSelectRole(option.value)}
+              disabled={!canEditRolePreset || busy}
               style={({ pressed }) => [
                 styles.presetTile,
                 widePresets && styles.presetTileWide,
                 selected && styles.presetTileOn,
-                pressed && canEdit && { opacity: 0.88 },
+                pressed && canEditRolePreset && { opacity: 0.88 },
               ]}
             >
               <View style={styles.presetTop}>
@@ -695,6 +783,29 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
           );
         })}
       </View>
+
+      {canEditRolePreset &&
+      (platformRole === "finance" ||
+        platformRole === "sales" ||
+        platformRole === "tripops") ? (
+        <View style={styles.presetSaveCard}>
+          <View style={styles.presetSaveHead}>
+            <View style={styles.sectionHeadCopy}>
+              <Text style={styles.sectionEyebrow}>Department manager</Text>
+              <Text style={styles.sectionLead} numberOfLines={2}>
+                Lets this member edit permission toggles for other{" "}
+                {platformRoleLabel(platformRole)} members — not role changes,
+                not other departments.
+              </Text>
+            </View>
+            <Switch
+              value={isDepartmentManager}
+              onValueChange={setIsDepartmentManager}
+              disabled={busy}
+            />
+          </View>
+        </View>
+      ) : null}
 
       {canEdit ? (
         <View style={styles.presetSaveCard}>
@@ -855,6 +966,9 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
               }
               defaultExpanded={false}
               onToggleDomain={(next) => {
+                // A manager edits individual surfaces only — the domain/section
+                // master switch is a role-preset-level change (owner only).
+                if (!canEditRolePreset) return;
                 if (isSection) {
                   handleToggleSection(def.key as MemberSectionKey, next);
                   return;

@@ -21,6 +21,7 @@ import {
   type PlatformTeamRole,
   type TeamInvitePermissions,
 } from "@/features/organization/utils/teamInviteRoles.util";
+import type { MemberSurfaceMap } from "@/lib/memberSurfaces";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -509,6 +510,43 @@ export async function updateMemberPermissions(
     if (error) {
       if (looksLikeNotOwnerError(error.message)) {
         return { error: new Error("Only the organization owner can change member roles.") };
+      }
+      return { error: new Error(error.message) };
+    }
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
+/** Detect the set_member_surfaces_as_manager RPC's scope rejections for a friendly message. */
+export function looksLikeNotDepartmentManagerError(message: string): boolean {
+  return /not_department_manager|cross_department|cannot_edit_admin|cannot_edit_self/i.test(
+    message,
+  );
+}
+
+/**
+ * Merge surface toggles for a member in the caller's own department, via the
+ * department-manager-scoped RPC. Caller must have permissions.isDepartmentManager
+ * = true; only the `surfaces` key is written, never role/platformRole/domains.
+ * The owner should keep using `updateMemberPermissions` for everything else,
+ * including assigning/removing the manager flag itself.
+ */
+export async function updateMemberSurfacesAsManager(
+  memberId: string,
+  surfaces: MemberSurfaceMap,
+): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase().rpc("set_member_surfaces_as_manager", {
+      p_member_id: memberId,
+      p_surfaces: surfaces,
+    });
+    if (error) {
+      if (looksLikeNotDepartmentManagerError(error.message)) {
+        return {
+          error: new Error("You can only edit permissions for members in your own department."),
+        };
       }
       return { error: new Error(error.message) };
     }

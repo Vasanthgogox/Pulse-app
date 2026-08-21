@@ -68,6 +68,14 @@ export type TeamInvitePermissions = {
    * per-action RBAC — see `lib/memberSurfaces.ts`.
    */
   surfaces?: MemberSurfaceMap;
+  /**
+   * Department manager flag. Owner-assigned only (via set_member_role).
+   * Lets the member edit `surfaces` for other members sharing their own
+   * `platformRole`, through the narrower set_member_surfaces_as_manager RPC —
+   * never role/platformRole/domains/this flag itself. See
+   * supabase/migrations/20270220120000_department_manager_surface_write.sql.
+   */
+  isDepartmentManager?: boolean;
 };
 
 const PERMISSION_LABELS: Record<string, string> = {
