@@ -378,9 +378,10 @@ export const Theme = {
   cinematicGlowRed: "rgba(232,33,39,0.45)",
 
   // ---- Trip feedback modal (Pulse-style: driver / supplier / client) ----
-  feedbackModalHeaderDriver: "#0F172A",
-  feedbackModalHeaderSupplier: "#064E3B",
-  feedbackModalHeaderClient: "#4C1D95",
+  // Driver keeps the green planning tone; supplier/client align with app brown/blue.
+  feedbackModalHeaderDriver: "#15803D",
+  feedbackModalHeaderSupplier: "#4D3636",
+  feedbackModalHeaderClient: "#CDE9F7",
   /** Filled star + avatar badge accent */
   feedbackModalStarActive: "#FBBF24",
   feedbackModalBackdrop: "rgba(0, 0, 0, 0.6)",

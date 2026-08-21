@@ -470,9 +470,9 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                 }
               >
                 <Feather
-                  name={isAssetDriverCost ? "minus-circle" : "plus"}
+                  name={isAssetDriverCost ? "minus-circle" : "minus"}
                   size={18}
-                  color="#4D3636"
+                  color={isAssetDriverCost ? "#4D3636" : Theme.teslaRed}
                 />
                 <Text style={styles.cnDnLabel}>
                   {isAssetDriverCost ? "Deduct (CN)" : "Credit (CN)"}
@@ -496,9 +496,9 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                 }
               >
                 <Feather
-                  name={isAssetDriverCost ? "plus-circle" : "minus"}
+                  name={isAssetDriverCost ? "plus-circle" : "plus"}
                   size={18}
-                  color="#e11d48"
+                  color={isAssetDriverCost ? "#e11d48" : Theme.positive}
                 />
                 <Text style={styles.cnDnLabel}>
                   {isAssetDriverCost ? "Pay driver (DN)" : "Debit (DN)"}

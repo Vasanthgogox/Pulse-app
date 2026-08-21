@@ -33,6 +33,7 @@ import {
   nextStepAfterContactImport,
   type PartyContactWizardFieldStep,
 } from "@/components/party/PartyContactMobileWizard";
+import { PartyContactCombinedForm } from "@/components/party/PartyContactCombinedForm";
 import {
   PartyDriverMobileWizard,
   nextStepAfterDriverImport,
@@ -61,7 +62,6 @@ import {
   ArrowRight,
   BookUser,
   Building2,
-  Check,
   ChevronLeft,
   Key,
   Layers,
@@ -1235,9 +1235,12 @@ function PartyRegistrationPortalInner(
       ? viewportH - visualViewportHeight
       : 0;
 
-  // Step-by-step wizard is now used on desktop too (rendered inside a centered
-  // card via renderWizardModal); mobile keeps the full-screen presentation.
-  const useContactWizard = kind === "client" || kind === "supplier";
+  // Desktop uses the single-page combined form for clients/suppliers;
+  // mobile keeps the step-by-step wizard for a focused experience.
+  const useContactWizard =
+    !layoutWide && (kind === "client" || kind === "supplier");
+  const useContactCombinedDesktop =
+    layoutWide && (kind === "client" || kind === "supplier");
   const useDriverWizard = kind === "driver";
   const useVehicleWizard = kind === "vehicle";
   const isDriverReviewTone = kind === "driver";
@@ -1854,6 +1857,116 @@ function PartyRegistrationPortalInner(
     );
   };
 
+  if (useContactCombinedDesktop) {
+    const combinedCanAdvance =
+      !!organizationId &&
+      orgOrCompanyName.trim().length >= 2 &&
+      contactName.trim().length >= 2 &&
+      !validatePhone(phoneDigits) &&
+      !driverRegisteredAtPhone;
+
+    return renderWizardModal(
+      step === "form" ? (
+        <PartyContactCombinedForm
+          entityTitle={formTitle}
+          subtitle="Fill required fields and continue."
+          onClose={onClose}
+          orgLabel={
+            kind === "client"
+              ? "Organization / billing name"
+              : "Supplier company name"
+          }
+          orgValue={orgOrCompanyName}
+          onOrgChange={setOrgOrCompanyName}
+          contactLabel="Primary contact"
+          contactValue={contactName}
+          onContactChange={setContactName}
+          phoneValue={phoneDigits}
+          onPhoneChange={handlePhoneLookupChange}
+          formError={formError}
+          noOrganizationBanner={
+            !organizationId ? (
+              <View style={[styles.banner, { marginHorizontal: 0, marginBottom: 12 }]}>
+                <FontAwesome name="warning" size={16} color="#92400e" />
+                <Text style={styles.bannerText}>
+                  {noOrganizationMessage ?? "No organization loaded."}
+                </Text>
+              </View>
+            ) : null
+          }
+          phoneExtras={
+            showPhoneInviteeUi ? (
+              <>
+                <Text style={styles.clientPhoneLookupHint}>
+                  Search by number to find someone on the platform and invite their
+                  organization.
+                </Text>
+                {phoneDigits.trim().replace(/\s+/g, "").length >=
+                  MIN_PHONE_LENGTH_FOR_SEARCH && phoneSearchLoading ? (
+                  <View style={styles.clientLookupLoadingRow}>
+                    <ActivityIndicator size="small" color="#2563eb" />
+                    <Text style={styles.clientLookupLoadingText}>Looking up…</Text>
+                  </View>
+                ) : null}
+                {inviteeMatch ? (
+                  <View style={styles.clientInviteeCard}>
+                    <Text style={styles.clientInviteeLabel}>
+                      {inviteeIsDriver
+                        ? t("inviteeRegisteredDriver")
+                        : t("inviteeFoundOnPlatform")}
+                    </Text>
+                    <Text style={styles.clientInviteeName}>
+                      {inviteeMatch.full_name || inviteeMatch.phone}
+                    </Text>
+                    <Text style={styles.clientInviteeHint}>
+                      {inviteeIsDriver
+                        ? kind === "supplier"
+                          ? t("addSupplierInviteeHintDriver")
+                          : t("addClientInviteeHintDriver")
+                        : kind === "supplier"
+                          ? t("addSupplierInviteeHintDefault")
+                          : t("addClientInviteeHintDefault")}
+                    </Text>
+                    {!inviteeIsDriver ? (
+                      <Pressable
+                        onPress={handleAddAsOfflineInstead}
+                        disabled={submitting}
+                        style={styles.clientOfflineLink}
+                        testID="party-add-offline-btn"
+                      >
+                        <Text style={styles.clientOfflineLinkText}>
+                          Add as offline instead
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : searchedNoResult ? (
+                  <Text style={styles.clientNoMatchHint}>
+                    No account with this number. Add as offline below.
+                  </Text>
+                ) : null}
+              </>
+            ) : null
+          }
+          canAdvance={combinedCanAdvance}
+          onAdvance={goReview}
+          advanceLabel="Continue"
+        />
+      ) : (
+        <PartyMobileWizardReview
+          onBackToEdit={() => setStep("form")}
+          summaryContent={mobileWizardSummaryContent}
+          reviewSaveLabel={reviewSaveLabel}
+          submitting={submitting}
+          organizationId={organizationId}
+          onConfirm={() => void confirmSave()}
+          title={reviewConfirmTitle}
+          message={reviewConfirmMessage}
+        />
+      ),
+    );
+  }
+
   if (useContactWizard) {
     return renderWizardModal(
       step === "form" ? (
@@ -2082,7 +2195,7 @@ function PartyRegistrationPortalInner(
             <View style={styles.portalHeaderMinimal}>
               <Pressable
                 style={styles.backBtnLight}
-                onPress={onClose}
+                onPress={step === "review" ? () => setStep("form") : onClose}
                 hitSlop={12}
                 testID="party-close-btn"
               >
@@ -2114,7 +2227,15 @@ function PartyRegistrationPortalInner(
                   Fill required fields and continue.
                 </Text>
               </>
-            ) : null}
+            ) : (
+              <>
+                <View style={styles.formHeader}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.formHeaderTitle}>{reviewConfirmTitle}</Text>
+                </View>
+                <Text style={styles.formHeaderHint}>{reviewConfirmMessage}</Text>
+              </>
+            )}
 
             {formError ? (
               <View style={styles.errorBar} testID="party-form-error">
@@ -2736,19 +2857,11 @@ function PartyRegistrationPortalInner(
                 <ArrowRight size={18} color="#fff" strokeWidth={2.5} />
               </Pressable>
             ) : (
-              <View style={[styles.reviewActionsBar, layoutWide && styles.reviewActionsBarWide]}>
-                <Pressable
-                  style={styles.reviewGhostBtnWide}
-                  onPress={() => setStep("form")}
-                  hitSlop={8}
-                  testID="party-edit-details-btn"
-                >
-                  <Text style={styles.ghostBtnText}>← Edit details</Text>
-                </Pressable>
+              <View style={styles.reviewActionsStack}>
                 <Pressable
                   style={[
-                    styles.confirmBtn,
-                    styles.confirmBtnFlexible,
+                    styles.primaryBtn,
+                    styles.reviewPrimaryBtn,
                     (!organizationId || submitting) &&
                       styles.primaryBtnDisabled,
                   ]}
@@ -2760,12 +2873,20 @@ function PartyRegistrationPortalInner(
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <>
-                      <Check size={22} color="#fff" strokeWidth={2.8} />
-                      <Text style={styles.confirmBtnText}>
+                      <Text style={styles.primaryBtnText}>
                         {reviewSaveLabel}
                       </Text>
+                      <ArrowRight size={18} color="#fff" strokeWidth={2.5} />
                     </>
                   )}
+                </Pressable>
+                <Pressable
+                  style={styles.reviewEditLink}
+                  onPress={() => setStep("form")}
+                  hitSlop={8}
+                  testID="party-edit-details-btn"
+                >
+                  <Text style={styles.ghostBtnText}>← Edit details</Text>
                 </Pressable>
               </View>
             )}
@@ -3305,7 +3426,7 @@ const styles = StyleSheet.create({
     ...FinanceTxnTypography.fieldValue,
     fontSize: 11,
     fontWeight: "600",
-    color: Theme.buttonPrimary,
+    color: Theme.textSecondary,
   },
   confirmBtn: {
     flexDirection: "row",
@@ -3349,63 +3470,61 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 4,
   },
+  reviewActionsStack: {
+    marginTop: 8,
+    gap: 4,
+    width: "100%",
+  },
+  reviewPrimaryBtn: {
+    marginTop: 8,
+  },
+  reviewEditLink: {
+    marginTop: 4,
+    marginBottom: 4,
+    paddingVertical: 10,
+    alignSelf: "center",
+  },
 
   summarySheet: {
     alignSelf: "stretch",
     width: "100%",
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: Theme.borderInput,
     overflow: "hidden",
-    marginTop: 12,
-    marginBottom: 12,
-    ...Platform.select({
-      web: {
-        boxShadow:
-          "0 2px 8px rgba(15,23,42,0.06), 0 12px 32px rgba(15,23,42,0.06)",
-      } as object,
-      default: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.06,
-        shadowRadius: 20,
-        elevation: 6,
-      },
-    }),
+    marginTop: 4,
+    marginBottom: 8,
   },
   summarySheetDesktop: {
-    alignSelf: "center",
-    maxWidth: 560,
+    alignSelf: "stretch",
+    maxWidth: "100%",
   },
 
   summaryDetailsCard: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 4,
-    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 8,
+    backgroundColor: Theme.screenBackground,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     gap: 0,
   },
   summaryDetailsCardDriver: {
     backgroundColor: "#f7fdf9",
-    borderWidth: 1,
-    borderColor: "#d1fae5",
+    borderWidth: 0,
     borderRadius: 14,
   },
   summaryDetailsHeading: {
-    ...FinanceTxnTypography.columnTitle,
+    ...FinanceTxnTypography.fieldLabel,
     fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    marginBottom: 2,
+    fontWeight: "600",
+    letterSpacing: 0.6,
+    marginBottom: 8,
     paddingHorizontal: 2,
   },
   summaryDetailsHeadingDriver: {
     color: "#166534",
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
 
   summaryDetailRow: {
