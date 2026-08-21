@@ -137,6 +137,8 @@ const LEGACY_TAG_LABELS: Record<string, string> = {
 
 const COMMENT_TAG_PREFIX = '[[tags:';
 const COMMENT_TAG_SUFFIX = ']]';
+const COMMENT_EDIT_REASON_PREFIX = '[[edit_reason:';
+const COMMENT_EDIT_REASON_SUFFIX = ']]';
 
 function getQuickTagsForRatedType(ratedType: RatedType): readonly QuickTag[] {
   if (ratedType === 'client') return CLIENT_RATING_TAGS;
@@ -154,7 +156,15 @@ function getQuickTagLabel(tagId: string, ratedType: RatedType): string {
 function parseCommentPayload(raw: string | null): CommentPayload {
   if (!raw) return { tags: [], note: '' };
   if (!raw.startsWith(COMMENT_TAG_PREFIX)) {
-    return { tags: [], note: raw.trim() };
+    const plain = raw.trim();
+    if (
+      plain.startsWith(COMMENT_EDIT_REASON_PREFIX) &&
+      plain.indexOf(COMMENT_EDIT_REASON_SUFFIX) !== -1
+    ) {
+      const suffixIndex = plain.indexOf(COMMENT_EDIT_REASON_SUFFIX);
+      return { tags: [], note: plain.slice(suffixIndex + COMMENT_EDIT_REASON_SUFFIX.length).trim() };
+    }
+    return { tags: [], note: plain };
   }
   const suffixIndex = raw.indexOf(COMMENT_TAG_SUFFIX);
   if (suffixIndex === -1) {
@@ -165,17 +175,33 @@ function parseCommentPayload(raw: string | null): CommentPayload {
     .split('|')
     .map((item) => item.trim())
     .filter(Boolean);
-  const note = raw.slice(suffixIndex + COMMENT_TAG_SUFFIX.length).trim();
+  let note = raw.slice(suffixIndex + COMMENT_TAG_SUFFIX.length).trim();
+  if (
+    note.startsWith(COMMENT_EDIT_REASON_PREFIX) &&
+    note.indexOf(COMMENT_EDIT_REASON_SUFFIX) !== -1
+  ) {
+    const editSuffixIndex = note.indexOf(COMMENT_EDIT_REASON_SUFFIX);
+    note = note.slice(editSuffixIndex + COMMENT_EDIT_REASON_SUFFIX.length).trim();
+  }
   return { tags, note };
 }
 
-function buildCommentPayload(tags: string[], note: string): string | null {
+function buildCommentPayload(tags: string[], note: string, editReason?: string): string | null {
   const trimmedNote = note.trim();
+  const trimmedEditReason = (editReason ?? '').trim();
+  const editMeta = trimmedEditReason
+    ? `${COMMENT_EDIT_REASON_PREFIX}${trimmedEditReason}${COMMENT_EDIT_REASON_SUFFIX}`
+    : '';
+  const body = editMeta ? (trimmedNote ? `${editMeta}\n${trimmedNote}` : editMeta) : trimmedNote;
   if (tags.length === 0) {
-    return trimmedNote || null;
+    return body || null;
   }
   const encoded = `${COMMENT_TAG_PREFIX}${tags.join('|')}${COMMENT_TAG_SUFFIX}`;
-  return trimmedNote ? `${encoded}\n${trimmedNote}` : encoded;
+  return body ? `${encoded}\n${body}` : encoded;
+}
+
+function hasEditReason(raw: string | null): boolean {
+  return !!raw && raw.includes(COMMENT_EDIT_REASON_PREFIX);
 }
 
 function formatDate(s: string) {
@@ -311,29 +337,17 @@ function presentationKindFromFlow(flow: RateFlow): FeedbackPresentationKind {
 const FEEDBACK_PRESENTATION: Record<
   FeedbackPresentationKind,
   {
-    headerBg: string;
-    eyebrow: string;
+    formTitle: string;
     promptWord: string;
-    badgeIcon: 'truck' | 'briefcase';
-    glowStrong: string;
-    glowSoft: string;
   }
 > = {
   DRIVER: {
-    headerBg: Theme.feedbackModalHeaderDriver,
-    eyebrow: 'Trip feedback',
+    formTitle: 'Trip feedback',
     promptWord: 'driver',
-    badgeIcon: 'truck',
-    glowStrong: 'rgba(99, 102, 241, 0.35)',
-    glowSoft: 'rgba(245, 158, 11, 0.18)',
   },
   SUPPLIER: {
-    headerBg: Theme.feedbackModalHeaderSupplier,
-    eyebrow: 'Partner audit',
+    formTitle: 'Partner feedback',
     promptWord: 'supplier',
-    badgeIcon: 'briefcase',
-    glowStrong: 'rgba(16, 185, 129, 0.38)',
-    glowSoft: 'rgba(255, 255, 255, 0.12)',
   },
 };
 
@@ -383,6 +397,12 @@ export function TripRatingsBlock({
   const [clientSubmitting, setClientSubmitting] = useState(false);
   const [clientFeedback, setClientFeedback] = useState<LocalClientFeedback | null>(null);
   const [clientFeedbackLoaded, setClientFeedbackLoaded] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editReason, setEditReason] = useState('');
+  const [showEditConfirm, setShowEditConfirm] = useState(false);
+  const [pendingEditTarget, setPendingEditTarget] = useState<'driver' | 'supplier' | 'client' | null>(null);
+  const [isClientEditMode, setIsClientEditMode] = useState(false);
+  const [clientEditReason, setClientEditReason] = useState('');
   const hasAutoOpenedRef = useRef(false);
   const hasAutoOpenedClientRef = useRef(false);
   const modalOpacity = useRef(new Animated.Value(0)).current;
@@ -821,6 +841,15 @@ export function TripRatingsBlock({
     }
   }, [loading, isCompleted, canRateSupplier, canRateDriver, hasRatedSupplier, hasRatedDriver]);
 
+  const supplierTripRating = ratings.find((r) => isSupplierRatingForTrip(r, trip));
+  const driverTripRating = ratings.find(
+    (r) => r.rated_type === 'driver' && (!trip.driver_id || r.rated_id === trip.driver_id),
+  );
+  const clientTripRating =
+    effectiveOrganizationId != null
+      ? resolveClientTripRating(ratings, trip, isClientViewer, effectiveOrganizationId)
+      : undefined;
+
   const resetComposer = (nextFlow: RateFlow) => {
     setFlow(nextFlow);
     setScore(0);
@@ -828,6 +857,8 @@ export function TripRatingsBlock({
     setSelectedTags([]);
     setShowCommentBox(false);
     setSubmitSuccess(false);
+    setIsEditMode(false);
+    setEditReason('');
   };
 
   const openRateSupplier = () => {
@@ -835,6 +866,55 @@ export function TripRatingsBlock({
   };
   const openRateDriver = () => {
     resetComposer({ type: 'supplier_driver' });
+  };
+
+  const requestEdit = (target: 'driver' | 'supplier' | 'client') => {
+    setPendingEditTarget(target);
+    setEditReason('');
+    setShowEditConfirm(true);
+  };
+
+  const confirmEdit = () => {
+    if (!editReason.trim()) {
+      Alert.alert('Reason required', 'Please provide a reason for editing the feedback.');
+      return;
+    }
+    setShowEditConfirm(false);
+    const target = pendingEditTarget;
+    setPendingEditTarget(null);
+
+    if (target === 'supplier' && supplierTripRating) {
+      const parsed = parseCommentPayload(supplierTripRating.comment ?? null);
+      setFlow({ type: 'client_supplier' });
+      setScore(Math.round(supplierTripRating.score));
+      setSelectedTags(parsed.tags);
+      setComment(parsed.note);
+      setShowCommentBox(!!parsed.note);
+      setSubmitSuccess(false);
+      setIsEditMode(true);
+    } else if (target === 'driver' && driverTripRating) {
+      const parsed = parseCommentPayload(driverTripRating.comment ?? null);
+      setFlow({ type: 'supplier_driver' });
+      setScore(Math.round(driverTripRating.score));
+      setSelectedTags(parsed.tags);
+      setComment(parsed.note);
+      setShowCommentBox(!!parsed.note);
+      setSubmitSuccess(false);
+      setIsEditMode(true);
+    } else if (target === 'client') {
+      const existingScore = clientTripRating?.score ?? clientFeedback?.score ?? 0;
+      const parsed = clientTripRating
+        ? parseCommentPayload(clientTripRating.comment)
+        : clientFeedback
+          ? { tags: clientFeedback.tags, note: clientFeedback.note }
+          : { tags: [], note: '' };
+      setClientScore(Math.round(existingScore));
+      setClientTags(parsed.tags);
+      setClientComment(parsed.note);
+      setIsClientEditMode(true);
+      setClientEditReason(editReason.trim());
+      setShowClientFeedbackModal(true);
+    }
   };
   const openRateSupplierAtScore = (nextScore: number) => {
     resetComposer({ type: 'client_supplier' });
@@ -845,6 +925,8 @@ export function TripRatingsBlock({
     setScore(nextScore);
   };
   const openRateClientAtScore = (nextScore: number) => {
+    setIsClientEditMode(false);
+    setClientEditReason('');
     setClientScore(nextScore);
     setShowClientFeedbackModal(true);
   };
@@ -855,6 +937,8 @@ export function TripRatingsBlock({
     setFlow(null);
     setSubmitting(false);
     setSubmitSuccess(false);
+    setIsEditMode(false);
+    setEditReason('');
   };
   const handleTagToggle = (tagId: string) => {
     setSelectedTags((prev) =>
@@ -914,7 +998,8 @@ export function TripRatingsBlock({
     setSubmitting(true);
     const commentPayload = buildCommentPayload(
       selectedTags,
-      trimmedComment.slice(0, VALIDATION.NOTES_MAX_LENGTH)
+      trimmedComment.slice(0, VALIDATION.NOTES_MAX_LENGTH),
+      isEditMode ? editReason : undefined,
     );
     createRating(effectiveOrganizationId, {
       trip_id: trip.id,
@@ -944,14 +1029,6 @@ export function TripRatingsBlock({
     });
   };
 
-  const supplierTripRating = ratings.find((r) => isSupplierRatingForTrip(r, trip));
-  const driverTripRating = ratings.find(
-    (r) => r.rated_type === 'driver' && (!trip.driver_id || r.rated_id === trip.driver_id),
-  );
-  const clientTripRating =
-    effectiveOrganizationId != null
-      ? resolveClientTripRating(ratings, trip, isClientViewer, effectiveOrganizationId)
-      : undefined;
   const supplierTripAvg = supplierTripRating?.score ?? null;
   const driverTripAvg = driverTripRating?.score ?? null;
   const clientTripAvg = clientTripRating?.score ?? clientFeedback?.score ?? null;
@@ -960,7 +1037,6 @@ export function TripRatingsBlock({
     if (loading || !isCompleted || !clientFeedbackLoaded) return;
     if (hasAutoOpenedClientRef.current) return;
     if (!canRateClient) return;
-    // Only auto-open if no rating has been given yet (DB or local)
     if (clientTripRating || clientFeedback || hasRatedClient) return;
     hasAutoOpenedClientRef.current = true;
     setShowClientFeedbackModal(true);
@@ -1033,6 +1109,12 @@ export function TripRatingsBlock({
     ? (operationalTripLabel !== "—" ? operationalTripLabel : 'Trip')
     : (trip.vehicle_display_number || (operationalTripLabel !== "—" ? operationalTripLabel : 'Trip'));
   const activeQuickTags = flow?.type === 'client_supplier' ? SUPPLIER_RATING_TAGS : DRIVER_RATING_TAGS;
+  // Driver accepted/assigned via app identity => connected party (global performance scope).
+  const isDriverConnectedInApp = !!trip.driver_id?.trim();
+  const isOfflineParty =
+    flow?.type === 'client_supplier'
+      ? !supplierPartyAvatarFieldsProp?.organizationImageUrl
+      : !isDriverConnectedInApp;
   const presentationKind = flow ? presentationKindFromFlow(flow) : 'DRIVER';
   const pulseUi = FEEDBACK_PRESENTATION[presentationKind];
   const pulseModalEntityType: PartyEntityType =
@@ -1051,6 +1133,13 @@ export function TripRatingsBlock({
     flow?.type === 'client_supplier'
       ? trip.supplier_id?.trim()
       : trip.driver_id?.trim();
+  // Seed fallback for initials / deterministic avatars.
+  // Prefer linked-organization seed (integrated brands) before entity/contact id.
+  const pulseModalInitialsSeed =
+    pulseModalPartyFields?.organizationAvatarSeed ??
+    pulseModalPartyFields?.avatarSeed ??
+    pulseModalEntitySeed ??
+    undefined;
   const clientModalAvatarUrl =
     (clientPartyAvatarFieldsProp?.avatarUrl ?? '').trim() ||
     (clientAvatarUri ?? '').trim() ||
@@ -1154,9 +1243,15 @@ export function TripRatingsBlock({
                   <View style={styles.wsScoreRow}>
                     <Text style={styles.wsAuditScore}>{r.score}</Text>
                     <FontAwesome name="star" size={16} color={Theme.feedbackModalStarActive} />
+                    {hasEditReason(r.comment) ? (
+                      <View style={styles.regEditedBadge}>
+                        <Feather name="edit-2" size={8} color={Theme.textMuted} />
+                        <Text style={styles.regEditedText}>Edited</Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
-                <Text style={styles.wsAuditDate}>{formatDate(r.created_at)}</Text>
+                <Text style={styles.wsAuditDate}>{formatDate(r.updated_at ?? r.created_at)}</Text>
               </View>
             ) : (
               <View style={styles.rowTopWithAvatar}>
@@ -1270,6 +1365,7 @@ export function TripRatingsBlock({
     onSelectScore: ((score: number) => void) | undefined,
     feedback: CommentPayload,
     ratedTypeForTags: RatedType,
+    wasEdited?: boolean,
   ) => {
     const filledStars =
       tripScore != null ? Math.min(5, Math.max(0, Math.round(Number(tripScore)))) : 0;
@@ -1297,8 +1393,17 @@ export function TripRatingsBlock({
       (resolvedAvatarUri ?? "").trim() ||
       undefined;
 
+    const hasExistingRating = tripScore != null;
+
     return (
-      <View style={[styles.regCard, isRegistrySidebar && styles.regCardSidebar]}>
+      <TouchableOpacity
+        style={[styles.regCard, isRegistrySidebar && styles.regCardSidebar]}
+        activeOpacity={hasExistingRating ? 1 : auditDisabled ? 1 : 0.82}
+        disabled={hasExistingRating || (auditDisabled && !onSelectScore)}
+        onPress={() => {
+          if (!hasExistingRating && !auditDisabled) onAudit();
+        }}
+      >
         <View style={styles.regCardTop}>
           <SharedPartyAvatar
             name={partyName}
@@ -1333,6 +1438,12 @@ export function TripRatingsBlock({
             >
               {perfLabel}
             </Text>
+            {wasEdited ? (
+              <View style={styles.regEditedBadge}>
+                <Feather name="edit-2" size={8} color={Theme.textMuted} />
+                <Text style={styles.regEditedText}>Edited</Text>
+              </View>
+            ) : null}
           </View>
           <View style={styles.regScoresCol}>
             <View
@@ -1427,44 +1538,59 @@ export function TripRatingsBlock({
               return (
                 <TouchableOpacity
                   key={step}
-                  disabled={auditDisabled || !onSelectScore}
+                  disabled={hasExistingRating || auditDisabled || !onSelectScore}
                   activeOpacity={0.8}
                   onPress={() => onSelectScore?.(step)}
-                  style={[styles.regStarHit, auditDisabled || !onSelectScore ? null : styles.regRungDotTap]}
+                  style={[styles.regStarHit, (hasExistingRating || auditDisabled || !onSelectScore) ? null : styles.regRungDotTap]}
                   hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
                 >
                   <FontAwesome
                     name={filled ? 'star' : 'star-o'}
-                    size={isRegistrySidebar ? 14 : 12}
+                    size={isRegistrySidebar ? 14 : 16}
                     color={filled ? Theme.feedbackModalStarActive : Theme.borderMedium}
                   />
                 </TouchableOpacity>
               );
             })}
           </View>
-          <TouchableOpacity
-            disabled={auditDisabled}
-            onPress={onAudit}
-            activeOpacity={0.85}
-            style={styles.regAuditTap}
-          >
-            <Text
-              style={[
-                styles.regAuditTxt,
-                isRegistrySidebar && styles.regAuditTxtSidebar,
-                auditDisabled && styles.regAuditTxtDis,
-              ]}
+          {tripScore != null ? (
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation?.();
+                requestEdit(ratedTypeForTags === 'supplier' ? 'supplier' : 'driver');
+              }}
+              activeOpacity={0.85}
+              style={styles.regEditTap}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              {auditDisabled ? 'Unavailable' : 'Rate now'}
-            </Text>
-            <Feather
-              name="arrow-up-right"
-              size={isRegistrySidebar ? 14 : 12}
-              color={auditDisabled ? Theme.textMuted : Theme.primary}
-            />
-          </TouchableOpacity>
+              <Feather name="edit-2" size={11} color={Theme.textMuted} />
+              <Text style={styles.regEditTxt}>Edit</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              disabled={auditDisabled}
+              onPress={onAudit}
+              activeOpacity={0.85}
+              style={styles.regAuditTap}
+            >
+              <Text
+                style={[
+                  styles.regAuditTxt,
+                  isRegistrySidebar && styles.regAuditTxtSidebar,
+                  auditDisabled && styles.regAuditTxtDis,
+                ]}
+              >
+                {auditDisabled ? 'Unavailable' : 'Rate now'}
+              </Text>
+              <Feather
+                name="arrow-up-right"
+                size={isRegistrySidebar ? 14 : 12}
+                color={auditDisabled ? Theme.textMuted : Theme.primary}
+              />
+            </TouchableOpacity>
+          )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1537,6 +1663,7 @@ export function TripRatingsBlock({
                         canOpenDriverRate ? openRateDriverAtScore : undefined,
                         driverRegistryFeedback,
                         'driver',
+                        hasEditReason(driverTripRating?.comment ?? null),
                       )
                     : null}
                   {showRegistryClientParty
@@ -1550,12 +1677,17 @@ export function TripRatingsBlock({
                         clientTripAvg,
                         displayClientAvg,
                         () => {
-                          if (canOpenClientRate) setShowClientFeedbackModal(true);
+                          if (canOpenClientRate) {
+                            setIsClientEditMode(false);
+                            setClientEditReason('');
+                            setShowClientFeedbackModal(true);
+                          }
                         },
                         !canOpenClientRate,
                         canOpenClientRate ? openRateClientAtScore : undefined,
                         clientRegistryFeedback,
                         'client',
+                        hasEditReason(clientTripRating?.comment ?? null),
                       )
                     : null}
                   {showRegistrySupplierParty
@@ -1575,6 +1707,7 @@ export function TripRatingsBlock({
                         canOpenSupplierRate ? openRateSupplierAtScore : undefined,
                         supplierRegistryFeedback,
                         'supplier',
+                        hasEditReason(supplierTripRating?.comment ?? null),
                       )
                     : null}
                 </View>
@@ -1607,10 +1740,14 @@ export function TripRatingsBlock({
                 <TouchableOpacity
                   style={[styles.wsPartyCard, isCompactWorkspace && styles.wsPartyCardCompact]}
                   onPress={() => {
-                    if (canRateClient) setShowClientFeedbackModal(true);
+                    if (canRateClient && !hasRatedClient) {
+                      setIsClientEditMode(false);
+                      setClientEditReason('');
+                      setShowClientFeedbackModal(true);
+                    }
                   }}
-                  activeOpacity={canRateClient ? 0.85 : 1}
-                  disabled={!canRateClient}
+                  activeOpacity={canRateClient && !hasRatedClient ? 0.85 : 1}
+                  disabled={!canRateClient || hasRatedClient}
                 >
                   <View style={[styles.wsPartyIcon, styles.wsPartyIconDark, isCompactWorkspace && styles.wsPartyIconCompact]}>
                     <PartyAvatar
@@ -1628,8 +1765,10 @@ export function TripRatingsBlock({
                   <View style={[styles.wsPartyDivider, isCompactWorkspace && styles.wsPartyDividerCompact]} />
                   {renderPartyScores(clientTripAvg, displayClientAvg)}
                   <View style={styles.wsPartyFooter}>
-                    {canRateClient ? (
+                    {canRateClient && !hasRatedClient ? (
                       <Text style={[styles.wsRateCta, isCompactWorkspace && styles.wsRateCtaCompact]}>Rate party</Text>
+                    ) : hasRatedClient ? (
+                      <Text style={[styles.wsRateCtaMuted, isCompactWorkspace && styles.wsRateCtaMutedCompact]}>Recorded</Text>
                     ) : (
                       <Text style={[styles.wsRateCtaMuted, isCompactWorkspace && styles.wsRateCtaMutedCompact]}>—</Text>
                     )}
@@ -1712,6 +1851,16 @@ export function TripRatingsBlock({
                     <Text style={[styles.btnText, isWorkspace && styles.wsPrimaryCtaText]}>Rate supplier</Text>
                   </TouchableOpacity>
                 )}
+                {canRateSupplier && hasRatedSupplier && (
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnEditFeedback]}
+                    onPress={() => requestEdit('supplier')}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="edit-2" size={13} color={Theme.textSecondary} />
+                    <Text style={styles.btnEditText}>Edit supplier feedback</Text>
+                  </TouchableOpacity>
+                )}
                 {canRateDriver && !hasRatedDriver && (
                   <TouchableOpacity
                     style={[styles.btn, styles.btnDriver, isWorkspace && styles.wsPrimaryCta]}
@@ -1722,16 +1871,40 @@ export function TripRatingsBlock({
                     <Text style={[styles.btnText, isWorkspace && styles.wsPrimaryCtaText]}>Rate driver</Text>
                   </TouchableOpacity>
                 )}
-                {canRateClient && (
+                {canRateDriver && hasRatedDriver && (
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnEditFeedback]}
+                    onPress={() => requestEdit('driver')}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="edit-2" size={13} color={Theme.textSecondary} />
+                    <Text style={styles.btnEditText}>Edit driver feedback</Text>
+                  </TouchableOpacity>
+                )}
+                {canRateClient && !hasRatedClient && (
                   <TouchableOpacity
                     style={[styles.btn, styles.btnDriver, isWorkspace && styles.wsOutlineCta]}
-                    onPress={() => setShowClientFeedbackModal(true)}
+                    onPress={() => {
+                      setIsClientEditMode(false);
+                      setClientEditReason('');
+                      setShowClientFeedbackModal(true);
+                    }}
                     activeOpacity={0.8}
                   >
                     <Feather name="user" size={14} color={Theme.textPrimaryDark} />
                     <Text style={[styles.btnText, isWorkspace && styles.wsOutlineCtaText]}>
                       Rate client performance
                     </Text>
+                  </TouchableOpacity>
+                )}
+                {canRateClient && hasRatedClient && (
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnEditFeedback]}
+                    onPress={() => requestEdit('client')}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="edit-2" size={13} color={Theme.textSecondary} />
+                    <Text style={styles.btnEditText}>Edit client feedback</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1774,74 +1947,65 @@ export function TripRatingsBlock({
               </Animated.View>
             ) : (
               <>
-                <View style={[styles.heroHeaderPulse, { backgroundColor: pulseUi.headerBg }, isDesktop && styles.heroHeaderPulseDesktop]}>
-                  <View style={[styles.heroGlowOnePulse, { backgroundColor: pulseUi.glowStrong }]} />
-                  <View style={[styles.heroGlowTwoPulse, { backgroundColor: pulseUi.glowSoft }]} />
-                  <View style={styles.heroTopRowPulse}>
-                    <View style={[styles.avatarWrapPulse, isDesktop && styles.avatarWrapPulseDesktop]}>
-                      <SharedPartyAvatar
-                        name={activeSubjectName}
-                        entityType={pulseModalEntityType}
-                        size={isDesktop ? 56 : 44}
-                        avatarUrl={pulseModalAvatarUrl}
-                        avatarSeed={
-                          pulseModalPartyFields?.avatarSeed ??
-                          pulseModalEntitySeed ??
-                          undefined
-                        }
-                        initialsColorSeed={
-                          pulseModalEntitySeed ??
-                          pulseModalPartyFields?.avatarSeed ??
-                          undefined
-                        }
-                        organizationImageUrl={
-                          pulseModalPartyFields?.organizationImageUrl ?? undefined
-                        }
-                        organizationAvatarSeed={
-                          pulseModalPartyFields?.organizationAvatarSeed ?? undefined
-                        }
-                      />
-                      <View
-                        style={[
-                          styles.avatarBadgePulse,
-                          { borderColor: pulseUi.headerBg },
-                        ]}
-                      >
-                        <Feather
-                          name={pulseUi.badgeIcon}
-                          size={10}
-                          color={Theme.textOnPrimary}
-                        />
-                      </View>
-                    </View>
-                    <View style={styles.heroTextWrapPulse}>
-                      <Text style={[styles.heroEyebrowPulse, isDesktop && styles.heroEyebrowPulseDesktop]}>{pulseUi.eyebrow}</Text>
-                      <Text style={[styles.heroNamePulse, isDesktop && styles.heroNamePulseDesktop]} numberOfLines={2}>
+                <View style={[styles.bizFormWrap, isDesktop && styles.bizFormWrapDesktop]}>
+                  <TouchableOpacity
+                    style={styles.bizBackBtn}
+                    onPress={closeModal}
+                    activeOpacity={0.8}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Feather name="chevron-left" size={22} color={Theme.textPrimaryDark} />
+                  </TouchableOpacity>
+
+                  <View style={styles.bizFormHeader}>
+                    <View style={styles.bizLiveDot} />
+                    <Text style={styles.bizFormTitle}>
+                      {isEditMode ? 'Edit feedback' : pulseUi.formTitle}
+                    </Text>
+                  </View>
+                  <Text style={styles.bizFormHint}>
+                    {isEditMode
+                      ? 'Update the fields below, then submit.'
+                      : 'Fill required fields and continue.'}
+                  </Text>
+
+                  <View style={styles.bizPartyRow}>
+                    <SharedPartyAvatar
+                      name={activeSubjectName}
+                      entityType={pulseModalEntityType}
+                      size={isDesktop ? 44 : 36}
+                      avatarUrl={pulseModalAvatarUrl}
+                      avatarSeed={
+                        pulseModalPartyFields?.avatarSeed ?? pulseModalEntitySeed ?? undefined
+                      }
+                      initialsColorSeed={pulseModalInitialsSeed}
+                      organizationImageUrl={
+                        pulseModalPartyFields?.organizationImageUrl ?? undefined
+                      }
+                      organizationAvatarSeed={
+                        pulseModalPartyFields?.organizationAvatarSeed ?? undefined
+                      }
+                    />
+                    <View style={styles.bizPartyTextCol}>
+                      <Text style={styles.bizFieldLabel}>
+                        {pulseUi.promptWord}
+                      </Text>
+                      <Text style={styles.bizPartyName} numberOfLines={2}>
                         {activeSubjectName}
                       </Text>
-                      <Text style={[styles.heroMetaPulse, isDesktop && styles.heroMetaPulseDesktop]} numberOfLines={1}>
+                      <Text style={styles.bizPartyMeta} numberOfLines={1}>
                         {activeSubjectMeta}
                       </Text>
                     </View>
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.closeButtonPulse}
-                    onPress={closeModal}
-                    activeOpacity={0.8}
-                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  >
-                    <Feather name="x" size={18} color={Theme.textOnPrimary} />
-                  </TouchableOpacity>
-                </View>
+                  {isOfflineParty ? (
+                    <Text style={styles.bizHelperHint}>
+                      This is an offline party — feedback is used for internal performance tracking only.
+                    </Text>
+                  ) : null}
 
-                <View style={[styles.modalBodyPulse, isDesktop && styles.modalBodyPulseDesktop]}>
-                  <Text style={[styles.ratingHeadlinePulse, isDesktop && styles.ratingHeadlinePulseDesktop]}>
-                    How was your{' '}
-                    <Text style={styles.ratingHeadlineAccent}>{pulseUi.promptWord}</Text>
-                    ?
-                  </Text>
-
+                  <Text style={styles.bizFieldLabel}>Rating</Text>
                   <View style={[styles.starsPulse, isDesktop && styles.starsPulseDesktop]}>
                     {[1, 2, 3, 4, 5].map((n) => (
                       <TouchableOpacity
@@ -1849,14 +2013,14 @@ export function TripRatingsBlock({
                         onPress={() => setScore(n)}
                         style={[
                           styles.starBtnPulse,
-                          { transform: [{ scale: n <= score ? 1.1 : 1 }] },
+                          { transform: [{ scale: n <= score ? 1.08 : 1 }] },
                         ]}
-                        hitSlop={8}
+                        hitSlop={12}
                         activeOpacity={0.85}
                       >
                         <FontAwesome
                           name={n <= score ? 'star' : 'star-o'}
-                          size={isDesktop ? 32 : 24}
+                          size={isDesktop ? 34 : 28}
                           color={
                             n <= score
                               ? Theme.feedbackModalStarActive
@@ -1867,177 +2031,174 @@ export function TripRatingsBlock({
                     ))}
                   </View>
 
-                  {score > 0 ? (
-                    <Animated.View
-                      style={[
-                        styles.composerSectionPulse,
-                        {
-                          opacity: composerOpacity,
-                          transform: [{ translateY: composerTranslateY }],
-                        },
-                      ]}
-                    >
-                      <View style={[styles.tagsWrapPulse, isDesktop && styles.tagsWrapPulseDesktop]}>
-                        {activeQuickTags.map((tag) => {
-                          const selected = selectedTags.includes(tag.id);
-                          return (
-                            <TouchableOpacity
-                              key={tag.id}
-                              onPress={() => handleTagToggle(tag.id)}
-                              style={[
-                                styles.tagChipPulse,
-                                isDesktop && styles.tagChipPulseDesktop,
-                                selected ? styles.tagChipPulseActive : styles.tagChipPulseIdle,
-                              ]}
-                              activeOpacity={0.85}
-                            >
-                              <Text
-                                style={[
-                                  styles.tagChipTextPulse,
-                                  selected
-                                    ? styles.tagChipTextPulseActive
-                                    : styles.tagChipTextPulseIdle,
-                                ]}
-                              >
-                                {tag.label}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-
-                      {!showCommentBox ? (
+                  <Text style={[styles.bizFieldLabel, styles.bizFieldLabelSpaced]}>Quick tags</Text>
+                  <View style={[styles.tagsWrapPulse, styles.clientTagsWrapPulse, isDesktop && styles.clientTagsWrapPulseDesktop]}>
+                    {activeQuickTags.map((tag) => {
+                      const selected = selectedTags.includes(tag.id);
+                      return (
                         <TouchableOpacity
-                          style={styles.noteTogglePulse}
-                          onPress={() => setShowCommentBox(true)}
-                          activeOpacity={0.8}
+                          key={tag.id}
+                          onPress={() => handleTagToggle(tag.id)}
+                          style={[
+                            styles.tagChipPulse,
+                            styles.clientTagChipPulse,
+                            isDesktop && styles.clientTagChipPulseDesktop,
+                            selected ? styles.tagChipPulseActive : styles.tagChipPulseIdle,
+                          ]}
+                          activeOpacity={0.85}
                         >
-                          <Feather name="message-square" size={15} color={Theme.textMuted} />
-                          <Text style={styles.noteToggleTextPulse}>
-                            Add a note (optional)
+                          <Text
+                            style={[
+                              styles.tagChipTextPulse,
+                              isDesktop && styles.tagChipTextPulseDesktop,
+                              selected
+                                ? styles.tagChipTextPulseActive
+                                : styles.tagChipTextPulseIdle,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {tag.label}
                           </Text>
                         </TouchableOpacity>
-                      ) : (
-                        <View style={styles.commentBoxWrapPulse}>
-                          <TextInput
-                            style={[styles.commentInputPulse, isDesktop && styles.commentInputPulseDesktop]}
-                            value={comment}
-                            onChangeText={setComment}
-                            placeholder="Tell us more about the experience..."
-                            placeholderTextColor={Theme.textMuted}
-                            multiline
-                            numberOfLines={4}
-                            maxLength={VALIDATION.NOTES_MAX_LENGTH}
-                            textAlignVertical="top"
-                          />
-                          <Text style={styles.commentCounterPulse}>
-                            {comment.length}/{VALIDATION.NOTES_MAX_LENGTH}
-                          </Text>
-                        </View>
-                      )}
+                      );
+                    })}
+                  </View>
 
-                      <TouchableOpacity
-                        style={[styles.modalSubmitPulse, isDesktop && styles.modalSubmitPulseDesktop]}
-                        onPress={handleSubmit}
-                        disabled={submitting}
-                        activeOpacity={0.85}
-                      >
-                        {submitting ? (
-                          <LoadingIndicator size="small" color={Theme.textOnPrimary} />
-                        ) : (
-                          <>
-                            <Text style={styles.modalSubmitTextPulse}>Post review</Text>
-                            <FontAwesome
-                              name="thumbs-up"
-                              size={18}
-                              color={Theme.textOnPrimary}
-                            />
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </Animated.View>
-                  ) : (
-                    <Text style={styles.helperTextPulse}>
-                      Select a star rating to continue.
-                    </Text>
-                  )}
+                  <Text style={[styles.bizFieldLabel, styles.bizFieldLabelSpaced]}>Note</Text>
+                  <View style={styles.commentBoxWrapPulse}>
+                    <TextInput
+                      style={[styles.commentInputPulse, isDesktop && styles.commentInputPulseDesktop]}
+                      value={comment}
+                      onChangeText={setComment}
+                      placeholder="Optional note"
+                      placeholderTextColor={Theme.textMuted}
+                      multiline
+                      numberOfLines={3}
+                      maxLength={VALIDATION.NOTES_MAX_LENGTH}
+                      textAlignVertical="top"
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.bizPrimaryBtn,
+                      (score < 1 || submitting) && styles.bizPrimaryBtnDisabled,
+                    ]}
+                    onPress={handleSubmit}
+                    disabled={score < 1 || submitting}
+                    activeOpacity={0.85}
+                  >
+                    {submitting ? (
+                      <LoadingIndicator size="small" color={Theme.buttonDarkText} />
+                    ) : (
+                      <>
+                        <Text style={styles.bizPrimaryBtnText}>
+                          {isEditMode ? 'Update' : 'Submit'}
+                        </Text>
+                        <Feather name="arrow-right" size={16} color={Theme.buttonDarkText} />
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </>
             )}
       </TripFeedbackModal>
       <TripFeedbackModal
         visible={showClientFeedbackModal}
-        onRequestClose={() => setShowClientFeedbackModal(false)}
+        onRequestClose={() => {
+          setShowClientFeedbackModal(false);
+          setIsClientEditMode(false);
+          setClientEditReason('');
+        }}
       >
-            <View style={[styles.heroHeaderPulse, { backgroundColor: Theme.primary }, isDesktop && styles.heroHeaderPulseDesktop]}>
-              <View style={styles.heroTopRowPulse}>
-                <View style={[styles.avatarWrapPulse, isDesktop && styles.avatarWrapPulseDesktop]}>
-                  <SharedPartyAvatar
-                    name={clientDisplayName}
-                    entityType="client"
-                    size={isDesktop ? 56 : 44}
-                    avatarUrl={clientModalAvatarUrl}
-                    avatarSeed={
-                      clientPartyAvatarFieldsProp?.avatarSeed ??
-                      trip.client_id?.trim() ??
-                      undefined
-                    }
-                    initialsColorSeed={
-                      trip.client_id?.trim() ??
-                      clientPartyAvatarFieldsProp?.avatarSeed ??
-                      undefined
-                    }
-                    organizationImageUrl={
-                      clientPartyAvatarFieldsProp?.organizationImageUrl ?? undefined
-                    }
-                    organizationAvatarSeed={
-                      clientPartyAvatarFieldsProp?.organizationAvatarSeed ?? undefined
-                    }
-                  />
-                  <View
-                    style={[
-                      styles.avatarBadgePulse,
-                      { borderColor: Theme.primary },
-                    ]}
-                  >
-                    <Feather name="user" size={10} color={Theme.textOnPrimary} />
-                  </View>
-                </View>
-                <View style={styles.heroTextWrapPulse}>
-                      <Text style={[styles.heroEyebrowPulse, isDesktop && styles.heroEyebrowPulseDesktop]}>Settlement feedback</Text>
-                      <Text style={[styles.heroNamePulse, isDesktop && styles.heroNamePulseDesktop]} numberOfLines={2}>
-                        {clientDisplayName}
-                      </Text>
-                      <Text style={[styles.heroMetaPulse, isDesktop && styles.heroMetaPulseDesktop]}>Payment captured</Text>
-                </View>
-              </View>
+            <View style={[styles.bizFormWrap, isDesktop && styles.bizFormWrapDesktop]}>
               <TouchableOpacity
-                style={styles.closeButtonPulse}
-                onPress={() => setShowClientFeedbackModal(false)}
+                style={styles.bizBackBtn}
+                onPress={() => {
+                  setShowClientFeedbackModal(false);
+                  setIsClientEditMode(false);
+                  setClientEditReason('');
+                }}
                 activeOpacity={0.8}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Feather name="x" size={18} color={Theme.textOnPrimary} />
+                <Feather name="chevron-left" size={22} color={Theme.textPrimaryDark} />
               </TouchableOpacity>
-            </View>
-            <View style={[styles.modalBodyPulse, isDesktop && styles.modalBodyPulseDesktop]}>
-              <Text style={[styles.ratingHeadlinePulse, isDesktop && styles.ratingHeadlinePulseDesktop]}>How was this client?</Text>
+
+              <View style={styles.bizFormHeader}>
+                <View style={styles.bizLiveDot} />
+                <Text style={styles.bizFormTitle}>
+                  {isClientEditMode ? 'Edit feedback' : 'Settlement feedback'}
+                </Text>
+              </View>
+              <Text style={styles.bizFormHint}>
+                {isClientEditMode
+                  ? 'Update the fields below, then submit.'
+                  : 'Fill required fields and continue.'}
+              </Text>
+
+              <View style={styles.bizPartyRow}>
+                <SharedPartyAvatar
+                  name={clientDisplayName}
+                  entityType="client"
+                  size={isDesktop ? 44 : 36}
+                  avatarUrl={clientModalAvatarUrl}
+                  avatarSeed={
+                    clientPartyAvatarFieldsProp?.avatarSeed ??
+                    trip.client_id?.trim() ??
+                    undefined
+                  }
+                  initialsColorSeed={
+                    clientPartyAvatarFieldsProp?.organizationAvatarSeed ??
+                    clientPartyAvatarFieldsProp?.avatarSeed ??
+                    trip.client_id?.trim() ??
+                    undefined
+                  }
+                  organizationImageUrl={
+                    clientPartyAvatarFieldsProp?.organizationImageUrl ?? undefined
+                  }
+                  organizationAvatarSeed={
+                    clientPartyAvatarFieldsProp?.organizationAvatarSeed ?? undefined
+                  }
+                />
+                <View style={styles.bizPartyTextCol}>
+                  <Text style={styles.bizFieldLabel}>Client</Text>
+                  <Text style={styles.bizPartyName} numberOfLines={2}>
+                    {clientDisplayName}
+                  </Text>
+                  <Text style={styles.bizPartyMeta}>Payment captured</Text>
+                </View>
+              </View>
+
+              {!clientPartyAvatarFieldsProp?.organizationImageUrl ? (
+                <Text style={styles.bizHelperHint}>
+                  This is an offline party — feedback is used for internal performance tracking only.
+                </Text>
+              ) : null}
+
+              <Text style={styles.bizFieldLabel}>Rating</Text>
               <View style={[styles.starsPulse, isDesktop && styles.starsPulseDesktop]}>
                 {[1, 2, 3, 4, 5].map((n) => (
                   <TouchableOpacity
                     key={`client-rate-${n}`}
                     onPress={() => setClientScore(n)}
-                    style={styles.starBtnPulse}
+                    style={[
+                      styles.starBtnPulse,
+                      { transform: [{ scale: n <= clientScore ? 1.08 : 1 }] },
+                    ]}
+                    hitSlop={12}
                     activeOpacity={0.85}
                   >
                     <FontAwesome
                       name={n <= clientScore ? 'star' : 'star-o'}
-                      size={isDesktop ? 32 : 24}
+                      size={isDesktop ? 34 : 28}
                       color={n <= clientScore ? Theme.feedbackModalStarActive : Theme.borderMedium}
                     />
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <Text style={[styles.bizFieldLabel, styles.bizFieldLabelSpaced]}>Quick tags</Text>
               <View style={[styles.tagsWrapPulse, styles.clientTagsWrapPulse, isDesktop && styles.clientTagsWrapPulseDesktop]}>
                 {CLIENT_RATING_TAGS.map((tag) => {
                   const selected = clientTags.includes(tag.id);
@@ -2069,6 +2230,8 @@ export function TripRatingsBlock({
                   );
                 })}
               </View>
+
+              <Text style={[styles.bizFieldLabel, styles.bizFieldLabelSpaced]}>Note</Text>
               <View style={styles.commentBoxWrapPulse}>
                 <TextInput
                   style={[styles.commentInputPulse, isDesktop && styles.commentInputPulseDesktop]}
@@ -2082,8 +2245,12 @@ export function TripRatingsBlock({
                   textAlignVertical="top"
                 />
               </View>
+
               <TouchableOpacity
-                style={[styles.modalSubmitPulse, isDesktop && styles.modalSubmitPulseDesktop]}
+                style={[
+                  styles.bizPrimaryBtn,
+                  (clientScore < 1 || clientSubmitting) && styles.bizPrimaryBtnDisabled,
+                ]}
                 disabled={clientScore < 1 || clientSubmitting}
                 onPress={async () => {
                   if (clientScore < 1) return;
@@ -2101,6 +2268,7 @@ export function TripRatingsBlock({
                   const commentPayload = buildCommentPayload(
                     clientTags,
                     clientComment.trim().slice(0, VALIDATION.NOTES_MAX_LENGTH),
+                    isClientEditMode ? clientEditReason : undefined,
                   );
                   let error: { message: string } | null = null;
                   let usedSchemaFallback = false;
@@ -2168,20 +2336,81 @@ export function TripRatingsBlock({
                   }
                   setClientSubmitting(false);
                   setShowClientFeedbackModal(false);
+                  setIsClientEditMode(false);
+                  setClientEditReason('');
                 }}
                 activeOpacity={0.85}
               >
                 {clientSubmitting ? (
-                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+                  <LoadingIndicator size="small" color={Theme.buttonDarkText} />
                 ) : (
                   <>
-                    <Text style={styles.modalSubmitTextPulse}>Submit</Text>
-                    <FontAwesome name="check" size={16} color={Theme.textOnPrimary} />
+                    <Text style={styles.bizPrimaryBtnText}>
+                      {isClientEditMode ? 'Update' : 'Submit'}
+                    </Text>
+                    <Feather name="arrow-right" size={16} color={Theme.buttonDarkText} />
                   </>
                 )}
               </TouchableOpacity>
             </View>
       </TripFeedbackModal>
+
+      {showEditConfirm ? (
+        <TripFeedbackModal
+          visible
+          onRequestClose={() => { setShowEditConfirm(false); setPendingEditTarget(null); }}
+        >
+          <View style={[styles.bizFormWrap, isDesktop && styles.bizFormWrapDesktop]}>
+            <TouchableOpacity
+              style={styles.bizBackBtn}
+              onPress={() => { setShowEditConfirm(false); setPendingEditTarget(null); }}
+              activeOpacity={0.8}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Feather name="chevron-left" size={22} color={Theme.textPrimaryDark} />
+            </TouchableOpacity>
+            <View style={styles.bizFormHeader}>
+              <View style={styles.bizLiveDot} />
+              <Text style={styles.bizFormTitle}>Edit submitted feedback?</Text>
+            </View>
+            <Text style={styles.bizFormHint}>
+              Your previous feedback will be replaced with the changes you submit. Please tell us why
+              you're updating it.
+            </Text>
+            <Text style={styles.bizFieldLabel}>Reason</Text>
+            <TextInput
+              style={styles.editConfirmInput}
+              value={editReason}
+              onChangeText={setEditReason}
+              placeholder="Reason"
+              placeholderTextColor={Theme.textMuted}
+              multiline
+              numberOfLines={2}
+              maxLength={200}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <View style={styles.editConfirmActions}>
+              <TouchableOpacity
+                style={styles.editConfirmCancel}
+                onPress={() => { setShowEditConfirm(false); setPendingEditTarget(null); }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.editConfirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editConfirmSubmit, !editReason.trim() && styles.editConfirmSubmitDisabled]}
+                onPress={confirmEdit}
+                disabled={!editReason.trim()}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.editConfirmSubmitText}>Continue</Text>
+                <Feather name="arrow-right" size={14} color={Theme.buttonDarkText} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TripFeedbackModal>
+      ) : null}
     </>
   );
 }
@@ -2921,13 +3150,13 @@ const styles = StyleSheet.create({
   regStarsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
     flex: 1,
     minWidth: 0,
   },
   regStarHit: {
-    paddingVertical: 2,
-    paddingHorizontal: 1,
+    paddingVertical: 4,
+    paddingHorizontal: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3056,7 +3285,7 @@ const styles = StyleSheet.create({
   },
   heroTopRowPulse: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
     paddingRight: 44,
   },
@@ -3091,8 +3320,7 @@ const styles = StyleSheet.create({
   heroTextWrapPulse: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
-    paddingTop: 2,
+    gap: 2,
   },
   heroEyebrowPulse: {
     fontSize: 9,
@@ -3132,10 +3360,11 @@ const styles = StyleSheet.create({
   },
   modalBodyPulse: {
     paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 16,
+    paddingTop: 18,
+    paddingBottom: 20,
     backgroundColor: Theme.screenBackground,
     alignItems: 'center',
+    gap: 6,
   },
   modalBodyPulseDesktop: {
     paddingHorizontal: 28,
@@ -3160,6 +3389,228 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginBottom: 14,
   },
+  offlinePartyHint: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: Theme.textMuted,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginBottom: 2,
+    paddingHorizontal: 8,
+  },
+  bizFormWrap: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
+    backgroundColor: Theme.screenBackground,
+  },
+  bizFormWrapDesktop: {
+    paddingHorizontal: 28,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  bizBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e8ecf1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  bizFormHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  bizLiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22c55e',
+  },
+  bizFormTitle: {
+    ...FinanceTxnTypography.partyTitle,
+    flexShrink: 1,
+  },
+  bizFormHint: {
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    lineHeight: 14,
+    marginBottom: 14,
+  },
+  bizPartyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    backgroundColor: Theme.surface,
+  },
+  bizPartyTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  bizPartyName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+  },
+  bizPartyMeta: {
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+  },
+  bizFieldLabel: {
+    ...FinanceTxnTypography.fieldLabel,
+    marginBottom: 6,
+    alignSelf: 'flex-start',
+  },
+  bizFieldLabelSpaced: {
+    marginTop: 12,
+  },
+  bizHelperHint: {
+    ...FinanceTxnTypography.routeWhy,
+    fontSize: 9,
+    lineHeight: 14,
+    marginBottom: 12,
+  },
+  bizPrimaryBtn: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Theme.buttonDark,
+    paddingVertical: 14,
+    borderRadius: 14,
+    width: '100%',
+  },
+  bizPrimaryBtnDisabled: {
+    opacity: 0.45,
+  },
+  bizPrimaryBtnText: {
+    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.buttonDarkText,
+    letterSpacing: 0.75,
+  },
+  regEditTap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  regEditTxt: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: Theme.textMuted,
+  },
+  regEditedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginLeft: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    backgroundColor: Theme.surface,
+  },
+  regEditedText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: Theme.textMuted,
+    letterSpacing: 0.3,
+  },
+  btnEditFeedback: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+  },
+  btnEditText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Theme.textSecondary,
+  },
+  editConfirmWrap: {
+    padding: 24,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    gap: 12,
+  },
+  editConfirmHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editConfirmTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+  },
+  editConfirmDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.textSecondary,
+  },
+  editConfirmInput: {
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 13,
+    color: Theme.textPrimaryDark,
+    minHeight: 60,
+    marginBottom: 8,
+  },
+  editConfirmActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 4,
+  },
+  editConfirmCancel: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  editConfirmCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Theme.textSecondary,
+  },
+  editConfirmSubmit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: Theme.buttonDark,
+  },
+  editConfirmSubmitDisabled: {
+    opacity: 0.45,
+  },
+  editConfirmSubmitText: {
+    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.buttonDarkText,
+    letterSpacing: 0.75,
+  },
   ratingHeadlineAccent: {
     color: Theme.primary,
     fontWeight: '900',
@@ -3167,18 +3618,19 @@ const styles = StyleSheet.create({
   },
   starsPulse: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 2,
+    alignSelf: 'stretch',
+    gap: 10,
+    marginBottom: 4,
   },
   starsPulseDesktop: {
-    gap: 10,
-    marginBottom: 8,
+    gap: 14,
+    marginBottom: 4,
   },
   starBtnPulse: {
-    paddingVertical: 2,
-    paddingHorizontal: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
   },
   composerSectionPulse: {
     width: '100%',
@@ -3197,9 +3649,9 @@ const styles = StyleSheet.create({
   },
   clientTagsWrapPulse: {
     width: '100%',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     rowGap: 8,
-    columnGap: 0,
+    columnGap: 8,
   },
   clientTagsWrapPulseDesktop: {
     flexWrap: 'nowrap',
@@ -3217,9 +3669,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   clientTagChipPulse: {
-    width: '48%',
     minHeight: 34,
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3267,20 +3718,21 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   commentBoxWrapPulse: {
+    marginTop: 6,
     marginBottom: 0,
     width: '100%',
   },
   commentInputPulse: {
     borderWidth: 1,
     borderColor: Theme.borderInput,
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 14,
     color: Theme.textPrimaryDark,
     minHeight: 76,
-    marginBottom: 4,
+    marginBottom: 0,
   },
   commentInputPulseDesktop: {
     minHeight: 96,
@@ -3296,6 +3748,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   modalSubmitPulse: {
+    marginTop: 8,
     backgroundColor: Theme.textPrimaryDark,
     paddingVertical: 14,
     paddingHorizontal: 18,

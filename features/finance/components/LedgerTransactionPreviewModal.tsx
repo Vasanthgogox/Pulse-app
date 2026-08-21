@@ -15,6 +15,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  View,
   useWindowDimensions,
 } from "react-native";
 
@@ -77,7 +78,12 @@ export function LedgerTransactionPreviewModal({
       statusBarTranslucent
     >
       <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.cardShell} onPress={(e) => e.stopPropagation()}>
+        <View
+          style={styles.cardShell}
+          // Ensure overlay tap handlers never win when interacting with the card.
+          // RN touch bubbling can be inconsistent across web/native.
+          onStartShouldSetResponder={() => true}
+        >
           <LedgerEntryReceiptCard
             desktop={isDesktop}
             {...(transaction.is_pending_request ? { heroAnimation: false as const } : {})}
@@ -102,7 +108,7 @@ export function LedgerTransactionPreviewModal({
                 : { label: "Done", onPress: onClose }
             }
           />
-        </Pressable>
+        </View>
       </Pressable>
     </Modal>
   );

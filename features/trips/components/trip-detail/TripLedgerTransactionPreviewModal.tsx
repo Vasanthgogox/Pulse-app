@@ -1,4 +1,5 @@
 import { LedgerTransactionPreviewModal } from "@/features/finance/components/LedgerTransactionPreviewModal";
+import type { LedgerEntryReceiptPartyAvatar } from "@/components/ledger/LedgerEntryReceiptCard";
 import type { LedgerReceiptTripDetailMap } from "@/features/finance/utils/ledgerTransactionReceipt.util";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 
@@ -9,12 +10,14 @@ export function TripLedgerTransactionPreviewModal({
   onClose,
   onViewAll,
   tripDetailsMap,
+  resolveReceiptPartyAvatar,
 }: {
   visible: boolean;
   transaction: LedgerRow | null;
   onClose: () => void;
   onViewAll?: () => void;
   tripDetailsMap?: LedgerReceiptTripDetailMap;
+  resolveReceiptPartyAvatar?: (row: LedgerRow) => LedgerEntryReceiptPartyAvatar | undefined;
 }) {
   return (
     <LedgerTransactionPreviewModal
@@ -23,6 +26,7 @@ export function TripLedgerTransactionPreviewModal({
       onClose={onClose}
       onViewAllOnTrip={onViewAll ? (_tripId: string) => onViewAll() : undefined}
       tripDetailsMap={tripDetailsMap}
+      resolveReceiptPartyAvatar={resolveReceiptPartyAvatar}
     />
   );
 }

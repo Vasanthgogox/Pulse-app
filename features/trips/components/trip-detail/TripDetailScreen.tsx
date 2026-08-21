@@ -20,6 +20,7 @@ import { TripMarginHero } from "@/features/trips/components/trip-detail/TripMarg
 import { TripLedgerTransactionPreviewModal } from "@/features/trips/components/trip-detail/TripLedgerTransactionPreviewModal";
 import { TripAuditLogPanel } from "@/features/trips/components/trip-detail/TripAuditLogPanel";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import type { LedgerEntryReceiptPartyAvatar } from "@/components/ledger/LedgerEntryReceiptCard";
 import { latestTripSettlementLedgerEntry } from "@/features/trips/utils/tripSettlementLedgerEntries.util";
 import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
@@ -591,6 +592,37 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+
+  const resolveReceiptPartyAvatar = useCallback(
+    (row: LedgerRow): LedgerEntryReceiptPartyAvatar | undefined => {
+      const partyName = (row.party_name ?? "").trim();
+      if (!partyName) return undefined;
+      const isSupplier = row.contact_type === "supplier";
+      const fields = isSupplier
+        ? detail.supplierPartyAvatarFields
+        : detail.clientPartyAvatarFields;
+      const partyRes = isSupplier
+        ? detail.supplierPartyRes
+        : detail.clientPartyRes;
+      return {
+        name: partyName,
+        entityType: (row.contact_type as "client" | "supplier") ?? "client",
+        avatarUrl: fields?.avatarUrl ?? undefined,
+        avatarSeed: fields?.avatarSeed ?? undefined,
+        organizationImageUrl: fields?.organizationImageUrl ?? undefined,
+        organizationAvatarSeed: fields?.organizationAvatarSeed ?? undefined,
+        isIntegrated: partyRes?.integrated ?? false,
+        initialsColorSeed: row.contact_id ?? row.party_name,
+      };
+    },
+    [
+      detail.clientPartyAvatarFields,
+      detail.supplierPartyAvatarFields,
+      detail.clientPartyRes,
+      detail.supplierPartyRes,
+    ],
+  );
+
   const { can: canSurface } = useMemberAccess();
   const canTripFinanceTab = canSurface("tripops.trips.finance");
   // Settlement write actions (capture payment / record payout). The trip finance
@@ -6041,6 +6073,7 @@ export default function TripDetailScreen({
           setActiveTab("finance");
           setFinanceSubTab("transactions");
         }}
+        resolveReceiptPartyAvatar={resolveReceiptPartyAvatar}
         tripDetailsMap={
           trip?.id
             ? {

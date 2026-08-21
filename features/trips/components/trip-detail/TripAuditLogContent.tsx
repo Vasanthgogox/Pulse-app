@@ -622,17 +622,17 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "600",
     color: METRONIC.ink,
     letterSpacing: -0.15,
   },
   headerSubtitle: {
     marginTop: 2,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "400",
     color: METRONIC.muted,
-    lineHeight: 14,
+    lineHeight: 16,
   },
   closeBtn: {
     width: 28,
@@ -665,7 +665,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   tabText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "400",
     color: METRONIC.muted,
   },
@@ -701,7 +701,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(62, 151, 255, 0.06)",
   },
   yearChipText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "400",
     color: METRONIC.muted,
   },
@@ -758,19 +758,19 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   journeyHeroRef: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
     color: METRONIC.ink,
   },
   journeyHeroRoute: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "400",
     color: METRONIC.sub,
-    lineHeight: 13,
+    lineHeight: 15,
   },
   journeyHeroMeta: {
     marginTop: 1,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "400",
     color: METRONIC.muted,
   },
@@ -792,7 +792,7 @@ const styles = StyleSheet.create({
     borderColor: METRONIC.border,
   },
   monthHeaderText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "500",
     letterSpacing: 0.4,
     textTransform: "uppercase",
@@ -830,17 +830,17 @@ const styles = StyleSheet.create({
   headline: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 19,
     color: METRONIC.ink,
-    fontWeight: "400",
+    fontWeight: "500",
   },
   actorName: {
     fontWeight: "600",
     color: METRONIC.ink,
   },
   actionText: {
-    fontWeight: "400",
+    fontWeight: "500",
     color: METRONIC.ink,
   },
   targetName: {
@@ -862,8 +862,8 @@ const styles = StyleSheet.create({
   },
   metaLine: {
     flex: 1,
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: "400",
     color: METRONIC.muted,
   },
@@ -873,10 +873,10 @@ const styles = StyleSheet.create({
   },
   plainDetail: {
     marginTop: 5,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "400",
     color: METRONIC.sub,
-    lineHeight: 14,
+    lineHeight: 15,
   },
   detailCard: {
     marginTop: 8,
@@ -923,8 +923,8 @@ const styles = StyleSheet.create({
     color: Theme.teslaRed,
   },
   detailSecondary: {
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: "400",
     color: METRONIC.sub,
   },
@@ -939,10 +939,10 @@ const styles = StyleSheet.create({
   },
   peopleLabel: {
     flex: 1,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "400",
     color: METRONIC.ink,
-    lineHeight: 12,
+    lineHeight: 13,
   },
   peopleRole: {
     fontWeight: "500",
@@ -970,7 +970,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(62, 151, 255, 0.08)",
   },
   yearText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "400",
     color: METRONIC.muted,
   },
@@ -985,7 +985,7 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 10,
+    fontSize: 11,
     color: METRONIC.muted,
   },
   emptyWrap: {
@@ -1005,14 +1005,14 @@ const styles = StyleSheet.create({
     borderColor: METRONIC.border,
   },
   emptyTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
     color: METRONIC.ink,
   },
   emptyBody: {
-    fontSize: 10,
+    fontSize: 11,
     color: METRONIC.muted,
     textAlign: "center",
-    lineHeight: 14,
+    lineHeight: 15,
   },
 });

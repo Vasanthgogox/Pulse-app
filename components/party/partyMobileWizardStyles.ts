@@ -487,6 +487,18 @@ export const partyMobileWizardStyles = StyleSheet.create({
     width: 42,
     height: 42,
   },
+  reviewHeroBlock: {
+    width: "100%",
+    alignItems: "center",
+    gap: 6,
+  },
+  reviewSummaryBlock: {
+    width: "100%",
+  },
+  reviewActionsBlock: {
+    width: "100%",
+    alignItems: "center",
+  },
   reviewCardTitle: {
     fontSize: 16,
     fontWeight: "700",
