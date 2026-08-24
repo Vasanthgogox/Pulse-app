@@ -8,6 +8,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { confirmDialog } from "@/lib/confirmDialog";
 import {
   DOMAIN_TOGGLE_ROWS,
   DomainPermissionToggleRow,
@@ -79,7 +80,6 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -341,30 +341,31 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
   const handleDeletePreset = useCallback(
     (preset: CustomRolePreset) => {
       if (!orgId || !canEdit) return;
-      Alert.alert("Delete preset?", `Remove "${preset.name}" from this workspace?`, [
-        { text: "Keep", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              setPresetBusy(true);
-              try {
-                const { error: delErr, presets: next } =
-                  await deleteCustomRolePreset(orgId, preset.id);
-                if (delErr) {
-                  setError(delErr.message);
-                  return;
-                }
-                setPresets(next);
-                setAppliedPresetId((id) => (id === preset.id ? null : id));
-              } finally {
-                setPresetBusy(false);
-              }
-            })();
-          },
-        },
-      ]);
+      void (async () => {
+        const confirmed = await confirmDialog({
+          title: "Delete preset?",
+          message: `Remove "${preset.name}" from this workspace?`,
+          confirmLabel: "Delete",
+          cancelLabel: "Keep",
+          destructive: true,
+        });
+        if (!confirmed) return;
+        setPresetBusy(true);
+        try {
+          const { error: delErr, presets: next } = await deleteCustomRolePreset(
+            orgId,
+            preset.id,
+          );
+          if (delErr) {
+            setError(delErr.message);
+            return;
+          }
+          setPresets(next);
+          setAppliedPresetId((id) => (id === preset.id ? null : id));
+        } finally {
+          setPresetBusy(false);
+        }
+      })();
     },
     [orgId, canEdit],
   );
@@ -521,81 +522,67 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
     const displayName =
       member.full_name || member.phone || member.email || "this member";
     const isPending = member.status === "pending";
-    Alert.alert(
-      isPending ? "Cancel invitation?" : "Remove from team?",
-      isPending
-        ? `Cancel the invite sent to ${displayName}?`
-        : `Remove ${displayName} from your team? They will lose access immediately.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: isPending ? "Cancel invite" : "Remove",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              setActionBusy(true);
-              try {
-                const { error: remErr } = isPending
-                  ? await cancelTeamInvite(member.id)
-                  : await removeMember(member.id);
-                if (remErr) {
-                  Alert.alert("Error", remErr.message);
-                  return;
-                }
-                invalidate();
-                await refetch();
-                onBack();
-              } finally {
-                setActionBusy(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
+    void (async () => {
+      const confirmed = await confirmDialog({
+        title: isPending ? "Cancel invitation?" : "Remove from team?",
+        message: isPending
+          ? `Cancel the invite sent to ${displayName}?`
+          : `Remove ${displayName} from your team? They will lose access immediately.`,
+        confirmLabel: isPending ? "Cancel invite" : "Remove",
+        cancelLabel: "Cancel",
+        destructive: true,
+      });
+      if (!confirmed) return;
+      setActionBusy(true);
+      try {
+        const { error: remErr } = isPending
+          ? await cancelTeamInvite(member.id)
+          : await removeMember(member.id);
+        if (remErr) {
+          setError(remErr.message);
+          return;
+        }
+        invalidate();
+        await refetch();
+        onBack();
+      } finally {
+        setActionBusy(false);
+      }
+    })();
   }, [member, canEdit, invalidate, refetch, onBack]);
 
   const handleTransfer = useCallback(() => {
     if (!member || !canTransfer || !orgId) return;
     const name =
       member.full_name || member.phone || member.email || "this member";
-    Alert.alert(
-      "Transfer ownership?",
-      `${name} will become the owner and you'll become an admin. You can't undo this yourself.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Transfer",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              setActionBusy(true);
-              try {
-                const { error: xferErr } = await transferOwnership(
-                  orgId,
-                  member.user_id,
-                );
-                if (xferErr) {
-                  Alert.alert(
-                    "Could not transfer ownership",
-                    looksLikeTransferTargetError(xferErr.message)
-                      ? "The chosen person must be an active member of this workspace."
-                      : xferErr.message,
-                  );
-                  return;
-                }
-                await refreshWorkspace();
-                invalidate();
-                await refetch();
-                onBack();
-              } finally {
-                setActionBusy(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
+    void (async () => {
+      const confirmed = await confirmDialog({
+        title: "Transfer ownership?",
+        message: `${name} will become the owner and you'll become an admin. You can't undo this yourself.`,
+        confirmLabel: "Transfer",
+        cancelLabel: "Cancel",
+        destructive: true,
+      });
+      if (!confirmed) return;
+      setActionBusy(true);
+      try {
+        const { error: xferErr } = await transferOwnership(orgId, member.user_id);
+        if (xferErr) {
+          setError(
+            looksLikeTransferTargetError(xferErr.message)
+              ? "The chosen person must be an active member of this workspace."
+              : xferErr.message,
+          );
+          return;
+        }
+        await refreshWorkspace();
+        invalidate();
+        await refetch();
+        onBack();
+      } finally {
+        setActionBusy(false);
+      }
+    })();
   }, [member, canTransfer, orgId, refreshWorkspace, invalidate, refetch, onBack]);
 
   if (isLoading && !member) {
@@ -727,6 +714,12 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
           </Pressable>
         </View>
       )}
+
+      {error ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
     </View>
   );
 
