@@ -387,11 +387,11 @@ When you change RBAC again:
 
 ---
 
-## Workspace hub — Org Profile tile gate
+## Workspace hub — Organization tile gate
 
 | Commit | Summary |
 |--------|---------|
-| _(pending)_ | Workspace hub "Org Profile" quick-action tile (`components/profile/WorkspaceHubMenu.tsx`): swapped the generic person icon for the org logo/initials avatar (same `orgLogoUri`/`orgInitials` resolution already used for the header logo), relabeled "Profile" → "Org Profile", and gated visibility on `canSurface("workspace.settings")` — the same `useMemberAccess` surface check the adjacent "Settings" row already uses. No new capability introduced. |
+| _(pending)_ | Workspace hub "Organization" quick-action tile (`components/profile/WorkspaceHubMenu.tsx`): swapped the generic person icon for the org logo/initials avatar (same `orgLogoUri`/`orgInitials` resolution already used for the header logo), relabeled "Profile" → "Organization", and gated visibility on `canSurface("workspace.settings")` — the same `useMemberAccess` surface check the adjacent "Settings" row already uses. No new capability introduced. |
 
 **Verification:** `tsc --noEmit` clean on the touched file. **Not verified in a running app** — did not open the workspace hub as a non-admin member to confirm the tile disappears.
 

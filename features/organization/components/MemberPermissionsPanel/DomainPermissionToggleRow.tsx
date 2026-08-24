@@ -324,7 +324,7 @@ export const DOMAIN_TOGGLE_ROWS: DomainToggleRowDef[] = [
   {
     key: "tripops",
     label: "Operations",
-    hint: "Trips, indents, tracking, docs, vehicles, drivers",
+    hint: "Trips, tracking, docs, vehicles, drivers",
   },
   {
     key: "team",
