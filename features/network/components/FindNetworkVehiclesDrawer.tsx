@@ -5,6 +5,7 @@
  * Opens the same story-detail page on select.
  */
 import Theme from "@/constants/Theme";
+import { ResponsiveDrawer } from "@/components/ResponsiveDrawer";
 import {
   OpportunityCard,
   useLoadCenterOpportunityPosts,
@@ -12,20 +13,16 @@ import {
 } from "@/features/network/components/LoadCenterOpportunityExchange";
 import type { PostRow } from "@/features/network/services/posts.service";
 import { splitLocationParts } from "@/features/network/utils/storyDisplay";
-import { MotiView } from "moti";
 import { Search, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableWithoutFeedback,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -99,8 +96,6 @@ export function FindNetworkVehiclesDrawer({
 }: FindNetworkVehiclesDrawerProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const isSideDrawer = Platform.OS === "web" && width >= 768;
   const isGet = mode === "get";
 
   const { posts, isLoading } = useLoadCenterOpportunityPosts(
@@ -332,65 +327,22 @@ export function FindNetworkVehiclesDrawer({
 
   if (!visible) return null;
 
-  if (isSideDrawer) {
-    return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="fade"
-        onRequestClose={onClose}
-        statusBarTranslucent
-      >
-        <View style={styles.overlay}>
-          <TouchableWithoutFeedback onPress={onClose} accessibilityLabel="Close">
-            <View style={StyleSheet.absoluteFillObject} />
-          </TouchableWithoutFeedback>
-          <MotiView
-            from={{ translateX: DRAWER_WIDTH }}
-            animate={{ translateX: 0 }}
-            transition={{ type: "spring", damping: 32, stiffness: 320, mass: 0.9 }}
-            style={[styles.drawer, { width: DRAWER_WIDTH, maxWidth: "92%" as unknown as number }]}
-          >
-            {body}
-          </MotiView>
-        </View>
-      </Modal>
-    );
-  }
-
   return (
-    <Modal
+    <ResponsiveDrawer
       visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
+      onClose={onClose}
+      insets={insets}
+      desktopWidth={DRAWER_WIDTH}
+      tabletWidth={DRAWER_WIDTH}
+      mobileVariant="fullScreen"
+      applyDrawerInsetPadding={false}
     >
       {body}
-    </Modal>
+    </ResponsiveDrawer>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    backgroundColor: Theme.overlayBackdrop,
-  },
-  drawer: {
-    height: "100%" as unknown as number,
-    backgroundColor: Theme.screenBackground,
-    ...Platform.select({
-      web: { boxShadow: "-8px 0 32px rgba(15,23,42,0.18)" } as object,
-      default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: -2, height: 0 },
-        shadowOpacity: 0.18,
-        shadowRadius: 20,
-        elevation: 24,
-      },
-    }),
-  },
   panel: {
     flex: 1,
     minHeight: 0,

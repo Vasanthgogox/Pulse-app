@@ -5,6 +5,7 @@
  * Commercial truth (price, canAward, lifecycle) from resolveCommercialOpportunity().
  */
 import Theme from "@/constants/Theme";
+import { ResponsiveDrawer } from "@/components/ResponsiveDrawer";
 import { getIndentDisplayNumber, type IndentRow } from "@/features/indents";
 import { IndentCounterOfferEntry } from "@/features/indents/components/bidding/IndentCounterOfferEntry";
 import { IndentLiveBidsPanel } from "@/features/indents/components/bidding/IndentLiveBidsPanel";
@@ -19,25 +20,18 @@ import { showAppAlert } from "@/lib/appAlert";
 import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
-import { MotiView } from "moti";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   useWindowDimensions,
   View,
 } from "react-native";
 import { X } from "lucide-react-native";
-
-/** Wide enough for bid cards; matches Load Center “wide side flex” preference. */
-const DESKTOP_DRAWER_WIDTH = 780;
-const TABLET_DRAWER_WIDTH = 720;
 
 const LIFECYCLE_LABEL: Record<string, string> = {
   draft: "Draft",
@@ -59,10 +53,9 @@ interface AwardModalProps {
 export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalProps) {
   const { width: windowWidth } = useWindowDimensions();
   const queryClient = useQueryClient();
-  const isSideDrawer =
-    Platform.OS === "web" && windowWidth >= 768;
-  const isDesktop = Platform.OS === "web" && windowWidth >= 1024;
-  const drawerWidth = isDesktop ? DESKTOP_DRAWER_WIDTH : TABLET_DRAWER_WIDTH;
+  // Mirrors ResponsiveDrawer's own default drawerBreakpoint (768) -- needed
+  // here too, separately, only to pick the bid-list scroll style below.
+  const isSideDrawer = Platform.OS === "web" && windowWidth >= 768;
 
   const {
     currentLoad,
@@ -431,117 +424,20 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
     />
   );
 
-  if (isSideDrawer) {
-    return (
-      <>
-        <Modal
-          visible={visible}
-          transparent
-          animationType="fade"
-          onRequestClose={close}
-          statusBarTranslucent
-          accessibilityViewIsModal
-        >
-          <View style={styles.desktopOverlay}>
-            <TouchableWithoutFeedback onPress={close} accessibilityLabel="Close">
-              <View style={StyleSheet.absoluteFillObject} />
-            </TouchableWithoutFeedback>
-            <MotiView
-              from={{ translateX: drawerWidth }}
-              animate={{ translateX: 0 }}
-              transition={{ type: "spring", damping: 32, stiffness: 320, mass: 0.9 }}
-              style={[
-                styles.desktopDrawer,
-                {
-                  width: drawerWidth,
-                  maxWidth: "92%" as unknown as number,
-                  paddingTop: Math.max(insets.top, 16),
-                  paddingBottom: 20 + insets.bottom,
-                },
-              ]}
-            >
-              <View style={styles.drawerInner}>{panelBody}</View>
-            </MotiView>
-          </View>
-        </Modal>
-        {counterEntry}
-      </>
-    );
-  }
-
   return (
     <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="slide"
-        onRequestClose={close}
-      >
-        <View style={styles.modalBackdrop}>
-          <TouchableWithoutFeedback onPress={close} accessibilityLabel="Close">
-            <View style={StyleSheet.absoluteFillObject} />
-          </TouchableWithoutFeedback>
-          <View style={[styles.modalSheet, { paddingBottom: 16 + insets.bottom }]}>
-            <View style={styles.modalHandle} />
-            {panelBody}
-          </View>
-        </View>
-      </Modal>
+      <ResponsiveDrawer visible={visible} onClose={close} insets={insets}>
+        {panelBody}
+      </ResponsiveDrawer>
       {counterEntry}
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  desktopOverlay: {
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    backgroundColor: Theme.overlayBackdrop,
-  },
-  desktopDrawer: {
-    height: "100%" as unknown as number,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 22,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: -2, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    elevation: 24,
-    ...Platform.select({
-      web: { boxShadow: "-8px 0 32px rgba(15,23,42,0.18)" } as object,
-      default: {},
-    }),
-  },
-  drawerInner: {
-    flex: 1,
-    minHeight: 0,
-  },
   bodyColumn: {
     flex: 1,
     minHeight: 0,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: Theme.overlayBackdrop,
-    justifyContent: "flex-end",
-  },
-  modalSheet: {
-    backgroundColor: Theme.screenBackground,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    minWidth: 0,
-    maxHeight: "92%" as unknown as number,
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: Theme.borderMedium,
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: 14,
   },
   reviewHubModalHeader: {
     flexDirection: "row",
