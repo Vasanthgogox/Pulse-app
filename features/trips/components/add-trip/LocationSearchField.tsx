@@ -137,9 +137,15 @@ export function LocationSearchField({
     setDropdownOpen(true);
     onDropdownOpenChange?.(true);
     onFocusScroll?.();
-    // Ensure modal's input focuses after modal is visible.
-    setTimeout(() => modalInputRef.current?.focus(), 0);
-  }, [onDropdownOpenChange, onFocusScroll, value]);
+    /**
+     * Do not auto-focus search — show popular / matching list first (same as
+     * vehicle-type picker). Keyboard only opens when the user taps search.
+     * Signup map sheet still focuses so typing starts immediately.
+     */
+    if (isSignupSheet) {
+      setTimeout(() => modalInputRef.current?.focus(), 0);
+    }
+  }, [isSignupSheet, onDropdownOpenChange, onFocusScroll, value]);
 
   const query = draft.trim();
   const popularForDisplay =
@@ -628,7 +634,7 @@ export function LocationSearchField({
                       autoCapitalize="words"
                       spellCheck={false}
                       autoComplete="off"
-                      autoFocus
+                      autoFocus={false}
                       compactChat
                       compactChatSize={isDesktopShell ? "md" : "sm"}
                       shellStyle={

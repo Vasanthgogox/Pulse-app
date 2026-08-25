@@ -10,6 +10,7 @@ import {
 import Theme from "@/constants/Theme";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/supplierNumericPartyPreview.util";
+import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
 import { PartnerRatesKeypadFlow } from "@/features/trips/components/allocation/PartnerRatesKeypadFlow";
 import type { AddTripFormState } from "@/features/trips/components/add-trip/types";
 import type { useAddTripForm } from "@/features/trips/components/add-trip/useAddTripForm";
@@ -156,86 +157,93 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
   return (
     <View style={[s.stepBody, compact && s.compactStepBody]}>
       <View style={s.stepSection}>
-        <DesktopSectionHeading>Supply source *</DesktopSectionHeading>
-        <View style={compact ? s.compactStackTight : s.sourceModeRow}>
-          <Pressable
-            style={[
-              s.sourceModeCard,
-              compact && s.compactSourceModeCard,
-              isAsset && s.sourceModeCardActive,
-            ]}
-            onPress={() => setters.setSupplySource("asset")}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isAsset }}
-          >
-            <View
-              style={[
-                s.sourceModeIcon,
-                compact && s.compactSourceModeIcon,
-                isAsset && s.sourceModeIconActive,
-              ]}
-            >
-              <Truck
-                size={compact ? 18 : 20}
-                color={isAsset ? Theme.textOnPrimary : Theme.textRouteCard}
-                strokeWidth={2.25}
-              />
-            </View>
-            <View style={s.sourceModeCopy}>
-              <Text
-                style={[
-                  s.sourceModeTitle,
-                  compact && s.compactSourceModeTitle,
-                  isAsset && s.sourceModeTitleActive,
-                ]}
+        {compact ? (
+          <SupplyAllocationModeBar
+            variant="wizard"
+            layout="stack"
+            mode={isAsset ? "asset" : "aggregate"}
+            onModeChange={(mode) => setters.setSupplySource(mode)}
+            assignLater={state.assignLater}
+            onAssignLaterChange={setters.setAssignLater}
+            showAssignLater={false}
+          />
+        ) : (
+          <>
+            <DesktopSectionHeading>Supply source *</DesktopSectionHeading>
+            <View style={s.sourceModeRow}>
+              <Pressable
+                style={[s.sourceModeCard, isAsset && s.sourceModeCardActive]}
+                onPress={() => setters.setSupplySource("asset")}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isAsset }}
               >
-                Asset
-              </Text>
-              <Text style={[s.sourceModeSub, compact && s.compactSourceModeSub]}>
-                Use your own drivers and vehicles
-              </Text>
-            </View>
-          </Pressable>
+                <View
+                  style={[
+                    s.sourceModeIcon,
+                    isAsset && s.sourceModeIconActive,
+                  ]}
+                >
+                  <Truck
+                    size={20}
+                    color={isAsset ? Theme.textOnPrimary : Theme.textRouteCard}
+                    strokeWidth={2.25}
+                  />
+                </View>
+                <View style={s.sourceModeCopy}>
+                  <Text
+                    style={[
+                      s.sourceModeTitle,
+                      isAsset && s.sourceModeTitleActive,
+                    ]}
+                  >
+                    Asset
+                  </Text>
+                  <Text style={s.sourceModeSub}>
+                    Use your own drivers and vehicles
+                  </Text>
+                </View>
+              </Pressable>
 
-          <Pressable
-            style={[
-              s.sourceModeCard,
-              compact && s.compactSourceModeCard,
-              isAggregate && s.sourceModeCardActive,
-            ]}
-            onPress={() => setters.setSupplySource("aggregate")}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isAggregate }}
-          >
-            <View
-              style={[
-                s.sourceModeIcon,
-                compact && s.compactSourceModeIcon,
-                isAggregate && s.sourceModeIconActive,
-              ]}
-            >
-              <Building2
-                size={compact ? 18 : 20}
-                color={isAggregate ? Theme.textOnPrimary : Theme.textRouteCard}
-                strokeWidth={2.25}
-              />
-            </View>
-            <View style={s.sourceModeCopy}>
-              <Text
+              <Pressable
                 style={[
-                  s.sourceModeTitle,
-                  compact && s.compactSourceModeTitle,
-                  isAggregate && s.sourceModeTitleActive,
+                  s.sourceModeCard,
+                  isAggregate && s.sourceModeCardActive,
                 ]}
+                onPress={() => setters.setSupplySource("aggregate")}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isAggregate }}
               >
-                Aggregate
-              </Text>
-              <Text style={[s.sourceModeSub, compact && s.compactSourceModeSub]}>
-                Book a transport partner at a set rate
-              </Text>
+                <View
+                  style={[
+                    s.sourceModeIcon,
+                    isAggregate && s.sourceModeIconActive,
+                  ]}
+                >
+                  <Building2
+                    size={20}
+                    color={
+                      isAggregate ? Theme.textOnPrimary : Theme.textRouteCard
+                    }
+                    strokeWidth={2.25}
+                  />
+                </View>
+                <View style={s.sourceModeCopy}>
+                  <Text
+                    style={[
+                      s.sourceModeTitle,
+                      isAggregate && s.sourceModeTitleActive,
+                    ]}
+                  >
+                    Aggregate
+                  </Text>
+                  <Text style={s.sourceModeSub}>
+                    Book a transport partner at a set rate
+                  </Text>
+                </View>
+              </Pressable>
             </View>
-          </Pressable>
-        </View>
+          </>
+        )}
       </View>
 
       {isAsset ? (
@@ -259,8 +267,8 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
               compact && s.compactSourceGuidanceText,
             ]}
           >
-            On the next step you can assign a driver and vehicle, or choose Assign
-            later and link them on the trip screen.
+            On the next step you can assign a driver and vehicle, or choose
+            Assign later and link them on the trip screen.
           </Text>
         </View>
       ) : null}

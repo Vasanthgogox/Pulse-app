@@ -52,12 +52,12 @@ export const CreateTripDesktopStepper = memo(function CreateTripDesktopStepper({
                 backgroundColor: done
                   ? Theme.positive
                   : active
-                    ? Theme.textPrimaryDark
+                    ? Theme.accentBrown
                     : Theme.surfaceGray,
                 borderColor: done
                   ? Theme.positive
                   : active
-                    ? Theme.textPrimaryDark
+                    ? Theme.accentBrown
                     : Theme.borderLight,
                 scale: active ? 1.02 : 1,
               }}

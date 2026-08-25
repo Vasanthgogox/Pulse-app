@@ -49,8 +49,13 @@ export type WizardNumericKeypadFlowProps = {
   showDecimal?: boolean;
   prefix?: string;
   placeholder?: string;
-  /** Optional content between amount and keypad. */
+  /** Optional content between amount and keypad (e.g. sale/margin strip). */
   accessory?: ReactNode;
+  /**
+   * Content pinned above the on-screen keypad (e.g. margin % chips).
+   * Stays with the pad so it isn’t lost under a fill-layout dock.
+   */
+  dockAccessory?: ReactNode;
   /**
    * Always use the mobile GPay layout (centered recipient + hero amount + keypad),
    * even on wide viewports — e.g. desktop partner-rate popup.
@@ -94,6 +99,7 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   prefix = "₹",
   placeholder = "0",
   accessory,
+  dockAccessory,
   forceMobileLayout = false,
   compact = false,
 }: WizardNumericKeypadFlowProps) {
@@ -350,17 +356,17 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         ) : null}
         {fieldSwitch}
         {payoutStage}
+        {accessory ? (
+          <View
+            style={[
+              styles.wizardKeypadAccessory,
+              isPopupShell && styles.wizardKeypadAccessoryPopup,
+            ]}
+          >
+            {accessory}
+          </View>
+        ) : null}
       </View>
-      {accessory ? (
-        <View
-          style={[
-            styles.wizardKeypadAccessory,
-            isPopupShell && styles.wizardKeypadAccessoryPopup,
-          ]}
-        >
-          {accessory}
-        </View>
-      ) : null}
       {/* Absolute bottom dock on fill shells — reliable mobile GPay layout. */}
       <View
         style={[
@@ -370,6 +376,9 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         ]}
       >
         <WizardActionBarHost style={styles.wizardKeypadActionBar} />
+        {dockAccessory ? (
+          <View style={styles.wizardKeypadDockAccessory}>{dockAccessory}</View>
+        ) : null}
         <View
           style={[
             flow.keypadDockWizard,

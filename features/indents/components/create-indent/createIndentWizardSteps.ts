@@ -54,11 +54,14 @@ export function indentStepCanAdvance(
           parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0,
       );
     case "prices": {
-      if (!t(form.supplier_target)) return true;
       const st = parseFloat(
         String(form.supplier_target ?? "").replace(/,/g, ""),
       );
-      return Number.isFinite(st) && st >= 0;
+      return (
+        Boolean(t(form.supplier_target)) &&
+        Number.isFinite(st) &&
+        st > 0
+      );
     }
     case "vehicle":
       return Boolean(

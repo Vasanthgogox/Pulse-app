@@ -41,18 +41,18 @@ export function seedDeployWeightTonsFromIndent(indent: IndentRow): string {
   return indentWeightKgToTonsInput(indent.weight);
 }
 
+/**
+ * Final allocation step only collects arrival date (type / product / tons
+ * come from the indent). Ready = valid date only so Convert to trip is not
+ * blocked when indent weight or commodity fields are empty.
+ */
 export function isDeployTripDetailsReady(
   pickupDate: string,
-  weightTons: string,
-  vehicleType: string,
-  loadType: string,
+  _weightTons?: string,
+  _vehicleType?: string,
+  _loadType?: string,
 ): boolean {
-  return (
-    isValidIsoDateString(pickupDate) &&
-    parseTonsInputToWeightKg(weightTons) != null &&
-    vehicleType.trim().length > 0 &&
-    loadType.trim().length > 0
-  );
+  return isValidIsoDateString(pickupDate);
 }
 
 export function seedDeployVehicleTypeFromIndent(indent: {

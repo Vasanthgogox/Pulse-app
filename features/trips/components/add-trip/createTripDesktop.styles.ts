@@ -749,15 +749,15 @@ export const createTripDesktopStyles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 22,
     borderRadius: 12,
-    backgroundColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.accentBrown,
     minHeight: 36,
     minWidth: 128,
     borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
+    borderColor: Theme.accentBrownDeep,
     ...Platform.select({
       web: {
         cursor: "pointer" as const,
-        boxShadow: "0 1px 4px rgba(15, 23, 42, 0.1)",
+        boxShadow: "0 1px 4px rgba(77, 54, 54, 0.16)",
       },
       default: {},
     }),
@@ -902,7 +902,7 @@ export const createTripDesktopStyles = StyleSheet.create({
     width: "100%",
   },
   stepperLabelActive: {
-    color: Theme.textPrimaryDark,
+    color: Theme.accentBrown,
     fontWeight: "700",
   },
   stepperLabelDone: {

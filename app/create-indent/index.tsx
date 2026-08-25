@@ -85,7 +85,6 @@ import { useSafeBack } from "@/lib/useSafeBack";
 import {
     dateISO,
     maxLength,
-    nonNegativeAmount,
     positiveAmount,
     required,
     runValidators,
@@ -151,10 +150,8 @@ function validateForm(state: FormState): Record<string, string> {
   r("drop_location", required(), maxLength(255));
   const clientPriceErr = positiveAmount()(state.client_price);
   if (clientPriceErr) errors.client_price = clientPriceErr;
-  if ((state.supplier_target ?? "").trim()) {
-    const supplierTargetErr = nonNegativeAmount()(state.supplier_target);
-    if (supplierTargetErr) errors.supplier_target = supplierTargetErr;
-  }
+  const supplierTargetErr = positiveAmount()(state.supplier_target);
+  if (supplierTargetErr) errors.supplier_target = supplierTargetErr;
   r("vehicle_type", required("Vehicle is required"), maxLength(100));
   r("load_type", required("Load type is required"), maxLength(100));
   const weightStr = (state.weight ?? "").trim();
@@ -1093,8 +1090,8 @@ export default function CreateIndentScreen() {
     parseFloat((form.weight ?? "").replace(/,/g, "")) > 0 &&
     (form.client_price ?? "").trim().length > 0 &&
     parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
-    (!(form.supplier_target ?? "").trim() ||
-      parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0);
+    (form.supplier_target ?? "").trim().length > 0 &&
+    parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) > 0;
 
   /**
    * Hooks below must stay above the `!canCreate` early return — `canCreate` flips
@@ -1203,7 +1200,7 @@ export default function CreateIndentScreen() {
           ? "Confirm the contract corridor and set the trip date."
           : "Enter pickup, drop and trip date."
         : wizardStep === "prices"
-          ? "Set an optional supplier target before sharing."
+          ? "Set a supplier target (or pick a margin %) before sharing."
           : wizardStep === "vehicle"
             ? "Vehicle type, load type and tonnage."
             : wizardStep === "loadType"
@@ -1242,7 +1239,9 @@ export default function CreateIndentScreen() {
   if (WIZARD_FULL_PAGE_STEPPED) {
     const compactWizard = !isDesktopEnterprise;
     const fillWizardBody =
-      compactWizard && wizardStep === "client" && Boolean(form.client_id);
+      compactWizard &&
+      ((wizardStep === "client" && Boolean(form.client_id)) ||
+        wizardStep === "prices");
     const stepIndex = INDENT_WIZARD_STEPS.indexOf(wizardStep);
     const progressSteps = INDENT_WIZARD_STEPS.map((id) => ({
       id,
@@ -1415,7 +1414,36 @@ export default function CreateIndentScreen() {
                 onSupplierTargetChange={(value) =>
                   update({ supplier_target: value })
                 }
+                clientPrice={form.client_price}
                 errorMessage={errors.supplier_target}
+                partyPreview={
+                  compactWizard && selectedClientRow
+                    ? {
+                        name: selectedClientRow.name ?? "Client",
+                        subtitle:
+                          resolveWizardClientPhone(selectedClientRow.phone) ??
+                          undefined,
+                        entityType: "client" as const,
+                        avatarUrl:
+                          (
+                            selectedClientRow as {
+                              avatar_url?: string | null;
+                            }
+                          ).avatar_url ?? null,
+                        avatarSeed:
+                          (
+                            selectedClientRow as {
+                              avatar_seed?: string | null;
+                            }
+                          ).avatar_seed ?? null,
+                      }
+                    : undefined
+                }
+                onPartyPress={
+                  compactWizard
+                    ? () => setWizardStep("client")
+                    : undefined
+                }
               />
             ) : null}
           </View>
@@ -2216,7 +2244,7 @@ export default function CreateIndentScreen() {
                     value={form.supplier_target}
                     onChange={(raw) => update({ supplier_target: raw })}
                     variant="field"
-                    placeholder="Optional estimate"
+                    placeholder="Enter target"
                     errorMessage={errors.supplier_target}
                   />
                 </View>
@@ -2242,7 +2270,6 @@ export default function CreateIndentScreen() {
                         label: "Supplier target",
                         rawValue: currencyFieldToRaw(form.supplier_target),
                         onRawValueChange: (raw) => update({ supplier_target: raw }),
-                        optional: true,
                         errorMessage: errors.supplier_target,
                       },
                     ]}

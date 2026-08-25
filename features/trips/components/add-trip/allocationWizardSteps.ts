@@ -8,24 +8,25 @@ export type AllocationSubStep =
   | "driverPhone"
   | "vehicle"
   | "fleetDriver"
-  | "fleetVehicle";
+  | "fleetVehicle"
+  | "confirm";
 
 /**
  * Allocation sub-steps after the top-level Source step.
+ * Mirrors indent deploy: aggregate phone → name → vehicle → confirm;
+ * asset driver → vehicle → confirm.
  * Source already captured mode + (aggregate) partner/rate.
  */
 export function getAllocationSubSteps(
   state: Pick<AddTripFormState, "supplySource" | "assignLater">,
 ): AllocationSubStep[] {
   if (state.assignLater) {
-    // One screen to confirm assign-later (toggle already available).
     return ["supply"];
   }
   if (state.supplySource === "aggregate") {
-    return ["driverPhone", "driverName", "vehicle"];
+    return ["driverPhone", "driverName", "vehicle", "confirm"];
   }
-  // Asset: driver + vehicle on one screen (reuse supply id for progress).
-  return ["supply"];
+  return ["fleetDriver", "fleetVehicle", "confirm"];
 }
 
 export function allocationSubStepFields(
@@ -53,6 +54,9 @@ export function allocationSubStepFields(
       return new Set(["assetDriver"]);
     case "fleetVehicle":
       return new Set(["assetVehicle"]);
+    case "confirm":
+      /** Already validated on prior steps — Create Trip uses full form canSubmit. */
+      return new Set();
     default:
       return new Set();
   }
@@ -94,6 +98,8 @@ export function allocationSubStepLabel(step: AllocationSubStep): string {
       return "Assign driver";
     case "fleetVehicle":
       return "Assign vehicle";
+    case "confirm":
+      return "Confirm";
     default:
       return "Allocation";
   }

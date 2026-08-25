@@ -16,18 +16,24 @@ function formatInr(amount: number): string {
 }
 
 export type PartnerRateSaleMarginStripProps = {
-  /** Client sale value (from Load step). */
+  /** Client sale value (from Load / client step). */
   saleValue: string;
-  /** Partner rate being typed. */
+  /** Partner rate / supplier target being typed. */
   partnerRate: string;
+  /** Left column label — default "Sale". */
+  saleLabel?: string;
+  /** Placeholder when sale exists but rate is empty. */
+  rateEmptyHint?: string;
 };
 
 /**
- * Live sale vs margin under partner-rate entry — updates while typing.
+ * Live sale vs margin under partner-rate / supplier-target entry — updates while typing.
  */
 export const PartnerRateSaleMarginStrip = memo(function PartnerRateSaleMarginStrip({
   saleValue,
   partnerRate,
+  saleLabel = "Sale",
+  rateEmptyHint = "Type rate",
 }: PartnerRateSaleMarginStripProps) {
   const sale = useMemo(() => parseAmount(saleValue), [saleValue]);
   const rate = useMemo(() => parseAmount(partnerRate), [partnerRate]);
@@ -57,16 +63,16 @@ export const PartnerRateSaleMarginStrip = memo(function PartnerRateSaleMarginStr
       style={styles.root}
       accessibilityLabel={
         hasSale && margin != null
-          ? `Sale ${formatInr(sale!)}, margin ${formatInr(margin)}${
+          ? `${saleLabel} ${formatInr(sale!)}, margin ${formatInr(margin)}${
               marginPct != null ? `, ${marginPct.toFixed(0)} percent` : ""
             }`
           : hasSale
-            ? `Sale ${formatInr(sale!)}`
+            ? `${saleLabel} ${formatInr(sale!)}`
             : undefined
       }
     >
       <View style={styles.cell}>
-        <Text style={styles.label}>Sale</Text>
+        <Text style={styles.label}>{saleLabel}</Text>
         <Text style={styles.value} numberOfLines={1}>
           {hasSale ? formatInr(sale!) : "—"}
         </Text>
@@ -104,7 +110,7 @@ export const PartnerRateSaleMarginStrip = memo(function PartnerRateSaleMarginStr
           </View>
         ) : (
           <Text style={styles.valueMuted} numberOfLines={1}>
-            {hasSale ? "Type rate" : "Set sale first"}
+            {hasSale ? rateEmptyHint : "Set sale first"}
           </Text>
         )}
       </View>

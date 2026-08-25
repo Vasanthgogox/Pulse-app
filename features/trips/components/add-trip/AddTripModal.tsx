@@ -167,13 +167,16 @@ export function AddTripModal({
     );
   }, [allocationFlowActive, wizardEnabled, wizardStep, allocationSteps]);
 
-  /** Mobile enterprise aggregate: party-style full-page phone / name / vehicle keypads. */
-  const mobileAggregateFleetKeypads =
+  /** Mobile enterprise: allocation sub-steps match indent deploy (keypads / roster). */
+  const mobileAllocationStepped =
     useEnterpriseSteps &&
     !isDesktopWizard &&
     wizardStep === "allocation" &&
-    form.state.supplySource === "aggregate" &&
     !form.state.assignLater;
+  const mobileAggregateFleetKeypads =
+    mobileAllocationStepped && form.state.supplySource === "aggregate";
+  const mobileAssetFleetSteps =
+    mobileAllocationStepped && form.state.supplySource === "asset";
 
   const stepFieldSet = useMemo(() => {
     if (wizardEnabled) {
@@ -181,11 +184,14 @@ export function AddTripModal({
         return sourceStepFields(form.state);
       }
       if (wizardStep === "allocation") {
-        if (useEnterpriseSteps && !mobileAggregateFleetKeypads) {
-          return desktopAllocationStepFields(form.state);
-        }
         if (useEnterpriseSteps && mobileAggregateFleetKeypads) {
           return allocationSubStepFields(allocationSubStep, form.state);
+        }
+        if (useEnterpriseSteps && mobileAssetFleetSteps) {
+          return allocationSubStepFields(allocationSubStep, form.state);
+        }
+        if (useEnterpriseSteps) {
+          return desktopAllocationStepFields(form.state);
         }
         return allocationSubStepFields(allocationSubStep, form.state);
       }
@@ -200,6 +206,7 @@ export function AddTripModal({
     webAllocSubSteps,
     useEnterpriseSteps,
     mobileAggregateFleetKeypads,
+    mobileAssetFleetSteps,
     wizardStep,
     allocationSubStep,
     form.state.supplySource,
@@ -236,7 +243,7 @@ export function AddTripModal({
   const wizardSubmitLabel = steppedFormActive
     ? wizardEnabled && wizardStep !== "allocation"
       ? "Continue"
-      : mobileAggregateFleetKeypads
+      : mobileAggregateFleetKeypads || mobileAssetFleetSteps
         ? isLastAllocationStep
           ? "Create Trip"
           : "Continue"
@@ -271,19 +278,23 @@ export function AddTripModal({
               }),
       };
     }
+    const allocationSubtitle =
+      mobileAggregateFleetKeypads || mobileAssetFleetSteps
+        ? allocationSubStepLabel(allocationSubStep)
+        : useEnterpriseSteps
+          ? form.state.supplySource === "asset"
+            ? "Assign vehicle and driver, or choose Assign later"
+            : form.state.assignLater
+              ? "Fleet can be linked on trip detail"
+              : "Enter partner driver phone and vehicle"
+          : `Assign · ${allocationSubStepLabel(allocationSubStep)}`;
     return {
       steps: topSteps,
       currentId: "allocation",
       stepIndex: topIndex >= 0 ? topIndex + 1 : topSteps.length,
       stepTotal: topSteps.length,
       title: "Create Trip",
-      subtitle: useEnterpriseSteps
-        ? form.state.supplySource === "asset"
-          ? "Assign vehicle and driver, or choose Assign later"
-          : form.state.assignLater
-            ? "Fleet can be linked on trip detail"
-            : "Enter partner driver phone and vehicle"
-        : `Assign · ${allocationSubStepLabel(allocationSubStep)}`,
+      subtitle: allocationSubtitle,
     };
   }, [
     wizardEnabled,
@@ -292,6 +303,8 @@ export function AddTripModal({
     allocationSubStep,
     isDesktopWizard,
     useEnterpriseSteps,
+    mobileAggregateFleetKeypads,
+    mobileAssetFleetSteps,
     form.state.supplySource,
     form.state.assignLater,
     contractLaneLocked,
@@ -320,6 +333,10 @@ export function AddTripModal({
     partnerRateFillBody ||
     allocationKeypadFillBody ||
     desktopAllocationFillBody;
+  /** Final allocation step: Create Trip only (edit via summary chips / header back). */
+  const hideFooterBack =
+    (wizardStep === "allocation" && isLastAllocationStep) ||
+    allocationKeypadFillBody;
 
   const runCreate = async (opts?: { skipDriverAssign?: boolean }) => {
     setDriverBusyAlertVisible(false);
@@ -463,7 +480,10 @@ export function AddTripModal({
       setWizardStep("allocation");
       return;
     }
-    if (wizardStep === "allocation" && mobileAggregateFleetKeypads) {
+    if (
+      wizardStep === "allocation" &&
+      (mobileAggregateFleetKeypads || mobileAssetFleetSteps)
+    ) {
       if (stepIssues.length > 0) {
         const msg = stepIssues[0]?.message ?? "Fill required fields.";
         setSubmitError(msg);
@@ -488,7 +508,11 @@ export function AddTripModal({
     }
     if (!wizardEnabled) return;
     if (wizardStep === "allocation") {
-      if (!useEnterpriseSteps || mobileAggregateFleetKeypads) {
+      if (
+        !useEnterpriseSteps ||
+        mobileAggregateFleetKeypads ||
+        mobileAssetFleetSteps
+      ) {
         const allocIdx = allocationSteps.indexOf(allocationSubStep);
         if (allocIdx > 0) {
           setAllocationSubStep(allocationSteps[allocIdx - 1]!);
@@ -540,7 +564,11 @@ export function AddTripModal({
       return;
     }
     if (wizardStep === "allocation") {
-      if (!useEnterpriseSteps || mobileAggregateFleetKeypads) {
+      if (
+        !useEnterpriseSteps ||
+        mobileAggregateFleetKeypads ||
+        mobileAssetFleetSteps
+      ) {
         const allocIdx = allocationSteps.indexOf(allocationSubStep);
         if (allocIdx > 0) {
           setAllocationSubStep(allocationSteps[allocIdx - 1]!);
@@ -629,6 +657,7 @@ export function AddTripModal({
       fillBody={wizardFillBody}
       scrollBody={wizardEnabled && !wizardFillBody && !isDesktopWizard}
       steppedLayout={isDesktopWizard}
+      hideFooterSecondary={hideFooterBack}
       progress={
         wizardEnabled && isDesktopWizard ? (
           <CreateTripDesktopStepper
@@ -660,10 +689,14 @@ export function AddTripModal({
           validationIssues={visibleIssues}
           sourceIndent={sourceIndent ?? null}
           allocationSubStep={
-            mobileAggregateFleetKeypads ? allocationSubStep : undefined
+            mobileAggregateFleetKeypads || mobileAssetFleetSteps
+              ? allocationSubStep
+              : undefined
           }
           onAllocationSubStepChange={
-            mobileAggregateFleetKeypads ? setAllocationSubStep : undefined
+            mobileAggregateFleetKeypads || mobileAssetFleetSteps
+              ? setAllocationSubStep
+              : undefined
           }
           onLaneGateActiveChange={setLaneGateActive}
           onContractLaneLockedChange={setContractLaneLocked}

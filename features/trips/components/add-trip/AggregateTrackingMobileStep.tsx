@@ -1,23 +1,15 @@
 /**
  * Aggregate driver phone / name / vehicle — full-page keypad flows (Create Trip mobile).
- * Matches indent deploy + party wizard standard (no system keyboard on phone / plate).
+ * Matches indent deploy + party wizard standard (no system keyboard on phone / name / plate).
  */
 import { memo, useMemo, type ReactNode } from "react";
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type TextInput as TextInputType,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { User } from "lucide-react-native";
 
 import { IndianVehicleRegistrationKeypadFlow } from "@/components/indianVehicle/IndianVehicleRegistrationKeypadFlow";
+import { DriverNameKeypadFlow } from "@/components/party/keypad/DriverNameKeypadFlow";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeypadFlow";
-import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import Theme from "@/constants/Theme";
 import type { ExistingDriverMatch } from "@/features/drivers/services/drivers.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
@@ -36,175 +28,161 @@ export interface AggregateTrackingMobileStepProps {
   vehicleText: string;
   onVehicleTextChange: (value: string) => void;
   invalid: (field: AddTripIssueField) => boolean;
-  driverNameInputRef?: React.RefObject<TextInputType | null>;
   driverPhoneMatches?: readonly ExistingDriverMatch[];
   driverPhoneLookupLoading?: boolean;
   selectedDriverMatchId?: string | null;
   onSelectDriverMatch?: (match: ExistingDriverMatch) => void;
   driverPhoneInTrip?: boolean;
   driverNameFromPlatform?: string | null;
-  /** Fleet roster for resolving recommended-driver avatars. */
   fleetDrivers?: readonly DriverRow[];
   testIDPrefix?: string;
 }
 
-export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobileStep({
-  step,
-  driverName,
-  onDriverNameChange,
-  driverPhone,
-  onDriverPhoneChange,
-  vehicleText,
-  onVehicleTextChange,
-  invalid,
-  driverNameInputRef,
-  driverPhoneMatches = [],
-  driverPhoneLookupLoading = false,
-  selectedDriverMatchId = null,
-  onSelectDriverMatch,
-  driverPhoneInTrip = false,
-  driverNameFromPlatform,
-  fleetDrivers = [],
-  testIDPrefix = "add-trip-aggregate",
-}: AggregateTrackingMobileStepProps) {
-  const phoneLast10 = useMemo(
-    () => normalizeIndianMobileLast10(driverPhone),
-    [driverPhone],
-  );
-  const phoneComplete = phoneLast10.length >= 10;
+export const AggregateTrackingMobileStep = memo(
+  function AggregateTrackingMobileStep({
+    step,
+    driverName,
+    onDriverNameChange,
+    driverPhone,
+    onDriverPhoneChange,
+    vehicleText,
+    onVehicleTextChange,
+    invalid,
+    driverPhoneMatches = [],
+    driverPhoneLookupLoading = false,
+    selectedDriverMatchId = null,
+    onSelectDriverMatch,
+    driverPhoneInTrip = false,
+    driverNameFromPlatform,
+    fleetDrivers = [],
+    testIDPrefix = "add-trip-aggregate",
+  }: AggregateTrackingMobileStepProps) {
+    const phoneLast10 = useMemo(
+      () => normalizeIndianMobileLast10(driverPhone),
+      [driverPhone],
+    );
+    const phoneComplete = phoneLast10.length >= 10;
 
-  const phoneFooterExtras = useMemo((): ReactNode => {
-    if (!onSelectDriverMatch) return null;
-    return (
-      <>
-        {driverPhoneInTrip ? (
-          <Text style={styles.phoneBusy}>
-            Driver is on another trip — ask them to finish it before assigning here.
-          </Text>
-        ) : null}
-        <DriverPhoneRecommendations
-          matches={driverPhoneMatches}
-          loading={driverPhoneLookupLoading}
-          selectedUserId={selectedDriverMatchId}
-          onSelect={onSelectDriverMatch}
-          phoneComplete={phoneComplete}
-          compact
-          fleetDrivers={fleetDrivers}
+    const phoneFooterExtras = useMemo((): ReactNode => {
+      if (!onSelectDriverMatch) return null;
+      return (
+        <>
+          {driverPhoneInTrip ? (
+            <Text style={styles.phoneBusy}>
+              Driver is on another trip — ask them to finish it before assigning
+              here.
+            </Text>
+          ) : null}
+          <DriverPhoneRecommendations
+            matches={driverPhoneMatches}
+            loading={driverPhoneLookupLoading}
+            selectedUserId={selectedDriverMatchId}
+            onSelect={onSelectDriverMatch}
+            phoneComplete={phoneComplete}
+            compact
+            fleetDrivers={fleetDrivers}
+          />
+        </>
+      );
+    }, [
+      driverPhoneInTrip,
+      driverPhoneMatches,
+      driverPhoneLookupLoading,
+      selectedDriverMatchId,
+      onSelectDriverMatch,
+      phoneComplete,
+      fleetDrivers,
+    ]);
+
+    if (step === "driverPhone") {
+      return (
+        <PhoneNumberKeypadFlow
+          label="Driver phone *"
+          placeholder="10-digit number"
+          value={driverPhone}
+          onChangeText={onDriverPhoneChange}
+          error={invalid("driverPhone") || driverPhoneInTrip}
+          footerExtras={phoneFooterExtras}
+          testID={`${testIDPrefix}-driver-phone`}
+          wizardShell
         />
+      );
+    }
+
+    if (step === "vehicle") {
+      return (
+        <View style={flow.root}>
+          <IndianVehicleRegistrationKeypadFlow
+            value={vehicleText}
+            onChangeText={onVehicleTextChange}
+            error={invalid("vehicleNumber")}
+            testID={`${testIDPrefix}-vehicle-keypad`}
+            wizardShell
+            label="Vehicle number *"
+          />
+        </View>
+      );
+    }
+
+    const suggestedName =
+      driverPhoneMatches.find((m) => m.user_id === selectedDriverMatchId)
+        ?.full_name?.trim() ||
+      driverNameFromPlatform?.trim() ||
+      null;
+    const showSuggestion =
+      Boolean(suggestedName) && suggestedName !== driverName.trim();
+
+    const nameFooterExtras = (
+      <>
+        {showSuggestion && suggestedName ? (
+          <Pressable
+            style={styles.suggestRow}
+            onPress={() => onDriverNameChange(suggestedName)}
+            accessibilityRole="button"
+          >
+            <View style={styles.suggestAvatar}>
+              <User size={16} color={Theme.iconPrimary} />
+            </View>
+            <View style={styles.suggestText}>
+              <Text style={styles.suggestLabel}>Use suggested name</Text>
+              <Text style={styles.suggestName} numberOfLines={1}>
+                {suggestedName}
+              </Text>
+            </View>
+          </Pressable>
+        ) : null}
+        {driverPhoneMatches.length > 1 &&
+        !selectedDriverMatchId &&
+        onSelectDriverMatch ? (
+          <DriverPhoneRecommendations
+            matches={driverPhoneMatches}
+            loading={false}
+            selectedUserId={selectedDriverMatchId}
+            onSelect={onSelectDriverMatch}
+            phoneComplete
+            compact
+            fleetDrivers={fleetDrivers}
+          />
+        ) : null}
       </>
     );
-  }, [
-    driverPhoneInTrip,
-    driverPhoneMatches,
-    driverPhoneLookupLoading,
-    selectedDriverMatchId,
-    onSelectDriverMatch,
-    phoneComplete,
-    fleetDrivers,
-  ]);
 
-  if (step === "driverPhone") {
     return (
-      <PhoneNumberKeypadFlow
-        label="Driver phone *"
-        placeholder="10-digit number"
-        value={driverPhone}
-        onChangeText={onDriverPhoneChange}
-        error={invalid("driverPhone") || driverPhoneInTrip}
-        footerExtras={phoneFooterExtras}
-        testID={`${testIDPrefix}-driver-phone`}
-        wizardShell
-      />
-    );
-  }
-
-  if (step === "vehicle") {
-    return (
-      <View style={flow.root}>
-      <IndianVehicleRegistrationKeypadFlow
-        value={vehicleText}
-        onChangeText={onVehicleTextChange}
-        error={invalid("vehicleNumber")}
-        testID={`${testIDPrefix}-vehicle-keypad`}
-        wizardShell
-        label="Vehicle number *"
-      />
-      </View>
-    );
-  }
-
-  const suggestedName =
-    driverPhoneMatches.find((m) => m.user_id === selectedDriverMatchId)?.full_name?.trim() ||
-    driverNameFromPlatform?.trim() ||
-    null;
-  const showSuggestion =
-    suggestedName && suggestedName !== driverName.trim();
-
-  return (
-    <View style={styles.nameRoot}>
-      {showSuggestion ? (
-        <Pressable
-          style={styles.suggestRow}
-          onPress={() => onDriverNameChange(suggestedName)}
-          accessibilityRole="button"
-        >
-          <View style={styles.suggestAvatar}>
-            <User size={16} color={Theme.iconPrimary} />
-          </View>
-          <View style={styles.suggestText}>
-            <Text style={styles.suggestLabel}>Use suggested name</Text>
-            <Text style={styles.suggestName} numberOfLines={1}>
-              {suggestedName}
-            </Text>
-          </View>
-        </Pressable>
-      ) : null}
-
-      {driverPhoneMatches.length > 1 &&
-      !selectedDriverMatchId &&
-      onSelectDriverMatch ? (
-        <DriverPhoneRecommendations
-          matches={driverPhoneMatches}
-          loading={false}
-          selectedUserId={selectedDriverMatchId}
-          onSelect={onSelectDriverMatch}
-          phoneComplete
-          compact
-          fleetDrivers={fleetDrivers}
-        />
-      ) : null}
-
-      <Text style={fullPageWizardStyles.wizardFieldLabel}>Driver name *</Text>
-      <TextInput
-        ref={driverNameInputRef}
-        style={[
-          fullPageWizardStyles.wizardFieldInput,
-          invalid("driverName") && styles.inputError,
-          Platform.OS === "web" && styles.webInput,
-        ]}
-        placeholder="e.g. Suresh Kumar"
-        placeholderTextColor={Theme.textMuted}
+      <DriverNameKeypadFlow
         value={driverName}
         onChangeText={onDriverNameChange}
-        autoCapitalize="words"
-        autoCorrect={false}
+        label="Driver name *"
+        placeholder="e.g. SURESH KUMAR"
+        error={invalid("driverName")}
+        footerExtras={nameFooterExtras}
         testID={`${testIDPrefix}-driver-name`}
+        wizardShell
       />
-    </View>
-  );
-});
+    );
+  },
+);
 
 const styles = StyleSheet.create({
-  nameRoot: {
-    flex: 1,
-    minHeight: 200,
-    gap: 14,
-    paddingTop: 8,
-    ...Platform.select({
-      web: { maxWidth: 520, alignSelf: "center", width: "100%" },
-      default: {},
-    }),
-  },
   phoneBusy: {
     fontSize: 13,
     fontWeight: "700",
@@ -215,44 +193,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.primary,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    marginBottom: 8,
   },
   suggestAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Theme.surfaceLight,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
   },
   suggestText: {
     flex: 1,
     minWidth: 0,
+    gap: 2,
   },
   suggestLabel: {
     fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
+    fontWeight: "600",
     color: Theme.textMuted,
   },
   suggestName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    marginTop: 2,
-  },
-  webInput: {
-    outlineStyle: "none",
-  } as object,
-  inputError: {
-    borderColor: Theme.destructive,
-    borderWidth: 2,
-    backgroundColor: "#fef2f2",
   },
 });

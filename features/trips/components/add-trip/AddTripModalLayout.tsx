@@ -40,6 +40,8 @@ export interface AddTripModalLayoutProps {
   tertiaryLabel?: string;
   onTertiaryPress?: () => void;
   tertiaryDisabled?: boolean;
+  /** Hide Back/Close secondary in footer (keypad / final confirm). */
+  hideFooterSecondary?: boolean;
 }
 
 export function AddTripModalLayout({
@@ -67,6 +69,7 @@ export function AddTripModalLayout({
   tertiaryLabel,
   onTertiaryPress,
   tertiaryDisabled = false,
+  hideFooterSecondary = false,
 }: AddTripModalLayoutProps) {
   const shouldShowFooter =
     primaryActionMode === "footer"
@@ -122,10 +125,16 @@ export function AddTripModalLayout({
         shouldShowFooter ? (
           <FullPageWizardFooter
             secondaryLabel={
-              fillBody ? undefined : onBack ? "Back" : "Close"
+              fillBody || hideFooterSecondary
+                ? undefined
+                : onBack
+                  ? "Back"
+                  : "Close"
             }
             onSecondaryPress={
-              fillBody ? undefined : onBack ?? onClose
+              fillBody || hideFooterSecondary
+                ? undefined
+                : onBack ?? onClose
             }
             tertiaryLabel={tertiaryLabel}
             onTertiaryPress={onTertiaryPress}

@@ -323,8 +323,8 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderRadius: 7,
   },
   wizardStepCircleActive: {
-    backgroundColor: Theme.textPrimaryDark,
-    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.accentBrown,
+    borderColor: Theme.accentBrown,
   },
   wizardStepCircleDone: {
     backgroundColor: Theme.positive,
@@ -364,7 +364,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     lineHeight: 11,
   },
   wizardStepTextActive: {
-    color: Theme.textPrimaryDark,
+    color: Theme.accentBrown,
     fontWeight: "700",
   },
   wizardStepTextDone: {
@@ -787,6 +787,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 14,
   },
+  /** Solid brown CTA — brand ink on light wizard shells (Create Load / Create Trip). */
   submitBtnInk: {
     flexDirection: "row",
     alignItems: "center",
@@ -796,13 +797,13 @@ export const fullPageWizardStyles = StyleSheet.create({
     flexShrink: 0,
     minWidth: 140,
     maxWidth: 240,
-    backgroundColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.accentBrown,
     paddingHorizontal: 22,
     paddingVertical: 12,
     minHeight: 48,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
+    borderColor: Theme.accentBrownDeep,
   },
   /** Mobile primary CTA — fills remaining row width so it never clips off-screen. */
   submitBtnMobileGrow: {
@@ -820,7 +821,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderColor: Theme.borderMedium,
   },
   submitBtnInkText: {
-    color: Theme.buttonPrimaryText,
+    color: Theme.textOnPrimary,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -1317,8 +1318,8 @@ export const fullPageWizardStyles = StyleSheet.create({
     justifyContent: "center",
   },
   quickDateChipActive: {
-    backgroundColor: Theme.textPrimaryDark,
-    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.accentBrown,
+    borderColor: Theme.accentBrownDeep,
   },
   quickDateChipText: {
     fontSize: 13,
@@ -1374,7 +1375,8 @@ export const fullPageWizardStyles = StyleSheet.create({
    * (≈56 CTA + 4×54 keys + row gaps + dock chrome).
    */
   wizardKeypadBodyFillPad: {
-    paddingBottom: 310,
+    /** Room for Continue + optional dock accessory (margin chips) + keypad. */
+    paddingBottom: 360,
   },
   wizardKeypadBodyCompact: {
     flexGrow: 1,
@@ -1409,7 +1411,7 @@ export const fullPageWizardStyles = StyleSheet.create({
   wizardKeypadAccessory: {
     width: "100%",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 2,
+    paddingTop: 6,
     paddingBottom: 4,
     flexShrink: 0,
     alignItems: "center",
@@ -1418,6 +1420,18 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 0,
     paddingBottom: 8,
+  },
+  /** Margin % chips etc. — sit directly above the number pad in the pinned dock. */
+  wizardKeypadDockAccessory: {
+    width: "100%",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 4,
+    paddingBottom: 8,
+    flexShrink: 0,
+    alignItems: "center",
+    backgroundColor: Theme.cardWhite,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
   },
   wizardKeypadBottomDock: {
     flexGrow: 0,

@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Keyboard, Switch, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Keyboard,
+  Switch,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { MotiView } from "moti";
 import { Easing } from "react-native-reanimated";
-import { ListTodo } from "lucide-react-native";
+import { AlertCircle, ListTodo } from "lucide-react-native";
 
 import {
   fullPageWizardStyles,
@@ -22,7 +28,8 @@ import type { useAddTripForm } from "@/features/trips/components/add-trip/useAdd
 import type { AddTripWizardStep } from "@/features/trips/components/add-trip/addTripWizardSteps";
 import type { AddTripIssueField } from "@/features/trips/components/add-trip/useAddTripForm";
 import type { AllocationSubStep } from "@/features/trips/components/add-trip/allocationWizardSteps";
-import { formatMobileNumber } from "@/lib/format";
+import { IndentAllocationConfirmSummary } from "@/features/indents/components/IndentAllocationConfirmSummary";
+import { formatIndianVehicleNumber, formatMobileNumber } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
@@ -34,14 +41,18 @@ import {
   buildClientLanePrefill,
   repriceLaneForTons,
 } from "@/features/clients/utils/clientLanePrefill.util";
-
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
 import { CreateTripDesktopAllocationStep } from "./CreateTripDesktopAllocationStep";
 import { CreateTripDesktopAsideArt } from "./CreateTripDesktopAsideArt";
 import { CreateTripDesktopClientStep } from "./CreateTripDesktopClientStep";
 import { CreateTripDesktopCommodityStep } from "./CreateTripDesktopCommodityStep";
+import {
+  CreateTripDesktopEntityList,
+  CreateTripDesktopListSection,
+} from "./CreateTripDesktopPickers";
 import { CreateTripDesktopRouteStep } from "./CreateTripDesktopRouteStep";
 import { CreateTripDesktopSourceStep } from "./CreateTripDesktopSourceStep";
+import { entityInitials } from "./CreateTripDesktopUi";
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
 import {
   buildPickupRecommendations,
@@ -300,6 +311,190 @@ export function CreateTripDesktopWizard({
     });
   }, [router]);
 
+  const handleSelectAssetDriver = useCallback(
+    (id: string) => {
+      const row = fleet.driverOptions.find((d) => d.id === id);
+      if (row?.isBusy) return;
+      const newId = state.driverId === id ? null : id;
+      const dr = newId
+        ? fleet.driverOptions.find((d) => d.id === newId)
+        : null;
+      setters.setDriver(
+        newId,
+        dr?.commission_percent ?? null,
+        dr?.commission_per_km ?? null,
+      );
+      if (newId) setDriverListExpanded(false);
+    },
+    [fleet.driverOptions, setters, state.driverId],
+  );
+
+  const handleSelectAssetVehicle = useCallback(
+    (id: string) => {
+      const row = fleet.vehicleOptions.find((v) => v.id === id);
+      if (row?.isBusy) return;
+      setters.setVehicleId(state.vehicleId === id ? null : id);
+      if (state.vehicleId !== id) setVehicleListExpanded(false);
+    },
+    [fleet.vehicleOptions, setters, state.vehicleId],
+  );
+
+  const driverListItems = useMemo(
+    () =>
+      fleet.driverOptions.map((driver) => ({
+        id: driver.id,
+        title: driver.name ?? "Driver",
+        subtitle: driver.phone ?? driver.email ?? undefined,
+        initials: entityInitials(driver.name ?? "DR"),
+        entityType: "driver" as const,
+        avatarUrl: driver.avatar_url ?? null,
+        avatarSeed: driver.avatar_seed ?? null,
+        disabled: driver.isBusy,
+        statusLabel: driver.isBusy ? "On trip" : "Available",
+        statusTone: driver.isBusy ? ("busy" as const) : ("available" as const),
+      })),
+    [fleet.driverOptions],
+  );
+
+  const vehicleListItems = useMemo(
+    () =>
+      fleet.vehicleOptions.map((vehicle) => {
+        const tag =
+          formatIndianVehicleNumber(vehicle.vehicle_number || "") ||
+          vehicle.vehicle_number ||
+          "Vehicle";
+        const type = vehicle.vehicle_body_type || vehicle.vehicle_type || "—";
+        return {
+          id: vehicle.id,
+          title: tag,
+          subtitle: type,
+          initials: tag.slice(0, 2).toUpperCase(),
+          entityType: "vehicle" as const,
+          disabled: vehicle.isBusy,
+          statusLabel: vehicle.isBusy ? "On trip" : "Available",
+          statusTone: vehicle.isBusy ? ("busy" as const) : ("available" as const),
+        };
+      }),
+    [fleet.vehicleOptions],
+  );
+
+  const selectedDriverLabel = useMemo(() => {
+    const row = fleet.driverOptions.find((d) => d.id === state.driverId);
+    return row?.name?.trim() || "—";
+  }, [fleet.driverOptions, state.driverId]);
+
+  const selectedVehicleLabel = useMemo(() => {
+    const row = fleet.vehicleOptions.find((v) => v.id === state.vehicleId);
+    if (!row) return "—";
+    return (
+      formatIndianVehicleNumber(row.vehicle_number || "") ||
+      row.vehicle_number ||
+      "—"
+    );
+  }, [fleet.vehicleOptions, state.vehicleId]);
+
+  const partnerLabel = useMemo(() => {
+    const row = fleet.selectedSupplierRow;
+    if (!row) return state.supplierDisplayName?.trim() || "—";
+    return row.company_name?.trim() || row.name?.trim() || "—";
+  }, [fleet.selectedSupplierRow, state.supplierDisplayName]);
+
+  const mobileConfirmRows = useMemo(() => {
+    if (
+      !isMobileLayout ||
+      wizardStep !== "allocation" ||
+      state.assignLater ||
+      allocationSubStep !== "confirm"
+    ) {
+      return [];
+    }
+
+    const rows: {
+      id: string;
+      label: string;
+      value: string;
+      onEdit?: () => void;
+    }[] = [];
+
+    if (selectedClient) {
+      rows.push({
+        id: "client",
+        label: "Client",
+        value: selectedClient.name?.trim() || "Client",
+      });
+    }
+
+    if (state.supplySource === "aggregate") {
+      rows.push({
+        id: "partner",
+        label: "Partner",
+        value: state.supplierId ? partnerLabel : "—",
+      });
+      const rateRaw = state.supplierRate.trim();
+      rows.push({
+        id: "rate",
+        label: "Rate",
+        value: rateRaw
+          ? `₹${Number(rateRaw).toLocaleString("en-IN")}`
+          : "—",
+      });
+      rows.push({
+        id: "phone",
+        label: "Driver phone",
+        value: state.driverPhone.trim() || "—",
+        onEdit: () => onAllocationSubStepChange?.("driverPhone"),
+      });
+      rows.push({
+        id: "driver",
+        label: "Driver",
+        value: state.aggregateDriverName.trim() || "—",
+        onEdit: () => onAllocationSubStepChange?.("driverName"),
+      });
+      rows.push({
+        id: "vehicle",
+        label: "Vehicle",
+        value:
+          formatIndianVehicleNumber(state.aggregateVehicleText.trim()) ||
+          state.aggregateVehicleText.trim() ||
+          "—",
+        onEdit: () => onAllocationSubStepChange?.("vehicle"),
+      });
+      return rows;
+    }
+
+    rows.push({
+      id: "driver",
+      label: "Driver",
+      value: state.driverId ? selectedDriverLabel : "—",
+      onEdit: () => onAllocationSubStepChange?.("fleetDriver"),
+    });
+    rows.push({
+      id: "vehicle",
+      label: "Vehicle",
+      value: state.vehicleId ? selectedVehicleLabel : "—",
+      onEdit: () => onAllocationSubStepChange?.("fleetVehicle"),
+    });
+    return rows;
+  }, [
+    isMobileLayout,
+    wizardStep,
+    state.assignLater,
+    state.supplySource,
+    state.supplierId,
+    state.supplierRate,
+    state.driverPhone,
+    state.aggregateDriverName,
+    state.aggregateVehicleText,
+    state.driverId,
+    state.vehicleId,
+    allocationSubStep,
+    selectedClient,
+    partnerLabel,
+    selectedDriverLabel,
+    selectedVehicleLabel,
+    onAllocationSubStepChange,
+  ]);
+
   let stepContent: ReactNode = null;
   switch (wizardStep) {
     case "client":
@@ -390,6 +585,13 @@ export function CreateTripDesktopWizard({
         (allocationSubStep === "driverPhone" ||
           allocationSubStep === "driverName" ||
           allocationSubStep === "vehicle");
+
+      const mobileAssetFleet =
+        isMobileLayout &&
+        state.supplySource === "asset" &&
+        !state.assignLater &&
+        (allocationSubStep === "fleetDriver" ||
+          allocationSubStep === "fleetVehicle");
 
       if (mobileFleetKeypad && allocationSubStep) {
         const summaryItems: WizardPriorSelectionItem[] = [];
@@ -494,6 +696,137 @@ export function CreateTripDesktopWizard({
         break;
       }
 
+      if (
+        isMobileLayout &&
+        !state.assignLater &&
+        allocationSubStep === "confirm" &&
+        mobileConfirmRows.length > 0
+      ) {
+        stepContent = (
+          <View style={[s.stepBody, s.compactStepBody]}>
+            <IndentAllocationConfirmSummary
+              title="Confirm trip"
+              hint="Tap Edit to change a detail before creating."
+              rows={mobileConfirmRows}
+            />
+          </View>
+        );
+        break;
+      }
+
+      if (mobileAssetFleet && allocationSubStep) {
+        const summaryItems: WizardPriorSelectionItem[] = [];
+        if (selectedClient) {
+          summaryItems.push({
+            id: "client",
+            label: "Client",
+            name: selectedClient.name?.trim() || "Client",
+          });
+        }
+        if (
+          allocationSubStep === "fleetVehicle" &&
+          state.driverId &&
+          selectedDriverLabel !== "—"
+        ) {
+          summaryItems.push({
+            id: "driver",
+            label: "Driver",
+            name: selectedDriverLabel,
+            onPress: () => onAllocationSubStepChange?.("fleetDriver"),
+          });
+        }
+
+        stepContent = (
+          <View style={[s.stepBody, s.compactStepBody]}>
+            <View style={fullPageWizardStyles.wizardKeypadChromePad}>
+              {summaryItems.length > 0 ? (
+                <WizardPriorSelections items={summaryItems} compact />
+              ) : null}
+              {allocationSubStep === "fleetDriver" ? (
+                <View
+                  style={[
+                    s.inputBoxClean,
+                    s.allocAssignLaterBox,
+                    s.compactAssignLaterBox,
+                  ]}
+                >
+                  <ListTodo
+                    size={16}
+                    color={Theme.textRouteCard}
+                    strokeWidth={2}
+                  />
+                  <View style={s.allocAssignLaterCopy}>
+                    <Text style={s.allocAssignLaterTitle}>Assign later</Text>
+                    <Text style={s.allocAssignLaterSub}>
+                      Pick vehicle & driver on trip detail
+                    </Text>
+                  </View>
+                  <Switch
+                    value={state.assignLater}
+                    onValueChange={setters.setAssignLater}
+                    disabled={fleet.assignLaterSwitchDisabled}
+                    trackColor={{
+                      false: Theme.borderLight,
+                      true: Theme.textPrimaryDark,
+                    }}
+                    thumbColor={Theme.cardWhite}
+                  />
+                </View>
+              ) : null}
+            </View>
+
+            {fleet.assetFleetWarningLines.length > 0 ? (
+              <View style={s.allocationWarnCompact}>
+                <AlertCircle size={14} color={Theme.warning} strokeWidth={2.5} />
+                <Text style={s.allocationWarnCompactText}>
+                  {fleet.assetFleetWarningLines[0]}
+                </Text>
+              </View>
+            ) : null}
+
+            {fleet.fleetLoading ? (
+              <ActivityIndicator
+                color={Theme.iconPrimary}
+                style={{ marginVertical: 24 }}
+              />
+            ) : allocationSubStep === "fleetDriver" ? (
+              <CreateTripDesktopListSection
+                heading="Select driver"
+                count={fleet.driverOptions.length}
+                onAddPress={handleAddDriver}
+                addAccessibilityLabel="Add driver"
+              >
+                <CreateTripDesktopEntityList
+                  items={driverListItems}
+                  selectedId={state.driverId}
+                  listExpanded
+                  onExpandList={() => setDriverListExpanded(true)}
+                  onSelect={handleSelectAssetDriver}
+                  compact
+                />
+              </CreateTripDesktopListSection>
+            ) : (
+              <CreateTripDesktopListSection
+                heading="Select vehicle"
+                count={fleet.vehicleOptions.length}
+                onAddPress={handleAddVehicle}
+                addAccessibilityLabel="Add vehicle"
+              >
+                <CreateTripDesktopEntityList
+                  items={vehicleListItems}
+                  selectedId={state.vehicleId}
+                  listExpanded
+                  onExpandList={() => setVehicleListExpanded(true)}
+                  onSelect={handleSelectAssetVehicle}
+                  compact
+                />
+              </CreateTripDesktopListSection>
+            )}
+          </View>
+        );
+        break;
+      }
+
       stepContent = (
         <CreateTripDesktopAllocationStep
           compact={isMobileLayout}
@@ -514,26 +847,8 @@ export function CreateTripDesktopWizard({
           vehicleListExpanded={vehicleListExpanded}
           onExpandDriverList={() => setDriverListExpanded(true)}
           onExpandVehicleList={() => setVehicleListExpanded(true)}
-          onSelectDriver={(id) => {
-            const row = fleet.driverOptions.find((d) => d.id === id);
-            if (row?.isBusy) return;
-            const newId = state.driverId === id ? null : id;
-            const dr = newId
-              ? fleet.driverOptions.find((d) => d.id === newId)
-              : null;
-            setters.setDriver(
-              newId,
-              dr?.commission_percent ?? null,
-              dr?.commission_per_km ?? null,
-            );
-            if (newId) setDriverListExpanded(false);
-          }}
-          onSelectVehicle={(id) => {
-            const row = fleet.vehicleOptions.find((v) => v.id === id);
-            if (row?.isBusy) return;
-            setters.setVehicleId(state.vehicleId === id ? null : id);
-            if (state.vehicleId !== id) setVehicleListExpanded(false);
-          }}
+          onSelectDriver={handleSelectAssetDriver}
+          onSelectVehicle={handleSelectAssetVehicle}
           onAddDriver={handleAddDriver}
           onAddVehicle={handleAddVehicle}
         />

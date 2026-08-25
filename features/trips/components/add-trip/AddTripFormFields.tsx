@@ -208,6 +208,8 @@ function allocationProgressTabLabel(
       return "Driver";
     case "fleetVehicle":
       return "Vehicle";
+    case "confirm":
+      return "Confirm";
     default:
       return allocationSubStepLabel(step);
   }

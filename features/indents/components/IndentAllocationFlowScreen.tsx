@@ -134,7 +134,9 @@ export function IndentAllocationFlowScreen({
     orgId,
     myQuotes,
     onSuccess: () => {
-      if (orgId) invalidateIndents(orgId);
+      if (orgId) {
+        invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
+      }
     },
   });
 

@@ -11,7 +11,7 @@ import {
 } from "@/features/indents/services/indentConversionService";
 import { getAcceptedDirectQuoteForIndent } from "@/features/indents/services/direct-quotes.service";
 import { updateIndent, type DirectQuoteRow, type IndentRow } from "@/features/indents";
-import { resolveIndentDeployQuote, resolveIndentDeployQuoteWithFreshQuote } from "@/features/indents/utils/resolveIndentDeployQuote.util";
+import { resolveIndentDeployQuoteWithFreshQuote } from "@/features/indents/utils/resolveIndentDeployQuote.util";
 import {
   isDeployTripDetailsReady,
   parseTonsInputToWeightKg,
@@ -35,6 +35,7 @@ import { lookupDriversByPhoneVariants } from "@/features/trips/utils/driverPhone
 import { updateDirectQuoteAssignment } from "@/features/indents";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { useInvalidateIndents, useInvalidateTrips } from "@/lib/queries";
+import { queryKeys } from "@/lib/queryKeys";
 import { validatePhone } from "@/lib/phoneValidation";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { isIndianVehiclePlateComplete } from "@/lib/indianVehicleInput.util";
@@ -60,22 +61,19 @@ async function persistIndentDeployTripDetails(
   if (!isValidIsoDateString(pickupDate)) {
     return { error: new Error("Pick a valid trip start date.") };
   }
-  const weightKg = parseTonsInputToWeightKg(weightTons);
-  if (weightKg == null) {
-    return { error: new Error("Enter load weight in tons (greater than 0).") };
-  }
-  if (!vehicleType.trim()) {
-    return { error: new Error("Select vehicle type.") };
-  }
-  if (!loadType.trim()) {
-    return { error: new Error("Select product type.") };
-  }
-  const { error } = await updateIndent(indentId, {
+  const payload: {
+    pickup_date: string;
+    weight?: number;
+    vehicle_type?: string;
+    load_type?: string;
+  } = {
     pickup_date: pickupDate.trim(),
-    weight: weightKg,
-    vehicle_type: vehicleType.trim(),
-    load_type: loadType.trim(),
-  });
+  };
+  const weightKg = parseTonsInputToWeightKg(weightTons);
+  if (weightKg != null) payload.weight = weightKg;
+  if (vehicleType.trim()) payload.vehicle_type = vehicleType.trim();
+  if (loadType.trim()) payload.load_type = loadType.trim();
+  const { error } = await updateIndent(indentId, payload);
   return { error };
 }
 
@@ -206,6 +204,17 @@ export function useStaffHandshake({
   const invalidateTrips = useInvalidateTrips();
   const invalidateIndents = useInvalidateIndents();
   const queryClient = useQueryClient();
+
+  const refreshAfterDeploy = useCallback(
+    (deployOrgId: string) => {
+      invalidateTrips(deployOrgId);
+      invalidateIndents(deployOrgId, { bustPartnerSupplierMarket: true });
+      queryClient.invalidateQueries({
+        queryKey: [...queryKeys.indents.finite(deployOrgId), "my-direct-quotes"],
+      });
+    },
+    [invalidateTrips, invalidateIndents, queryClient],
+  );
 
   // FSM-style open/close state
   const [currentLoad, setCurrentLoad] = useState<IndentRow | null>(null);
@@ -446,11 +455,6 @@ export function useStaffHandshake({
       setCurrentLoad(null);
       return;
     }
-    const resolution = resolveIndentDeployQuote(load, orgId, myQuotes);
-    if (!resolution) {
-      Alert.alert("Cannot deploy", "No accepted quote found for this load.");
-      return;
-    }
     if (!assignDriverId || typeof assignVehicleId !== "string") {
       Alert.alert(
         "Select driver and vehicle",
@@ -523,8 +527,7 @@ export function useStaffHandshake({
       setAssignVehicleRegistration("");
       setUseAdHocDriver(false);
       onSuccess("Voyage authorized — trip created.");
-      invalidateTrips(orgId);
-      invalidateIndents(orgId);
+      refreshAfterDeploy(orgId);
       const isShipper = load.organization_id === orgId;
       if (isShipper) {
         router.push("/(tabs)/trips" as import("expo-router").Href);
@@ -553,8 +556,7 @@ export function useStaffHandshake({
     deployVehicleType,
     deployLoadType,
     tripDetailsReady,
-    invalidateTrips,
-    invalidateIndents,
+    refreshAfterDeploy,
     onSuccess,
     router,
   ]);
@@ -577,11 +579,6 @@ export function useStaffHandshake({
         "This load has been cancelled or closed.",
       );
       setCurrentLoad(null);
-      return;
-    }
-    const resolution = resolveIndentDeployQuote(load, orgId, myQuotes);
-    if (!resolution) {
-      Alert.alert("Cannot deploy", "No accepted quote found for this load.");
       return;
     }
     const handshakeSubSupplierId = (subcontractSupplierId ?? "").trim();
@@ -735,8 +732,7 @@ export function useStaffHandshake({
       if (deferHandshakeAssignment || !phoneTrimmed || phoneErr) {
         await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
+        refreshAfterDeploy(orgId);
         setCurrentLoad(null);
         setIsDeploying(false);
         onSuccess(
@@ -758,8 +754,7 @@ export function useStaffHandshake({
       if (availability.isBusy) {
         await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
+        refreshAfterDeploy(orgId);
         setCurrentLoad(null);
         setIsDeploying(false);
         Alert.alert(
@@ -785,8 +780,7 @@ export function useStaffHandshake({
       if (assignAggErr) {
         await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
+        refreshAfterDeploy(orgId);
         setCurrentLoad(null);
         setIsDeploying(false);
         Alert.alert(
@@ -808,8 +802,7 @@ export function useStaffHandshake({
       if (otpErr || !code) {
         await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
-        invalidateTrips(orgId);
-        invalidateIndents(orgId);
+        refreshAfterDeploy(orgId);
         setCurrentLoad(null);
         setIsDeploying(false);
         Alert.alert(
@@ -830,8 +823,7 @@ export function useStaffHandshake({
       await saveSubcontract();
 
       await updateIndent(load.id, { status: "completed" });
-      invalidateTrips(orgId);
-      invalidateIndents(orgId);
+      refreshAfterDeploy(orgId);
       onSuccess("OTP generated");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error.";
@@ -858,8 +850,7 @@ export function useStaffHandshake({
     deployLoadType,
     tripDetailsReady,
     queryClient,
-    invalidateTrips,
-    invalidateIndents,
+    refreshAfterDeploy,
     onSuccess,
     router,
   ]);
