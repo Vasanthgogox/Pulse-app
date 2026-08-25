@@ -632,11 +632,22 @@ export async function transferOwnership(
 
 export async function removeMember(memberId: string): Promise<{ error: Error | null }> {
   try {
-    const { error } = await supabase()
+    const { data, error } = await supabase()
       .from("organization_members")
       .update({ status: "inactive" })
-      .eq("id", memberId);
+      .eq("id", memberId)
+      .select("id");
     if (error) return { error: new Error(error.message) };
+    // RLS blocks the write silently (0 rows, no PostgREST error) rather than
+    // rejecting it — without this check the caller sees `error: null` and
+    // treats a no-op as success.
+    if (!data || data.length === 0) {
+      return {
+        error: new Error(
+          "Couldn't remove this member — you may not have permission.",
+        ),
+      };
+    }
     return { error: null };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)) };
