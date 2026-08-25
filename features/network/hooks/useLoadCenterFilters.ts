@@ -16,7 +16,6 @@ import {
 } from "@/features/network/utils/loadCenter.model";
 import {
   isDoneConvertedToTrip,
-  isDoneRejectedQuote,
 } from "@/features/network/utils/loadCenterTripAllocation.util";
 
 export interface UseLoadCenterFiltersParams {
@@ -268,20 +267,43 @@ export function useLoadCenterFilters({
     awardedLoads,
   ]);
 
+  /**
+   * Done → Rejected: terminal Get Load outcomes that did not convert to our trip
+   * (declined bid, lost to another bidder, cancelled/expired, etc.).
+   * Must partition Done with Converted so Done count = Rejected + Converted.
+   */
+  const findWorkDoneConvertedOpts = useCallback(
+    (load: IndentRow) => ({
+      awardedToMe: awardedToMeIndentIds.has(load.id),
+      indentStatus: load.status,
+      quoteStatus: myQuoteByIndentId.get(load.id)?.status,
+    }),
+    [awardedToMeIndentIds, myQuoteByIndentId],
+  );
+
   const findWorkDoneRejectedLoads = useMemo(
     () =>
-      findWorkDoneUnionLoads.filter((load) =>
-        isDoneRejectedQuote(load.id, myQuoteByIndentId),
+      findWorkDoneUnionLoads.filter(
+        (load) =>
+          !isDoneConvertedToTrip(
+            load.id,
+            indentIdsWithTrip,
+            findWorkDoneConvertedOpts(load),
+          ),
       ),
-    [findWorkDoneUnionLoads, myQuoteByIndentId],
+    [findWorkDoneUnionLoads, indentIdsWithTrip, findWorkDoneConvertedOpts],
   );
 
   const findWorkDoneConvertedLoads = useMemo(
     () =>
       findWorkDoneUnionLoads.filter((load) =>
-        isDoneConvertedToTrip(load.id, indentIdsWithTrip),
+        isDoneConvertedToTrip(
+          load.id,
+          indentIdsWithTrip,
+          findWorkDoneConvertedOpts(load),
+        ),
       ),
-    [findWorkDoneUnionLoads, indentIdsWithTrip],
+    [findWorkDoneUnionLoads, indentIdsWithTrip, findWorkDoneConvertedOpts],
   );
 
   const hirePartnerDoneLoads = useMemo(
@@ -292,13 +314,13 @@ export function useLoadCenterFilters({
     [hirePartnerLoads],
   );
 
+  /** Done → Rejected (Give Load): terminal loads not linked to a trip. */
   const hirePartnerDoneRejectedLoads = useMemo(
     () =>
-      hirePartnerDoneLoads.filter((load) => {
-        const s = (load.status || "").toLowerCase();
-        return s === "cancelled" || s === "expired" || s === "closed";
-      }),
-    [hirePartnerDoneLoads],
+      hirePartnerDoneLoads.filter(
+        (load) => !isDoneConvertedToTrip(load.id, indentIdsWithTrip),
+      ),
+    [hirePartnerDoneLoads, indentIdsWithTrip],
   );
 
   const hirePartnerDoneConvertedLoads = useMemo(
@@ -309,20 +331,30 @@ export function useLoadCenterFilters({
     [hirePartnerDoneLoads, indentIdsWithTrip],
   );
 
+  /** Done → Rejected (Action required / Claimed): awarded loads without a trip. */
   const claimedDoneRejectedLoads = useMemo(
     () =>
-      awardedLoadsDone.filter((load) =>
-        isDoneRejectedQuote(load.id, myQuoteByIndentId),
+      awardedLoadsDone.filter(
+        (load) =>
+          !isDoneConvertedToTrip(load.id, indentIdsWithTrip, {
+            awardedToMe: true,
+            indentStatus: load.status,
+            quoteStatus: myQuoteByIndentId.get(load.id)?.status,
+          }),
       ),
-    [awardedLoadsDone, myQuoteByIndentId],
+    [awardedLoadsDone, indentIdsWithTrip, myQuoteByIndentId],
   );
 
   const claimedDoneConvertedLoads = useMemo(
     () =>
       awardedLoadsDone.filter((load) =>
-        isDoneConvertedToTrip(load.id, indentIdsWithTrip),
+        isDoneConvertedToTrip(load.id, indentIdsWithTrip, {
+          awardedToMe: true,
+          indentStatus: load.status,
+          quoteStatus: myQuoteByIndentId.get(load.id)?.status,
+        }),
       ),
-    [awardedLoadsDone, indentIdsWithTrip],
+    [awardedLoadsDone, indentIdsWithTrip, myQuoteByIndentId],
   );
 
   const pickDoneSubList = useCallback(

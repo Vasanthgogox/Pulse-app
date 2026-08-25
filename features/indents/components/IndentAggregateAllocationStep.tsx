@@ -2,14 +2,14 @@
  * Single-step UI for aggregate (partner supply) indent deploy wizard.
  */
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { User } from "lucide-react-native";
 
 import { IndianVehicleRegistrationKeypadFlow } from "@/components/indianVehicle/IndianVehicleRegistrationKeypadFlow";
+import { DriverNameKeypadFlow } from "@/components/party/keypad/DriverNameKeypadFlow";
 import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeypadFlow";
 import { PartnerRatesKeypadFlow } from "@/features/trips/components/allocation/PartnerRatesKeypadFlow";
 import { TripPartnerPickerSection } from "@/features/trips/components/add-trip/TripPartnerPickerSection";
-import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/supplierNumericPartyPreview.util";
 import Theme from "@/constants/Theme";
 import { formatMobileNumber } from "@/lib/format";
@@ -27,6 +27,8 @@ export type IndentAggregateAllocationStepProps = {
   state: StaffHandshakeResult["state"];
   set: StaffHandshakeResult["set"];
   onAddPartner: () => void;
+  /** After a partner tile is tapped — parent advances to Rates. */
+  onPartnerSelected?: () => void;
 };
 
 export const IndentAggregateAllocationStep = memo(function IndentAggregateAllocationStep({
@@ -36,6 +38,7 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
   state,
   set,
   onAddPartner,
+  onPartnerSelected,
 }: IndentAggregateAllocationStepProps) {
   const {
     subcontractSupplierId,
@@ -68,8 +71,9 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
     (supplier: SupplierRow) => {
       set.subcontractSupplierId(supplier.id);
       setPartnerListExpanded(false);
+      onPartnerSelected?.();
     },
-    [set],
+    [set, onPartnerSelected],
   );
 
   const handleClearPartner = useCallback(() => {
@@ -79,6 +83,14 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
   const handlePhoneChange = useCallback(
     (value: string) => {
       set.aggregateDriverPhone(formatMobileNumber(value));
+    },
+    [set],
+  );
+
+  const handleNameChange = useCallback(
+    (value: string) => {
+      set.aggregateDriverNameManualRef.current = true;
+      set.aggregateDriverTrackingName(value);
     },
     [set],
   );
@@ -111,6 +123,43 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
       set,
     ],
   );
+
+  const nameFooterExtras = useMemo(() => {
+    const suggestedName = aggregatePhoneMatches.find(
+      (m) => m.user_id === aggregatePhoneSelectedUserId,
+    )?.full_name?.trim();
+    const showSuggestion =
+      suggestedName &&
+      suggestedName !== aggregateDriverTrackingName.trim();
+
+    if (!showSuggestion) return null;
+
+    return (
+      <Pressable
+        style={styles.suggestRow}
+        onPress={() => {
+          set.aggregateDriverNameManualRef.current = false;
+          set.aggregateDriverTrackingName(suggestedName);
+        }}
+        accessibilityRole="button"
+      >
+        <View style={styles.suggestAvatar}>
+          <User size={16} color={Theme.iconPrimary} />
+        </View>
+        <View style={styles.suggestText}>
+          <Text style={styles.suggestLabel}>Use suggested name</Text>
+          <Text style={styles.suggestName} numberOfLines={1}>
+            {suggestedName}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  }, [
+    aggregatePhoneMatches,
+    aggregatePhoneSelectedUserId,
+    aggregateDriverTrackingName,
+    set,
+  ]);
 
   if (step === "partner") {
     return (
@@ -163,67 +212,23 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
   }
 
   if (step === "driverName") {
-    const suggestedName = aggregatePhoneMatches.find(
-      (m) => m.user_id === aggregatePhoneSelectedUserId,
-    )?.full_name?.trim();
-    const showSuggestion =
-      suggestedName &&
-      suggestedName !== aggregateDriverTrackingName.trim();
-
     return (
-      <View style={styles.fieldStack}>
-        {showSuggestion ? (
-          <Pressable
-            style={styles.suggestRow}
-            onPress={() => {
-              set.aggregateDriverNameManualRef.current = false;
-              set.aggregateDriverTrackingName(suggestedName);
-            }}
-            accessibilityRole="button"
-          >
-            <View style={styles.suggestAvatar}>
-              <User size={16} color={Theme.iconPrimary} />
-            </View>
-            <View style={styles.suggestText}>
-              <Text style={styles.suggestLabel}>Use suggested name</Text>
-              <Text style={styles.suggestName} numberOfLines={1}>
-                {suggestedName}
-              </Text>
-            </View>
-          </Pressable>
-        ) : null}
-
-        {aggregatePhoneMatches.length > 1 && !aggregatePhoneSelectedUserId ? (
-          <DriverPhoneRecommendations
-            matches={aggregatePhoneMatches}
-            loading={false}
-            selectedUserId={aggregatePhoneSelectedUserId}
-            onSelect={set.applyAggregatePhoneMatch}
-            phoneComplete
-            compact
-          />
-        ) : null}
-
-        <Text style={fullPageWizardStyles.wizardFieldLabel}>Driver name (tracking) *</Text>
-        <TextInput
-          style={fullPageWizardStyles.wizardFieldInput}
-          placeholder="e.g. Suresh Kumar"
-          placeholderTextColor={Theme.textMuted}
-          value={aggregateDriverTrackingName}
-          onChangeText={(value) => {
-            set.aggregateDriverNameManualRef.current = true;
-            set.aggregateDriverTrackingName(value);
-          }}
-          autoCorrect={false}
-          autoCapitalize="words"
-        />
-      </View>
+      <DriverNameKeypadFlow
+        label="Driver name (tracking) *"
+        placeholder="e.g. Suresh Kumar"
+        value={aggregateDriverTrackingName}
+        onChangeText={handleNameChange}
+        footerExtras={nameFooterExtras}
+        testID="indent-allocation-driver-name"
+        wizardShell
+      />
     );
   }
 
   if (step === "vehicleReg") {
     return (
       <IndianVehicleRegistrationKeypadFlow
+        label="Vehicle number *"
         value={assignVehicleRegistration}
         onChangeText={set.assignVehicleRegistration}
         testID="indent-allocation-vehicle-keypad"
@@ -236,22 +241,6 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
 });
 
 const styles = StyleSheet.create({
-  fieldStack: { gap: 12, paddingTop: 4 },
-  label: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-  },
-  input: {
-    minHeight: 48,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-  },
   phoneBusy: {
     fontSize: 12,
     fontWeight: "700",
@@ -289,9 +278,8 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   suggestName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    marginTop: 2,
   },
 });

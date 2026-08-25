@@ -36,7 +36,8 @@ export const LOAD_CENTER_PROMO_HERO_VISUAL_SCALE: Record<
   give_done_converted: 1.04,
   get_open: 1.02,
   get_quoted: 1.02,
-  get_awarded: 1.04,
+  /** Trophy art fills more of its canvas than other heroes — keep it smaller. */
+  get_awarded: 0.68,
   get_done_rejected: 1.02,
   get_done_converted: 1.02,
   claimed_awarded: 1.1,

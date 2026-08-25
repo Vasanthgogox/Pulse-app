@@ -1,5 +1,7 @@
 import {
   STATUS_TABS,
+  resolveGetLoadDoneOutcome,
+  resolveGetLoadMobileCardLabels,
   resolveGiveLoadTicketCommerce,
   statusMatchesFilter,
 } from "@/features/network/utils/loadCenter.model";
@@ -111,5 +113,115 @@ describe("give load ticket commerce", () => {
     const c = resolveGiveLoadTicketCommerce("DONE", base, { ...opts, isDone: true });
     expect(c.amountInr).toBeNull();
     expect(c.rightCaption).toBe("On books");
+  });
+});
+
+describe("resolveGetLoadDoneOutcome", () => {
+  it("marks cancelled indents as CANCELLED and non-interactive", () => {
+    const o = resolveGetLoadDoneOutcome(
+      { status: "cancelled" },
+      { status: "rejected" },
+      false,
+    );
+    expect(o.kind).toBe("cancelled");
+    expect(o.kicker).toBe("CANCELLED");
+    expect(o.statusLabel).toBe("cancelled");
+    expect(o.channelLabel).toBe("Indent cancelled");
+    expect(o.interactive).toBe(false);
+  });
+
+  it("marks completed/closed as LOST when we did not win", () => {
+    for (const status of ["completed", "closed", "awarded"]) {
+      const o = resolveGetLoadDoneOutcome(
+        { status },
+        { status: "rejected" },
+        false,
+        false,
+      );
+      expect(o.kind).toBe("lost");
+      expect(o.kicker).toBe("LOST");
+      expect(o.footerLabel).toBe("Allocated to another bidder");
+      expect(o.interactive).toBe(false);
+    }
+  });
+
+  it("prefers LOST over REJECTED when indent is terminal and we lost", () => {
+    const o = resolveGetLoadDoneOutcome(
+      { status: "completed" },
+      { status: "rejected" },
+      false,
+      false,
+    );
+    expect(o.kind).toBe("lost");
+    expect(o.statusLabel).toBe("lost");
+  });
+
+  it("marks won + completed as CONVERTED even without a trip row yet", () => {
+    const o = resolveGetLoadDoneOutcome(
+      { status: "completed" },
+      { status: "accepted" },
+      false,
+      true,
+    );
+    expect(o.kind).toBe("converted");
+    expect(o.kicker).toBe("CONVERTED");
+    expect(o.statusLabel).toBe("converted");
+    expect(o.channelLabel).toBe("Won · converted to trip");
+  });
+
+  it("marks linked trips as CONVERTED", () => {
+    const o = resolveGetLoadDoneOutcome(
+      { status: "completed" },
+      { status: "accepted" },
+      true,
+      true,
+    );
+    expect(o.kind).toBe("converted");
+    expect(o.kicker).toBe("CONVERTED");
+  });
+
+  it("marks quote rejected as REJECTED when indent is not terminal-awarded", () => {
+    const o = resolveGetLoadDoneOutcome(
+      { status: "open" },
+      { status: "rejected" },
+      false,
+    );
+    expect(o.kind).toBe("declined");
+    expect(o.kicker).toBe("REJECTED");
+    expect(o.statusLabel).toBe("rejected");
+  });
+
+  it("marks expired indents as EXPIRED", () => {
+    const o = resolveGetLoadDoneOutcome({ status: "expired" }, null, false);
+    expect(o.kind).toBe("expired");
+    expect(o.kicker).toBe("EXPIRED");
+  });
+});
+
+describe("resolveGetLoadMobileCardLabels Done tab", () => {
+  it("surfaces LOST labels for completed indents without a win", () => {
+    const labels = resolveGetLoadMobileCardLabels(
+      "DONE",
+      "REJECTED",
+      { id: "i1", status: "completed", load_type: "General" },
+      { status: "rejected", amount: 1000 },
+      new Set(),
+      false,
+    );
+    expect(labels.statusLabel).toBe("lost");
+    expect(labels.rightFooter).toBe("Allocated to another bidder");
+  });
+
+  it("surfaces CONVERTED when we won", () => {
+    const labels = resolveGetLoadMobileCardLabels(
+      "DONE",
+      "CONVERTED",
+      { id: "i1", status: "completed", load_type: "General" },
+      { status: "accepted", amount: 1000 },
+      new Set(["i1"]),
+      true,
+    );
+    expect(labels.statusLabel).toBe("converted");
+    expect(labels.rightFooter).toBe("On books");
   });
 });

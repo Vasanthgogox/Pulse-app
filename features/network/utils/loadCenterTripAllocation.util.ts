@@ -143,6 +143,18 @@ export function resolveTripAllocationDisplay(
   };
 }
 
+/**
+ * Done → Rejected bucket: terminal load that did not convert to our trip.
+ * Pairs with {@link isDoneConvertedToTrip} so Rejected ∪ Converted = Done.
+ */
+export function isDoneRejectedOutcome(
+  loadId: string,
+  indentIdsWithTrip: ReadonlySet<string>,
+  options?: DoneConvertedOptions,
+): boolean {
+  return !isDoneConvertedToTrip(loadId, indentIdsWithTrip, options);
+}
+
 export function isDoneRejectedQuote(
   loadId: string,
   myQuoteByIndentId: ReadonlyMap<string, { status?: string | null }>,
@@ -151,9 +163,27 @@ export function isDoneRejectedQuote(
   return (q?.status ?? "").trim().toLowerCase() === "rejected";
 }
 
+export type DoneConvertedOptions = {
+  /** Our org won this indent (accepted quote / assigned supplier). */
+  awardedToMe?: boolean;
+  indentStatus?: string | null;
+  quoteStatus?: string | null;
+};
+
+/**
+ * Converted to trips: linked trip, or we won and the indent is already completed
+ * (trip row can lag behind indent completion in the client list).
+ */
 export function isDoneConvertedToTrip(
   loadId: string,
   indentIdsWithTrip: ReadonlySet<string>,
+  options?: DoneConvertedOptions,
 ): boolean {
-  return indentIdsWithTrip.has(loadId);
+  if (indentIdsWithTrip.has(loadId)) return true;
+  const st = (options?.indentStatus || "").trim().toLowerCase();
+  const quote = (options?.quoteStatus || "").trim().toLowerCase();
+  const wonByMe =
+    options?.awardedToMe === true || quote === "accepted";
+  if (wonByMe && (st === "completed" || st === "closed")) return true;
+  return false;
 }

@@ -16,6 +16,8 @@ export type WizardPartyContextRowProps = {
   /** Stack vertically only on very narrow viewports (default 300). */
   stackBelowWidth?: number;
   style?: FullPageWizardPartyRowProps["style"];
+  /** Dense summary chips (driver name / load steps). */
+  compact?: boolean;
 };
 
 /**
@@ -26,17 +28,22 @@ export const WizardPartyContextRow = memo(function WizardPartyContextRow({
   right,
   stackBelowWidth = 300,
   style,
+  compact = false,
 }: WizardPartyContextRowProps) {
   const { width } = useWindowDimensions();
 
   if (!right) {
-    return <WizardEntityPartyCell {...left} />;
+    return <WizardEntityPartyCell {...left} compact={compact} solo />;
   }
 
   return (
-    <FullPageWizardPartyRow stack={width < stackBelowWidth} style={style}>
-      <WizardEntityPartyCell {...left} />
-      <WizardEntityPartyCell {...right} />
+    <FullPageWizardPartyRow
+      /** Never stack compact chips — keep one tiny summary row. */
+      stack={!compact && width < stackBelowWidth}
+      style={style}
+    >
+      <WizardEntityPartyCell {...left} compact={compact} />
+      <WizardEntityPartyCell {...right} compact={compact} />
     </FullPageWizardPartyRow>
   );
 });

@@ -461,7 +461,7 @@ export function useStaffHandshake({
     if (!tripDetailsReady) {
       Alert.alert(
         "Trip details required",
-        "Set trip start date and load weight in tons before deploying.",
+        "Set vehicle arrival date before deploying. Vehicle type, product, and weight come from the indent.",
       );
       return;
     }
@@ -644,7 +644,7 @@ export function useStaffHandshake({
     if (!tripDetailsReady) {
       Alert.alert(
         "Trip details required",
-        "Set trip start date and load weight in tons before deploying.",
+        "Set vehicle arrival date before deploying. Vehicle type, product, and weight come from the indent.",
       );
       return;
     }

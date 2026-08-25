@@ -78,9 +78,16 @@ export function TripPartnerPickerSection({
 }: TripPartnerPickerSectionProps) {
   const selectedSupplier =
     suppliers.find((s) => s.id === supplierId) ?? null;
-  const showPartnerList = !supplierId || partnerListExpanded;
+  // A blocked supplier (e.g. this load's own shipper) never counts as a valid
+  // confirmed selection — fall back to the list instead of the summary card,
+  // even if some earlier state left it selected.
+  const selectedBlockedReason = supplierId
+    ? blockedReasonBySupplierId?.[supplierId]
+    : undefined;
+  const showPartnerList =
+    !supplierId || partnerListExpanded || Boolean(selectedBlockedReason);
   const showPartnerSummary = Boolean(
-    supplierId && !partnerListExpanded && selectedSupplier,
+    supplierId && !partnerListExpanded && selectedSupplier && !selectedBlockedReason,
   );
   const showPicker =
     showPartnerList || (!suppressCollapsedSummary && showPartnerSummary);
@@ -95,21 +102,26 @@ export function TripPartnerPickerSection({
             sensitivity: "base",
           }),
         )
-        .map((supplier) => ({
-          id: supplier.id,
-          name: partnerDisplayName(supplier),
-          subtitle: resolveWizardContactPhone(supplier.phone),
-          avatarUrl: supplier.avatar_url ?? null,
-          avatarSeed: supplier.avatar_seed ?? null,
-          entityType: "supplier" as const,
-          organizationImageUrl:
-            (supplier as { organization_avatar_url?: string | null })
-              .organization_avatar_url ?? null,
-          organizationAvatarSeed:
-            (supplier as { organization_avatar_seed?: string | null })
-              .organization_avatar_seed ?? null,
-        })),
-    [suppliers],
+        .map((supplier) => {
+          const blockedReason = blockedReasonBySupplierId?.[supplier.id];
+          return {
+            id: supplier.id,
+            name: partnerDisplayName(supplier),
+            subtitle: resolveWizardContactPhone(supplier.phone),
+            avatarUrl: supplier.avatar_url ?? null,
+            avatarSeed: supplier.avatar_seed ?? null,
+            entityType: "supplier" as const,
+            organizationImageUrl:
+              (supplier as { organization_avatar_url?: string | null })
+                .organization_avatar_url ?? null,
+            organizationAvatarSeed:
+              (supplier as { organization_avatar_seed?: string | null })
+                .organization_avatar_seed ?? null,
+            disabled: Boolean(blockedReason),
+            statusLabel: blockedReason,
+          };
+        }),
+    [suppliers, blockedReasonBySupplierId],
   );
 
   if (wizardMode) {
@@ -141,7 +153,7 @@ export function TripPartnerPickerSection({
           <>
             <WizardSelectionGrid
               items={gridItems}
-              selectedId={supplierId}
+              selectedId={selectedBlockedReason ? null : supplierId}
               onSelect={(id) => {
                 const row = suppliers.find((s) => s.id === id);
                 if (!row) return;

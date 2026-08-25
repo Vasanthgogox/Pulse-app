@@ -29,7 +29,7 @@ export const VALIDATION = {
   NOTES_MAX_LENGTH: 1000,
   DESCRIPTION_MAX_LENGTH: 500,
   PARTY_NAME_MAX_LENGTH: 255,
-  /** Longest Indian plate after normalize (LL + 3 + 3 + 4, or BH series). */
+  /** Fixed Indian plate after normalize: AA 00 AA 0000 (10 chars). */
   VEHICLE_NUMBER_MAX_LENGTH: INDIAN_VEHICLE_TOTAL_LENGTH,
   LICENSE_NUMBER_MIN_LENGTH: 5,
   LICENSE_NUMBER_MAX_LENGTH: 20,
@@ -118,14 +118,14 @@ export function dateISO(msg = 'Enter a valid date (YYYY-MM-DD).'): Validator<str
 }
 
 /**
- * Indian vehicle registration — same structural rules as the add-truck keypad
- * (`isIndianVehiclePlateValid`): district 1–3 digits, series 0–3 letters, BH series.
+ * Indian vehicle registration — fixed AA 00 AA 0000
+ * (`isIndianVehiclePlateValid`), e.g. TN 17 AS 2202.
  */
 export function validateIndianVehicleNumber(value: string | null | undefined): string | null {
   const raw = (value ?? '').trim();
   if (raw.length === 0) return 'Required';
   if (!isIndianVehiclePlateValid(raw)) {
-    return 'Enter a valid vehicle number (e.g. TN 25 CM 7892).';
+    return 'Enter a valid vehicle number (e.g. TN 17 AS 2202).';
   }
   return null;
 }

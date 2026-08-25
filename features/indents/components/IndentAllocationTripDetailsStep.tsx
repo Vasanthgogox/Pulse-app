@@ -14,7 +14,6 @@ import {
 
 import Theme from "@/constants/Theme";
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
-import { TripCommodityFields } from "@/features/trips/components/add-trip/TripCommodityFields";
 import {
   formatIsoDateForDisplay,
   getDayAfterTomorrowIso,
@@ -25,49 +24,36 @@ import {
 
 export type IndentAllocationTripDetailsStepProps = {
   pickupDate: string;
-  weightTons: string;
-  vehicleType: string;
-  loadType: string;
   onPickupDateChange: (iso: string) => void;
-  onWeightTonsChange: (value: string) => void;
-  onVehicleTypeChange: (value: string) => void;
-  onLoadTypeChange: (value: string) => void;
   pickupDateError?: string | null;
-  weightError?: string | null;
-  vehicleTypeError?: boolean;
-  loadTypeError?: boolean;
-  tonsError?: boolean;
-  indentVehicleType?: string | null;
-  indentLoadType?: string | null;
 };
 
+/**
+ * Final allocation step — vehicle arrival date only.
+ * Vehicle type, product type, and tons come from the indent.
+ */
 export const IndentAllocationTripDetailsStep = memo(
   function IndentAllocationTripDetailsStep({
     pickupDate,
-    weightTons,
-    vehicleType,
-    loadType,
     onPickupDateChange,
-    onWeightTonsChange,
-    onVehicleTypeChange,
-    onLoadTypeChange,
     pickupDateError,
-    weightError,
-    vehicleTypeError,
-    loadTypeError,
-    tonsError,
-    indentVehicleType,
-    indentLoadType,
   }: IndentAllocationTripDetailsStepProps) {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const { width } = useWindowDimensions();
     const isWide = Platform.OS === "web" && width >= 720;
-    const preferWebSelect = Platform.OS === "web";
 
     return (
-      <View style={[fullPageWizardStyles.wizardStepContentFlat, styles.root, isWide && styles.rootWebWide]}>
+      <View
+        style={[
+          fullPageWizardStyles.wizardStepContentFlat,
+          styles.root,
+          isWide && styles.rootWebWide,
+        ]}
+      >
         <View style={fullPageWizardStyles.wizardFieldBlock}>
-          <Text style={fullPageWizardStyles.wizardFieldLabel}>Trip start date</Text>
+          <Text style={fullPageWizardStyles.wizardFieldLabel}>
+            Vehicle arrival date *
+          </Text>
           <View style={fullPageWizardStyles.quickDateRow}>
             {(
               [
@@ -132,14 +118,17 @@ export const IndentAllocationTripDetailsStep = memo(
                 (Platform.OS === "android" ? (
                   <DateTimePicker
                     value={
-                      pickupDate ? new Date(`${pickupDate}T12:00:00`) : new Date()
+                      pickupDate
+                        ? new Date(`${pickupDate}T12:00:00`)
+                        : new Date()
                     }
                     mode="date"
                     display="default"
                     minimumDate={new Date()}
                     onChange={(e, date) => {
                       setShowDatePicker(false);
-                      if (e.type === "set" && date) onPickupDateChange(toISODate(date));
+                      if (e.type === "set" && date)
+                        onPickupDateChange(toISODate(date));
                     }}
                   />
                 ) : (
@@ -154,7 +143,9 @@ export const IndentAllocationTripDetailsStep = memo(
                         onStartShouldSetResponder={() => true}
                       >
                         <View style={styles.datePickerHeader}>
-                          <Text style={styles.datePickerTitle}>Pick date</Text>
+                          <Text style={styles.datePickerTitle}>
+                            Vehicle arrival date
+                          </Text>
                           <TouchableOpacity
                             onPress={() => setShowDatePicker(false)}
                             hitSlop={12}
@@ -185,52 +176,36 @@ export const IndentAllocationTripDetailsStep = memo(
             <Text style={styles.errorText}>{pickupDateError}</Text>
           ) : null}
         </View>
-
-        <TripCommodityFields
-          vehicleType={vehicleType}
-          loadType={loadType}
-          tons={weightTons}
-          onVehicleTypeChange={onVehicleTypeChange}
-          onLoadTypeChange={onLoadTypeChange}
-          onTonsChange={onWeightTonsChange}
-          vehicleTypeError={vehicleTypeError}
-          loadTypeError={loadTypeError}
-          tonsError={tonsError}
-          indentVehicleType={indentVehicleType}
-          indentLoadType={indentLoadType}
-          isWide={isWide}
-          useFormChrome={preferWebSelect}
-          preferWebSelect={preferWebSelect}
-          fieldLabelStyle={fullPageWizardStyles.wizardFieldLabel}
-          fieldInputStyle={fullPageWizardStyles.wizardFieldInput}
-        />
-        {weightError ? <Text style={styles.errorText}>{weightError}</Text> : null}
       </View>
     );
   },
 );
 
 const styles = StyleSheet.create({
-  root: { gap: 12 },
-  rootWebWide: {
+  root: {
     width: "100%",
-    maxWidth: 720,
+    gap: 12,
+  },
+  rootWebWide: {
+    maxWidth: 520,
     alignSelf: "center",
   },
   input: {
     ...fullPageWizardStyles.wizardFieldInput,
   },
-  inputError: { borderColor: Theme.negative },
+  inputError: {
+    borderColor: Theme.destructive,
+  },
   errorText: {
-    fontSize: 11,
+    marginTop: 6,
+    fontSize: 12,
     fontWeight: "600",
-    color: Theme.negative,
-    marginTop: 2,
+    color: Theme.destructive,
   },
   datePickerBackdrop: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(15,23,42,0.45)",
+    backgroundColor: "rgba(15, 23, 42, 0.35)",
   },
   datePickerSheet: {
     backgroundColor: Theme.cardWhite,
@@ -242,11 +217,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
-  datePickerTitle: { fontSize: 16, fontWeight: "700", color: Theme.textPrimaryDark },
-  datePickerDone: { fontSize: 15, fontWeight: "700", color: Theme.primary },
+  datePickerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  datePickerDone: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Theme.primary,
+  },
 });

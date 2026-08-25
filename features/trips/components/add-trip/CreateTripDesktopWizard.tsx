@@ -5,6 +5,11 @@ import { MotiView } from "moti";
 import { Easing } from "react-native-reanimated";
 import { ListTodo } from "lucide-react-native";
 
+import {
+  fullPageWizardStyles,
+  WizardPriorSelections,
+  type WizardPriorSelectionItem,
+} from "@/components/full-page-wizard";
 import Theme from "@/constants/Theme";
 import { ROUTES } from "@/lib/routes";
 import type { ClientRow } from "@/features/clients/services/clients.service";
@@ -18,7 +23,6 @@ import type { AddTripWizardStep } from "@/features/trips/components/add-trip/add
 import type { AddTripIssueField } from "@/features/trips/components/add-trip/useAddTripForm";
 import type { AllocationSubStep } from "@/features/trips/components/add-trip/allocationWizardSteps";
 import { formatMobileNumber } from "@/lib/format";
-import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/supplierNumericPartyPreview.util";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
@@ -61,6 +65,8 @@ export type CreateTripDesktopWizardProps = {
   layout?: "desktop" | "mobile";
   /** Mobile aggregate fleet entry — party-style keypad sub-step. */
   allocationSubStep?: AllocationSubStep;
+  /** Jump back within phone → name → vehicle (summary chip taps). */
+  onAllocationSubStepChange?: (step: AllocationSubStep) => void;
   /** True while client step is on the contract/adhoc lane gate. */
   onLaneGateActiveChange?: (active: boolean) => void;
   /** True when a contract lane is selected (route step becomes date-first). */
@@ -80,6 +86,7 @@ export function CreateTripDesktopWizard({
   sourceIndent = null,
   layout = "desktop",
   allocationSubStep,
+  onAllocationSubStepChange,
   onLaneGateActiveChange,
   onContractLaneLockedChange,
   onRequestChangeLane,
@@ -385,23 +392,65 @@ export function CreateTripDesktopWizard({
           allocationSubStep === "vehicle");
 
       if (mobileFleetKeypad && allocationSubStep) {
-        const partnerPreview = fleet.selectedSupplierRow
-          ? supplierToNumericPartyPreview(fleet.selectedSupplierRow)
-          : undefined;
+        const summaryItems: WizardPriorSelectionItem[] = [];
+        if (selectedClient) {
+          summaryItems.push({
+            id: "client",
+            label: "Client",
+            name: selectedClient.name?.trim() || "Client",
+          });
+        }
+        const rateRaw = state.supplierRate.trim();
+        if (rateRaw) {
+          summaryItems.push({
+            id: "rate",
+            label: "Rate",
+            name: `₹${Number(rateRaw).toLocaleString("en-IN")}`,
+          });
+        }
+        if (
+          (allocationSubStep === "driverName" ||
+            allocationSubStep === "vehicle") &&
+          state.driverPhone.trim()
+        ) {
+          summaryItems.push({
+            id: "phone",
+            label: "Phone",
+            name: state.driverPhone.trim(),
+            onPress: () => onAllocationSubStepChange?.("driverPhone"),
+          });
+        }
+        if (
+          allocationSubStep === "vehicle" &&
+          state.aggregateDriverName.trim()
+        ) {
+          summaryItems.push({
+            id: "name",
+            label: "Driver",
+            name: state.aggregateDriverName.trim(),
+            onPress: () => onAllocationSubStepChange?.("driverName"),
+          });
+        }
+
         stepContent = (
           <View style={s.saleMobileKeypadRoot}>
-            {allocationSubStep === "driverPhone" ? (
-              <View style={s.compactAllocToolbar}>
-                {partnerPreview ? (
-                  <View style={s.allocPartnerNameChip}>
-                    <Text style={s.allocPartnerNameChipLabel}>Partner</Text>
-                    <Text style={s.allocPartnerNameChipValue} numberOfLines={1}>
-                      {partnerPreview.name}
-                    </Text>
-                  </View>
-                ) : null}
-                <View style={[s.inputBoxClean, s.allocAssignLaterBox, s.compactAssignLaterBox]}>
-                  <ListTodo size={16} color={Theme.textRouteCard} strokeWidth={2} />
+            <View style={fullPageWizardStyles.wizardKeypadChromePad}>
+              {summaryItems.length > 0 ? (
+                <WizardPriorSelections items={summaryItems} compact />
+              ) : null}
+              {allocationSubStep === "driverPhone" ? (
+                <View
+                  style={[
+                    s.inputBoxClean,
+                    s.allocAssignLaterBox,
+                    s.compactAssignLaterBox,
+                  ]}
+                >
+                  <ListTodo
+                    size={16}
+                    color={Theme.textRouteCard}
+                    strokeWidth={2}
+                  />
                   <View style={s.allocAssignLaterCopy}>
                     <Text style={s.allocAssignLaterTitle}>Assign later</Text>
                     <Text style={s.allocAssignLaterSub}>
@@ -412,18 +461,23 @@ export function CreateTripDesktopWizard({
                     value={state.assignLater}
                     onValueChange={setters.setAssignLater}
                     disabled={fleet.assignLaterSwitchDisabled}
-                    trackColor={{ false: Theme.borderLight, true: Theme.textPrimaryDark }}
+                    trackColor={{
+                      false: Theme.borderLight,
+                      true: Theme.textPrimaryDark,
+                    }}
                     thumbColor={Theme.cardWhite}
                   />
                 </View>
-              </View>
-            ) : null}
+              ) : null}
+            </View>
             <AggregateTrackingMobileStep
               step={allocationSubStep}
               driverName={state.aggregateDriverName}
               onDriverNameChange={setters.setAggregateDriverName}
               driverPhone={state.driverPhone}
-              onDriverPhoneChange={(v) => setters.setDriverPhone(formatMobileNumber(v))}
+              onDriverPhoneChange={(v) =>
+                setters.setDriverPhone(formatMobileNumber(v))
+              }
               vehicleText={state.aggregateVehicleText}
               onVehicleTextChange={setters.setAggregateVehicleText}
               invalid={invalid}
@@ -464,7 +518,9 @@ export function CreateTripDesktopWizard({
             const row = fleet.driverOptions.find((d) => d.id === id);
             if (row?.isBusy) return;
             const newId = state.driverId === id ? null : id;
-            const dr = newId ? fleet.driverOptions.find((d) => d.id === newId) : null;
+            const dr = newId
+              ? fleet.driverOptions.find((d) => d.id === newId)
+              : null;
             setters.setDriver(
               newId,
               dr?.commission_percent ?? null,
@@ -501,6 +557,7 @@ export function CreateTripDesktopWizard({
         state.supplySource === "aggregate" &&
         !state.assignLater &&
         (allocationSubStep === "driverPhone" ||
+          allocationSubStep === "driverName" ||
           allocationSubStep === "vehicle")));
 
   const workspaceStyle =

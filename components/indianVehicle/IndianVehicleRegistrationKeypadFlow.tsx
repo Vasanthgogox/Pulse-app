@@ -158,7 +158,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
             <Truck size={20} color={Theme.iconMuted} style={styles.leadingIcon} />
             <KeypadDisplayValueWithCaret
               value={displayValue}
-              placeholder="TN 01 CM 2026"
+              placeholder="TN 17 AS 2202"
               showCaret={showCursor}
               valueStyle={[
                 styles.displayValue,
@@ -174,33 +174,40 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
           </Pressable>
         </View>
 
-        {wizardShell ? <WizardActionBarHost style={flow.actionBarHost} /> : null}
+        {wizardShell || !isDesktopWeb ? (
+          <View style={wizardShell ? flow.bottomDock : undefined}>
+            {wizardShell ? (
+              <WizardActionBarHost style={flow.actionBarHost} />
+            ) : null}
 
-        {/* On desktop web the physical keyboard drives entry (useIndianVehiclePhysicalKeypad),
-            so the on-screen QWERTY is hidden — it only dominates the layout on laptops/PCs. */}
-        {isDesktopWeb ? null : (
-          <View
-            style={
-              wizardShell || groupTop
-                ? [
-                    flow.keypadDockWizard,
-                    flow.keypadDockWizardBleed,
-                    flow.keypadDockSignIn,
-                  ]
-                : styles.keypadDock
-            }
-          >
-            <IndianVehicleRegistrationKeypad
-              kind={keyboardKind}
-              onKey={handleKey}
-              normalizedLength={normLen}
-              atMaxLength={!allowedNext.letters && !allowedNext.digits}
-              compact={groupTop}
-              canToggleMode={canToggleMode}
-              onToggleMode={handleToggleMode}
-            />
+            {/* On desktop web the physical keyboard drives entry (useIndianVehiclePhysicalKeypad),
+                so the on-screen QWERTY is hidden — it only dominates the layout on laptops/PCs. */}
+            {isDesktopWeb ? null : (
+              <View
+                style={
+                  wizardShell || groupTop
+                    ? [
+                        flow.keypadDockWizard,
+                        flow.keypadDockWizardBleed,
+                        flow.keypadDockSignIn,
+                        flow.padDockFlush,
+                      ]
+                    : styles.keypadDock
+                }
+              >
+                <IndianVehicleRegistrationKeypad
+                  kind={keyboardKind}
+                  onKey={handleKey}
+                  normalizedLength={normLen}
+                  atMaxLength={!allowedNext.letters && !allowedNext.digits}
+                  compact={groupTop}
+                  canToggleMode={canToggleMode}
+                  onToggleMode={handleToggleMode}
+                />
+              </View>
+            )}
           </View>
-        )}
+        ) : null}
       </View>
     );
   },
@@ -221,7 +228,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     width: "100%",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
+    position: "relative",
   },
   rootGrouped: {
     width: "100%",
@@ -236,6 +244,7 @@ const styles = StyleSheet.create({
   mainWizard: {
     /** Match phone / rate keypad — pageRootKeypad is edge-to-edge. */
     paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 310,
   },
   regLabel: {
     color: Theme.textMuted,

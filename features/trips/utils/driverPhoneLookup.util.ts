@@ -36,8 +36,8 @@ export function enrichDriverMatchesWithFleetAvatars(
   matches: readonly ExistingDriverMatch[],
   fleetDrivers: readonly DriverRow[],
 ): ExistingDriverMatch[] {
-  if (matches.length === 0) return [...matches];
-  if (fleetDrivers.length === 0) return [...matches];
+  if (matches.length === 0) return matches as ExistingDriverMatch[];
+  if (fleetDrivers.length === 0) return matches as ExistingDriverMatch[];
 
   return matches.map((match) => {
     const hasAvatar =

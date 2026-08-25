@@ -45,6 +45,8 @@ import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/inden
 import {
     DONE_SUB_TABS,
     getLoadCenterStatusTabLabel,
+    resolveGetLoadDoneOutcome,
+    resolveGetLoadMobileCardLabels,
     resolveGetLoadSourceTag,
     resolveGetLoadTicketCommerce,
     resolveGiveLoadMobileDisplayStatus,
@@ -357,6 +359,7 @@ export function LoadCenterView({
     indentIdsWithTrip,
     tripByIndentId,
     hirePartnerLoads,
+    awardedToMeIndentIds,
     awardedLoads,
     findWorkLoads,
     findWorkDoneUnionLoads,
@@ -1364,19 +1367,38 @@ export function LoadCenterView({
         statusMatchesFilter(load.status || "", "DONE") ||
         indentIdsWithTrip.has(load.id);
       const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
-      const loadTypeDetail = (load.load_type || "—").toUpperCase();
       const clientLabel = resolveMarketIndentShipperLabel(load);
-      const statusLabel = isAccepted
-        ? "awarded"
-        : isRejected
-          ? "declined"
-          : isPending &&
-              existingQuote?.counter_amount != null &&
-              Number(existingQuote.counter_amount) > 0
-            ? "countered"
-            : isPending
-              ? "receiving bids"
-              : "open market";
+      const mobileLabels = resolveGetLoadMobileCardLabels(
+        statusFilterTab,
+        doneSubTab,
+        load,
+        existingQuote,
+        indentIdsWithTrip,
+        awardedToMeIndentIds.has(load.id),
+      );
+      const doneOutcome =
+        statusFilterTab === "DONE" || isDoneOutcome
+          ? resolveGetLoadDoneOutcome(
+              load,
+              existingQuote,
+              indentIdsWithTrip.has(load.id),
+              awardedToMeIndentIds.has(load.id),
+            )
+          : null;
+      const statusLabel =
+        statusFilterTab === "DONE"
+          ? mobileLabels.statusLabel
+          : isAccepted
+            ? "awarded"
+            : isRejected
+              ? "rejected"
+              : isPending &&
+                  existingQuote?.counter_amount != null &&
+                  Number(existingQuote.counter_amount) > 0
+                ? "countered"
+                : isPending
+                  ? "receiving bids"
+                  : "open market";
       const quoteAmount = Number(existingQuote?.amount ?? 0);
       const counterInr =
         existingQuote?.counter_amount != null &&
@@ -1393,27 +1415,39 @@ export function LoadCenterView({
             : isPending
               ? "pending"
               : "open";
-      const rightFooter = isAccepted
-        ? "Bids won"
-        : loadTypeDetail;
+      const rightFooter =
+        statusFilterTab === "DONE"
+          ? mobileLabels.rightFooter
+          : isAccepted
+            ? "Bids won"
+            : (load.load_type || "—").toUpperCase();
       const ticketCommerce = resolveGetLoadTicketCommerce(
         statusFilterTab,
         doneSubTab,
         load,
         existingQuote,
         indentIdsWithTrip,
+        awardedToMeIndentIds.has(load.id),
       );
-      const ctaLabel = isAccepted
-        ? isDoneOutcome
+      /** Terminal Done cards: no Rebid — only converted keeps View details. */
+      const allowPrimaryCta =
+        doneOutcome == null ||
+        doneOutcome.kind === "converted" ||
+        doneOutcome.interactive;
+      const ctaLabel =
+        doneOutcome?.kind === "converted"
           ? "View details"
-          : "Allocate"
-        : isCountered
-          ? "Respond to counter"
-          : isPending
-            ? "Update bid"
-            : isRejected
-              ? "New quote"
-              : "Bid now";
+          : isAccepted
+            ? isDoneOutcome
+              ? "View details"
+              : "Allocate"
+            : isCountered
+              ? "Respond to counter"
+              : isPending
+                ? "Update bid"
+                : isRejected
+                  ? "New quote"
+                  : "Bid now";
 
       const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
       const sourceTag = resolveGetLoadSourceTag(
@@ -1450,6 +1484,11 @@ export function LoadCenterView({
           onPress={openLoad}
           dense={layout.dense}
           fillGrid={layout.fillGrid}
+          dimmed={
+            doneOutcome != null &&
+            !doneOutcome.interactive &&
+            doneOutcome.kind !== "converted"
+          }
           actions={
             layout.withActions ? (
               <GetLoadIndentCardActions
@@ -1457,6 +1496,7 @@ export function LoadCenterView({
                 isAccepted={isAccepted}
                 isDoneOutcome={isDoneOutcome}
                 ctaLabel={ctaLabel}
+                showPrimaryCta={allowPrimaryCta}
                 quoteVariant={quoteVariant}
                 quoteAmount={quoteAmount}
                 onIndentPress={handleCardIndentPress}
@@ -1471,6 +1511,7 @@ export function LoadCenterView({
       );
     },
     [
+      awardedToMeIndentIds,
       connectedClientOrgIds,
       creatorOrgProfileMap,
       doneSubTab,

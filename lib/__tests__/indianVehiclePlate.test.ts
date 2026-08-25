@@ -9,6 +9,7 @@ import {
 } from "@/lib/indianVehicleInput.util";
 import {
   formatIndianVehicleNumber,
+  formatIndianVehicleNumberInput,
   normalizeVehicleNumberForMatch,
 } from "@/lib/format";
 import { validateIndianVehicleNumber } from "@/lib/validation";
@@ -22,25 +23,17 @@ function typeOut(plate: string): string {
   return value;
 }
 
-/**
- * Indian plates are variable-length: the series block may be absent, 1, 2 or 3
- * letters, and the district may be 1-3 digits. The old fixed 2-2-2-4 mask
- * silently dropped keystrokes for every shape except LL NN LL NNNN.
- */
+/** Fixed AA 00 AA 0000 plates only (e.g. TN 17 AS 2202). */
 const VALID_PLATES = [
-  "TN01CM2026", // standard 2-letter series
-  "TN01C2026", // single-letter series
-  "TN091234", // no series (older plate)
-  "UP32ABC1234", // 3-letter series
-  "TN100AB1234", // 3-digit district
-  "DL8CAF5031", // 1-digit district + 3-letter series
-  "22BH1234AB", // Bharat series
+  "TN17AS2202",
+  "TN01CM2026",
   "MH12DE1433",
   "KA05MG1234",
   "HR26DK8337",
+  "UP32AB1234",
 ];
 
-describe("Indian vehicle plate entry", () => {
+describe("Indian vehicle plate entry (fixed AA 00 AA 0000)", () => {
   it.each(VALID_PLATES)("types %s without dropping characters", (plate) => {
     const typed = typeOut(plate);
     expect(normalizeVehicleNumberForMatch(typed)).toBe(plate);
@@ -58,60 +51,74 @@ describe("Indian vehicle plate entry", () => {
     expect(validateIndianVehicleNumber(formatIndianVehicleNumber(plate))).toBeNull();
   });
 
-  it.each(["", "TN", "TN01", "TN01CM", "ABCD", "12345", "22BH1234"])(
-    "treats incomplete %s as invalid",
-    (partial) => {
-      expect(isIndianVehiclePlateValid(partial)).toBe(false);
-      if (partial.length === 0) {
-        expect(validateIndianVehicleNumber(partial)).toBe("Required");
-      } else {
-        expect(validateIndianVehicleNumber(partial)).toMatch(/valid vehicle number/i);
-      }
-    },
-  );
+  it.each([
+    "",
+    "TN",
+    "TN17",
+    "TN17AS",
+    "TN17AS220",
+    "TN1AS2202",
+    "TN17A2202",
+    "ABCD",
+    "12345",
+    "22BH1234AB",
+    "TN01C2026",
+    "TN091234",
+  ])("treats incomplete or non-fixed %s as invalid", (partial) => {
+    expect(isIndianVehiclePlateValid(partial)).toBe(false);
+    if (partial.length === 0) {
+      expect(validateIndianVehicleNumber(partial)).toBe("Required");
+    } else {
+      expect(validateIndianVehicleNumber(partial)).toMatch(/valid vehicle number/i);
+    }
+  });
+
+  it("formats input with fixed spacing", () => {
+    expect(formatIndianVehicleNumberInput("tn17as2202")).toBe("TN 17 AS 2202");
+    expect(formatIndianVehicleNumberInput("TN17")).toBe("TN 17");
+    expect(formatIndianVehicleNumberInput("TN17AS")).toBe("TN 17 AS");
+  });
 
   it("formats stored plates for display and leaves non-Indian values alone", () => {
-    expect(formatIndianVehicleNumber("TN25CM7892")).toBe("TN 25 CM 7892");
-    expect(formatIndianVehicleNumber("tn 25 cm 7892")).toBe("TN 25 CM 7892");
+    expect(formatIndianVehicleNumber("TN17AS2202")).toBe("TN 17 AS 2202");
+    expect(formatIndianVehicleNumber("tn 17 as 2202")).toBe("TN 17 AS 2202");
     expect(formatIndianVehicleNumber("TRK-SEED-001")).toBe("TRK-SEED-001");
   });
 
-  it("drops the series chip once the plate clearly has none", () => {
-    const guide = getIndianVehicleSegmentGuide("TN 09 1234");
-    expect(guide.map((s) => s.done)).toEqual([true, true, false, true]);
-  });
-
-  it("marks every segment done for a complete standard plate", () => {
-    const guide = getIndianVehicleSegmentGuide("TN 01 CM 2026");
+  it("marks every segment done for a complete plate", () => {
+    const guide = getIndianVehicleSegmentGuide("TN 17 AS 2202");
+    expect(guide.map((s) => s.label)).toEqual(["AA", "00", "AA", "0000"]);
     expect(guide.every((s) => s.done)).toBe(true);
   });
 
-  it("keeps the number pad after one district digit so TN 09… can be typed", () => {
-    expect(getIndianVehicleKeyboardKind("TN0")).toBe("numbers");
-    expect(getIndianVehicleAllowedNext("TN0")).toEqual({
-      letters: true,
+  it("switches keypad by fixed segment", () => {
+    expect(getIndianVehicleKeyboardKind("")).toBe("letters");
+    expect(getIndianVehicleKeyboardKind("TN")).toBe("numbers");
+    expect(getIndianVehicleKeyboardKind("TN17")).toBe("letters");
+    expect(getIndianVehicleKeyboardKind("TN17AS")).toBe("numbers");
+    expect(getIndianVehicleAllowedNext("TN")).toEqual({
+      letters: false,
       digits: true,
     });
-    expect(appendIndianVehicleChar("TN 0", "9")).toBe("TN 09");
-  });
-
-  it("still allows a second series letter after the first (not locked to one)", () => {
-    expect(getIndianVehicleAllowedNext("TN0I")).toEqual({
+    expect(getIndianVehicleAllowedNext("TN17")).toEqual({
       letters: true,
+      digits: false,
+    });
+    expect(getIndianVehicleAllowedNext("TN17AS")).toEqual({
+      letters: false,
       digits: true,
     });
-    expect(appendIndianVehicleChar("TN 0 I", "M")).toBe("TN 0 IM");
-    expect(appendIndianVehicleChar("TN 0 I", "1")).toBe("TN 0 I 1");
-    expect(getIndianVehicleSegmentGuide("TN 0 I").map((s) => s.label)).toEqual([
-      "AA",
-      "00",
-      "AA",
-      "0000",
-    ]);
-    expect(getIndianVehicleFormatHint("TN 0 I")).toMatch(/series letters/i);
   });
 
-  it("prefers letters once a typical 2-digit district is filled", () => {
-    expect(getIndianVehicleKeyboardKind("TN09")).toBe("letters");
+  it("rejects a letter during the district segment", () => {
+    expect(appendIndianVehicleChar("TN 1", "A")).toBe("TN 1");
+    expect(appendIndianVehicleChar("TN 17", "A")).toBe("TN 17 A");
+  });
+
+  it("hints match the fixed mask", () => {
+    expect(getIndianVehicleFormatHint("")).toMatch(/state code/i);
+    expect(getIndianVehicleFormatHint("TN")).toMatch(/district/i);
+    expect(getIndianVehicleFormatHint("TN17")).toMatch(/series/i);
+    expect(getIndianVehicleFormatHint("TN17AS")).toMatch(/4 digits/i);
   });
 });

@@ -111,7 +111,7 @@ export function AddTripModalLayout({
       stepIndex={stepIndex}
       stepTotal={stepTotal}
       onBack={onBack ?? onClose}
-      backLabel={stepIndex != null && stepIndex > 1 ? "Back" : "Close"}
+      backLabel={onBack ? "Back" : "Close"}
       progress={progress}
       fillBody={fillBody}
       scrollBody={scrollBody}
@@ -122,9 +122,11 @@ export function AddTripModalLayout({
         shouldShowFooter ? (
           <FullPageWizardFooter
             secondaryLabel={
-              stepIndex != null && stepIndex > 1 ? "Back" : "Close"
+              fillBody ? undefined : onBack ? "Back" : "Close"
             }
-            onSecondaryPress={onBack ?? onClose}
+            onSecondaryPress={
+              fillBody ? undefined : onBack ?? onClose
+            }
             tertiaryLabel={tertiaryLabel}
             onTertiaryPress={onTertiaryPress}
             tertiaryDisabled={tertiaryDisabled || submitting}

@@ -156,28 +156,39 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
         {footerExtras ? <View style={flow.extras}>{footerExtras}</View> : null}
       </View>
 
-      {wizardShell ? <WizardActionBarHost style={flow.actionBarHost} /> : null}
+      {wizardShell || !isDesktopWeb ? (
+        <View style={wizardShell ? flow.bottomDock : undefined}>
+          {wizardShell ? (
+            <WizardActionBarHost style={flow.actionBarHost} />
+          ) : null}
 
-      {isDesktopWeb ? null : (
-        <View
-          style={
-            wizardShell || groupTop
-              ? [flow.keypadDockWizard, flow.keypadDockWizardBleed, flow.keypadDockSignIn]
-              : useAppleKeypad
-                ? flow.keypadDockApple
-                : flow.keypadDock
-          }
-        >
-          <DecimalKeypad
-            onKey={handleKey}
-            showDecimal={false}
-            layout="phone"
-            variant={wizardShell || !useAppleKeypad ? "pay" : "apple"}
-            size="default"
-            hapticsEnabled={false}
-          />
+          {isDesktopWeb ? null : (
+            <View
+              style={
+                wizardShell || groupTop
+                  ? [
+                      flow.keypadDockWizard,
+                      flow.keypadDockWizardBleed,
+                      flow.keypadDockSignIn,
+                      flow.padDockFlush,
+                    ]
+                  : useAppleKeypad
+                    ? flow.keypadDockApple
+                    : flow.keypadDock
+              }
+            >
+              <DecimalKeypad
+                onKey={handleKey}
+                showDecimal={false}
+                layout="phone"
+                variant={wizardShell || !useAppleKeypad ? "pay" : "apple"}
+                size="default"
+                hapticsEnabled={false}
+              />
+            </View>
+          )}
         </View>
-      )}
+      ) : null}
     </View>
   );
 });

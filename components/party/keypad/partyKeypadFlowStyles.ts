@@ -8,7 +8,8 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     width: "100%",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
+    position: "relative",
   },
   main: {
     flexShrink: 1,
@@ -51,11 +52,20 @@ export const partyKeypadFlowStyles = StyleSheet.create({
   /**
    * Inside FullPageWizardShell keypad steps (`pageRootKeypad` has no side pad
    * so the dock can go edge-to-edge). Re-apply screen inset on the input stack.
+   * paddingBottom reserves room for absolute CTA + pad dock.
    */
   mainPaddedWizard: {
     flexShrink: 1,
     minHeight: 0,
     paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 310,
+  },
+  /** Letter keypad (name) is taller than the phone pad — reserve more body. */
+  mainPaddedWizardTall: {
+    flexShrink: 1,
+    minHeight: 0,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 360,
   },
   displayRow: {
     position: "relative",
@@ -210,6 +220,23 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     flexShrink: 0,
     width: "100%",
     zIndex: 5,
+    backgroundColor: Theme.cardWhite,
+    paddingTop: 4,
+  },
+  /** CTA + pad stay glued to the bottom of fillBody shells. */
+  bottomDock: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "100%",
+    backgroundColor: Theme.cardWhite,
+    zIndex: 6,
+  },
+  padDockFlush: {
+    marginTop: 0,
   },
   hiddenInput: {
     position: "absolute",

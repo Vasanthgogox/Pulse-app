@@ -152,10 +152,130 @@ function quoteCounterAmountInr(
   return n > 0 ? n : null;
 }
 
+/** Mobile GET LOAD Done outcomes — tag + copy for lost / cancelled / declined. */
+export type GetLoadDoneOutcomeKind =
+  | "converted"
+  | "cancelled"
+  | "expired"
+  | "lost"
+  | "declined";
+
+export type GetLoadDoneOutcome = {
+  kind: GetLoadDoneOutcomeKind;
+  /** Feeds status chip resolver (lowercase). */
+  statusLabel: string;
+  /** Under party name. */
+  channelLabel: string;
+  /** Footer / ticket caption. */
+  footerLabel: string;
+  /** Ticket kicker pill. */
+  kicker: string;
+  /** False when Rebid / bid actions must stay off. */
+  interactive: boolean;
+};
+
+/**
+ * Classify a Get Load Done card from indent status + our quote.
+ * - Declined bid → Rejected
+ * - We won (+ trip / completed) → Converted
+ * - Awarded elsewhere / closed → Lost
+ * - Shipper cancelled → Cancelled
+ */
+export function resolveGetLoadDoneOutcome(
+  load: { status?: string | null },
+  existingQuote:
+    | {
+        status?: string | null;
+      }
+    | null
+    | undefined,
+  hasTrip: boolean,
+  awardedToMe = false,
+): GetLoadDoneOutcome {
+  const indentStatus = (load.status || "").trim().toLowerCase();
+  const quoteStatus = (existingQuote?.status || "").trim().toLowerCase();
+  const wonByMe = awardedToMe || quoteStatus === "accepted";
+
+  if (
+    hasTrip ||
+    (wonByMe && (indentStatus === "completed" || indentStatus === "closed"))
+  ) {
+    return {
+      kind: "converted",
+      statusLabel: "converted",
+      channelLabel: "Won · converted to trip",
+      footerLabel: "On books",
+      kicker: "CONVERTED",
+      interactive: false,
+    };
+  }
+
+  if (indentStatus === "cancelled") {
+    return {
+      kind: "cancelled",
+      statusLabel: "cancelled",
+      channelLabel: "Indent cancelled",
+      footerLabel: "Indent cancelled",
+      kicker: "CANCELLED",
+      interactive: false,
+    };
+  }
+
+  if (indentStatus === "expired") {
+    return {
+      kind: "expired",
+      statusLabel: "expired",
+      channelLabel: "Opportunity expired",
+      footerLabel: "No longer open",
+      kicker: "EXPIRED",
+      interactive: false,
+    };
+  }
+
+  /**
+   * Shipper awarded elsewhere / closed the market / completed without our win.
+   * Prefer LOST over REJECTED so the card explains allocation, not just quote state.
+   */
+  if (
+    indentStatus === "completed" ||
+    indentStatus === "closed" ||
+    indentStatus === "awarded"
+  ) {
+    return {
+      kind: "lost",
+      statusLabel: "lost",
+      channelLabel: "Awarded to another bidder",
+      footerLabel: "Allocated to another bidder",
+      kicker: "LOST",
+      interactive: false,
+    };
+  }
+
+  if (quoteStatus === "rejected") {
+    return {
+      kind: "declined",
+      statusLabel: "rejected",
+      channelLabel: "Bid declined",
+      footerLabel: "Quote rejected",
+      kicker: "REJECTED",
+      interactive: false,
+    };
+  }
+
+  return {
+    kind: "lost",
+    statusLabel: "lost",
+    channelLabel: "Opportunity closed",
+    footerLabel: "No longer open for bids",
+    kicker: "LOST",
+    interactive: false,
+  };
+}
+
 /** Mobile GET LOAD card labels — Done tab uses outcome status, not live quote state. */
 export function resolveGetLoadMobileCardLabels(
   statusFilterTab: StatusFilterTab,
-  doneSubTab: DoneSubTab,
+  _doneSubTab: DoneSubTab,
   load: { id: string; status?: string | null; load_type?: string | null },
   existingQuote:
     | {
@@ -165,6 +285,7 @@ export function resolveGetLoadMobileCardLabels(
       }
     | undefined,
   indentIdsWithTrip: ReadonlySet<string>,
+  awardedToMe = false,
 ): { statusLabel: string; rightFooter: string } {
   const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
   const loadTypeDetail = (load.load_type || "—").toUpperCase();
@@ -172,15 +293,15 @@ export function resolveGetLoadMobileCardLabels(
   const counterInr = quoteCounterAmountInr(existingQuote);
 
   if (statusFilterTab === "DONE") {
-    if (doneSubTab === "REJECTED" || quoteStatus === "rejected") {
-      return {
-        statusLabel: "declined",
-        rightFooter: "Quote not selected",
-      };
-    }
+    const outcome = resolveGetLoadDoneOutcome(
+      load,
+      existingQuote,
+      hasTrip,
+      awardedToMe,
+    );
     return {
-      statusLabel: "completed",
-      rightFooter: hasTrip ? "On books" : "Closed",
+      statusLabel: outcome.statusLabel,
+      rightFooter: outcome.footerLabel,
     };
   }
 
@@ -191,7 +312,7 @@ export function resolveGetLoadMobileCardLabels(
   const statusLabel = isAccepted
     ? "bids won"
     : isRejected
-      ? "declined"
+      ? "rejected"
       : isCountered
         ? "countered"
         : isPending
@@ -230,7 +351,7 @@ export type LoadCenterTicketCommerce = {
 
 export function resolveGetLoadTicketCommerce(
   statusFilterTab: StatusFilterTab,
-  doneSubTab: DoneSubTab,
+  _doneSubTab: DoneSubTab,
   load: { id: string; status?: string | null; supplier_target?: number | null },
   existingQuote:
     | {
@@ -240,6 +361,7 @@ export function resolveGetLoadTicketCommerce(
       }
     | undefined,
   indentIdsWithTrip: ReadonlySet<string>,
+  awardedToMe = false,
 ): LoadCenterTicketCommerce {
   const targetRateInr = Number(load.supplier_target ?? 0);
   const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
@@ -249,17 +371,16 @@ export function resolveGetLoadTicketCommerce(
   const hasTrip = indentIdsWithTrip.has(load.id);
 
   if (statusFilterTab === "DONE") {
-    if (doneSubTab === "REJECTED" || quoteStatus === "rejected") {
-      return {
-        kicker: "DECLINED",
-        amountInr: null,
-        rightCaption: "Quote not selected",
-      };
-    }
+    const outcome = resolveGetLoadDoneOutcome(
+      load,
+      existingQuote,
+      hasTrip,
+      awardedToMe,
+    );
     return {
-      kicker: "COMPLETED",
+      kicker: outcome.kicker,
       amountInr: null,
-      rightCaption: hasTrip ? "On books" : "Closed",
+      rightCaption: outcome.footerLabel,
     };
   }
 

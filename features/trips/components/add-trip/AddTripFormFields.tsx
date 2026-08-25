@@ -955,36 +955,47 @@ export function AddTripFormFields({
     }
     const items: WizardPriorSelectionItem[] = [];
     const step = allocationSubStep;
-    const rateSteps = new Set(["driverName", "vehicle"]);
-    const rateRaw = state.supplierRate.trim();
-    if (rateSteps.has(step ?? "") && rateRaw) {
+    const summarySteps = new Set(["driverPhone", "driverName", "vehicle"]);
+    if (!summarySteps.has(step ?? "")) return [];
+
+    if (selectedClientRow) {
       items.push({
-        id: "rate",
-        label: "Partner rate",
-        name: `₹${Number(rateRaw).toLocaleString("en-IN")}`,
-        subtitle: state.advancePaid.trim()
-          ? `Advance ₹${Number(state.advancePaid.trim()).toLocaleString("en-IN")}`
-          : null,
-        onPress: () => onAllocationSubStepChange?.("rates"),
+        id: "client",
+        label: "Client",
+        name: selectedClientRow.name?.trim() || "Client",
       });
     }
-    const phoneSteps = new Set(["driverName", "vehicle"]);
-    if (phoneSteps.has(step ?? "") && state.driverPhone.trim()) {
+
+    const rateRaw = state.supplierRate.trim();
+    if (rateRaw) {
+      items.push({
+        id: "rate",
+        label: "Rate",
+        name: `₹${Number(rateRaw).toLocaleString("en-IN")}`,
+      });
+    }
+
+    if (
+      (step === "driverName" || step === "vehicle") &&
+      state.driverPhone.trim()
+    ) {
       items.push({
         id: "phone",
-        label: "Driver phone",
+        label: "Phone",
         name: state.driverPhone.trim(),
         onPress: () => onAllocationSubStepChange?.("driverPhone"),
       });
     }
+
     if (step === "vehicle" && state.aggregateDriverName.trim()) {
       items.push({
         id: "name",
-        label: "Driver name",
+        label: "Driver",
         name: state.aggregateDriverName.trim(),
         onPress: () => onAllocationSubStepChange?.("driverName"),
       });
     }
+
     return items;
   }, [
     mobileAllocWizard,
@@ -992,15 +1003,29 @@ export function AddTripFormFields({
     state.supplySource,
     state.assignLater,
     state.supplierRate,
-    state.advancePaid,
     state.driverPhone,
     state.aggregateDriverName,
     allocationSubStep,
     onAllocationSubStepChange,
+    selectedClientRow,
   ]);
 
   const allocationContextRow = useMemo(() => {
     if (!mobileAllocWizard || !isWizardAllocationCard || !selectedClientRow) {
+      return null;
+    }
+
+    /**
+     * Phone / name / vehicle: chrome is the compact prior strip only
+     * (matches indent Deploy load).
+     */
+    if (
+      state.supplySource === "aggregate" &&
+      !state.assignLater &&
+      (allocationSubStep === "driverPhone" ||
+        allocationSubStep === "driverName" ||
+        allocationSubStep === "vehicle")
+    ) {
       return null;
     }
 
@@ -1033,38 +1058,6 @@ export function AddTripFormFields({
             onPress: openPartnerPicker,
           }
         : null;
-
-      if (step === "driverPhone") {
-        return {
-          left,
-          right: partnerCell ?? {
-            label: "Partner",
-            name: "Select partner",
-            entityType: "supplier" as const,
-            onPress: openPartnerPicker,
-          },
-        };
-      }
-
-      const driverSteps = new Set(["driverName", "vehicle"]);
-      if (driverSteps.has(step ?? "")) {
-        const driverName =
-          state.aggregateDriverName.trim() ||
-          state.driverPhone.trim() ||
-          "Select driver";
-        return {
-          left,
-          right: {
-            label: "Driver",
-            name: driverName,
-            subtitle:
-              state.aggregateDriverName.trim() && state.driverPhone.trim()
-                ? state.driverPhone.trim()
-                : null,
-            entityType: "driver" as const,
-          },
-        };
-      }
 
       const partnerSteps = new Set(["supply", "rates"]);
       if (partnerSteps.has(step ?? "")) {
@@ -1122,8 +1115,6 @@ export function AddTripFormFields({
     selectedClientRow,
     state.supplySource,
     state.assignLater,
-    state.aggregateDriverName,
-    state.driverPhone,
     allocationSubStep,
     selectedSupplierRow,
     showAssetFleetOnSupply,
@@ -2321,11 +2312,15 @@ export function AddTripFormFields({
                   <WizardPartyContextRow
                     left={allocationContextRow.left}
                     right={allocationContextRow.right}
+                    compact
                   />
                 ) : null}
 
                 {allocationPriorSelections.length > 0 ? (
-                  <WizardPriorSelections items={allocationPriorSelections} />
+                  <WizardPriorSelections
+                    items={allocationPriorSelections}
+                    compact
+                  />
                 ) : null}
               </View>
             ) : null}
@@ -2733,7 +2728,6 @@ export function AddTripFormFields({
                   setters.setAggregateVehicleText(v)
                 }
                 invalid={invalid}
-                driverNameInputRef={aggregateDriverNameInputRef}
                 driverPhoneMatches={enrichedDriverPhoneMatches}
                 driverPhoneLookupLoading={driverPhoneLookupLoading}
                 selectedDriverMatchId={selectedDriverMatchId}

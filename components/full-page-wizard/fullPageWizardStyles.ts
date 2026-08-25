@@ -469,12 +469,44 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     minHeight: 56,
-    width: "100%",
+    flex: 1,
+    minWidth: 0,
     alignSelf: "stretch",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
     gap: 10,
+  },
+  /** Allocation text steps — tiny summary chips so the field stays readable. */
+  partyCardFlatCompact: {
+    paddingVertical: 4,
+    paddingHorizontal: 7,
+    minHeight: 32,
+    borderRadius: 8,
+    gap: 6,
+  },
+  /**
+   * Horizontal scroll strip chip — content-sized (not flex:1) so labels
+   * never collapse under the active field.
+   */
+  partyCardFlatStrip: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "auto",
+    width: "auto",
+    maxWidth: 148,
+    minWidth: 88,
+    minHeight: 28,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRadius: 7,
+    gap: 5,
+    alignSelf: "center",
+  },
+  /** Solo party chip (no row sibling) — fill chrome width. */
+  partyCardFlatSolo: {
+    flex: 0,
+    width: "100%",
   },
   partyCardFlatSelected: {
     backgroundColor: WIZARD_ACCENT_SOFT,
@@ -485,6 +517,13 @@ export const fullPageWizardStyles = StyleSheet.create({
     minWidth: 0,
     justifyContent: "center",
     gap: 2,
+  },
+  partyTextWrapStrip: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: "auto",
+    maxWidth: 108,
+    gap: 0,
   },
   partyLabel: {
     color: Theme.textMuted,
@@ -498,6 +537,17 @@ export const fullPageWizardStyles = StyleSheet.create({
       default: {},
     }),
   },
+  partyLabelCompact: {
+    fontSize: 8,
+    lineHeight: 10,
+    letterSpacing: 0.3,
+  },
+  partyLabelStrip: {
+    fontSize: 7,
+    lineHeight: 9,
+    letterSpacing: 0.2,
+    fontWeight: "600",
+  },
   partyName: {
     color: Theme.textPrimaryDark,
     fontSize: 13,
@@ -507,6 +557,16 @@ export const fullPageWizardStyles = StyleSheet.create({
       android: { includeFontPadding: false as const },
       default: {},
     }),
+  },
+  partyNameCompact: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "600",
+  },
+  partyNameStrip: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "700",
   },
   partySubtitle: {
     color: Theme.textSecondary,
@@ -1070,30 +1130,39 @@ export const fullPageWizardStyles = StyleSheet.create({
   /** Wizard step field label — matches attribution block titles. */
   wizardFieldLabel: {
     color: Theme.textMuted,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.35,
     textTransform: "uppercase",
-    marginBottom: 8,
+    marginBottom: 6,
+    marginTop: 2,
   },
   /** Wizard step text input — readable body size for mobile. */
   wizardFieldInput: {
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.cardWhite,
     color: Theme.textPrimaryDark,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "600",
     fontStyle: "normal",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 56,
+    lineHeight: 24,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
+    minHeight: 48,
+    height: 48,
     marginBottom: 0,
     width: "100%",
     alignSelf: "stretch",
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    textAlignVertical: "center",
     ...Platform.select({
-      web: { outlineStyle: "none" } as object,
+      web: {
+        outlineStyle: "none",
+        // RN-web: keep typed value visible (avoid clipped tall box).
+        boxSizing: "border-box",
+      } as object,
+      android: { includeFontPadding: false as const },
       default: {},
     }),
   },
@@ -1109,25 +1178,30 @@ export const fullPageWizardStyles = StyleSheet.create({
   wizardKeypadChromePad: {
     width: "100%",
     flexShrink: 0,
-    gap: 10,
+    gap: 8,
     paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 8,
+    marginBottom: 4,
+    backgroundColor: Theme.screenBackground,
+    zIndex: 2,
   },
   /** Flex host for keypad step content under chrome (fill remaining height). */
   wizardKeypadStepFill: {
     flex: 1,
     minHeight: 0,
     width: "100%",
+    zIndex: 1,
   },
   /** Prior-step summary cards in one row above the active field. */
   wizardPriorSelectionsStack: {
     width: "100%",
-    gap: 8,
-    marginBottom: 4,
+    gap: 6,
+    marginBottom: 2,
   },
   wizardPriorSelectionsRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 8,
+    gap: 6,
     width: "100%",
   },
   wizardPriorSelectionCell: {
@@ -1141,9 +1215,35 @@ export const fullPageWizardStyles = StyleSheet.create({
     padding: 8,
     gap: 8,
   },
+  wizardPriorSelectionCardCompact: {
+    padding: 0,
+    gap: 0,
+    flex: 1,
+    minWidth: 0,
+  },
+  /** Single compact summary strip — horizontal scroll for shipper · rate · phone … */
+  wizardSummaryStrip: {
+    width: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    maxHeight: 40,
+    marginBottom: 0,
+  },
+  wizardSummaryStripContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 2,
+    paddingRight: 8,
+  },
+  wizardSummaryStripCell: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   wizardFieldBlock: {
     width: "100%",
     gap: 6,
+    marginTop: 4,
   },
   /** Flat list block — no outer card when parent already uses formSectionCard. */
   blockFlat: {
@@ -1238,6 +1338,12 @@ export const fullPageWizardStyles = StyleSheet.create({
     alignItems: "stretch",
     justifyContent: "flex-start",
   },
+  /** Full-screen allocate rates/phone — root fills shell; dock pins to bottom. */
+  wizardKeypadRootFill: {
+    position: "relative",
+    flex: 1,
+    minHeight: 0,
+  },
   wizardKeypadRootPopup: {
     flexGrow: 0,
     flexShrink: 1,
@@ -1252,24 +1358,31 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 12,
     paddingTop: 2,
   },
-  /** Mobile GPay — stack recipient + amount, leave room for CTA + keypad. */
+  /** Mobile GPay — amount up top; CTA+pad dock pinned below. */
   wizardKeypadBodyMobilePay: {
     flexGrow: 1,
     flexShrink: 1,
     minHeight: 0,
-    justifyContent: "center",
-    gap: 8,
+    justifyContent: "flex-start",
+    gap: 10,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 4,
-    paddingTop: 4,
+    paddingBottom: 8,
+    paddingTop: 8,
+  },
+  /**
+   * Reserve space for absolute CTA + default pay pad
+   * (≈56 CTA + 4×54 keys + row gaps + dock chrome).
+   */
+  wizardKeypadBodyFillPad: {
+    paddingBottom: 310,
   },
   wizardKeypadBodyCompact: {
     flexGrow: 1,
     flexShrink: 1,
     minHeight: 0,
-    gap: 6,
-    paddingTop: 0,
-    justifyContent: "center",
+    gap: 8,
+    paddingTop: 4,
+    justifyContent: "flex-start",
   },
   /** Desktop rate/sale popup — stack from the top like driver sign-in. */
   wizardKeypadBodyPopup: {
@@ -1306,10 +1419,35 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 8,
   },
+  wizardKeypadBottomDock: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "100%",
+    backgroundColor: Theme.cardWhite,
+    zIndex: 6,
+  },
+  /** True mobile: glue Continue + keys to the bottom of the fill shell. */
+  wizardKeypadBottomDockPinned: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    marginTop: 0,
+  },
+  wizardKeypadBottomDockPopup: {
+    marginTop: 8,
+  },
+  wizardKeypadPadDock: {
+    marginTop: 0,
+  },
   wizardKeypadActionBar: {
     flexShrink: 0,
     width: "100%",
     zIndex: 5,
+    backgroundColor: Theme.cardWhite,
+    paddingTop: 4,
+    /** Match PhoneNumberKeypadFlow — full-bleed CTA above pad, pad owns side inset. */
+    paddingHorizontal: 0,
   },
   wizardKeypadDesktopActionBar: {
     flexShrink: 0,

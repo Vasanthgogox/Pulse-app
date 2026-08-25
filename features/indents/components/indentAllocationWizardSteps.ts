@@ -30,16 +30,16 @@ export function getIndentAllocationWizardSteps(opts: {
         { id: "vehicleReg", label: "Vehicle" },
       );
     }
-    steps.push({ id: "commodity", label: "Load" });
+    steps.push({ id: "commodity", label: "Date" });
     return steps;
   }
   if (opts.assignLater) {
-    return [{ id: "commodity", label: "Load" }];
+    return [{ id: "commodity", label: "Date" }];
   }
   return [
     { id: "driver", label: "Driver" },
     { id: "vehicle", label: "Vehicle" },
-    { id: "commodity", label: "Load" },
+    { id: "commodity", label: "Date" },
   ];
 }
 
@@ -58,9 +58,9 @@ export function indentAllocationStepSubtitle(
       case "driverName":
         return "Step 4 · Driver name for tracking";
       case "vehicleReg":
-        return "Step 5 · Vehicle number (XX NN LL NNNN)";
+        return "Step 5 · Vehicle number (AA 00 AA 0000, e.g. TN 17 AS 2202)";
       case "commodity":
-        return "Final · Trip date, commodity, and weight";
+        return "Final · Confirm allocation and vehicle arrival date";
       default:
         return "Aggregate deploy";
     }
@@ -71,7 +71,7 @@ export function indentAllocationStepSubtitle(
     case "vehicle":
       return "Step 2 · Choose fleet vehicle";
     case "commodity":
-      return "Final · Trip date, commodity, and weight";
+      return "Final · Confirm allocation and vehicle arrival date";
     default:
       return "Asset deploy";
   }

@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { View } from "react-native";
+import { ScrollView, View } from "react-native";
 
 import { WizardEntitySummaryCard } from "@/components/full-page-wizard/WizardEntityPicker";
 import { fullPageWizardStyles } from "@/components/full-page-wizard/fullPageWizardStyles";
@@ -23,6 +23,8 @@ export type WizardPriorSelectionsProps = {
   items: readonly WizardPriorSelectionItem[];
   /** When both ids are present, render as a horizontal context row (Driver · Shipper). */
   contextPairIds?: readonly [string, string];
+  /** Dense chips so the active field stays above the fold. */
+  compact?: boolean;
 };
 
 function toPartyCell(item: WizardPriorSelectionItem) {
@@ -43,6 +45,7 @@ function toPartyCell(item: WizardPriorSelectionItem) {
 export const WizardPriorSelections = memo(function WizardPriorSelections({
   items,
   contextPairIds,
+  compact = false,
 }: WizardPriorSelectionsProps) {
   const { contextRow, rest } = useMemo(() => {
     if (!contextPairIds || contextPairIds.length !== 2) {
@@ -62,6 +65,45 @@ export const WizardPriorSelections = memo(function WizardPriorSelections({
   }, [items, contextPairIds]);
 
   if (!items.length) return null;
+
+  /**
+   * Compact: one horizontal scroll strip (shipper · rate · phone · …).
+   * Chips are content-sized so they never crush under the active field label.
+   */
+  if (compact) {
+    return (
+      <ScrollView
+        horizontal
+        style={fullPageWizardStyles.wizardSummaryStrip}
+        contentContainerStyle={fullPageWizardStyles.wizardSummaryStripContent}
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        bounces
+      >
+        {items.map((item) => (
+          <View
+            key={item.id}
+            style={fullPageWizardStyles.wizardSummaryStripCell}
+          >
+            <WizardEntitySummaryCard
+              label={item.label}
+              name={item.name}
+              subtitle={null}
+              entityType={item.entityType ?? "client"}
+              avatarUrl={item.avatarUrl}
+              avatarSeed={item.avatarSeed}
+              organizationImageUrl={item.organizationImageUrl}
+              organizationAvatarSeed={item.organizationAvatarSeed}
+              onPress={item.onPress}
+              showChevron={false}
+              compact
+              strip
+            />
+          </View>
+        ))}
+      </ScrollView>
+    );
+  }
 
   return (
     <View style={fullPageWizardStyles.wizardPriorSelectionsStack}>

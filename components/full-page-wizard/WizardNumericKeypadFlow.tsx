@@ -100,8 +100,14 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   const { width } = useWindowDimensions();
   const isDesktopKeypad =
     !forceMobileLayout && width >= Layout.wizardSteppedMaxWidth;
-  /** Mobile + desktop popup — same pay tray chrome as driver sign-in. */
-  const matchSignInKeypad = forceMobileLayout || !isDesktopKeypad;
+  /**
+   * Desktop rate/sale *modals* only — shrink-wrap root.
+   * Must NOT apply on normal mobile wizard fill (that collapsed flex:1 and
+   * left Continue floating mid-screen over ₹ amount with an empty lower half).
+   */
+  const isPopupShell = forceMobileLayout;
+  /** Pay-tray keypad chrome (sign-in dock) on mobile fill + desktop popups. */
+  const usePayTrayChrome = isPopupShell || !isDesktopKeypad;
 
   const resolvedActiveId = activeFieldId ?? fields[0]?.id ?? "";
   const activeField =
@@ -326,7 +332,8 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
     <View
       style={[
         styles.wizardKeypadRoot,
-        matchSignInKeypad && styles.wizardKeypadRootPopup,
+        !isPopupShell && styles.wizardKeypadRootFill,
+        isPopupShell && styles.wizardKeypadRootPopup,
       ]}
     >
       <View
@@ -334,7 +341,8 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
           styles.wizardKeypadBody,
           styles.wizardKeypadBodyMobilePay,
           useCompactChrome && styles.wizardKeypadBodyCompact,
-          matchSignInKeypad && styles.wizardKeypadBodyPopup,
+          !isPopupShell && styles.wizardKeypadBodyFillPad,
+          isPopupShell && styles.wizardKeypadBodyPopup,
         ]}
       >
         {recipientHero ? (
@@ -347,26 +355,35 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         <View
           style={[
             styles.wizardKeypadAccessory,
-            matchSignInKeypad && styles.wizardKeypadAccessoryPopup,
+            isPopupShell && styles.wizardKeypadAccessoryPopup,
           ]}
         >
           {accessory}
         </View>
       ) : null}
-      {/* Continue / Close — hosted above the pad so CTAs never sit under keys. */}
-      <WizardActionBarHost style={styles.wizardKeypadActionBar} />
+      {/* Absolute bottom dock on fill shells — reliable mobile GPay layout. */}
       <View
         style={[
-          flow.keypadDockWizard,
-          flow.keypadDockWizardBleed,
-          flow.keypadDockSignIn,
+          styles.wizardKeypadBottomDock,
+          !isPopupShell && styles.wizardKeypadBottomDockPinned,
+          isPopupShell && styles.wizardKeypadBottomDockPopup,
         ]}
       >
-        <KeypadDock
-          onKey={handleKey}
-          showDecimal={showDecimal}
-          size="default"
-        />
+        <WizardActionBarHost style={styles.wizardKeypadActionBar} />
+        <View
+          style={[
+            flow.keypadDockWizard,
+            flow.keypadDockWizardBleed,
+            usePayTrayChrome && flow.keypadDockSignIn,
+            styles.wizardKeypadPadDock,
+          ]}
+        >
+          <KeypadDock
+            onKey={handleKey}
+            showDecimal={showDecimal}
+            size="default"
+          />
+        </View>
       </View>
     </View>
   );

@@ -124,7 +124,12 @@ export function FullPageWizardShell({
   ) : null;
 
   const body = fillBody ? (
-    isKeypadStep && width < Layout.wizardSteppedMaxWidth ? (
+    /**
+     * Keypad steps hoist Continue above the pad — must stay a flex View so
+     * `wizardKeypadRoot` gets a real height and marginTop:auto docks CTA+keys.
+     * ScrollView breaks that chain (CTA floats mid-body over Partner rate).
+     */
+    isKeypadStep ? (
       <View style={styles.bodyFill}>{children}</View>
     ) : (
       <ScrollView

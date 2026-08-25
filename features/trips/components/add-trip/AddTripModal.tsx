@@ -24,7 +24,6 @@ import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
 import { CreateTripDesktopStepper } from "./CreateTripDesktopStepper";
 import { CreateTripDesktopWizard } from "./CreateTripDesktopWizard";
-import { AddTripWizardProgress } from "./AddTripWizardProgress";
 import type {
   AddTripCompleteOptions,
   AddTripCompleteResult,
@@ -311,7 +310,9 @@ export function AddTripModal({
     Boolean(form.state.supplierId);
   const allocationKeypadFillBody =
     mobileAggregateFleetKeypads &&
-    (allocationSubStep === "driverPhone" || allocationSubStep === "vehicle");
+    (allocationSubStep === "driverPhone" ||
+      allocationSubStep === "driverName" ||
+      allocationSubStep === "vehicle");
   const desktopAllocationFillBody =
     useEnterpriseSteps && wizardStep === "allocation" && isDesktopWizard;
   const wizardFillBody =
@@ -611,8 +612,8 @@ export function AddTripModal({
       title={wizardStepMeta?.title ?? "Create Trip"}
       insightPreset="trip"
       subtitle={wizardStepMeta?.subtitle}
-      stepIndex={wizardStepMeta?.stepIndex}
-      stepTotal={wizardStepMeta?.stepTotal}
+      stepIndex={undefined}
+      stepTotal={undefined}
       submitLabel={wizardSubmitLabel}
       canSubmit={stepCanAdvance}
       submitting={submitting}
@@ -620,7 +621,7 @@ export function AddTripModal({
       validationMessage={visibleValidationMessage ?? submitError}
       onClose={isDesktopWizard ? onClose : handleWizardBackOrClose}
       onBack={
-        wizardEnabled && wizardStepMeta && wizardStepMeta.stepIndex > 1
+        wizardEnabled && wizardStep !== "client"
           ? handleWizardBack
           : undefined
       }
@@ -638,12 +639,6 @@ export function AddTripModal({
             }))}
             currentStepId={wizardStep}
             onStepPress={handleWizardStepPress}
-          />
-        ) : wizardStepMeta ? (
-          <AddTripWizardProgress
-            steps={wizardStepMeta.steps}
-            currentStepId={wizardStepMeta.currentId}
-            onStepPress={useEnterpriseSteps ? handleWizardStepPress : undefined}
           />
         ) : null
       }
@@ -666,6 +661,9 @@ export function AddTripModal({
           sourceIndent={sourceIndent ?? null}
           allocationSubStep={
             mobileAggregateFleetKeypads ? allocationSubStep : undefined
+          }
+          onAllocationSubStepChange={
+            mobileAggregateFleetKeypads ? setAllocationSubStep : undefined
           }
           onLaneGateActiveChange={setLaneGateActive}
           onContractLaneLockedChange={setContractLaneLocked}

@@ -49,6 +49,8 @@ export type DriverPhoneRecommendationsProps = {
 
 const AVATAR_SIZE = 36;
 const AVATAR_SIZE_COMPACT = 32;
+/** Stable default — inline `= []` is a new array every render and loops setState. */
+const EMPTY_FLEET_DRIVERS: readonly DriverRow[] = [];
 
 export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendations({
   matches,
@@ -59,7 +61,7 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
   compact = false,
   layout = "stack",
   emptyHint,
-  fleetDrivers = [],
+  fleetDrivers = EMPTY_FLEET_DRIVERS,
 }: DriverPhoneRecommendationsProps) {
   const [avatarByUserId, setAvatarByUserId] = useState<Record<string, MatchAvatarMeta>>(
     {},
@@ -73,7 +75,7 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
   useEffect(() => {
     let cancelled = false;
     if (enrichedMatches.length === 0) {
-      setAvatarByUserId({});
+      setAvatarByUserId((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       return;
     }
 
@@ -121,7 +123,21 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
       }
 
       if (cancelled) return;
-      setAvatarByUserId(seed);
+      setAvatarByUserId((prev) => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(seed);
+        if (
+          prevKeys.length === nextKeys.length &&
+          nextKeys.every(
+            (key) =>
+              prev[key]?.avatarUrl === seed[key]?.avatarUrl &&
+              prev[key]?.avatarSeed === seed[key]?.avatarSeed,
+          )
+        ) {
+          return prev;
+        }
+        return seed;
+      });
     };
 
     void loadAvatars();

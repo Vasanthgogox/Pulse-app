@@ -704,6 +704,8 @@ export type GetLoadIndentCardActionsProps = LoadCenterIndentCardActionsLayout & 
   isAccepted: boolean;
   isDoneOutcome: boolean;
   ctaLabel: string;
+  /** False for LOST / CANCELLED / EXPIRED — share only, no Rebid. */
+  showPrimaryCta?: boolean;
   quoteVariant: GetLoadQuoteChipVariant;
   quoteAmount?: number;
   onIndentPress: (load: IndentRow) => void;
@@ -735,6 +737,7 @@ export function GetLoadIndentCardActions({
   isAccepted,
   isDoneOutcome,
   ctaLabel,
+  showPrimaryCta = true,
   quoteVariant: _quoteVariant,
   quoteAmount: _quoteAmount,
   onIndentPress,
@@ -746,6 +749,7 @@ export function GetLoadIndentCardActions({
   style,
 }: GetLoadIndentCardActionsProps) {
   const onPrimary = () => {
+    if (!showPrimaryCta) return;
     if (isAccepted) {
       if (isDoneOutcome) {
         onIndentPress(load);
@@ -768,7 +772,9 @@ export function GetLoadIndentCardActions({
         >
           <Share2 size={13} color={Theme.textMuted} strokeWidth={2.2} />
         </CommerceIconButton>
-        <CommerceLinkCta label={linkLabel} onPress={onPrimary} />
+        {showPrimaryCta ? (
+          <CommerceLinkCta label={linkLabel} onPress={onPrimary} />
+        ) : null}
       </CommerceActionRow>
     );
   }
@@ -780,21 +786,21 @@ export function GetLoadIndentCardActions({
       onPress={() => onShareIndent(load)}
     />
   );
-  const primary = (
+  const primary = showPrimaryCta ? (
     <PrimaryButton
       dense={dense}
       inline={dense}
       label={compactGetLoadCtaLabel(ctaLabel, dense)}
       onPress={onPrimary}
     />
-  );
+  ) : null;
 
   if (dense) {
     return (
       <View style={style}>
         <InlineActionRow>
           {share}
-          <View style={styles.primaryGrow}>{primary}</View>
+          {primary ? <View style={styles.primaryGrow}>{primary}</View> : null}
         </InlineActionRow>
       </View>
     );
@@ -804,7 +810,7 @@ export function GetLoadIndentCardActions({
     <View style={style}>
       <InlineActionRow>
         {share}
-        <View style={styles.primaryGrow}>{primary}</View>
+        {primary ? <View style={styles.primaryGrow}>{primary}</View> : null}
       </InlineActionRow>
     </View>
   );

@@ -130,6 +130,8 @@ export function WizardEntitySummaryCard({
   onPress,
   style,
   showChevron,
+  compact = false,
+  strip = false,
 }: {
   label: string;
   name: string;
@@ -143,6 +145,9 @@ export function WizardEntitySummaryCard({
   onPress?: () => void;
   style?: import("react-native").StyleProp<import("react-native").ViewStyle>;
   showChevron?: boolean;
+  compact?: boolean;
+  /** Horizontal scroll strip chip (content-sized). */
+  strip?: boolean;
 }) {
   return (
     <WizardEntityPartyCell
@@ -154,10 +159,12 @@ export function WizardEntitySummaryCard({
       avatarSeed={avatarSeed}
       organizationImageUrl={organizationImageUrl}
       organizationAvatarSeed={organizationAvatarSeed}
-      avatarSize={WIZARD_PARTY_AVATAR_SIZE}
+      avatarSize={strip ? 18 : compact ? 22 : WIZARD_PARTY_AVATAR_SIZE}
       onPress={onPress}
       style={style}
       showChevron={showChevron}
+      compact={compact}
+      strip={strip}
     />
   );
 }

@@ -126,7 +126,19 @@ function resolveStatusChip(
   }
   if (s === "countered") return { text: "COUNTER", tone: "warn" };
   if (s === "declined" || s === "rejected") {
-    return { text: "DECLINED", tone: "warn" };
+    return { text: "REJECTED", tone: "warn" };
+  }
+  if (s === "lost") {
+    return { text: "LOST", tone: "warn" };
+  }
+  if (s === "cancelled") {
+    return { text: "CANCELLED", tone: "muted" };
+  }
+  if (s === "expired") {
+    return { text: "EXPIRED", tone: "muted" };
+  }
+  if (s === "converted") {
+    return { text: "CONVERTED", tone: "won" };
   }
   if (s === "completed" || s === "done") {
     return { text: "DONE", tone: "muted" };
@@ -158,7 +170,12 @@ function resolveChannelLabel(
     ) {
       return "Your bid won";
     }
-    if (s === "declined" || s === "rejected") return "Bid not selected";
+    if (s === "declined" || s === "rejected") return "Bid declined";
+    if (s === "lost") return "Awarded to another bidder";
+    if (s === "cancelled") return "Indent cancelled";
+    if (s === "expired") return "Opportunity expired";
+    if (s === "converted") return "Won · converted to trip";
+    if (s === "completed" || s === "done") return "Converted to trip";
     return sourceTag === "network" ? "Network indent" : "Market indent";
   }
   if (s === "action required") return "Bids won · allocate";
@@ -184,6 +201,18 @@ function resolveInlineCta(
   }
   if (sourceTag != null && (s === "open market" || s === "open" || s === "live")) {
     return "View & bid";
+  }
+  if (
+    s === "lost" ||
+    s === "cancelled" ||
+    s === "expired" ||
+    s === "declined" ||
+    s === "rejected" ||
+    s === "converted" ||
+    s === "completed" ||
+    s === "done"
+  ) {
+    return null;
   }
   if (sourceTag != null) return "View";
   return "View";
@@ -217,6 +246,8 @@ export type LoadCenterHubMobileIndentCardProps = {
   dense?: boolean;
   /** Stretch card to fill grid cell height. */
   fillGrid?: boolean;
+  /** Soften LOST / CANCELLED / EXPIRED Done cards. */
+  dimmed?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -252,6 +283,7 @@ export function LoadCenterHubMobileIndentCard({
   actions,
   dense = false,
   fillGrid = false,
+  dimmed = false,
   style,
 }: LoadCenterHubMobileIndentCardProps) {
   const router = useRouter();
@@ -333,7 +365,12 @@ export function LoadCenterHubMobileIndentCard({
 
   return (
     <View
-      style={[styles.cardWrap, fillGrid && styles.cardWrapGrid, style]}
+      style={[
+        styles.cardWrap,
+        fillGrid && styles.cardWrapGrid,
+        dimmed && styles.cardWrapDimmed,
+        style,
+      ]}
     >
       <View style={[styles.card, fillGrid && styles.cardGrid]}>
         <Pressable
@@ -589,6 +626,9 @@ const cardShadow = Platform.select({
 const styles = StyleSheet.create({
   cardWrap: {
     ...hubMobileListCanvasStyles.cardWrap,
+  },
+  cardWrapDimmed: {
+    opacity: 0.72,
   },
   cardWrapGrid: {
     flex: 1,
