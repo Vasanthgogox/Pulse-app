@@ -12,7 +12,6 @@ import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { FinanceTxnTypography } from '@/constants/FinanceTxnTypography';
 import Theme from '@/constants/Theme';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { RatingsRegistryHeroLottie } from "@/features/ratings/components/RatingsRegistryHeroLottie";
 import {
     getClientById,
     getClientDetails,
@@ -210,6 +209,19 @@ function formatDate(s: string) {
   const [y, m, day] = d.split('-');
   const months = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
   return `${day} ${months[Number(m) - 1]} ${y}`;
+}
+
+/** Soft title-case when the source string is ALL CAPS (common in party records). */
+function formatPartyDisplayName(name: string): string {
+  const t = (name ?? '').trim();
+  if (!t) return '—';
+  const letters = t.replace(/[^A-Za-z]/g, '');
+  if (letters.length >= 2 && letters === letters.toUpperCase()) {
+    return t
+      .toLowerCase()
+      .replace(/\b([a-z])/g, (ch) => ch.toUpperCase());
+  }
+  return t;
 }
 
 async function resolveAvatarUri(raw: string | null | undefined): Promise<string | null> {
@@ -908,7 +920,7 @@ export function TripRatingsBlock({
         : clientFeedback
           ? { tags: clientFeedback.tags, note: clientFeedback.note }
           : { tags: [], note: '' };
-      setClientScore(Math.round(existingScore));
+      setClientScore(Math.round(existingScore) || 0);
       setClientTags(parsed.tags);
       setClientComment(parsed.note);
       setIsClientEditMode(true);
@@ -1009,6 +1021,11 @@ export function TripRatingsBlock({
       rated_id,
       score,
       comment: commentPayload,
+      existingRatingId: isEditMode
+        ? rated_type === "supplier"
+          ? supplierTripRating?.id
+          : driverTripRating?.id
+        : undefined,
     }).then(({ error }) => {
       setSubmitting(false);
       if (!error) {
@@ -1075,6 +1092,7 @@ export function TripRatingsBlock({
       ? {
           organizationImageUrl: null,
           organizationAvatarSeed: null,
+          organizationName: null,
           avatarUrl:
             (driverAvatarUri ?? resolvedDriverAvatarUri ?? "").trim() || null,
           avatarSeed: trip.driver_id?.trim() ?? null,
@@ -1093,7 +1111,6 @@ export function TripRatingsBlock({
   const isWorkspace = layoutVariant === 'workspace';
   const isRegistry = layoutVariant === 'registry';
   const isRegistrySidebar = isRegistry && embeddedSidebar;
-  const ratingsHeroIconSize = isRegistrySidebar ? 44 : 36;
   const isWidePanel = isWorkspace || isRegistry;
   const isCompactWorkspace = isWidePanel && width < 1100;
   const operationalTripLabel = getTripOperationalDisplay({
@@ -1394,144 +1411,126 @@ export function TripRatingsBlock({
       undefined;
 
     const hasExistingRating = tripScore != null;
+    const ratePrompt = hasExistingRating
+      ? 'Your rating'
+      : `Rate this ${roleKicker.toLowerCase()}`;
+    const displayName = formatPartyDisplayName(partyName);
 
     return (
-      <TouchableOpacity
+      <View
         style={[styles.regCard, isRegistrySidebar && styles.regCardSidebar]}
-        activeOpacity={hasExistingRating ? 1 : auditDisabled ? 1 : 0.82}
-        disabled={hasExistingRating || (auditDisabled && !onSelectScore)}
-        onPress={() => {
-          if (!hasExistingRating && !auditDisabled) onAudit();
-        }}
       >
-        <View style={styles.regCardTop}>
-          <SharedPartyAvatar
-            name={partyName}
-            entityType={entityType}
-            size={isRegistrySidebar ? 42 : 28}
-            avatarUrl={avatarUrl}
-            avatarSeed={partyAvatar?.avatarSeed ?? entitySeed ?? undefined}
-            initialsColorSeed={entitySeed ?? partyAvatar?.avatarSeed ?? undefined}
-            organizationImageUrl={partyAvatar?.organizationImageUrl ?? undefined}
-            organizationAvatarSeed={partyAvatar?.organizationAvatarSeed ?? undefined}
-          />
-          <View style={styles.regCardBody}>
-            <Text
-              style={[styles.regKicker, isRegistrySidebar && styles.regKickerSidebar]}
-              numberOfLines={1}
-            >
-              {roleKicker.toUpperCase()}
-            </Text>
-            <Text
-              style={[styles.regPartyName, isRegistrySidebar && styles.regPartyNameSidebar]}
-              numberOfLines={2}
-            >
-              {partyName}
-            </Text>
-            <Text
-              style={[
-                styles.regPerfLbl,
-                isRegistrySidebar && styles.regPerfLblSidebar,
-                { color: perfColor },
-              ]}
-              numberOfLines={1}
-            >
-              {perfLabel}
-            </Text>
-            {wasEdited ? (
-              <View style={styles.regEditedBadge}>
-                <Feather name="edit-2" size={8} color={Theme.textMuted} />
-                <Text style={styles.regEditedText}>Edited</Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.regScoresCol}>
-            <View
-              style={[
-                styles.regTripScoreBlock,
-                isRegistrySidebar && styles.regTripScoreBlockSidebar,
-                tripScore == null && styles.regTripScoreBlockEmpty,
-              ]}
-            >
+        <TouchableOpacity
+          style={[
+            styles.regCardMain,
+            !hasFeedbackBody && styles.regCardMainTight,
+          ]}
+          activeOpacity={hasExistingRating ? 1 : auditDisabled ? 1 : 0.82}
+          disabled={hasExistingRating || (auditDisabled && !onSelectScore)}
+          onPress={() => {
+            if (!hasExistingRating && !auditDisabled) onAudit();
+          }}
+        >
+          <View style={styles.regCardTop}>
+            <SharedPartyAvatar
+              name={partyName}
+              entityType={entityType}
+              size={isRegistrySidebar ? 44 : 40}
+              avatarUrl={avatarUrl}
+              avatarSeed={partyAvatar?.avatarSeed ?? entitySeed ?? undefined}
+              initialsColorSeed={entitySeed ?? partyAvatar?.avatarSeed ?? undefined}
+              organizationImageUrl={partyAvatar?.organizationImageUrl ?? undefined}
+              organizationAvatarSeed={partyAvatar?.organizationAvatarSeed ?? undefined}
+            />
+            <View style={styles.regCardBody}>
               <Text
-                style={[
-                  styles.regTripEyebrow,
-                  isRegistrySidebar && styles.regTripEyebrowSidebar,
-                ]}
+                style={[styles.regKicker, isRegistrySidebar && styles.regKickerSidebar]}
+                numberOfLines={1}
               >
-                Trip
+                {roleKicker.toUpperCase()}
               </Text>
-              <View style={styles.regTripScoreRow}>
+              <Text
+                style={[styles.regPartyName, isRegistrySidebar && styles.regPartyNameSidebar]}
+                numberOfLines={1}
+              >
+                {displayName}
+              </Text>
+              <View style={styles.regStatusRow}>
                 <Text
                   style={[
-                    styles.regTripHeroScore,
-                    isRegistrySidebar && styles.regTripHeroScoreSidebar,
-                    tripScore == null && styles.regTripHeroScoreEmpty,
+                    styles.regPerfLbl,
+                    isRegistrySidebar && styles.regPerfLblSidebar,
+                    { color: perfColor },
                   ]}
+                  numberOfLines={1}
                 >
-                  {tripScore != null ? tripScore.toFixed(1) : '—'}
+                  {perfLabel}
                 </Text>
-                <FontAwesome
-                  name="star"
-                  size={isRegistrySidebar ? 12 : 10}
-                  color={
-                    tripScore != null
-                      ? Theme.feedbackModalStarActive
-                      : Theme.textMuted
-                  }
-                  style={styles.regTripHeroStar}
-                />
-              </View>
-            </View>
-            <View style={styles.regAvgScoreBlock}>
-              <Text
-                style={[
-                  styles.regMetricEyebrowMuted,
-                  isRegistrySidebar && styles.regMetricEyebrowMutedSidebar,
-                ]}
-              >
-                Avg
-              </Text>
-              <View style={styles.regGlobalPill}>
-                <FontAwesome
-                  name="star"
-                  size={isRegistrySidebar ? 9 : 7}
-                  color={Theme.feedbackModalStarActive}
-                />
-                <Text
-                  style={[
-                    styles.regGlobalPillText,
-                    isRegistrySidebar && styles.regGlobalPillTextSidebar,
-                  ]}
-                >
-                  {globalScore != null ? globalScore.toFixed(1) : '—'}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        {hasFeedbackBody ? (
-          <View style={styles.regFeedbackSection}>
-            <Text style={styles.regFeedbackHeading}>Given feedback</Text>
-            {feedback.tags.length > 0 ? (
-              <View style={styles.regFeedbackTags}>
-                {feedback.tags.map((tagId) => (
-                  <View key={tagId} style={styles.regFeedbackTagChip}>
-                    <Text style={styles.regFeedbackTagText}>
-                      {getQuickTagLabel(tagId, ratedTypeForTags)}
-                    </Text>
+                {wasEdited ? (
+                  <View style={styles.regEditedBadge}>
+                    <Feather name="edit-2" size={8} color={Theme.textMuted} />
+                    <Text style={styles.regEditedText}>Edited</Text>
                   </View>
-                ))}
+                ) : null}
               </View>
-            ) : null}
-            {noteTrimmed ? (
-              <Text style={styles.regFeedbackNote} numberOfLines={4}>
-                {noteTrimmed}
-              </Text>
-            ) : null}
+            </View>
+            <View style={styles.regScoresCol}>
+              <View style={styles.regAvgScoreBlock}>
+                <Text
+                  style={[
+                    styles.regMetricEyebrowMuted,
+                    isRegistrySidebar && styles.regMetricEyebrowMutedSidebar,
+                  ]}
+                >
+                  Avg
+                </Text>
+                <View style={styles.regGlobalPill}>
+                  <Text
+                    style={[
+                      styles.regGlobalPillText,
+                      isRegistrySidebar && styles.regGlobalPillTextSidebar,
+                    ]}
+                  >
+                    {globalScore != null ? globalScore.toFixed(1) : '—'}
+                  </Text>
+                  <FontAwesome
+                    name="star"
+                    size={isRegistrySidebar ? 9 : 8}
+                    color={Theme.feedbackModalStarActive}
+                  />
+                </View>
+              </View>
+            </View>
           </View>
-        ) : null}
+          {hasFeedbackBody ? (
+            <View style={styles.regFeedbackSection}>
+              <Text style={styles.regFeedbackHeading}>Given feedback</Text>
+              {feedback.tags.length > 0 ? (
+                <View style={styles.regFeedbackTags}>
+                  {feedback.tags.map((tagId) => (
+                    <View key={tagId} style={styles.regFeedbackTagChip}>
+                      <Text style={styles.regFeedbackTagText}>
+                        {getQuickTagLabel(tagId, ratedTypeForTags)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              {noteTrimmed ? (
+                <Text style={styles.regFeedbackNote} numberOfLines={3}>
+                  {noteTrimmed}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+        </TouchableOpacity>
+
         <View style={[styles.regCardFoot, isRegistrySidebar && styles.regCardFootSidebar]}>
+          <View style={styles.regFootSide}>
+            <Text style={styles.regRatePrompt} numberOfLines={2}>
+              {ratePrompt}
+            </Text>
+          </View>
           <View style={styles.regStarsRow}>
             {[1, 2, 3, 4, 5].map((step) => {
               const filled = tripScore != null && step <= filledStars;
@@ -1541,56 +1540,52 @@ export function TripRatingsBlock({
                   disabled={hasExistingRating || auditDisabled || !onSelectScore}
                   activeOpacity={0.8}
                   onPress={() => onSelectScore?.(step)}
-                  style={[styles.regStarHit, (hasExistingRating || auditDisabled || !onSelectScore) ? null : styles.regRungDotTap]}
-                  hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+                  style={[
+                    styles.regStarHit,
+                    hasExistingRating || auditDisabled || !onSelectScore
+                      ? null
+                      : styles.regRungDotTap,
+                  ]}
+                  hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rate ${step} stars`}
                 >
                   <FontAwesome
                     name={filled ? 'star' : 'star-o'}
-                    size={isRegistrySidebar ? 14 : 16}
-                    color={filled ? Theme.feedbackModalStarActive : Theme.borderMedium}
+                    size={isRegistrySidebar ? 18 : 19}
+                    color={
+                      filled ? Theme.feedbackModalStarActive : '#C8C8C8'
+                    }
                   />
                 </TouchableOpacity>
               );
             })}
           </View>
-          {tripScore != null ? (
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation?.();
-                requestEdit(ratedTypeForTags === 'supplier' ? 'supplier' : 'driver');
-              }}
-              activeOpacity={0.85}
-              style={styles.regEditTap}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Feather name="edit-2" size={11} color={Theme.textMuted} />
-              <Text style={styles.regEditTxt}>Edit</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              disabled={auditDisabled}
-              onPress={onAudit}
-              activeOpacity={0.85}
-              style={styles.regAuditTap}
-            >
-              <Text
-                style={[
-                  styles.regAuditTxt,
-                  isRegistrySidebar && styles.regAuditTxtSidebar,
-                  auditDisabled && styles.regAuditTxtDis,
-                ]}
+          <View style={[styles.regFootSide, styles.regFootSideEnd]}>
+            {tripScore != null ? (
+              <TouchableOpacity
+                onPress={() => {
+                  requestEdit(
+                    ratedTypeForTags === "client"
+                      ? "client"
+                      : ratedTypeForTags === "supplier"
+                        ? "supplier"
+                        : "driver",
+                  );
+                }}
+                activeOpacity={0.85}
+                style={styles.regEditTap}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Edit rating"
               >
-                {auditDisabled ? 'Unavailable' : 'Rate now'}
-              </Text>
-              <Feather
-                name="arrow-up-right"
-                size={isRegistrySidebar ? 14 : 12}
-                color={auditDisabled ? Theme.textMuted : Theme.primary}
-              />
-            </TouchableOpacity>
-          )}
+                <Feather name="edit-2" size={12} color="#616161" />
+                <Text style={styles.regEditTxt}>Edit</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -1628,23 +1623,6 @@ export function TripRatingsBlock({
           <>
             {isRegistry ? (
               <View style={[styles.regWrap, isRegistrySidebar && styles.regWrapSidebar]}>
-                <View style={[styles.regSectionHead, isRegistrySidebar && styles.regSectionHeadSidebar]}>
-                  <View
-                    style={[
-                      styles.regHeaderIllusWrap,
-                      isRegistrySidebar && styles.regHeaderIllusWrapSidebar,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.regHeaderIllusViewport,
-                        isRegistrySidebar && styles.regHeaderIllusViewportSidebar,
-                      ]}
-                    >
-                      <RatingsRegistryHeroLottie iconSize={ratingsHeroIconSize} />
-                    </View>
-                  </View>
-                </View>
                 <View style={[styles.regStack, isRegistrySidebar && styles.regStackSidebar]}>
                   {showRegistryDriverParty
                     ? renderRegistryCard(
@@ -2300,6 +2278,9 @@ export function TripRatingsBlock({
                       rated_id: ratedClientId,
                       score: clientScore,
                       comment: commentPayload,
+                      existingRatingId: isClientEditMode
+                        ? clientTripRating?.id
+                        : undefined,
                     });
                     error = submitRes.error;
                     const allowLocalClientFallback =
@@ -2932,8 +2913,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   wsCardRegistry: {
-    padding: 8,
-    borderRadius: 12,
+    padding: 0,
+    borderRadius: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: { boxShadow: 'none' },
+      default: {},
+    }),
   },
   wsCardRegistrySidebar: {
     padding: 0,
@@ -2945,139 +2932,87 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  regWrap: { gap: 6 },
-  regWrapSidebar: { gap: 10 },
-  regSectionHead: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: -2,
-    paddingBottom: 0,
+  regWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+    gap: 10,
   },
-  regSectionHeadSidebar: {
-    paddingBottom: 0,
-    marginBottom: -2,
+  regWrapSidebar: { gap: 12 },
+  regStack: {
+    width: "100%",
+    alignSelf: "stretch",
+    gap: 10,
   },
-  regHeaderIllusWrap: {
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 0,
-    marginBottom: 2,
-    paddingVertical: 8,
-  },
-  regHeaderIllusWrapSidebar: {
-    marginBottom: 4,
-    paddingVertical: 10,
-  },
-  regHeaderIllusViewport: {
-    alignSelf: 'center',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  regHeaderIllusViewportSidebar: {},
-  regStack: { gap: 5 },
   regStackSidebar: { gap: 12 },
   regCard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    gap: 0,
+    width: "100%",
+    alignSelf: "stretch",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E6E6E6",
+    backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 3,
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
   },
   regCardSidebar: {
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(248,250,252,0.72)',
-    borderColor: '#f1f5f9',
-    gap: 2,
+    borderRadius: 14,
+    borderColor: Theme.borderLight,
+  },
+  regCardMain: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    gap: 10,
+  },
+  regCardMainTight: {
+    paddingBottom: 10,
+    gap: 0,
   },
   regCardTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 7,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
   },
   regCardBody: {
     flex: 1,
     minWidth: 0,
-    gap: 0,
+    gap: 2,
+    paddingTop: 2,
+  },
+  regStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 2,
   },
   regScoresCol: {
     flexShrink: 0,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 6,
-    paddingLeft: 4,
-  },
-  regTripScoreBlock: {
-    alignItems: 'flex-end',
-    gap: 1,
-    minWidth: 44,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  regTripScoreBlockSidebar: {
-    minWidth: 52,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  regTripScoreBlockEmpty: {
-    backgroundColor: 'transparent',
-  },
-  regTripEyebrow: {
-    ...FinanceTxnTypography.fieldLabel,
-    fontSize: 7,
-    fontWeight: '700',
-    lineHeight: 9,
-  },
-  regTripEyebrowSidebar: {
-    fontSize: 9,
-    lineHeight: 11,
-  },
-  regTripScoreRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'flex-end',
-    gap: 2,
-  },
-  regTripHeroScore: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.5,
-    lineHeight: 18,
-    fontVariant: ['tabular-nums'],
-  },
-  regTripHeroScoreSidebar: {
-    fontSize: 20,
-    lineHeight: 22,
-  },
-  regTripHeroScoreEmpty: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Theme.textMuted,
-  },
-  regTripHeroStar: {
-    marginBottom: 2,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingTop: 2,
   },
   regAvgScoreBlock: {
-    alignItems: 'flex-end',
-    gap: 0,
-    paddingBottom: 2,
+    alignItems: "flex-end",
+    gap: 2,
+    minWidth: 44,
   },
   regKicker: {
     ...FinanceTxnTypography.chipLabel,
-    fontSize: 8,
-    lineHeight: 10,
+    fontSize: 9,
+    lineHeight: 11,
+    color: '#9E9E9E',
+    letterSpacing: 0.5,
+    fontWeight: '600',
   },
   regKickerSidebar: {
     fontSize: 10,
@@ -3086,71 +3021,100 @@ const styles = StyleSheet.create({
   regPartyName: {
     ...FinanceTxnTypography.partyTitle,
     fontStyle: 'normal',
-    fontWeight: '600',
-    fontSize: 11,
-    lineHeight: 13,
+    fontWeight: '700',
+    fontSize: 14,
+    lineHeight: 18,
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
+    textTransform: 'none',
   },
   regPartyNameSidebar: {
     fontSize: 15,
     lineHeight: 18,
   },
-  regGlobalPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
   regMetricEyebrowMuted: {
     ...FinanceTxnTypography.fieldLabel,
-    fontSize: 7,
-    lineHeight: 9,
+    fontSize: 8,
+    lineHeight: 10,
+    color: '#9E9E9E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    fontWeight: '600',
+    textAlign: 'right',
+    alignSelf: 'stretch',
   },
   regMetricEyebrowMutedSidebar: {
     fontSize: 9,
     lineHeight: 11,
   },
+  regGlobalPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 3,
+  },
   regGlobalPillText: {
     ...FinanceTxnTypography.fieldValue,
     fontStyle: 'normal',
-    fontWeight: '600',
-    fontSize: 11,
-    lineHeight: 13,
+    fontWeight: '700',
+    fontSize: 13,
+    lineHeight: 16,
     fontVariant: ['tabular-nums'],
+    color: Theme.textPrimaryDark,
+    textAlign: 'right',
   },
   regGlobalPillTextSidebar: {
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 16,
   },
   regPerfLbl: {
     ...FinanceTxnTypography.chipLabel,
-    fontWeight: '500',
-    fontSize: 7,
-    lineHeight: 9,
-    marginTop: 1,
+    fontWeight: '700',
+    fontSize: 10,
+    lineHeight: 12,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
   },
   regPerfLblSidebar: {
     fontSize: 10,
     lineHeight: 12,
-    marginTop: 2,
   },
   regCardFoot: {
-    marginTop: 5,
-    paddingTop: 5,
+    marginTop: 0,
+    paddingTop: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    borderTopColor: '#EEEEEE',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 4,
+    backgroundColor: '#F5F5F5',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 52,
   },
   regCardFootSidebar: {
-    marginTop: 10,
-    paddingTop: 10,
-    gap: 8,
+    marginTop: 0,
+    paddingTop: 0,
+    paddingVertical: 12,
+  },
+  regFootSide: {
+    width: 76,
+    flexShrink: 0,
+    justifyContent: 'center',
+  },
+  regFootSideEnd: {
+    alignItems: 'flex-end',
+  },
+  regRatePrompt: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#616161',
+    lineHeight: 15,
   },
   regStarsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    gap: 2,
     flex: 1,
     minWidth: 0,
   },
@@ -3159,43 +3123,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 28,
+    minHeight: 36,
   },
   regRungDotTap: {
     opacity: 1,
   },
   regFeedbackSection: {
-    marginTop: 3,
-    paddingTop: 5,
+    marginTop: 2,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    gap: 3,
+    borderTopColor: '#F0F0F0',
+    gap: 8,
   },
   regFeedbackHeading: {
     ...FinanceTxnTypography.fieldLabel,
-    fontSize: 8,
+    fontSize: 9,
     lineHeight: 11,
+    color: '#9E9E9E',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
   regFeedbackTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 5,
+    gap: 6,
   },
   regFeedbackTagChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    backgroundColor: '#F0F0F0',
+    borderWidth: 0,
   },
   regFeedbackTagText: {
     ...FinanceTxnTypography.chipLabel,
-    color: Theme.textSecondary,
+    color: '#424242',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
   },
   regFeedbackNote: {
     ...FinanceTxnTypography.fieldValue,
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#616161',
+    marginTop: 2,
   },
   regAuditTap: {
     flexDirection: 'row',
@@ -3508,29 +3483,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 2,
+    paddingVertical: 6,
     paddingHorizontal: 6,
+    borderRadius: 8,
+    flexShrink: 0,
   },
   regEditTxt: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: Theme.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#616161',
   },
   regEditedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginLeft: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    backgroundColor: Theme.surface,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#F0F0F0',
   },
   regEditedText: {
     fontSize: 9,
     fontWeight: '600',
     color: Theme.textMuted,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   btnEditFeedback: {
     borderWidth: 1,

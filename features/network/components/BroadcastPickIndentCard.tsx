@@ -66,7 +66,7 @@ export function BroadcastPickIndentCard({
       <View style={styles.loadCardHead}>
         <View style={styles.loadPillRow}>
           <View style={styles.loadTypePill}>
-            <Text style={styles.loadTypePillText}>Give load</Text>
+            <Text style={styles.loadTypePillText}>My load</Text>
           </View>
           <View style={[styles.loadStatePill, statusPill.pill]}>
             <Text style={[styles.loadStatePillText, statusPill.text]}>

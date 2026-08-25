@@ -387,6 +387,38 @@ export async function getMyBidForPost(
 }
 
 /**
+ * Bulk “have I already bid?” for Find loads / opportunity cards.
+ * Excludes withdrawn so the card can show LIVE again.
+ */
+export async function getMyBidsForPostIds(
+  orgId: string,
+  postIds: string[],
+): Promise<{ error: Error | null; bids: BidRow[] }> {
+  const unique = [...new Set(postIds.filter(Boolean))];
+  if (!orgId || unique.length === 0) return { error: null, bids: [] };
+
+  const { data, error } = await supabase()
+    .from('bids')
+    .select(
+      'id, post_id, bidder_organization_id, bidder_user_id, amount, note, status, created_at, updated_at',
+    )
+    .eq('bidder_organization_id', orgId)
+    .in('post_id', unique)
+    .neq('status', 'withdrawn');
+
+  if (error) return { error: new Error(error.message), bids: [] };
+
+  return {
+    error: null,
+    bids: (data ?? []).map((row) => ({
+      ...(row as Omit<BidRow, 'bidder_org_name'>),
+      bidder_org_name: null,
+      status: (row as { status: string }).status as BidStatus,
+    })),
+  };
+}
+
+/**
  * Pending Pulse bids on LOAD posts the owner org published from those indents.
  * @deprecated Prefer getIndentOfferCountsForOwnerIndents — do not sum with direct_quotes (double-counts Pulse bids).
  */

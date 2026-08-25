@@ -142,6 +142,11 @@ export function BidModal({
   if (!load) return null;
 
   const targetRate = Number(load.supplier_target ?? load.client_price ?? 0);
+  const vehicleType = (load.vehicle_type ?? "").trim() || undefined;
+  const weightLabel =
+    load.weight != null && Number(load.weight) > 0
+      ? `${Number(load.weight)} KG`
+      : undefined;
 
   return (
     <IndentBidAmountEntry
@@ -151,6 +156,8 @@ export function BidModal({
       indentDisplayNumber={getIndentDisplayNumber(load)}
       origin={load.pickup_area}
       destination={load.drop_location}
+      vehicleType={vehicleType}
+      weightLabel={weightLabel}
       targetRateInr={targetRate > 0 ? targetRate : undefined}
       initialAmount={
         activeBidQuote?.amount != null ? Number(activeBidQuote.amount) : null

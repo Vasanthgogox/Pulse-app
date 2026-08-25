@@ -260,6 +260,8 @@ export default function StoryDetailScreen() {
   const [showBoost, setShowBoost] = useState(false);
   const [showBoostProgress, setShowBoostProgress] = useState(false);
   const [freshCampaignId, setFreshCampaignId] = useState<string | null>(null);
+  /** Keeps story tap zones clear of the growing bid-status footer. */
+  const [footerHeight, setFooterHeight] = useState(168);
   const progress = useRef(new Animated.Value(0)).current;
   const footerFade = useRef(new Animated.Value(0)).current;
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -654,7 +656,10 @@ export default function StoryDetailScreen() {
         </View>
       </View>
 
-      <View style={styles.tapZones} pointerEvents="box-none">
+      <View
+        style={[styles.tapZones, { bottom: Math.max(footerHeight + 8, 140) }]}
+        pointerEvents="box-none"
+      >
         <Pressable style={styles.tapLeft} onPress={goPrev} />
         <Pressable style={styles.tapRight} onPress={goNext} />
       </View>
@@ -748,8 +753,22 @@ export default function StoryDetailScreen() {
         <PulseBrandMark wordColor={INK} dotColor={INK} textStyle={styles.watermarkText} />
       </View>
 
-      {/* Footer */}
-      <Animated.View style={[styles.footer, { paddingBottom: Math.max(phonePopup ? 16 : insets.bottom, 20) + 8, opacity: footerFade }]}>
+      {/* Footer — stacked above tap zones so bid status never overlaps the hero */}
+      <Animated.View
+        onLayout={(e) => {
+          const next = Math.ceil(e.nativeEvent.layout.height);
+          if (next > 0) {
+            setFooterHeight((prev) => (prev === next ? prev : next));
+          }
+        }}
+        style={[
+          styles.footer,
+          {
+            paddingBottom: Math.max(phonePopup ? 16 : insets.bottom, 20) + 8,
+            opacity: footerFade,
+          },
+        ]}
+      >
         {isOwnPost && isLoad && (
           <StoryOwnerFooterActions
             viewsLabel={storyOwnerViewsLabel(ownerViewRows.length, ownerViewsLoading)}
@@ -784,8 +803,7 @@ export default function StoryDetailScreen() {
 
         {canBidOnLoad && post && (
           commercialOpportunity.bidding.hasBid ? (
-            /* Already bid — show status + edit; surface shipper counter when present */
-            <>
+            <View style={styles.bidSubmittedBlock}>
               <View
                 style={[
                   styles.bidStatusBanner,
@@ -803,27 +821,29 @@ export default function StoryDetailScreen() {
                       styles.bidStatusLabel,
                       commercialOpportunity.bidding.counterAmount != null && styles.bidStatusLabelCounter,
                     ]}
+                    numberOfLines={1}
                   >
                     {commercialOpportunity.bidding.counterAmount != null
                       ? "Counter offer received"
                       : "Bid submitted"}
                   </Text>
-                  <Text style={styles.bidStatusAmount}>
+                  <Text style={styles.bidStatusAmount} numberOfLines={1}>
                     ₹
                     {(
                       commercialOpportunity.bidding.counterAmount ??
                       commercialOpportunity.bidding.myBidAmount ??
                       0
                     ).toLocaleString("en-IN")}
-                    {commercialOpportunity.bidding.counterAmount == null && bidNote
-                      ? ` · ${bidNote}`
-                      : ""}
                   </Text>
                   {commercialOpportunity.bidding.counterAmount != null &&
                   (commercialOpportunity.bidding.myBidAmount ?? 0) > 0 ? (
-                    <Text style={styles.bidStatusSub}>
+                    <Text style={styles.bidStatusSub} numberOfLines={1}>
                       Your bid · ₹
                       {commercialOpportunity.bidding.myBidAmount!.toLocaleString("en-IN")}
+                    </Text>
+                  ) : bidNote ? (
+                    <Text style={styles.bidStatusSub} numberOfLines={1}>
+                      {bidNote}
                     </Text>
                   ) : null}
                 </View>
@@ -854,16 +874,20 @@ export default function StoryDetailScreen() {
               </View>
               {commercialOpportunity.permissions.canEditBid && (
                 <Pressable
-                  style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
+                  style={({ pressed }) => [
+                    styles.authorizeBtn,
+                    styles.authorizeBtnCompact,
+                    pressed && styles.authorizeBtnPressed,
+                  ]}
                   onPress={() => guardVerified(() => { setEditBidMode(true); setBidPost(post); })}
                 >
-                  <Edit3 size={16} color={INK} />
+                  <Edit3 size={15} color={INK} />
                   <Text style={styles.authorizeBtnText}>
                     {commercialOpportunity.actions.primary?.label ?? "Edit bid"}
                   </Text>
                 </Pressable>
               )}
-            </>
+            </View>
           ) : commercialOpportunity.permissions.canBid ? (
             <Pressable
               style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
@@ -901,7 +925,7 @@ export default function StoryDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel="Message poster"
           >
-            <MessageSquare size={16} color={INK} />
+            <MessageSquare size={15} color={INK} />
             <Text style={styles.messageGhostText}>Message</Text>
           </Pressable>
         )}
@@ -1087,7 +1111,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: "uppercase",
   },
-  tapZones: { position: "absolute", top: 100, left: 0, right: 0, bottom: 200, flexDirection: "row", zIndex: 30 },
+  tapZones: {
+    position: "absolute",
+    top: 100,
+    left: 0,
+    right: 0,
+    bottom: 168,
+    flexDirection: "row",
+    zIndex: 30,
+  },
   tapLeft: { flex: 1 },
   tapRight: { flex: 2.2 },
   centerStage: {
@@ -1097,6 +1129,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     marginTop: -8,
     gap: 0,
+    minHeight: 0,
+    overflow: "hidden",
+    zIndex: 10,
   },
   centerStageDesktop: { marginTop: -4, paddingHorizontal: 56 },
   iconHero: {
@@ -1250,7 +1285,15 @@ const styles = StyleSheet.create({
   },
   metaChipEmphasis: { backgroundColor: Theme.screenBackground },
   metaChipText: { fontSize: 9, fontWeight: "800", color: MUTED, letterSpacing: 0.1 },
-  watermark: { position: "absolute", top: "50%", left: 0, right: 0, alignItems: "center", transform: [{ translateY: -28 }] },
+  watermark: {
+    position: "absolute",
+    top: "50%",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    transform: [{ translateY: -28 }],
+    zIndex: 5,
+  },
   watermarkDesktop: { transform: [{ translateY: -36 }] },
   watermarkText: { fontSize: 56, fontWeight: "900", color: INK, opacity: 0.03, letterSpacing: -1.2, fontStyle: "italic" },
   footer: {
@@ -1258,11 +1301,13 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.loadStatusTabBorderSoft,
-    backgroundColor: "rgba(255,255,255,0.96)",
+    backgroundColor: "rgba(255,255,255,0.98)",
     gap: 8,
     maxWidth: 480,
     width: "100%",
     alignSelf: "center",
+    zIndex: 60,
+    elevation: 8,
   },
   authorizeBtn: {
     flexDirection: "row",
@@ -1273,10 +1318,14 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingVertical: 12,
     paddingHorizontal: 18,
-    marginBottom: 4,
     backgroundColor: Theme.loadAddButtonBg,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
+  },
+  authorizeBtnCompact: {
+    minHeight: 44,
+    paddingVertical: 10,
+    borderRadius: 14,
   },
   authorizeBtnPressed: {
     backgroundColor: Theme.loadAddButtonBgPressed,
@@ -1291,16 +1340,42 @@ const styles = StyleSheet.create({
   },
   authorizeBtnText: { fontSize: 13, fontWeight: "800", color: INK, letterSpacing: -0.15 },
   authorizeBtnTextOnFill: { color: Theme.textOnPrimary },
-  messageGhost: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 },
+  messageGhost: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 8,
+    minHeight: 44,
+  },
   messageGhostText: { fontSize: 12, fontWeight: "800", color: INK, letterSpacing: 0.6 },
-  // Bid status
-  bidStatusBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#10b98110", borderRadius: 14, borderWidth: 1, borderColor: "#10b98130", paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10 },
+  bidSubmittedBlock: {
+    width: "100%",
+    gap: 8,
+  },
+  bidStatusBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#10b98110",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#10b98130",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
   bidStatusBannerCounter: {
     backgroundColor: Theme.warningMuted,
     borderColor: "rgba(180, 83, 9, 0.28)",
   },
   bidStatusText: { flex: 1, minWidth: 0 },
-  bidStatusLabel: { fontSize: 10, fontWeight: "900", color: "#10b981", letterSpacing: 0.8, textTransform: "uppercase" },
+  bidStatusLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#10b981",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
   bidStatusLabelCounter: { color: Theme.warning },
   bidStatusAmount: { fontSize: 14, fontWeight: "800", color: INK, marginTop: 1 },
   bidStatusSub: {
@@ -1309,7 +1384,7 @@ const styles = StyleSheet.create({
     color: MUTED,
     marginTop: 2,
   },
-  bidStatusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  bidStatusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0 },
   bidBadgePending: { backgroundColor: "#f59e0b18" },
   bidBadgeAccepted: { backgroundColor: "#10b98118" },
   bidBadgeRejected: { backgroundColor: "#ef444418" },

@@ -3,7 +3,6 @@ import type { SupplierRow } from "@/features/suppliers/services/suppliers.servic
 import {
   resolvePartyAvatarIdentityFromClient,
   resolvePartyAvatarIdentityFromSupplier,
-  supplierDisplayName,
 } from "@/lib/entityIdentity";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 
@@ -72,7 +71,7 @@ export function selectIntegratedSuppliersForLoadCenter(
       );
       return {
         id: supplier.id,
-        displayName: supplierDisplayName(supplier),
+        displayName: identity.displayName,
         entityType: "supplier" as const,
         organizationImageUrl: identity.organizationImageUrl,
         organizationAvatarSeed: identity.organizationAvatarSeed,

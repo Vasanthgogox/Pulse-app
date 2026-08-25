@@ -5,6 +5,7 @@
  * Opens the same story-detail page on select.
  */
 import Theme from "@/constants/Theme";
+import { ResponsiveDrawer } from "@/components/ResponsiveDrawer";
 import {
   OpportunityCard,
   useLoadCenterOpportunityPosts,
@@ -12,26 +13,23 @@ import {
 } from "@/features/network/components/LoadCenterOpportunityExchange";
 import type { PostRow } from "@/features/network/services/posts.service";
 import { splitLocationParts } from "@/features/network/utils/storyDisplay";
-import { MotiView } from "moti";
 import { Search, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableWithoutFeedback,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 const DRAWER_WIDTH = 440;
+const FIND_CANVAS = "#F0F2F5";
 
 export type FindNetworkVehiclesDrawerProps = {
   visible: boolean;
@@ -99,16 +97,15 @@ export function FindNetworkVehiclesDrawer({
 }: FindNetworkVehiclesDrawerProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const isSideDrawer = Platform.OS === "web" && width >= 768;
   const isGet = mode === "get";
 
-  const { posts, isLoading } = useLoadCenterOpportunityPosts(
-    orgId,
-    mode,
-    supplierOrgIds,
-    clientOrgIds,
-  );
+  const { posts, isLoading, viewerBidByPostId, orgProfileMap } =
+    useLoadCenterOpportunityPosts(
+      orgId,
+      mode,
+      supplierOrgIds,
+      clientOrgIds,
+    );
 
   const [search, setSearch] = useState("");
   const [vehicleType, setVehicleType] = useState("all");
@@ -288,7 +285,13 @@ export function FindNetworkVehiclesDrawer({
         <Text style={styles.listCount}>
           {isLoading
             ? "Loading…"
-            : `${filtered.length} ${listNoun}${filtered.length === 1 ? "" : "s"}`}
+            : (() => {
+                const bidded = isGet
+                  ? filtered.filter((p) => viewerBidByPostId.has(p.id)).length
+                  : 0;
+                const base = `${filtered.length} ${listNoun}${filtered.length === 1 ? "" : "s"}`;
+                return bidded > 0 ? `${base} · ${bidded} already bidded` : base;
+              })()}
         </Text>
         {hasActiveFilters ? (
           <Pressable onPress={clearFilters} hitSlop={8}>
@@ -322,6 +325,8 @@ export function FindNetworkVehiclesDrawer({
               post={post}
               mode={mode}
               fillWidth
+              viewerBid={viewerBidByPostId.get(post.id) ?? null}
+              orgProfileMap={orgProfileMap}
               onPress={() => openStory(post)}
             />
           ))}
@@ -332,87 +337,46 @@ export function FindNetworkVehiclesDrawer({
 
   if (!visible) return null;
 
-  if (isSideDrawer) {
-    return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="fade"
-        onRequestClose={onClose}
-        statusBarTranslucent
-      >
-        <View style={styles.overlay}>
-          <TouchableWithoutFeedback onPress={onClose} accessibilityLabel="Close">
-            <View style={StyleSheet.absoluteFillObject} />
-          </TouchableWithoutFeedback>
-          <MotiView
-            from={{ translateX: DRAWER_WIDTH }}
-            animate={{ translateX: 0 }}
-            transition={{ type: "spring", damping: 32, stiffness: 320, mass: 0.9 }}
-            style={[styles.drawer, { width: DRAWER_WIDTH, maxWidth: "92%" as unknown as number }]}
-          >
-            {body}
-          </MotiView>
-        </View>
-      </Modal>
-    );
-  }
-
   return (
-    <Modal
+    <ResponsiveDrawer
       visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
+      onClose={onClose}
+      insets={insets}
+      desktopWidth={DRAWER_WIDTH}
+      tabletWidth={DRAWER_WIDTH}
+      mobileVariant="fullScreen"
+      applyDrawerInsetPadding={false}
     >
       {body}
-    </Modal>
+    </ResponsiveDrawer>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    backgroundColor: Theme.overlayBackdrop,
-  },
-  drawer: {
-    height: "100%" as unknown as number,
-    backgroundColor: Theme.screenBackground,
-    ...Platform.select({
-      web: { boxShadow: "-8px 0 32px rgba(15,23,42,0.18)" } as object,
-      default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: -2, height: 0 },
-        shadowOpacity: 0.18,
-        shadowRadius: 20,
-        elevation: 24,
-      },
-    }),
-  },
   panel: {
     flex: 1,
     minHeight: 0,
     paddingHorizontal: 16,
-    gap: 10,
+    gap: 12,
+    backgroundColor: FIND_CANVAS,
   },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
   },
-  headerText: { flex: 1, minWidth: 0, gap: 2 },
+  headerText: { flex: 1, minWidth: 0, gap: 3 },
   title: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 17,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
     color: Theme.textMuted,
+    lineHeight: 16,
   },
   closeBtn: {
     width: 36,
@@ -420,9 +384,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#D1D5DB",
   },
   searchWrap: {
     flexDirection: "row",
@@ -433,7 +397,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#D1D5DB",
   },
   searchInput: {
     flex: 1,
@@ -447,8 +411,8 @@ const styles = StyleSheet.create({
   filterBlock: { gap: 6 },
   filterLabel: {
     fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.4,
+    fontWeight: "700",
+    letterSpacing: 0.45,
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
@@ -456,10 +420,10 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: Theme.surfaceGray,
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#E5E7EB",
     maxWidth: 160,
   },
   chipOn: {
@@ -475,7 +439,7 @@ const styles = StyleSheet.create({
   filterInput: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#D1D5DB",
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 10,
     paddingVertical: Platform.OS === "web" ? 9 : 8,
@@ -494,9 +458,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
+    paddingTop: 2,
   },
   listCount: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textSecondary,
   },
@@ -506,7 +471,7 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   list: { flex: 1, minHeight: 0 },
-  listContent: { gap: 8, paddingBottom: 12 },
+  listContent: { gap: 12, paddingBottom: 16 },
   empty: {
     flex: 1,
     alignItems: "center",
@@ -515,14 +480,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyTitle: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   emptySub: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
     color: Theme.textMuted,
     textAlign: "center",
+    lineHeight: 16,
   },
 });

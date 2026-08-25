@@ -162,7 +162,7 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
         <View
           style={
             wizardShell || groupTop
-              ? flow.keypadDockWizard
+              ? [flow.keypadDockWizard, flow.keypadDockWizardBleed, flow.keypadDockSignIn]
               : useAppleKeypad
                 ? flow.keypadDockApple
                 : flow.keypadDock
@@ -172,8 +172,9 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
             onKey={handleKey}
             showDecimal={false}
             layout="phone"
-            variant={wizardShell ? "pay" : useAppleKeypad ? "apple" : "pay"}
-            size={wizardShell || !useAppleKeypad ? "compact" : "default"}
+            variant={wizardShell || !useAppleKeypad ? "pay" : "apple"}
+            size="default"
+            hapticsEnabled={false}
           />
         </View>
       )}

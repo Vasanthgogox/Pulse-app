@@ -192,7 +192,7 @@ export const IndentAwardCelebrationModal = memo(
               <Text style={styles.body}>
                 Awarded to{" "}
                 <Text style={styles.bodyEm}>{data.carrier}</Text>. They can
-                assign staff and deploy from Load Center → Claimed.
+                assign staff and deploy from Load Center → Action required.
               </Text>
 
               <View style={styles.metrics}>

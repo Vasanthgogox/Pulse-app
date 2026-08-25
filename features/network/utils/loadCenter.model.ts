@@ -19,10 +19,11 @@ export function getLoadCenterStatusTabLabel(
   tabId: StatusFilterTab,
   defaultLabel: string,
 ): string {
-  if (loadSubTab === "GIVE_LOAD" && tabId === "OPEN") return "Open Market";
+  if (loadSubTab === "GIVE_LOAD" && tabId === "OPEN") return "My loads";
   if (loadSubTab === "GIVE_LOAD" && tabId === "QUOTED") return "Receiving Bids";
   if (loadSubTab === "GET_LOAD" && tabId === "OPEN") return "Open Market";
   if (loadSubTab === "GET_LOAD" && tabId === "QUOTED") return "My Bids";
+  if (loadSubTab === "GET_LOAD" && tabId === "AWARDED") return "Bids Won";
   return defaultLabel;
 }
 
@@ -56,7 +57,7 @@ export function giveLoadStatusPillLabel(
 ): string {
   const derived = giveLoadBidReceivedDisplayStatus(indentStatus, bidCount);
   if (derived === GIVE_LOAD_RECEIVING_BIDS_STATUS) return "Receiving Bids";
-  if (statusMatchesFilter(derived, "OPEN")) return "Open Market";
+  if (statusMatchesFilter(derived, "OPEN")) return "My loads";
   if (derived === "awarded") return "Awarded";
   if (statusMatchesFilter(derived, "DONE")) return "Completed";
   return derived.replace(/\b\w/g, (c) => c.toUpperCase());
@@ -65,7 +66,8 @@ export function giveLoadStatusPillLabel(
 /**
  * Marketplace lifecycle tabs (product labels).
  * Internal filter ids stay OPEN|QUOTED|AWARDED|DONE for query-key / URL compatibility.
- * Product UI never says "Quoted" — use Open Market / Receiving Bids / My Bids.
+ * Product UI never says "Quoted" — Give Load uses My loads / Receiving Bids;
+ * Get Load uses Open Market / My Bids / Bids Won.
  *
  * `status='quoted'` is a deprecated DB value, not an active business state.
  * Legacy compatibility only. No new indents enter 'quoted' after migration
@@ -187,7 +189,7 @@ export function resolveGetLoadMobileCardLabels(
   const isAccepted = quoteStatus === "accepted";
   const isCountered = isPending && counterInr != null;
   const statusLabel = isAccepted
-    ? "awarded"
+    ? "bids won"
     : isRejected
       ? "declined"
       : isCountered
@@ -200,7 +202,7 @@ export function resolveGetLoadMobileCardLabels(
     : isPending
       ? `Your bid ${formatINR(Number(existingQuote?.amount ?? 0))}`
       : isAccepted
-        ? "Awarded"
+        ? "Bids won"
         : loadTypeDetail;
 
   return { statusLabel, rightFooter };
@@ -216,6 +218,14 @@ export type LoadCenterTicketCommerce = {
   quoteStatus?: string | null;
   /** Shown when there is no numeric hero (bids, load type, done outcome). */
   rightCaption?: string | null;
+  /**
+   * Winning bidder's org name, AWARDED tickets only. Session-scoped: only
+   * populated right after an award succeeds in this session (see
+   * useAwardQuote's lastAwardedByIndentId) -- there is no persisted lookup
+   * from indent to accepted-quote bidder name yet, so this is null again
+   * after a reload until that's added separately.
+   */
+  awardedByName?: string | null;
 };
 
 export function resolveGetLoadTicketCommerce(
@@ -274,9 +284,9 @@ export function resolveGetLoadTicketCommerce(
   }
   if (quoteStatus === "accepted") {
     return {
-      kicker: "AWARDED",
+      kicker: "BIDS WON",
       amountInr: hasQuote ? quoteAmount : null,
-      rightCaption: "Awarded",
+      rightCaption: "Bids won",
       quoteStatus,
     };
   }
@@ -316,6 +326,8 @@ export function resolveGiveLoadTicketCommerce(
     isAwarded: boolean;
     bidCount: number;
     loadTypeDetail: string;
+    /** See LoadCenterTicketCommerce.awardedByName -- session-scoped only. */
+    awardedByName?: string | null;
   },
 ): LoadCenterTicketCommerce {
   const positive = (value: unknown): number | null => {
@@ -340,6 +352,7 @@ export function resolveGiveLoadTicketCommerce(
       amountInr: awardedInr,
       targetRateInr: clientRateInr,
       referenceLabel: "Client rate",
+      awardedByName: options.awardedByName?.trim() || null,
     };
   }
 

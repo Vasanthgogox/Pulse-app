@@ -2,11 +2,21 @@
  * Load Center — opportunity exchange strip.
  * Get load: open LOAD stories + sponsored load ads from the network.
  * Give load: idle VEHICLE_AVAILABILITY stories + sponsored capacity ads.
+ *
+ * Card chrome aligned with IndentMobileLoadDetail (Ajio-style density).
+ * Avatars use PartyAvatar org hierarchy: logo → seed → initials.
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { LoadCenterSidebarFindEmpty } from "@/features/network/components/LoadCenterSidebarFindEmpty";
 import Theme from "@/constants/Theme";
+import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
+import type { DirectQuoteRow } from "@/features/indents";
 import type { PostRow } from "@/features/network/services/posts.service";
+import { getMyBidsForPostIds } from "@/features/network/services/bids.service";
+import {
+  opportunityPostAvatarProps,
+  type IndentCardAvatarProps,
+} from "@/features/network/utils/indentCardAvatar.util";
 import {
   formatCapacityMaterial,
   formatStoryDate,
@@ -15,15 +25,16 @@ import {
 } from "@/features/network/utils/storyDisplay";
 import { shouldHideLoadStoryFromAuthor } from "@/features/network/utils/storyLoadVisibility.util";
 import { isIndentStoryLive } from "@/features/network/utils/indentStoryWindow.util";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { formatINR } from "@/lib/format";
+import { useMyDirectQuotesQuery } from "@/lib/queries";
 import { useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
+import { queryKeys } from "@/lib/queryKeys";
+import { STALE } from "@/lib/queryClient";
+import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import {
-  ArrowRight,
-  MapPin,
-} from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, Truck } from "lucide-react-native";
+import { memo, useMemo } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -35,6 +46,13 @@ import {
 } from "react-native";
 
 export type LoadCenterOpportunityMode = "give" | "get";
+
+/** Viewer’s active bid/quote on a Find-loads opportunity. */
+export type OpportunityViewerBid = {
+  status: string;
+  amount: number;
+  counterAmount: number | null;
+};
 
 type LoadCenterOpportunityExchangeProps = {
   orgId: string | null;
@@ -63,6 +81,24 @@ type LoadCenterOpportunityExchangeProps = {
 };
 
 const MAX_CARDS = 12;
+const LINK = "#2563EB";
+const MUTED = "#6B7280";
+const BODY = "#4B5563";
+const INK = "#111827";
+const BORDER = "#E5E7EB";
+const CARD_EDGE = "#D1D5DB";
+const CANVAS_SOFT = "#F9FAFB";
+const CARD_W = 260;
+const AVATAR = 32;
+
+const EMPTY_ORG_SET: ReadonlySet<string> = new Set();
+
+function formatWeightTonnes(weight: number | null | undefined): string | null {
+  if (weight == null || !Number.isFinite(weight) || weight <= 0) return null;
+  return weight >= 1
+    ? `${Number.isInteger(weight) ? weight : weight.toFixed(1)} t`
+    : `${Math.round(weight * 1000)} kg`;
+}
 
 function filterOpportunityPosts(
   posts: PostRow[],
@@ -85,16 +121,10 @@ function filterOpportunityPosts(
       return false;
     }
 
-    // Fleet Owner organic capacity (null org) — include in Give Load / Find vehicles.
-    // Same posts model; not connection-gated; docs/private fleet fields never in payload.
     if (mode === "give" && isFleetOwnerCapacityPost(p)) return true;
 
-    // Hide own-org stories from the "nearby" rail.
     if (p.organization_id != null && p.organization_id === orgId) return false;
 
-    // Sponsored reach is audience-gated server-side and is sorted to the top
-    // below — applying the supplier-only rule here would drop the paid post
-    // before it ever reaches that sort.
     if (p.is_sponsored) return true;
     if (
       mode === "get" &&
@@ -113,7 +143,6 @@ function filterOpportunityPosts(
     const aSponsored = a.is_sponsored ? 1 : 0;
     const bSponsored = b.is_sponsored ? 1 : 0;
     if (aSponsored !== bSponsored) return bSponsored - aSponsored;
-    // Prefer FO / organic capacity after ads so Idle capacity isn't ads-only.
     if (mode === "give") {
       const aFo = isFleetOwnerCapacityPost(a) ? 1 : 0;
       const bFo = isFleetOwnerCapacityPost(b) ? 1 : 0;
@@ -128,56 +157,190 @@ function filterOpportunityPosts(
   return matched.slice(0, MAX_CARDS);
 }
 
-const EMPTY_ORG_SET: ReadonlySet<string> = new Set();
+function quoteCounterAmount(quote: DirectQuoteRow): number | null {
+  const n = Number(quote.counter_amount ?? 0);
+  return n > 0 ? n : null;
+}
 
-export function OpportunityCard({
+/** Prefer direct quote on source indent; fall back to story bid. */
+export function resolveOpportunityViewerBid(
+  post: PostRow,
+  quotesByIndentId: ReadonlyMap<string, DirectQuoteRow>,
+  bidsByPostId: ReadonlyMap<string, OpportunityViewerBid>,
+): OpportunityViewerBid | null {
+  const indentId = (post.source_indent_id ?? "").trim();
+  if (indentId) {
+    const quote = quotesByIndentId.get(indentId);
+    if (quote) {
+      const status = (quote.status ?? "pending").toLowerCase();
+      if (status === "withdrawn") return null;
+      return {
+        status,
+        amount: Number(quote.amount ?? 0),
+        counterAmount: quoteCounterAmount(quote),
+      };
+    }
+  }
+  return bidsByPostId.get(post.id) ?? null;
+}
+
+/**
+ * Org logo → owner avatar → seed → initials (Get Load hub parity).
+ * Fleet capacity without branding gets a truck plate.
+ */
+function OpportunityOrgAvatar({
+  post,
+  isLoad,
+  isFleetCapacity,
+  avatar,
+}: {
+  post: PostRow;
+  isLoad: boolean;
+  isFleetCapacity: boolean;
+  avatar: IndentCardAvatarProps;
+}) {
+  const displayName = (post.org_name ?? "").trim() || "Fleet";
+  const orgLogo = (avatar.organizationImageUrl ?? "").trim() || null;
+  const orgSeed = (avatar.organizationAvatarSeed ?? "").trim() || null;
+  const contactUrl = (avatar.avatarUrl ?? "").trim() || null;
+  const contactSeed = (avatar.avatarSeed ?? "").trim() || null;
+
+  if (isFleetCapacity && !orgLogo && !orgSeed && !contactUrl && !contactSeed) {
+    return (
+      <View style={styles.avatarFleetPlate} accessibilityLabel="Fleet capacity">
+        <Truck size={16} color={INK} strokeWidth={2.2} />
+      </View>
+    );
+  }
+
+  return (
+    <PartyAvatar
+      name={displayName}
+      organizationImageUrl={orgLogo}
+      organizationAvatarSeed={orgSeed}
+      avatarUrl={contactUrl}
+      avatarSeed={contactSeed}
+      entityType={isLoad ? "client" : "supplier"}
+      isIntegrated
+      size={AVATAR}
+      initialsColorSeed={avatar.initialsColorSeed}
+      shape="circle"
+    />
+  );
+}
+
+export const OpportunityCard = memo(function OpportunityCard({
   post,
   mode,
   onPress,
   fillWidth = false,
+  viewerBid = null,
+  orgProfileMap,
 }: {
   post: PostRow;
   mode: LoadCenterOpportunityMode;
   onPress: () => void;
   fillWidth?: boolean;
+  /** When set, this load already has our bid/quote — do not show plain LIVE. */
+  viewerBid?: OpportunityViewerBid | null;
+  /** Batch partner display — logo → owner avatar → seed (Get Load hub parity). */
+  orgProfileMap?: Record<string, LinkedOrgDisplay>;
 }) {
   const isSponsored = !!post.is_sponsored;
   const isLoad = mode === "get";
   const isFleetCapacity = isFleetOwnerCapacityPost(post);
-  const rawLogo = post.org_avatar_url?.trim() ?? "";
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(
-    rawLogo.startsWith("http") ? rawLogo : null,
-  );
-
-  useEffect(() => {
-    let mounted = true;
-    if (!rawLogo || rawLogo.startsWith("http")) {
-      setAvatarUrl(rawLogo || null);
-      return;
-    }
-    getSignedAvatarUrl(rawLogo).then((signed) => {
-      if (mounted) setAvatarUrl(signed ?? null);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [rawLogo]);
+  const avatar = opportunityPostAvatarProps(post, orgProfileMap);
 
   const originParts = splitLocationParts(post.origin);
   const destinationParts = splitLocationParts(
     isLoad ? post.destination : post.destination || "Anywhere",
   );
-  const vehicle = post.vehicle_type?.trim() || (isLoad ? "Any vehicle" : "Capacity");
+  const vehicle =
+    post.vehicle_type?.trim() || (isLoad ? "Any vehicle" : "Capacity");
   const material = formatCapacityMaterial(post.material);
+  const weight = formatWeightTonnes(post.weight_tonnes);
   const rate =
     post.rate_offer != null && Number.isFinite(post.rate_offer)
       ? formatINR(post.rate_offer)
       : null;
   const posted = post.created_at ? formatStoryDate(post.created_at) : null;
+  const loadDate = post.load_date ? formatStoryDate(post.load_date) : null;
   const displayOrgName = (post.org_name ?? "").trim() || "Fleet availability";
-  const shortName = isFleetCapacity
-    ? "Fleet"
-    : (displayOrgName.split(/\s+/)[0] ?? displayOrgName);
+
+  const bidStatus = (viewerBid?.status ?? "").toLowerCase();
+  const hasActiveBid = isLoad && viewerBid != null && bidStatus !== "withdrawn";
+  const isCountered =
+    hasActiveBid &&
+    bidStatus === "pending" &&
+    viewerBid!.counterAmount != null &&
+    viewerBid!.counterAmount > 0;
+  const isPendingBid = hasActiveBid && bidStatus === "pending" && !isCountered;
+  const isWonBid = hasActiveBid && bidStatus === "accepted";
+  const isDeclinedBid = hasActiveBid && bidStatus === "rejected";
+
+  const statusLabel = isSponsored
+    ? "AD"
+    : isFleetCapacity
+      ? "FLEET"
+      : isCountered
+        ? "COUNTER"
+        : isWonBid
+          ? "WON"
+          : isDeclinedBid
+            ? "DECLINED"
+            : isPendingBid
+              ? "BIDDED"
+              : "LIVE";
+
+  const statusTone: "ad" | "fleet" | "live" | "bidded" | "counter" | "won" | "declined" =
+    isSponsored
+      ? "ad"
+      : isFleetCapacity
+        ? "fleet"
+        : isCountered
+          ? "counter"
+          : isWonBid
+            ? "won"
+            : isDeclinedBid
+              ? "declined"
+              : isPendingBid
+                ? "bidded"
+                : "live";
+
+  const channelLabel = isSponsored
+    ? isLoad
+      ? "Sponsored load"
+      : "Sponsored capacity"
+    : isFleetCapacity
+      ? "Driver capacity"
+      : isLoad
+        ? hasActiveBid
+          ? isCountered
+            ? "Counter offer received"
+            : isWonBid
+              ? "Your bid won"
+              : isDeclinedBid
+                ? "Bid not selected"
+                : "You already bid"
+          : "Network indent"
+        : "Network capacity";
+
+  const ctaLabel = !isLoad
+    ? "View"
+    : isPendingBid || isCountered
+      ? "Update bid"
+      : isWonBid
+        ? "View award"
+        : "View & bid";
+
+  const yourBidAmount =
+    hasActiveBid && viewerBid!.amount > 0 ? formatINR(viewerBid!.amount) : null;
+  const counterAmountLabel =
+    isCountered && viewerBid!.counterAmount != null
+      ? formatINR(viewerBid!.counterAmount)
+      : null;
+
+  const specChips = [vehicle, weight, material].filter(Boolean) as string[];
 
   return (
     <Pressable
@@ -194,108 +357,174 @@ export function OpportunityCard({
           ? `Sponsored ${isLoad ? "load" : "capacity"} from ${displayOrgName}`
           : isFleetCapacity
             ? `Fleet availability ${vehicle}`
-            : `${isLoad ? "Indent from network" : "Idle vehicle"} from ${displayOrgName}`
+            : hasActiveBid
+              ? `${statusLabel} load from ${displayOrgName}`
+              : `${isLoad ? "Indent from network" : "Idle vehicle"} from ${displayOrgName}`
       }
     >
+      {isSponsored ? <View style={styles.sponsoredAccent} /> : null}
+
       <View style={styles.cardTop}>
-        <PartyAvatar
-          name={displayOrgName}
-          avatarUrl={avatarUrl}
-          avatarSeed={post.org_avatar_seed}
-          entityType="supplier"
-          size={24}
+        <OpportunityOrgAvatar
+          post={post}
+          isLoad={isLoad}
+          isFleetCapacity={isFleetCapacity}
+          avatar={avatar}
         />
         <View style={styles.cardTopText}>
           <Text style={styles.orgName} numberOfLines={1}>
-            {isFleetCapacity ? "Fleet availability" : shortName}
+            {isFleetCapacity ? "Fleet availability" : displayOrgName}
           </Text>
           <Text style={styles.metaLine} numberOfLines={1}>
-            {isSponsored
-              ? isLoad
-                ? "Sponsored load"
-                : "Sponsored capacity"
-              : isFleetCapacity
-                ? "Driver capacity"
-              : isLoad
-                ? "Indent from network"
-                : "Network capacity"}
+            {channelLabel}
             {posted ? ` · ${posted}` : ""}
           </Text>
         </View>
-        {isSponsored ? (
-          <View style={styles.adsPill}>
-            <Text style={styles.adsPillText}>Ad</Text>
-          </View>
-        ) : (
-          <View style={styles.networkPill}>
-            <Text style={styles.networkPillText}>
-              {isFleetCapacity ? "Fleet" : "Network"}
-            </Text>
-          </View>
-        )}
+        <View
+          style={[
+            styles.statusChip,
+            statusTone === "ad" && styles.statusChipAd,
+            statusTone === "fleet" && styles.statusChipFleet,
+            statusTone === "live" && styles.statusChipLive,
+            statusTone === "bidded" && styles.statusChipBidded,
+            statusTone === "counter" && styles.statusChipCounter,
+            statusTone === "won" && styles.statusChipWon,
+            statusTone === "declined" && styles.statusChipDeclined,
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusChipText,
+              statusTone === "ad" && styles.statusChipTextAd,
+              statusTone === "fleet" && styles.statusChipTextFleet,
+              statusTone === "live" && styles.statusChipTextLive,
+              statusTone === "bidded" && styles.statusChipTextBidded,
+              statusTone === "counter" && styles.statusChipTextCounter,
+              statusTone === "won" && styles.statusChipTextWon,
+              statusTone === "declined" && styles.statusChipTextDeclined,
+            ]}
+          >
+            {statusLabel}
+          </Text>
+        </View>
       </View>
 
-      <View style={styles.heroRow}>
-        <Text style={styles.kicker} numberOfLines={1}>
-          {isLoad ? "Open indent" : "Open capacity"}
-        </Text>
-        <Text style={styles.heroTitle} numberOfLines={1}>
-          {vehicle}
-        </Text>
-      </View>
-
-      <View style={styles.routeStrip}>
-        <View style={styles.routeCityCol}>
-          <View style={styles.dotOrigin} />
-          <Text style={styles.routeCity} numberOfLines={1}>
+      <View style={styles.routeGrid}>
+        <View style={styles.routeCol}>
+          <Text style={styles.routeLabel}>Pickup</Text>
+          <Text style={styles.routeValue} numberOfLines={1}>
             {originParts.city}
           </Text>
+          {originParts.state ? (
+            <Text style={styles.routeState} numberOfLines={1}>
+              {originParts.state}
+            </Text>
+          ) : null}
         </View>
-        <ArrowRight size={11} color={Theme.loadAddButtonText} strokeWidth={2.25} />
-        <View style={[styles.routeCityCol, styles.routeCityColEnd]}>
-          <View style={styles.dotDest} />
-          <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
+        <View style={styles.routeSep}>
+          <View style={styles.routeSepLine} />
+          <ArrowRight size={11} color={MUTED} strokeWidth={2.4} />
+          <View style={styles.routeSepLine} />
+        </View>
+        <View style={[styles.routeCol, styles.routeColEnd]}>
+          <Text style={[styles.routeLabel, styles.routeLabelEnd]}>Drop</Text>
+          <Text
+            style={[styles.routeValue, styles.routeValueEnd]}
+            numberOfLines={1}
+          >
             {destinationParts.city}
           </Text>
+          {destinationParts.state ? (
+            <Text
+              style={[styles.routeState, styles.routeValueEnd]}
+              numberOfLines={1}
+            >
+              {destinationParts.state}
+            </Text>
+          ) : null}
         </View>
       </View>
 
-      {(material || rate) && (
-        <View style={styles.specRow}>
-          {material ? (
-            <View style={styles.specChip}>
-              <MapPin size={10} color={Theme.loadStatusTabTextMuted} strokeWidth={2.2} />
-              <Text style={styles.specText} numberOfLines={1}>
-                {material}
+      {specChips.length > 0 || loadDate ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.specScroll}
+          contentContainerStyle={styles.specRow}
+        >
+          {specChips.map((chip) => (
+            <View key={chip} style={styles.specChip}>
+              <Text style={styles.specChipText} numberOfLines={1}>
+                {chip}
+              </Text>
+            </View>
+          ))}
+          {loadDate ? (
+            <View style={[styles.specChip, styles.specChipDate]}>
+              <Text style={styles.specChipDateText} numberOfLines={1}>
+                {loadDate}
               </Text>
             </View>
           ) : null}
-          {rate ? (
-            <View style={[styles.specChip, styles.specChipRate]}>
-              <Text style={styles.specRateText} numberOfLines={1}>
+        </ScrollView>
+      ) : null}
+
+      <View style={styles.priceRow}>
+        <View style={styles.priceCol}>
+          {counterAmountLabel ? (
+            <>
+              <Text style={styles.priceHint}>Counter</Text>
+              <Text style={styles.price} numberOfLines={1}>
+                {counterAmountLabel}
+              </Text>
+              {yourBidAmount ? (
+                <Text style={styles.priceMuted} numberOfLines={1}>
+                  Your bid {yourBidAmount}
+                </Text>
+              ) : null}
+            </>
+          ) : yourBidAmount ? (
+            <>
+              <Text style={styles.priceHint}>Your bid</Text>
+              <Text style={styles.price} numberOfLines={1}>
+                {yourBidAmount}
+              </Text>
+            </>
+          ) : rate ? (
+            <>
+              <Text style={styles.priceHint}>
+                {isLoad ? "Offer" : "Asking"}
+              </Text>
+              <Text style={styles.price} numberOfLines={1}>
                 {rate}
               </Text>
-            </View>
-          ) : null}
+            </>
+          ) : (
+            <Text style={styles.priceMuted} numberOfLines={1}>
+              {isLoad ? "Rate on request" : "Open capacity"}
+            </Text>
+          )}
         </View>
-      )}
-
-      <View style={styles.cardFooter}>
-        <Text style={styles.ctaText}>
-          {isLoad ? "View & bid" : "View capacity"}
-        </Text>
-        <ArrowRight size={11} color={Theme.primary} strokeWidth={2.4} />
+        <View style={styles.ctaHit}>
+          <Text style={styles.ctaText}>{ctaLabel}</Text>
+          <ArrowRight size={12} color={LINK} strokeWidth={2.4} />
+        </View>
       </View>
     </Pressable>
   );
-}
+});
 
 export function useLoadCenterOpportunityPosts(
   orgId: string | null,
   mode: LoadCenterOpportunityMode,
   supplierOrgIds?: ReadonlySet<string>,
   clientOrgIds?: ReadonlySet<string>,
-): { posts: PostRow[]; isLoading: boolean } {
+): {
+  posts: PostRow[];
+  isLoading: boolean;
+  viewerBidByPostId: ReadonlyMap<string, OpportunityViewerBid>;
+  orgProfileMap: Record<string, LinkedOrgDisplay>;
+} {
   const feedQ = useNetworkFeedQuery(orgId, { enabled: !!orgId });
   const posts = useMemo(
     () =>
@@ -310,7 +539,117 @@ export function useLoadCenterOpportunityPosts(
         : [],
     [feedQ.data, orgId, mode, supplierOrgIds, clientOrgIds],
   );
-  return { posts, isLoading: feedQ.isLoading };
+
+  const creatorOrgIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const post of posts) {
+      const id = (post.organization_id ?? "").trim();
+      if (id) set.add(id);
+    }
+    return Array.from(set).sort();
+  }, [posts]);
+
+  const orgProfilesQ = useQuery({
+    queryKey: queryKeys.linkedOrgDisplay(creatorOrgIds),
+    queryFn: async () => {
+      const profiles = await getLinkedOrgProfilesBatch(creatorOrgIds);
+      const result: Record<string, LinkedOrgDisplay> = {};
+      for (const [oid, profile] of Object.entries(profiles)) {
+        result[oid] = {
+          avatarUrl: (profile.avatarUrl ?? "").trim() || undefined,
+          avatarSeed:
+            (profile.avatarSeed ?? profile.orgAvatarSeed ?? "").trim() ||
+            undefined,
+        };
+      }
+      return result;
+    },
+    enabled: creatorOrgIds.length > 0,
+    staleTime: STALE.moderate,
+  });
+  const orgProfileMap = orgProfilesQ.data ?? {};
+
+  const loadMode = mode === "get";
+  const myQuotesQ = useMyDirectQuotesQuery(loadMode ? orgId : null);
+
+  const quotesByIndentId = useMemo(() => {
+    const map = new Map<string, DirectQuoteRow>();
+    for (const quote of myQuotesQ.data ?? []) {
+      if (!quote.indent_id) continue;
+      const status = (quote.status ?? "").toLowerCase();
+      if (status === "withdrawn") continue;
+      map.set(quote.indent_id, quote);
+    }
+    return map;
+  }, [myQuotesQ.data]);
+
+  const postIdsNeedingBidLookup = useMemo(() => {
+    if (!loadMode) return [] as string[];
+    return posts
+      .filter((p) => {
+        const indentId = (p.source_indent_id ?? "").trim();
+        if (indentId && quotesByIndentId.has(indentId)) return false;
+        return true;
+      })
+      .map((p) => p.id);
+  }, [loadMode, posts, quotesByIndentId]);
+
+  const myBidsQ = useQuery({
+    queryKey: [
+      ...queryKeys.bids.myBid("batch", orgId ?? ""),
+      postIdsNeedingBidLookup.slice().sort().join(","),
+    ],
+    queryFn: async () => {
+      const res = await getMyBidsForPostIds(orgId!, postIdsNeedingBidLookup);
+      if (res.error) throw res.error;
+      return res.bids;
+    },
+    enabled: loadMode && !!orgId && postIdsNeedingBidLookup.length > 0,
+    staleTime: STALE.moderate,
+  });
+
+  const bidsByPostId = useMemo(() => {
+    const map = new Map<string, OpportunityViewerBid>();
+    for (const bid of myBidsQ.data ?? []) {
+      const status = (bid.status ?? "pending").toLowerCase();
+      if (status === "withdrawn") continue;
+      map.set(bid.post_id, {
+        status,
+        amount: Number(bid.amount ?? 0),
+        counterAmount: null,
+      });
+    }
+    return map;
+  }, [myBidsQ.data]);
+
+  const viewerBidByPostId = useMemo(() => {
+    const map = new Map<string, OpportunityViewerBid>();
+    if (!loadMode) return map;
+    for (const post of posts) {
+      const bid = resolveOpportunityViewerBid(
+        post,
+        quotesByIndentId,
+        bidsByPostId,
+      );
+      if (bid) map.set(post.id, bid);
+    }
+    return map;
+  }, [loadMode, posts, quotesByIndentId, bidsByPostId]);
+
+  return {
+    posts,
+    isLoading: feedQ.isLoading,
+    viewerBidByPostId,
+    orgProfileMap,
+  };
+}
+
+/** Posts still open to bid — excludes loads the viewer already quoted/bid on. */
+export function filterUnbiddedOpportunityPosts(
+  posts: PostRow[],
+  viewerBidByPostId: ReadonlyMap<string, OpportunityViewerBid>,
+): PostRow[] {
+  return posts.filter((p) => !viewerBidByPostId.has(p.id));
 }
 
 export function LoadCenterOpportunityExchange({
@@ -324,16 +663,34 @@ export function LoadCenterOpportunityExchange({
   clientOrgIds,
 }: LoadCenterOpportunityExchangeProps) {
   const router = useRouter();
-  const { posts, isLoading } = useLoadCenterOpportunityPosts(
-    orgId,
-    mode,
-    supplierOrgIds,
-    clientOrgIds,
-  );
+  const { posts, isLoading, viewerBidByPostId, orgProfileMap } =
+    useLoadCenterOpportunityPosts(
+      orgId,
+      mode,
+      supplierOrgIds,
+      clientOrgIds,
+    );
 
-  const sponsoredCount = posts.filter((p) => p.is_sponsored).length;
-  const networkCount = posts.length - sponsoredCount;
+  /**
+   * Open Market kanban column: only show loads not yet bid on.
+   * Already-bid loads live in My Bids (indent hub cards) — avoid duplicates.
+   * Find drawer / carousel keep bidded cards (BIDDED badge).
+   */
+  const displayPosts = useMemo(() => {
+    if (columnStack && mode === "get") {
+      return filterUnbiddedOpportunityPosts(posts, viewerBidByPostId);
+    }
+    return posts;
+  }, [columnStack, mode, posts, viewerBidByPostId]);
+
   const isGet = mode === "get";
+  const sponsoredCount = displayPosts.filter((p) => p.is_sponsored).length;
+  const biddedCount = isGet
+    ? displayPosts.filter((p) => !p.is_sponsored && viewerBidByPostId.has(p.id))
+        .length
+    : 0;
+  const networkCount = displayPosts.length - sponsoredCount;
+  const liveOpenCount = Math.max(0, networkCount - biddedCount);
   const title = isGet
     ? sidebarStack
       ? "Advertised loads"
@@ -341,9 +698,9 @@ export function LoadCenterOpportunityExchange({
     : "Idle capacity nearby";
   const subtitle = isGet
     ? sidebarStack
-      ? "Indents from network you can bid on"
-      : "Sponsored load ads and indents from network you can bid on"
-    : "Sponsored capacity ads and fleet vehicle Stories";
+      ? "Indents from network — already-bid loads are marked"
+      : "Sponsored ads and network indents"
+    : "Sponsored capacity and fleet Stories";
   const loadingSidebarText = isGet ? "Finding loads…" : "Finding capacity…";
 
   const openStory = (post: PostRow) => {
@@ -361,11 +718,47 @@ export function LoadCenterOpportunityExchange({
 
   if (!orgId) return null;
 
+  const header = (
+    <View style={styles.header}>
+      <View style={styles.headerText}>
+        <Text style={styles.headerTitle}>{title}</Text>
+        <Text style={styles.headerSub} numberOfLines={sidebarStack ? 2 : 1}>
+          {subtitle}
+        </Text>
+      </View>
+      <View style={styles.countCluster}>
+        {sponsoredCount > 0 ? (
+          <View style={[styles.countChip, styles.countChipAd]}>
+            <Text style={[styles.countChipText, styles.countChipTextAd]}>
+              {sponsoredCount} Ads
+            </Text>
+          </View>
+        ) : null}
+        {liveOpenCount > 0 ? (
+          <View style={[styles.countChip, styles.countChipLive]}>
+            <Text style={[styles.countChipText, styles.countChipTextLive]}>
+              {liveOpenCount} live
+            </Text>
+          </View>
+        ) : null}
+        {biddedCount > 0 ? (
+          <View style={[styles.countChip, styles.countChipBidded]}>
+            <Text style={[styles.countChipText, styles.countChipTextBidded]}>
+              {biddedCount} bidded
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
   if (columnStack || sidebarStack) {
     if (isLoading && posts.length === 0) {
       if (!sidebarStack) return null;
       return (
-        <View style={[styles.wrap, styles.wrapSidebar, embedded && styles.wrapEmbedded]}>
+        <View
+          style={[styles.wrap, styles.wrapSidebar, embedded && styles.wrapEmbedded]}
+        >
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={Theme.accentBrown} />
             <Text style={styles.loadingText}>{loadingSidebarText}</Text>
@@ -373,29 +766,26 @@ export function LoadCenterOpportunityExchange({
         </View>
       );
     }
-    if (posts.length === 0) {
+    if (displayPosts.length === 0) {
       if (!sidebarStack) return null;
       return (
-        <View style={[styles.wrap, styles.wrapSidebar, embedded && styles.wrapEmbedded]}>
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <Text style={styles.headerTitle}>{title}</Text>
-              <Text style={styles.headerSub} numberOfLines={2}>
-                {subtitle}
-              </Text>
-            </View>
-          </View>
+        <View
+          style={[styles.wrap, styles.wrapSidebar, embedded && styles.wrapEmbedded]}
+        >
+          {header}
           <LoadCenterSidebarFindEmpty mode={mode} plain />
         </View>
       );
     }
 
-    const cards = posts.map((post) => (
+    const cards = displayPosts.map((post) => (
       <OpportunityCard
         key={post.id}
         post={post}
         mode={mode}
         fillWidth
+        viewerBid={viewerBidByPostId.get(post.id) ?? null}
+        orgProfileMap={orgProfileMap}
         onPress={() => openStory(post)}
       />
     ));
@@ -405,27 +795,10 @@ export function LoadCenterOpportunityExchange({
     }
 
     return (
-      <View style={[styles.wrap, styles.wrapSidebar, embedded && styles.wrapEmbedded]}>
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>{title}</Text>
-            <Text style={styles.headerSub} numberOfLines={2}>
-              {subtitle}
-            </Text>
-          </View>
-          <View style={styles.countCluster}>
-            {sponsoredCount > 0 ? (
-              <View style={styles.countPillAds}>
-                <Text style={styles.countPillAdsText}>{sponsoredCount} Ads</Text>
-              </View>
-            ) : null}
-            {networkCount > 0 ? (
-              <View style={styles.countPillNet}>
-                <Text style={styles.countPillNetText}>{networkCount} live</Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
+      <View
+        style={[styles.wrap, styles.wrapSidebar, embedded && styles.wrapEmbedded]}
+      >
+        {header}
         <View style={styles.columnStack}>{cards}</View>
       </View>
     );
@@ -457,26 +830,7 @@ export function LoadCenterOpportunityExchange({
         fullBleed && styles.wrapFullBleed,
       ]}
     >
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>{title}</Text>
-          <Text style={styles.headerSub} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        </View>
-        <View style={styles.countCluster}>
-          {sponsoredCount > 0 ? (
-            <View style={styles.countPillAds}>
-              <Text style={styles.countPillAdsText}>{sponsoredCount} Ads</Text>
-            </View>
-          ) : null}
-          {networkCount > 0 ? (
-            <View style={styles.countPillNet}>
-              <Text style={styles.countPillNetText}>{networkCount} live</Text>
-            </View>
-          ) : null}
-        </View>
-      </View>
+      {header}
 
       <ScrollView
         horizontal
@@ -487,12 +841,17 @@ export function LoadCenterOpportunityExchange({
           fullBleed && styles.scrollFullBleed,
         ]}
         style={fullBleed ? styles.scrollViewFullBleed : undefined}
+        decelerationRate="fast"
+        snapToInterval={CARD_W + 8}
+        snapToAlignment="start"
       >
         {posts.map((post) => (
           <OpportunityCard
             key={post.id}
             post={post}
             mode={mode}
+            viewerBid={viewerBidByPostId.get(post.id) ?? null}
+            orgProfileMap={orgProfileMap}
             onPress={() => openStory(post)}
           />
         ))}
@@ -501,28 +860,26 @@ export function LoadCenterOpportunityExchange({
   );
 }
 
-const CARD_W = 228;
-
 const cardShadow = Platform.select({
+  ios: {
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+  },
+  android: { elevation: 2 },
   web: {
     boxShadow:
-      "0 1px 0 rgba(255,255,255,0.95) inset, 0 8px 22px rgba(15, 23, 42, 0.09), 0 2px 6px rgba(15, 23, 42, 0.04)",
+      "0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06)",
   } as object,
-  ios: {
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-  },
-  android: { elevation: 3 },
   default: {},
 });
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 8,
+    gap: 10,
     marginBottom: 0,
-    paddingTop: 0,
+    paddingTop: 2,
   },
   wrapEmbedded: {
     marginHorizontal: 0,
@@ -533,12 +890,11 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     paddingTop: 10,
     paddingBottom: 8,
-    paddingHorizontal: 10,
-    gap: 8,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    paddingHorizontal: 12,
+    gap: 10,
+    backgroundColor: Theme.cardWhite,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: BORDER,
   },
   wrapSidebar: {
     width: "100%",
@@ -548,13 +904,12 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     paddingHorizontal: 12,
     gap: 10,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: CARD_EDGE,
     ...Platform.select({
       web: {
-        boxShadow: "0 2px 10px rgba(15, 23, 42, 0.05)",
         display: "flex",
         flexDirection: "column",
         height: "100%",
@@ -567,7 +922,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 0,
   },
   scrollFullBleed: {
-    paddingVertical: 4,
+    paddingVertical: 2,
     paddingRight: 4,
     flexGrow: 1,
   },
@@ -576,79 +931,92 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingVertical: 8,
-    paddingHorizontal: 0,
   },
   loadingText: {
     fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textMuted,
+    fontWeight: "500",
+    color: MUTED,
   },
   header: {
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
-    paddingHorizontal: 2,
   },
-  headerText: { flex: 1, minWidth: 0, gap: 1 },
+  headerText: { flex: 1, minWidth: 0, gap: 2 },
   headerTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: INK,
+    letterSpacing: -0.15,
   },
   headerSub: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    lineHeight: 13,
+    fontSize: 11,
+    fontWeight: "400",
+    color: MUTED,
+    lineHeight: 14,
   },
-  countCluster: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
-  countPillAds: {
+  countCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+    paddingTop: 1,
+  },
+  countChip: {
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: Theme.accentBrown,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "transparent",
   },
-  countPillAdsText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
+  countChipAd: {
+    backgroundColor: Theme.accentBrownWash,
+    borderColor: Theme.accentBrownBorder,
+  },
+  countChipLive: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "rgba(21, 128, 61, 0.18)",
+  },
+  countChipBidded: {
+    backgroundColor: "#EFF6FF",
+    borderColor: "rgba(37, 99, 235, 0.22)",
+  },
+  countChipText: {
+    fontSize: 10,
+    fontWeight: "700",
     letterSpacing: 0.2,
   },
-  countPillNet: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
-    borderColor: Theme.networkHubListCardConnectedBorder,
+  countChipTextAd: {
+    color: Theme.accentBrown,
   },
-  countPillNetText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.success,
+  countChipTextLive: {
+    color: Theme.positive,
+  },
+  countChipTextBidded: {
+    color: LINK,
   },
   scroll: {
-    gap: 8,
+    gap: 10,
     paddingVertical: 2,
     paddingRight: 4,
   },
   columnStack: {
     width: "100%",
-    gap: 8,
+    gap: 10,
     marginBottom: 2,
   },
   card: {
+    position: "relative",
     width: CARD_W,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: CARD_EDGE,
     backgroundColor: Theme.cardWhite,
-    paddingHorizontal: 11,
-    paddingTop: 10,
-    paddingBottom: 10,
-    gap: 6,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 0,
+    gap: 12,
     overflow: "hidden",
     ...cardShadow,
   },
@@ -658,156 +1026,256 @@ const styles = StyleSheet.create({
   },
   cardSponsored: {
     borderColor: Theme.accentBrownBorder,
-    backgroundColor: Theme.cardWhite,
   },
-  cardPressed: { opacity: 0.94, transform: [{ scale: 0.985 }] },
-  cardTop: { flexDirection: "row", alignItems: "center", gap: 7 },
-  cardTopText: { flex: 1, minWidth: 0, gap: 0 },
-  orgName: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.1,
-  },
-  adsPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
+  cardPressed: { opacity: 0.94 },
+  sponsoredAccent: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
     backgroundColor: Theme.accentBrown,
-    flexShrink: 0,
   },
-  adsPillText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+  cardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  networkPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: Theme.surface,
+  avatarRing: {
+    width: AVATAR + 2,
+    height: AVATAR + 2,
+    borderRadius: (AVATAR + 2) / 2,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
+    borderColor: BORDER,
+    backgroundColor: CANVAS_SOFT,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
     flexShrink: 0,
   },
-  networkPillText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-    letterSpacing: 0.25,
-    textTransform: "uppercase",
+  avatarFleetPlate: {
+    width: AVATAR + 2,
+    height: AVATAR + 2,
+    borderRadius: 8,
+    backgroundColor: CANVAS_SOFT,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  cardTopText: { flex: 1, minWidth: 0, gap: 3 },
+  orgName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: INK,
+    letterSpacing: -0.2,
   },
   metaLine: {
     fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textMuted,
+    fontWeight: "400",
+    color: MUTED,
+    lineHeight: 14,
   },
-  heroRow: {
-    gap: 2,
-  },
-  kicker: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color: Theme.textMuted,
-  },
-  heroTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
-    lineHeight: 17,
-  },
-  routeStrip: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
-    borderRadius: 9,
-    backgroundColor: Theme.surface,
+  statusChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexShrink: 0,
+    alignSelf: "center",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: "transparent",
   },
-  routeCityCol: {
+  statusChipAd: {
+    backgroundColor: Theme.accentBrownWash,
+    borderColor: Theme.accentBrownBorder,
+  },
+  statusChipLive: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "rgba(21, 128, 61, 0.18)",
+  },
+  statusChipBidded: {
+    backgroundColor: "#EFF6FF",
+    borderColor: "rgba(37, 99, 235, 0.22)",
+  },
+  statusChipCounter: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "rgba(234, 88, 12, 0.22)",
+  },
+  statusChipWon: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "rgba(21, 128, 61, 0.22)",
+  },
+  statusChipDeclined: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "rgba(220, 38, 38, 0.2)",
+  },
+  statusChipFleet: {
+    backgroundColor: CANVAS_SOFT,
+    borderColor: BORDER,
+  },
+  statusChipText: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  statusChipTextAd: {
+    color: Theme.accentBrownDeep,
+  },
+  statusChipTextLive: {
+    color: Theme.positive,
+  },
+  statusChipTextBidded: {
+    color: LINK,
+  },
+  statusChipTextCounter: {
+    color: "#C2410C",
+  },
+  statusChipTextWon: {
+    color: Theme.positive,
+  },
+  statusChipTextDeclined: {
+    color: Theme.destructive,
+  },
+  statusChipTextFleet: {
+    color: BODY,
+  },
+  routeGrid: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  routeCol: {
     flex: 1,
     minWidth: 0,
+  },
+  routeColEnd: {
+    alignItems: "flex-end",
+  },
+  routeSep: {
+    paddingTop: 16,
+    width: 28,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    justifyContent: "center",
+    gap: 2,
   },
-  routeCityColEnd: {
-    justifyContent: "flex-end",
+  routeSepLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: CARD_EDGE,
   },
-  dotOrigin: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: Theme.success,
-    flexShrink: 0,
-  },
-  dotDest: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: Theme.accentBrown,
-    flexShrink: 0,
-  },
-  routeCity: {
-    flexShrink: 1,
-    fontSize: 12,
+  routeLabel: {
+    fontSize: 9,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.1,
+    color: MUTED,
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+    marginBottom: 3,
   },
-  routeCityEnd: {
+  routeLabelEnd: {
     textAlign: "right",
+  },
+  routeValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: INK,
+    lineHeight: 19,
+    letterSpacing: -0.15,
+  },
+  routeValueEnd: {
+    textAlign: "right",
+  },
+  routeState: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "400",
+    color: BODY,
+    lineHeight: 14,
+  },
+  specScroll: {
+    width: "100%",
+    flexGrow: 0,
   },
   specRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 5,
+    flexWrap: "nowrap",
+    alignItems: "center",
+    gap: 6,
+    paddingRight: 2,
   },
   specChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: CANVAS_SOFT,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
+    flexShrink: 0,
+  },
+  specChipDate: {
+    backgroundColor: "#EFF6FF",
+    borderColor: "rgba(37, 99, 235, 0.28)",
+  },
+  specChipText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: BODY,
+    lineHeight: 13,
+  },
+  specChipDateText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: LINK,
+    lineHeight: 13,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginHorizontal: -14,
+    marginTop: 2,
+    paddingHorizontal: 14,
+    paddingTop: 11,
+    paddingBottom: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: BORDER,
+    backgroundColor: CANVAS_SOFT,
+  },
+  priceCol: { flex: 1, minWidth: 0, gap: 1 },
+  priceHint: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+    color: MUTED,
+    lineHeight: 12,
+  },
+  price: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: INK,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: -0.3,
+    lineHeight: 20,
+  },
+  priceMuted: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: MUTED,
+  },
+  ctaHit: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    maxWidth: "100%",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-  },
-  specChipRate: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.networkHubListCardConnectedBorder,
-  },
-  specText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    maxWidth: 120,
-  },
-  specRateText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.success,
-  },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingTop: 2,
+    flexShrink: 0,
+    paddingVertical: 2,
   },
   ctaText: {
     fontSize: 12,
-    fontWeight: "800",
-    color: Theme.primary,
+    fontWeight: "600",
+    color: LINK,
   },
 });

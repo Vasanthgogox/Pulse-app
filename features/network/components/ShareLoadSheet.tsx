@@ -14,7 +14,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import * as Sharing from "expo-sharing";
-import { ArrowRight, CheckCircle2, Clock, Copy, X, Zap } from "lucide-react-native";
+import { ArrowRight, CheckCircle2, Clock, Copy, TrendingUp, X, Zap } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     Animated,
@@ -117,6 +117,8 @@ interface ShareLoadSheetProps {
   orgId: string;
   onClose: () => void;
   onSuccess?: (type: "feed" | "story") => void;
+  /** After story broadcast — open Pulse Reach boost for this post. */
+  onBoostAfterBroadcast?: (postId: string) => void;
 }
 
 function LoadPreviewCard({ indent }: { indent: IndentRow }) {
@@ -160,12 +162,14 @@ function SuccessView({
   orgId,
   postId,
   onShareWhatsApp,
+  onBoostReach,
   onDone,
 }: {
   indent: IndentRow;
   orgId: string;
   postId: string;
   onShareWhatsApp: () => void;
+  onBoostReach?: () => void;
   onDone: () => void;
 }) {
   const scale = useRef(new Animated.Value(0.7)).current;
@@ -218,9 +222,21 @@ function SuccessView({
         <Text style={styles.successTitle}>Story live</Text>
         <Text style={styles.successSub}>
           Your load is in the story reel. Partners in your network can bid and message until it
-          expires.
+          expires. Boost with Pulse Reach to amplify visibility.
         </Text>
       </View>
+
+      {onBoostReach ? (
+        <Pressable
+          style={({ pressed }) => [styles.boostBtn, pressed && styles.boostBtnPressed]}
+          onPress={onBoostReach}
+          accessibilityRole="button"
+          accessibilityLabel="Boost with Pulse Reach"
+        >
+          <TrendingUp size={16} color={Theme.accentBrown} strokeWidth={2.4} />
+          <Text style={styles.boostBtnText}>Boost with Pulse Reach</Text>
+        </Pressable>
+      ) : null}
 
       {!hasWebBase ? (
         <View style={styles.devHintBanner}>
@@ -277,6 +293,7 @@ export function ShareLoadSheet({
   orgId,
   onClose,
   onSuccess,
+  onBoostAfterBroadcast,
 }: ShareLoadSheetProps) {
   const insets = useSafeAreaInsets();
   const { status: authStatus } = useAuth();
@@ -405,6 +422,11 @@ export function ShareLoadSheet({
           orgId={orgId}
           postId={successPostId}
           onShareWhatsApp={shareStoryLinkOnWhatsApp}
+          onBoostReach={
+            onBoostAfterBroadcast
+              ? () => onBoostAfterBroadcast(successPostId)
+              : undefined
+          }
           onDone={onClose}
         />
       ) : !success ? (
@@ -894,6 +916,27 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textAlign: "center",
     lineHeight: 16,
+  },
+  boostBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Theme.accentBrownWash,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.accentBrownBorder,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    width: "100%",
+    minHeight: 46,
+  },
+  boostBtnPressed: { opacity: 0.9 },
+  boostBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.accentBrown,
+    letterSpacing: 0.2,
   },
   waBtn: {
     flexDirection: "row",

@@ -535,9 +535,7 @@ export function IndentAllocationFlowScreen({
   const primaryLabel = deployOtpCode
     ? "Done"
     : isLastStep
-      ? useAdHocDriver && !staffHandshakeAssignLater
-        ? "Deploy & get OTP"
-        : "Authorize & deploy voyage"
+      ? "Convert to trip"
       : "Continue";
 
   const showBack = !deployOtpCode && stepIndex > 0;
@@ -579,6 +577,12 @@ export function IndentAllocationFlowScreen({
 
   const fillBodyStep =
     step === "rates" || step === "driverPhone" || step === "vehicleReg";
+
+  const hasFlowChrome =
+    Boolean(allocationContextRow) ||
+    priorSelections.length > 0 ||
+    showModeBar ||
+    (staffHandshakeAssignLater && step === "commodity");
 
   if (!currentLoad) {
     return <CenteredLoadingView message="Loading allocation…" />;
@@ -631,146 +635,169 @@ export function IndentAllocationFlowScreen({
           }}
         />
       ) : (
-        <View style={[styles.flowBody, fullPageWizardStyles.wizardStepBody]}>
-          {allocationContextRow ? (
-            <WizardPartyContextRow
-              left={allocationContextRow.left}
-              right={allocationContextRow.right}
-            />
-          ) : null}
+        <View
+          style={[
+            styles.flowBody,
+            fillBodyStep ? styles.flowBodyKeypad : fullPageWizardStyles.wizardStepBody,
+          ]}
+        >
+          {hasFlowChrome ? (
+            <View
+              style={
+                fillBodyStep
+                  ? fullPageWizardStyles.wizardKeypadChromePad
+                  : styles.flowChrome
+              }
+            >
+              {allocationContextRow ? (
+                <WizardPartyContextRow
+                  left={allocationContextRow.left}
+                  right={allocationContextRow.right}
+                />
+              ) : null}
 
-          {!deployOtpCode && priorSelections.length > 0 ? (
-            <WizardPriorSelections items={priorSelections} />
-          ) : null}
+              {priorSelections.length > 0 ? (
+                <WizardPriorSelections items={priorSelections} />
+              ) : null}
 
-          {showModeBar ? (
-            <SupplyAllocationModeBar
-              variant="wizard"
-              mode={useAdHocDriver ? "aggregate" : "asset"}
-              assignLater={staffHandshakeAssignLater}
-              onModeChange={(mode) => {
-                const aggregate = mode === "aggregate";
-                set.useAdHocDriver(aggregate);
-                if (aggregate) {
-                  set.assignDriverId(null);
-                  set.assignVehicleId(undefined);
-                } else {
-                  set.aggregateDriverPhone("");
-                  set.aggregateDriverTrackingName("");
-                  set.subcontractSupplierId(null);
-                  set.subcontractRate("");
-                  set.assignVehicleRegistration("");
-                  set.aggregateDriverNameManualRef.current = false;
-                }
-                goToModeFirstStep(aggregate, staffHandshakeAssignLater);
-              }}
-              onAssignLaterChange={(v) => {
-                set.staffHandshakeAssignLater(v);
-                if (v) {
-                  set.assignDriverId(null);
-                  set.assignVehicleId(undefined);
-                  set.aggregateDriverPhone("");
-                  set.aggregateDriverTrackingName("");
-                  set.assignVehicleRegistration("");
-                }
-                goToModeFirstStep(useAdHocDriver, v);
-              }}
-            />
-          ) : null}
+              {showModeBar ? (
+                <SupplyAllocationModeBar
+                  variant="wizard"
+                  mode={useAdHocDriver ? "aggregate" : "asset"}
+                  assignLater={staffHandshakeAssignLater}
+                  onModeChange={(mode) => {
+                    const aggregate = mode === "aggregate";
+                    set.useAdHocDriver(aggregate);
+                    if (aggregate) {
+                      set.assignDriverId(null);
+                      set.assignVehicleId(undefined);
+                    } else {
+                      set.aggregateDriverPhone("");
+                      set.aggregateDriverTrackingName("");
+                      set.subcontractSupplierId(null);
+                      set.subcontractRate("");
+                      set.assignVehicleRegistration("");
+                      set.aggregateDriverNameManualRef.current = false;
+                    }
+                    goToModeFirstStep(aggregate, staffHandshakeAssignLater);
+                  }}
+                  onAssignLaterChange={(v) => {
+                    set.staffHandshakeAssignLater(v);
+                    if (v) {
+                      set.assignDriverId(null);
+                      set.assignVehicleId(undefined);
+                      set.aggregateDriverPhone("");
+                      set.aggregateDriverTrackingName("");
+                      set.assignVehicleRegistration("");
+                    }
+                    goToModeFirstStep(useAdHocDriver, v);
+                  }}
+                />
+              ) : null}
 
-          {staffHandshakeAssignLater && step === "commodity" ? (
-            <View style={fullPageWizardStyles.shipperWarningCard}>
-              <Text style={fullPageWizardStyles.shipperWarningText}>
-                {useAdHocDriver
-                  ? "Partner and rate are required now. Add driver and vehicle on the trip screen before the trip starts."
-                  : "Assign vehicle and driver on the trip screen before the trip starts."}
-              </Text>
+              {staffHandshakeAssignLater && step === "commodity" ? (
+                <View style={fullPageWizardStyles.shipperWarningCard}>
+                  <Text style={fullPageWizardStyles.shipperWarningText}>
+                    {useAdHocDriver
+                      ? "Partner and rate are required now. Add driver and vehicle on the trip screen before the trip starts."
+                      : "Assign vehicle and driver on the trip screen before the trip starts."}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
 
-          {useAdHocDriver &&
-          step !== "commodity" &&
-          (step === "partner" ||
-            step === "rates" ||
-            step === "driverName" ||
-            step === "driverPhone" ||
-            step === "vehicleReg") ? (
-            <IndentAggregateAllocationStep
-              step={step}
-              suppliers={suppliers}
-              state={state}
-              set={set}
-              onAddPartner={onAddPartner}
-              blockedReasonBySupplierId={blockedPartnerReasons}
-            />
-          ) : null}
+          <View
+            style={
+              fillBodyStep
+                ? fullPageWizardStyles.wizardKeypadStepFill
+                : styles.flowStep
+            }
+          >
+            {useAdHocDriver &&
+            step !== "commodity" &&
+            (step === "partner" ||
+              step === "rates" ||
+              step === "driverName" ||
+              step === "driverPhone" ||
+              step === "vehicleReg") ? (
+              <IndentAggregateAllocationStep
+                step={step}
+                suppliers={suppliers}
+                state={state}
+                set={set}
+                onAddPartner={onAddPartner}
+                blockedReasonBySupplierId={blockedPartnerReasons}
+              />
+            ) : null}
 
-          {!useAdHocDriver && !staffHandshakeAssignLater && step === "commodity" ? (
-            <IndentAllocationTripDetailsStep
-              pickupDate={deployPickupDate}
-              weightTons={deployWeightTons}
-              vehicleType={deployVehicleType}
-              loadType={deployLoadType}
-              onPickupDateChange={set.deployPickupDate}
-              onWeightTonsChange={set.deployWeightTons}
-              onVehicleTypeChange={set.deployVehicleType}
-              onLoadTypeChange={set.deployLoadType}
-              pickupDateError={pickupDateError}
-              weightError={weightError}
-              vehicleTypeError={!deployVehicleType.trim()}
-              loadTypeError={!deployLoadType.trim()}
-              tonsError={weightError != null}
-              indentVehicleType={currentLoad.vehicle_type}
-              indentLoadType={currentLoad.load_type}
-            />
-          ) : null}
+            {!useAdHocDriver && !staffHandshakeAssignLater && step === "commodity" ? (
+              <IndentAllocationTripDetailsStep
+                pickupDate={deployPickupDate}
+                weightTons={deployWeightTons}
+                vehicleType={deployVehicleType}
+                loadType={deployLoadType}
+                onPickupDateChange={set.deployPickupDate}
+                onWeightTonsChange={set.deployWeightTons}
+                onVehicleTypeChange={set.deployVehicleType}
+                onLoadTypeChange={set.deployLoadType}
+                pickupDateError={pickupDateError}
+                weightError={weightError}
+                vehicleTypeError={!deployVehicleType.trim()}
+                loadTypeError={!deployLoadType.trim()}
+                tonsError={weightError != null}
+                indentVehicleType={currentLoad.vehicle_type}
+                indentLoadType={currentLoad.load_type}
+              />
+            ) : null}
 
-          {!useAdHocDriver && !staffHandshakeAssignLater && (step === "driver" || step === "vehicle") ? (
-            <AssetRosterPickers
-              isFlow
-              assetFlowStep={step === "vehicle" ? "vehicle" : "driver"}
-              width={windowWidth}
-              orgId={orgId}
-              activeDrivers={activeDrivers}
-              vehicles={vehicles}
-              assignDriverId={assignDriverId}
-              assignVehicleId={assignVehicleId}
-              set={set}
-              onNavigateAddDriver={() => {
-                router.push({
-                  pathname: "/(modals)/add-driver",
-                  params: { returnTo: ROUTES.indentAllocation(indentId) },
-                });
-              }}
-              onNavigateAddVehicle={() => {
-                router.push({
-                  pathname: "/(modals)/add-vehicle",
-                  params: { returnTo: ROUTES.indentAllocation(indentId) },
-                });
-              }}
-            />
-          ) : null}
+            {!useAdHocDriver && !staffHandshakeAssignLater && (step === "driver" || step === "vehicle") ? (
+              <AssetRosterPickers
+                isFlow
+                assetFlowStep={step === "vehicle" ? "vehicle" : "driver"}
+                width={windowWidth}
+                orgId={orgId}
+                activeDrivers={activeDrivers}
+                vehicles={vehicles}
+                assignDriverId={assignDriverId}
+                assignVehicleId={assignVehicleId}
+                set={set}
+                onNavigateAddDriver={() => {
+                  router.push({
+                    pathname: "/(modals)/add-driver",
+                    params: { returnTo: ROUTES.indentAllocation(indentId) },
+                  });
+                }}
+                onNavigateAddVehicle={() => {
+                  router.push({
+                    pathname: "/(modals)/add-vehicle",
+                    params: { returnTo: ROUTES.indentAllocation(indentId) },
+                  });
+                }}
+              />
+            ) : null}
 
-          {(useAdHocDriver && step === "commodity") ||
-          (staffHandshakeAssignLater && step === "commodity") ? (
-            <IndentAllocationTripDetailsStep
-              pickupDate={deployPickupDate}
-              weightTons={deployWeightTons}
-              vehicleType={deployVehicleType}
-              loadType={deployLoadType}
-              onPickupDateChange={set.deployPickupDate}
-              onWeightTonsChange={set.deployWeightTons}
-              onVehicleTypeChange={set.deployVehicleType}
-              onLoadTypeChange={set.deployLoadType}
-              pickupDateError={pickupDateError}
-              weightError={weightError}
-              vehicleTypeError={!deployVehicleType.trim()}
-              loadTypeError={!deployLoadType.trim()}
-              tonsError={weightError != null}
-              indentVehicleType={currentLoad.vehicle_type}
-              indentLoadType={currentLoad.load_type}
-            />
-          ) : null}
+            {(useAdHocDriver && step === "commodity") ||
+            (staffHandshakeAssignLater && step === "commodity") ? (
+              <IndentAllocationTripDetailsStep
+                pickupDate={deployPickupDate}
+                weightTons={deployWeightTons}
+                vehicleType={deployVehicleType}
+                loadType={deployLoadType}
+                onPickupDateChange={set.deployPickupDate}
+                onWeightTonsChange={set.deployWeightTons}
+                onVehicleTypeChange={set.deployVehicleType}
+                onLoadTypeChange={set.deployLoadType}
+                pickupDateError={pickupDateError}
+                weightError={weightError}
+                vehicleTypeError={!deployVehicleType.trim()}
+                loadTypeError={!deployLoadType.trim()}
+                tonsError={weightError != null}
+                indentVehicleType={currentLoad.vehicle_type}
+                indentLoadType={currentLoad.load_type}
+              />
+            ) : null}
+          </View>
         </View>
       )}
     </AssignmentFlowShell>
@@ -783,5 +810,21 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     minWidth: 0,
     flexGrow: 1,
+  },
+  flowBodyKeypad: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    gap: 8,
+  },
+  flowChrome: {
+    width: "100%",
+    gap: 12,
+    flexShrink: 0,
+  },
+  flowStep: {
+    width: "100%",
+    minWidth: 0,
+    gap: 12,
   },
 });

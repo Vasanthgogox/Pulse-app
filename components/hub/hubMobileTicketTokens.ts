@@ -14,8 +14,8 @@ export const HUB_MOBILE_TICKET_REF = {
   radius: 16,
 } as const;
 
-/** Page/list strip — transparent (cards provide their own white surface). */
-export const HUB_MOBILE_LIST_CANVAS_BG = "transparent";
+/** Soft page canvas so white ticket cards lift clearly. */
+export const HUB_MOBILE_LIST_CANVAS_BG = "#F0F2F5";
 
 export const hubMobileListCanvasStyles = StyleSheet.create({
   list: {
@@ -29,6 +29,6 @@ export const hubMobileListCanvasStyles = StyleSheet.create({
   },
   cardWrap: {
     width: "100%",
-    marginBottom: 12,
+    marginBottom: 14,
   },
 });

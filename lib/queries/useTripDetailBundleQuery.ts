@@ -120,6 +120,8 @@ export interface BundleVehicle {
 export interface BundleLinkedOrg {
   id: string;
   logo_url: string | null;
+  /** Org display name when included by get_trip_detail_bundle. */
+  name?: string | null;
 }
 
 export interface BundleClient {
@@ -135,6 +137,8 @@ export interface BundleClient {
 
 export interface BundleSupplier {
   id: string;
+  /** Canonical supplier display name (suppliers.name). */
+  name?: string | null;
   company_name: string | null;
   phone: string | null;
   avatar_url: string | null;

@@ -118,18 +118,18 @@ export function HubEmptyPromoLayout({
   const heroBoxW = heroOnly
     ? heroSlotSize ??
       (compact
-        ? 200
+        ? 112
         : isDesktop
-          ? 256
-          : 228)
+          ? 144
+          : 128)
     : Math.round(clusterW * 0.55);
   const heroBoxH = heroOnly
     ? heroSlotSize ??
       (compact
-        ? 200
+        ? 112
         : isDesktop
-          ? 256
-          : 228)
+          ? 144
+          : 128)
     : compact
       ? 96
       : isDesktop

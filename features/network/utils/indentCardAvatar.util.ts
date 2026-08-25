@@ -49,3 +49,32 @@ export function marketLoadIndentAvatarProps(
     initialsColorSeed: orgId ? `org:${orgId}` : `indent:${load.id}`,
   };
 }
+
+/**
+ * Find loads / opportunity story cards — same hierarchy as Get Load hub:
+ * batch partner display (logo → owner avatar → seed) with feed fields as
+ * optimistic fallback until the batch resolves.
+ */
+export function opportunityPostAvatarProps(
+  post: {
+    id: string;
+    organization_id?: string | null;
+    org_avatar_url?: string | null;
+    org_avatar_seed?: string | null;
+  },
+  creatorOrgMap: Record<string, LinkedOrgDisplay> | undefined,
+): IndentCardAvatarProps {
+  const orgId = (post.organization_id ?? "").trim();
+  const org = orgId && creatorOrgMap ? creatorOrgMap[orgId] : undefined;
+  const batchUrl = (org?.avatarUrl ?? "").trim() || null;
+  const batchSeed = (org?.avatarSeed ?? "").trim() || null;
+  const feedUrl = (post.org_avatar_url ?? "").trim() || null;
+  const feedSeed = (post.org_avatar_seed ?? "").trim() || null;
+  return {
+    avatarUrl: null,
+    avatarSeed: null,
+    organizationImageUrl: batchUrl || feedUrl,
+    organizationAvatarSeed: batchSeed || feedSeed,
+    initialsColorSeed: orgId ? `org:${orgId}` : `post:${post.id}`,
+  };
+}

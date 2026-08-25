@@ -234,12 +234,19 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
       <View style={[flow.main, styles.main]}>{mainContent}</View>
 
       {isDesktopWeb ? null : (
-        <View style={[flow.keypadDock, useInset && styles.keypadDockInset]}>
+        <View
+          style={[
+            flow.keypadDock,
+            useInset && styles.keypadDockInset,
+            flow.keypadDockSignIn,
+          ]}
+        >
           <DecimalKeypad
             onKey={handleKey}
             showDecimal
             variant="pay"
-            size="compact"
+            size="default"
+            hapticsEnabled={false}
           />
         </View>
       )}

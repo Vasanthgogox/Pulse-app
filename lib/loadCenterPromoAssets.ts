@@ -195,14 +195,14 @@ export const LOAD_CENTER_PROMO_PRESETS: Record<
   claimed_awarded: {
     illustration: Illustration14,
     aspect: 600 / 466,
-    title: "No claimed loads yet",
+    title: "Nothing needs allocation",
     description:
-      "Freight awarded to you appears here. Assign staff and deploy when you are ready to run.",
+      "Bids you won that still need a vehicle show here. Allocate when you are ready to run.",
     ctaLabel: "",
     bullets: [
-      { label: "Award confirmed", icon: "pdf" },
-      { label: "Assign staff", icon: "mail" },
-      { label: "Deploy vehicle", icon: "vector" },
+      { label: "Bid won", icon: "pdf" },
+      { label: "Allocate vehicle", icon: "mail" },
+      { label: "Assign driver", icon: "vector" },
       { label: "Share indent", icon: "doc" },
     ],
   },

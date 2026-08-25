@@ -141,6 +141,8 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
         partyPreview={
           selectedPartner ? supplierToNumericPartyPreview(selectedPartner) : undefined
         }
+        /** Parent WizardPartyContextRow already shows partner. */
+        suppressPartyPreview
         wizardShell
       />
     );

@@ -6,7 +6,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Feather } from "@expo/vector-icons";
-import { Home, MoreHorizontal, Navigation, Package } from "lucide-react-native";
+import { Home, Navigation, Package } from "lucide-react-native";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   Alert,
@@ -133,7 +133,11 @@ export function LiveTrackingModal({
 }: LiveTrackingModalProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const mapHeroHeight = Math.round(Math.min(windowHeight * 0.48, 440));
+  // Map sits below an in-flow header (not under an absolute overlay), so keep
+  // the hero shorter than a full-bleed design and leave room for the sheet.
+  const mapHeroHeight = Math.round(
+    Math.min(Math.max(windowHeight * 0.36, 220), 360),
+  );
   const [activityOpen, setActivityOpen] = useState(true);
   const handleClose = useCallback(() => {
     onClose();
@@ -185,6 +189,21 @@ export function LiveTrackingModal({
       Alert.alert("Unable to open maps", "Could not open the driver location.");
     }
   }, [mapTruckLocation, locationAddress]);
+
+  const openPingInMaps = useCallback(async (latitude: number, longitude: number) => {
+    const label = encodeURIComponent("Driver ping");
+    const url =
+      Platform.OS === "ios"
+        ? `maps:?q=${latitude},${longitude}&ll=${latitude},${longitude}`
+        : Platform.OS === "android"
+          ? `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`
+          : `https://www.google.com/maps?q=${latitude},${longitude}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Unable to open maps", "Could not open this ping location.");
+    }
+  }, []);
 
   if (!visible) return null;
 
@@ -367,6 +386,22 @@ export function LiveTrackingModal({
     </View>
   );
 
+  const driverDisplayName = driverName?.trim() || "Driver";
+  const hasPhone = Boolean(driverPhone?.trim());
+
+  // Sample prior GPS points (movement) so the route lists driver travel, not
+  // only origin → current. Latest point is the Current row below.
+  const movementPings = (() => {
+    const trail = mapDbLocationTrail ?? [];
+    if (trail.length === 0) return [] as typeof trail;
+    const prior = mapTruckLocation && trail.length > 1 ? trail.slice(0, -1) : trail;
+    if (prior.length === 0) return [] as typeof trail;
+    const max = 4;
+    if (prior.length <= max) return prior;
+    const step = (prior.length - 1) / (max - 1);
+    return Array.from({ length: max }, (_, i) => prior[Math.round(i * step)]!);
+  })();
+
   return (
     <Modal
       visible
@@ -376,10 +411,8 @@ export function LiveTrackingModal({
       statusBarTranslucent
     >
       <View style={styles.root}>
-        <View
-          style={[styles.headerFloat, { paddingTop: insets.top + 8 }]}
-          pointerEvents="box-none"
-        >
+        {/* In-flow header — avoids absolute overlay colliding with map / sheet. */}
+        <View style={[styles.headerBar, { paddingTop: insets.top + 8 }]}>
           <Pressable
             onPress={handleClose}
             style={({ pressed }) => [
@@ -388,6 +421,7 @@ export function LiveTrackingModal({
             ]}
             accessibilityRole="button"
             accessibilityLabel="Close live tracking"
+            hitSlop={Layout.touchTargetHitSlop}
           >
             <FontAwesome name="chevron-left" size={14} color={Theme.textPrimaryDark} />
           </Pressable>
@@ -396,31 +430,30 @@ export function LiveTrackingModal({
             <Text style={styles.headerTitle} numberOfLines={1}>
               {headerTitle}
             </Text>
-            <Text style={styles.headerSubtitle} numberOfLines={1}>
-              {headerSubtitle}
-            </Text>
+            {headerSubtitle ? (
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                {headerSubtitle}
+              </Text>
+            ) : null}
           </View>
 
           <Pressable
-            onPress={
-              driverPhone?.trim()
-                ? handleCallDriverToCoordinate
-                : handleClose
-            }
+            onPress={hasPhone ? handleCallDriverToCoordinate : undefined}
+            disabled={!hasPhone}
             style={({ pressed }) => [
               styles.headerCircleBtn,
-              pressed && styles.headerCircleBtnPressed,
+              !hasPhone && styles.headerCircleBtnDisabled,
+              pressed && hasPhone && styles.headerCircleBtnPressed,
             ]}
             accessibilityRole="button"
-            accessibilityLabel={
-              driverPhone?.trim() ? "Call driver" : "More options"
-            }
+            accessibilityLabel={hasPhone ? "Call driver" : "No driver phone"}
+            hitSlop={Layout.touchTargetHitSlop}
           >
-            {driverPhone?.trim() ? (
-              <FontAwesome name="phone" size={14} color={Theme.textPrimaryDark} />
-            ) : (
-              <MoreHorizontal size={16} color={Theme.textPrimaryDark} strokeWidth={1.75} />
-            )}
+            <FontAwesome
+              name="phone"
+              size={14}
+              color={hasPhone ? Theme.textPrimaryDark : Theme.textMuted}
+            />
           </Pressable>
         </View>
 
@@ -445,21 +478,27 @@ export function LiveTrackingModal({
               truckStatus={mapTruckStatus}
               height={mapHeroHeight}
               tripId={trip.id}
-              trackingEnabled={trackingBroadcastActive}
+              trackingEnabled={
+                trackingBroadcastActive || (mapDbLocationTrail?.length ?? 0) > 0
+              }
               fitPaddingBottom={96}
               driverAvatarUri={driverAvatarUri}
               driverAvatarSeed={driverAvatarSeed ?? trip.driver_id}
               driverOnline={trackingBroadcastActive}
             />
-            <View style={styles.mapChip} pointerEvents="none">
-              <Text style={styles.mapChipText}>MAP</Text>
-            </View>
             {trackingState.broadcastActive ? (
               <View style={styles.livePill} pointerEvents="none">
                 <View style={styles.liveDot} />
                 <Text style={styles.livePillText}>LIVE</Text>
               </View>
+            ) : (mapDbLocationTrail?.length ?? 0) > 0 ? (
+              <View style={[styles.livePill, styles.historyPill]} pointerEvents="none">
+                <Text style={styles.livePillText}>PINGS</Text>
+              </View>
             ) : null}
+            <View style={styles.mapChip} pointerEvents="none">
+              <Text style={styles.mapChipText}>MAP</Text>
+            </View>
           </View>
 
           <View style={styles.sheetStack}>
@@ -510,14 +549,18 @@ export function LiveTrackingModal({
                       />
                     </View>
                     <View style={styles.statusCopy}>
-                      <Text style={styles.statusHeadline}>{statusHeadline}</Text>
+                      <Text style={styles.statusHeadline} numberOfLines={2}>
+                        {statusHeadline}
+                      </Text>
                       {presentation?.distanceRemainingLabel ? (
-                        <Text style={styles.statusSubcopy}>
+                        <Text style={styles.statusSubcopy} numberOfLines={1}>
                           {presentation.distanceRemainingLabel}
                         </Text>
                       ) : null}
                     </View>
                   </View>
+                </View>
+                <View style={styles.statusMetaRow}>
                   <View
                     style={[
                       styles.statusChip,
@@ -547,6 +590,7 @@ export function LiveTrackingModal({
                           : "TRACKING"}
                     </Text>
                   </View>
+                  <Text style={styles.progressPctLabel}>{progressPct}% en route</Text>
                 </View>
                 <View style={styles.progressTrack}>
                   <View
@@ -584,13 +628,14 @@ export function LiveTrackingModal({
                 <Text style={styles.driverCardLabel}>Driver</Text>
                 <View style={styles.driverCardBody}>
                   <View style={styles.driverCardTextCol}>
-                    <Text style={styles.driverCardLocation} numberOfLines={2}>
-                      {lastPingDisplay.hasPing
-                        ? (driverPingLine ?? "Last driver ping")
-                        : driverOffline
-                          ? "No GPS ping yet"
-                          : "Waiting for GPS"}
+                    <Text style={styles.driverCardName} numberOfLines={1}>
+                      {driverDisplayName}
                     </Text>
+                    {vehicleLabel?.trim() ? (
+                      <Text style={styles.driverCardVehicle} numberOfLines={1}>
+                        {vehicleLabel.trim()}
+                      </Text>
+                    ) : null}
                     <View style={styles.driverCardMetaRow}>
                       <Text style={styles.driverCardMetaLabel}>Last updated</Text>
                       <Text
@@ -639,6 +684,45 @@ export function LiveTrackingModal({
                     subtitle={trip.pickup_area?.trim() || "Pickup"}
                     isFirst
                   />
+                  {movementPings.map((ping, idx) => {
+                    const lat = ping.latitude;
+                    const lon = ping.longitude;
+                    const when = ping.recorded_at
+                      ? formatAssignmentDate(ping.recorded_at)
+                      : "GPS ping";
+                    return (
+                      <RouteStopRow
+                        key={`ping-${ping.recorded_at ?? idx}-${lat}-${lon}`}
+                        variant="origin"
+                        icon={
+                          <Navigation
+                            size={11}
+                            color={Theme.pulseIndigo}
+                            strokeWidth={2}
+                          />
+                        }
+                        label={`Ping ${idx + 1}`}
+                        title={`${lat.toFixed(4)}, ${lon.toFixed(4)}`}
+                        subtitle={when}
+                        onPress={() => void openPingInMaps(lat, lon)}
+                        actionLabel="Open in maps"
+                      />
+                    );
+                  })}
+                  {mapTruckLocation ? (
+                    <RouteStopRow
+                      variant={driverOffline ? "current-offline" : "current-live"}
+                      label="Current"
+                      title={driverPingLine ?? "Driver location"}
+                      subtitle={
+                        lastPingDisplay.hasPing
+                          ? (offlineLabel ?? pingTimeShort ?? "Last GPS ping")
+                          : "Waiting for GPS"
+                      }
+                      onPress={openLastPingInMaps}
+                      actionLabel="Open in maps"
+                    />
+                  ) : null}
                   <RouteStopRow
                     variant="destination"
                     icon={
@@ -659,12 +743,12 @@ export function LiveTrackingModal({
               <View style={styles.actionBar}>
                 <Pressable
                   onPress={handleCallDriverToCoordinate}
-                  disabled={!driverPhone?.trim()}
+                  disabled={!hasPhone}
                   style={({ pressed }) => [
                     styles.actionBtn,
                     styles.actionBtnPrimary,
-                    !driverPhone?.trim() && styles.actionBtnDisabled,
-                    pressed && styles.actionBtnPressed,
+                    !hasPhone && styles.actionBtnDisabled,
+                    pressed && hasPhone && styles.actionBtnPressed,
                   ]}
                   accessibilityRole="button"
                   accessibilityLabel="Call driver"
@@ -672,7 +756,7 @@ export function LiveTrackingModal({
                   <Feather name="phone" size={14} color={Theme.textPrimaryDark} />
                   <Text style={styles.actionBtnPrimaryText}>Call driver</Text>
                 </Pressable>
-                {driverOffline && onSendLoginReminder ? (
+                {onSendLoginReminder ? (
                   <Pressable
                     onPress={onSendLoginReminder}
                     style={({ pressed }) => [
@@ -684,11 +768,13 @@ export function LiveTrackingModal({
                     accessibilityLabel="Request driver location"
                   >
                     <Feather name="bell" size={14} color={Theme.pulseIndigo} />
-                    <Text style={styles.actionBtnSecondaryText}>Request ping</Text>
+                    <Text style={styles.actionBtnSecondaryText}>
+                      {driverOffline ? "Request ping" : "Nudge driver"}
+                    </Text>
                   </Pressable>
                 ) : null}
               </View>
-              {driverOffline && onReassignDriver ? (
+              {onReassignDriver ? (
                 <Pressable
                   onPress={onReassignDriver}
                   style={({ pressed }) => [
@@ -833,14 +919,14 @@ function RouteStopRow({
     </>
   );
 
-  if (isCurrent && onPress) {
+  if (onPress) {
     return (
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [
           styles.routeRow,
-          styles.routeRowCurrent,
-          {
+          isCurrent && styles.routeRowCurrent,
+          isCurrent && {
             backgroundColor: isOffline ? tone.rowBg : TRACKING.live.rowBg,
             borderColor: isOffline ? tone.rowBorder : TRACKING.live.rowBorder,
           },
@@ -1034,7 +1120,7 @@ const styles = StyleSheet.create({
   livePill: {
     position: "absolute",
     left: SCREEN_PAD,
-    bottom: SHEET_OVERLAP + 12,
+    top: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
@@ -1055,6 +1141,9 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
     letterSpacing: 0.4,
   },
+  historyPill: {
+    backgroundColor: "rgba(15, 23, 42, 0.78)",
+  },
   sheetStack: {
     marginTop: -SHEET_OVERLAP,
     paddingHorizontal: 0,
@@ -1063,37 +1152,30 @@ const styles = StyleSheet.create({
     maxWidth: Layout.trackingSheetMaxWidth,
     alignSelf: "center",
   },
-  headerFloat: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 30,
+  headerBar: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: SCREEN_PAD,
-    paddingBottom: 8,
+    paddingBottom: 10,
     gap: 8,
+    backgroundColor: Theme.screenBackground,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    zIndex: 2,
   },
   headerCircleBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Theme.screenBackground,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-      },
-      android: { elevation: 4 },
-      default: {
-        boxShadow: "0 2px 10px rgba(15, 23, 42, 0.12)",
-      } as object,
-    }),
+    flexShrink: 0,
+  },
+  headerCircleBtnDisabled: {
+    opacity: 0.45,
   },
   headerCircleBtnPressed: {
     opacity: 0.88,
@@ -1104,15 +1186,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.15,
+    letterSpacing: -0.2,
     textAlign: "center",
   },
   headerSubtitle: {
     marginTop: 2,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
     color: Theme.textPrimary,
     textAlign: "center",
@@ -1151,8 +1233,7 @@ const styles = StyleSheet.create({
   },
   statusBannerTop: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: 12,
   },
   statusBannerLeft: {
@@ -1189,13 +1270,18 @@ const styles = StyleSheet.create({
     color: Theme.textPrimary,
     lineHeight: 14,
   },
+  statusMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
   statusChip: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
     backgroundColor: Theme.surfaceGray,
     flexShrink: 0,
-    alignSelf: "center",
   },
   statusChipText: {
     fontSize: 9,
@@ -1205,6 +1291,14 @@ const styles = StyleSheet.create({
   },
   statusChipTextSolid: {
     color: Theme.textOnPrimary,
+  },
+  progressPctLabel: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+    textAlign: "right",
   },
   progressTrack: {
     height: 5,
@@ -1220,17 +1314,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
-    marginTop: 12,
+    gap: 10,
   },
   arrivalLabel: {
     fontSize: 11,
     fontWeight: "600",
     color: Theme.textPrimary,
+    flexShrink: 0,
   },
   arrivalValue: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 14,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
+    textAlign: "right",
   },
   arrivalValueMuted: {
     color: Theme.textPrimary,
@@ -1260,7 +1358,19 @@ const styles = StyleSheet.create({
   driverCardTextCol: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: 3,
+  },
+  driverCardName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    lineHeight: 19,
+  },
+  driverCardVehicle: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textPrimary,
+    lineHeight: 16,
   },
   driverCardLocation: {
     fontSize: 14,
@@ -1272,6 +1382,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
+    marginTop: 2,
   },
   driverCardMetaLabel: {
     fontSize: 10,

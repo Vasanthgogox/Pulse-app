@@ -81,7 +81,7 @@ export function NumericEntryRecipientHero({
       {party.subtitle ? (
         <Text
           style={[styles.subtitle, dense && styles.subtitleDense]}
-          numberOfLines={2}
+          numberOfLines={3}
         >
           {party.subtitle}
         </Text>

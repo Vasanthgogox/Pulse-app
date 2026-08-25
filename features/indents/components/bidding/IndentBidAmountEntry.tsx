@@ -16,6 +16,10 @@ export interface IndentBidAmountEntryProps {
   indentDisplayNumber: string;
   origin?: string | null;
   destination?: string | null;
+  /** e.g. Container / Trailer */
+  vehicleType?: string | null;
+  /** e.g. 30 t / 30000 KG */
+  weightLabel?: string | null;
   targetRateInr?: number;
   /** Pre-fill when updating an existing quote. */
   initialAmount?: number | null;
@@ -37,6 +41,12 @@ function routeSubtitle(
   return `${o} → ${d}`;
 }
 
+function cleanSpec(value?: string | null): string | undefined {
+  const v = (value ?? "").trim();
+  if (!v || v === "—") return undefined;
+  return v;
+}
+
 export function IndentBidAmountEntry({
   visible,
   onClose,
@@ -44,6 +54,8 @@ export function IndentBidAmountEntry({
   indentDisplayNumber,
   origin,
   destination,
+  vehicleType,
+  weightLabel,
   targetRateInr,
   initialAmount,
   isUpdate = false,
@@ -51,6 +63,8 @@ export function IndentBidAmountEntry({
   onClearValidationError,
   onInvalidAmount,
 }: IndentBidAmountEntryProps) {
+  const title = isUpdate ? "Update your bid" : "Place your bid";
+
   const initialValue = useMemo(() => {
     if (initialAmount != null && Number(initialAmount) > 0) {
       return toRawString(initialAmount);
@@ -58,23 +72,38 @@ export function IndentBidAmountEntry({
     return "";
   }, [visible, initialAmount]);
 
-  const contextLine = useMemo(() => {
-    const parts = [`Indent ${indentDisplayNumber}`];
-    if (targetRateInr != null && targetRateInr > 0) {
-      parts.push(`Target ${formatINR(targetRateInr)}`);
-    }
-    return parts.join(" · ");
-  }, [indentDisplayNumber, targetRateInr]);
+  const loadSpecs = useMemo(() => {
+    const parts = [cleanSpec(vehicleType), cleanSpec(weightLabel)].filter(
+      Boolean,
+    ) as string[];
+    return parts.length > 0 ? parts.join(" · ") : undefined;
+  }, [vehicleType, weightLabel]);
 
   const partyPreview = useMemo((): NumericEntryPartyPreview | undefined => {
-    const subtitle = routeSubtitle(origin, destination);
-    if (!subtitle) return undefined;
+    const route = routeSubtitle(origin, destination);
+    const subtitleParts = [
+      route,
+      loadSpecs,
+      targetRateInr != null && targetRateInr > 0
+        ? `Target ${formatINR(targetRateInr)}`
+        : null,
+    ].filter(Boolean) as string[];
     return {
-      name: indentDisplayNumber,
-      subtitle,
+      name: title,
+      subtitle:
+        subtitleParts.length > 0
+          ? subtitleParts.join(" · ")
+          : `Indent ${indentDisplayNumber}`,
       entityType: "supplier",
     };
-  }, [indentDisplayNumber, origin, destination]);
+  }, [
+    title,
+    indentDisplayNumber,
+    origin,
+    destination,
+    loadSpecs,
+    targetRateInr,
+  ]);
 
   const handleSubmit = useCallback(
     (raw: string) => {
@@ -97,8 +126,8 @@ export function IndentBidAmountEntry({
       onClose={onClose}
       onSubmit={handleSubmit}
       initialValue={initialValue}
-      label={isUpdate ? "Update your bid" : "Your bid"}
-      contextLine={partyPreview ? undefined : contextLine}
+      label={title}
+      contextLine={undefined}
       partyPreview={partyPreview}
       type="currency"
       prefix="₹"

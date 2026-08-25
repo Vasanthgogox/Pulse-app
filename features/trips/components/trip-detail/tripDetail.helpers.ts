@@ -29,6 +29,7 @@ function isUsableSupplierDisplayName(
     lc === "supplier" ||
     lc === "partner" ||
     lc === "awaiting data" ||
+    lc === "connected" ||
     lc === "aggregate supplier" ||
     lc === "asset / own vehicle" ||
     lc === "own vehicle"
@@ -50,6 +51,8 @@ export function resolveTripSupplierDisplayName(opts: {
   partnerName?: string | null;
   supplierPartyName?: string | null;
   tripSupplierName?: string | null;
+  /** Linked org profile name (e.g. from get_connection_partner_display). */
+  linkedOrganizationName?: string | null;
   clientName?: string | null;
   ledgerEntries?: TripSupplierNameLedgerEntry[] | null;
 }): string | null {
@@ -58,6 +61,7 @@ export function resolveTripSupplierDisplayName(opts: {
     opts.partnerName,
     opts.supplierPartyName,
     opts.tripSupplierName,
+    opts.linkedOrganizationName,
   ]) {
     if (isUsableSupplierDisplayName(candidate, clientName)) {
       return candidate.trim();

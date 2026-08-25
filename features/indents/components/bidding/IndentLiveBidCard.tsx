@@ -5,6 +5,7 @@
  */
 import { memo, useMemo } from "react";
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -25,7 +26,6 @@ import {
 } from "@/features/indents/utils/bidding/indentLiveBids.util";
 import {
   indentHubCardShadow,
-  indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
 import type { IndentBidAlertInfo } from "@/features/indents/utils/bidding/indentBidAlert.util";
 import { formatINR } from "@/lib/format";
@@ -43,14 +43,17 @@ export interface IndentLiveBidCardProps {
   /** True when the bidder is already an integrated partner of the viewing org */
   isConnectedPartner?: boolean;
   onPress?: () => void;
-  /** Owner: open counter-offer modal for this bid */
+  /** Owner: open counter-offer keypad for this bid */
   onCounterOffer?: () => void;
-  /** Owner: award this bid directly from the card */
+  /** @deprecated Award lives on the sticky footer — ignored on the card. */
   onAwardBid?: () => void;
   awarding?: boolean;
+  /** Mobile stacked: denser row; Counter still available when selected. */
+  minimal?: boolean;
 }
 
-const AVATAR_SIZE = 34;
+const AVATAR_SIZE = 28;
+const AVATAR_SIZE_MINIMAL = 30;
 
 function stripCurrencyPrefix(formatted: string): string {
   return formatted.replace(/^[^\d,.-]+/, "").trim() || formatted;
@@ -111,9 +114,12 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
   isConnectedPartner = false,
   onPress,
   onCounterOffer,
-  onAwardBid,
-  awarding = false,
+  onAwardBid: _onAwardBid,
+  awarding: _awarding = false,
+  minimal = false,
 }: IndentLiveBidCardProps) {
+  void _onAwardBid;
+  void _awarding;
   const partyName =
     (quote.bidder_organization_name ?? "Supplier").trim() || "Supplier";
   const amount = Number(quote.amount ?? 0);
@@ -166,10 +172,153 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
     ],
   );
 
-  const hasCardActions = Boolean(onCounterOffer || onAwardBid);
+  const hasCardActions = Boolean(onCounterOffer);
   const selectedHint =
     footerInsight?.recommendation ??
     (isLowest ? "At or below your target" : "Ready to award from footer");
+
+  if (minimal) {
+    const lowestBadge = badges.find(
+      (b) => b.kind === "lowest" || b.kind === "recommended",
+    );
+    const targetLabel =
+      targetRateInr > 0
+        ? `Target · ₹ ${stripCurrencyPrefix(formatINR(targetRateInr))}`
+        : null;
+    const marginLabel =
+      margin != null
+        ? `Margin · ${margin.marginPct}%`
+        : null;
+    const statusToneLabel = selected && !disabled && !isAccepted
+      ? "Selected"
+      : lowestBadge && !isAccepted && !isRejected
+        ? lowestBadge.label
+        : statusLabel;
+
+    const minimalContent = (
+      <View
+        style={[
+          styles.minimalCard,
+          selected && styles.minimalCardSelected,
+          disabled && styles.cardDisabled,
+          isAccepted && styles.cardAwarded,
+          isRejected && styles.cardRejected,
+        ]}
+      >
+        <View style={styles.minimalTop}>
+          <EntityAvatar
+            name={partyName}
+            initialsColorSeed={quote.bidder_organization_id}
+            entityType="supplier"
+            size={AVATAR_SIZE_MINIMAL}
+            showIntegrationBadge={false}
+          />
+          <View style={styles.minimalBody}>
+            <View style={styles.minimalNameRow}>
+              <Text style={styles.minimalName} numberOfLines={1}>
+                {partyName}
+              </Text>
+              {isConnectedPartner ? (
+                <View style={styles.partnerPill}>
+                  <Text style={styles.partnerPillText}>Verified</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.minimalMeta} numberOfLines={1}>
+              {isConnectedPartner ? "Network supplier" : "Marketplace"}
+              {submitted ? ` · ${submitted}` : ""}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.minimalStatusPill,
+              isAccepted && styles.statusPillAwarded,
+              isRejected && styles.statusPillRejected,
+              isCountered && styles.statusPillCountered,
+              !isAccepted &&
+                !isRejected &&
+                !isCountered &&
+                styles.statusPillPending,
+              selected && !disabled && styles.statusPillSelected,
+            ]}
+          >
+            <Text
+              style={[
+                styles.minimalStatusText,
+                isAccepted && styles.statusTextAwarded,
+                isRejected && styles.statusTextRejected,
+                isCountered && styles.statusTextCountered,
+                !isAccepted &&
+                  !isRejected &&
+                  !isCountered &&
+                  styles.statusTextPending,
+                selected && !disabled && styles.statusTextSelected,
+              ]}
+              numberOfLines={1}
+            >
+              {statusToneLabel.toUpperCase()}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.minimalCommerce}>
+          <View style={styles.minimalAmountCol}>
+            <Text style={styles.minimalBidLabel}>Bid</Text>
+            <Text
+              style={[
+                styles.minimalAmount,
+                isLowest && !isRejected && styles.minimalAmountGreen,
+              ]}
+              numberOfLines={1}
+            >
+              ₹ {amountDisplay}
+            </Text>
+            {isCountered ? (
+              <Text style={styles.minimalRef} numberOfLines={1}>
+                Counter · ₹ {stripCurrencyPrefix(formatINR(counterAmount!))}
+              </Text>
+            ) : targetLabel || marginLabel ? (
+              <Text style={styles.minimalRef} numberOfLines={1}>
+                {[targetLabel, marginLabel].filter(Boolean).join("  ·  ")}
+              </Text>
+            ) : null}
+          </View>
+          {selected && !disabled && onCounterOffer ? (
+            <TouchableOpacity
+              style={styles.minimalCounterBtn}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                onCounterOffer();
+              }}
+              activeOpacity={0.85}
+              accessibilityLabel={
+                isCountered ? "Update counter offer" : "Counter offer"
+              }
+              hitSlop={Layout.touchTargetHitSlop}
+            >
+              <Text style={styles.minimalCounterBtnText}>
+                {isCountered ? "Update" : "Counter"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+    );
+
+    if (onPress) {
+      return (
+        <Pressable
+          onPress={onPress}
+          disabled={disabled}
+          accessibilityRole="button"
+          accessibilityState={{ selected, disabled }}
+        >
+          {minimalContent}
+        </Pressable>
+      );
+    }
+    return minimalContent;
+  }
 
   const content = (
     <View
@@ -229,10 +378,16 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
           ) : null}
         </View>
 
-        <View style={styles.amountCol}>
+          <View style={styles.amountCol}>
           <View style={styles.amountHero}>
             <Text style={styles.amountCurrency}>₹</Text>
-            <Text style={styles.amount} numberOfLines={1}>
+            <Text
+              style={[
+                styles.amount,
+                isLowest && !isRejected && styles.amountGreen,
+              ]}
+              numberOfLines={1}
+            >
               {amountDisplay}
             </Text>
           </View>
@@ -240,6 +395,10 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
             <View
               style={[
                 styles.statusPill,
+                !isAccepted &&
+                  !isRejected &&
+                  !isCountered &&
+                  styles.statusPillPending,
                 isAccepted && styles.statusPillAwarded,
                 isRejected && styles.statusPillRejected,
                 isCountered && styles.statusPillCountered,
@@ -252,6 +411,10 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
               <Text
                 style={[
                   styles.statusText,
+                  !isAccepted &&
+                    !isRejected &&
+                    !isCountered &&
+                    styles.statusTextPending,
                   isAccepted && styles.statusTextAwarded,
                   isRejected && styles.statusTextRejected,
                   isCountered && styles.statusTextCountered,
@@ -346,52 +509,35 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
             <View style={styles.actionLeft}>
               <FontAwesome
                 name="check-circle"
-                size={13}
+                size={12}
                 color={Theme.positive}
               />
               <Text style={styles.actionLeftText} numberOfLines={1}>
                 {isCountered
-                  ? `Counter · ₹ ${stripCurrencyPrefix(formatINR(counterAmount!))}`
-                  : "Selected"}
+                  ? `Countered · ₹ ${stripCurrencyPrefix(formatINR(counterAmount!))}`
+                  : "Selected · send a counter or award below"}
               </Text>
             </View>
-            <View style={styles.actionBtns}>
-              {onCounterOffer ? (
-                <TouchableOpacity
-                  style={styles.counterBtn}
-                  onPress={(e) => {
-                    e.stopPropagation?.();
-                    onCounterOffer();
-                  }}
-                  activeOpacity={0.85}
-                  accessibilityLabel="Counter offer"
-                  hitSlop={Layout.touchTargetHitSlop}
-                >
-                  <Text style={styles.counterBtnText}>Counter</Text>
-                </TouchableOpacity>
-              ) : null}
-              {onAwardBid ? (
-                <TouchableOpacity
-                  style={[styles.awardBtn, awarding && styles.awardBtnDisabled]}
-                  onPress={(e) => {
-                    e.stopPropagation?.();
-                    if (!awarding) onAwardBid();
-                  }}
-                  activeOpacity={0.9}
-                  disabled={awarding}
-                  accessibilityLabel="Award bid"
-                  hitSlop={Layout.touchTargetHitSlop}
-                >
-                  <Text style={styles.awardBtnText}>
-                    {awarding ? "Awarding…" : "Award"}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
+            <TouchableOpacity
+              style={styles.counterBtn}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                onCounterOffer?.();
+              }}
+              activeOpacity={0.85}
+              accessibilityLabel={
+                isCountered ? "Update counter offer" : "Counter offer"
+              }
+              hitSlop={Layout.touchTargetHitSlop}
+            >
+              <Text style={styles.counterBtnText}>
+                {isCountered ? "Update counter" : "Counter"}
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.selectedStrip}>
-            <FontAwesome name="check-circle" size={13} color={Theme.positive} />
+            <FontAwesome name="check-circle" size={12} color={Theme.positive} />
             <Text style={styles.selectedStripText}>{selectedHint}</Text>
           </View>
         )
@@ -456,12 +602,11 @@ const styles = StyleSheet.create({
   },
   pressablePressed: {
     opacity: 0.96,
-    transform: [{ translateY: -0.5 }],
   },
   card: {
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: "hidden",
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
   },
@@ -471,7 +616,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   cardAwarded: {
-    borderColor: Theme.accentGold,
+    borderColor: Theme.positiveMutedDarkBorder,
   },
   cardRejected: {
     borderColor: Theme.borderMedium,
@@ -483,14 +628,14 @@ const styles = StyleSheet.create({
   topSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   avatarWrap: {
-    width: AVATAR_SIZE + 4,
-    height: AVATAR_SIZE + 4,
-    borderRadius: 12,
+    width: AVATAR_SIZE + 2,
+    height: AVATAR_SIZE + 2,
+    borderRadius: 999,
     backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
@@ -500,126 +645,132 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     minWidth: 0,
-    gap: 5,
-    paddingRight: 6,
+    gap: 4,
+    paddingRight: 4,
   },
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 5,
   },
   partyName: {
-    ...indentReviewHubText.partyTitle,
-    fontSize: 13,
-    fontWeight: "900",
+    fontSize: 11,
+    fontWeight: "700",
     letterSpacing: 0.15,
-    color: Theme.textPrimaryDark,
+    color: Theme.gpayListTitle,
     flexShrink: 1,
   },
   partnerPill: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 5,
+    borderRadius: 4,
     backgroundColor: Theme.positiveMuted,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.positiveMutedDarkBorder,
   },
   partnerPillText: {
     fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.35,
+    fontWeight: "700",
+    letterSpacing: 0.3,
     textTransform: "uppercase",
     color: Theme.positive,
   },
   partnerPillMarket: {
-    backgroundColor: Theme.accentBrownMuted,
-    borderColor: Theme.accentBrownBorder,
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderMedium,
   },
   partnerPillTextMarket: {
-    color: Theme.accentBrown,
+    color: Theme.gpayListSubtitle,
   },
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 5,
+    gap: 4,
   },
   badge: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 5,
+    borderRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
   },
   badgeRecommended: {
-    backgroundColor: Theme.surface,
-    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positiveMutedDarkBorder,
   },
   badgeLowest: {
     backgroundColor: Theme.positiveMuted,
     borderColor: Theme.positiveMutedDarkBorder,
   },
   badgeTarget: {
-    backgroundColor: Theme.pulseIndigoWash,
-    borderColor: Theme.pulseIndigoRing,
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positiveMutedDarkBorder,
   },
   badgeAwarded: {
-    backgroundColor: Theme.accentGoldMuted,
-    borderColor: Theme.accentGold,
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positiveMutedDarkBorder,
   },
   badgeText: {
     fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+    fontWeight: "700",
+    letterSpacing: 0.25,
     textTransform: "uppercase",
   },
-  badgeTextRecommended: { color: Theme.textRouteCard },
+  badgeTextRecommended: { color: Theme.positive },
   badgeTextLowest: { color: Theme.positive },
-  badgeTextTarget: { color: Theme.driverPrimary },
-  badgeTextAwarded: { color: Theme.accentBrownDeep },
+  badgeTextTarget: { color: Theme.positive },
+  badgeTextAwarded: { color: Theme.positive },
   amountCol: {
     alignItems: "flex-end",
     justifyContent: "center",
-    gap: 4,
+    gap: 3,
     flexShrink: 0,
-    minWidth: 92,
+    minWidth: 84,
   },
   amountHero: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 2,
+    gap: 1,
   },
   amountCurrency: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textSecondary,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.gpayListSubtitle,
   },
   amount: {
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: -0.35,
-    maxWidth: 124,
-    color: Theme.textPrimaryDark,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+    maxWidth: 108,
+    color: Theme.gpayListTitle,
     fontVariant: ["tabular-nums"],
+  },
+  amountGreen: {
+    color: Theme.gpayAmountReceived,
   },
   statusMeta: {
     alignItems: "flex-end",
     gap: 2,
   },
   statusPill: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 5,
+    borderRadius: 4,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
   },
-  statusPillSelected: {
+  statusPillPending: {
     backgroundColor: Theme.positiveMuted,
     borderColor: Theme.positiveMutedDarkBorder,
   },
+  statusPillSelected: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positive,
+  },
   statusPillAwarded: {
-    backgroundColor: Theme.accentGoldMuted,
-    borderColor: Theme.accentGold,
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positiveMutedDarkBorder,
   },
   statusPillRejected: {
     backgroundColor: Theme.negativeMuted,
@@ -631,18 +782,19 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 8,
-    fontWeight: "800",
+    fontWeight: "700",
     letterSpacing: 0.35,
     color: Theme.textMuted,
   },
+  statusTextPending: { color: Theme.positive },
   statusTextSelected: { color: Theme.positive },
-  statusTextAwarded: { color: Theme.accentBrownDeep },
+  statusTextAwarded: { color: Theme.positive },
   statusTextRejected: { color: Theme.teslaRed },
   statusTextCountered: { color: Theme.aggregatePillText },
   submittedText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: Theme.textMuted,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.gpayListSubtitle,
   },
   metricsBar: {
     flexDirection: "row",
@@ -650,38 +802,38 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 2,
   },
   metricCol: {
     flex: 1,
     minWidth: 0,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     justifyContent: "flex-start",
   },
   metricDivider: {
     width: StyleSheet.hairlineWidth,
     alignSelf: "stretch",
     backgroundColor: Theme.borderLight,
-    marginVertical: 2,
+    marginVertical: 1,
   },
   metricLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.35,
+    fontSize: 8,
+    fontWeight: "600",
+    letterSpacing: 0.4,
     textTransform: "uppercase",
-    color: Theme.textMuted,
-    marginBottom: 4,
+    color: Theme.gpayListSubtitle,
+    marginBottom: 3,
   },
   metricValue: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.15,
+    color: Theme.gpayListTitle,
+    letterSpacing: -0.1,
   },
   metricPositive: {
-    color: Theme.success,
+    color: Theme.gpayAmountReceived,
   },
   metricNegative: {
     color: Theme.teslaRed,
@@ -689,27 +841,27 @@ const styles = StyleSheet.create({
   metricHintRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginTop: 4,
-    minHeight: 14,
+    gap: 3,
+    marginTop: 3,
+    minHeight: 12,
   },
   metricHint: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.success,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.positive,
     flexShrink: 1,
   },
   metricHintSpacer: {
-    minHeight: 14,
-    marginTop: 4,
+    minHeight: 12,
+    marginTop: 3,
   },
   actionStrip: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     backgroundColor: Theme.positiveMuted,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.positiveMutedDarkBorder,
@@ -717,29 +869,23 @@ const styles = StyleSheet.create({
   actionLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     flexShrink: 1,
     minWidth: 0,
     flex: 1,
   },
   actionLeftText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.gpayListTitle,
     flexShrink: 1,
-  },
-  actionBtns: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexShrink: 0,
   },
   selectedStrip: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     backgroundColor: Theme.positiveMuted,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.positiveMutedDarkBorder,
@@ -747,50 +893,38 @@ const styles = StyleSheet.create({
   selectedStripText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
-    lineHeight: 17,
-    color: Theme.textPrimaryDark,
+    lineHeight: 15,
+    color: Theme.gpayListTitle,
   },
   counterBtn: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    minHeight: 36,
-    borderRadius: 10,
+    minHeight: 34,
+    borderRadius: 8,
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.positiveMutedDarkBorder,
     justifyContent: "center",
+    flexShrink: 0,
   },
   counterBtnText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  awardBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    minHeight: 36,
-    borderRadius: 10,
-    backgroundColor: Theme.driverPrimary,
-    justifyContent: "center",
-  },
-  awardBtnDisabled: { opacity: 0.55 },
-  awardBtnText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: Theme.textOnDark,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.positive,
+    letterSpacing: 0.2,
   },
   alertPanel: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginHorizontal: 12,
-    marginBottom: 12,
+    gap: 6,
+    marginHorizontal: 10,
+    marginBottom: 10,
     marginTop: 0,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     backgroundColor: Theme.surface,
     borderColor: Theme.borderLight,
@@ -804,13 +938,141 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderMedium,
   },
   alertPanelSoon: {
-    backgroundColor: Theme.accentGoldMuted,
-    borderColor: Theme.accentGold,
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positiveMutedDarkBorder,
   },
   alertText: {
     flex: 1,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.gpayListTitle,
+  },
+  minimalCard: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0F172A",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+      },
+      android: { elevation: 1 },
+      web: {
+        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.05)",
+      } as object,
+      default: {},
+    }),
+  },
+  minimalCardSelected: {
+    borderColor: Theme.positive,
+    backgroundColor: Theme.cardWhite,
+  },
+  minimalTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  minimalBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  minimalNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    minWidth: 0,
+  },
+  minimalName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.gpayListTitle,
+    flexShrink: 1,
+    letterSpacing: -0.15,
+  },
+  minimalMeta: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.gpayListSubtitle,
+  },
+  minimalCommerce: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+  },
+  minimalAmountCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  minimalBidLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: Theme.gpayListSubtitle,
+  },
+  minimalAmount: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Theme.gpayListTitle,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: -0.25,
+  },
+  minimalAmountGreen: {
+    color: Theme.gpayAmountReceived,
+  },
+  minimalRef: {
+    marginTop: 1,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.gpayListSubtitle,
+  },
+  minimalStatusPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surface,
+    flexShrink: 0,
+    maxWidth: "38%",
+  },
+  minimalStatusText: {
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.35,
+    color: Theme.textMuted,
+  },
+  minimalCounterBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 34,
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.positiveMutedDarkBorder,
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  minimalCounterBtnText: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: Theme.positive,
+    letterSpacing: 0.15,
   },
 });

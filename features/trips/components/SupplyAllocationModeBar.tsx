@@ -94,64 +94,46 @@ export function SupplyAllocationModeBar({
   const segmentPill = !canToggleModes
     ? singleModeBanner
     : isWizard ? (
-    <View
-      style={[
-        fullPageWizardStyles.modeRow,
-        isInline && styles.modeRowInline,
-      ]}
-    >
-      <Pressable
-        style={[
-          fullPageWizardStyles.modeChip,
-          isInline && styles.modeChipInline,
-          isAsset && fullPageWizardStyles.modeChipActive,
-        ]}
-        onPress={() => onModeChange("asset")}
-        accessibilityRole="button"
-        accessibilityState={{ selected: isAsset }}
-      >
-        <View style={styles.wizardChipInner}>
-          <Truck
-            size={15}
-            color={isAsset ? Theme.textPrimaryDark : Theme.textMuted}
-            strokeWidth={2.25}
-          />
-          <Text
-            style={[
-              fullPageWizardStyles.modeChipText,
-              isAsset && fullPageWizardStyles.modeChipTextActive,
-            ]}
-          >
-            Asset
-          </Text>
-        </View>
-      </Pressable>
-      <Pressable
-        style={[
-          fullPageWizardStyles.modeChip,
-          isInline && styles.modeChipInline,
-          !isAsset && fullPageWizardStyles.modeChipActive,
-        ]}
-        onPress={() => onModeChange("aggregate")}
-        accessibilityRole="button"
-        accessibilityState={{ selected: !isAsset }}
-      >
-        <View style={styles.wizardChipInner}>
-          <Building2
-            size={15}
-            color={!isAsset ? Theme.textPrimaryDark : Theme.textMuted}
-            strokeWidth={2.25}
-          />
-          <Text
-            style={[
-              fullPageWizardStyles.modeChipText,
-              !isAsset && fullPageWizardStyles.modeChipTextActive,
-            ]}
-          >
-            Aggregate
-          </Text>
-        </View>
-      </Pressable>
+    <View style={[styles.choiceStack, isInline && styles.modeRowInline]}>
+      <Text style={styles.choiceHeading}>How will this move?</Text>
+      {showAsset ? (
+        <Pressable
+          style={[styles.choiceCard, isAsset && styles.choiceCardSelected]}
+          onPress={() => onModeChange("asset")}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isAsset }}
+        >
+          <View style={styles.choiceIcon}>
+            <Truck size={14} color={Theme.textPrimaryDark} strokeWidth={2.2} />
+          </View>
+          <View style={styles.choiceCopy}>
+            <Text style={styles.choiceTitle}>Asset</Text>
+            <Text style={styles.choiceSub}>
+              Your own fleet vehicle and driver
+            </Text>
+          </View>
+          <View style={[styles.radio, isAsset && styles.radioOn]} />
+        </Pressable>
+      ) : null}
+      {showAggregate ? (
+        <Pressable
+          style={[styles.choiceCard, !isAsset && styles.choiceCardSelected]}
+          onPress={() => onModeChange("aggregate")}
+          accessibilityRole="button"
+          accessibilityState={{ selected: !isAsset }}
+        >
+          <View style={styles.choiceIcon}>
+            <Building2 size={14} color={Theme.textPrimaryDark} strokeWidth={2.2} />
+          </View>
+          <View style={styles.choiceCopy}>
+            <Text style={styles.choiceTitle}>Aggregate</Text>
+            <Text style={styles.choiceSub}>
+              Sub-assign to a network supplier
+            </Text>
+          </View>
+          <View style={[styles.radio, !isAsset && styles.radioOn]} />
+        </Pressable>
+      ) : null}
     </View>
   ) : (
     <View
@@ -299,6 +281,73 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  choiceStack: {
+    width: "100%",
+    gap: 8,
+  },
+  choiceHeading: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    marginBottom: 2,
+  },
+  choiceCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    minHeight: 52,
+    backgroundColor: Theme.cardWhite,
+    width: "100%",
+  },
+  choiceCardSelected: {
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.surface,
+  },
+  choiceIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  choiceCopy: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  choiceTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    lineHeight: 18,
+  },
+  choiceSub: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  radio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
+    flexShrink: 0,
+  },
+  radioOn: {
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.textPrimaryDark,
+    borderWidth: 5,
   },
   wizardAssignLaterRow: {
     flexDirection: "row",
