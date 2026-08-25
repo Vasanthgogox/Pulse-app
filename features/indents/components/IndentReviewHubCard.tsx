@@ -20,6 +20,7 @@ import Theme from "@/constants/Theme";
 import { IndentFreightClientEntity } from "@/features/indents/components/IndentFreightClientEntity";
 import { IndentHubInsightTicketTail } from "@/features/indents/components/IndentHubInsightTicketTail";
 import type { IndentFreightCardClientProps } from "@/features/indents/components/IndentFreightCard";
+import { IndentMobileLoadDetail } from "@/features/indents/components/IndentMobileLoadDetail";
 import {
   indentHubCardShadow,
   indentReviewHubLayout,
@@ -53,6 +54,7 @@ export type IndentReviewHubCardProps = {
   client: IndentFreightCardClientProps;
   quoteStatus?: string | null;
   quoteAmountInr?: number | null;
+  counterAmountInr?: number | null;
   targetRateInr?: number;
   footerInsight?: IndentBidFooterInsight | null;
   alertInfo?: IndentBidAlertInfo | null;
@@ -61,6 +63,18 @@ export type IndentReviewHubCardProps = {
   suppressSupplierQuoteHero?: boolean;
   compact?: boolean;
   stacked?: boolean;
+  /** Mobile order-detail layout extras (ignored on desktop split). */
+  loadId?: string;
+  createdAtLabel?: string;
+  pickupDateIso?: string | null;
+  liveBidsCount?: number;
+  clientPriceInr?: number;
+  supplierTargetInr?: number;
+  primaryActionLabel?: string;
+  onPrimaryAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
+  bidsSlot?: ReactNode;
   partiesStrip?: ReactNode;
   children?: ReactNode;
 };
@@ -143,6 +157,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
   client,
   quoteStatus,
   quoteAmountInr,
+  counterAmountInr = null,
   targetRateInr = 0,
   footerInsight,
   alertInfo,
@@ -150,9 +165,67 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
   suppressSupplierQuoteHero = false,
   compact = false,
   stacked = false,
+  loadId = "",
+  createdAtLabel = "—",
+  pickupDateIso = null,
+  liveBidsCount = 0,
+  clientPriceInr = 0,
+  supplierTargetInr = 0,
+  primaryActionLabel,
+  onPrimaryAction,
+  secondaryActionLabel,
+  onSecondaryAction,
+  bidsSlot,
   partiesStrip,
   children,
 }: IndentReviewHubCardProps) {
+  if (stacked) {
+    return (
+      <IndentMobileLoadDetail
+        isOwner={isOwner}
+        typeLabel={typeLabel}
+        status={status}
+        isDirect={isDirect}
+        loadId={loadId || "—"}
+        dateLabel={dateLabel}
+        createdAtLabel={createdAtLabel}
+        pickupDateIso={pickupDateIso}
+        origin={origin}
+        destination={destination}
+        vehicleType={vehicleType}
+        weightKg={weightKg}
+        material={material}
+        liveBidsCount={liveBidsCount}
+        canCancelLoad={canCancelLoad}
+        cancelling={cancelling}
+        onCancelLoad={onCancelLoad}
+        canEditLoad={canEditLoad}
+        onEditAll={onEditAll}
+        primaryAmount={primaryAmount}
+        supplierRate={supplierRate}
+        marginPct={marginPct}
+        clientPriceInr={clientPriceInr}
+        supplierTargetInr={supplierTargetInr}
+        client={client}
+        quoteStatus={quoteStatus}
+        quoteAmountInr={quoteAmountInr}
+        counterAmountInr={counterAmountInr}
+        targetRateInr={targetRateInr}
+        onQuotePress={
+          suppressSupplierQuoteHero ? undefined : onQuotePress
+        }
+        primaryActionLabel={primaryActionLabel}
+        onPrimaryAction={onPrimaryAction}
+        secondaryActionLabel={secondaryActionLabel}
+        onSecondaryAction={onSecondaryAction}
+        bidsSlot={bidsSlot}
+        partiesStrip={partiesStrip}
+      >
+        {children}
+      </IndentMobileLoadDetail>
+    );
+  }
+
   const hasQuote =
     !suppressSupplierQuoteHero &&
     quoteAmountInr != null &&
@@ -293,7 +366,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
             >
               <FontAwesome
                 name="pencil"
-                size={10}
+                size={9}
                 color={Theme.positive}
               />
               <Text style={styles.editAll}>EDIT ALL</Text>
@@ -359,6 +432,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
               ) : (
                 heroBlock
               )}
+              <View style={styles.clientEntityDivider} />
               <View style={styles.clientEntitySlot}>
                 <IndentFreightClientEntity
                   label="CLIENT"
@@ -371,6 +445,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
                   align="left"
                   nameLines={1}
                   surface="light"
+                  avatarSize={compact ? 28 : 32}
                 />
               </View>
             </View>
@@ -436,30 +511,32 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
 
 const styles = StyleSheet.create({
   stack: {
-    gap: 12,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 4,
     width: "100%",
     alignSelf: "stretch",
   },
   stackStacked: {
-    gap: 10,
-    marginBottom: 4,
+    gap: 8,
+    marginBottom: 2,
     width: "100%",
   },
   glassCard: {
     position: "relative",
     backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     overflow: "hidden",
     width: "100%",
     alignSelf: "stretch",
   },
   glassCardCompact: {
-    padding: 12,
-    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 10,
   },
   glassCardStacked: {
     alignSelf: "stretch",
@@ -467,296 +544,311 @@ const styles = StyleSheet.create({
   },
   orb: {
     position: "absolute",
-    top: -40,
-    right: -32,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    top: -36,
+    right: -28,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: Theme.positive,
-    opacity: 0.06,
+    opacity: 0.045,
   },
   tagsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 8,
     zIndex: 1,
   },
   pillRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
     flexShrink: 1,
     flexWrap: "wrap",
   },
   tagsRight: {
     alignItems: "flex-end",
-    gap: 4,
+    gap: 2,
     flexShrink: 0,
   },
   typePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
     backgroundColor: Theme.darkBackground,
   },
   typePillText: {
     ...indentReviewHubText.chipLabel,
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.6,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.5,
     color: Theme.textOnDark,
   },
   statePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
     backgroundColor: Theme.positiveMuted,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.positiveMutedDarkBorder,
   },
   statePillText: {
     ...indentReviewHubText.chipLabel,
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.4,
     color: Theme.positive,
   },
   directPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
   },
   directPillText: {
     ...indentReviewHubText.chipLabel,
+    fontSize: 8,
     color: Theme.textPrimaryDark,
   },
   dateLine: {
     ...indentReviewHubText.dateLine,
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "500",
   },
   cancelLinkText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 9,
+    fontWeight: "600",
     color: Theme.negative,
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
   },
   routePanel: {
     backgroundColor: Theme.surface,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    padding: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     zIndex: 1,
   },
   routePanelCompact: {
-    padding: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
   },
   route: { marginBottom: 0 },
   specsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   specsTitle: {
     ...indentReviewHubText.fieldLabel,
-    fontSize: 10,
-    letterSpacing: 0.8,
+    fontSize: 8,
+    letterSpacing: 0.7,
+    fontWeight: "700",
     color: Theme.textMuted,
   },
   editAllBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
   },
   editAll: {
     ...indentReviewHubText.buttonLabel,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.45,
     color: Theme.positive,
   },
   editAllDisabled: {
     ...indentReviewHubText.chipLabel,
-    fontSize: 9,
+    fontSize: 8,
     color: Theme.textMuted,
   },
   readOnlyPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
   },
   readOnlyText: {
     ...indentReviewHubText.chipLabel,
-    fontSize: 9,
+    fontSize: 8,
     color: Theme.textMuted,
   },
   specGrid: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 10,
+    gap: 6,
+    marginBottom: 8,
     alignItems: "stretch",
   },
   specTile: {
     flex: 1,
     minWidth: 0,
-    minHeight: 72,
+    minHeight: 52,
     backgroundColor: Theme.surface,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
     justifyContent: "flex-start",
   },
   specTileLabel: {
     ...indentReviewHubText.specLabel,
-    fontSize: 9,
+    fontSize: 7,
     letterSpacing: 0.5,
+    fontWeight: "600",
     color: Theme.textMuted,
-    marginBottom: 4,
+    marginBottom: 3,
+    textTransform: "uppercase",
   },
   specTileValue: {
     ...indentReviewHubText.fieldValue,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    lineHeight: 15,
+    lineHeight: 13,
   },
   specTileValueEmpty: {
     color: Theme.textMuted,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   financeRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     alignItems: "stretch",
+    marginTop: 10,
   },
   supplierTargetCard: {
-    flex: 1.45,
+    flex: 1.2,
     minWidth: 0,
-    minHeight: 124,
     backgroundColor: Theme.darkBackground,
-    borderRadius: 14,
-    paddingHorizontal: 14,
+    borderRadius: 10,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     justifyContent: "space-between",
+    gap: 8,
   },
   clientRateCard: {
     flex: 1,
     minWidth: 0,
-    minHeight: 124,
     backgroundColor: Theme.surface,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 12,
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
+    gap: 6,
   },
   quoteHeroCard: {
     flex: 1,
     minWidth: 0,
-    minHeight: 124,
     backgroundColor: Theme.positiveMuted,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.positiveMutedDarkBorder,
     padding: 12,
     justifyContent: "center",
   },
   financeLabelDark: {
     ...indentReviewHubText.freightLabelDark,
-    fontSize: 9,
-    letterSpacing: 0.6,
+    fontSize: 7,
+    letterSpacing: 0.55,
   },
   financeLabelLight: {
     ...indentReviewHubText.freightGridLabelLight,
-    fontSize: 9,
-    letterSpacing: 0.6,
+    fontSize: 7,
+    letterSpacing: 0.55,
+    marginBottom: 0,
   },
   financeValueDark: {
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 15,
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
     color: Theme.textOnDark,
-    marginTop: 6,
-    marginBottom: 10,
+    letterSpacing: -0.2,
+    marginTop: 4,
+    marginBottom: 6,
   },
   financeValueDarkCompact: {
-    fontSize: 16,
+    fontSize: 13,
   },
   financeValueLight: {
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 14,
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
     color: Theme.textPrimaryDark,
-    marginTop: 6,
-    marginBottom: 8,
+    letterSpacing: -0.2,
+    marginTop: 4,
+    marginBottom: 6,
   },
   financeValueLightCompact: {
-    fontSize: 15,
+    fontSize: 12,
   },
   clientRateTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  clientEntitySlot: {
+  clientEntityDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
     marginTop: 4,
+    marginBottom: 2,
+  },
+  clientEntitySlot: {
+    marginTop: 0,
   },
   marginChip: {
     alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: "rgba(16,185,129,0.2)",
-    borderWidth: 1,
-    borderColor: "rgba(16,185,129,0.35)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: "rgba(16,185,129,0.18)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(16,185,129,0.32)",
   },
   marginChipText: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.4,
+    fontSize: 7,
+    fontWeight: "700",
+    letterSpacing: 0.35,
     color: Theme.positiveMuted,
   },
   baselineChip: {
     alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.12)",
   },
   baselineChipText: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 7,
+    fontWeight: "600",
     color: Theme.textOnDarkMuted,
   },
   heroPressable: { minWidth: 0 },
-  heroBlock: { gap: 2 },
+  heroBlock: { gap: 1 },
   heroTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 6,
+    gap: 4,
   },
   heroKicker: {
     ...indentReviewHubText.freightGridLabelLight,
-    fontSize: 9,
+    fontSize: 7,
     marginBottom: 0,
   },
   heroAmountRow: {
@@ -765,39 +857,40 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   heroCurrency: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   heroAmount: {
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 15,
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
   },
   heroAmountCompact: {
-    fontSize: 16,
+    fontSize: 13,
   },
   heroReference: {
     ...indentReviewHubText.bodyMuted,
-    fontSize: 10,
-    marginTop: 2,
+    fontSize: 9,
+    marginTop: 1,
   },
   heroTapHint: {
     ...indentReviewHubText.bodyMuted,
-    fontSize: 10,
+    fontSize: 9,
     color: Theme.positive,
-    marginTop: 4,
+    marginTop: 2,
   },
   statusPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   statusPillText: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.25,
   },
   statusPending: { backgroundColor: Theme.surfaceGray },
   statusPendingText: { color: Theme.textMuted },
@@ -806,19 +899,19 @@ const styles = StyleSheet.create({
   statusRejected: { backgroundColor: "#FEE2E2" },
   statusRejectedText: { color: "#B91C1C" },
   insightWrap: {
-    borderRadius: 16,
+    borderRadius: 10,
     overflow: "hidden",
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.positiveMutedDarkBorder,
     backgroundColor: Theme.positiveMuted,
   },
   insightWrapCompact: {
-    borderRadius: 14,
+    borderRadius: 10,
   },
   insightWrapStacked: {
     width: "100%",
   },
   childrenSlot: {
-    marginTop: 4,
+    marginTop: 2,
   },
 });

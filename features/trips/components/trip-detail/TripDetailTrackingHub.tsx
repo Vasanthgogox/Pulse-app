@@ -53,7 +53,9 @@ export function TripDetailTrackingHub({
         <View style={styles.liveCopy}>
           <Text style={styles.liveTitle}>Live Tracking</Text>
           <Text style={styles.liveSubtitle} numberOfLines={1}>
-            Route · position · pings
+            {broadcastActive
+              ? "Live route · position · pings"
+              : "Map · last ping · movement"}
           </Text>
         </View>
         {broadcastActive ? (

@@ -15,30 +15,106 @@ export type TripLikeForClientResolution = {
 
 export async function createRating(
   organizationId: string,
-  data: CreateRatingData
+  data: CreateRatingData & { existingRatingId?: string | null },
 ): Promise<{ error: Error | null; rating: RatingRow | null }> {
-  const { data: row, error } = await supabase()
-    .from('ratings')
-    .upsert(
-      {
-        organization_id: organizationId,
-        trip_id: data.trip_id,
-        rater_type: data.rater_type,
-        rater_id: data.rater_id,
-        rated_type: data.rated_type,
-        rated_id: data.rated_id,
-        score: Math.min(5, Math.max(1, data.score)),
-        comment: data.comment ?? null,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'trip_id,rater_type,rater_id,rated_type,rated_id',
-      }
-    )
-    .select()
-    .single();
+  const score = Math.min(5, Math.max(1, data.score));
+  const comment = data.comment ?? null;
+  const updatedAt = new Date().toISOString();
 
-  if (error) return { error: new Error(error.message), rating: null };
+  const updateById = async (id: string) => {
+    const { data: row, error } = await supabase()
+      .from("ratings")
+      .update({
+        score,
+        comment,
+        updated_at: updatedAt,
+      })
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+
+    if (error) return { error: new Error(error.message), rating: null as RatingRow | null };
+    if (!row) {
+      return {
+        error: new Error(
+          "Could not update this rating (permission or row missing). Refresh and try again.",
+        ),
+        rating: null as RatingRow | null,
+      };
+    }
+    return { error: null, rating: row as RatingRow };
+  };
+
+  // Explicit edit path: update the row the UI already loaded (avoids rater-key drift).
+  if (data.existingRatingId?.trim()) {
+    return updateById(data.existingRatingId.trim());
+  }
+
+  // Prefer update-by-id when a row already exists for this trip+rater+rated key.
+  // Blind upsert was rewriting organization_id and then failing RLS/.single() on edit.
+  const { data: existing, error: lookupError } = await supabase()
+    .from("ratings")
+    .select("id, organization_id")
+    .eq("trip_id", data.trip_id)
+    .eq("rater_type", data.rater_type)
+    .eq("rater_id", data.rater_id)
+    .eq("rated_type", data.rated_type)
+    .eq("rated_id", data.rated_id)
+    .maybeSingle();
+
+  if (lookupError) {
+    return { error: new Error(lookupError.message), rating: null };
+  }
+
+  if (existing?.id) {
+    return updateById(existing.id);
+  }
+
+  const { data: row, error } = await supabase()
+    .from("ratings")
+    .insert({
+      organization_id: organizationId,
+      trip_id: data.trip_id,
+      rater_type: data.rater_type,
+      rater_id: data.rater_id,
+      rated_type: data.rated_type,
+      rated_id: data.rated_id,
+      score,
+      comment,
+      updated_at: updatedAt,
+    })
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    // Race: another client inserted first — retry as update.
+    const isConflict =
+      error.code === "23505" ||
+      error.message.toLowerCase().includes("duplicate") ||
+      error.message.toLowerCase().includes("unique");
+    if (isConflict) {
+      const { data: raced, error: racedLookupError } = await supabase()
+        .from("ratings")
+        .select("id")
+        .eq("trip_id", data.trip_id)
+        .eq("rater_type", data.rater_type)
+        .eq("rater_id", data.rater_id)
+        .eq("rated_type", data.rated_type)
+        .eq("rated_id", data.rated_id)
+        .maybeSingle();
+      if (!racedLookupError && raced?.id) {
+        return updateById(raced.id);
+      }
+    }
+    return { error: new Error(error.message), rating: null };
+  }
+
+  if (!row) {
+    return {
+      error: new Error("Rating saved but could not be reloaded. Pull to refresh."),
+      rating: null,
+    };
+  }
   return { error: null, rating: row as RatingRow };
 }
 

@@ -179,7 +179,17 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
         {/* On desktop web the physical keyboard drives entry (useIndianVehiclePhysicalKeypad),
             so the on-screen QWERTY is hidden — it only dominates the layout on laptops/PCs. */}
         {isDesktopWeb ? null : (
-          <View style={[styles.keypadDock, (wizardShell || groupTop) && flow.keypadDockWizard]}>
+          <View
+            style={
+              wizardShell || groupTop
+                ? [
+                    flow.keypadDockWizard,
+                    flow.keypadDockWizardBleed,
+                    flow.keypadDockSignIn,
+                  ]
+                : styles.keypadDock
+            }
+          >
             <IndianVehicleRegistrationKeypad
               kind={keyboardKind}
               onKey={handleKey}
@@ -224,7 +234,8 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   mainWizard: {
-    paddingHorizontal: 0,
+    /** Match phone / rate keypad — pageRootKeypad is edge-to-edge. */
+    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
   regLabel: {
     color: Theme.textMuted,

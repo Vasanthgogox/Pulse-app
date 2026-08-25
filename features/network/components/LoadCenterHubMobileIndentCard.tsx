@@ -1,35 +1,29 @@
 /**
- * Mobile loads hub — ticket card aligned with TripsHubMobileTripCard.
+ * Load Center hub indent card — Ajio / opportunity-card layout.
+ * Shared across My load, Get load, and Action required stages.
  */
 import {
   HUB_GRID_CARD_MIN_HEIGHT,
-  HUB_GRID_DIVIDER_MARGIN_BOTTOM,
-  HUB_GRID_DIVIDER_MARGIN_TOP,
-  HUB_CARD_HEAD_AVATAR,
-  HUB_CARD_HEAD_LEFT_GAP,
-  HUB_GRID_HEAD_MARGIN_BOTTOM,
-  HUB_GRID_PARTY_MIN_HEIGHT,
-  HUB_GRID_ROUTE_MIN_HEIGHT,
 } from "@/components/hub/hubGridCardLayout";
-import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
-import { IndentHubPerforation } from "@/features/indents/components/IndentHubPerforation";
-import {
-  indentReviewHubLayout,
-} from "@/features/indents/styles/indentReviewHubStyles";
 import { getIndentDisplayNumber, type IndentRow } from "@/features/indents";
 import type {
   GetLoadSourceTag,
   LoadCenterTicketCommerce,
 } from "@/features/network/utils/loadCenter.model";
-import { formatINR } from "@/lib/format";
-import { formatMobileTripSchedule } from "@/features/trips/components/TripsHubMobileTripCard";
+import {
+  formatStoryDate,
+  splitLocationParts,
+} from "@/features/network/utils/storyDisplay";
 import type { LoadCenterTripAllocation } from "@/features/network/utils/loadCenterTripAllocation.util";
+import { formatINR } from "@/lib/format";
+import { ArrowRight } from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -39,12 +33,17 @@ import {
 import { useRouter } from "expo-router";
 
 import {
-  HUB_MOBILE_TICKET_REF,
   HubMobileListCanvas,
   hubMobileListCanvasStyles,
 } from "@/components/hub";
 
-const REF = HUB_MOBILE_TICKET_REF;
+const INK = "#111827";
+const MUTED = "#6B7280";
+const BODY = "#4B5563";
+const LINK = "#2563EB";
+const BORDER = "#E5E7EB";
+const CARD_EDGE = "#D1D5DB";
+const CANVAS_SOFT = "#F9FAFB";
 const ALLOCATION_AVATAR_SIZE = 24;
 
 /** @deprecated Use `HUB_GRID_CARD_MIN_HEIGHT` from `@/components/hub/hubGridCardLayout`. */
@@ -56,40 +55,138 @@ function asLabel(value: unknown): string {
   return s || "—";
 }
 
-function formatPartyName(value: string, hubTicket?: boolean): string {
-  const label = asLabel(value);
-  return hubTicket ? label : label.toUpperCase();
-}
-
 function stripCurrencyPrefix(formatted: string): string {
   return formatted.replace(/^[^\d,.-]+/, "").trim() || formatted;
 }
 
-/** `HH:MM` from a full timestamp; empty when absent or unparseable. */
-function formatIndentCreatedTime(iso: string | null | undefined): string {
-  const raw = iso?.trim();
-  if (!raw) return "";
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+function formatWeightChip(weightKg: number | null | undefined): string | null {
+  const kg = Number(weightKg);
+  if (!Number.isFinite(kg) || kg <= 0) return null;
+  const tonnes = kg / 1000;
+  if (tonnes >= 0.1) {
+    const rounded = Math.round(tonnes * 10) / 10;
+    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded} t`;
+  }
+  return `${Math.round(kg)} kg`;
 }
 
-function quoteStatusPillStyles(status: string) {
-  const s = status.toLowerCase();
-  if (s === "accepted") {
-    return { pill: styles.statusAwarded, text: styles.statusAwardedText };
+function titleCaseWord(value: string): string {
+  const t = value.trim();
+  if (!t) return t;
+  return t
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+type StatusChipTone =
+  | "live"
+  | "bidded"
+  | "action"
+  | "won"
+  | "muted"
+  | "warn";
+
+/**
+ * Find-loads OpportunityCard tone map.
+ * Get Load (sourceTag set) = bidder view → BIDDED blue.
+ * Give Load (owner) = BIDS / LIVE green while quotes are open.
+ */
+function resolveStatusChip(
+  statusLabel: string,
+  sourceTag?: GetLoadSourceTag | null,
+): {
+  text: string;
+  tone: StatusChipTone;
+} {
+  const s = asLabel(statusLabel).trim().toLowerCase();
+  const isGetLoad = sourceTag != null;
+  if (s === "action required" || s === "allocate") {
+    return { text: "ACTION", tone: "action" };
   }
-  if (s === "rejected") {
-    return { pill: styles.statusRejected, text: styles.statusRejectedText };
+  if (
+    s === "bids won" ||
+    s === "awarded" ||
+    s === "claimed" ||
+    s === "accepted"
+  ) {
+    return { text: "WON", tone: "won" };
   }
-  if (s === "countered") {
-    return { pill: styles.statusCountered, text: styles.statusCounteredText };
+  if (
+    s === "broadcast" ||
+    s === "open" ||
+    s === "open market" ||
+    s === "live"
+  ) {
+    return { text: "LIVE", tone: "live" };
   }
-  return { pill: styles.statusPending, text: styles.statusPendingText };
+  if (s === "receiving bids" || s === "quoted" || s === "my bids") {
+    if (isGetLoad) return { text: "BIDDED", tone: "bidded" };
+    return { text: "BIDS", tone: "live" };
+  }
+  if (s === "countered") return { text: "COUNTER", tone: "warn" };
+  if (s === "declined" || s === "rejected") {
+    return { text: "DECLINED", tone: "warn" };
+  }
+  if (s === "completed" || s === "done") {
+    return { text: "DONE", tone: "muted" };
+  }
+  if (s === "draft") return { text: "DRAFT", tone: "muted" };
+  const short = asLabel(statusLabel).toUpperCase();
+  return {
+    text: short.length > 10 ? short.slice(0, 9) : short,
+    tone: "muted",
+  };
+}
+
+/** Meta under party name — matches OpportunityCard “You already bid · date”. */
+function resolveChannelLabel(
+  sourceTag: GetLoadSourceTag | null | undefined,
+  statusLabel: string,
+): string {
+  const s = asLabel(statusLabel).trim().toLowerCase();
+  if (sourceTag != null) {
+    if (s === "receiving bids" || s === "my bids" || s === "quoted") {
+      return "You already bid";
+    }
+    if (s === "countered") return "Counter offer received";
+    if (
+      s === "bids won" ||
+      s === "awarded" ||
+      s === "action required" ||
+      s === "allocate"
+    ) {
+      return "Your bid won";
+    }
+    if (s === "declined" || s === "rejected") return "Bid not selected";
+    return sourceTag === "network" ? "Network indent" : "Market indent";
+  }
+  if (s === "action required") return "Bids won · allocate";
+  if (s === "bids won" || s === "awarded") return "Bids won";
+  if (s === "draft") return "Draft load";
+  return "My load";
+}
+
+function resolveInlineCta(
+  statusLabel: string,
+  sourceTag: GetLoadSourceTag | null | undefined,
+): string | null {
+  const s = asLabel(statusLabel).trim().toLowerCase();
+  if (s === "action required" || s === "allocate") return "Allocate";
+  if (s === "bids won" || s === "awarded") return "Allocate";
+  if (
+    s === "receiving bids" ||
+    s === "countered" ||
+    s === "my bids" ||
+    s === "quoted"
+  ) {
+    return "Update bid";
+  }
+  if (sourceTag != null && (s === "open market" || s === "open" || s === "live")) {
+    return "View & bid";
+  }
+  if (sourceTag != null) return "View";
+  return "View";
 }
 
 export type LoadCenterHubMobileIndentCardProps = {
@@ -101,7 +198,7 @@ export type LoadCenterHubMobileIndentCardProps = {
   pickupIso?: string | null;
   leftFooterLabel: string;
   rightFooterLabel: string;
-  /** Travel-ticket stub: target rate / your quote (GET LOAD, claimed). */
+  /** Ticket commerce: target rate / your quote / bids won. */
   ticketCommerce?: LoadCenterTicketCommerce | null;
   /** Network partner vs market discovery (Reach / ad). */
   sourceTag?: GetLoadSourceTag | null;
@@ -158,313 +255,217 @@ export function LoadCenterHubMobileIndentCard({
   style,
 }: LoadCenterHubMobileIndentCardProps) {
   const router = useRouter();
-  const indentNo = asLabel(getIndentDisplayNumber(indent));
-  const schedule = formatMobileTripSchedule(
-    pickupIso ?? indent.pickup_date ?? indent.created_at,
-  );
-  // `pickup_date` is a date-only column, so `schedule` carries no time of day.
-  // Surface the real creation time instead of leaving the stub date-only.
-  const createdTime = formatIndentCreatedTime(indent.created_at);
-  const scheduleSuffix = ` · ${schedule.scheduleLine}${
-    !schedule.time && createdTime ? ` · Created ${createdTime}` : ""
-  }`;
-  const hubTicket = dense || fillGrid;
-  const displayName = formatPartyName(titleName, hubTicket);
+  const displayName = asLabel(titleName);
   const avatarFb =
     (initialsColorSeed ?? avatarSeed ?? "").trim() ||
     (indent.client_id
       ? `client-entity:${String(indent.client_id).trim()}`
       : `indent:${indent.id}`);
-  const bodyPadding =
-    fillGrid
-      ? 14
-      : dense
-        ? indentReviewHubLayout.hubCardPaddingDense
-        : indentReviewHubLayout.hubCardPaddingComfort;
-  const useTicketStub = ticketCommerce != null;
+
+  const originParts = splitLocationParts(origin);
+  const destParts = splitLocationParts(dest);
+  const statusChip = resolveStatusChip(statusLabel, sourceTag);
+  const channelLabel = resolveChannelLabel(sourceTag, statusLabel);
+  const isGetLoadCard = sourceTag != null;
+  /** Meta date: bid/posted date for Get Load; pickup for Give Load. */
+  const metaDateIso = isGetLoadCard
+    ? indent.created_at ?? pickupIso ?? indent.pickup_date
+    : pickupIso ?? indent.pickup_date ?? indent.created_at;
+  const metaDateLabel = metaDateIso ? formatStoryDate(metaDateIso) : "";
+  const metaLine = metaDateLabel
+    ? `${channelLabel} · ${metaDateLabel}`
+    : channelLabel;
+  const loadDateIso = pickupIso ?? indent.pickup_date;
+  const loadDateLabel = loadDateIso ? formatStoryDate(loadDateIso) : "";
+
+  const vehicle =
+    (indent.vehicle_type || leftFooterLabel || "").trim() || null;
+  const material = (indent.load_type || "").trim() || null;
+  const weight = formatWeightChip(
+    typeof indent.weight === "number" ? indent.weight : Number(indent.weight),
+  );
+  /** Keep weight casing (“30 t”); title-case vehicle / material only. */
+  const specChips = [
+    vehicle ? titleCaseWord(vehicle) : null,
+    weight,
+    material ? titleCaseWord(material) : null,
+  ].filter(Boolean) as string[];
+
   const commerce = ticketCommerce;
   const heroAmount =
     commerce?.amountInr != null && commerce.amountInr > 0
-      ? stripCurrencyPrefix(formatINR(commerce.amountInr))
+      ? formatINR(commerce.amountInr)
       : null;
-  const referenceTarget =
+  const rawReferenceTarget =
     commerce?.targetRateInr != null && commerce.targetRateInr > 0
       ? stripCurrencyPrefix(formatINR(commerce.targetRateInr))
       : null;
-  const quoteStatusNorm = (commerce?.quoteStatus ?? "").trim().toLowerCase();
-  const statusStyles =
-    quoteStatusNorm &&
-    (commerce?.kicker === "YOUR BID" ||
-      commerce?.kicker === "YOUR QUOTE" ||
-      commerce?.kicker === "COUNTER OFFER")
-      ? quoteStatusPillStyles(quoteStatusNorm)
-      : null;
-  const referenceLabel = commerce?.referenceLabel?.trim() || "Target";
-  const rightCaption =
+  /** OpportunityCard pending-bid footer shows only YOUR BID + amount. */
+  const referenceTarget =
+    isGetLoadCard && (commerce?.kicker ?? "").toUpperCase() === "YOUR BID"
+      ? null
+      : rawReferenceTarget;
+  const priceHint =
+    commerce?.kicker?.trim() ||
+    (heroAmount ? "Offer" : null);
+  const priceMuted =
     commerce?.rightCaption?.trim() ||
     (!heroAmount ? rightFooterLabel : null);
+  const fallbackCta =
+    Boolean(onPress) && !actions
+      ? resolveInlineCta(statusLabel, sourceTag)
+      : null;
 
-  const stubBlock = (
-    <View
-      style={[
-        styles.stub,
-        fillGrid && styles.stubGrid,
-        dense && styles.stubDense,
-      ]}
-    >
-      {!fillGrid ? (
-        <IndentHubPerforation contentPadding={bodyPadding} />
-      ) : null}
-      <View style={styles.refRow}>
-        <Text style={[styles.refLine, hubTicket && styles.refLineHub]} numberOfLines={1}>
-          <Text style={[styles.refId, hubTicket && styles.refIdHub]}>{indentNo}</Text>
-          <Text style={[styles.refMuted, hubTicket && styles.refMutedHub]}>
-            {scheduleSuffix}
-          </Text>
-        </Text>
+  const priceTrailing =
+    actions != null ? (
+      <View
+        style={styles.priceActions}
+        onStartShouldSetResponder={() => true}
+      >
+        {actions}
       </View>
-      <View style={[styles.stubStack, fillGrid && styles.stubStackGrid]}>
-        {heroAmount ? (
-          <>
-            <View style={styles.stubKickerRow}>
-              <Text
-                style={[styles.stubVehicle, hubTicket && styles.stubVehicleHub]}
-                numberOfLines={1}
-              >
-                {leftFooterLabel}
-              </Text>
-              <View style={styles.stubCommerceTop}>
-                <Text
-                  style={[styles.stubKicker, hubTicket && styles.stubKickerHub]}
-                  numberOfLines={1}
-                >
-                  {commerce?.kicker ?? "Target rate"}
-                </Text>
-                {statusStyles ? (
-                  <View style={[styles.statusPill, statusStyles.pill]}>
-                    <Text style={[styles.statusPillText, statusStyles.text]}>
-                      {quoteStatusNorm === "accepted"
-                        ? "Awarded"
-                        : quoteStatusNorm === "rejected"
-                          ? "Rejected"
-                          : quoteStatusNorm === "countered"
-                            ? "Countered"
-                            : "Pending"}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-            <View style={styles.stubAmountBlock}>
-              <View style={styles.stubAmountRow}>
-                <Text style={[styles.stubCurrency, fillGrid && styles.stubCurrencyGrid]}>
-                  ₹
-                </Text>
-                <Text
-                  style={[styles.stubAmount, fillGrid && styles.stubAmountGrid]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.75}
-                >
-                  {heroAmount}
-                </Text>
-              </View>
-              {referenceTarget ? (
-                <Text style={styles.stubReference} numberOfLines={1}>
-                  {`${referenceLabel} · ₹ ${referenceTarget}`}
-                </Text>
-              ) : null}
-            </View>
-          </>
-        ) : (
-          <View style={[styles.stubRow, fillGrid && styles.stubRowGrid]}>
-            <View style={styles.stubLeft}>
-              <Text
-                style={[styles.stubVehicle, hubTicket && styles.stubVehicleHub]}
-                numberOfLines={2}
-              >
-                {leftFooterLabel}
-              </Text>
-            </View>
-            <Text
-              style={[styles.stubCaption, hubTicket && styles.stubCaptionHub]}
-              numberOfLines={2}
-            >
-              {rightCaption ?? rightFooterLabel}
-            </Text>
-          </View>
-        )}
-      </View>
-    </View>
-  );
-
-  const legacyFooter = fillGrid ? (
-    <View style={styles.metaBlockGrid}>
-      <View style={styles.metaBlockGridGrow} />
-      <View style={styles.refRow}>
-        <Text style={[styles.refLine, styles.refLineHub]} numberOfLines={1}>
-          <Text style={[styles.refId, styles.refIdHub]}>{indentNo}</Text>
-          <Text style={[styles.refMuted, styles.refMutedHub]}>
-            {scheduleSuffix}
-          </Text>
-        </Text>
-      </View>
-      <View style={[styles.partyRow, styles.partyRowGrid]}>
-        <Text style={[styles.footerLabel, styles.footerLabelHub]} numberOfLines={1}>
-          {leftFooterLabel}
-        </Text>
-        <Text
-          style={[styles.footerLabel, styles.footerLabelEnd, styles.footerLabelHub]}
-          numberOfLines={1}
-        >
-          {rightFooterLabel}
-        </Text>
-      </View>
-    </View>
-  ) : (
-    <>
-      <View style={styles.refRow}>
-        <Text style={[styles.refLine, hubTicket && styles.refLineHub]} numberOfLines={1}>
-          <Text style={[styles.refId, hubTicket && styles.refIdHub]}>{indentNo}</Text>
-          <Text style={[styles.refMuted, hubTicket && styles.refMutedHub]}>
-            {scheduleSuffix}
-          </Text>
-        </Text>
-      </View>
-      <View style={styles.partyRow}>
-        <Text
-          style={[styles.footerLabel, hubTicket && styles.footerLabelHub]}
-          numberOfLines={1}
-        >
-          {leftFooterLabel}
-        </Text>
-        <Text
-          style={[
-            styles.footerLabel,
-            styles.footerLabelEnd,
-            hubTicket && styles.footerLabelHub,
-          ]}
-          numberOfLines={1}
-        >
-          {rightFooterLabel}
-        </Text>
-      </View>
-    </>
-  );
+    ) : fallbackCta ? (
+      <Pressable style={styles.ctaHit} onPress={onPress} hitSlop={6}>
+        <Text style={styles.ctaText}>{fallbackCta}</Text>
+        <ArrowRight size={12} color={LINK} strokeWidth={2.4} />
+      </Pressable>
+    ) : null;
 
   return (
     <View
-      style={[
-        styles.cardWrap,
-        fillGrid && styles.cardWrapGrid,
-        style,
-      ]}
+      style={[styles.cardWrap, fillGrid && styles.cardWrapGrid, style]}
     >
-      <View
-        style={[
-          styles.card,
-          fillGrid && styles.cardGrid,
-          fillGrid && styles.cardGridElevated,
-        ]}
-      >
+      <View style={[styles.card, fillGrid && styles.cardGrid]}>
         <Pressable
           onPress={onPress}
           disabled={!onPress}
           style={({ pressed }) => [
             styles.body,
-            !fillGrid && dense && styles.bodyDense,
-            !fillGrid && !dense && styles.bodyComfort,
-            fillGrid && styles.bodyGridPad,
+            dense && styles.bodyDense,
             fillGrid && styles.bodyGrid,
             Boolean(onPress) && pressed && styles.bodyPressed,
           ]}
           accessibilityRole={onPress ? "button" : undefined}
           accessibilityLabel={
             onPress
-              ? `${indentNo} ${displayName}, ${asLabel(origin)} to ${asLabel(dest)}`
+              ? `${getIndentDisplayNumber(indent)} ${displayName}, ${asLabel(origin)} to ${asLabel(dest)}`
               : undefined
           }
         >
-          <View style={[styles.head, fillGrid && styles.headGrid]}>
-            <View style={styles.headLeft}>
-              <PartyAvatar
-                name={displayName}
-                initialsColorSeed={avatarFb}
-                organizationImageUrl={organizationImageUrl}
-                organizationAvatarSeed={organizationAvatarSeed}
-                avatarUrl={avatarUrl}
-                avatarSeed={avatarSeed}
-                entityType="client"
-                size={HUB_CARD_HEAD_AVATAR}
-              />
-              <View style={styles.headText}>
-                <Text
-                  style={[styles.brand, hubTicket && styles.brandHub]}
-                  numberOfLines={1}
-                >
-                  {displayName}
-                </Text>
-                {sourceTag ? (
-                  <View
-                    style={[
-                      styles.sourcePill,
-                      sourceTag === "network"
-                        ? styles.sourcePillNetwork
-                        : styles.sourcePillMarket,
-                    ]}
-                    accessibilityLabel={
-                      sourceTag === "network"
-                        ? "Network"
-                        : "Market through ad"
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.sourcePillText,
-                        sourceTag === "network"
-                          ? styles.sourcePillTextNetwork
-                          : styles.sourcePillTextMarket,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {sourceTag === "network" ? "Network" : "Market"}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
+          <View style={styles.cardTop}>
+            <PartyAvatar
+              name={displayName}
+              initialsColorSeed={avatarFb}
+              organizationImageUrl={organizationImageUrl}
+              organizationAvatarSeed={organizationAvatarSeed}
+              avatarUrl={avatarUrl}
+              avatarSeed={avatarSeed}
+              entityType="client"
+              size={32}
+            />
+            <View style={styles.cardTopText}>
+              <Text style={styles.orgName} numberOfLines={1}>
+                {displayName}
+              </Text>
+              <Text style={styles.metaLine} numberOfLines={2}>
+                {metaLine}
+              </Text>
             </View>
-            <View style={styles.headMetaCol}>
+            <View
+              style={[
+                styles.statusChip,
+                statusChip.tone === "live" && styles.statusChipLive,
+                statusChip.tone === "bidded" && styles.statusChipBidded,
+                statusChip.tone === "action" && styles.statusChipAction,
+                statusChip.tone === "won" && styles.statusChipWon,
+                statusChip.tone === "warn" && styles.statusChipWarn,
+                statusChip.tone === "muted" && styles.statusChipMuted,
+              ]}
+              accessibilityLabel={asLabel(statusLabel)}
+            >
               <Text
-                style={[styles.headMeta, hubTicket && styles.headMetaHub]}
+                style={[
+                  styles.statusChipText,
+                  statusChip.tone === "live" && styles.statusChipTextLive,
+                  statusChip.tone === "bidded" && styles.statusChipTextBidded,
+                  statusChip.tone === "action" && styles.statusChipTextAction,
+                  statusChip.tone === "won" && styles.statusChipTextWon,
+                  statusChip.tone === "warn" && styles.statusChipTextWarn,
+                  statusChip.tone === "muted" && styles.statusChipTextMuted,
+                ]}
                 numberOfLines={1}
               >
-                {asLabel(statusLabel).toUpperCase()}
+                {statusChip.text}
               </Text>
             </View>
           </View>
 
-          <LoadCardRouteRow
-            origin={origin}
-            destination={dest}
-            compact={hubTicket}
-            style={[
-              styles.route,
-              dense && styles.routeDense,
-              fillGrid && styles.routeGrid,
-            ]}
-          />
+          {/* Route: CSS grid on web (kanban stretch breaks RN flex row). */}
+          <View style={styles.routeGrid}>
+            <View style={styles.routeCol}>
+              <Text style={styles.routeLabel}>PICKUP</Text>
+              <Text style={styles.routeCity} numberOfLines={1}>
+                {titleCaseWord(originParts.city)}
+              </Text>
+              {originParts.state ? (
+                <Text style={styles.routeState} numberOfLines={1}>
+                  {titleCaseWord(originParts.state)}
+                </Text>
+              ) : (
+                <Text style={styles.routeStateSpacer}>{"\u00a0"}</Text>
+              )}
+            </View>
+            <View style={styles.routeSep} pointerEvents="none" accessibilityElementsHidden>
+              <View style={styles.routeSepLine} />
+              <ArrowRight size={11} color={MUTED} strokeWidth={2.4} />
+              <View style={styles.routeSepLine} />
+            </View>
+            <View style={[styles.routeCol, styles.routeColEnd]}>
+              <Text style={[styles.routeLabel, styles.routeLabelEnd]}>DROP</Text>
+              <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
+                {titleCaseWord(destParts.city)}
+              </Text>
+              {destParts.state ? (
+                <Text style={[styles.routeState, styles.routeStateEnd]} numberOfLines={1}>
+                  {titleCaseWord(destParts.state)}
+                </Text>
+              ) : (
+                <Text style={[styles.routeStateSpacer, styles.routeStateEnd]}>
+                  {"\u00a0"}
+                </Text>
+              )}
+            </View>
+          </View>
 
-          {!useTicketStub ? (
-            <View style={[styles.divider, fillGrid && styles.dividerGrid]} />
+          {specChips.length > 0 || loadDateLabel ? (
+            <ScrollView
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              style={styles.specScroll}
+              contentContainerStyle={styles.specRow}
+            >
+              {specChips.map((chip) => (
+                <View key={chip} style={styles.specChip}>
+                  <Text style={styles.specChipText} numberOfLines={1}>
+                    {chip}
+                  </Text>
+                </View>
+              ))}
+              {loadDateLabel ? (
+                <View style={[styles.specChip, styles.specChipDate]}>
+                  <Text style={styles.specChipDateText} numberOfLines={1}>
+                    {loadDateLabel}
+                  </Text>
+                </View>
+              ) : null}
+            </ScrollView>
           ) : null}
 
           {tripAllocation ? (
-            <View
-              style={[
-                styles.allocationRow,
-                fillGrid && styles.allocationRowGrid,
-              ]}
-            >
+            <View style={styles.allocationRow}>
               <View style={styles.allocationCell}>
                 <View style={styles.allocationPartyRow}>
                   {tripAllocation.driverId ? (
@@ -520,38 +521,72 @@ export function LoadCenterHubMobileIndentCard({
               </View>
             </View>
           ) : null}
-
-          {useTicketStub ? (
-            fillGrid ? (
-              <View style={styles.metaBlockGrid}>
-                <View style={styles.metaBlockGridGrow} />
-                {stubBlock}
-              </View>
-            ) : (
-              stubBlock
-            )
-          ) : fillGrid ? (
-            legacyFooter
-          ) : (
-            legacyFooter
-          )}
         </Pressable>
-        {actions ? (
-          <View style={[styles.actionsSlot, fillGrid && styles.actionsSlotGrid]}>
-            {actions}
-          </View>
-        ) : null}
+
+        <View
+          style={[
+            styles.priceRow,
+            dense && styles.priceRowDense,
+            fillGrid && styles.priceRowGrid,
+          ]}
+        >
+          <Pressable
+            onPress={onPress}
+            disabled={!onPress}
+            style={styles.priceCol}
+          >
+            {heroAmount ? (
+              <>
+                {priceHint ? (
+                  <Text style={styles.priceHint} numberOfLines={1}>
+                    {priceHint}
+                  </Text>
+                ) : null}
+                <Text
+                  style={[styles.price, (dense || fillGrid) && styles.priceDense]}
+                  numberOfLines={1}
+                >
+                  {heroAmount}
+                </Text>
+                {referenceTarget ? (
+                  <Text style={styles.priceRef} numberOfLines={1}>
+                    {`${commerce?.referenceLabel?.trim() || "Client rate"} · ₹ ${referenceTarget}`}
+                  </Text>
+                ) : dense || fillGrid ? (
+                  <Text style={styles.priceRefSpacer} accessible={false}>
+                    {"\u00a0"}
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <Text style={styles.priceMuted} numberOfLines={2}>
+                {priceMuted || "Rate on request"}
+              </Text>
+            )}
+          </Pressable>
+          {priceTrailing}
+        </View>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  list: {
-    width: "100%",
-    gap: 0,
-    paddingHorizontal: 0,
+const cardShadow = Platform.select({
+  ios: {
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
   },
+  android: { elevation: 2 },
+  web: {
+    boxShadow:
+      "0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06)",
+  } as ViewStyle,
+  default: {},
+});
+
+const styles = StyleSheet.create({
   cardWrap: {
     ...hubMobileListCanvasStyles.cardWrap,
   },
@@ -567,19 +602,18 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: CARD_EDGE,
     overflow: "hidden",
+    ...cardShadow,
     ...Platform.select({
       web: {
-        boxShadow: "0 2px 8px rgba(15, 23, 42, 0.05)",
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        maxWidth: "100%",
+        boxSizing: "border-box",
       } as ViewStyle,
-      default: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 6,
-        elevation: 1,
-      },
+      default: {},
     }),
   },
   cardGrid: {
@@ -591,171 +625,300 @@ const styles = StyleSheet.create({
     minHeight: HUB_GRID_CARD_MIN_HEIGHT,
     flexDirection: "column",
   },
-  cardGridElevated: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    backgroundColor: Theme.cardWhite,
+  body: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
+    gap: 14,
     ...Platform.select({
       web: {
-        boxShadow:
-          "0 1px 0 rgba(255,255,255,0.9) inset, 0 10px 28px rgba(15, 23, 42, 0.10), 0 2px 6px rgba(15, 23, 42, 0.05)",
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        maxWidth: "100%",
+        boxSizing: "border-box",
       } as ViewStyle,
-      default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.12,
-        shadowRadius: 14,
-        elevation: 4,
-      },
+      default: {},
     }),
   },
-  body: {},
-  bodyComfort: {
-    paddingHorizontal: indentReviewHubLayout.hubCardPaddingComfort,
-    paddingTop: indentReviewHubLayout.hubCardPaddingComfort,
-    paddingBottom: 12,
-  },
   bodyDense: {
-    paddingHorizontal: indentReviewHubLayout.hubCardPaddingDense,
-    paddingTop: indentReviewHubLayout.hubCardPaddingDense,
-    paddingBottom: 10,
-  },
-  bodyGridPad: {
     paddingHorizontal: 12,
     paddingTop: 12,
+    paddingBottom: 10,
+    gap: 12,
   },
   bodyGrid: {
     flex: 1,
     flexDirection: "column",
-    paddingBottom: 8,
-  },
-  actionsSlot: {
-    marginTop: "auto",
-    width: "100%",
-    minWidth: 0,
-  },
-  actionsSlotGrid: {
-    flexShrink: 0,
-    marginTop: 0,
-  },
-  metaBlockGrid: {
-    flex: 1,
-    minHeight: 0,
-    flexDirection: "column",
-  },
-  metaBlockGridGrow: {
-    flex: 1,
-    minHeight: 0,
   },
   bodyPressed: {
-    opacity: 0.98,
+    opacity: 0.94,
   },
-  head: {
+  cardTop: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: 10,
-    marginBottom: 14,
-    minHeight: HUB_CARD_HEAD_AVATAR,
   },
-  headGrid: {
-    marginBottom: HUB_GRID_HEAD_MARGIN_BOTTOM,
-  },
-  headLeft: {
+  cardTopText: {
     flex: 1,
     minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: HUB_CARD_HEAD_LEFT_GAP,
+    gap: 3,
   },
-  headText: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-    gap: 4,
-  },
-  brand: {
+  orgName: {
     fontSize: 14,
-    lineHeight: 17,
-    letterSpacing: -0.15,
     fontWeight: "700",
-    fontStyle: "normal",
-    color: REF.ink,
-    includeFontPadding: false,
+    color: INK,
+    letterSpacing: -0.2,
   },
-  brandHub: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: "700",
+  metaLine: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: MUTED,
+    lineHeight: 14,
   },
-  sourcePill: {
-    alignSelf: "flex-start",
+  statusChip: {
     paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 999,
-    flexShrink: 1,
-    maxWidth: "100%",
-  },
-  sourcePillNetwork: {
-    backgroundColor: Theme.loadStatusTabTrayBg,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexShrink: 0,
+    alignSelf: "center",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.loadStatusTabBorderSoft,
+    borderColor: "transparent",
   },
-  sourcePillMarket: {
-    backgroundColor: Theme.accentBrown,
+  statusChipLive: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "rgba(21, 128, 61, 0.18)",
   },
-  sourcePillText: {
+  statusChipBidded: {
+    backgroundColor: "#EFF6FF",
+    borderColor: "rgba(37, 99, 235, 0.22)",
+  },
+  statusChipAction: {
+    backgroundColor: Theme.accentBrownWash,
+    borderColor: Theme.accentBrownBorder,
+  },
+  statusChipWon: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positiveMutedDarkBorder,
+  },
+  statusChipWarn: {
+    backgroundColor: Theme.warningMuted,
+    borderColor: "rgba(180, 83, 9, 0.2)",
+  },
+  statusChipMuted: {
+    backgroundColor: CANVAS_SOFT,
+    borderColor: BORDER,
+  },
+  statusChipText: {
     fontSize: 9,
     fontWeight: "700",
     letterSpacing: 0.4,
     textTransform: "uppercase",
-    includeFontPadding: false,
   },
-  sourcePillTextNetwork: {
-    color: Theme.pulseIndigo,
+  statusChipTextLive: {
+    color: Theme.positive,
   },
-  sourcePillTextMarket: {
-    color: Theme.textOnPrimary,
+  statusChipTextBidded: {
+    color: LINK,
   },
-  headMetaCol: {
-    flexShrink: 0,
-    maxWidth: "42%",
-    minHeight: HUB_CARD_HEAD_AVATAR,
+  statusChipTextAction: {
+    color: Theme.accentBrownDeep,
+  },
+  statusChipTextWon: {
+    color: Theme.positive,
+  },
+  statusChipTextWarn: {
+    color: Theme.warning,
+  },
+  statusChipTextMuted: {
+    color: BODY,
+  },
+  routeGrid: Platform.select({
+    web: {
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 1fr) 28px minmax(0, 1fr)",
+      columnGap: 6,
+      alignItems: "start",
+      width: "100%",
+      maxWidth: "100%",
+      boxSizing: "border-box",
+    } as ViewStyle,
+    default: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      alignSelf: "stretch",
+      width: "100%",
+      gap: 6,
+    },
+  }),
+  routeCol: Platform.select({
+    web: {
+      minWidth: 0,
+      maxWidth: "100%",
+      overflow: "hidden",
+    } as ViewStyle,
+    default: {
+      flex: 1,
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: 0,
+      minWidth: 0,
+    },
+  }),
+  routeColEnd: {
     alignItems: "flex-end",
+  },
+  routeSep: {
+    paddingTop: 16,
+    width: 28,
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-  },
-  headMeta: {
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: "600",
-    color: REF.muted,
-    textAlign: "right",
-    textTransform: "uppercase",
-    letterSpacing: 0.35,
+    gap: 2,
     flexShrink: 0,
-    includeFontPadding: false,
+    flexGrow: 0,
+    ...Platform.select({
+      web: {
+        display: "flex",
+        flexDirection: "row",
+        alignSelf: "start",
+        width: 28,
+      } as ViewStyle,
+      default: {},
+    }),
   },
-  headMetaHub: {
+  routeSepLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: CARD_EDGE,
+  },
+  routeLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: MUTED,
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+    marginBottom: 3,
+    lineHeight: 12,
+  },
+  routeLabelEnd: {
+    textAlign: "right",
+    width: "100%",
+  },
+  routeCity: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: INK,
+    lineHeight: 19,
+    letterSpacing: -0.15,
+    ...Platform.select({
+      web: { maxWidth: "100%" } as ViewStyle,
+      default: {},
+    }),
+  },
+  routeCityEnd: {
+    textAlign: "right",
+    width: "100%",
+  },
+  routeState: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "400",
+    color: BODY,
+    lineHeight: 14,
+  },
+  routeStateEnd: {
+    textAlign: "right",
+    width: "100%",
+  },
+  routeStateSpacer: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 14,
+    color: "transparent",
+  },
+  /** Single-row side-scroll — match OpportunityCard; web needs max-content so chips don't stretch. */
+  specScroll: {
+    width: "100%",
     maxWidth: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: "stretch",
+    marginTop: 2,
+    ...Platform.select({
+      web: {
+        overflow: "hidden",
+      } as ViewStyle,
+      default: {},
+    }),
+  },
+  specRow: {
+    flexDirection: "row",
+    flexWrap: "nowrap",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 2,
+    paddingRight: 8,
+    ...Platform.select({
+      web: {
+        display: "flex",
+        flexDirection: "row",
+        flexWrap: "nowrap",
+        alignItems: "center",
+        width: "max-content",
+        minWidth: "100%",
+      } as ViewStyle,
+      default: {},
+    }),
+  },
+  specChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: CANVAS_SOFT,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
+    flexGrow: 0,
+    flexShrink: 0,
+    ...Platform.select({
+      web: {
+        display: "flex",
+        flex: "none" as unknown as number,
+        width: "max-content",
+        boxSizing: "border-box",
+      } as ViewStyle,
+      default: {},
+    }),
+  },
+  specChipDate: {
+    backgroundColor: "#EFF6FF",
+    borderColor: "rgba(37, 99, 235, 0.28)",
+  },
+  specChipText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: BODY,
+    lineHeight: 14,
+  },
+  specChipDateText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: LINK,
+    lineHeight: 14,
   },
   allocationRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    marginBottom: 10,
     borderRadius: 10,
-    backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    backgroundColor: CANVAS_SOFT,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
     overflow: "hidden",
-  },
-  allocationRowGrid: {
-    marginBottom: 8,
   },
   allocationCell: {
     flex: 1,
     minWidth: 0,
-    paddingVertical: 8,
+    paddingVertical: 9,
     paddingHorizontal: 10,
     justifyContent: "center",
   },
@@ -780,13 +943,13 @@ const styles = StyleSheet.create({
   },
   allocationDivider: {
     width: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.borderLight,
+    backgroundColor: BORDER,
   },
   allocationLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 0.25,
+    color: MUTED,
+    letterSpacing: 0.3,
     textTransform: "uppercase",
     marginBottom: 2,
   },
@@ -796,283 +959,104 @@ const styles = StyleSheet.create({
   allocationValue: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: INK,
     letterSpacing: -0.1,
   },
   allocationValueEnd: {
     textAlign: "right",
   },
-  route: {
-    width: "100%",
-    maxWidth: "100%",
-    marginBottom: 4,
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginHorizontal: 0,
+    marginTop: 0,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: BORDER,
+    backgroundColor: CANVAS_SOFT,
   },
-  routeDense: {
-    marginBottom: 0,
+  priceRowDense: {
+    marginHorizontal: 0,
+    marginTop: 0,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
+    gap: 8,
   },
-  routeGrid: {
-    minHeight: HUB_GRID_ROUTE_MIN_HEIGHT,
-    flexShrink: 0,
-    marginBottom: 0,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: REF.hairline,
-    marginTop: 12,
-    marginBottom: 10,
-  },
-  dividerGrid: {
-    marginTop: HUB_GRID_DIVIDER_MARGIN_TOP,
-    marginBottom: HUB_GRID_DIVIDER_MARGIN_BOTTOM,
-    flexShrink: 0,
-  },
-  refRow: {
+  priceRowGrid: {
+    marginTop: "auto",
+    alignItems: "center",
+  } as ViewStyle,
+  priceCol: {
+    flex: 1,
     minWidth: 0,
+    justifyContent: "center",
+    gap: 2,
+  },
+  priceActions: {
+    flexShrink: 0,
+    maxWidth: "52%",
+    minWidth: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    alignSelf: "center",
+  },
+  priceHint: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+    color: MUTED,
+    lineHeight: 12,
     marginBottom: 2,
   },
-  refLine: {
-    fontSize: 11,
-    lineHeight: 15,
-    letterSpacing: 0.05,
-  },
-  refLineHub: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  refId: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: REF.inkMid,
-    lineHeight: 15,
-    fontVariant: ["tabular-nums"],
-  },
-  refIdHub: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: REF.inkMid,
-  },
-  refMuted: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: REF.muted,
-    lineHeight: 15,
-    fontVariant: ["tabular-nums"],
-  },
-  refMutedHub: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: REF.muted,
-  },
-  partyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    marginTop: 4,
-    width: "100%",
-  },
-  partyRowGrid: {
-    marginTop: 4,
-    minHeight: 24,
-    flexShrink: 0,
-    alignItems: "center",
-  },
-  footerLabel: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: "400",
-    color: REF.muted,
-    letterSpacing: 0.1,
-  },
-  footerLabelHub: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 8,
-    lineHeight: 11,
-    fontWeight: "500",
-    color: REF.inkMid,
-    letterSpacing: 0,
-  },
-  footerLabelEnd: {
-    textAlign: "right",
-  },
-  stub: {
-    minWidth: 0,
-  },
-  stubGrid: {
-    flexShrink: 0,
-  },
-  stubDense: {},
-  stubStack: {
-    minWidth: 0,
-    marginTop: 8,
-    gap: 2,
-  },
-  stubStackGrid: {
-    marginTop: 4,
-    flexShrink: 0,
-  },
-  /** Single row: left meta + YOUR BID / status — shared vertical center. */
-  stubKickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    minWidth: 0,
-    minHeight: 18,
-  },
-  stubAmountBlock: {
-    alignItems: "flex-end",
-    gap: 0,
-    minWidth: 0,
-    marginTop: 1,
-  },
-  stubRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-    minWidth: 0,
-  },
-  stubRowGrid: {
-    minHeight: HUB_GRID_PARTY_MIN_HEIGHT + 8,
-    flexShrink: 0,
-  },
-  stubLeft: {
-    flex: 1,
-    minWidth: 0,
-    maxWidth: "42%",
-  },
-  stubVehicle: {
-    flex: 1,
-    minWidth: 0,
-    maxWidth: "46%",
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "600",
-    color: REF.muted,
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
-    includeFontPadding: false,
-  },
-  stubVehicleHub: {
-    fontSize: 9,
-    lineHeight: 14,
-    fontWeight: "600",
-    color: REF.inkMid,
-    letterSpacing: 0.25,
-  },
-  stubCommerce: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: "flex-end",
-    gap: 3,
-  },
-  stubCommerceTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 6,
-    flexShrink: 1,
-    minWidth: 0,
-    maxWidth: "58%",
-  },
-  stubKicker: {
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "600",
-    color: REF.muted,
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
-    flexShrink: 1,
-    includeFontPadding: false,
-  },
-  stubKickerHub: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: REF.muted,
-  },
-  stubAmountRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "flex-end",
-    gap: 2,
-    maxWidth: "100%",
-  },
-  stubCurrency: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: REF.inkMid,
-    lineHeight: 18,
-    includeFontPadding: false,
-  },
-  stubCurrencyGrid: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  stubAmount: {
-    fontSize: 18,
+  price: {
+    fontSize: 16,
     fontWeight: "700",
-    lineHeight: 20,
+    color: INK,
+    fontVariant: ["tabular-nums"],
     letterSpacing: -0.3,
-    color: REF.ink,
-    flexShrink: 1,
-    textAlign: "right",
-    fontVariant: ["tabular-nums"],
-    includeFontPadding: false,
+    lineHeight: 20,
   },
-  stubAmountGrid: {
+  priceDense: {
     fontSize: 15,
-    lineHeight: 18,
-    fontWeight: "700",
+    lineHeight: 19,
   },
-  stubReference: {
+  priceRef: {
+    marginTop: 2,
     fontSize: 10,
     fontWeight: "500",
-    lineHeight: 12,
-    color: Theme.textMuted,
-    textAlign: "right",
-    letterSpacing: 0.05,
-    marginTop: 1,
+    color: MUTED,
     fontVariant: ["tabular-nums"],
-    includeFontPadding: false,
+    lineHeight: 13,
   },
-  stubCaption: {
-    flex: 1,
-    minWidth: 0,
-    maxWidth: "52%",
-    fontSize: 11,
-    lineHeight: 14,
+  /** Keeps grid footers level when some cards lack a target / client rate line. */
+  priceRefSpacer: {
+    marginTop: 2,
+    fontSize: 10,
+    lineHeight: 13,
+    color: "transparent",
+  },
+  priceMuted: {
+    fontSize: 12,
     fontWeight: "500",
-    color: REF.muted,
-    textAlign: "right",
+    color: MUTED,
   },
-  stubCaptionHub: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: REF.inkMid,
-  },
-  statusPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 999,
+  ctaHit: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
     flexShrink: 0,
+    paddingVertical: 2,
+    paddingLeft: 2,
   },
-  statusPillText: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-    includeFontPadding: false,
+  ctaText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: LINK,
   },
-  statusPending: { backgroundColor: Theme.surface },
-  statusPendingText: { color: Theme.textPrimaryDark },
-  statusAwarded: { backgroundColor: Theme.accentBrownWash },
-  statusAwardedText: { color: Theme.accentBrownDeep },
-  statusRejected: { backgroundColor: "#FEE2E2" },
-  statusRejectedText: { color: "#B91C1C" },
-  statusCountered: { backgroundColor: Theme.warningMuted },
-  statusCounteredText: { color: Theme.warning },
 });

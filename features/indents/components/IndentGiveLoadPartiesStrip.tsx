@@ -2,7 +2,7 @@
  * Give Load — integrated supplier row on the review hub left card.
  * Nudges owners to grow integrated network for more bids and better margin.
  */
-import { EntityAvatar } from "@/components/EntityAvatar";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
 import type { LoadCenterIntegratedParty } from "@/features/network/utils/loadCenterIntegratedParties.util";
@@ -17,11 +17,11 @@ import {
   View,
 } from "react-native";
 
-const FACE_SIZE = 34;
-const RING_SIZE = 42;
-const SLOT_SIZE = 46;
-const TILE_WIDTH = 58;
-const TILE_LABEL_LINE = 13;
+const FACE_SIZE = 32;
+const RING_SIZE = 36;
+const SLOT_SIZE = 40;
+const TILE_WIDTH = 56;
+const TILE_LABEL_LINE = 12;
 const MAX_VISIBLE = 6;
 
 export type IndentGiveLoadPartiesStripProps = {
@@ -128,19 +128,20 @@ function PartyFace({
   hasBid: boolean;
   onPress?: () => void;
 }) {
-  const shortName = party.displayName.split(/\s+/)[0] ?? party.displayName;
+  const shortName =
+    party.displayName.split(/\s+/).filter(Boolean)[0] ?? party.displayName;
 
   return (
     <PartyTile
       label={shortName}
       onPress={onPress}
-      accessibilityLabel={`${party.displayName}${hasBid ? ", bid received" : ""}`}
+      accessibilityLabel={`${party.displayName}${hasBid ? ", bid received" : ", integrated supplier"}`}
     >
       <AvatarTileSlot
         ringStyle={hasBid ? styles.faceRingBid : styles.faceRingIdle}
         badge={hasBid ? "bid" : "integrated"}
       >
-        <EntityAvatar
+        <PartyAvatar
           name={party.displayName}
           entityType={party.entityType}
           organizationImageUrl={party.organizationImageUrl}
@@ -148,8 +149,8 @@ function PartyFace({
           avatarUrl={party.avatarUrl}
           avatarSeed={party.avatarSeed}
           isIntegrated
-          showIntegrationBadge={false}
           size={FACE_SIZE}
+          initialsColorSeed={party.linkedOrganizationId || party.id}
         />
       </AvatarTileSlot>
     </PartyTile>
@@ -179,8 +180,79 @@ export function IndentGiveLoadPartiesStrip({
   const bidCount = quotes.length;
   const insight = resolveInsightCopy(parties.length, bidCount, marginPct);
 
+  if (stacked) {
+    return (
+      <View style={styles.stackedShell}>
+        <View style={styles.stackedHeader}>
+          <Text style={styles.stackedTitle}>Integrated suppliers</Text>
+          <View style={styles.stackedCount}>
+            <Text style={styles.stackedCountText}>{parties.length}</Text>
+          </View>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.stackedScroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          {visibleParties.map((party) => (
+            <PartyFace
+              key={party.id}
+              party={party}
+              hasBid={bidderOrgIds.has(party.linkedOrganizationId)}
+              onPress={onPartyPress ? () => onPartyPress(party) : undefined}
+            />
+          ))}
+
+          {overflow > 0 ? (
+            <PartyTile
+              label="More"
+              onPress={onAddParties}
+              accessibilityLabel={`${overflow} more suppliers`}
+            >
+              <AvatarTileSlot ringStyle={styles.faceRingOverflow}>
+                <Text style={styles.overflowText}>+{overflow}</Text>
+              </AvatarTileSlot>
+            </PartyTile>
+          ) : null}
+
+          <PartyTile
+            label="Add"
+            onPress={onAddParties}
+            accessibilityLabel="Add integrated suppliers"
+          >
+            <AvatarTileSlot ringStyle={styles.faceRingAdd}>
+              <UserPlus size={15} color={Theme.primary} strokeWidth={2.2} />
+            </AvatarTileSlot>
+          </PartyTile>
+        </ScrollView>
+
+        <View style={styles.stackedInsight}>
+          <View style={styles.stackedInsightIcon}>
+            <TrendingUp size={12} color={Theme.loadAddButtonText} strokeWidth={2.4} />
+          </View>
+          <View style={styles.stackedInsightCopy}>
+            <Text style={styles.stackedInsightHeadline} numberOfLines={1}>
+              {insight.headline}
+            </Text>
+            <Text style={styles.stackedInsightSub} numberOfLines={2}>
+              {insight.sub}
+            </Text>
+          </View>
+          {marginPct != null ? (
+            <View style={styles.stackedMargin}>
+              <Text style={styles.stackedMarginLabel}>Margin</Text>
+              <Text style={styles.stackedMarginValue}>{marginPct}%</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.shell, compact && styles.shellCompact, stacked && styles.shellStacked]}>
+    <View style={[styles.shell, compact && styles.shellCompact]}>
       <View style={styles.headerRow}>
         <Text style={styles.kicker}>Integrated suppliers</Text>
         <View style={styles.countPill}>
@@ -238,7 +310,6 @@ export function IndentGiveLoadPartiesStrip({
         end={{ x: 1, y: 1 }}
         style={[
           styles.insightCard,
-          stacked && styles.insightCardStacked,
           compact && styles.insightCardCompact,
         ]}
       >
@@ -273,8 +344,92 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingTop: 0,
   },
-  shellStacked: {
-    gap: 6,
+  stackedShell: {
+    gap: 10,
+    width: "100%",
+  },
+  stackedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  stackedTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
+  },
+  stackedCount: {
+    minWidth: 22,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    backgroundColor: "#F0F0F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stackedCountText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    fontVariant: ["tabular-nums"],
+  },
+  stackedScroll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 2,
+  },
+  stackedInsight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#EEEEEE",
+  },
+  stackedInsightIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: "#F0F0F0",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  stackedInsightCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  stackedInsightHeadline: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  stackedInsightSub: {
+    fontSize: 10,
+    fontWeight: "400",
+    color: Theme.textSecondary,
+    lineHeight: 13,
+  },
+  stackedMargin: {
+    alignItems: "flex-end",
+    flexShrink: 0,
+  },
+  stackedMarginLabel: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  stackedMarginValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.positive,
+    fontVariant: ["tabular-nums"],
   },
   headerRow: {
     flexDirection: "row",
@@ -285,16 +440,16 @@ const styles = StyleSheet.create({
   },
   kicker: {
     fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.7,
+    fontWeight: "700",
+    letterSpacing: 0.65,
     textTransform: "uppercase",
     color: Theme.textRouteCard,
   },
   countPill: {
-    minWidth: 22,
-    height: 18,
-    paddingHorizontal: 6,
-    borderRadius: 9,
+    minWidth: 18,
+    height: 16,
+    paddingHorizontal: 5,
+    borderRadius: 8,
     backgroundColor: Theme.surfaceLight,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
@@ -302,21 +457,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   countPillText: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 8,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   supplierRow: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
   },
   supplierRowCompact: {
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   scrollContent: {
     flexDirection: "row",
@@ -348,7 +503,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
-    overflow: "hidden",
   },
   faceRingBid: {
     borderColor: Theme.positive,
@@ -422,11 +576,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     gap: 8,
   },
-  insightCardStacked: {
-    flexWrap: "wrap",
-    alignItems: "flex-start",
-    rowGap: 8,
-  },
   insightIcon: {
     width: 28,
     height: 28,
@@ -442,16 +591,16 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   insightHeadline: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.1,
+    letterSpacing: -0.05,
   },
   insightSub: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "500",
     color: Theme.textSecondary,
-    lineHeight: 13,
+    lineHeight: 12,
   },
   marginChip: {
     alignItems: "flex-end",
@@ -461,14 +610,14 @@ const styles = StyleSheet.create({
   },
   marginChipLabel: {
     fontSize: 7,
-    fontWeight: "700",
-    letterSpacing: 0.4,
+    fontWeight: "600",
+    letterSpacing: 0.35,
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
   marginChipValue: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.positive,
     fontVariant: ["tabular-nums"],
   },

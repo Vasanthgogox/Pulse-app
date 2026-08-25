@@ -121,7 +121,13 @@ export function IndentCounterOfferEntry({
       placeholder="0"
       allowDecimal={false}
       maxDecimalPlaces={0}
-      submitLabel={submitting ? "Sending…" : "Submit counter"}
+      submitLabel={
+        submitting
+          ? "Sending…"
+          : initialCounterAmount != null && Number(initialCounterAmount) > 0
+            ? "Update counter"
+            : "Submit counter"
+      }
       validationError={validationError}
     />
   );

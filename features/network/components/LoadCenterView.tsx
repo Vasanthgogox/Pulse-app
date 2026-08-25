@@ -10,7 +10,6 @@ import {
   ClaimedIndentCardActions,
   GetLoadIndentCardActions,
   GiveLoadIndentCardActions,
-  LoadCenterIndentCardFooter,
 } from "@/features/network/components/LoadCenterIndentCardActions";
 import {
   LoadCenterHubMobileIndentCard,
@@ -43,7 +42,6 @@ import {
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
-import { ensureIndentStory } from "@/features/network/services/indentStoryPosts.service";
 import {
     DONE_SUB_TABS,
     getLoadCenterStatusTabLabel,
@@ -67,6 +65,9 @@ import { useSuccessToast } from "@/features/network/hooks/useSuccessToast";
 import { useTripDeployment } from "@/features/network/hooks/useTripDeployment";
 import { AwardModal } from "@/features/network/components/AwardModal";
 import { BidModal } from "@/features/network/components/bidding/BidModal";
+import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
+import { BoostSheet } from "@/features/reach/components/BoostSheet";
+import { queryKeys } from "@/lib/queryKeys";
 import { LoadCenterKanbanBoard, type LoadCenterKanbanColumn } from "@/features/network/components/LoadCenterKanbanBoard";
 import { LoadCenterKanbanColumnModal } from "@/features/network/components/LoadCenterKanbanColumnModal";
 import { GIVE_LOAD_KANBAN_COLUMNS, bucketGiveLoadIndentsForKanban, giveLoadKanbanColumnLabel } from "@/features/network/utils/giveLoadKanban.util";
@@ -115,6 +116,7 @@ import {
     useVehiclesQuery,
 } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { Search } from "lucide-react-native";
 import { type FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
@@ -255,7 +257,11 @@ export function LoadCenterView({
 
   const invalidateIndents = useInvalidateIndents();
   const invalidatePosts = useInvalidatePosts(orgId);
-  const [pulsingIndentId, setPulsingIndentId] = useState<string | null>(null);
+  const [pulseShareIndent, setPulseShareIndent] = useState<IndentRow | null>(
+    null,
+  );
+  const [boostSheetVisible, setBoostSheetVisible] = useState(false);
+  const [boostPostId, setBoostPostId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   useFocusEffect(
@@ -357,7 +363,6 @@ export function LoadCenterView({
     filteredHirePartnerLoads,
     filteredFindWorkList,
     filteredClaimedLoads,
-    filteredClaimedDoneLoads,
     doneSubTabCounts,
     statusTabCounts,
     loadMatchesSearch,
@@ -477,7 +482,7 @@ export function LoadCenterView({
     tripByIndentId,
   ]);
 
-  /** Claimed tab: prefer action-needed deploy count so quiet-mode badge stays honest. */
+  /** Action required tab: prefer pending-allocation count so quiet-mode badge stays honest. */
   const claimedTabCount =
     pendingDeployCount > 0 ? pendingDeployCount : awardedLoads.length;
 
@@ -486,7 +491,7 @@ export function LoadCenterView({
       [
         {
           key: "GIVE_LOAD" as const,
-          label: "Give load",
+          label: "My load",
           count: hirePartnerLoads.length,
         },
         {
@@ -496,7 +501,7 @@ export function LoadCenterView({
         },
         {
           key: "AWARDED" as const,
-          label: "Claimed",
+          label: "Action required",
           count: claimedTabCount,
         },
       ] as const,
@@ -532,12 +537,10 @@ export function LoadCenterView({
     [statusFilterTab, doneSubTab, tripByIndentId, driverProfileById],
   );
 
+  /** Action required: bids won still needing vehicle / driver allocation. */
   const displayedClaimedLoads = useMemo(
-    () =>
-      statusFilterTab === "DONE"
-        ? filteredClaimedDoneLoads
-        : filteredClaimedLoads,
-    [statusFilterTab, filteredClaimedDoneLoads, filteredClaimedLoads],
+    () => filteredClaimedLoads,
+    [filteredClaimedLoads],
   );
 
   const loadCenterPromoVariant = useMemo(
@@ -608,20 +611,29 @@ export function LoadCenterView({
     () => new Set(clients.map((c) => c.linked_organization_id).filter(Boolean) as string[]),
     [clients],
   );
-  const { posts: getLoadOpportunityPosts } = useLoadCenterOpportunityPosts(
+  const {
+    posts: getLoadOpportunityPosts,
+    viewerBidByPostId: getLoadOppViewerBids,
+  } = useLoadCenterOpportunityPosts(
     orgId,
     "get",
     connectedSupplierOrgIds,
     connectedClientOrgIds,
   );
+  /** Open Market column badge — only loads still open to bid (not already in My Bids). */
+  const openMarketOpportunityCount = useMemo(
+    () =>
+      getLoadOpportunityPosts.filter((p) => !getLoadOppViewerBids.has(p.id))
+        .length,
+    [getLoadOpportunityPosts, getLoadOppViewerBids],
+  );
   const getLoadKanbanColumnsWithOpps = useMemo(() => {
-    const oppCount = getLoadOpportunityPosts.length;
-    if (oppCount === 0) return getLoadKanbanColumns;
+    if (openMarketOpportunityCount === 0) return getLoadKanbanColumns;
     return getLoadKanbanColumns.map((col) => {
       if (col.id !== "OPEN") return col;
       return {
         ...col,
-        countExtra: oppCount,
+        countExtra: openMarketOpportunityCount,
         topExtra: (
           <LoadCenterOpportunityExchange
             orgId={orgId}
@@ -636,7 +648,7 @@ export function LoadCenterView({
     });
   }, [
     getLoadKanbanColumns,
-    getLoadOpportunityPosts.length,
+    openMarketOpportunityCount,
     orgId,
     connectedSupplierOrgIds,
     connectedClientOrgIds,
@@ -760,16 +772,25 @@ export function LoadCenterView({
 
   const marketCreatorOrgIdsKey = useMemo(() => {
     const ids = new Set<string>();
-    for (const load of filteredFindWorkList) {
+    const addOrg = (load: { organization_id?: string | null }) => {
       const orgIdKey = (load.organization_id ?? "").trim();
       if (orgIdKey) ids.add(orgIdKey);
-    }
-    for (const load of displayedClaimedLoads) {
-      const orgIdKey = (load.organization_id ?? "").trim();
-      if (orgIdKey) ids.add(orgIdKey);
-    }
+    };
+    for (const load of filteredFindWorkList) addOrg(load);
+    for (const load of findWorkLoads) addOrg(load);
+    for (const load of awardedLoads) addOrg(load);
+    for (const load of findWorkDoneUnionLoads) addOrg(load);
+    for (const load of displayedClaimedLoads) addOrg(load);
+    for (const load of hirePartnerLoads) addOrg(load);
     return Array.from(ids).sort().join("|");
-  }, [filteredFindWorkList, displayedClaimedLoads]);
+  }, [
+    filteredFindWorkList,
+    findWorkLoads,
+    awardedLoads,
+    findWorkDoneUnionLoads,
+    displayedClaimedLoads,
+    hirePartnerLoads,
+  ]);
 
   useEffect(() => {
     const ids = marketCreatorOrgIdsKey
@@ -797,7 +818,11 @@ export function LoadCenterView({
         const nextKeys = Object.keys(next);
         if (
           prevKeys.length === nextKeys.length &&
-          nextKeys.every((k) => prev[k]?.avatarUrl === next[k]?.avatarUrl)
+          nextKeys.every(
+            (k) =>
+              prev[k]?.avatarUrl === next[k]?.avatarUrl &&
+              prev[k]?.avatarSeed === next[k]?.avatarSeed,
+          )
         ) {
           return prev;
         }
@@ -810,9 +835,9 @@ export function LoadCenterView({
   }, [marketCreatorOrgIdsKey]);
 
   useEffect(() => {
-    // Keep status filter valid per role tab to avoid confusing empty views.
+    // Action required = pending allocation only (bids won → allocate vehicle).
     if (loadSubTab === "AWARDED") {
-      if (statusFilterTab !== "AWARDED" && statusFilterTab !== "DONE") {
+      if (statusFilterTab !== "AWARDED") {
         setStatusFilterTab("AWARDED");
       }
       return;
@@ -948,12 +973,7 @@ export function LoadCenterView({
               </View>
             </View>
           </View>
-          {loadSubTab === "AWARDED" ? (
-            <>
-              <View style={styles.loadsTabDivider} />
-              {renderDesktopStatusTabs()}
-            </>
-          ) : null}
+          {/* Action required: pending allocation only — no Awarded/Done sub-tabs. */}
         </View>
       </View>
     </View>
@@ -984,27 +1004,31 @@ export function LoadCenterView({
     triggerSuccess("Load broadcasted to network");
   };
 
-  const handlePulseStory = async (load: IndentRow) => {
-    if (!orgId || pulsingIndentId) return;
-    const live = indentStoryStates[load.id]?.isLive === true;
-    if (live) {
-      triggerSuccess("Story is live for 24 hours");
-      return;
-    }
-    setPulsingIndentId(load.id);
-    try {
-      const { error } = await ensureIndentStory(orgId, load, { reboost: true });
-      if (error) {
-        Alert.alert("Could not Pulse story", error.message);
+  const handlePulseStory = useCallback(
+    (load: IndentRow) => {
+      if (!orgId) return;
+      const story = indentStoryStates[load.id];
+      // Already live — open Reach boost (plans + credits) directly.
+      if (story?.isLive && story.postId) {
+        setBoostPostId(story.postId);
+        setBoostSheetVisible(true);
         return;
       }
-      invalidatePosts();
-      await refetchIndentStories();
-      triggerSuccess("Story live for 24 hours");
-    } finally {
-      setPulsingIndentId(null);
-    }
-  };
+      setPulseShareIndent(load);
+    },
+    [orgId, indentStoryStates],
+  );
+
+  const handlePulseStoryShareSuccess = useCallback(() => {
+    invalidatePosts();
+    void refetchIndentStories();
+  }, [invalidatePosts, refetchIndentStories]);
+
+  const handleBoostAfterBroadcast = useCallback((postId: string) => {
+    setBoostPostId(postId);
+    setPulseShareIndent(null);
+    setBoostSheetVisible(true);
+  }, []);
 
   const handleShareIndent = async (load: IndentRow) => {
     const routeLabel = `${(load.pickup_area || "—").toUpperCase()} → ${(load.drop_location || "—").toUpperCase()}`;
@@ -1056,7 +1080,8 @@ export function LoadCenterView({
   }, [isMobileView, layout, useGridLayout]);
   const statusTabsForRole = useMemo(() => {
     if (!isClaimedTab) return STATUS_TABS;
-    return STATUS_TABS.filter((t) => t.id === "AWARDED" || t.id === "DONE");
+    // Action required is pending-allocation only — no Awarded/Done stage strip.
+    return [];
   }, [isClaimedTab]);
 
   const mobileDoneSubTabs = useMemo(
@@ -1101,7 +1126,7 @@ export function LoadCenterView({
           key={load.id}
           indent={load}
           titleName={clientLabel}
-          statusLabel={isDone ? "completed" : "claimed"}
+          statusLabel={isDone ? "completed" : "action required"}
           origin={load.pickup_area || "—"}
           dest={load.drop_location || "—"}
           pickupIso={load.pickup_date}
@@ -1110,7 +1135,7 @@ export function LoadCenterView({
             isDone ? "On books" : formatINR(supplierRate)
           }
           ticketCommerce={{
-            kicker: isDone ? "COMPLETED" : "AWARDED",
+            kicker: isDone ? "COMPLETED" : "BIDS WON",
             amountInr: isDone ? null : supplierRate,
             rightCaption: isDone ? "On books" : null,
           }}
@@ -1121,18 +1146,18 @@ export function LoadCenterView({
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
           tripAllocation={tripAllocationForLoad(load.id)}
-          onPress={() => handleCardIndentPress(load)}
+          onPress={() =>
+            isDone ? handleCardIndentPress(load) : openIndentAllocation(load)
+          }
           actions={
-            <LoadCenterIndentCardFooter>
-              <ClaimedIndentCardActions
-                load={load}
-                isDone={isDone}
-                assigning={tripDeployment.assigningTripId === load.id}
-                onIndentPress={handleCardIndentPress}
-                onShareIndent={handleShareIndent}
-                onAssignDeploy={openIndentAllocation}
-              />
-            </LoadCenterIndentCardFooter>
+            <ClaimedIndentCardActions
+              load={load}
+              isDone={isDone}
+              assigning={tripDeployment.assigningTripId === load.id}
+              onIndentPress={handleCardIndentPress}
+              onShareIndent={handleShareIndent}
+              onAssignDeploy={openIndentAllocation}
+            />
           }
         />
       );
@@ -1216,6 +1241,7 @@ export function LoadCenterView({
           isAwarded: isAwardedPendingTrip || hasDirectSupplier,
           bidCount,
           loadTypeDetail,
+          awardedByName: awardModal.lastAwardedByIndentId[load.id] ?? null,
         },
       );
 
@@ -1251,29 +1277,27 @@ export function LoadCenterView({
           fillGrid={layout.fillGrid}
           actions={
             layout.withActions ? (
-              <LoadCenterIndentCardFooter dense={layout.dense}>
-                <GiveLoadIndentCardActions
-                  load={load}
-                  bidCount={bidCount}
-                  isDone={isDone}
-                  isDraft={isDraft}
-                  isAwardedPendingTrip={isAwardedPendingTrip}
-                  isAwaitingSupplierDeploy={isAwaitingSupplierDeploy}
-                  showPulseToNetwork={showPulseToNetwork}
-                  pulseStoryLive={indentStoryStates[load.id]?.isLive === true}
-                  pulseBusy={pulsingIndentId === load.id}
-                  awardedAmountLabel={
-                    awardedAmount != null ? formatINR(awardedAmount) : null
-                  }
-                  awardedAmount={awardedAmount}
-                  onPulseStory={handlePulseStory}
-                  onIndentPress={handleCardIndentPress}
-                  onShareIndent={handleShareIndent}
-                  onBroadcastDraft={handleBroadcastDraft}
-                  onOpenAwardModal={awardModal.open}
-                  dense={layout.dense}
-                />
-              </LoadCenterIndentCardFooter>
+              <GiveLoadIndentCardActions
+                load={load}
+                bidCount={bidCount}
+                isDone={isDone}
+                isDraft={isDraft}
+                isAwardedPendingTrip={isAwardedPendingTrip}
+                isAwaitingSupplierDeploy={isAwaitingSupplierDeploy}
+                showPulseToNetwork={showPulseToNetwork}
+                pulseStoryLive={indentStoryStates[load.id]?.isLive === true}
+                pulseBusy={false}
+                awardedAmountLabel={
+                  awardedAmount != null ? formatINR(awardedAmount) : null
+                }
+                awardedAmount={awardedAmount}
+                onPulseStory={handlePulseStory}
+                onIndentPress={handleCardIndentPress}
+                onShareIndent={handleShareIndent}
+                onBroadcastDraft={handleBroadcastDraft}
+                onOpenAwardModal={awardModal.open}
+                dense={layout.dense}
+              />
             ) : undefined
           }
         />
@@ -1290,7 +1314,6 @@ export function LoadCenterView({
       isMobileView,
       linkedOrgByOrganizationId,
       handleCardIndentPress,
-      pulsingIndentId,
       quoteCounts,
       statusFilterTab,
       tripAllocationForLoad,
@@ -1299,7 +1322,7 @@ export function LoadCenterView({
 
   const renderGiveLoadMobileCard = useCallback(
     (load: IndentRow) =>
-      renderGiveLoadHubCard(load, { withActions: false }),
+      renderGiveLoadHubCard(load, { withActions: true }),
     [renderGiveLoadHubCard],
   );
 
@@ -1371,7 +1394,7 @@ export function LoadCenterView({
               ? "pending"
               : "open";
       const rightFooter = isAccepted
-        ? "Awarded"
+        ? "Bids won"
         : loadTypeDetail;
       const ticketCommerce = resolveGetLoadTicketCommerce(
         statusFilterTab,
@@ -1387,7 +1410,7 @@ export function LoadCenterView({
         : isCountered
           ? "Respond to counter"
           : isPending
-            ? "Update quote"
+            ? "Update bid"
             : isRejected
               ? "New quote"
               : "Bid now";
@@ -1429,21 +1452,19 @@ export function LoadCenterView({
           fillGrid={layout.fillGrid}
           actions={
             layout.withActions ? (
-              <LoadCenterIndentCardFooter dense={layout.dense}>
-                <GetLoadIndentCardActions
-                  load={load}
-                  isAccepted={isAccepted}
-                  isDoneOutcome={isDoneOutcome}
-                  ctaLabel={ctaLabel}
-                  quoteVariant={quoteVariant}
-                  quoteAmount={quoteAmount}
-                  onIndentPress={handleCardIndentPress}
-                  onShareIndent={handleShareIndent}
-                  onOpenBidModal={setBidLoad}
-                  onAllocate={openIndentAllocation}
-                  dense={layout.dense}
-                />
-              </LoadCenterIndentCardFooter>
+              <GetLoadIndentCardActions
+                load={load}
+                isAccepted={isAccepted}
+                isDoneOutcome={isDoneOutcome}
+                ctaLabel={ctaLabel}
+                quoteVariant={quoteVariant}
+                quoteAmount={quoteAmount}
+                onIndentPress={handleCardIndentPress}
+                onShareIndent={handleShareIndent}
+                onOpenBidModal={setBidLoad}
+                onAllocate={openIndentAllocation}
+                dense={layout.dense}
+              />
             ) : undefined
           }
         />
@@ -1464,7 +1485,12 @@ export function LoadCenterView({
   );
 
   const renderGetLoadMobileCard = useCallback(
-    (load: IndentRow) => renderGetLoadHubCard(load, { withActions: false }),
+    (load: IndentRow) =>
+      renderGetLoadHubCard(load, {
+        // Same action toolbar as desktop list — Allocate on Bids Won must show.
+        dense: false,
+        withActions: true,
+      }),
     [renderGetLoadHubCard],
   );
 
@@ -1511,7 +1537,7 @@ export function LoadCenterView({
         <LoadCenterHubMobileIndentCard
           indent={load}
           titleName={clientLabel}
-          statusLabel={isDone ? "completed" : "claimed"}
+          statusLabel={isDone ? "completed" : "action required"}
           origin={load.pickup_area || "—"}
           dest={load.drop_location || "—"}
           pickupIso={load.pickup_date}
@@ -1528,17 +1554,15 @@ export function LoadCenterView({
           dense
           fillGrid
           actions={
-            <LoadCenterIndentCardFooter dense>
-              <ClaimedIndentCardActions
-                load={load}
-                isDone={isDone}
-                assigning={tripDeployment.assigningTripId === load.id}
-                onIndentPress={handleCardIndentPress}
-                onShareIndent={handleShareIndent}
-                onAssignDeploy={openIndentAllocation}
-                dense
-              />
-            </LoadCenterIndentCardFooter>
+            <ClaimedIndentCardActions
+              load={load}
+              isDone={isDone}
+              assigning={tripDeployment.assigningTripId === load.id}
+              onIndentPress={handleCardIndentPress}
+              onShareIndent={handleShareIndent}
+              onAssignDeploy={openIndentAllocation}
+              dense
+            />
           }
         />
       );
@@ -1571,7 +1595,7 @@ export function LoadCenterView({
           mainTabs={[
             {
               key: "GIVE_LOAD",
-              label: "Give load",
+              label: "My load",
               count: hirePartnerLoads.length,
             },
             {
@@ -1581,7 +1605,7 @@ export function LoadCenterView({
             },
             {
               key: "AWARDED",
-              label: "Claimed",
+              label: "Action required",
               count: claimedTabCount,
             },
           ]}
@@ -1600,22 +1624,49 @@ export function LoadCenterView({
       ) : null}
 
       {isMobileView &&
-      (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD") &&
-      (loadSubTab === "GIVE_LOAD"
-        ? integratedSuppliers
-        : integratedClients
-      ).length > 0 ? (
+      (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD") ? (
         <View style={styles.mobileNetworkToolbarRow}>
-          <LoadCenterIntegratedPartiesRow
-            mode={loadSubTab === "GIVE_LOAD" ? "supplier" : "client"}
-            parties={
-              loadSubTab === "GIVE_LOAD"
-                ? integratedSuppliers
-                : integratedClients
-            }
-            onAddToNetwork={openNetworkForParties}
-            onPartyPress={openIntegratedParty}
-          />
+          <View style={styles.mobileNetworkToolbarInner}>
+            {(loadSubTab === "GIVE_LOAD"
+              ? integratedSuppliers
+              : integratedClients
+            ).length > 0 ? (
+              <View style={styles.mobileNetworkPartiesFlex}>
+                <LoadCenterIntegratedPartiesRow
+                  mode={loadSubTab === "GIVE_LOAD" ? "supplier" : "client"}
+                  parties={
+                    loadSubTab === "GIVE_LOAD"
+                      ? integratedSuppliers
+                      : integratedClients
+                  }
+                  onAddToNetwork={openNetworkForParties}
+                  onPartyPress={openIntegratedParty}
+                />
+              </View>
+            ) : (
+              <View style={styles.mobileNetworkPartiesFlex} />
+            )}
+            <Pressable
+              style={({ pressed }) => [
+                styles.mobileFindOppsBtn,
+                pressed && styles.mobileFindOppsBtnPressed,
+              ]}
+              onPress={() =>
+                setFindMarketplaceMode(
+                  loadSubTab === "GET_LOAD" ? "get" : "give",
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel={
+                loadSubTab === "GET_LOAD"
+                  ? "Search open opportunities"
+                  : "Search idle capacity"
+              }
+              hitSlop={8}
+            >
+              <Search size={16} color={Theme.textPrimaryDark} strokeWidth={2.2} />
+            </Pressable>
+          </View>
         </View>
       ) : null}
 
@@ -1740,18 +1791,8 @@ export function LoadCenterView({
                   usePartnerSidebar ? styles.loadDesktopMain : undefined
                 }
               >
-                {/* Mobile: opportunity strip above list.
-                    Desktop Get Load network indents live in Open Market. */}
-                {isMobileView ? (
-                  <LoadCenterOpportunityExchange
-                    orgId={orgId}
-                    mode={loadSubTab === "GET_LOAD" ? "get" : "give"}
-                    supplierOrgIds={connectedSupplierOrgIds}
-                    clientOrgIds={connectedClientOrgIds}
-                    embedded
-                  />
-                ) : null}
-                {!usePartnerSidebar && orgId ? (
+                {/* Opportunity cards open via search icon → Find drawer (mobile only). */}
+                {!usePartnerSidebar && orgId && !isMobileView ? (
                   <View style={styles.loadPartnerRecsMobile}>
                     <LoadCenterPartnerRecommendations
                       orgId={orgId}
@@ -1946,14 +1987,11 @@ export function LoadCenterView({
               <View style={styles.securedSection}>
                 <View style={styles.loadSectionRow}>
                   <Text style={styles.loadSectionTitle}>
-                    {statusFilterTab === "DONE"
-                      ? "Completed claimed loads"
-                      : "Ready to deploy"}
+                    Pending allocation
                   </Text>
                   <View style={styles.loadSectionPill}>
                     <Text style={styles.loadSectionPillText}>
-                      {displayedClaimedLoads.length}{" "}
-                      {statusFilterTab === "DONE" ? "done" : "live"}
+                      {displayedClaimedLoads.length} to allocate
                     </Text>
                   </View>
                 </View>
@@ -1967,10 +2005,7 @@ export function LoadCenterView({
                           styles.highlightedIndentCard,
                       ]}
                     >
-                      {renderClaimedGridCard(
-                        load,
-                        statusFilterTab === "DONE",
-                      )}
+                      {renderClaimedGridCard(load, false)}
                     </View>
                   ))}
                 </View>
@@ -1981,14 +2016,11 @@ export function LoadCenterView({
                   <View style={[styles.securedSection, { marginBottom: 8 }]}>
                     <View style={styles.loadSectionRow}>
                       <Text style={styles.loadSectionTitle}>
-                        {statusFilterTab === "DONE"
-                          ? "Completed claimed loads"
-                          : "Ready to deploy"}
+                        Pending allocation
                       </Text>
                       <View style={styles.loadSectionPill}>
                         <Text style={styles.loadSectionPillText}>
-                          {displayedClaimedLoads.length}{" "}
-                          {statusFilterTab === "DONE" ? "done" : "live"}
+                          {displayedClaimedLoads.length} to allocate
                         </Text>
                       </View>
                     </View>
@@ -2003,10 +2035,7 @@ export function LoadCenterView({
                         : undefined
                     }
                   >
-                    {renderClaimedMobileCard(
-                      load,
-                      statusFilterTab === "DONE",
-                    )}
+                    {renderClaimedMobileCard(load, false)}
                   </View>
                 ))}
               </LoadCenterHubMobileListCanvas>
@@ -2184,6 +2213,41 @@ export function LoadCenterView({
         />
       ) : null}
 
+      {orgId ? (
+        <ShareLoadSheet
+          visible={pulseShareIndent != null}
+          indent={pulseShareIndent}
+          orgId={orgId}
+          onClose={() => setPulseShareIndent(null)}
+          onSuccess={handlePulseStoryShareSuccess}
+          onBoostAfterBroadcast={handleBoostAfterBroadcast}
+        />
+      ) : null}
+
+      {orgId && boostPostId ? (
+        <BoostSheet
+          visible={boostSheetVisible}
+          onClose={() => {
+            setBoostSheetVisible(false);
+            setBoostPostId(null);
+          }}
+          orgId={orgId}
+          postId={boostPostId}
+          onBoosted={() => {
+            invalidatePosts();
+            void refetchIndentStories();
+            if (orgId) {
+              void queryClient.invalidateQueries({
+                queryKey: queryKeys.reach.campaignsForOrg(orgId),
+              });
+              void queryClient.invalidateQueries({
+                queryKey: queryKeys.reach.wallet(orgId),
+              });
+            }
+          }}
+        />
+      ) : null}
+
     </View>
     </HubScreenShell>
   );
@@ -2245,7 +2309,31 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
+  },
+  mobileNetworkToolbarInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 42,
+  },
+  mobileNetworkPartiesFlex: {
+    flex: 1,
+    minWidth: 0,
     justifyContent: "center",
+  },
+  mobileFindOppsBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  mobileFindOppsBtnPressed: {
+    opacity: 0.88,
   },
   loadsSearchIcon: { marginRight: 8 },
   loadsSearchWrapFlex: {

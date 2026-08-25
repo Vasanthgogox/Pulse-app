@@ -29,26 +29,27 @@ export const LOAD_CENTER_PROMO_HERO_VISUAL_SCALE: Record<
   LoadCenterPromoVariant,
   number
 > = {
-  give_open: 1.26,
-  give_quoted: 1.22,
-  give_awarded: 1.32,
-  give_done_rejected: 1.24,
-  give_done_converted: 1.22,
-  get_open: 1.18,
-  get_quoted: 1.16,
-  get_awarded: 1.2,
-  get_done_rejected: 1.18,
-  get_done_converted: 1.18,
-  claimed_awarded: 1.5,
-  claimed_done_rejected: 1.2,
-  claimed_done_converted: 1.28,
-  filtered_out: 1.15,
+  give_open: 1.05,
+  give_quoted: 1.04,
+  give_awarded: 1.08,
+  give_done_rejected: 1.04,
+  give_done_converted: 1.04,
+  get_open: 1.02,
+  get_quoted: 1.02,
+  get_awarded: 1.04,
+  get_done_rejected: 1.02,
+  get_done_converted: 1.02,
+  claimed_awarded: 1.1,
+  claimed_done_rejected: 1.04,
+  claimed_done_converted: 1.06,
+  filtered_out: 1.02,
 };
 
+/** Compact square slot — keeps empty-state Lottie icons small and readable. */
 export const LOAD_CENTER_PROMO_HERO_SLOT = {
-  compact: 200,
-  mobile: 228,
-  desktop: 256,
+  compact: 112,
+  mobile: 128,
+  desktop: 144,
 } as const;
 
 export function resolveLoadCenterPromoHeroLottie(

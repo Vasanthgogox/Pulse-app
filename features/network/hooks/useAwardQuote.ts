@@ -50,6 +50,15 @@ export interface AwardQuoteResult {
   selectQuote: (id: string | null) => void;
   /** Optional quote id awards that pending offer immediately (card Award button). */
   award: (quoteIdOverride?: string) => Promise<void>;
+  /**
+   * indentId -> winning bidder's org name, captured in memory the instant an
+   * award succeeds (the winning DirectQuoteRow is already loaded at that
+   * point -- no new query). Session-scoped only: it does NOT persist across
+   * a reload, since there is no persisted lookup from an indent to its
+   * accepted quote's bidder name today. Closing that gap for good needs a
+   * real query addition, deliberately deferred.
+   */
+  lastAwardedByIndentId: Record<string, string>;
 }
 
 export function useAwardQuote({
@@ -63,6 +72,7 @@ export function useAwardQuote({
   const [currentLoad, setCurrentLoad] = useState<IndentRow | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
+  const [lastAwardedByIndentId, setLastAwardedByIndentId] = useState<Record<string, string>>({});
 
   const {
     data: awardModalQuotes = [],
@@ -344,11 +354,17 @@ export function useAwardQuote({
           queryKey: ["indents", load.id, "direct-quotes"],
         });
       }
+      if (winner.bidder_organization_name?.trim()) {
+        setLastAwardedByIndentId((m) => ({
+          ...m,
+          [load.id]: winner.bidder_organization_name!.trim(),
+        }));
+      }
       setSelectedQuoteId(null);
       setCurrentLoad(null);
       invalidateIndents(orgId);
       invalidatePosts();
-      onSuccess("Load awarded — supplier can assign and deploy from Claimed.");
+      onSuccess("Load awarded — supplier can allocate from Action required.");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error.";
       showAppAlert("Could not award", msg);
@@ -389,5 +405,6 @@ export function useAwardQuote({
     close,
     selectQuote,
     award,
+    lastAwardedByIndentId,
   };
 }

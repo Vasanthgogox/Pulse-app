@@ -28,7 +28,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { X } from "lucide-react-native";
@@ -51,11 +50,7 @@ interface AwardModalProps {
 }
 
 export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalProps) {
-  const { width: windowWidth } = useWindowDimensions();
   const queryClient = useQueryClient();
-  // Mirrors ResponsiveDrawer's own default drawerBreakpoint (768) -- needed
-  // here too, separately, only to pick the bid-list scroll style below.
-  const isSideDrawer = Platform.OS === "web" && windowWidth >= 768;
 
   const {
     currentLoad,
@@ -174,7 +169,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
   };
 
   const panelBody = (
-    <>
+    <View style={styles.panelRoot}>
       <View style={styles.reviewHubModalHeader}>
         <TouchableOpacity
           onPress={close}
@@ -300,11 +295,10 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
         ) : (
           <>
             <ScrollView
-              style={
-                isSideDrawer ? styles.bidsScrollDrawer : styles.bidsScrollSheet
-              }
+              style={styles.bidsScroll}
               contentContainerStyle={styles.bidsScrollContent}
               showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
             >
               <IndentLiveBidsPanel
                 quotes={sortedQuotes}
@@ -318,13 +312,6 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                 awarding={awarding}
                 onCounterOffer={
                   canActOnBids ? openCounterOffer : undefined
-                }
-                onAwardBid={
-                  canActOnBids
-                    ? (quoteId) => {
-                        void award.award(quoteId);
-                      }
-                    : undefined
                 }
               />
             </ScrollView>
@@ -394,7 +381,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
           </TouchableOpacity>
         </View>
       ) : null}
-    </>
+    </View>
   );
 
   const counterEntry = (
@@ -435,15 +422,23 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
 }
 
 const styles = StyleSheet.create({
+  panelRoot: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    flexDirection: "column",
+  },
   bodyColumn: {
     flex: 1,
     minHeight: 0,
+    minWidth: 0,
   },
   reviewHubModalHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 12,
     gap: 10,
+    flexShrink: 0,
   },
   reviewHubModalBack: {
     width: 40,
@@ -491,12 +486,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     marginTop: 0,
   },
-  bidsScrollDrawer: {
+  bidsScroll: {
     flex: 1,
     minHeight: 0,
-  },
-  bidsScrollSheet: {
-    maxHeight: 380,
   },
   bidsScrollContent: {
     paddingBottom: 4,
@@ -536,11 +528,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   footerActions: {
-    marginTop: 14,
-    paddingTop: 14,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     gap: 8,
+    flexShrink: 0,
   },
   modalSubmit: {
     flexDirection: "row",

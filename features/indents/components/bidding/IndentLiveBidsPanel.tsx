@@ -11,7 +11,6 @@ import { EntityAvatar } from "@/components/EntityAvatar";
 import Theme from "@/constants/Theme";
 import { IndentLiveBidCard } from "@/features/indents/components/bidding/IndentLiveBidCard";
 import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
-import { indentReviewHubText } from "@/features/indents/styles/indentReviewHubStyles";
 import { buildIndentAwardedBidAlert } from "@/features/indents/utils/bidding/indentBidAlert.util";
 import { buildIndentLiveBidsViewModel } from "@/features/indents/utils/bidding/indentLiveBids.util";
 import { formatINR } from "@/lib/format";
@@ -31,8 +30,13 @@ export interface IndentLiveBidsPanelProps {
   /** linked_organization_id values the shipper already has as integrated suppliers */
   connectedSupplierOrgIds?: Set<string>;
   onCounterOffer?: (quoteId: string) => void;
+  /** Award stays on the sticky footer — not shown on bid cards. */
   onAwardBid?: (quoteId: string) => void;
   awarding?: boolean;
+  /** Mobile: slim bid rows (amount focus). */
+  minimalCards?: boolean;
+  /** Mobile: hide filter chips to reduce noise. */
+  hideFilters?: boolean;
 }
 
 export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
@@ -45,9 +49,13 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
   canSelect = true,
   connectedSupplierOrgIds,
   onCounterOffer,
-  onAwardBid,
-  awarding = false,
+  onAwardBid: _onAwardBid,
+  awarding: _awarding = false,
+  minimalCards = false,
+  hideFilters = false,
 }: IndentLiveBidsPanelProps) {
+  void _onAwardBid;
+  void _awarding;
   const [filterTag, setFilterTag] = useState<BidFilterTag>("ALL");
 
   const vm = useMemo(
@@ -78,7 +86,7 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
     [vm.recommendedQuoteId, vm.sortedQuotes],
   );
 
-  const showFilters = quotes.length > 1;
+  const showFilters = !hideFilters && quotes.length > 1;
   const savingsLabel =
     vm.highestPendingAmount != null &&
     vm.lowestPendingAmount != null &&
@@ -87,7 +95,7 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
       : null;
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, minimalCards && styles.wrapMinimal]}>
       {showFilters ? (
         <View style={styles.filterRow}>
           {(
@@ -122,7 +130,10 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
         </View>
       ) : null}
 
-      {vm.showRecommendationStrip && recommendedQuote && filterTag === "ALL" ? (
+      {vm.showRecommendationStrip &&
+      recommendedQuote &&
+      filterTag === "ALL" &&
+      !minimalCards ? (
         <Pressable
           style={({ pressed }) => [
             styles.recoStrip,
@@ -157,7 +168,7 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
               name={recommendedQuote.bidder_organization_name ?? "Supplier"}
               initialsColorSeed={recommendedQuote.bidder_organization_id}
               entityType="supplier"
-              size={34}
+              size={28}
               showIntegrationBadge={false}
             />
             <View style={styles.recoBody}>
@@ -206,8 +217,17 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
             <IndentLiveBidCard
               key={q.id}
               quote={q}
-              badges={badges}
-              alertInfo={alertInfo}
+              badges={
+                minimalCards
+                  ? (vm.badgesByQuoteId.get(q.id) ?? []).filter(
+                      (b) =>
+                        b.kind === "lowest" ||
+                        b.kind === "recommended" ||
+                        b.kind === "awarded",
+                    )
+                  : badges
+              }
+              alertInfo={minimalCards ? null : alertInfo}
               selected={isSelected}
               disabled={!canSelect || !isPending}
               clientPriceInr={clientPriceInr}
@@ -217,6 +237,7 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
               isConnectedPartner={
                 connectedSupplierOrgIds?.has(q.bidder_organization_id) ?? false
               }
+              minimal={minimalCards}
               onPress={
                 canSelect && isPending
                   ? () => onSelectQuote(isSelected ? null : q.id)
@@ -230,15 +251,8 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
                     }
                   : undefined
               }
-              onAwardBid={
-                canSelect && isPending && onAwardBid
-                  ? () => {
-                      onSelectQuote(q.id);
-                      onAwardBid(q.id);
-                    }
-                  : undefined
-              }
-              awarding={awarding && selectedQuoteId === q.id}
+              onAwardBid={undefined}
+              awarding={false}
             />
           );
         })
@@ -255,6 +269,10 @@ const stylesDef = {
     alignSelf: "stretch",
     gap: 10,
   }),
+  wrapMinimal: view({
+    gap: 8,
+    marginBottom: 0,
+  }),
   filterRow: view({
     flexDirection: "row",
     alignItems: "stretch",
@@ -269,31 +287,26 @@ const stylesDef = {
   filterPill: view({
     flex: 1,
     minWidth: 0,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 9,
+    paddingHorizontal: 6,
+    paddingVertical: 7,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   }),
   filterPillActive: view({
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: Theme.positiveMuted,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 1,
+    borderColor: Theme.positiveMutedDarkBorder,
   }),
   filterPillText: text({
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
-    color: Theme.textMuted,
+    color: Theme.gpayListSubtitle,
     textAlign: "center",
   }),
   filterPillTextActive: text({
-    color: Theme.textPrimaryDark,
-    fontWeight: "800",
+    color: Theme.positive,
+    fontWeight: "700",
   }),
   emptyFilter: view({
     alignItems: "center",
@@ -307,22 +320,27 @@ const stylesDef = {
     backgroundColor: Theme.cardWhite,
   }),
   emptyFilterText: text({
-    ...indentReviewHubText.bodyMuted,
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.gpayListSubtitle,
     textAlign: "center",
   }),
   compareHint: text({
-    ...indentReviewHubText.bodyMuted,
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.gpayListSubtitle,
     textAlign: "left",
     paddingHorizontal: 2,
+    paddingBottom: 2,
   }),
   recoStrip: view({
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.positiveMutedDarkBorder,
     backgroundColor: Theme.positiveMuted,
-    gap: 10,
+    gap: 8,
     width: "100%",
     alignSelf: "stretch",
   }),
@@ -343,61 +361,63 @@ const stylesDef = {
   recoKickerRow: view({
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     flexShrink: 1,
     minWidth: 0,
   }),
   recoKicker: text({
-    ...indentReviewHubText.sectionTitle,
     color: Theme.positive,
-    letterSpacing: 0.7,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
   }),
   recoMeta: text({
-    ...indentReviewHubText.bodyMuted,
-    fontSize: 10,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.gpayListSubtitle,
     flexShrink: 0,
   }),
   recoRow: view({
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   }),
   recoBody: view({
     flex: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 2,
     paddingRight: 4,
   }),
   recoName: text({
-    ...indentReviewHubText.partyTitle,
-    fontSize: 13,
-    letterSpacing: 0.2,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.15,
+    color: Theme.gpayListTitle,
   }),
   recoHint: text({
-    ...indentReviewHubText.bodyMuted,
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10,
+    fontWeight: "500",
+    lineHeight: 13,
+    color: Theme.gpayListSubtitle,
   }),
   recoAmountCol: view({
     alignItems: "flex-end",
     justifyContent: "center",
-    gap: 3,
+    gap: 2,
     flexShrink: 0,
   }),
   recoAmount: text({
-    fontSize: 15,
-    fontWeight: "900",
-    color: Theme.textPrimaryDark,
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.gpayAmountReceived,
     fontVariant: ["tabular-nums"],
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
   }),
   recoSelectedLabel: text({
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.4,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.3,
     textTransform: "uppercase",
     color: Theme.positive,
   }),

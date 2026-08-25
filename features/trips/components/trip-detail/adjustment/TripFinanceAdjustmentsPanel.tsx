@@ -8,7 +8,6 @@ import {
   type ProvisionCostBreakdownLine,
   type ProvisionFinanceLayout,
 } from "@/features/trips/components/trip-detail/adjustment/ProvisionRevisedPartiesCard";
-import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import { formatINR } from "@/lib/format";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
@@ -18,6 +17,12 @@ import {
   selectClientPassThroughRecommendations,
   type ClientPassThroughRecommendation,
 } from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentPassThrough.util";
+
+const LINK = "#2874F0";
+const INK = "#212121";
+const BODY = "#616161";
+const MUTED = "#9E9E9E";
+const CANVAS = "#F5F5F5";
 
 export interface TripFinanceAdjustmentsPanelProps {
   adjustments: TripAdjustment[];
@@ -120,32 +125,37 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
         </View>
       </View>
 
-      <ProvisionRevisedPartiesCard
-        clientName={props.clientName}
-        clientAvatarUrl={props.clientAvatarUrl}
-        clientAvatarSeed={props.clientAvatarSeed}
-        clientOrganizationImageUrl={props.clientOrganizationImageUrl}
-        clientOrganizationAvatarSeed={props.clientOrganizationAvatarSeed}
-        clientIntegrated={props.clientIntegrated}
-        sales={props.sales}
-        adjSales={props.adjSales}
-        revenueSideDelta={props.revenueSideDelta}
-        supplierName={props.supplierName}
-        supplierAvatarUrl={props.supplierAvatarUrl}
-        supplierAvatarSeed={props.supplierAvatarSeed}
-        supplierOrganizationImageUrl={props.supplierOrganizationImageUrl}
-        supplierOrganizationAvatarSeed={props.supplierOrganizationAvatarSeed}
-        supplierIntegrated={props.supplierIntegrated}
-        cost={props.cost}
-        adjCost={props.adjCost}
-        costSideDelta={props.costSideDelta}
-        costLaneLabel={props.costLaneLabel}
-        costPartyEntityType={props.isAssetExecution ? "driver" : "supplier"}
-        costBreakdownLines={props.costBreakdownLines}
-        costUnset={props.costUnset}
-        onSelectSide={props.onOpenProvision}
-        layout={layout}
-      />
+      {/* Mobile chrome already shows sale/cost once — avoid repeating party totals. */}
+      {isDesktop ? (
+        <ProvisionRevisedPartiesCard
+          clientName={props.clientName}
+          clientAvatarUrl={props.clientAvatarUrl}
+          clientAvatarSeed={props.clientAvatarSeed}
+          clientOrganizationImageUrl={props.clientOrganizationImageUrl}
+          clientOrganizationAvatarSeed={props.clientOrganizationAvatarSeed}
+          clientIntegrated={props.clientIntegrated}
+          sales={props.sales}
+          adjSales={props.adjSales}
+          revenueSideDelta={props.revenueSideDelta}
+          supplierName={props.supplierName}
+          supplierAvatarUrl={props.supplierAvatarUrl}
+          supplierAvatarSeed={props.supplierAvatarSeed}
+          supplierOrganizationImageUrl={props.supplierOrganizationImageUrl}
+          supplierOrganizationAvatarSeed={props.supplierOrganizationAvatarSeed}
+          supplierIntegrated={props.supplierIntegrated}
+          cost={props.cost}
+          adjCost={props.adjCost}
+          costSideDelta={props.costSideDelta}
+          costLaneLabel={props.costLaneLabel}
+          costPartyEntityType={props.isAssetExecution ? "driver" : "supplier"}
+          costBreakdownLines={props.costBreakdownLines}
+          costUnset={props.costUnset}
+          onSelectSide={props.onOpenProvision}
+          layout={layout}
+        />
+      ) : props.capturePaymentSlot ? (
+        <View style={styles.mobileCaptureFirst}>{props.capturePaymentSlot}</View>
+      ) : null}
 
       {props.onRequestDeduction && passThroughRecommendations.length > 0 ? (
         <ProvisionPassThroughCard
@@ -190,16 +200,26 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
               Party
             </Text>
           </View>
-          <View style={styles.colNote}>
-            <Text style={[styles.th, isDesktop && styles.thDesktop]} numberOfLines={1}>
-              Note
-            </Text>
-          </View>
-          <View style={styles.colReason}>
-            <Text style={[styles.th, isDesktop && styles.thDesktop]} numberOfLines={1}>
-              Reason
-            </Text>
-          </View>
+          {isDesktop ? (
+            <>
+              <View style={styles.colNote}>
+                <Text style={[styles.th, styles.thDesktop]} numberOfLines={1}>
+                  Note
+                </Text>
+              </View>
+              <View style={styles.colReason}>
+                <Text style={[styles.th, styles.thDesktop]} numberOfLines={1}>
+                  Reason
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.colNoteReason}>
+              <Text style={styles.th} numberOfLines={1}>
+                Note / reason
+              </Text>
+            </View>
+          )}
           <View style={[styles.colAmt, { width: colAmt }]}>
             <Text style={[styles.th, styles.thAmt, isDesktop && styles.thDesktop]} numberOfLines={1}>
               Amount
@@ -219,6 +239,42 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
             const costEntityType = props.isAssetExecution ? "driver" : "supplier";
             const isSelected = selectedRowId === adj.id;
             const canEdit = !voided && typeof props.onEditAdjustment === "function";
+            const reasonText = (adj.reason ?? "").trim() || "—";
+            const notePill = (
+              <Pressable
+                style={[
+                  styles.notePill,
+                  adj.impact === "minus" ? styles.notePillCn : styles.notePillDn,
+                  voided && styles.notePillVoided,
+                ]}
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  props.onViewNotePdf?.(adj);
+                }}
+                disabled={!props.onViewNotePdf}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${cnDnLabel(adj.impact)} PDF`}
+              >
+                <Text
+                  style={[
+                    styles.notePillText,
+                    adj.impact === "minus" ? styles.noteCn : styles.noteDn,
+                    voided && styles.struck,
+                  ]}
+                >
+                  {cnDnLabel(adj.impact)}
+                </Text>
+                {props.onViewNotePdf ? (
+                  <Feather
+                    name="file-text"
+                    size={9}
+                    color={adj.impact === "minus" ? Theme.primary : "#0f766e"}
+                    style={styles.notePillIcon}
+                  />
+                ) : null}
+              </Pressable>
+            );
             return (
               <View key={adj.id} style={styles.trWrap}>
               <Pressable
@@ -237,8 +293,21 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                     name={partyName}
                     avatarUrl={isSale ? props.clientAvatarUrl : props.supplierAvatarUrl}
                     avatarSeed={isSale ? props.clientAvatarSeed : props.supplierAvatarSeed}
+                    organizationImageUrl={
+                      isSale
+                        ? props.clientOrganizationImageUrl
+                        : props.supplierOrganizationImageUrl
+                    }
+                    organizationAvatarSeed={
+                      isSale
+                        ? props.clientOrganizationAvatarSeed
+                        : props.supplierOrganizationAvatarSeed
+                    }
+                    isIntegrated={
+                      isSale ? props.clientIntegrated : props.supplierIntegrated
+                    }
                     entityType={isSale ? "client" : costEntityType}
-                    size={isDesktop ? 24 : 20}
+                    size={isDesktop ? 24 : 22}
                     showIntegrationBadge={false}
                   />
                   <View style={styles.partyLaneBody}>
@@ -272,54 +341,38 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                     </View>
                   </View>
                 </View>
-                <View style={styles.colNote}>
-                  <Pressable
-                    style={[
-                      styles.notePill,
-                      adj.impact === "minus" ? styles.notePillCn : styles.notePillDn,
-                      voided && styles.notePillVoided,
-                    ]}
-                    onPress={(e) => {
-                      e?.stopPropagation?.();
-                      props.onViewNotePdf?.(adj);
-                    }}
-                    disabled={!props.onViewNotePdf}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel={`View ${cnDnLabel(adj.impact)} PDF`}
-                  >
+                {isDesktop ? (
+                  <>
+                    <View style={styles.colNote}>{notePill}</View>
+                    <View style={styles.colReason}>
+                      <Text
+                        style={[
+                          styles.td,
+                          styles.tdReason,
+                          styles.tdDesktop,
+                          voided && styles.struck,
+                        ]}
+                        numberOfLines={3}
+                      >
+                        {reasonText}
+                      </Text>
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.colNoteReason}>
+                    {notePill}
                     <Text
                       style={[
-                        styles.notePillText,
-                        adj.impact === "minus" ? styles.noteCn : styles.noteDn,
+                        styles.td,
+                        styles.tdReason,
                         voided && styles.struck,
                       ]}
+                      numberOfLines={2}
                     >
-                      {cnDnLabel(adj.impact)}
+                      {reasonText}
                     </Text>
-                    {props.onViewNotePdf ? (
-                      <Feather
-                        name="file-text"
-                        size={9}
-                        color={adj.impact === "minus" ? Theme.primary : "#0f766e"}
-                        style={styles.notePillIcon}
-                      />
-                    ) : null}
-                  </Pressable>
-                </View>
-                <View style={styles.colReason}>
-                  <Text
-                    style={[
-                      styles.td,
-                      styles.tdReason,
-                      isDesktop && styles.tdDesktop,
-                      voided && styles.struck,
-                    ]}
-                    numberOfLines={3}
-                  >
-                    {(adj.reason ?? "").trim() || "—"}
-                  </Text>
-                </View>
+                  </View>
+                )}
                 <View style={[styles.colAmt, { width: colAmt }]}>
                   <Text
                     style={[
@@ -349,11 +402,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                       accessibilityRole="button"
                       accessibilityLabel={`View ${cnDnLabel(adj.impact)} PDF`}
                     >
-                      <Feather
-                        name="file-text"
-                        size={11}
-                        color={adj.impact === "minus" ? Theme.primary : "#0f766e"}
-                      />
+                      <Feather name="file-text" size={12} color={LINK} />
                       <Text style={styles.rowActionBtnText}>View PDF</Text>
                     </Pressable>
                   ) : null}
@@ -368,7 +417,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                       accessibilityRole="button"
                       accessibilityLabel={`Edit ${cnDnLabel(adj.impact)}`}
                     >
-                      <Feather name="edit-2" size={11} color={Theme.buttonPrimaryText} />
+                      <Feather name="edit-2" size={12} color={LINK} />
                       <Text style={styles.rowActionBtnTextPrimary}>
                         Edit {cnDnLabel(adj.impact)}
                       </Text>
@@ -382,20 +431,27 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
         )}
       </View>
 
-      {props.capturePaymentSlot}
+      {/* Desktop: capture under lines. Mobile: already shown above. */}
+      {isDesktop ? props.capturePaymentSlot : null}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   card: {
-    marginTop: 8,
-    backgroundColor: "#fff",
-    padding: 10,
-    gap: 8,
+    marginTop: 0,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
+    gap: 10,
+  },
+  mobileCaptureFirst: {
+    marginBottom: 2,
   },
   cardDesktop: {
     marginTop: 10,
+    backgroundColor: Theme.cardWhite,
     padding: 14,
     gap: 12,
   },
@@ -406,24 +462,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color: Theme.textPrimaryDark,
-    lineHeight: 12,
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: -0.1,
+    textTransform: "none",
+    color: INK,
+    lineHeight: 18,
   },
   titleDesktop: {
     fontSize: 11,
+    fontWeight: "800",
     letterSpacing: 0.8,
+    textTransform: "uppercase",
     lineHeight: 14,
   },
   hint: {
     marginTop: 2,
-    fontSize: 9,
-    fontWeight: "500",
-    lineHeight: 12,
-    color: Theme.textMuted,
+    fontSize: 11,
+    fontWeight: "400",
+    lineHeight: 15,
+    color: MUTED,
   },
   hintDesktop: {
     fontSize: 11,
@@ -433,7 +491,8 @@ const styles = StyleSheet.create({
   badge: {
     minWidth: 22,
     height: 22,
-    backgroundColor: "#f1f5f9",
+    borderRadius: 11,
+    backgroundColor: CANVAS,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
@@ -442,11 +501,12 @@ const styles = StyleSheet.create({
   badgeDesktop: {
     minWidth: 26,
     height: 26,
+    borderRadius: 13,
   },
   badgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
-    color: "#64748b",
+    color: BODY,
     fontVariant: ["tabular-nums"],
   },
   badgeTextDesktop: {
@@ -460,15 +520,19 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   tableTitle: {
-    fontSize: 8,
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+    textTransform: "none",
+    color: INK,
+    lineHeight: 14,
+  },
+  tableTitleDesktop: {
+    fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.5,
     textTransform: "uppercase",
     color: Theme.textMuted,
-    lineHeight: 10,
-  },
-  tableTitleDesktop: {
-    fontSize: 10,
     lineHeight: 12,
   },
   toolbarActions: { flexDirection: "row", gap: 6 },
@@ -483,55 +547,64 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    backgroundColor: "rgba(99,102,241,0.06)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(40,116,240,0.08)",
   },
   addBtnSaleText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "600",
-    color: Theme.primary,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+    color: LINK,
+    textTransform: "none",
+    letterSpacing: 0,
   },
   addBtnCost: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    backgroundColor: "rgba(15,118,110,0.06)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(15,118,110,0.08)",
   },
   addBtnCostText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "600",
     color: "#0f766e",
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+    textTransform: "none",
+    letterSpacing: 0,
   },
   table: {
     overflow: "hidden",
-    backgroundColor: "#fafbfc",
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#EEEEEE",
+    backgroundColor: Theme.cardWhite,
   },
   tableDesktop: {
+    borderRadius: 8,
   },
   tableHead: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    backgroundColor: "#f8fafc",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e8ecf4",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: CANVAS,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#EEEEEE",
   },
   tableHeadDesktop: {
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   th: {
-    ...FinanceTxnTypography.fieldLabel,
-    fontSize: 8,
-    lineHeight: 11,
+    fontSize: 10,
+    fontWeight: "500",
+    lineHeight: 13,
+    color: MUTED,
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
   },
   thDesktop: {
     fontSize: 10,
@@ -542,15 +615,15 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   colPartyLane: {
-    flex: 1,
-    minWidth: 96,
-    maxWidth: 128,
+    flex: 1.05,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingRight: 4,
+    gap: 8,
+    paddingRight: 8,
   },
   colPartyLaneDesktop: {
+    flex: 1,
     minWidth: 140,
     maxWidth: 220,
     gap: 8,
@@ -559,36 +632,41 @@ const styles = StyleSheet.create({
   partyLaneBody: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 4,
   },
   colNote: {
     width: COL_NOTE,
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 2,
   },
   colReason: {
     flex: 1.35,
     minWidth: 72,
     justifyContent: "center",
-    paddingHorizontal: 2,
-    paddingTop: 2,
+    paddingHorizontal: 4,
+  },
+  colNoteReason: {
+    flex: 1.45,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 8,
   },
   colAmt: {
     width: COL_AMT,
     flexShrink: 0,
     alignItems: "flex-end",
-    justifyContent: "flex-start",
-    paddingTop: 2,
+    justifyContent: "center",
   },
   empty: {
-    padding: 12,
-    fontSize: 10,
+    padding: 14,
+    fontSize: 12,
     fontWeight: "400",
-    color: Theme.textMuted,
+    color: MUTED,
     textAlign: "center",
-    lineHeight: 14,
+    lineHeight: 16,
   },
   emptyDesktop: {
     padding: 16,
@@ -597,86 +675,81 @@ const styles = StyleSheet.create({
   },
   tr: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    minHeight: 38,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
-    backgroundColor: "#fff",
+    alignItems: "center",
+    minHeight: 52,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: Theme.cardWhite,
   },
   trDesktop: {
-    minHeight: 44,
+    minHeight: 48,
     paddingVertical: 9,
     paddingHorizontal: 12,
+    alignItems: "flex-start",
   },
   trWrap: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e8ecf4",
-    backgroundColor: "#fff",
+    borderBottomColor: "#EEEEEE",
+    backgroundColor: Theme.cardWhite,
   },
   trSelected: {
-    backgroundColor: "#fafbff",
-    borderBottomColor: Theme.pulseIndigoRing,
+    backgroundColor: "#FAFBFF",
   },
   rowActions: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingBottom: 8,
-    paddingTop: 2,
-    backgroundColor: "#fafbff",
+    gap: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.pulseIndigoRing,
+    borderTopColor: "#EEEEEE",
+    backgroundColor: CANVAS,
   },
   rowActionBtn: {
     flex: 1,
-    minWidth: 96,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
-    backgroundColor: Theme.cardWhite,
-    minHeight: 32,
+    gap: 6,
+    paddingVertical: 11,
+    minHeight: 44,
+    backgroundColor: CANVAS,
   },
   rowActionBtnPrimary: {
-    backgroundColor: Theme.buttonPrimary,
+    backgroundColor: CANVAS,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: "#E0E0E0",
   },
   rowActionBtnPressed: {
-    opacity: 0.88,
+    opacity: 0.75,
+    backgroundColor: "#EEEEEE",
   },
   rowActionBtnText: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontWeight: "500",
+    color: LINK,
   },
   rowActionBtnTextPrimary: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.buttonPrimaryText,
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontWeight: "500",
+    color: LINK,
   },
   trVoided: { opacity: 0.55 },
   td: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: "400",
-    color: "#475569",
-    lineHeight: 13,
+    color: BODY,
+    lineHeight: 16,
   },
   tdDesktop: {
     fontSize: 11,
     lineHeight: 15,
   },
   partyCell: {
-    ...FinanceTxnTypography.partyTitle,
     fontStyle: "normal",
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: "600",
-    lineHeight: 12,
-    color: Theme.textPrimaryDark,
+    lineHeight: 16,
+    color: INK,
     minWidth: 0,
+    textTransform: "none",
   },
   partyCellDesktop: {
     fontSize: 11,
@@ -684,47 +757,49 @@ const styles = StyleSheet.create({
   },
   laneChip: {
     alignSelf: "flex-start",
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
     paddingVertical: 2,
+    borderRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
   },
   laneChipSale: {
-    backgroundColor: "rgba(99,102,241,0.08)",
+    backgroundColor: "rgba(40,116,240,0.08)",
+    borderColor: "rgba(40,116,240,0.2)",
   },
   laneChipCost: {
     backgroundColor: "rgba(15,118,110,0.08)",
-    borderColor: "rgba(15,118,110,0.22)",
+    borderColor: "rgba(15,118,110,0.2)",
   },
   laneChipVoided: {
     opacity: 0.75,
   },
   laneChipText: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.4,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.3,
     textTransform: "uppercase",
   },
   laneChipTextSale: {
-    color: Theme.primary,
+    color: LINK,
   },
   laneChipTextCost: {
     color: "#0f766e",
   },
   notePill: {
-    minWidth: 28,
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
-    paddingHorizontal: 5,
-    paddingVertical: 3,
-    borderRadius: 6,
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
   notePillIcon: {
-    marginTop: 1,
+    marginTop: 0,
   },
   notePillCn: {
-    backgroundColor: "rgba(79,70,229,0.1)",
+    backgroundColor: "rgba(40,116,240,0.1)",
   },
   notePillDn: {
     backgroundColor: "rgba(225,29,72,0.08)",
@@ -733,31 +808,33 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   notePillText: {
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
     letterSpacing: 0.2,
   },
-  noteCn: { color: "#4D3636" },
+  noteCn: { color: LINK },
   noteDn: { color: "#e11d48" },
   tdReason: {
-    fontWeight: "500",
-    color: "#64748b",
-    fontSize: 9,
-    lineHeight: 13,
+    flex: 1,
+    minWidth: 0,
+    fontWeight: "400",
+    color: BODY,
+    fontSize: 12,
+    lineHeight: 16,
   },
   tdAmt: {
-    fontSize: 9,
+    fontSize: 12,
     textAlign: "right",
-    fontWeight: "700",
+    fontWeight: "600",
     fontVariant: ["tabular-nums"],
-    lineHeight: 13,
+    lineHeight: 16,
   },
   tdAmtDesktop: {
     fontSize: 11,
     lineHeight: 15,
   },
-  amtSale: { color: "#059669" },
-  amtCost: { color: "#dc2626" },
+  amtSale: { color: Theme.gpayAmountReceived },
+  amtCost: { color: Theme.teslaRed },
   struck: {
     textDecorationLine: "line-through",
     opacity: 0.75,

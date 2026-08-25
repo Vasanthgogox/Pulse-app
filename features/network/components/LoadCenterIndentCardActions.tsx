@@ -20,7 +20,7 @@ import Theme from "@/constants/Theme";
 import { formatINRChip } from "@/lib/format";
 import type { IndentRow } from "@/features/indents";
 import { BidReceivedHammer } from "@/features/indents";
-import { Package, Share2, Zap } from "lucide-react-native";
+import { ArrowRight, Package, Share2, Zap } from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
   Platform,
@@ -34,11 +34,18 @@ import {
 
 const FOOTER_BORDER = "rgba(15, 23, 42, 0.06)";
 const ROW_HEIGHT = HUB_GRID_TOOLBAR_ROW_HEIGHT;
+const LINK = "#2874F0";
+const BORDER_SOFT = "#EEEEEE";
 /** Expand 32px controls to a ~44pt touch target without growing the row. */
 const TOOLBAR_HIT_SLOP = { top: 6, bottom: 6, left: 6, right: 6 } as const;
 
 export type LoadCenterIndentCardActionsLayout = {
   dense?: boolean;
+  /**
+   * Sit in the card’s Offer / Your bid row (reference: amount left, CTA right).
+   * Default true for list cards.
+   */
+  commerceRow?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -201,6 +208,99 @@ function PulseButton({
       </Text>
     </TouchableOpacity>
   );
+}
+
+function CommerceLinkCta({
+  label,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.commerceCta, disabled && styles.commerceCtaDisabled]}
+      onPress={onPress}
+      activeOpacity={0.85}
+      disabled={disabled}
+      hitSlop={TOOLBAR_HIT_SLOP}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Text style={styles.commerceCtaText} numberOfLines={1}>
+        {label}
+      </Text>
+      <ArrowRight size={11} color={LINK} strokeWidth={2.4} />
+    </TouchableOpacity>
+  );
+}
+
+function CommerceActionRow({
+  children,
+  style,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return <View style={[styles.commerceRow, style]}>{children}</View>;
+}
+
+function CommerceIconButton({
+  onPress,
+  label,
+  children,
+  tone,
+}: {
+  onPress: () => void;
+  label: string;
+  children: ReactNode;
+  tone?: "live" | "expired" | "default";
+}) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.commerceIconBtn,
+        tone === "live" && styles.commerceIconBtnLive,
+        tone === "expired" && styles.commerceIconBtnExpired,
+      ]}
+      onPress={onPress}
+      activeOpacity={0.85}
+      accessibilityLabel={label}
+      hitSlop={TOOLBAR_HIT_SLOP}
+    >
+      {children}
+    </TouchableOpacity>
+  );
+}
+
+function compactCommerceCtaLabel(label: string): string {
+  switch (label) {
+    case "Review Hub":
+    case "Review":
+      return "Review";
+    case "Broadcast":
+      return "Broadcast";
+    case "Update quote":
+    case "Update bid":
+    case "Update":
+      return "Update bid";
+    case "View details":
+    case "Details":
+      return "View";
+    case "Allocate":
+      return "Allocate";
+    case "New quote":
+    case "Rebid":
+      return "Rebid";
+    case "Respond to counter":
+      return "Respond";
+    case "Bid now":
+      return "View & bid";
+    default:
+      return label;
+  }
 }
 
 function PendingChip({ dense }: { dense?: boolean }) {
@@ -459,11 +559,62 @@ export function GiveLoadIndentCardActions({
   awardedAmountLabel,
   awardedAmount,
   dense,
+  commerceRow = true,
   style,
 }: GiveLoadIndentCardActionsProps) {
   const shareOpensDetail = isDone || isAwardedPendingTrip;
   const pulseHandler = onPulseStory ?? onShareToNetwork;
   const showPulse = showPulseToNetwork && Boolean(pulseHandler);
+
+  const onPrimary = () => {
+    if (isDraft) {
+      onBroadcastDraft(load);
+      return;
+    }
+    onOpenAwardModal(load);
+  };
+
+  if (commerceRow) {
+    const ctaLabel = compactCommerceCtaLabel(
+      isDraft ? "Broadcast" : "Review Hub",
+    );
+    return (
+      <CommerceActionRow style={style}>
+        <CommerceIconButton
+          label={shareOpensDetail ? "View detail" : "Share indent"}
+          onPress={() =>
+            shareOpensDetail ? onIndentPress(load) : onShareIndent(load)
+          }
+        >
+          <Share2 size={13} color={Theme.textMuted} strokeWidth={2.2} />
+        </CommerceIconButton>
+        {showPulse ? (
+          <CommerceIconButton
+            label={
+              pulseStoryLive
+                ? "Pulse story is live"
+                : "Pulse indent as a 24 hour story"
+            }
+            onPress={() => pulseHandler!(load)}
+            tone={pulseStoryLive ? "live" : "expired"}
+          >
+            <Zap
+              size={12}
+              color={pulseStoryLive ? Theme.positive : Theme.destructive}
+              strokeWidth={2.2}
+            />
+          </CommerceIconButton>
+        ) : null}
+        {isDone ? null : isAwaitingSupplierDeploy ? (
+          <Text style={styles.commercePending} numberOfLines={1}>
+            Pending
+          </Text>
+        ) : (
+          <CommerceLinkCta label={ctaLabel} onPress={onPrimary} />
+        )}
+      </CommerceActionRow>
+    );
+  }
 
   const statusChip = (
     <GiveLoadBidChip
@@ -497,13 +648,7 @@ export function GiveLoadIndentCardActions({
           isDraft ? "Broadcast" : "Review Hub",
           dense,
         )}
-        onPress={() => {
-          if (isDraft) {
-            onBroadcastDraft(load);
-            return;
-          }
-          onOpenAwardModal(load);
-        }}
+        onPress={onPrimary}
       />
     );
 
@@ -569,10 +714,11 @@ export type GetLoadIndentCardActionsProps = LoadCenterIndentCardActionsLayout & 
 };
 
 function compactGetLoadCtaLabel(label: string, dense?: boolean): string {
+  if (label === "Update quote" || label === "Update" || label === "Update bid") {
+    return "Update bid";
+  }
   if (!dense) return label;
   switch (label) {
-    case "Update quote":
-      return "Update";
     case "View details":
       return "Details";
     case "Allocate":
@@ -589,13 +735,14 @@ export function GetLoadIndentCardActions({
   isAccepted,
   isDoneOutcome,
   ctaLabel,
-  quoteVariant,
-  quoteAmount,
+  quoteVariant: _quoteVariant,
+  quoteAmount: _quoteAmount,
   onIndentPress,
   onShareIndent,
   onOpenBidModal,
   onAllocate,
   dense,
+  commerceRow = true,
   style,
 }: GetLoadIndentCardActionsProps) {
   const onPrimary = () => {
@@ -610,13 +757,22 @@ export function GetLoadIndentCardActions({
     onOpenBidModal(load);
   };
 
-  const statusChip = (
-    <GetLoadQuoteChip
-      variant={quoteVariant}
-      quoteAmount={quoteAmount}
-      dense={dense}
-    />
-  );
+  const linkLabel = compactCommerceCtaLabel(ctaLabel);
+
+  if (commerceRow) {
+    return (
+      <CommerceActionRow style={style}>
+        <CommerceIconButton
+          label="Share load"
+          onPress={() => onShareIndent(load)}
+        >
+          <Share2 size={13} color={Theme.textMuted} strokeWidth={2.2} />
+        </CommerceIconButton>
+        <CommerceLinkCta label={linkLabel} onPress={onPrimary} />
+      </CommerceActionRow>
+    );
+  }
+
   const share = (
     <ShareIconButton
       dense={dense}
@@ -636,11 +792,10 @@ export function GetLoadIndentCardActions({
   if (dense) {
     return (
       <View style={style}>
-        <HubGridToolbarRow
-          status={statusChip}
-          share={share}
-          primary={primary}
-        />
+        <InlineActionRow>
+          {share}
+          <View style={styles.primaryGrow}>{primary}</View>
+        </InlineActionRow>
       </View>
     );
   }
@@ -648,10 +803,7 @@ export function GetLoadIndentCardActions({
   return (
     <View style={style}>
       <InlineActionRow>
-        <InlineLeadingCluster>
-          {statusChip}
-          {share}
-        </InlineLeadingCluster>
+        {share}
         <View style={styles.primaryGrow}>{primary}</View>
       </InlineActionRow>
     </View>
@@ -675,8 +827,29 @@ export function ClaimedIndentCardActions({
   onShareIndent,
   onAssignDeploy,
   dense,
+  commerceRow = true,
   style,
 }: ClaimedIndentCardActionsProps) {
+  if (commerceRow) {
+    return (
+      <CommerceActionRow style={style}>
+        <CommerceIconButton
+          label="Share load"
+          onPress={() => onShareIndent(load)}
+        >
+          <Share2 size={13} color={Theme.textMuted} strokeWidth={2.2} />
+        </CommerceIconButton>
+        <CommerceLinkCta
+          label={isDone ? "View" : assigning ? "…" : "Allocate"}
+          onPress={() =>
+            isDone ? onIndentPress(load) : onAssignDeploy(load)
+          }
+          disabled={assigning}
+        />
+      </CommerceActionRow>
+    );
+  }
+
   const statusChip = dense ? (
     <HubGridStatusChip
       icon={
@@ -686,8 +859,8 @@ export function ClaimedIndentCardActions({
           color={isDone ? Theme.positive : Theme.textMuted}
         />
       }
-      line1={isDone ? "Done" : "Ready"}
-      accessibilityLabel={isDone ? "Completed" : "Ready to assign"}
+      line1={isDone ? "Done" : "Allocate"}
+      accessibilityLabel={isDone ? "Completed" : "Action required — allocate vehicle"}
     />
   ) : (
     <View style={styles.statusChip}>
@@ -700,7 +873,7 @@ export function ClaimedIndentCardActions({
       </View>
       <View style={styles.statusChipTextWrap}>
         <Text style={styles.statusChipLine1} numberOfLines={1}>
-          {isDone ? "Done" : "Ready"}
+          {isDone ? "Done" : "Allocate"}
         </Text>
       </View>
     </View>
@@ -715,7 +888,7 @@ export function ClaimedIndentCardActions({
   );
   const primary = dense ? (
     <HubGridPrimaryButton
-      label={isDone ? "View" : assigning ? "…" : "Assign"}
+      label={isDone ? "View" : assigning ? "…" : "Allocate"}
       onPress={() => (isDone ? onIndentPress(load) : onAssignDeploy(load))}
       disabled={assigning}
     />
@@ -723,7 +896,7 @@ export function ClaimedIndentCardActions({
     <PrimaryButton
       dense={false}
       inline={false}
-      label={isDone ? "View" : assigning ? "…" : "Assign vehicle"}
+      label={isDone ? "View details" : assigning ? "…" : "Allocate"}
       onPress={() => (isDone ? onIndentPress(load) : onAssignDeploy(load))}
       disabled={assigning}
     />
@@ -781,12 +954,12 @@ const styles = StyleSheet.create({
   inlineRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     width: "100%",
     minWidth: 0,
     height: ROW_HEIGHT,
     ...Platform.select({
-      web: { columnGap: 6, rowGap: 0 } as ViewStyle,
+      web: { columnGap: 8, rowGap: 0 } as ViewStyle,
       default: {},
     }),
   },
@@ -876,6 +1049,59 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
     padding: 0,
+  },
+  commerceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+    flexShrink: 0,
+    height: 28,
+  },
+  commerceIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER_SOFT,
+    backgroundColor: Theme.cardWhite,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  commerceIconBtnLive: {
+    borderColor: "rgba(21, 128, 61, 0.35)",
+    backgroundColor: "#E8F7F0",
+  },
+  commerceIconBtnExpired: {
+    borderColor: "rgba(185, 28, 28, 0.28)",
+    backgroundColor: "#FEF2F2",
+  },
+  commerceCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    height: 28,
+    paddingVertical: 0,
+    paddingHorizontal: 8,
+    borderRadius: 7,
+    backgroundColor: "#EFF6FF",
+    maxWidth: 110,
+  },
+  commerceCtaDisabled: {
+    opacity: 0.55,
+  },
+  commerceCtaText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: LINK,
+    letterSpacing: -0.1,
+    lineHeight: 16,
+  },
+  commercePending: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
   },
   pulseBtn: {
     flexDirection: "row",

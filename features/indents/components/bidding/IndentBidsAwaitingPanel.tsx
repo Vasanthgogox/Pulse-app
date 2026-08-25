@@ -5,7 +5,6 @@ import { indentReviewHubText } from "@/features/indents/styles/indentReviewHubSt
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
-  IndentHubAuctionGlyph,
   IndentHubLivePulseDot,
   IndentHubTrophyGlyph,
 } from "@/features/indents/components/IndentHubAnimatedGlyphs";
@@ -44,6 +43,13 @@ export type IndentBidsAwaitingPanelProps = {
   onBroadcast?: () => void;
   onShareStory?: () => void;
   onShareWhatsApp?: () => void;
+  /**
+   * Boost with Pulse Reach — only shown after a Pulse story is live.
+   * Do not use as a standalone always-visible Reach entry.
+   */
+  onBoostReach?: () => void;
+  /** True when this indent has a live Pulse story (24h window). */
+  pulseStoryLive?: boolean;
 };
 
 const LISTENING_TIPS = [
@@ -253,6 +259,7 @@ function ShareActionTile({
   disabled,
   loading,
   compact,
+  labelColor,
 }: {
   label: string;
   hint: string;
@@ -263,6 +270,7 @@ function ShareActionTile({
   disabled?: boolean;
   loading?: boolean;
   compact?: boolean;
+  labelColor?: string;
 }) {
   return (
     <Pressable
@@ -295,13 +303,21 @@ function ShareActionTile({
         </View>
         <View style={styles.shareTileCopy}>
           <Text
-            style={[styles.shareTileLabel, compact && styles.shareTileLabelCompact]}
+            style={[
+              styles.shareTileLabel,
+              compact && styles.shareTileLabelCompact,
+              labelColor ? { color: labelColor } : null,
+            ]}
             numberOfLines={1}
           >
             {label}
           </Text>
           <Text
-            style={[styles.shareTileHint, compact && styles.shareTileHintCompact]}
+            style={[
+              styles.shareTileHint,
+              compact && styles.shareTileHintCompact,
+              labelColor ? { color: labelColor, opacity: 0.85 } : null,
+            ]}
             numberOfLines={2}
           >
             {hint}
@@ -313,56 +329,209 @@ function ShareActionTile({
   );
 }
 
+function StackedReachActions({
+  onShareStory,
+  onShareWhatsApp,
+  onBoostReach,
+  sharingStory,
+  pulseStoryLive = false,
+}: {
+  onShareStory?: () => void;
+  onShareWhatsApp?: () => void;
+  onBoostReach?: () => void;
+  sharingStory?: boolean;
+  pulseStoryLive?: boolean;
+}) {
+  const hasStory = Boolean(onShareStory);
+  const hasWhatsApp = Boolean(onShareWhatsApp);
+  if (!hasStory && !hasWhatsApp) return null;
+
+  const showBoost = pulseStoryLive && Boolean(onBoostReach);
+
+  return (
+    <View style={styles.stackedReach}>
+      <Text style={styles.stackedReachKicker}>Boost reach</Text>
+      <View style={styles.stackedReachRow}>
+        {hasStory ? (
+          <TouchableOpacity
+            style={[
+              styles.stackedReachBtn,
+              pulseStoryLive
+                ? styles.stackedReachBtnPrimary
+                : styles.stackedReachBtnInactive,
+            ]}
+            onPress={onShareStory}
+            disabled={sharingStory}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel={
+              pulseStoryLive
+                ? "Pulse story is active — rebroadcast or manage"
+                : "Broadcast Pulse story — currently inactive"
+            }
+          >
+            {sharingStory ? (
+              <LoadingIndicator
+                size="small"
+                color={
+                  pulseStoryLive ? Theme.textOnDark : Theme.teslaRed
+                }
+              />
+            ) : (
+              <>
+                <Feather
+                  name="zap"
+                  size={12}
+                  color={
+                    pulseStoryLive ? Theme.textOnDark : Theme.teslaRed
+                  }
+                />
+                <Text
+                  style={[
+                    pulseStoryLive
+                      ? styles.stackedReachBtnPrimaryText
+                      : styles.stackedStoryInactiveText,
+                  ]}
+                  numberOfLines={1}
+                >
+                  Pulse story
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : null}
+        {hasWhatsApp ? (
+          <TouchableOpacity
+            style={[styles.stackedReachBtn, styles.stackedReachBtnWa]}
+            onPress={onShareWhatsApp}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Share on WhatsApp"
+          >
+            <FontAwesome name="whatsapp" size={13} color="#128C7E" />
+            <Text style={styles.stackedReachBtnWaText} numberOfLines={1}>
+              WhatsApp
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {hasStory ? (
+        <Text
+          style={[
+            styles.stackedStoryStatus,
+            pulseStoryLive
+              ? styles.stackedStoryStatusLive
+              : styles.stackedStoryStatusInactive,
+          ]}
+        >
+          {pulseStoryLive
+            ? "Pulse story · Active (24h)"
+            : "Pulse story · Inactive — broadcast to go live"}
+        </Text>
+      ) : null}
+      {showBoost ? (
+        <TouchableOpacity
+          onPress={onBoostReach}
+          hitSlop={8}
+          style={styles.stackedBoostLink}
+          accessibilityRole="button"
+          accessibilityLabel="Boost with Pulse Reach"
+        >
+          <Feather name="trending-up" size={12} color={Theme.accentBrown} />
+          <Text style={styles.stackedBoostLinkText}>
+            Boost with Pulse Reach
+          </Text>
+          <Feather name="chevron-right" size={12} color={Theme.accentBrown} />
+        </TouchableOpacity>
+      ) : null}
+      <View style={styles.stackedLockRow}>
+        <Feather name="lock" size={10} color={MUTED} />
+        <Text style={styles.stackedLockText}>
+          Editing locked while bids are open
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function ShareDock({
   compact,
   stacked,
   onShareStory,
   onShareWhatsApp,
+  onBoostReach,
   sharingStory,
+  pulseStoryLive = false,
 }: {
   compact?: boolean;
   stacked?: boolean;
   onShareStory?: () => void;
   onShareWhatsApp?: () => void;
+  onBoostReach?: () => void;
   sharingStory?: boolean;
+  pulseStoryLive?: boolean;
 }) {
   const hasStory = Boolean(onShareStory);
   const hasWhatsApp = Boolean(onShareWhatsApp);
   if (!hasStory && !hasWhatsApp) return null;
+
+  if (stacked) {
+    return (
+      <StackedReachActions
+        onShareStory={onShareStory}
+        onShareWhatsApp={onShareWhatsApp}
+        onBoostReach={onBoostReach}
+        sharingStory={sharingStory}
+        pulseStoryLive={pulseStoryLive}
+      />
+    );
+  }
+
+  const showBoost = pulseStoryLive && Boolean(onBoostReach);
 
   return (
     <View
       style={[
         styles.shareDock,
         compact && styles.shareDockCompact,
-        stacked && styles.shareDockStacked,
-        !stacked && styles.shareDockCentered,
+        styles.shareDockCentered,
       ]}
     >
-      {stacked ? (
-        <Text style={[styles.shareDockKicker, styles.shareDockKickerStacked]}>
-          Spread reach
-        </Text>
-      ) : (
-        <View style={styles.shareDockDividerRow}>
-          <View style={styles.shareDockLine} />
-          <Text style={styles.shareDockKicker}>Spread reach</Text>
-          <View style={styles.shareDockLine} />
-        </View>
-      )}
+      <View style={styles.shareDockDividerRow}>
+        <View style={styles.shareDockLine} />
+        <Text style={styles.shareDockKicker}>Spread reach</Text>
+        <View style={styles.shareDockLine} />
+      </View>
 
       <View style={[styles.shareTileRow, compact && styles.shareTileRowCompact]}>
         {hasStory ? (
           <ShareActionTile
             label="Pulse story"
-            hint="24h network post"
-            gradientColors={["rgba(205,233,247,0.55)", "rgba(255,255,255,0.95)"]}
-            borderColor="rgba(77,54,54,0.12)"
-            icon={<Feather name="zap" size={compact ? 15 : 17} color={INK} />}
+            hint={
+              pulseStoryLive ? "Active · 24h network" : "Inactive · tap to broadcast"
+            }
+            gradientColors={
+              pulseStoryLive
+                ? ["rgba(205,233,247,0.55)", "rgba(255,255,255,0.95)"]
+                : ["rgba(232,33,39,0.08)", "rgba(255,255,255,0.96)"]
+            }
+            borderColor={
+              pulseStoryLive
+                ? "rgba(77,54,54,0.12)"
+                : "rgba(232,33,39,0.28)"
+            }
+            icon={
+              <Feather
+                name="zap"
+                size={compact ? 15 : 17}
+                color={pulseStoryLive ? INK : Theme.teslaRed}
+              />
+            }
             onPress={onShareStory}
             loading={sharingStory}
             disabled={sharingStory}
             compact={compact}
+            labelColor={!pulseStoryLive ? Theme.teslaRed : undefined}
           />
         ) : null}
         {hasWhatsApp ? (
@@ -383,6 +552,19 @@ function ShareDock({
           />
         ) : null}
       </View>
+
+      {showBoost ? (
+        <TouchableOpacity
+          onPress={onBoostReach}
+          style={styles.dockBoostLink}
+          accessibilityRole="button"
+          accessibilityLabel="Boost with Pulse Reach"
+        >
+          <Feather name="trending-up" size={13} color={Theme.accentBrown} />
+          <Text style={styles.dockBoostLinkText}>Boost with Pulse Reach</Text>
+          <Feather name="chevron-right" size={14} color={Theme.accentBrown} />
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.shareLockPill}>
         <Feather name="lock" size={10} color={MUTED} />
@@ -406,18 +588,17 @@ export function LiveBidsSectionHeader({
   return (
     <View style={styles.liveBidsHeaderBar}>
       <View style={styles.sectionHeaderRow}>
-        <FontAwesome name="gavel" size={14} color={Theme.driverPrimary} />
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {showTrophy ? (
-          <IndentHubTrophyGlyph size={18} />
-        ) : isListening && count === 0 ? (
-          <View style={styles.listeningChip}>
-            <IndentHubLivePulseDot />
-            <Text style={styles.listeningChipText}>LIVE</Text>
-          </View>
-        ) : count > 0 ? (
-          <IndentHubAuctionGlyph size={18} />
-        ) : null}
+        <View style={styles.sectionTitleCluster}>
+          <View style={styles.sectionAccent} />
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {showTrophy ? <IndentHubTrophyGlyph size={14} /> : null}
+          {isListening && count === 0 ? (
+            <View style={styles.listeningChip}>
+              <IndentHubLivePulseDot />
+              <Text style={styles.listeningChipText}>LIVE</Text>
+            </View>
+          ) : null}
+        </View>
         <View
           style={[
             styles.countBadge,
@@ -453,6 +634,8 @@ export function IndentBidsAwaitingPanel({
   onBroadcast,
   onShareStory,
   onShareWhatsApp,
+  onBoostReach,
+  pulseStoryLive = false,
 }: IndentBidsAwaitingPanelProps) {
   const title = canBroadcast
     ? "Ready to go live"
@@ -463,24 +646,111 @@ export function IndentBidsAwaitingPanel({
   const body = canBroadcast
     ? "Broadcast this load to your network — transporters can quote in real time."
     : isListening
-      ? "Your load is on the network. Quotes land here as partners respond."
+      ? "Your load is live. Quotes appear here as partners respond."
       : "Waiting for transporters to respond on this load.";
 
   const showLiveKicker = isListening;
-  const showShareActions = isListening && (onShareStory || onShareWhatsApp);
+  const showShareActions =
+    isListening && (onShareStory || onShareWhatsApp);
+
+  /** Mobile Ajio sheet — flat, dense, aligned with IndentMobileLoadDetail. */
+  if (stacked) {
+    return (
+      <View style={styles.stackedRoot}>
+        <View style={styles.stackedStatus}>
+          <View
+            style={[
+              styles.stackedIconWrap,
+              isListening && styles.stackedIconWrapLive,
+              canBroadcast && styles.stackedIconWrapReady,
+            ]}
+          >
+            {isListening ? (
+              <View style={styles.stackedLiveDot} />
+            ) : (
+              <Feather
+                name={canBroadcast ? "share-2" : "inbox"}
+                size={14}
+                color={INK}
+              />
+            )}
+          </View>
+          <View style={styles.stackedCopy}>
+            <View style={styles.stackedTitleRow}>
+              <Text style={styles.stackedTitle}>{title}</Text>
+              {isListening ? (
+                <View style={styles.stackedLiveChip}>
+                  <Text style={styles.stackedLiveChipText}>LIVE</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.stackedBody} numberOfLines={2}>
+              {body}
+            </Text>
+          </View>
+        </View>
+
+        {canBroadcast && onBroadcast ? (
+          <TouchableOpacity
+            style={styles.stackedBroadcastBtn}
+            onPress={onBroadcast}
+            activeOpacity={0.9}
+            disabled={isBroadcasting || sharingDraft}
+            accessibilityRole="button"
+            accessibilityLabel="Broadcast load to network"
+          >
+            {isBroadcasting || sharingDraft ? (
+              <LoadingIndicator size="small" color={Theme.buttonPrimaryText} />
+            ) : (
+              <>
+                <Feather
+                  name="share-2"
+                  size={13}
+                  color={Theme.buttonPrimaryText}
+                />
+                <Text style={styles.stackedBroadcastBtnText}>Broadcast now</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : showShareActions ? (
+          <StackedReachActions
+            onShareStory={onShareStory}
+            onShareWhatsApp={onShareWhatsApp}
+            onBoostReach={onBoostReach}
+            sharingStory={sharingStory}
+            pulseStoryLive={pulseStoryLive}
+          />
+        ) : isListening ? (
+          <View style={styles.stackedLockRow}>
+            <Feather name="lock" size={10} color={MUTED} />
+            <Text style={styles.stackedLockText}>
+              Shared — editing locked while bids are open
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.stackedLockRow}>
+            <Feather name="lock" size={10} color={MUTED} />
+            <Text style={styles.stackedLockText}>
+              Broadcast unavailable for current status
+            </Text>
+          </View>
+        )}
+
+        {broadcastError ? (
+          <Text style={styles.errorText}>{broadcastError}</Text>
+        ) : null}
+      </View>
+    );
+  }
 
   const lottieSize = paneFill
     ? compact
       ? 80
       : 96
-    : stacked
-      ? compact
-        ? 60
-        : 72
-      : compact
-        ? 72
-        : 88;
-  const lottieRenderScale = paneFill ? 2.4 : stacked ? 2 : 2.2;
+    : compact
+      ? 72
+      : 88;
+  const lottieRenderScale = paneFill ? 2.4 : 2.2;
   const lottieStageSize = paneFill ? (compact ? 136 : 156) : undefined;
 
   const inner = (
@@ -488,25 +758,23 @@ export function IndentBidsAwaitingPanel({
       style={[
         styles.contentStack,
         paneFill && styles.contentStackPaneFill,
-        stacked && styles.contentStackStacked,
       ]}
     >
       <View
         style={[
           styles.contentColumn,
           compact && styles.contentColumnCompact,
-          stacked && styles.contentColumnStacked,
-          paneFill && !stacked && styles.contentColumnPane,
+          paneFill && styles.contentColumnPane,
         ]}
       >
       <BidLifecycleStrip
         canBroadcast={canBroadcast}
         isListening={isListening}
-        compact={compact || stacked}
+        compact={compact}
       />
 
       {showLiveKicker ? (
-        <View style={[styles.liveBanner, stacked && styles.liveBannerStacked]}>
+        <View style={styles.liveBanner}>
           <View style={styles.livePulseDot} />
           <View style={styles.liveBannerIcon}>
             <Feather name="radio" size={10} color={INK} />
@@ -520,15 +788,12 @@ export function IndentBidsAwaitingPanel({
         style={[
           styles.hero,
           compact && styles.heroCompact,
-          stacked && styles.heroStacked,
         ]}
       >
         <View
           style={[
             styles.lottieStage,
             compact && styles.lottieStageCompact,
-            stacked && styles.lottieStageStacked,
-            stacked && compact && styles.lottieStageStackedCompact,
             paneFill && styles.lottieStagePane,
             paneFill && compact && styles.lottieStagePaneCompact,
             lottieStageSize != null && {
@@ -545,8 +810,6 @@ export function IndentBidsAwaitingPanel({
             style={[
               styles.lottieWrap,
               compact && styles.lottieWrapCompact,
-              stacked && styles.lottieWrapStacked,
-              stacked && compact && styles.lottieWrapStackedCompact,
             ]}
           >
             <TinyEmptyLottie
@@ -558,12 +821,11 @@ export function IndentBidsAwaitingPanel({
           </LinearGradient>
         </View>
 
-        <View style={[styles.heroCopy, stacked && styles.heroCopyStacked]}>
+        <View style={styles.heroCopy}>
           <Text
             style={[
               styles.title,
               compact && styles.titleCompact,
-              stacked && styles.titleStacked,
             ]}
           >
             {title}
@@ -572,16 +834,15 @@ export function IndentBidsAwaitingPanel({
             style={[
               styles.body,
               compact && styles.bodyCompact,
-              stacked && styles.bodyStacked,
             ]}
-            numberOfLines={stacked ? 2 : 3}
+            numberOfLines={3}
           >
             {body}
           </Text>
         </View>
       </View>
 
-      {isListening && paneFill && !stacked ? (
+      {isListening && paneFill ? (
         <ListeningTipsCarousel compact={compact} />
       ) : null}
 
@@ -606,10 +867,12 @@ export function IndentBidsAwaitingPanel({
       ) : showShareActions ? (
         <ShareDock
           compact={compact}
-          stacked={stacked}
+          stacked={false}
           onShareStory={onShareStory}
           onShareWhatsApp={onShareWhatsApp}
+          onBoostReach={onBoostReach}
           sharingStory={sharingStory}
+          pulseStoryLive={pulseStoryLive}
         />
       ) : isListening ? (
         <View style={[styles.listeningFooter, compact && styles.listeningFooterCompact]}>
@@ -637,8 +900,6 @@ export function IndentBidsAwaitingPanel({
         compact && styles.cardCompact,
         paneFill && styles.cardPaneFill,
         paneFill && isListening && styles.cardPaneFillListening,
-        stacked && styles.cardStacked,
-        stacked && compact && styles.cardStackedCompact,
         isListening && styles.cardListening,
       ]}
     >
@@ -667,7 +928,23 @@ const styles = StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    width: "100%",
+  },
+  sectionTitleCluster: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  sectionAccent: {
+    width: 3,
+    height: 14,
+    borderRadius: 2,
+    backgroundColor: Theme.positive,
+    flexShrink: 0,
   },
   liveBidsHeaderBar: {
     flexDirection: "row",
@@ -675,49 +952,56 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 2,
   },
-  sectionTitle: indentReviewHubText.sectionTitle,
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+    color: Theme.gpayListTitle,
+    textTransform: "none",
+  },
   listeningChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 999,
-    backgroundColor: SKY_TRAY,
+    backgroundColor: Theme.positiveMuted,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.loadStatusTabBorderSoft,
+    borderColor: Theme.positiveMutedDarkBorder,
   },
   listeningChipText: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: INK,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    color: Theme.positive,
   },
   countBadge: {
-    minWidth: 20,
-    height: 20,
+    minWidth: 22,
+    height: 22,
     paddingHorizontal: 6,
-    borderRadius: 10,
+    borderRadius: 11,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
   },
   countBadgeListening: {
-    backgroundColor: SKY_TRAY,
+    backgroundColor: Theme.positiveMuted,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.loadStatusTabBorderSoft,
+    borderColor: Theme.positiveMutedDarkBorder,
   },
   countBadgeActive: {
-    backgroundColor: Theme.driverPrimary,
+    backgroundColor: Theme.positive,
     borderWidth: 0,
   },
   countBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    color: Theme.gpayListTitle,
+    fontVariant: ["tabular-nums"],
   },
   countBadgeTextListening: {
-    color: INK,
+    color: Theme.positive,
   },
   countBadgeTextActive: {
     color: Theme.textOnDark,
@@ -1132,10 +1416,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 10,
   },
-  shareDockStacked: {
-    paddingTop: 10,
-    gap: 8,
-  },
   shareDockCentered: {
     alignItems: "stretch",
   },
@@ -1158,8 +1438,196 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     flexShrink: 0,
   },
-  shareDockKickerStacked: {
+  stackedRoot: {
+    width: "100%",
+    alignSelf: "stretch",
+    gap: 12,
+    paddingTop: 2,
+    paddingBottom: 4,
+  },
+  stackedStatus: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  stackedIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "#F0F0F0",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  stackedIconWrapLive: {
+    backgroundColor: "#E8F7F0",
+  },
+  stackedIconWrapReady: {
+    backgroundColor: "#EEF3FF",
+  },
+  stackedLiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Theme.positive,
+  },
+  stackedCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  stackedTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  stackedTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
+  },
+  stackedLiveChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: "#E8F7F0",
+  },
+  stackedLiveChipText: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    color: Theme.positive,
+  },
+  stackedBody: {
+    fontSize: 11,
+    fontWeight: "400",
+    lineHeight: 15,
+    color: MUTED,
+  },
+  stackedBroadcastBtn: {
+    height: 34,
+    borderRadius: 6,
+    backgroundColor: Theme.darkBackground,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  stackedBroadcastBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+  },
+  stackedReach: {
+    gap: 8,
+    paddingTop: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#EEEEEE",
+  },
+  stackedReachKicker: {
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+    color: MUTED,
+  },
+  stackedReachRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    width: "100%",
+  },
+  stackedReachBtn: {
+    flex: 1,
+    minWidth: 0,
+    height: 34,
+    borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: 6,
+  },
+  stackedReachBtnPrimary: {
+    backgroundColor: Theme.darkBackground,
+  },
+  stackedReachBtnPrimaryText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+  },
+  stackedReachBtnInactive: {
+    backgroundColor: "#FFF1F1",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(232,33,39,0.35)",
+  },
+  stackedStoryInactiveText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.teslaRed,
+  },
+  stackedReachBtnWa: {
+    backgroundColor: "#EEEEEE",
+  },
+  stackedReachBtnWaText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#128C7E",
+  },
+  stackedStoryStatus: {
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  stackedStoryStatusLive: {
+    color: Theme.positive,
+  },
+  stackedStoryStatusInactive: {
+    color: Theme.teslaRed,
+    fontWeight: "600",
+  },
+  stackedBoostLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
     alignSelf: "flex-start",
+  },
+  stackedBoostLinkText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.accentBrown,
+  },
+  dockBoostLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: Theme.accentBrownWash,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.accentBrownBorder,
+  },
+  dockBoostLinkText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.accentBrown,
+  },
+  stackedLockRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 2,
+  },
+  stackedLockText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "400",
+    color: MUTED,
   },
   shareTileRow: {
     flexDirection: "row",

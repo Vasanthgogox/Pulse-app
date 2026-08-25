@@ -48,11 +48,14 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     flexShrink: 1,
     minHeight: 0,
   },
-  /** Inside a wizard shell (full-page or carded) — the shell already pads. */
+  /**
+   * Inside FullPageWizardShell keypad steps (`pageRootKeypad` has no side pad
+   * so the dock can go edge-to-edge). Re-apply screen inset on the input stack.
+   */
   mainPaddedWizard: {
     flexShrink: 1,
     minHeight: 0,
-    paddingHorizontal: 0,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
   displayRow: {
     position: "relative",

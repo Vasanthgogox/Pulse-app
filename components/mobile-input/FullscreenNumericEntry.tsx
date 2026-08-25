@@ -179,7 +179,18 @@ export function FullscreenNumericEntry({
 
       <View style={styles.payBody}>
         {partyPreview ? (
-          <NumericEntryRecipientHero party={partyPreview} caption={label} />
+          <NumericEntryRecipientHero
+            party={partyPreview}
+            // Avoid "Update your bid Update your bid" when party.name already is the action title.
+            caption={
+              partyPreview.name.trim().toLowerCase() === label.trim().toLowerCase()
+                ? undefined
+                : label
+            }
+            nameInline={
+              partyPreview.name.trim().toLowerCase() !== label.trim().toLowerCase()
+            }
+          />
         ) : (
           <View style={styles.payLabelOnly}>
             <Text style={styles.payLabelOnlyText}>{label}</Text>
@@ -269,7 +280,19 @@ export function FullscreenNumericEntry({
       </View>
 
       {partyPreview ? (
-        <NumericEntryRecipientHero party={partyPreview} caption={label} />
+        partyPreview.name.trim().toLowerCase() === label.trim().toLowerCase() ? (
+          partyPreview.subtitle ? (
+            <Text style={styles.elevatedPartySubtitle} numberOfLines={3}>
+              {partyPreview.subtitle}
+            </Text>
+          ) : null
+        ) : (
+          <NumericEntryRecipientHero
+            party={partyPreview}
+            caption={label}
+            nameInline
+          />
+        )
       ) : null}
 
       {amountDisplay}
@@ -513,6 +536,15 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     marginTop: 2,
     textAlign: 'center',
+  },
+  elevatedPartySubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Theme.textMuted,
+    textAlign: 'center',
+    lineHeight: 17,
+    paddingHorizontal: 20,
+    marginBottom: 8,
   },
   applyBtn: {
     paddingHorizontal: 14,

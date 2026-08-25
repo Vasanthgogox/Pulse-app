@@ -1,11 +1,11 @@
 /**
  * Trip tracking status gate and adaptive TAT-based checkpoint interval logic.
  *
- * Status gating is more precise than !tripCompleted — idle/assigned trips do
- * not need live tracking subscriptions even though they're not completed.
+ * Live GPS broadcast + map UI attach once a driver is on the trip (assigned /
+ * pending acceptance / in-transit). Pre-assignment idle trips stay gated out.
  */
 
-// Statuses that indicate the driver is actively moving.
+// Statuses that indicate the driver is actively moving on a leg.
 const ACTIVE_TRACKING_STATUSES = new Set([
   'in_transit', 'going_to_pickup', 'moving',
   // DB aliases in use until status values are normalized:
@@ -14,8 +14,9 @@ const ACTIVE_TRACKING_STATUSES = new Set([
 ]);
 
 /**
- * Returns true only when live GPS tracking should be active.
- * More precise than !isTripCompleted — also gates out idle/assigned states.
+ * Returns true when the trip is on an active movement leg (post-start).
+ * Prefer {@link isTripDriverMapEligible} for map / Track / ping UI — that also
+ * covers assigned / pending_acceptance with a driver.
  */
 export function isTripTrackingActive(
   status: string | null | undefined,
@@ -26,10 +27,11 @@ export function isTripTrackingActive(
   return ACTIVE_TRACKING_STATUSES.has(status.toLowerCase());
 }
 
-/** Trip has a driver and may emit GPS — show map, trail, and last-known pin. */
+/** Trip has a driver and may emit GPS — show map, trail, Track modal, and last-known pin. */
 const DRIVER_MAP_ELIGIBLE_STATUSES = new Set([
   ...ACTIVE_TRACKING_STATUSES,
   "assigned",
+  "confirmed",
   "pending_acceptance",
 ]);
 

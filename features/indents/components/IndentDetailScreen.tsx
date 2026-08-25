@@ -69,7 +69,9 @@ import {
     useInvalidateIndents,
     useMyDirectQuotesQuery,
 } from "@/lib/queries/useIndentsQuery";
-import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
+import { useInvalidatePosts, useIndentStoryStatesQuery } from "@/lib/queries/usePostsQuery";
+import { BoostSheet } from "@/features/reach/components/BoostSheet";
+import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
 import { useCapabilities } from "@/lib/useCapabilities";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
@@ -159,6 +161,20 @@ function formatIndentDate(
   }
 }
 
+function formatPlacedOnDate(createdAt: string): string {
+  try {
+    const d = new Date(createdAt);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "—";
+  }
+}
+
 export function IndentDetailScreen({
   indentId,
   onBack,
@@ -170,7 +186,7 @@ export function IndentDetailScreen({
   const useSplitHub = windowWidth >= 880 && windowHeight >= 560;
   const stackedHub = !useSplitHub;
   const hubDense = compactHub || stackedHub;
-  const footerReserve = compactHub ? 52 : 64;
+  const footerReserve = stackedHub ? 12 : compactHub ? 52 : 64;
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const capabilities = useCapabilities();
@@ -197,6 +213,16 @@ export function IndentDetailScreen({
     [suppliers, linkedOrgByOrganizationId],
   );
   const [indent, setIndent] = useState<IndentRow | null>(null);
+  const indentStoryIds = useMemo(
+    () => (indent?.id ? [indent.id] : []),
+    [indent?.id],
+  );
+  const indentStoryStatesQ = useIndentStoryStatesQuery(orgId, indentStoryIds);
+  const pulseStoryState = indent?.id
+    ? indentStoryStatesQ.data?.[indent.id]
+    : undefined;
+  const pulseStoryLive = pulseStoryState?.isLive === true;
+  const pulseStoryPostId = pulseStoryState?.postId ?? null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -205,6 +231,11 @@ export function IndentDetailScreen({
   const [confirmShareVisible, setConfirmShareVisible] = useState(false);
   const [sharingDraft, setSharingDraft] = useState(false);
   const [shareStorySheetVisible, setShareStorySheetVisible] = useState(false);
+  const [boostSheetVisible, setBoostSheetVisible] = useState(false);
+  const [boostPostIdOverride, setBoostPostIdOverride] = useState<string | null>(
+    null,
+  );
+  const boostPostId = boostPostIdOverride ?? pulseStoryPostId;
   const [broadcastError, setBroadcastError] = useState<string | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
@@ -323,10 +354,21 @@ export function IndentDetailScreen({
     await shareIndentOnWhatsApp(indent);
   }, [indent]);
 
+  const handleBoostReach = useCallback(() => {
+    const postId = boostPostIdOverride ?? pulseStoryPostId;
+    if (!postId) return;
+    if (!pulseStoryLive && !boostPostIdOverride) return;
+    setBoostSheetVisible(true);
+  }, [pulseStoryLive, pulseStoryPostId, boostPostIdOverride]);
+
   const handleStoryShareSuccess = useCallback(() => {
-    if (orgId) invalidatePosts();
-    setShareStorySheetVisible(false);
-  }, [orgId, invalidatePosts]);
+    if (orgId) {
+      invalidatePosts();
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.posts.indentStories(orgId, indent?.id ?? ""),
+      });
+    }
+  }, [orgId, invalidatePosts, queryClient, indent?.id]);
 
   const openIntegratedSuppliersNetwork = useCallback(() => {
     router.push(ROUTES.TABS.NETWORK as import("expo-router").Href);
@@ -791,6 +833,7 @@ export function IndentDetailScreen({
     indent.pickup_date ?? null,
     indent.created_at,
   );
+  const createdAtLabel = formatPlacedOnDate(indent.created_at);
 
   const clientPriceNum = Number(indent.client_price ?? 0);
   const supplierNum = effectiveSupplierAmount;
@@ -836,7 +879,7 @@ export function IndentDetailScreen({
     myQuoteStatus === "accepted"
       ? isIndentCompleted
         ? "COMPLETED"
-        : "BID AWARDED"
+        : "BIDS WON"
       : myQuoteStatus === "rejected"
         ? "BID REJECTED"
         : "BIDDING LOCKED";
@@ -861,9 +904,7 @@ export function IndentDetailScreen({
         ? "completed"
         : null;
 
-  const supplierAllocateLabel = linkedTrip?.id
-    ? "ASSIGN VEHICLE"
-    : "ALLOCATE VEHICLE";
+  const supplierAllocateLabel = "Allocate";
 
   const showGiveLoadPartiesStrip =
     canUseSuppliers &&
@@ -897,67 +938,203 @@ export function IndentDetailScreen({
       ? (quotes.find((q) => q.id === counterQuoteId) ?? null)
       : null;
 
+  const showMobileAwardFooter =
+    stackedHub &&
+    isOwner &&
+    canAward &&
+    quotes.some((q) => normalizeStatus(q.status) === "pending");
+  const hideStickyFooter = stackedHub && !showMobileAwardFooter;
+  const contentFooterReserve = hideStickyFooter
+    ? 8
+    : showMobileAwardFooter
+      ? 52
+      : footerReserve;
+
+  const myCounterAmount =
+    myQuote?.counter_amount != null && Number(myQuote.counter_amount) > 0
+      ? Number(myQuote.counter_amount)
+      : null;
+  const isCounteredPending =
+    !isOwner &&
+    hasMyPendingQuote &&
+    myCounterAmount != null &&
+    myCounterAmount > 0;
+
+  const mobilePrimaryAction = (() => {
+    if (linkedTrip?.id) {
+      return {
+        label: "View trip →",
+        onPress: () => {
+          router.push(ROUTES.tripDetail(linkedTrip.id) as never);
+        },
+      };
+    }
+    if (!isOwner && canOpenQuoteModal && isCounteredPending) {
+      return {
+        label: `Accept ${formatINR(myCounterAmount!)}`,
+        onPress: () => {
+          void submitQuoteAmount(myCounterAmount!);
+        },
+      };
+    }
+    if (!isOwner && canOpenQuoteModal) {
+      return {
+        label: hasMyPendingQuote ? "Update bid" : "Submit bid",
+        onPress: openQuoteEntry,
+      };
+    }
+    if (!isOwner && canSupplierAllocateVehicle) {
+      return {
+        label: supplierAllocateLabel,
+        onPress: handleSupplierAllocate,
+      };
+    }
+    if (isOwner && canBroadcast) {
+      return {
+        label: "Share load",
+        onPress: () => setConfirmShareVisible(true),
+      };
+    }
+    if (isOwner && liveBidsCount > 0) {
+      const pendingQuotes = quotes.filter(
+        (q) => normalizeStatus(q.status) === "pending",
+      );
+      const lowestPending = [...pendingQuotes].sort(
+        (a, b) => Number(a.amount ?? 0) - Number(b.amount ?? 0),
+      )[0];
+      if (lowestPending && canAward) {
+        const alreadySelected = selectedQuoteId === lowestPending.id;
+        return {
+          label: alreadySelected
+            ? "Award selected"
+            : pendingQuotes.length === 1
+              ? "Select bid"
+              : "Select lowest bid",
+          onPress: () => {
+            if (alreadySelected) {
+              void handleAwardQuote(lowestPending.id);
+            } else {
+              setSelectedQuoteId(lowestPending.id);
+            }
+          },
+        };
+      }
+      return {
+        label: "Review bids",
+        onPress: () => {
+          if (lowestPending) setSelectedQuoteId(lowestPending.id);
+        },
+      };
+    }
+    if (isOwner && canEditLoad) {
+      return { label: "Edit load", onPress: handleEditAll };
+    }
+    if (isOwner && canCancelLoad) {
+      return { label: "Cancel load", onPress: handleCancelLoad };
+    }
+    return null;
+  })();
+
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        stackedHub && styles.containerMobile,
+      ]}
+    >
       {/* Header */}
       <View
         style={[
           styles.header,
+          stackedHub && styles.headerMobile,
           compactHub && styles.headerCompact,
-          { paddingTop: insets.top + Layout.headerPaddingBelowInset },
+          { paddingTop: insets.top + (stackedHub ? 8 : Layout.headerPaddingBelowInset) },
         ]}
       >
         <TouchableOpacity
           onPress={onBack}
-          style={styles.headerIconBtn}
+          style={[styles.headerIconBtn, stackedHub && styles.headerIconBtnMobile]}
           activeOpacity={0.8}
           accessibilityLabel="Back"
           hitSlop={Layout.touchTargetHitSlop}
         >
-          <FontAwesome name="chevron-left" size={20} color={Theme.textOnDark} />
+          <FontAwesome
+            name="chevron-left"
+            size={stackedHub ? 18 : 20}
+            color={stackedHub ? Theme.textPrimaryDark : Theme.textOnDark}
+          />
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerId} numberOfLines={1}>
-            {displayNumber}
-          </Text>
-          <View style={styles.headerSubtitleRow}>
-            {(statusLower === "open" ||
-              statusLower === "broadcast" ||
-              // Legacy compatibility only — no new 'quoted' after 20270128103100.
-              statusLower === "quoted" ||
-              statusLower === "pending") &&
-            !["awarded", "completed", "deployed", "cancelled"].includes(
-              statusLower,
-            ) ? (
-              <View style={styles.headerLiveDot} />
-            ) : (
-              <View style={styles.headerStatusDot} />
-            )}
-            <Text style={styles.headerSubtitle} numberOfLines={1}>
-              {compactHub
-                ? `Review Hub · ${status === "OPEN" ? "Active" : status}`
-                : `Review Hub · ${status === "OPEN" ? "Active" : status}${
-                    clientEntityRawName && clientEntityRawName !== "—"
-                      ? ` · ${clientEntityRawName}`
-                      : ""
-                  }${
-                    getTripOperationalDisplay({
-                      trip_number: indent.trip_number ?? null,
-                    }) !== "—"
-                      ? ` · ${getTripOperationalDisplay({ trip_number: indent.trip_number ?? null })}`
-                      : ""
-                  }`}
+        {stackedHub ? (
+          <>
+            <Text style={styles.headerMobileTitle} numberOfLines={1}>
+              {isOwner ? "Loads" : "My bid"}
             </Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.headerIconBtn}
-          activeOpacity={0.8}
-          accessibilityLabel="More actions"
-          hitSlop={Layout.touchTargetHitSlop}
-        >
-          <FontAwesome name="ellipsis-h" size={20} color={Theme.textOnDark} />
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerHelpBtn}
+              activeOpacity={0.8}
+              accessibilityLabel="Help"
+              hitSlop={Layout.touchTargetHitSlop}
+              onPress={() =>
+                Alert.alert(
+                  isOwner ? "Load help" : "Bid help",
+                  isOwner
+                    ? "Track status, review bids, and manage rates from this page. Cancel is available until the load is awarded."
+                    : "See your bid amount, status vs shipper target, and update while pending. Awarded bids unlock vehicle allocation.",
+                )
+              }
+            >
+              <View style={styles.headerHelpIcon}>
+                <Text style={styles.headerHelpIconText}>?</Text>
+              </View>
+              <Text style={styles.headerHelpText}>Help</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <View style={styles.headerCenter}>
+              <Text style={styles.headerId} numberOfLines={1}>
+                {displayNumber}
+              </Text>
+              <View style={styles.headerSubtitleRow}>
+                {(statusLower === "open" ||
+                  statusLower === "broadcast" ||
+                  // Legacy compatibility only — no new 'quoted' after 20270128103100.
+                  statusLower === "quoted" ||
+                  statusLower === "pending") &&
+                !["awarded", "completed", "deployed", "cancelled"].includes(
+                  statusLower,
+                ) ? (
+                  <View style={styles.headerLiveDot} />
+                ) : (
+                  <View style={styles.headerStatusDot} />
+                )}
+                <Text style={styles.headerSubtitle} numberOfLines={1}>
+                  {compactHub
+                    ? `Review Hub · ${status === "OPEN" ? "Active" : status}`
+                    : `Review Hub · ${status === "OPEN" ? "Active" : status}${
+                        clientEntityRawName && clientEntityRawName !== "—"
+                          ? ` · ${clientEntityRawName}`
+                          : ""
+                      }${
+                        getTripOperationalDisplay({
+                          trip_number: indent.trip_number ?? null,
+                        }) !== "—"
+                          ? ` · ${getTripOperationalDisplay({ trip_number: indent.trip_number ?? null })}`
+                          : ""
+                      }`}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              activeOpacity={0.8}
+              accessibilityLabel="More actions"
+              hitSlop={Layout.touchTargetHitSlop}
+            >
+              <FontAwesome name="ellipsis-h" size={20} color={Theme.textOnDark} />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* Summary + bids (split on wide web, stacked on mobile) */}
@@ -965,14 +1142,20 @@ export function IndentDetailScreen({
         useSplit={useSplitHub}
         compact={hubDense}
         stacked={stackedHub}
-        footerReserve={footerReserve}
+        hideStackedBids={stackedHub}
+        footerReserve={contentFooterReserve}
         insetsBottom={insets.bottom}
         refreshing={refreshing}
         onRefresh={handleRefresh}
         summary={
           <>
             {statusLower === "draft" ? (
-              <View style={styles.draftBanner}>
+              <View
+                style={[
+                  styles.draftBanner,
+                  stackedHub && styles.draftBannerMobile,
+                ]}
+              >
                 <FontAwesome
                   name="pencil-square-o"
                   size={12}
@@ -992,13 +1175,95 @@ export function IndentDetailScreen({
               typeLabel={
                 isOwner
                   ? canUseSuppliers
-                    ? "GIVE LOAD"
+                    ? "MY LOAD"
                     : "LOAD"
                   : "GET LOAD"
               }
               status={status}
               isDirect={isDirect}
               dateLabel={dateLabel}
+              loadId={displayNumber}
+              createdAtLabel={createdAtLabel}
+              pickupDateIso={indent.pickup_date ?? null}
+              liveBidsCount={liveBidsCount}
+              clientPriceInr={clientPriceNum}
+              supplierTargetInr={supplierTargetNum}
+              primaryActionLabel={mobilePrimaryAction?.label}
+              onPrimaryAction={mobilePrimaryAction?.onPress}
+              secondaryActionLabel={
+                isCounteredPending && canOpenQuoteModal ? "Update bid" : undefined
+              }
+              onSecondaryAction={
+                isCounteredPending && canOpenQuoteModal ? openQuoteEntry : undefined
+              }
+              bidsSlot={
+                stackedHub && isOwner ? (
+                  <View style={styles.mobileLiveBidsShell}>
+                    <IndentReviewHubBidsHeader
+                      title={
+                        liveBidsCount === 0 && isListeningForBids
+                          ? "Listening"
+                          : "Live bids"
+                      }
+                      liveBidsCount={liveBidsCount}
+                      isListeningForBids={isListeningForBids}
+                      showTrophy={
+                        statusLower === "awarded" ||
+                        statusLower === "completed" ||
+                        statusLower === "deployed"
+                      }
+                      showHammer={false}
+                    />
+                    <IndentReviewHubBidsBody
+                      isOwner={isOwner}
+                      compact={hubDense}
+                      stacked={stackedHub}
+                      title="Live bids"
+                      liveBidsCount={liveBidsCount}
+                      isListeningForBids={isListeningForBids}
+                      showTrophy={
+                        statusLower === "awarded" ||
+                        statusLower === "completed" ||
+                        statusLower === "deployed"
+                      }
+                      showHammer={false}
+                      quotes={quotes}
+                      clientPriceInr={clientPriceNum}
+                      targetRateInr={effectiveSupplierAmount}
+                      pickupDateIso={indent.pickup_date}
+                      selectedQuoteId={selectedQuoteId}
+                      onSelectQuote={setSelectedQuoteId}
+                      canAward={canAward}
+                      canBroadcast={canBroadcast}
+                      isListening={
+                        statusLower === "broadcast" || statusLower === "open"
+                      }
+                      isBroadcasting={isBroadcasting}
+                      sharingDraft={sharingDraft}
+                      broadcastError={broadcastError}
+                      onBroadcast={handleBroadcast}
+                      onShareStory={handleOpenShareStory}
+                      onShareWhatsApp={handleShareWhatsApp}
+                      onBoostReach={handleBoostReach}
+                      pulseStoryLive={pulseStoryLive}
+                      onCounterOffer={canAward ? openCounterOffer : undefined}
+                      myQuote={myQuote}
+                      supplierQuoteActionHint={supplierQuoteActionHint}
+                      supplierQuoteAlert={supplierQuoteAlert}
+                      canOpenQuoteModal={canOpenQuoteModal}
+                      onQuotePress={openQuoteEntry}
+                      showSupplierPartySummaries={false}
+                      orgId={orgId}
+                      shipperName={clientEntityRawName}
+                      linkedTrip={linkedTrip ?? null}
+                      driverLabel={linkedTripPartyLabels.driver}
+                      vehicleLabel={linkedTripPartyLabels.vehicle}
+                      allocationPending={!linkedTripPartyLabels.isAllocated}
+                      targetRateInrSupplier={Number(indent.supplier_target ?? 0)}
+                    />
+                  </View>
+                ) : undefined
+              }
               origin={origin}
               destination={destination}
               vehicleType={vehicleType}
@@ -1029,6 +1294,12 @@ export function IndentDetailScreen({
               }}
               quoteStatus={myQuote ? myQuoteStatus || "pending" : null}
               quoteAmountInr={myQuote ? Number(myQuote.amount ?? 0) : null}
+              counterAmountInr={
+                myQuote?.counter_amount != null &&
+                Number(myQuote.counter_amount) > 0
+                  ? Number(myQuote.counter_amount)
+                  : null
+              }
               targetRateInr={Number(indent.supplier_target ?? 0)}
               footerInsight={supplierFooterInsight}
               alertInfo={supplierQuoteAlert}
@@ -1120,15 +1391,9 @@ export function IndentDetailScreen({
             onBroadcast={handleBroadcast}
             onShareStory={isOwner ? handleOpenShareStory : undefined}
             onShareWhatsApp={isOwner ? handleShareWhatsApp : undefined}
+            onBoostReach={isOwner ? handleBoostReach : undefined}
+            pulseStoryLive={isOwner ? pulseStoryLive : false}
             onCounterOffer={isOwner && canAward ? openCounterOffer : undefined}
-            onAwardBid={
-              isOwner && canAward
-                ? (id) => {
-                    void handleAwardQuote(id);
-                  }
-                : undefined
-            }
-            awarding={awarding}
             myQuote={myQuote}
             supplierQuoteActionHint={supplierQuoteActionHint}
             supplierQuoteAlert={supplierQuoteAlert}
@@ -1146,129 +1411,157 @@ export function IndentDetailScreen({
         }
       />
 
-      {/* Sticky award / action footer */}
-      <View
-        style={[
-          styles.footer,
-          compactHub && styles.footerCompact,
-          {
-            paddingBottom: (compactHub ? 10 : 14) + insets.bottom,
-          },
-        ]}
-      >
-        {isOwner ? (
-          <>
-            <TouchableOpacity
-              style={styles.footerEditBtn}
-              onPress={canEditLoad ? handleEditAll : undefined}
-              activeOpacity={0.85}
-              accessibilityLabel="Edit indent"
-              hitSlop={Layout.touchTargetHitSlop}
-              disabled={!canEditLoad}
-            >
-              <FontAwesome
-                name="pencil"
-                size={16}
-                color={canEditLoad ? Theme.textSecondary : Theme.textMuted}
-              />
-            </TouchableOpacity>
-            {canAward &&
-            quotes.some((q) => normalizeStatus(q.status) === "pending") ? (
-              <>
-                <View style={styles.footerSelectionMeta}>
-                  <Text style={styles.footerMetaKicker}>Selected carrier</Text>
-                  <Text style={styles.footerMetaValue} numberOfLines={1}>
-                    {selectedPendingQuote?.bidder_organization_name?.trim() ||
-                      "Tap a bid to select"}
-                  </Text>
-                  {selectedAwardMargin ? (
-                    <Text style={styles.footerMetaMargin} numberOfLines={1}>
-                      Margin {formatINR(selectedAwardMargin.marginInr)} (
-                      {selectedAwardMargin.marginPct}%)
+      {/* Sticky award / action footer (hidden on mobile order-detail; CTAs live in scroll) */}
+      {!hideStickyFooter && (
+        <View
+          style={[
+            styles.footer,
+            compactHub && styles.footerCompact,
+            stackedHub && styles.footerMobile,
+            {
+              paddingBottom: (stackedHub ? 8 : compactHub ? 10 : 14) + insets.bottom,
+            },
+          ]}
+        >
+          {isOwner ? (
+            <>
+              <TouchableOpacity
+                style={[styles.footerEditBtn, stackedHub && styles.footerEditBtnMobile]}
+                onPress={canEditLoad ? handleEditAll : undefined}
+                activeOpacity={0.85}
+                accessibilityLabel="Edit indent"
+                hitSlop={Layout.touchTargetHitSlop}
+                disabled={!canEditLoad}
+              >
+                <FontAwesome
+                  name="pencil"
+                  size={stackedHub ? 14 : 16}
+                  color={canEditLoad ? Theme.textSecondary : Theme.textMuted}
+                />
+              </TouchableOpacity>
+              {canAward &&
+              quotes.some((q) => normalizeStatus(q.status) === "pending") ? (
+                <>
+                  <View style={styles.footerSelectionMeta}>
+                    <Text
+                      style={[
+                        styles.footerMetaKicker,
+                        stackedHub && styles.footerMetaKickerMobile,
+                      ]}
+                    >
+                      Selected carrier
                     </Text>
-                  ) : null}
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.footerAwardBtn,
-                    !canAwardSelected && styles.footerAwardBtnDisabled,
-                  ]}
-                  onPress={() => {
-                    void handleAwardQuote();
-                  }}
-                  disabled={!canAwardSelected}
-                  activeOpacity={0.9}
-                  accessibilityLabel="Award selected bid"
-                  hitSlop={Layout.touchTargetHitSlop}
-                >
-                  {awarding ? (
-                    <LoadingIndicator size="small" color={Theme.textOnDark} />
-                  ) : (
-                    <>
-                      <FontAwesome
-                        name="trophy"
-                        size={12}
-                        color={Theme.textOnDark}
-                      />
-                      <Text style={styles.footerAwardBtnText}>
-                        Award selected
+                    <Text
+                      style={[
+                        styles.footerMetaValue,
+                        stackedHub && styles.footerMetaValueMobile,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {selectedPendingQuote?.bidder_organization_name?.trim() ||
+                        "Tap a bid to select"}
+                    </Text>
+                    {selectedAwardMargin ? (
+                      <Text
+                        style={[
+                          styles.footerMetaMargin,
+                          stackedHub && styles.footerMetaMarginMobile,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        Margin {formatINR(selectedAwardMargin.marginInr)} (
+                        {selectedAwardMargin.marginPct}%)
                       </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </>
-            ) : isListeningForBids ? (
-              <View style={styles.footerListeningPill}>
-                <View style={styles.footerListeningDot} />
-                <Text style={styles.footerListeningText}>
-                  Live bidding · awaiting quotes
-                </Text>
-              </View>
-            ) : !canCancelLoad ? (
-              <View style={styles.footerLockedPill}>
-                <FontAwesome name="lock" size={14} color={Theme.textMuted} />
-                <Text style={styles.footerLockedText}>LOAD LOCKED</Text>
-              </View>
-            ) : (
-              <View style={styles.footerSpacer} />
-            )}
-          </>
-        ) : canOpenQuoteModal ? (
-          <TouchableOpacity
-            style={styles.footerBidBtn}
-            onPress={openQuoteEntry}
-            activeOpacity={0.9}
-            accessibilityLabel="Submit bid"
-            hitSlop={Layout.touchTargetHitSlop}
-            disabled={submittingQuote}
-          >
-            <FontAwesome name="gavel" size={16} color={Theme.textOnDark} />
-            <Text style={styles.footerCancelText}>
-              {submittingQuote
-                ? "SUBMITTING…"
-                : hasMyPendingQuote
-                  ? "UPDATE BID"
-                  : "BID NOW"}
-            </Text>
-          </TouchableOpacity>
-        ) : canSupplierAllocateVehicle ? (
-          <TouchableOpacity
-            style={styles.footerBidBtn}
-            onPress={handleSupplierAllocate}
-            activeOpacity={0.9}
-            accessibilityLabel={supplierAllocateLabel}
-            hitSlop={Layout.touchTargetHitSlop}
-          >
-            <FontAwesome name="truck" size={16} color={Theme.textOnDark} />
-            <Text style={styles.footerCancelText}>{supplierAllocateLabel}</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.footerLockedPill}>
-            <FontAwesome name="lock" size={14} color={Theme.textMuted} />
-            <Text style={styles.footerLockedText}>{supplierFooterStatus}</Text>
-          </View>
-        )}
-      </View>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.footerAwardBtn,
+                      stackedHub && styles.footerAwardBtnMobile,
+                      !canAwardSelected && styles.footerAwardBtnDisabled,
+                    ]}
+                    onPress={() => {
+                      void handleAwardQuote();
+                    }}
+                    disabled={!canAwardSelected}
+                    activeOpacity={0.9}
+                    accessibilityLabel="Award selected bid"
+                    hitSlop={Layout.touchTargetHitSlop}
+                  >
+                    {awarding ? (
+                      <LoadingIndicator size="small" color={Theme.textOnDark} />
+                    ) : (
+                      <>
+                        <FontAwesome
+                          name="trophy"
+                          size={stackedHub ? 11 : 12}
+                          color={Theme.textOnDark}
+                        />
+                        <Text
+                          style={[
+                            styles.footerAwardBtnText,
+                            stackedHub && styles.footerAwardBtnTextMobile,
+                          ]}
+                        >
+                          Award selected
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : isListeningForBids ? (
+                <View style={styles.footerListeningPill}>
+                  <View style={styles.footerListeningDot} />
+                  <Text style={styles.footerListeningText}>
+                    Live bidding · awaiting quotes
+                  </Text>
+                </View>
+              ) : !canCancelLoad ? (
+                <View style={styles.footerLockedPill}>
+                  <FontAwesome name="lock" size={14} color={Theme.textMuted} />
+                  <Text style={styles.footerLockedText}>LOAD LOCKED</Text>
+                </View>
+              ) : (
+                <View style={styles.footerSpacer} />
+              )}
+            </>
+          ) : canOpenQuoteModal ? (
+            <TouchableOpacity
+              style={styles.footerBidBtn}
+              onPress={openQuoteEntry}
+              activeOpacity={0.9}
+              accessibilityLabel="Submit bid"
+              hitSlop={Layout.touchTargetHitSlop}
+              disabled={submittingQuote}
+            >
+              <FontAwesome name="gavel" size={16} color={Theme.textOnDark} />
+              <Text style={styles.footerCancelText}>
+                {submittingQuote
+                  ? "SUBMITTING…"
+                  : hasMyPendingQuote
+                    ? "UPDATE BID"
+                    : "BID NOW"}
+              </Text>
+            </TouchableOpacity>
+          ) : canSupplierAllocateVehicle ? (
+            <TouchableOpacity
+              style={styles.footerBidBtn}
+              onPress={handleSupplierAllocate}
+              activeOpacity={0.9}
+              accessibilityLabel={supplierAllocateLabel}
+              hitSlop={Layout.touchTargetHitSlop}
+            >
+              <FontAwesome name="truck" size={16} color={Theme.textOnDark} />
+              <Text style={styles.footerCancelText}>{supplierAllocateLabel}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.footerLockedPill}>
+              <FontAwesome name="lock" size={14} color={Theme.textMuted} />
+              <Text style={styles.footerLockedText}>{supplierFooterStatus}</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Broadcast modal */}
       <Modal
@@ -1373,8 +1666,16 @@ export function IndentDetailScreen({
         indentDisplayNumber={displayNumber}
         origin={origin}
         destination={destination}
+        vehicleType={vehicleType !== "—" ? vehicleType : undefined}
+        weightLabel={weightKg !== "—" ? weightKg : undefined}
         targetRateInr={supplierNum > 0 ? supplierNum : undefined}
-        initialAmount={myQuote?.amount != null ? Number(myQuote.amount) : null}
+        initialAmount={
+          isCounteredPending
+            ? myCounterAmount
+            : myQuote?.amount != null
+              ? Number(myQuote.amount)
+              : null
+        }
         isUpdate={hasMyPendingQuote}
         validationError={
           submittingQuote
@@ -1394,6 +1695,32 @@ export function IndentDetailScreen({
           orgId={orgId}
           onClose={() => setShareStorySheetVisible(false)}
           onSuccess={handleStoryShareSuccess}
+          onBoostAfterBroadcast={(postId) => {
+            setBoostPostIdOverride(postId);
+            setShareStorySheetVisible(false);
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.posts.indentStories(orgId, indent?.id ?? ""),
+            });
+            setBoostSheetVisible(true);
+          }}
+        />
+      ) : null}
+
+      {isOwner && orgId && boostPostId ? (
+        <BoostSheet
+          visible={boostSheetVisible}
+          onClose={() => {
+            setBoostSheetVisible(false);
+            setBoostPostIdOverride(null);
+          }}
+          orgId={orgId}
+          postId={boostPostId}
+          onBoosted={() => {
+            invalidatePosts();
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.posts.indentStories(orgId, indent?.id ?? ""),
+            });
+          }}
         />
       ) : null}
 
@@ -1456,6 +1783,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.darkBackground,
   },
+  containerMobile: {
+    backgroundColor: "#F0F2F5",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -1467,6 +1797,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderOnDark,
   },
+  headerMobile: {
+    backgroundColor: Theme.cardWhite,
+    borderBottomColor: Theme.borderLight,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: 10,
+    paddingHorizontal: 14,
+  },
   headerCompact: {
     paddingBottom: 6,
   },
@@ -1476,6 +1813,46 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.driverWhiteMutedStrong,
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerIconBtnMobile: {
+    width: 40,
+    height: 40,
+    backgroundColor: "transparent",
+  },
+  headerMobileTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    color: Theme.gpayListTitle,
+    marginLeft: 2,
+  },
+  headerHelpBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minHeight: 44,
+  },
+  headerHelpIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: "#2874F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerHelpIconText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#2874F0",
+    lineHeight: 12,
+  },
+  headerHelpText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#2874F0",
   },
   headerIconBtnPlaceholder: {
     width: 40,
@@ -1541,6 +1918,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  draftBannerMobile: {
+    marginHorizontal: 14,
+    borderRadius: 10,
+  },
+  mobileLiveBidsShell: {
+    gap: 10,
+    width: "100%",
+    alignSelf: "stretch",
   },
   draftBannerText: {
     flex: 1,
@@ -1974,6 +2360,11 @@ const styles = StyleSheet.create({
   footerCompact: {
     paddingTop: 6,
   },
+  footerMobile: {
+    paddingTop: 8,
+    paddingHorizontal: 14,
+    minHeight: 52,
+  },
   footerEditBtn: {
     width: 44,
     height: 44,
@@ -1982,6 +2373,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
+  },
+  footerEditBtnMobile: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    marginRight: 8,
   },
   footerSelectionMeta: {
     flex: 1,
@@ -1996,11 +2393,19 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
+  footerMetaKickerMobile: {
+    fontSize: 8,
+    fontWeight: "600",
+  },
   footerMetaValue: {
     marginTop: 2,
     fontSize: 13,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
+  },
+  footerMetaValueMobile: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   footerMetaMargin: {
     marginTop: 1,
@@ -2008,6 +2413,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
     color: Theme.positive,
+  },
+  footerMetaMarginMobile: {
+    fontSize: 10,
+    fontWeight: "600",
   },
   footerAwardBtn: {
     minWidth: 132,
@@ -2025,6 +2434,15 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  footerAwardBtnMobile: {
+    minWidth: 112,
+    height: 36,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    gap: 6,
+    shadowOpacity: 0.04,
+    elevation: 1,
+  },
   footerAwardBtnDisabled: {
     opacity: 0.45,
   },
@@ -2033,6 +2451,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Theme.textOnDark,
     textTransform: "uppercase",
+  },
+  footerAwardBtnTextMobile: {
+    fontSize: 9,
+    fontWeight: "700",
   },
   footerSpacer: {
     flex: 1,

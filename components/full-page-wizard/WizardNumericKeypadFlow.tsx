@@ -63,11 +63,13 @@ export type WizardNumericKeypadFlowProps = {
 function KeypadDock({
   onKey,
   showDecimal,
-  size = "compact",
+  size = "default",
+  layout,
 }: {
   onKey: (key: KeypadKey) => void;
   showDecimal: boolean;
   size?: "default" | "compact";
+  layout?: "decimal" | "phone";
 }) {
   return (
     <DecimalKeypad
@@ -75,6 +77,7 @@ function KeypadDock({
       showDecimal={showDecimal}
       variant="pay"
       size={size}
+      layout={layout ?? (showDecimal ? "decimal" : "phone")}
       hapticsEnabled={false}
     />
   );
@@ -97,8 +100,8 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   const { width } = useWindowDimensions();
   const isDesktopKeypad =
     !forceMobileLayout && width >= Layout.wizardSteppedMaxWidth;
-  /** Desktop popup — same pay keypad chrome as driver sign-in. */
-  const matchSignInKeypad = forceMobileLayout;
+  /** Mobile + desktop popup — same pay tray chrome as driver sign-in. */
+  const matchSignInKeypad = forceMobileLayout || !isDesktopKeypad;
 
   const resolvedActiveId = activeFieldId ?? fields[0]?.id ?? "";
   const activeField =
@@ -305,7 +308,7 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
                   <KeypadDock
                     onKey={handleKey}
                     showDecimal={showDecimal}
-                    size="compact"
+                    size="default"
                   />
                 </View>
               </View>
@@ -356,15 +359,13 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         style={[
           flow.keypadDockWizard,
           flow.keypadDockWizardBleed,
-          matchSignInKeypad
-            ? flow.keypadDockSignIn
-            : useCompactChrome && flow.keypadDockWizardCompact,
+          flow.keypadDockSignIn,
         ]}
       >
         <KeypadDock
           onKey={handleKey}
           showDecimal={showDecimal}
-          size={matchSignInKeypad ? "default" : "compact"}
+          size="default"
         />
       </View>
     </View>

@@ -167,6 +167,8 @@ type TripMapCoordinateFields = TripRow & {
 export type TripPartyAvatarFields = {
   organizationImageUrl: string | null;
   organizationAvatarSeed: string | null;
+  /** Linked org display name (e.g. Ajio) — used when supplier row name is missing from the bundle. */
+  organizationName: string | null;
   avatarUrl: string | null;
   avatarSeed: string | null;
 };
@@ -175,6 +177,7 @@ function emptyTripPartyAvatarFields(): TripPartyAvatarFields {
   return {
     organizationImageUrl: null,
     organizationAvatarSeed: null,
+    organizationName: null,
     avatarUrl: null,
     avatarSeed: null,
   };
@@ -206,6 +209,20 @@ function pickSupplierDisplayName(
     supplier.contact_person ||
     ""
   ).trim() || null;
+}
+
+function isMissingSupplierLabel(value: string | null | undefined): boolean {
+  const v = (value ?? "").trim();
+  if (!v) return true;
+  const lc = v.toLowerCase();
+  return (
+    lc === "awaiting data" ||
+    lc === "supplier" ||
+    lc === "partner" ||
+    lc === "connected" ||
+    lc === "—" ||
+    lc === "-"
+  );
 }
 
 export interface UseTripDetailOptions {
@@ -384,6 +401,13 @@ export function useTripDetail({
   const supplierRetryForTripIdRef = useRef<string | null>(null);
   const tripRef = useRef<TripRow | null>(null);
   tripRef.current = trip;
+  // Guards loadTripDocuments against a stale response: if the user
+  // navigates trip -> trip before an in-flight getDocumentsByTripId
+  // resolves, this lets the .then() detect it's no longer for the active
+  // trip and discard it, instead of overwriting the new trip's documents
+  // (and therefore its LR/POD/manifest preview) with the previous trip's.
+  const currentTripIdRef = useRef<string | null>(null);
+  currentTripIdRef.current = tripId ?? null;
   // Phase 3c: deduplicates dual-filter Realtime events (trip_id + driver_id on same channel).
   const lastSeenLocationIdRef = useRef<string | null>(null);
   // Coarse gate: only re-geocode when position changes by > ~100m (3 decimal degrees).
@@ -451,8 +475,12 @@ export function useTripDetail({
 
   const trackingBroadcastEnabled =
     isTrackingBroadcastV1Enabled() &&
-    isTripTrackingActive(trip?.status, trip?.completed_at) &&
-    !!trip?.id;
+    !!trip?.id &&
+    isTripDriverMapEligible(
+      trip.status,
+      trip.completed_at,
+      effectiveDriverIdForLocation,
+    );
 
   /** Load presence + checkpoint trail whenever a driver is on an open trip (incl. assigned). */
   const driverMapDataEnabled =
@@ -752,6 +780,7 @@ export function useTripDetail({
         partnerName,
         supplierPartyName: supplierPartyRes?.name,
         tripSupplierName: trip?.supplier_name,
+        linkedOrganizationName: supplierPartyAvatarFields?.organizationName,
         clientName: displayClientName ?? trip?.client_name,
         ledgerEntries: tripLedgerEntries,
       }),
@@ -759,6 +788,7 @@ export function useTripDetail({
       partnerName,
       supplierPartyRes?.name,
       trip?.supplier_name,
+      supplierPartyAvatarFields?.organizationName,
       displayClientName,
       trip?.client_name,
       tripLedgerEntries,
@@ -912,14 +942,17 @@ export function useTripDetail({
             category: 'lr' as const,
           };
 
+    const firstVehicleDoc = vehiclePreviewDocs.find((doc) => !!doc.storagePath);
+
     return [
       lrCard,
       manifestCard,
       {
         id: "vehicle-documents",
         label: "Vehicle Document",
-        type: hasVehicleDoc ? "DOCS" : "JPG",
+        type: firstVehicleDoc?.type ?? (hasVehicleDoc ? "DOCS" : "JPG"),
         status: hasVehicleDoc ? ("Uploaded" as const) : ("Pending" as const),
+        storagePath: firstVehicleDoc?.storagePath,
         docSource: "vehicle" as const,
         category: "vehicle" as const,
       },
@@ -1402,6 +1435,7 @@ export function useTripDetail({
       if (trip.supplier_id) {
         const fields = emptyTripPartyAvatarFields();
         let rawAvatar = "";
+        let linkedOrgName: string | null = null;
         const details = await getSupplierDetails(trip.supplier_id);
         if (!cancelled && details.supplier) {
           fields.avatarUrl = nStr(details.supplier.avatar_url);
@@ -1413,6 +1447,8 @@ export function useTripDetail({
             if (!cancelled && linked.profile) {
               fields.organizationImageUrl = nStr(linked.profile.avatarUrl);
               fields.organizationAvatarSeed = nStr(linked.profile.avatarSeed);
+              linkedOrgName = nStr(linked.profile.organizationName);
+              fields.organizationName = linkedOrgName;
             }
           }
         }
@@ -1420,19 +1456,27 @@ export function useTripDetail({
         if (!rawAvatar && details.supplier?.linked_organization_id) {
           const linked = await getLinkedOrgProfileForSupplier(details.supplier.linked_organization_id);
           if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+          if (!linkedOrgName && linked.profile) {
+            linkedOrgName = nStr(linked.profile.organizationName);
+            fields.organizationName = linkedOrgName;
+          }
         }
-        if (!rawAvatar) {
+        if (!rawAvatar || !fields.organizationName) {
           const { supplier } = await getSupplierById(ownerOrg, trip.supplier_id);
           if (!cancelled && supplier) {
             if (!fields.avatarUrl) fields.avatarUrl = nStr(supplier.avatar_url);
             if (!fields.avatarSeed) fields.avatarSeed = nStr(supplier.avatar_seed);
-            if (!fields.organizationImageUrl && supplier.linked_organization_id) {
+            if (supplier.linked_organization_id) {
               const linked = await getLinkedOrgProfileForSupplier(supplier.linked_organization_id);
               if (!cancelled && linked.profile) {
                 if (!fields.organizationImageUrl)
                   fields.organizationImageUrl = nStr(linked.profile.avatarUrl);
                 if (!fields.organizationAvatarSeed)
                   fields.organizationAvatarSeed = nStr(linked.profile.avatarSeed);
+                if (!fields.organizationName) {
+                  linkedOrgName = nStr(linked.profile.organizationName);
+                  fields.organizationName = linkedOrgName;
+                }
               }
             }
             if (!cancelled && supplier.avatar_url) rawAvatar = supplier.avatar_url;
@@ -1453,37 +1497,52 @@ export function useTripDetail({
           setSupplierAvatarUri(uri);
         }
 
-        if (!bundleActive) {
-          const pick = pickSupplierDisplayName;
-          let supplierRow = details.supplier;
-          if (!supplierRow) {
-            const { supplier, error: errOwner } = await getSupplierById(ownerOrg, trip.supplier_id);
-            if (!errOwner) supplierRow = supplier;
-          }
-          if (!supplierRow && viewerOrgId && viewerOrgId !== ownerOrg) {
-            const { supplier, error: errViewer } = await getSupplierById(
-              viewerOrgId,
-              trip.supplier_id,
-            );
-            if (!errViewer) supplierRow = supplier;
-          }
-          const fallback = (trip.supplier_name ?? "").trim() || null;
-          const supplierName = supplierRow ? pick(supplierRow) ?? fallback : fallback;
-          if (!cancelled) {
-            setPartnerName(supplierName);
-            if (supplierRow || supplierName) {
-              setSupplierPartyRes({
-                name: supplierName,
-                integrated: supplierRow
-                  ? isIntegratedSupplierRow(supplierRow)
-                  : false,
-                orgId: supplierRow
-                  ? nStr(supplierRow.linked_organization_id)
-                  : null,
-              });
-            } else {
-              setSupplierPartyRes(null);
-            }
+        // Always resolve a display name — the trip-detail bundle historically
+        // omitted suppliers.name (only company_name), which left integrated
+        // suppliers like Ajio as "Awaiting data" while the org logo still loaded.
+        const pick = pickSupplierDisplayName;
+        let supplierRow = details.supplier;
+        if (!supplierRow) {
+          const { supplier, error: errOwner } = await getSupplierById(ownerOrg, trip.supplier_id);
+          if (!errOwner) supplierRow = supplier;
+        }
+        if (!supplierRow && viewerOrgId && viewerOrgId !== ownerOrg) {
+          const { supplier, error: errViewer } = await getSupplierById(
+            viewerOrgId,
+            trip.supplier_id,
+          );
+          if (!errViewer) supplierRow = supplier;
+        }
+        const fallback = (trip.supplier_name ?? "").trim() || null;
+        const supplierName =
+          (supplierRow ? pick(supplierRow) : null) ??
+          linkedOrgName ??
+          fallback;
+        if (!cancelled && !isMissingSupplierLabel(supplierName)) {
+          setPartnerName(supplierName);
+          setSupplierPartyRes({
+            name: supplierName,
+            integrated: supplierRow
+              ? isIntegratedSupplierRow(supplierRow)
+              : !!details.supplier?.linked_organization_id,
+            orgId: supplierRow
+              ? nStr(supplierRow.linked_organization_id)
+              : nStr(details.supplier?.linked_organization_id),
+          });
+        } else if (!cancelled && !bundleActive) {
+          setPartnerName(supplierName);
+          if (supplierRow || supplierName) {
+            setSupplierPartyRes({
+              name: supplierName,
+              integrated: supplierRow
+                ? isIntegratedSupplierRow(supplierRow)
+                : false,
+              orgId: supplierRow
+                ? nStr(supplierRow.linked_organization_id)
+                : null,
+            });
+          } else {
+            setSupplierPartyRes(null);
           }
         }
       }
@@ -1547,9 +1606,15 @@ export function useTripDetail({
 
   const loadTripDocuments = useCallback(() => {
     if (!tripId) return;
+    const requestedTripId = tripId;
     tripDocumentsService
       .getDocumentsByTripId(tripId)
       .then(({ documents, error }) => {
+        // The active trip changed while this request was in flight -- a
+        // stale response here would otherwise overwrite the new trip's
+        // documents with the previous trip's (wrong LR/POD/manifest shown
+        // under the new trip's labels).
+        if (currentTripIdRef.current !== requestedTripId) return;
         if (error) setTripDocuments([]);
         else setTripDocuments(documents ?? []);
       });
@@ -2205,14 +2270,35 @@ export function useTripDetail({
     if (bundle.supplier_detail?.supplier) {
       const s = bundle.supplier_detail.supplier;
       const linkedId = nStr(s.linked_organization_id);
+      const linkedOrgName = nStr(
+        (bundle.supplier_detail.linked_org as { name?: string | null } | null)
+          ?.name,
+      );
+      // Bundle historically shipped company_name only; prefer canonical `name`
+      // when present, then linked org name (Ajio logo without label case).
       const supplierName =
-        pickSupplierDisplayName(s) ?? nStr(tripRow.supplier_name);
+        pickSupplierDisplayName({
+          company_name: s.company_name,
+          name: (s as { name?: string | null }).name,
+        }) ??
+        linkedOrgName ??
+        nStr(tripRow.supplier_name);
       setPartnerName(supplierName);
       setSupplierPartyRes({
         name: supplierName,
         integrated: !!linkedId,
         orgId: linkedId,
       });
+      if (linkedOrgName || bundle.supplier_detail.linked_org?.logo_url) {
+        setSupplierPartyAvatarFields((prev) => ({
+          ...(prev ?? emptyTripPartyAvatarFields()),
+          organizationImageUrl:
+            nStr(bundle.supplier_detail?.linked_org?.logo_url) ??
+            prev?.organizationImageUrl ??
+            null,
+          organizationName: linkedOrgName ?? prev?.organizationName ?? null,
+        }));
+      }
     } else {
       const fallbackSupplierName = nStr(tripRow.supplier_name);
       setPartnerName(fallbackSupplierName);
@@ -2286,7 +2372,16 @@ export function useTripDetail({
       return;
     }
     if (isVehicleGalleryDoc) return;
-    if (!docPreviewStoragePath) return;
+    if (!docPreviewStoragePath) {
+      // Clear any previously-resolved preview before bailing -- otherwise
+      // the modal header (bound to selectedDoc.label) updates to the new
+      // doc immediately while the image body keeps showing whichever
+      // document was previously loaded.
+      setDocPreviewUrl(null);
+      setDocPreviewLoading(false);
+      setDocPreviewError(false);
+      return;
+    }
     let isActive = true;
     setDocPreviewLoading(true);
     setDocPreviewUrl(null);

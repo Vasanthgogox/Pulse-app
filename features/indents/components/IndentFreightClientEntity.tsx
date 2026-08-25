@@ -35,6 +35,8 @@ export type IndentFreightClientEntityProps = {
   hideLabel?: boolean;
   /** Override default avatar diameter (light cards default 40, dark 32). */
   avatarSize?: number;
+  /** Hide contact/phone detail under the name. */
+  hideDetail?: boolean;
 };
 
 export const IndentFreightClientEntity = memo(function IndentFreightClientEntity({
@@ -51,6 +53,7 @@ export const IndentFreightClientEntity = memo(function IndentFreightClientEntity
   surface = "light",
   hideLabel = false,
   avatarSize,
+  hideDetail = false,
 }: IndentFreightClientEntityProps) {
   const router = useRouter();
   const {
@@ -93,11 +96,51 @@ export const IndentFreightClientEntity = memo(function IndentFreightClientEntity
       organizationImageUrl={fields.organizationImageUrl}
       organizationAvatarSeed={fields.organizationAvatarSeed}
       entityType="client"
+      isIntegrated={
+        fields.isIntegrated === null ? undefined : fields.isIntegrated
+      }
       size={resolvedAvatarSize}
       initialsColorSeed={
         publicProfileClientId ?? shipperOrgId ?? resolvedAvatarName
       }
     />
+  );
+
+  const nameBlock = (
+    <View style={styles.nameCopy}>
+      <Text
+        style={[
+          onLight ? styles.nameLight : styles.nameDark,
+          isRight && styles.nameRight,
+        ]}
+        numberOfLines={nameLines}
+      >
+        {displayName}
+      </Text>
+      {!hideDetail && fields.detailLine ? (
+        <Text
+          style={[
+            styles.detailLine,
+            !onLight && styles.detailLineDark,
+            isRight && styles.nameRight,
+          ]}
+          numberOfLines={1}
+        >
+          {fields.detailLine}
+        </Text>
+      ) : fields.isIntegrated === true ? (
+        <Text
+          style={[
+            styles.detailLine,
+            styles.detailIntegrated,
+            isRight && styles.nameRight,
+          ]}
+          numberOfLines={1}
+        >
+          Integrated
+        </Text>
+      ) : null}
+    </View>
   );
 
   return (
@@ -145,15 +188,18 @@ export const IndentFreightClientEntity = memo(function IndentFreightClientEntity
             {avatar}
           </View>
         )}
-        <Text
-          style={[
-            onLight ? styles.nameLight : styles.nameDark,
-            isRight && styles.nameRight,
-          ]}
-          numberOfLines={nameLines}
-        >
-          {displayName}
-        </Text>
+        {canOpenPublicProfile ? (
+          <Pressable
+            onPress={openProfile}
+            style={styles.namePress}
+            accessibilityRole="button"
+            accessibilityLabel={`View details for ${displayName}`}
+          >
+            {nameBlock}
+          </Pressable>
+        ) : (
+          nameBlock
+        )}
       </View>
     </View>
   );
@@ -172,13 +218,16 @@ const styles = StyleSheet.create({
     ...indentReviewHubText.freightGridLabelDark,
     marginBottom: 4,
   },
-  labelLight: indentReviewHubText.freightGridLabelLight,
+  labelLight: {
+    ...indentReviewHubText.freightGridLabelLight,
+    marginBottom: 4,
+  },
   labelRight: {
     textAlign: "right",
   },
   nameRow: {
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     minWidth: 0,
     alignSelf: "stretch",
     width: "100%",
@@ -197,21 +246,41 @@ const styles = StyleSheet.create({
   avatarPress: {
     borderWidth: 1,
     borderColor: Theme.separatorDark,
+    overflow: "hidden",
+    flexShrink: 0,
   },
   avatarPressPressed: {
     opacity: 0.88,
   },
-  nameDark: {
-    ...indentReviewHubText.freightGridValueDark,
+  namePress: {
     flex: 1,
     minWidth: 0,
+  },
+  nameCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  nameDark: {
+    ...indentReviewHubText.freightGridValueDark,
   },
   nameLight: {
     ...indentReviewHubText.freightGridValueLight,
-    flex: 1,
-    minWidth: 0,
   },
   nameRight: {
     textAlign: "right",
+  },
+  detailLine: {
+    fontSize: 10,
+    fontWeight: "400",
+    color: Theme.textSecondary,
+    lineHeight: 13,
+  },
+  detailLineDark: {
+    color: Theme.textOnDarkMuted,
+  },
+  detailIntegrated: {
+    color: Theme.positive,
+    fontWeight: "600",
   },
 });

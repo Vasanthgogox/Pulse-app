@@ -55,6 +55,8 @@ export type IndentReviewHubBidsPaneProps = {
   onBroadcast?: () => void;
   onShareStory?: () => void;
   onShareWhatsApp?: () => void;
+  onBoostReach?: () => void;
+  pulseStoryLive?: boolean;
   onCounterOffer?: (quoteId: string) => void;
   onAwardBid?: (quoteId: string) => void;
   awarding?: boolean;
@@ -141,9 +143,9 @@ export function IndentReviewHubBidsBody(props: IndentReviewHubBidsPaneProps) {
     onBroadcast,
     onShareStory,
     onShareWhatsApp,
+    onBoostReach,
+    pulseStoryLive,
     onCounterOffer,
-    onAwardBid,
-    awarding,
     myQuote,
     supplierQuoteActionHint,
     supplierQuoteAlert,
@@ -181,6 +183,8 @@ export function IndentReviewHubBidsBody(props: IndentReviewHubBidsPaneProps) {
             onBroadcast={onBroadcast}
             onShareStory={onShareStory}
             onShareWhatsApp={onShareWhatsApp}
+            onBoostReach={onBoostReach}
+            pulseStoryLive={pulseStoryLive}
           />
         </View>
       );
@@ -196,8 +200,8 @@ export function IndentReviewHubBidsBody(props: IndentReviewHubBidsPaneProps) {
           onSelectQuote={onSelectQuote}
           canSelect={canAward}
           onCounterOffer={onCounterOffer}
-          onAwardBid={onAwardBid}
-          awarding={awarding}
+          minimalCards={stacked}
+          hideFilters={stacked}
         />
       </View>
     );
@@ -255,6 +259,8 @@ type SplitLayoutProps = {
   summary: ReactNode;
   bidsHeader: ReactNode;
   bidsBody: ReactNode;
+  /** When true, stacked layout only renders summary (supplier my-bid embeds quote). */
+  hideStackedBids?: boolean;
   footerReserve: number;
   insetsBottom: number;
   refreshing: boolean;
@@ -268,6 +274,7 @@ export function IndentReviewHubSplitLayout({
   summary,
   bidsHeader,
   bidsBody,
+  hideStackedBids = false,
   footerReserve,
   insetsBottom,
   refreshing,
@@ -278,11 +285,12 @@ export function IndentReviewHubSplitLayout({
   if (!useSplit) {
     return (
       <ScrollView
-        style={styles.stackScroll}
+        style={[styles.stackScroll, stacked && styles.stackScrollMobile]}
         contentContainerStyle={[
           splitStyles.summaryPaneContent,
           compact && splitStyles.summaryPaneContentCompact,
           stacked && splitStyles.summaryPaneContentStacked,
+          stacked && styles.stackContentMobile,
           { paddingBottom: bottomPad },
         ]}
         showsVerticalScrollIndicator={false}
@@ -296,17 +304,25 @@ export function IndentReviewHubSplitLayout({
         }
       >
         {summary}
-        <View
-          style={[
-            styles.stackBidsSection,
-            compact && styles.stackBidsSectionCompact,
-          ]}
-        >
-          <View style={[styles.stackBidsHeader, compact && styles.stackBidsHeaderCompact]}>
-            {bidsHeader}
+        {!hideStackedBids ? (
+          <View
+            style={[
+              styles.stackBidsSection,
+              compact && styles.stackBidsSectionCompact,
+              stacked && styles.stackBidsSectionMobile,
+            ]}
+          >
+            <View
+              style={[
+                styles.stackBidsHeader,
+                compact && styles.stackBidsHeaderCompact,
+              ]}
+            >
+              {bidsHeader}
+            </View>
+            {bidsBody}
           </View>
-          {bidsBody}
-        </View>
+        ) : null}
       </ScrollView>
     );
   }
@@ -357,6 +373,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.surface,
   },
+  stackScrollMobile: {
+    backgroundColor: "#F0F2F5",
+  },
+  stackContentMobile: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    gap: 0,
+  },
   stackBidsSection: {
     marginTop: 6,
     paddingTop: 10,
@@ -373,6 +397,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingTop: 8,
     gap: 6,
+  },
+  stackBidsSectionMobile: {
+    marginTop: 8,
+    marginHorizontal: 0,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 16,
+    backgroundColor: Theme.cardWhite,
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
   },
   stackBidsHeader: {
     flexDirection: "row",
@@ -401,6 +435,9 @@ const styles = StyleSheet.create({
   },
   awaitingPaneShellStacked: {
     paddingTop: 0,
+    flex: 0,
+    minHeight: 0,
+    justifyContent: "flex-start",
   },
   supplierHint: {
     fontSize: 12,

@@ -20,7 +20,8 @@ import {
   View,
 } from "react-native";
 
-export const LOADS_HUB_PAGE_BG = Theme.surface;
+/** Soft slate canvas — white ticket cards need this contrast to read. */
+export const LOADS_HUB_PAGE_BG = "#F0F2F5";
 
 type MainTab = {
   key: "GIVE_LOAD" | "GET_LOAD" | "AWARDED";

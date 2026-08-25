@@ -14,7 +14,6 @@ import { TripChatRoomSheet } from "@/features/chat/components/TripChatRoomSheet"
 import {
   pushTripLedgerQuickEntry,
 } from "@/features/finance/ledger/tripLedgerEntryChooser";
-import { TripAssetVaultPanel } from "@/features/trips/components/trip-detail/TripAssetVaultPanel";
 import { TripPayableReceivableSummaryCard } from "@/features/trips/components/trip-detail/adjustment/TripPayableReceivableSummaryCard";
 import { TripMarginHero } from "@/features/trips/components/trip-detail/TripMarginHero";
 import { TripLedgerTransactionPreviewModal } from "@/features/trips/components/trip-detail/TripLedgerTransactionPreviewModal";
@@ -122,6 +121,7 @@ const LiveTrackingModal = lazy(() =>
 );
 import {
   defaultTrackingState,
+  isTripDriverMapEligible,
   isTripTrackingActive,
 } from "@/features/trips/utils/tripTrackingStatus.util";
 import {
@@ -135,6 +135,9 @@ import { useTripTimelineQuery } from "@/lib/queries/useTripTimelineQuery";
 import { useTripCheckpointDistanceQuery } from "@/lib/queries/useTripCheckpointDistanceQuery";
 import { buildDriverLastPingDisplay } from "@/features/trips/utils/driverLastPingDisplay.util";
 import { TripDetailTrackingHub } from "./TripDetailTrackingHub";
+import { TripMobileDetail } from "./TripMobileDetail";
+import { TripMobileFinancePanel } from "./TripMobileFinancePanel";
+import { TripMobileVaultPanel } from "./TripMobileVaultPanel";
 import { TripStageControlPanel } from "./TripStageControlPanel";
 import { ManifestRefAssetCard } from "./ManifestRefAssetCard";
 import { useManifestRefAssetInsights } from "./hooks/useManifestRefAssetInsights";
@@ -175,7 +178,6 @@ import {
   neoStyles,
   styles,
   MANIFEST_HERO_AVATAR_DESKTOP,
-  MANIFEST_HERO_AVATAR_MOBILE,
 } from "./TripDetailScreen.styles";
 import { TripProvider } from "./context/TripContext";
 import { useTripDetailUi } from "./hooks/useTripDetailUi";
@@ -248,124 +250,6 @@ const manifestHeroBridgePartyStyles = StyleSheet.create({
     overflow: "hidden",
   },
 });
-
-/** Right bridge party — text beside avatar (same structure as client column). */
-function ManifestHeroBridgePartyEnd({
-  roleLabel,
-  partyName,
-  partyPhone,
-  entityType,
-  avatarSize,
-  avatarUrl,
-  avatarSeed,
-  organizationImageUrl,
-  organizationAvatarSeed,
-  isIntegrated,
-  vehicleLabel,
-  vehicleId,
-}: {
-  roleLabel: string;
-  partyName: string;
-  partyPhone?: string | null;
-  entityType: "driver" | "supplier";
-  avatarSize: number;
-  avatarUrl?: string | null;
-  avatarSeed?: string | null;
-  organizationImageUrl?: string | null;
-  organizationAvatarSeed?: string | null;
-  isIntegrated?: boolean;
-  vehicleLabel?: string | null;
-  vehicleId?: string | null;
-}) {
-  const showVehicleBadge =
-    entityType === "driver" &&
-    !!String(vehicleLabel ?? "").trim();
-  const badgeSize = Math.max(10, Math.round(avatarSize * 0.42));
-  const stackSize = avatarSize + (showVehicleBadge ? 6 : 0);
-  const iconWrapSize = stackSize;
-  const phoneDisplay = formatPhoneForDisplay(partyPhone);
-  const phoneDigits = (partyPhone ?? "").replace(/[^\d+]/g, "");
-
-  return (
-    <View style={[styles.refHeroBridgeCol, styles.refHeroBridgeColRight]}>
-      <View style={styles.refHeroBridgeTextColEnd}>
-        <Text
-          style={[styles.refHeroBridgeLabel, styles.refHeroBridgeLabelRight]}
-          numberOfLines={1}
-        >
-          {roleLabel}
-        </Text>
-        <Text
-          style={[styles.refHeroBridgeValue, styles.refHeroBridgeValueRight]}
-          numberOfLines={2}
-          ellipsizeMode="tail"
-        >
-          {partyName.toUpperCase()}
-        </Text>
-        {phoneDisplay ? (
-          <TouchableOpacity
-            onPress={() => {
-              if (phoneDigits) void Linking.openURL(`tel:${phoneDigits}`);
-            }}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel={`Call ${partyName} at ${phoneDisplay}`}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <Text
-              style={[
-                styles.refHeroBridgePhone,
-                styles.refHeroBridgeValueRight,
-              ]}
-              numberOfLines={1}
-            >
-              {phoneDisplay}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-      <View
-        style={[
-          styles.refHeroBridgeIconWrap,
-          { width: iconWrapSize, height: iconWrapSize },
-        ]}
-      >
-        <View
-          style={[
-            manifestHeroBridgePartyStyles.avatarStack,
-            { width: stackSize, height: stackSize },
-          ]}
-        >
-          <PartyAvatar
-            name={partyName}
-            entityType={entityType}
-            size={avatarSize}
-            avatarUrl={avatarUrl ?? undefined}
-            avatarSeed={avatarSeed ?? undefined}
-            organizationImageUrl={organizationImageUrl ?? undefined}
-            organizationAvatarSeed={organizationAvatarSeed ?? undefined}
-            isIntegrated={isIntegrated}
-            showIntegrationBadge={false}
-          />
-          {showVehicleBadge ? (
-            <View
-              style={manifestHeroBridgePartyStyles.vehicleBadge}
-              accessibilityLabel={`Vehicle ${vehicleLabel}`}
-            >
-              <PartyAvatar
-                name={vehicleLabel!}
-                entityType="driver"
-                size={badgeSize}
-                avatarSeed={vehicleId ?? undefined}
-                showIntegrationBadge={false}
-              />
-            </View>
-          ) : null}
-        </View>
-      </View>
-    </View>
-  );
-}
 
 /** Desktop neo hero — same party row layout as mobile bridge. */
 function NeoManifestHeroBridgePartyEnd({
@@ -582,7 +466,7 @@ export default function TripDetailScreen({
   const useCompactAdjustmentWizard = screenWidth < 680;
   const desktopTab: "tracking" | "finance" =
     activeTab === "finance" ? "finance" : "tracking";
-  const hPad = isMobile ? 12 : isTablet ? 16 : 24;
+  const hPad = isMobile ? 14 : isTablet ? 16 : 24;
   const mapHeight = isMobile ? 220 : isTablet ? 380 : 600;
 
   const detail = useTripDetail({
@@ -784,6 +668,23 @@ export default function TripDetailScreen({
         ? isTripTrackingActive(detail.trip.status, detail.trip.completed_at)
         : false,
     [detail.trip?.status, detail.trip?.completed_at, detail.trip],
+  );
+  /** Assigned + in-transit: Track modal, hub, map trail / current pin. */
+  const driverMapTrackingEligible = useMemo(
+    () =>
+      detail.trip
+        ? isTripDriverMapEligible(
+            detail.trip.status,
+            detail.trip.completed_at,
+            detail.trip.driver_id,
+          )
+        : false,
+    [
+      detail.trip?.status,
+      detail.trip?.completed_at,
+      detail.trip?.driver_id,
+      detail.trip,
+    ],
   );
   const showDriverTrackingOfflineOverlay = useMemo(
     () => journeyTrackingActive && (detail.isDriverOffline ?? false),
@@ -1141,6 +1042,21 @@ export default function TripDetailScreen({
 
   // Vault upload hooks — must run before loading/error early returns (Rules of Hooks).
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+  const [pendingVaultUpload, setPendingVaultUpload] = useState<{
+    slotId: string;
+    label: string;
+    docType: tripDocumentsService.TripDocumentType;
+    uri: string;
+    fileName: string;
+    mimeType: string;
+  } | null>(null);
+  const [vaultDeleteTarget, setVaultDeleteTarget] = useState<{
+    cardId: string;
+    label: string;
+    storagePath: string;
+    documentId?: string;
+    category?: string;
+  } | null>(null);
 
   const readFileAsArrayBuffer = useCallback(
     async (uri: string): Promise<ArrayBuffer> => {
@@ -1156,11 +1072,122 @@ export default function TripDetailScreen({
     [],
   );
 
+  const confirmPendingVaultUpload = useCallback(async () => {
+    const pending = pendingVaultUpload;
+    const tripIdForUpload = detail.trip?.id;
+    const uploaderId = detail.currentUserId;
+    if (!pending || !tripIdForUpload || !uploaderId || uploadingDocId) return;
+
+    setUploadingDocId(pending.slotId);
+    try {
+      const arrayBuffer = await readFileAsArrayBuffer(pending.uri);
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        Alert.alert("Upload failed", "Could not read the selected file.");
+        return;
+      }
+      const { error } = await tripDocumentsService.uploadTripDocument(
+        tripIdForUpload,
+        uploaderId,
+        {
+          arrayBuffer,
+          fileName: pending.fileName,
+          mimeType: pending.mimeType,
+        },
+        pending.docType,
+      );
+      if (error) {
+        Alert.alert("Upload failed", error.message);
+        return;
+      }
+      setPendingVaultUpload(null);
+      detail.handleRefresh();
+      Alert.alert("Uploaded", `${pending.label} is saved in the vault.`);
+    } catch (e) {
+      Alert.alert(
+        "Upload failed",
+        e instanceof Error ? e.message : "Something went wrong.",
+      );
+    } finally {
+      setUploadingDocId(null);
+    }
+  }, [
+    pendingVaultUpload,
+    detail.trip?.id,
+    detail.currentUserId,
+    detail.handleRefresh,
+    uploadingDocId,
+    readFileAsArrayBuffer,
+  ]);
+
+  const executeVaultDelete = useCallback(async () => {
+    const target = vaultDeleteTarget;
+    const tripId = detail.trip?.id;
+    if (!target || !tripId || uploadingDocId) return;
+
+    const row =
+      (target.documentId
+        ? detail.tripDocuments.find((d) => d.id === target.documentId)
+        : undefined) ??
+      detail.tripDocuments.find((d) => d.storage_path === target.storagePath);
+
+    const categoryToType: Record<
+      string,
+      tripDocumentsService.TripDocumentType
+    > = {
+      lr: "lr",
+      trip: "manifest",
+      driver: "pod",
+    };
+
+    setUploadingDocId(target.cardId);
+    setVaultDeleteTarget(null);
+    try {
+      const payload: tripDocumentsService.TripDocumentRow =
+        row ??
+        ({
+          // storage- prefix → deleteTripDocument clears storage even without a DB row
+          id: `storage-${target.storagePath}`,
+          trip_id: tripId,
+          file_name: target.label,
+          storage_path: target.storagePath,
+          mime_type: null,
+          size_bytes: null,
+          uploaded_at: new Date().toISOString(),
+          uploaded_by: null,
+          document_type: categoryToType[target.category ?? ""] ?? "manifest",
+        } satisfies tripDocumentsService.TripDocumentRow);
+
+      const { error } = await tripDocumentsService.deleteTripDocument(payload);
+      if (error) {
+        Alert.alert("Delete failed", error.message);
+        return;
+      }
+      detail.setSelectedDoc(null);
+      detail.handleRefresh();
+      Alert.alert("Deleted", `${target.label} was removed.`);
+    } catch (e) {
+      Alert.alert(
+        "Delete failed",
+        e instanceof Error ? e.message : "Something went wrong.",
+      );
+    } finally {
+      setUploadingDocId(null);
+    }
+  }, [
+    vaultDeleteTarget,
+    detail.trip?.id,
+    detail.tripDocuments,
+    detail.setSelectedDoc,
+    detail.handleRefresh,
+    uploadingDocId,
+  ]);
+
   const handleVaultUpload = useCallback(
     async (doc: (typeof detail.computedTripDocs)[number]) => {
       const tripIdForUpload = detail.trip?.id;
       const uploaderId = detail.currentUserId;
-      if (!tripIdForUpload || !uploaderId || uploadingDocId) return;
+      if (!tripIdForUpload || !uploaderId || uploadingDocId || pendingVaultUpload)
+        return;
 
       const allowPdf = doc.category !== "driver";
       let uri: string | null = null;
@@ -1201,100 +1228,76 @@ export default function TripDetailScreen({
         }
 
         if (!uri) return;
-        setUploadingDocId(doc.id);
-        const arrayBuffer = await readFileAsArrayBuffer(uri);
-        if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-          Alert.alert("Upload failed", "Could not read the selected file.");
-          return;
-        }
 
-        const CATEGORY_TO_DOC_TYPE: Record<string, tripDocumentsService.TripDocumentType> = {
-          driver: 'pod',
-          trip: 'manifest',
-          lr: 'lr',
+        const CATEGORY_TO_DOC_TYPE: Record<
+          string,
+          tripDocumentsService.TripDocumentType
+        > = {
+          driver: "pod",
+          trip: "manifest",
+          lr: "lr",
         };
-        const { error } = await tripDocumentsService.uploadTripDocument(
-          tripIdForUpload,
-          uploaderId,
-          { arrayBuffer, fileName, mimeType },
-          CATEGORY_TO_DOC_TYPE[doc.category ?? ''] ?? 'manifest',
-        );
-        if (error) {
-          Alert.alert("Upload failed", error.message);
-          return;
-        }
-        detail.handleRefresh();
+
+        // Preview + confirm before any network upload (prevents accidental saves).
+        setPendingVaultUpload({
+          slotId: doc.id,
+          label: doc.label,
+          docType: CATEGORY_TO_DOC_TYPE[doc.category ?? ""] ?? "manifest",
+          uri,
+          fileName,
+          mimeType,
+        });
       } catch (e) {
         Alert.alert(
           "Upload failed",
           e instanceof Error ? e.message : "Something went wrong.",
         );
-      } finally {
-        setUploadingDocId(null);
       }
     },
     [
       detail.trip?.id,
       detail.currentUserId,
-      detail.handleRefresh,
       uploadingDocId,
-      readFileAsArrayBuffer,
+      pendingVaultUpload,
     ],
   );
 
   const handleLRUpload = useCallback(async () => {
     const tripIdForUpload = detail.trip?.id;
     const uploaderId = detail.currentUserId;
-    if (!tripIdForUpload || !uploaderId || uploadingDocId) return;
-
-    let uri: string | null = null;
-    let fileName = `lr-${Date.now()}.pdf`;
-    let mimeType = 'application/pdf';
+    if (!tripIdForUpload || !uploaderId || uploadingDocId || pendingVaultUpload)
+      return;
 
     try {
       const res = await DocumentPicker.getDocumentAsync({
         multiple: false,
         copyToCacheDirectory: true,
-        type: ['application/pdf', 'image/*'],
+        type: ["application/pdf", "image/*"],
       });
       if (res.canceled || !res.assets?.[0]) return;
       const asset = res.assets[0];
-      uri = asset.uri;
-      fileName = asset.name || fileName;
-      mimeType = asset.mimeType || 'application/pdf';
+      const fileName = asset.name || `lr-${Date.now()}.pdf`;
+      const mimeType = asset.mimeType || "application/pdf";
 
-      setUploadingDocId('lr');
-      const arrayBuffer = await readFileAsArrayBuffer(uri);
-      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-        Alert.alert('Upload failed', 'Could not read the selected file.');
-        return;
-      }
-
-      const { error: uploadError } = await tripDocumentsService.uploadTripDocument(
-        tripIdForUpload,
-        uploaderId,
-        { arrayBuffer, fileName, mimeType },
-        'lr',
-      );
-      if (uploadError) {
-        Alert.alert('Upload failed', uploadError.message);
-        return;
-      }
-
-      // LR can be uploaded by anyone at any stage — it must not change trip status.
-      // Only the driver app's own flow (DriverTripFlowCard) may transition to in_transit.
-      detail.handleRefresh();
+      setPendingVaultUpload({
+        slotId: "lr",
+        label: "LR Document",
+        docType: "lr",
+        uri: asset.uri,
+        fileName,
+        mimeType,
+      });
     } catch (e) {
-      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Something went wrong.');
-    } finally {
-      setUploadingDocId(null);
+      Alert.alert(
+        "Upload failed",
+        e instanceof Error ? e.message : "Something went wrong.",
+      );
     }
   }, [
     detail.trip?.id,
     detail.currentUserId,
-    detail.handleRefresh,
     uploadingDocId,
-    readFileAsArrayBuffer,
+    pendingVaultUpload,
   ]);
 
   const manifestJourneyPings = useMemo(() => {
@@ -1813,6 +1816,8 @@ export default function TripDetailScreen({
       partnerName: detail.partnerName,
       supplierPartyName: detail.supplierPartyRes?.name,
       tripSupplierName: tripExtra.supplier_name,
+      linkedOrganizationName:
+        detail.supplierPartyAvatarFields?.organizationName,
       clientName:
         detail.displayClientName?.trim() ||
         String(trip.client_name ?? "").trim() ||
@@ -2048,11 +2053,6 @@ export default function TripDetailScreen({
     !!trip.vehicle_id ||
     !!String(trip.driver_display_name ?? "").trim() ||
     !!String(trip.vehicle_display_number ?? "").trim();
-  const currentStatusLabel = (() => {
-    const s = effectiveStatusLower;
-    if (s === "assigned" && !hasAnyAssignment) return "UNASSIGNED";
-    return s.replace(/_/g, " ").toUpperCase();
-  })();
   const payoutModeLabel = (() => {
     if (!payoutModeLc) return "—";
     if (payoutModeLc === "asset") return "Asset";
@@ -2640,6 +2640,24 @@ export default function TripDetailScreen({
       })
     : "—";
 
+  const mobilePlacedOnLabel = (() => {
+    if (!trip.created_at) return "—";
+    try {
+      return new Date(trip.created_at).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "—";
+    }
+  })();
+
+  const mobileTripIdLabel = getTripDisplayNumber(
+    trip,
+    currentOrganization?.id,
+  );
+
   const fmtAuditDate = (iso: string | null | undefined) => {
     if (!iso) return "—";
     try {
@@ -2766,39 +2784,26 @@ export default function TripDetailScreen({
           <>
             <TouchableOpacity
               onPress={onBack}
-              style={styles.navCircleBtn}
+              style={styles.navBackHit}
               activeOpacity={0.85}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <FontAwesome name="chevron-left" size={18} color="#0f172a" />
+              <FontAwesome name="chevron-left" size={16} color="#212121" />
             </TouchableOpacity>
-            <View style={styles.navMobileCenter}>
-              <Text style={styles.navMobileKicker}>Trip history</Text>
-              <View style={styles.navMobileTripRow}>
-                <Text style={styles.navMobileTripId}>
-                  {getTripDisplayNumber(trip, currentOrganization?.id)}
-                </Text>
-                <View style={styles.navMobilePulseRow}>
-                  <View
-                    style={[styles.navMobileDot, styles.navMobileDotEmerald]}
-                  />
-                  <View
-                    style={[styles.navMobileDot, styles.navMobileDotIndigo]}
-                  />
-                </View>
-              </View>
-            </View>
+            <Text style={styles.navMobileTitle}>Trips</Text>
             <View style={styles.navMobileRightActions}>
               <TouchableOpacity
-                style={styles.navCircleBtn}
+                style={styles.navHelpBtn}
                 activeOpacity={0.85}
                 onPress={() => setShowTripAuditLog(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Open trip activity log"
+                accessibilityLabel="Help and activity"
               >
-                <Feather name="clock" size={16} color="#64748b" />
+                <Feather name="help-circle" size={15} color="#2874F0" />
+                <Text style={styles.navHelpText}>Help</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.navCircleBtn, styles.navChatCircle]}
+                style={styles.navIconHit}
                 activeOpacity={0.85}
                 onPress={() => void handleOpenTripChat()}
                 accessibilityRole="button"
@@ -2809,12 +2814,6 @@ export default function TripDetailScreen({
                   color={Theme.driverEmerald}
                   strokeWidth={2.2}
                 />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.navCircleBtn}
-                activeOpacity={0.85}
-              >
-                <FontAwesome name="share-alt" size={16} color="#0f172a" />
               </TouchableOpacity>
             </View>
           </>
@@ -2843,13 +2842,13 @@ export default function TripDetailScreen({
 
       {/* ── Scrollable content ────────────────────────────────────────────────── */}
       <ScrollView
-        style={styles.scroll}
+        style={[styles.scroll, !isDesktop && styles.scrollMobileOrder]}
         contentContainerStyle={[
           styles.scrollContent,
           isDesktop && styles.scrollContentDesktop,
           {
-            padding: isDesktop ? 24 : isMobile ? 14 : 18,
-            gap: isDesktop ? 24 : isMobile ? 12 : 16,
+            padding: isDesktop ? 24 : isMobile ? 0 : 18,
+            gap: isDesktop ? 24 : isMobile ? 0 : 16,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -2862,210 +2861,19 @@ export default function TripDetailScreen({
       >
         {!isDesktop ? (
           <>
-            <View style={styles.refHeroCard}>
-              <View style={styles.refHeroBgGlow} />
-              <View style={styles.refHeroBridgeRow}>
-                <View style={styles.refHeroBridgeCol}>
-                  <View style={styles.refHeroBridgeIconWrap}>
-                    <PartyAvatar
-                      name={clientNameForParty}
-                      entityType="client"
-                      size={MANIFEST_HERO_AVATAR_MOBILE}
-                      organizationImageUrl={
-                        detail.clientPartyAvatarFields?.organizationImageUrl ??
-                        undefined
-                      }
-                      organizationAvatarSeed={
-                        detail.clientPartyAvatarFields
-                          ?.organizationAvatarSeed ?? undefined
-                      }
-                      avatarUrl={
-                        detail.clientPartyAvatarFields?.avatarUrl ?? undefined
-                      }
-                      avatarSeed={
-                        detail.clientPartyAvatarFields?.avatarSeed ?? undefined
-                      }
-                      isIntegrated={clientPartyIntegrated}
-                      showIntegrationBadge={false}
-                    />
-                  </View>
-                  <View style={styles.refHeroBridgeTextCol}>
-                    <Text style={styles.refHeroBridgeLabel}>CLIENT</Text>
-                    <Text
-                      style={styles.refHeroBridgeValue}
-                      numberOfLines={2}
-                      ellipsizeMode="tail"
-                    >
-                      {clientNameCard}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.refHeroBridgeSwap}>
-                  <FontAwesome name="exchange" size={12} color="#64748b" />
-                </View>
-                {showManifestHeroDriver ? (
-                  <ManifestHeroBridgePartyEnd
-                    roleLabel="DRIVER"
-                    partyName={allocatedDriverName}
-                    partyPhone={detail.driverPhone}
-                    entityType="driver"
-                    avatarSize={MANIFEST_HERO_AVATAR_MOBILE}
-                    avatarUrl={detail.driverAvatarUri}
-                    avatarSeed={trip.driver_id}
-                    vehicleLabel={allocatedVehicleLabel}
-                    vehicleId={trip.vehicle_id}
-                  />
-                ) : (
-                  <ManifestHeroBridgePartyEnd
-                    roleLabel="SUPPLIER"
-                    partyName={supplierName}
-                    entityType="supplier"
-                    avatarSize={MANIFEST_HERO_AVATAR_MOBILE}
-                    avatarUrl={detail.supplierPartyAvatarFields?.avatarUrl}
-                    avatarSeed={detail.supplierPartyAvatarFields?.avatarSeed}
-                    organizationImageUrl={
-                      detail.supplierPartyAvatarFields?.organizationImageUrl
-                    }
-                    organizationAvatarSeed={
-                      detail.supplierPartyAvatarFields?.organizationAvatarSeed
-                    }
-                    isIntegrated={supplierPartyIntegrated}
-                  />
-                )}
-              </View>
-              <View style={styles.refHeroRouteRow}>
-                <View
-                  style={[
-                    styles.refHeroRouteCol,
-                    styles.refHeroRouteColJustify,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.refHeroCity,
-                      isMobile && styles.refHeroCityMobile,
-                    ]}
-                  >
-                    {originSplit.primary.toUpperCase()}
-                  </Text>
-                  <Text style={styles.refHeroState}>
-                    {originStateLabel.toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.refHeroConnectorWrap}>
-                  <View style={styles.refHeroToRow}>
-                    <View style={styles.refHeroToDot} />
-                    <View style={styles.refHeroToLine} />
-                  </View>
-                </View>
-                <View
-                  style={[
-                    styles.refHeroRouteCol,
-                    styles.refHeroRouteColRight,
-                    styles.refHeroRouteColJustify,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.refHeroCity,
-                      isMobile && styles.refHeroCityMobile,
-                      isMobile && styles.refHeroCityMobileDest,
-                      Platform.OS === "web" &&
-                        isMobile &&
-                        styles.refHeroCityWebDest,
-                      styles.refHeroCityRight,
-                    ]}
-                    numberOfLines={1}
-                    {...(Platform.OS === "web"
-                      ? {}
-                      : {
-                          adjustsFontSizeToFit: true as const,
-                          minimumFontScale: 0.45,
-                        })}
-                  >
-                    {destinationSplit.primary.toUpperCase()}
-                  </Text>
-                  <Text style={[styles.refHeroState, styles.refHeroStateRight]}>
-                    {destinationStateLabel.toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.refHeroMetaShell}>
-                <View style={styles.refHeroMetaItem}>
-                  <View style={styles.refHeroMetaIconWrap}>
-                    <Feather name="navigation" size={12} color="#fff" />
-                  </View>
-                  <View>
-                    <Text style={styles.refHeroMetaLabel}>Manifest range</Text>
-                    <Text style={styles.refHeroMetaValue} numberOfLines={1}>
-                      {resolvedDistanceLabel
-                        ? resolvedDistanceLabel.replace(/\s*km$/i, " KM")
-                        : "—"}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.refHeroMetaDivider} />
-                <View
-                  style={[styles.refHeroMetaItem, styles.refHeroMetaItemRight]}
-                >
-                  <View>
-                    <Text style={styles.refHeroMetaLabel}>ETA manifest</Text>
-                    <Text style={styles.refHeroMetaValue} numberOfLines={1}>
-                      {liveTrackingPresentation?.eta.label ?? '—'}
-                    </Text>
-                  </View>
-                  <View style={styles.refHeroMetaIconGhost}>
-                    <Feather name="clock" size={12} color="#a5b4fc" />
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.refAssetRow}>
-              <ManifestRefAssetCard
-                roleLabel="Driver"
-                primaryText={allocatedDriverName}
-                variant="driver"
-                phone={detail.driverPhone}
-                ratingAvg={manifestDriverInsights.ratingAvg}
-                docsIssue={manifestDriverInsights.docsIssue}
-                insightsLoading={manifestRefAssetInsights.isLoading}
-                driverName={detail.driverName}
-                driverAvatarUrl={detail.driverAvatarUri}
-                driverId={trip.driver_id}
-                showChange={canChangeManifestAssets}
-                onChange={() => openAssignmentFlow("driver")}
-              />
-              <ManifestRefAssetCard
-                roleLabel="Vehicle"
-                primaryText={allocatedVehicleLabel}
-                variant="vehicle"
-                vehicleType={vehicleTypeLabel}
-                docsIssue={manifestVehicleInsights.docsIssue}
-                insightsLoading={manifestRefAssetInsights.isLoading}
-                showChange={canChangeManifestAssets}
-                onChange={() => openAssignmentFlow("vehicle")}
-              />
-            </View>
-
-            <View style={styles.refTabShell}>
+            <View style={styles.mobileOrderChipRow}>
               <TouchableOpacity
                 style={[
-                  styles.refTabBtn,
-                  activeTab === "trip" && styles.refTabBtnActive,
+                  styles.mobileOrderChip,
+                  activeTab === "trip" && styles.mobileOrderChipActive,
                 ]}
                 onPress={() => setActiveTab("trip")}
                 activeOpacity={0.85}
               >
-                <Feather
-                  name="activity"
-                  size={12}
-                  color={activeTab === "trip" ? "#818cf8" : "#94a3b8"}
-                />
                 <Text
                   style={[
-                    styles.refTabBtnText,
-                    activeTab === "trip" && styles.refTabBtnTextActive,
+                    styles.mobileOrderChipText,
+                    activeTab === "trip" && styles.mobileOrderChipTextActive,
                   ]}
                 >
                   Journey
@@ -3074,21 +2882,16 @@ export default function TripDetailScreen({
               {canTripFinanceTab ? (
                 <TouchableOpacity
                   style={[
-                    styles.refTabBtn,
-                    activeTab === "finance" && styles.refTabBtnActive,
+                    styles.mobileOrderChip,
+                    activeTab === "finance" && styles.mobileOrderChipActive,
                   ]}
                   onPress={() => setActiveTab("finance")}
                   activeOpacity={0.85}
                 >
-                  <Feather
-                    name="credit-card"
-                    size={12}
-                    color={activeTab === "finance" ? "#818cf8" : "#94a3b8"}
-                  />
                   <Text
                     style={[
-                      styles.refTabBtnText,
-                      activeTab === "finance" && styles.refTabBtnTextActive,
+                      styles.mobileOrderChipText,
+                      activeTab === "finance" && styles.mobileOrderChipTextActive,
                     ]}
                   >
                     Finance
@@ -3098,21 +2901,16 @@ export default function TripDetailScreen({
               {showExpenseHub && canTripExpensesTab ? (
                 <TouchableOpacity
                   style={[
-                    styles.refTabBtn,
-                    activeTab === "expenses" && styles.refTabBtnActive,
+                    styles.mobileOrderChip,
+                    activeTab === "expenses" && styles.mobileOrderChipActive,
                   ]}
                   onPress={() => setActiveTab("expenses")}
                   activeOpacity={0.85}
                 >
-                  <Feather
-                    name="dollar-sign"
-                    size={12}
-                    color={activeTab === "expenses" ? "#818cf8" : "#94a3b8"}
-                  />
                   <Text
                     style={[
-                      styles.refTabBtnText,
-                      activeTab === "expenses" && styles.refTabBtnTextActive,
+                      styles.mobileOrderChipText,
+                      activeTab === "expenses" && styles.mobileOrderChipTextActive,
                     ]}
                   >
                     {expenseTabLabel}
@@ -3122,21 +2920,16 @@ export default function TripDetailScreen({
               {canTripDocsTab ? (
                 <TouchableOpacity
                   style={[
-                    styles.refTabBtn,
-                    activeTab === "docs" && styles.refTabBtnActive,
+                    styles.mobileOrderChip,
+                    activeTab === "docs" && styles.mobileOrderChipActive,
                   ]}
                   onPress={() => setActiveTab("docs")}
                   activeOpacity={0.85}
                 >
-                  <Feather
-                    name="shield"
-                    size={12}
-                    color={activeTab === "docs" ? "#818cf8" : "#94a3b8"}
-                  />
                   <Text
                     style={[
-                      styles.refTabBtnText,
-                      activeTab === "docs" && styles.refTabBtnTextActive,
+                      styles.mobileOrderChipText,
+                      activeTab === "docs" && styles.mobileOrderChipTextActive,
                     ]}
                   >
                     Vault
@@ -3146,284 +2939,245 @@ export default function TripDetailScreen({
             </View>
 
             <PersistentTabPanel active={activeTab === "trip"}>
-              <>
-                {canTripTrackingTab &&
-                isTripTrackingActive(trip?.status, trip?.completed_at) ? (
-                  <TripDetailTrackingHub
-                    onOpenLiveTracking={() => detail.setShowTrackingModal(true)}
-                    presentation={liveTrackingPresentation}
-                    driverLastPing={driverLastPingDisplay}
-                    recordedAt={driverLastPingRecordedAt}
-                    broadcastActive={trackingState?.broadcastActive ?? false}
-                  />
-                ) : null}
-                {canTripTrackingTab &&
-                isTripTrackingActive(trip?.status, trip?.completed_at) &&
-                trip ? (
-                  <>
-                    <TripStageControlPanel
-                      trip={trip}
-                      driverName={detail.driverName}
-                      vehicleLabel={detail.vehicleLabel}
-                    />
-                    <TouchableOpacity
-                      onPress={() => router.push(ROUTES.trackTrip(trip.id))}
-                      activeOpacity={0.8}
-                      style={{ alignSelf: "flex-start", marginTop: 8, marginBottom: 4 }}
-                    >
-                      <Text style={{ fontSize: 12, fontWeight: "600", color: Theme.driverPrimary }}>
-                        {entryContext === "client" ? "Simplified tracking view" : "View customer tracking"}
-                      </Text>
-                    </TouchableOpacity>
-                    {entryContext !== "client" ? (
-                      <TouchableOpacity
-                        onPress={() => router.push(ROUTES.FLEET_OPERATIONS)}
-                        activeOpacity={0.8}
-                        style={{ alignSelf: "flex-start", marginBottom: 4 }}
-                      >
-                        <Text style={{ fontSize: 12, fontWeight: "600", color: Theme.driverPrimary }}>
-                          Fleet operations dashboard
-                        </Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </>
-                ) : null}
-                <View style={styles.refTimelineCard}>
-                  {visibleJourneyLogs.map((log, index) => {
-                    const expanded = expandedLog === index;
-                    const isLast = index === visibleJourneyLogs.length - 1;
-                    const isCurrent =
-                      !manifestJourneyComplete && isLast;
-                    const phase: "completed" | "current" | "pending" = isCurrent
-                      ? "current"
-                      : "completed";
-                    const stepIndex = manifestStepIndexForLog(log.stepKey);
-                    const stepSimLogs = manifestSimLogsForStepIndex(
-                      stepIndex,
-                      simLogEntries,
+              <TripMobileDetail
+                tripIdLabel={getTripDisplayNumber(trip, currentOrganization?.id)}
+                status={String(trip.status ?? "")}
+                statusLabel={statusLabel}
+                payoutModeLabel={payoutModeLabel}
+                createdAtIso={trip.created_at ?? null}
+                pickupDateIso={trip.pickup_date ?? null}
+                completedAtIso={trip.completed_at ?? null}
+                startedAtIso={trip.started_at ?? null}
+                origin={
+                  [originSplit.primary, originStateLabel]
+                    .filter(Boolean)
+                    .join(", ") ||
+                  trip.pickup_area ||
+                  "—"
+                }
+                destination={
+                  [destinationSplit.primary, destinationStateLabel]
+                    .filter(Boolean)
+                    .join(", ") ||
+                  trip.drop_location ||
+                  "—"
+                }
+                vehicleLabel={allocatedVehicleLabel}
+                vehicleType={vehicleTypeLabel}
+                loadTonsLabel={loadTonsLabel}
+                distanceLabel={resolvedDistanceLabel}
+                etaLabel={liveTrackingPresentation?.eta.label ?? null}
+                clientName={clientNameForParty}
+                driverName={allocatedDriverName}
+                driverPhone={detail.driverPhone}
+                supplierName={supplierNameForParty}
+                clientParty={{
+                  name: clientNameForParty,
+                  roleLabel: "Client",
+                  entityType: "client",
+                  avatarUrl: detail.clientPartyAvatarFields?.avatarUrl,
+                  avatarSeed: detail.clientPartyAvatarFields?.avatarSeed,
+                  organizationImageUrl:
+                    detail.clientPartyAvatarFields?.organizationImageUrl,
+                  organizationAvatarSeed:
+                    detail.clientPartyAvatarFields?.organizationAvatarSeed,
+                  isIntegrated: clientPartyIntegrated,
+                }}
+                costParty={
+                  isAssetTripFinance
+                    ? {
+                        name:
+                          allocatedDriverName !== "Unassigned"
+                            ? allocatedDriverName
+                            : detail.driverName?.trim() || "Driver",
+                        roleLabel: "Driver",
+                        entityType: "driver",
+                        avatarUrl: detail.driverAvatarUri,
+                        avatarSeed: trip.driver_id,
+                        isIntegrated: false,
+                      }
+                    : {
+                        name: supplierNameForParty,
+                        roleLabel: "Supplier",
+                        entityType: "supplier",
+                        avatarUrl: detail.supplierPartyAvatarFields?.avatarUrl,
+                        avatarSeed: detail.supplierPartyAvatarFields?.avatarSeed,
+                        organizationImageUrl:
+                          detail.supplierPartyAvatarFields
+                            ?.organizationImageUrl,
+                        organizationAvatarSeed:
+                          detail.supplierPartyAvatarFields
+                            ?.organizationAvatarSeed,
+                        isIntegrated: supplierPartyIntegrated,
+                      }
+                }
+                saleInr={sales}
+                costInr={cost}
+                adjustedSaleInr={adjSales}
+                adjustedCostInr={adjCost}
+                marginInr={netManifestYield}
+                marginBasisLabel={marginBasisLabel}
+                saleLabel={
+                  isPartnerSettlementView ? "Partner amount" : "Client rate"
+                }
+                costLabel={
+                  isAssetTripFinance
+                    ? "Trip cost"
+                    : isPartnerSettlementView
+                      ? "Your cost"
+                      : "Supplier cost"
+                }
+                canTrack={canTripTrackingTab}
+                onTrack={() => {
+                  if (!hasDriverAssigned) {
+                    Alert.alert(
+                      "Driver not assigned",
+                      "Assign a driver to this trip before you can track live location.",
+                      canChangeManifestAssets
+                        ? [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Assign driver",
+                              onPress: () => openAssignmentFlow("driver"),
+                            },
+                          ]
+                        : [{ text: "OK" }],
                     );
-                    return (
-                      <View
-                        key={`${log.stepKey}-${index}`}
-                        style={styles.refTimelineItemWrap}
-                      >
-                        {!isLast ? (
-                          <View
-                            style={[
-                              styles.refTimelineConnector,
-                              phase === "completed" && {
-                                backgroundColor: "#40B876",
-                              },
-                            ]}
-                          />
-                        ) : null}
-                        <TouchableOpacity
-                          style={[
-                            styles.refTimelineItem,
-                            expanded && styles.refTimelineItemExpanded,
-                          ]}
-                          onPress={() =>
-                            setExpandedLog(expanded ? null : index)
-                          }
-                          activeOpacity={0.9}
-                        >
-                          <View style={neoStyles.manifestPulseIconColumn}>
-                            <ManifestPulseStepIcon phase={phase} />
-                          </View>
-                          <View style={styles.refTimelineBody}>
-                            <View style={styles.refTimelineTop}>
-                              <Text
-                                style={styles.refTimelineStatus}
-                                numberOfLines={1}
-                              >
-                                {log.status}
-                              </Text>
-                              <View style={styles.refTimelineTopRight}>
-                                <Text style={styles.refTimelineTime}>
-                                  {log.time}
-                                </Text>
-                                <FontAwesome
-                                  name={
-                                    expanded ? "chevron-up" : "chevron-down"
-                                  }
-                                  size={11}
-                                  color="#94a3b8"
-                                />
-                              </View>
-                            </View>
-                            <Text style={styles.refTimelineLocation}>
-                              {log.location}
-                            </Text>
-                            {log.locationCoords ? (
-                              <Text style={styles.refTimelineCoords}>
-                                {log.locationCoords}
-                              </Text>
-                            ) : null}
-                            {expanded ? (
-                              <Text style={styles.refTimelineDetails}>
-                                {log.details}
-                              </Text>
-                            ) : null}
-                            {expanded && stepIndex === 3 ? (
-                              <ManifestDriverPingList
-                                pings={manifestDriverPings}
-                              />
-                            ) : null}
-                            {stepSimLogs.map((sim, si) => (
-                              <View
-                                key={`ref-sim-${si}`}
-                                style={neoStyles.simLogBadge}
-                              >
-                                <Feather
-                                  name="zap"
-                                  size={10}
-                                  color="#f59e0b"
-                                />
-                                <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text style={neoStyles.simLogBadgeText}>
-                                    Business simulated · {sim.userName}
-                                  </Text>
-                                </View>
-                              </View>
-                            ))}
-                          </View>
-                        </TouchableOpacity>
+                    return;
+                  }
+                  if (driverMapTrackingEligible) {
+                    detail.setShowTrackingModal(true);
+                  } else {
+                    router.push(ROUTES.trackTrip(trip.id));
+                  }
+                }}
+                canChangeAssets={canChangeManifestAssets}
+                onChangeAssets={() => openAssignmentFlow("driver")}
+                onOpenFinance={
+                  canTripFinanceTab
+                    ? () => setActiveTab("finance")
+                    : undefined
+                }
+              >
+                {canTripTrackingTab && driverMapTrackingEligible ? (
+                  <View style={styles.mobileOrderOpsSheet}>
+                    <TripDetailTrackingHub
+                      onOpenLiveTracking={() =>
+                        detail.setShowTrackingModal(true)
+                      }
+                      presentation={liveTrackingPresentation}
+                      driverLastPing={driverLastPingDisplay}
+                      recordedAt={driverLastPingRecordedAt}
+                      broadcastActive={trackingState?.broadcastActive ?? false}
+                    />
+                    {trip ? (
+                      <View style={{ marginTop: 8 }}>
+                        <TripStageControlPanel
+                          trip={trip}
+                          driverName={detail.driverName}
+                          vehicleLabel={detail.vehicleLabel}
+                        />
                       </View>
-                    );
-                  })}
-                </View>
-
-                <View style={styles.refDeliveredCard}>
-                  <View>
-                    <Text style={styles.refDeliveredLabel}>
-                      {tripCompleted
-                        ? "Final Audit Status"
-                        : "Current Status"}
-                    </Text>
-                    <Text style={styles.refDeliveredValue}>
-                      {tripCompleted
-                        ? "DELIVERED SUCCESSFULLY"
-                        : currentStatusLabel}
-                    </Text>
+                    ) : null}
                   </View>
-                  <View style={styles.refDeliveredIconWrap}>
-                    <FontAwesome
-                      name={tripCompleted ? "check-circle" : "clock-o"}
-                      size={20}
-                      color="#fff"
+                ) : null}
+                {canTripRatings ? (
+                  <View style={styles.mobileOrderRatingsSheet}>
+                    <TripRatingsBlock
+                      trip={trip}
+                      organizationId={currentOrganization?.id ?? null}
+                      partnerName={detail.partnerName}
+                      driverName={detail.driverName}
+                      driverAvatarUri={detail.driverAvatarUri}
+                      clientName={
+                        detail.displayClientName ?? trip.client_name ?? null
+                      }
+                      clientPartyAvatarFields={detail.clientPartyAvatarFields}
+                      supplierPartyAvatarFields={
+                        detail.supplierPartyAvatarFields
+                      }
+                      paymentCaptured={paymentCaptured}
+                      layoutVariant="registry"
                     />
                   </View>
-                </View>
-
-                {canTripRatings ? (
-                <View style={styles.refFeedbackWrap}>
-                  <TripRatingsBlock
-                    trip={trip}
-                    organizationId={currentOrganization?.id ?? null}
-                    partnerName={detail.partnerName}
-                    driverName={detail.driverName}
-                    driverAvatarUri={detail.driverAvatarUri}
-                    clientName={
-                      detail.displayClientName ?? trip.client_name ?? null
-                    }
-                    clientPartyAvatarFields={detail.clientPartyAvatarFields}
-                    supplierPartyAvatarFields={detail.supplierPartyAvatarFields}
-                    paymentCaptured={paymentCaptured}
-                    layoutVariant="registry"
-                  />
-                </View>
                 ) : null}
-              </>
+              </TripMobileDetail>
             </PersistentTabPanel>
             <PersistentTabPanel active={activeTab === "finance"}>
-              <View style={styles.refFinanceWrap}>
-                <View style={styles.refFinanceSubTabs}>
-                  <TouchableOpacity
-                    style={styles.refFinanceSubBtn}
-                    onPress={() => setFinanceSubTab("summary")}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        styles.refFinanceSubBtnText,
-                        financeSubTab === "summary" &&
-                          styles.refFinanceSubBtnTextActive,
-                      ]}
-                    >
-                      Summary
+              <TripMobileFinancePanel
+                tripIdLabel={mobileTripIdLabel}
+                createdAtLabel={mobilePlacedOnLabel}
+                statusLabel={statusLabel}
+                saleLabel={
+                  isPartnerSettlementView ? "Partner amount" : "Client rate"
+                }
+                costLabel={
+                  isAssetTripFinance
+                    ? "Trip cost"
+                    : isPartnerSettlementView
+                      ? "Your cost"
+                      : "Supplier cost"
+                }
+                saleInr={sales}
+                costInr={cost}
+                adjustedSaleInr={adjSales}
+                adjustedCostInr={adjCost}
+                marginInr={netManifestYield}
+                marginBasisLabel={marginBasisLabel}
+                clientName={clientNameForParty}
+                payablePartyName={provisionCostPartyName}
+                payablePartyLabel={
+                  isAssetTripFinance ? "Driver" : "Supplier"
+                }
+                subTab={financeSubTab}
+                onSubTabChange={setFinanceSubTab}
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
+                captureSlot={undefined}
+                summarySlot={financeAdjustmentSummaryWrappedEl}
+                transactionsSlot={
+                  filteredFinanceRows.length === 0 ? (
+                    <Text style={styles.mobileOrderEmptyTxn}>
+                      No transactions yet
                     </Text>
-                    {financeSubTab === "summary" ? (
-                      <View style={styles.refFinanceSubLine} />
-                    ) : null}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.refFinanceSubBtn}
-                    onPress={() => setFinanceSubTab("transactions")}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        styles.refFinanceSubBtnText,
-                        financeSubTab === "transactions" &&
-                          styles.refFinanceSubBtnTextActive,
-                      ]}
-                    >
-                      Transactions
-                    </Text>
-                    {financeSubTab === "transactions" ? (
-                      <View style={styles.refFinanceSubLine} />
-                    ) : null}
-                  </TouchableOpacity>
-                </View>
-
-                {financeSubTab === "summary" ? (
-                  <>
-                    {financeManifestSummaryBlock}
-                    {financeAdjustmentSummaryWrappedEl}
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.refFinanceSearchWrap}>
-                      <Feather name="search" size={14} color="#94a3b8" />
-                      <TextInput
-                        value={searchTerm}
-                        onChangeText={setSearchTerm}
-                        placeholder="Audit transaction registry..."
-                        placeholderTextColor="#94a3b8"
-                        style={styles.refFinanceSearchInput}
-                      />
-                    </View>
-                    {filteredFinanceRows.map((row) => (
+                  ) : (
+                    filteredFinanceRows.map((row) => (
                       <TouchableOpacity
                         key={row.key}
-                        style={styles.refTxnRow}
+                        style={styles.mobileOrderTxnRow}
                         activeOpacity={0.85}
                         onPress={() => setPreviewLedgerTx(row.tx)}
                         accessibilityRole="button"
                         accessibilityLabel="Preview transaction"
                       >
-                        <View style={styles.refTxnLeft}>
+                        <View style={styles.mobileOrderTxnLeft}>
                           <View
                             style={[
-                              styles.refTxnIconWrap,
+                              styles.mobileOrderTxnIcon,
                               row.isIn
-                                ? styles.refTxnIconIn
-                                : styles.refTxnIconOut,
+                                ? styles.mobileOrderTxnIconIn
+                                : styles.mobileOrderTxnIconOut,
                             ]}
                           >
                             <Feather
                               name={
                                 row.isIn ? "arrow-down-left" : "arrow-up-right"
                               }
-                              size={16}
-                              color={row.isIn ? Theme.primary : "#f43f5e"}
+                              size={14}
+                              color={row.isIn ? Theme.positive : Theme.teslaRed}
                             />
                           </View>
-                          <View style={styles.refTxnTextWrap}>
-                            <Text style={styles.refTxnLabel}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text
+                              style={styles.mobileOrderTxnLabel}
+                              numberOfLines={1}
+                            >
                               {ledgerHistoryTitle(row.tx, row.isIn)}
                             </Text>
-                            <Text style={styles.refTxnMeta}>
+                            <Text
+                              style={styles.mobileOrderTxnMeta}
+                              numberOfLines={1}
+                            >
                               {formatLedgerDate(row.tx.transaction_date)} ·{" "}
                               {row.tx.payment_mode || "Wallet"}
                             </Text>
@@ -3431,23 +3185,23 @@ export default function TripDetailScreen({
                         </View>
                         <Text
                           style={[
-                            styles.refTxnAmount,
+                            styles.mobileOrderTxnAmount,
                             row.isIn
-                              ? styles.refTxnAmountIn
-                              : styles.refTxnAmountOut,
+                              ? styles.mobileOrderTxnAmountIn
+                              : styles.mobileOrderTxnAmountOut,
                           ]}
                         >
                           {formatINR(row.amount)}
                         </Text>
                       </TouchableOpacity>
-                    ))}
-                  </>
-                )}
-              </View>
+                    ))
+                  )
+                }
+              />
             </PersistentTabPanel>
             {!isAggregate ? (
               <PersistentTabPanel active={activeTab === "expenses"}>
-              <View style={styles.refFinanceWrap}>
+              <View style={[styles.refFinanceWrap, styles.mobileOrderTabPad]}>
                 {odometerPreviewEl}
                 <Suspense fallback={<ActivityIndicator style={{ margin: 24 }} color="#818cf8" />}>
                 <TripExpensesScreen
@@ -3493,12 +3247,14 @@ export default function TripDetailScreen({
               </PersistentTabPanel>
             ) : null}
             <PersistentTabPanel active={activeTab === "docs"}>
-              <TripAssetVaultPanel
+              <TripMobileVaultPanel
                 docs={vaultDocs}
                 canUploadTripDocs={canUploadTripDocs}
                 uploadingDocId={uploadingDocId}
                 vehicleId={trip.vehicle_id ?? null}
                 onCardPress={handleVaultCardPress}
+                tripIdLabel={mobileTripIdLabel}
+                createdAtLabel={mobilePlacedOnLabel}
               />
             </PersistentTabPanel>
           </>
@@ -4087,6 +3843,7 @@ export default function TripDetailScreen({
                           onDistanceCalculated={setMapRouteDistanceKm}
                           tripId={trip.id}
                           trackingEnabled={trackingState?.broadcastActive ?? false}
+                          fitPaddingBottom={driverMapTrackingEligible ? 168 : 96}
                           driverAvatarUri={detail.driverAvatarUri}
                           driverAvatarSeed={trip.driver_id}
                           driverOnline={trackingState?.broadcastActive ?? false}
@@ -4107,7 +3864,7 @@ export default function TripDetailScreen({
                             Live Telemetry
                           </Text>
                         </View>
-                      ) : journeyTrackingActive ? (
+                      ) : driverMapTrackingEligible ? (
                         <View
                           style={[neoStyles.radarLive, neoStyles.radarHistory]}
                           pointerEvents="none"
@@ -4117,89 +3874,104 @@ export default function TripDetailScreen({
                           </Text>
                         </View>
                       ) : null}
-                      {(trackingState?.broadcastActive ?? false) ? (
-                        <TouchableOpacity
-                          style={[
-                            neoStyles.radarPingBtn,
-                            isPingTimedOut && neoStyles.radarPingBtnTimedOut,
-                            (trackingState?.isPinging ?? false) && neoStyles.radarPingBtnActive,
-                          ]}
-                          onPress={detail.requestDriverPing}
-                          disabled={trackingState?.isPinging ?? false}
-                          activeOpacity={0.75}
-                        >
-                          {(trackingState?.isPinging ?? false) ? (
-                            <ActivityIndicator size="small" color="#60a5fa" />
-                          ) : isPingTimedOut ? (
-                            <Feather name="alert-circle" size={14} color="#f59e0b" />
-                          ) : (
-                            <Feather name="navigation" size={14} color="#60a5fa" />
-                          )}
-                          <Text
-                            style={[
-                              neoStyles.radarPingText,
-                              isPingTimedOut && neoStyles.radarPingTextTimedOut,
-                            ]}
-                          >
-                            {(trackingState?.isPinging ?? false)
-                              ? "Pinging…"
-                              : isPingTimedOut
-                                ? "No response"
-                                : "Ping Driver"}
-                          </Text>
-                        </TouchableOpacity>
-                      ) : null}
-                      {journeyTrackingActive ? (
-                        <TouchableOpacity
-                          style={neoStyles.radarLiveTrackBtn}
-                          onPress={() => detail.setShowTrackingModal(true)}
-                          activeOpacity={0.75}
-                        >
-                          <Feather name="map-pin" size={14} color="#818cf8" />
-                          <Text style={neoStyles.radarLiveTrackText}>
-                            Live Tracking
-                          </Text>
-                        </TouchableOpacity>
-                      ) : null}
                       <View
-                        style={[
-                          neoStyles.radarBottom,
-                          isMobile && neoStyles.radarBottomMobile,
-                        ]}
+                        style={neoStyles.radarBottom}
                         pointerEvents="box-none"
                       >
-                        <View style={neoStyles.radarBottomLeft}>
-                          <Text style={neoStyles.radarMetaLabel}>
-                            Driver location
-                          </Text>
-                          <Text
-                            style={neoStyles.radarMetaValue}
-                            numberOfLines={2}
-                          >
-                            {driverLastPingDisplay.locationLabel?.trim() ||
-                              driverLastPingDisplay.cityLabel?.trim() ||
-                              "—"}
-                          </Text>
-                        </View>
-                        <View style={neoStyles.radarBottomRight}>
-                          <Text style={neoStyles.radarMetaLabel}>
-                            {driverLastPingDisplay.recordedAtLabel
-                              ? "Last ping"
-                              : "Distance / ETA"}
-                          </Text>
-                          {driverLastPingDisplay.recordedAtLabel ? (
-                            <Text style={neoStyles.radarMetaTime}>
-                              {driverLastPingDisplay.recordedAtLabel}
+                        <View style={neoStyles.radarBottomMetaRow}>
+                          <View style={neoStyles.radarBottomLeft}>
+                            <Text style={neoStyles.radarMetaLabel}>
+                              Driver location
                             </Text>
-                          ) : (
-                            <Text style={neoStyles.radarSpeed}>
-                              {resolvedDistanceLabel ?? "Calculating"}{" "}
-                              <Text style={neoStyles.radarSpeedUnit}>
-                                · {liveTrackingPresentation?.eta.label ?? '—'}
+                            <Text
+                              style={neoStyles.radarMetaValue}
+                              numberOfLines={2}
+                            >
+                              {driverLastPingDisplay.locationLabel?.trim() ||
+                                driverLastPingDisplay.cityLabel?.trim() ||
+                                (driverMapTrackingEligible
+                                  ? "Waiting for first ping"
+                                  : "—")}
+                            </Text>
+                            {detail.driverName?.trim() ? (
+                              <Text style={neoStyles.radarDriverName} numberOfLines={1}>
+                                {detail.driverName.trim()}
+                                {detail.vehicleLabel?.trim()
+                                  ? ` · ${detail.vehicleLabel.trim()}`
+                                  : ""}
                               </Text>
+                            ) : null}
+                          </View>
+                          <View style={neoStyles.radarBottomRight}>
+                            <Text style={neoStyles.radarMetaLabel}>
+                              {driverLastPingDisplay.recordedAtLabel
+                                ? "Last ping"
+                                : "Distance / ETA"}
                             </Text>
-                          )}
+                            {driverLastPingDisplay.recordedAtLabel ? (
+                              <Text style={neoStyles.radarMetaTime}>
+                                {driverLastPingDisplay.recordedAtLabel}
+                              </Text>
+                            ) : (
+                              <Text style={neoStyles.radarSpeed}>
+                                {resolvedDistanceLabel ?? "Calculating"}{" "}
+                                <Text style={neoStyles.radarSpeedUnit}>
+                                  · {liveTrackingPresentation?.eta.label ?? "—"}
+                                </Text>
+                              </Text>
+                            )}
+                          </View>
                         </View>
+                        {driverMapTrackingEligible ? (
+                          <View style={neoStyles.radarBottomActions}>
+                            <TouchableOpacity
+                              style={neoStyles.radarBottomActionBtn}
+                              onPress={() => detail.setShowTrackingModal(true)}
+                              activeOpacity={0.75}
+                              accessibilityRole="button"
+                              accessibilityLabel="Open live tracking"
+                            >
+                              <Feather name="map-pin" size={14} color={Theme.buttonDarkText} />
+                              <Text style={neoStyles.radarBottomActionTextLive}>
+                                Live Tracking
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                neoStyles.radarBottomActionBtn,
+                                neoStyles.radarBottomActionBtnPing,
+                                isPingTimedOut && neoStyles.radarBottomActionBtnTimedOut,
+                                (trackingState?.isPinging ?? false) &&
+                                  neoStyles.radarBottomActionBtnActive,
+                              ]}
+                              onPress={detail.requestDriverPing}
+                              disabled={trackingState?.isPinging ?? false}
+                              activeOpacity={0.75}
+                              accessibilityRole="button"
+                              accessibilityLabel="Ping driver"
+                            >
+                              {(trackingState?.isPinging ?? false) ? (
+                                <ActivityIndicator size="small" color={Theme.buttonDarkText} />
+                              ) : isPingTimedOut ? (
+                                <Feather name="alert-circle" size={14} color={Theme.buttonDarkText} />
+                              ) : (
+                                <Feather name="navigation" size={14} color={Theme.buttonDarkText} />
+                              )}
+                              <Text
+                                style={[
+                                  neoStyles.radarBottomActionTextPing,
+                                  isPingTimedOut && neoStyles.radarPingTextTimedOut,
+                                ]}
+                              >
+                                {(trackingState?.isPinging ?? false)
+                                  ? "Pinging…"
+                                  : isPingTimedOut
+                                    ? "No response"
+                                    : "Ping Driver"}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                   </View>
@@ -5779,6 +5551,7 @@ export default function TripDetailScreen({
                     : "Preview"}
                 </Text>
               </View>
+              {/* Spacer mirrors close control so the title stays centered. */}
               <View style={{ width: 36 }} />
             </View>
 
@@ -6053,6 +5826,7 @@ export default function TripDetailScreen({
             ) : null}
 
             <View style={styles.docModalFooter}>
+              <View />
               <TouchableOpacity
                 style={styles.docModalFooterBtn}
                 onPress={() => detail.setSelectedDoc(null)}
@@ -6064,6 +5838,117 @@ export default function TripDetailScreen({
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={pendingVaultUpload != null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!uploadingDocId) setPendingVaultUpload(null);
+        }}
+      >
+        <View style={styles.docModalBackdrop}>
+          <View
+            style={[
+              styles.docModalCard,
+              {
+                marginTop: insets.top + 12,
+                marginBottom: insets.bottom + 12,
+                maxHeight: "88%",
+              },
+            ]}
+          >
+            <View style={styles.docModalHeader}>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!uploadingDocId) setPendingVaultUpload(null);
+                }}
+                style={styles.docModalCloseIcon}
+                activeOpacity={0.8}
+                disabled={!!uploadingDocId}
+              >
+                <FontAwesome name="times" size={18} color="#0f172a" />
+              </TouchableOpacity>
+              <View style={styles.docModalTitleBlock}>
+                <Text style={styles.docModalTitle} numberOfLines={2}>
+                  {pendingVaultUpload?.label ?? "Document"}
+                </Text>
+                <Text style={styles.docModalSubtitle} numberOfLines={1}>
+                  Confirm upload
+                </Text>
+              </View>
+              <View style={{ width: 36 }} />
+            </View>
+
+            <View style={styles.docModalBody}>
+              {pendingVaultUpload ? (
+                (pendingVaultUpload.mimeType || "").startsWith("image/") ? (
+                  <Image
+                    source={{ uri: pendingVaultUpload.uri }}
+                    style={styles.docModalImage}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={styles.docModalCenter}>
+                    <FontAwesome
+                      name="file-pdf-o"
+                      size={48}
+                      color={Theme.primary}
+                    />
+                    <Text style={styles.docModalHint} numberOfLines={2}>
+                      {pendingVaultUpload.fileName}
+                    </Text>
+                    <Text style={styles.docModalHint}>
+                      PDF ready — confirm to save to the vault.
+                    </Text>
+                  </View>
+                )
+              ) : null}
+            </View>
+
+            <View style={styles.docModalFooter}>
+              <TouchableOpacity
+                style={styles.docModalFooterCancelBtn}
+                onPress={() => setPendingVaultUpload(null)}
+                activeOpacity={0.85}
+                disabled={!!uploadingDocId}
+              >
+                <Text style={styles.docModalFooterCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.docModalFooterBtn}
+                onPress={() => void confirmPendingVaultUpload()}
+                activeOpacity={0.85}
+                disabled={!!uploadingDocId}
+              >
+                {uploadingDocId ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={Theme.buttonDarkText}
+                  />
+                ) : (
+                  <Text style={styles.docModalFooterBtnText}>Upload</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ThemedAlertModal
+        visible={vaultDeleteTarget != null}
+        title="Delete document?"
+        message={`Remove “${vaultDeleteTarget?.label ?? "this file"}” from this trip? This cannot be undone.`}
+        okText="Delete"
+        okVariant="primary"
+        variant="warning"
+        secondaryText="Cancel"
+        onSecondary={() => setVaultDeleteTarget(null)}
+        onRequestClose={() => setVaultDeleteTarget(null)}
+        onOk={() => {
+          void executeVaultDelete();
+        }}
+      />
 
       <TripLedgerTransactionPreviewModal
         visible={previewLedgerTx != null}

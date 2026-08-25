@@ -2309,15 +2309,25 @@ export function AddTripFormFields({
                         : styles.allocationStepBody
               }
             >
-            {allocationContextRow ? (
-              <WizardPartyContextRow
-                left={allocationContextRow.left}
-                right={allocationContextRow.right}
-              />
-            ) : null}
+            {allocationContextRow || allocationPriorSelections.length > 0 ? (
+              <View
+                style={
+                  allocationFillBody
+                    ? fullPageWizardStyles.wizardKeypadChromePad
+                    : undefined
+                }
+              >
+                {allocationContextRow ? (
+                  <WizardPartyContextRow
+                    left={allocationContextRow.left}
+                    right={allocationContextRow.right}
+                  />
+                ) : null}
 
-            {allocationPriorSelections.length > 0 ? (
-              <WizardPriorSelections items={allocationPriorSelections} />
+                {allocationPriorSelections.length > 0 ? (
+                  <WizardPriorSelections items={allocationPriorSelections} />
+                ) : null}
+              </View>
             ) : null}
 
             {showAlloc("supply") ? (
@@ -3604,6 +3614,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     width: "100%",
+    gap: 8,
   },
   allocationStepBody: {
     width: "100%",

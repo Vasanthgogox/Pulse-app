@@ -1102,6 +1102,22 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 12,
     paddingBottom: 4,
   },
+  /**
+   * Keypad allocate steps: pageRootKeypad has no side pad — chrome above the
+   * pad (context row, priors, mode) must re-apply the same inset as header.
+   */
+  wizardKeypadChromePad: {
+    width: "100%",
+    flexShrink: 0,
+    gap: 10,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+  },
+  /** Flex host for keypad step content under chrome (fill remaining height). */
+  wizardKeypadStepFill: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+  },
   /** Prior-step summary cards in one row above the active field. */
   wizardPriorSelectionsStack: {
     width: "100%",

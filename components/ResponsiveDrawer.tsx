@@ -30,6 +30,8 @@ const DEFAULT_TABLET_WIDTH = 720;
 const DEFAULT_DRAWER_BREAKPOINT = 768;
 /** At/above this, use desktopWidth; between breakpoint and this, tabletWidth. */
 const DEFAULT_DESKTOP_BREAKPOINT = 1024;
+/** Shared with indent/trip mobile detail (PAD = 14). */
+const MOBILE_SHEET_PAD = 14;
 
 export interface ResponsiveDrawerProps {
   visible: boolean;
@@ -66,10 +68,14 @@ export function ResponsiveDrawer({
   mobileVariant = "sheet",
   applyDrawerInsetPadding = true,
 }: ResponsiveDrawerProps) {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isSideDrawer = Platform.OS === "web" && windowWidth >= drawerBreakpoint;
   const isDesktop = Platform.OS === "web" && windowWidth >= desktopBreakpoint;
   const drawerWidth = isDesktop ? desktopWidth : tabletWidth;
+  /** Bounded height so flex children (scroll + sticky footer) align on mobile. */
+  const sheetHeight = Math.round(
+    Math.min(windowHeight * 0.92, windowHeight - Math.max(insets.top, 12)),
+  );
 
   if (isSideDrawer) {
     return (
@@ -130,9 +136,18 @@ export function ResponsiveDrawer({
         <TouchableWithoutFeedback onPress={onClose} accessibilityLabel="Close">
           <View style={StyleSheet.absoluteFillObject} />
         </TouchableWithoutFeedback>
-        <View style={[styles.modalSheet, { paddingBottom: 16 + insets.bottom }]}>
+        <View
+          style={[
+            styles.modalSheet,
+            {
+              height: sheetHeight,
+              maxHeight: sheetHeight,
+              paddingBottom: Math.max(12, insets.bottom) + 8,
+            },
+          ]}
+        >
           <View style={styles.modalHandle} />
-          {children}
+          <View style={styles.sheetBody}>{children}</View>
         </View>
       </View>
     </Modal>
@@ -170,19 +185,28 @@ const styles = StyleSheet.create({
   },
   modalSheet: {
     backgroundColor: Theme.screenBackground,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: MOBILE_SHEET_PAD,
+    paddingTop: 8,
     minWidth: 0,
-    maxHeight: "92%" as unknown as number,
+    width: "100%",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
+  sheetBody: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    flexDirection: "column",
   },
   modalHandle: {
-    width: 40,
+    width: 36,
     height: 4,
     backgroundColor: Theme.borderMedium,
     borderRadius: 2,
     alignSelf: "center",
-    marginBottom: 14,
+    marginBottom: 10,
+    flexShrink: 0,
   },
 });

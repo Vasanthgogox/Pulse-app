@@ -85,7 +85,7 @@ export function bucketGiveLoadIndentsForKanban(
 }
 
 export function giveLoadKanbanColumnLabel(tabId: StatusFilterTab): string {
-  if (tabId === "OPEN") return "My Indents";
+  if (tabId === "OPEN") return "My loads";
   if (tabId === "QUOTED") return "Receiving Bids";
   const tab = STATUS_TABS.find((t) => t.id === tabId);
   return tab?.label ?? tabId;

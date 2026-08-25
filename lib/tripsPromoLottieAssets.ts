@@ -23,19 +23,19 @@ export const TRIPS_PROMO_HERO_LOTTIE: Record<TripsPromoVariant, AnimationObject>
  * the fixed square slot (Lottie canvases have different padding / aspect ratios).
  */
 export const TRIPS_PROMO_HERO_VISUAL_SCALE: Record<TripsPromoVariant, number> = {
-  unassigned: 1.28,
-  assigned: 1.08,
-  loading: 1.52,
-  in_transit: 1.18,
-  unloading: 1.5,
-  delivered_docs_pending: 1.22,
-  first_trip: 1.14,
-  filtered_out: 1.2,
-  history_empty: 1.24,
-  history_due_to_get: 1.38,
-  history_no_due_to_get: 1.2,
-  history_due_to_pay: 1.22,
-  history_no_due_to_pay: 1.22,
+  unassigned: 1.06,
+  assigned: 1.02,
+  loading: 1.12,
+  in_transit: 1.04,
+  unloading: 1.1,
+  delivered_docs_pending: 1.04,
+  first_trip: 1.02,
+  filtered_out: 1.04,
+  history_empty: 1.04,
+  history_due_to_get: 1.08,
+  history_no_due_to_get: 1.04,
+  history_due_to_pay: 1.04,
+  history_no_due_to_pay: 1.04,
 };
 
 export function resolveTripsPromoHeroLottie(
@@ -52,7 +52,7 @@ export function resolveTripsPromoHeroVisualScale(
 
 /** Fixed square slot — all trip tabs share the same outer frame. */
 export const TRIPS_PROMO_HERO_SLOT = {
-  compact: 140,
-  mobile: 160,
-  desktop: 180,
+  compact: 112,
+  mobile: 128,
+  desktop: 144,
 } as const;

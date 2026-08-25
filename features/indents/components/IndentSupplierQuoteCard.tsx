@@ -237,7 +237,7 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
     : isAccepted && alertInfo
       ? null
       : isAccepted
-        ? "Awarded"
+        ? "Bids won"
         : isRejected
           ? "Rejected"
           : isCountered
