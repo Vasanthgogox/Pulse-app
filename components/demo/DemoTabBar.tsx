@@ -896,6 +896,7 @@ export function DemoTabBar({
       onOpenChatWarm={openMessagesFromPressIn}
       onCollapseNetworkDock={collapseNetworkDock}
       onWarmTab={onWarmTab}
+      onProfilePress={onProfilePress}
     />
   );
 }

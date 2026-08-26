@@ -1585,13 +1585,19 @@ export default function TripDetailScreen({
   };
 
   // ── Finance numbers ───────────────────────────────────────────────────────────
-  // Keep POV parity with TripDetailFinanceView: supplier-side indent view should
-  // use supplier settlement amounts, not client billing amounts.
+  // Keep POV parity with TripDetailFinanceView: supplier-side view (indent OR
+  // manual/Aggregate-assigned) should use supplier settlement amounts, not
+  // client billing amounts. Gated on supplier_id (matches isAggregateTrip()'s
+  // convention), not indent_id — get_trip_detail_bundle now masks client_price/
+  // margin/etc. to null for a non-owner supplier regardless of indent_id, so
+  // this must recognize the same trips or a manual Aggregate trip shows a
+  // false ₹0 sale instead of the supplier's real supplier_rate.
   const isTripOwner =
     currentOrganization?.id != null &&
     trip.organization_id != null &&
     trip.organization_id === currentOrganization.id;
-  const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
+  const isPartnerSettlementView =
+    String(trip.supplier_id ?? "").trim().length > 0 && !isTripOwner;
   const payoutModeLc = String(trip.trip_payout_mode ?? "")
     .trim()
     .toLowerCase();

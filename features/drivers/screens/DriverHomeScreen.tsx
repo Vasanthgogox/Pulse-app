@@ -7,6 +7,7 @@ import {
 } from "@/components/driver/DriverTripSheetLayout";
 import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
 import { JobRequestCard } from "@/components/JobRequestCard";
+import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import { DriverMapAvatarMarker } from "@/components/driver/DriverMapAvatarMarker";
 import {
@@ -353,6 +354,10 @@ export default function DriverRadarScreen() {
   const [acceptLoading, setAcceptLoading] = useState(false);
   const [declineLoading, setDeclineLoading] = useState(false);
   const [declineConfirmTripId, setDeclineConfirmTripId] = useState<string | null>(null);
+  // Alert.alert is a no-op on web (react-native-web stub) — decline failures must
+  // use this themed modal, matching the web-safe pattern already used for the
+  // decline confirmation itself, or the driver sees nothing on mobile web.
+  const [declineErrorMessage, setDeclineErrorMessage] = useState<string | null>(null);
   const [acceptError, setAcceptError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -816,14 +821,22 @@ export default function DriverRadarScreen() {
         setOtpError(null);
       }
       setDeclineLoading(true);
-      const { error } = await tripsService.driverRejectTrip(tripId);
+      // Pre-OTP assignment (drivers.user_id IS NULL) needs a different RPC —
+      // driver_reject_trip() can never authorize an unclaimed driver. Mirrors
+      // the same requiresOtp check handleAcceptMission already uses
+      // (pendingOtpTripsRequiringOtp itself is declared later in this
+      // component, so this recomputes from pendingOtpTrips directly to avoid
+      // a temporal-dead-zone reference).
+      const pendingOtpTrip = pendingOtpTrips.find((t) => t.id === tripId);
+      const requiresOtp = !!pendingOtpTrip && !isRosterTrip(pendingOtpTrip);
+      const { error } = requiresOtp
+        ? await tripsService.driverDeclinePendingAssignment(tripId)
+        : await tripsService.driverRejectTrip(tripId);
       setDeclineLoading(false);
       if (error) {
-        Alert.alert(
-          "Decline failed",
-          error.message ?? "Could not decline. Try again.",
-          [{ text: "OK" }],
-        );
+        // Alert.alert is a no-op on web — use the themed modal so the failure
+        // is actually visible instead of silently doing nothing.
+        setDeclineErrorMessage(error.message ?? "Could not decline. Try again.");
         return;
       }
       if (
@@ -856,7 +869,15 @@ export default function DriverRadarScreen() {
         assignmentFeedbackTimeoutRef.current = null;
       }, 1200);
     },
-    [declineLoading, otpClaimTripId, acceptedTripId, uid, invalidateDriverHome, setDeclinedTripId],
+    [
+      declineLoading,
+      otpClaimTripId,
+      acceptedTripId,
+      uid,
+      invalidateDriverHome,
+      setDeclinedTripId,
+      pendingOtpTrips,
+    ],
   );
 
   const confirmDeclineTrip = useCallback(
@@ -1129,10 +1150,12 @@ export default function DriverRadarScreen() {
     // Durable, server-side record of the driver's tap. The status write above keeps
     // the trip on 'assigned', so without this row nothing outside this device can
     // tell acceptance apart from the dispatcher's assignment — which is why the web
-    // manifest used to guess. Best-effort by design: a failure here must not block a
-    // driver who has already accepted, and the audit helper swallows duplicate-tap
-    // and pre-migration errors.
-    void insertTripAssignmentAudit({
+    // manifest used to guess. Awaited (not fire-and-forget) so this row's changed_at
+    // is committed before the driver can proceed to pickup; otherwise a fast tap-through
+    // can race a later started_at write ahead of this insert, making driver_accepted
+    // appear to happen after pickup. The audit helper still swallows duplicate-tap
+    // and pre-migration errors, so this can't block a driver who has already accepted.
+    await insertTripAssignmentAudit({
       trip_id: trip.id,
       event_type: "driver_accepted",
       driver_id_prev: null,
@@ -2567,7 +2590,9 @@ export default function DriverRadarScreen() {
           // Claiming by OTP is an acceptance too — record it so the web manifest
           // reflects it. driver_id comes from the RPC, which resolves/creates the
           // driver row for auth.uid(); a local trip object would be stale here.
-          void insertTripAssignmentAudit({
+          // Awaited so changed_at commits before the driver can proceed to pickup —
+          // see handleAcceptMission for the same fire-and-forget race this avoids.
+          await insertTripAssignmentAudit({
             trip_id: tripIdToSet,
             event_type: "driver_accepted",
             driver_id_prev: null,
@@ -5868,6 +5893,13 @@ export default function DriverRadarScreen() {
           setDeclineConfirmTripId(null);
           if (tripId) void runDeclineTrip(tripId);
         }}
+      />
+      <ThemedAlertModal
+        variant="warning"
+        visible={declineErrorMessage != null}
+        title="Decline failed"
+        message={declineErrorMessage ?? "Could not decline. Try again."}
+        onOk={() => setDeclineErrorMessage(null)}
       />
     </View>
   );

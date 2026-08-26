@@ -75,6 +75,8 @@ export interface TripRow {
   supplier_id: string | null;
   /** Ledger lane: `market` = supplier payable; `asset` = driver + vehicle. NULL = infer from supplier_id. */
   trip_payout_mode?: "market" | "asset" | string | null;
+  /** Explicit, dispatcher-captured execution model for a subcontracted trip. NULL = infer via getTripExecutionModel()'s legacy heuristic. Immutable once started_at is set. */
+  execution_type?: "ASSET" | "AGGREGATE" | null;
   /** Optional; when set without supplier_id, used for supplier due/name matching (e.g. synced trips). */
   supplier_name?: string | null;
   driver_id: string | null;
@@ -593,6 +595,36 @@ export async function driverRejectTrip(
   });
   if (error) return { error: new Error(error.message), trip: null };
   // Fetch updated row for local UI consistency (RPC may not return the trip row).
+  const refreshed = await getDriverTripById(tripId);
+  return {
+    error: null,
+    trip: refreshed.trip ? driverRowToTripRow(refreshed.trip) : null,
+  };
+}
+
+/**
+ * Decline a phone-assigned trip before OTP claim (drivers.user_id IS NULL).
+ * driver_reject_trip() cannot authorize this state (d.user_id = auth.uid()
+ * never matches while unclaimed) — this RPC authorizes via the caller's own
+ * registered phone matching the assigned driver's phone_normalised instead,
+ * the same identity model claim_trip_by_otp() already uses. Do not call this
+ * for an already-claimed driver; the RPC itself refuses that case.
+ */
+export async function driverDeclinePendingAssignment(
+  tripId: string,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { data, error } = await supabase().rpc(
+    "driver_decline_pending_assignment",
+    { p_trip_id: tripId },
+  );
+  if (error) return { error: new Error(error.message), trip: null };
+  const obj = data as { ok?: boolean; error?: string } | null;
+  if (!obj || obj.ok !== true) {
+    return {
+      error: new Error(obj?.error ?? "Could not decline. Try again."),
+      trip: null,
+    };
+  }
   const refreshed = await getDriverTripById(tripId);
   return {
     error: null,
@@ -2341,6 +2373,8 @@ export async function assignAggregateTripDriverByPhone(
   previousDriverId?: string | null,
   /** Dispatcher-entered name — stored on drivers.name so hub does not show UNASSIGNED. */
   driverName?: string | null,
+  /** Explicit own-asset vs third-party choice (Issue B). Omitted/undefined = NULL, preserving legacy AGGREGATE-default behavior. */
+  executionType?: "ASSET" | "AGGREGATE" | null,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const normalized = (phone ?? "").trim().replace(/\s+/g, "");
   if (!normalized) {
@@ -2389,6 +2423,9 @@ export async function assignAggregateTripDriverByPhone(
   if (fleetVehicleId) {
     rpcArgs.p_vehicle_id = fleetVehicleId;
   }
+  if (executionType) {
+    rpcArgs.p_execution_type = executionType;
+  }
 
   let { data, error } = await supabase().rpc(
     "assign_aggregate_trip_driver",
@@ -2396,11 +2433,24 @@ export async function assignAggregateTripDriverByPhone(
   );
   if (
     error &&
+    executionType &&
+    /p_execution_type|Could not find the function/i.test(String(error.message ?? ""))
+  ) {
+    const withoutExecutionType = { ...rpcArgs };
+    delete withoutExecutionType.p_execution_type;
+    ({ data, error } = await supabase().rpc(
+      "assign_aggregate_trip_driver",
+      withoutExecutionType,
+    ));
+  }
+  if (
+    error &&
     usableDriverName &&
     /p_driver_name|Could not find the function/i.test(String(error.message ?? ""))
   ) {
     const withoutName = { ...rpcArgs };
     delete withoutName.p_driver_name;
+    delete withoutName.p_execution_type;
     ({ data, error } = await supabase().rpc(
       "assign_aggregate_trip_driver",
       withoutName,
@@ -2411,10 +2461,11 @@ export async function assignAggregateTripDriverByPhone(
     fleetVehicleId &&
     /p_vehicle_id|Could not find the function/i.test(String(error.message ?? ""))
   ) {
-    // Stale RPC (pre-name / pre-vehicle-id signature): retry without the newer args.
+    // Stale RPC (pre-name / pre-vehicle-id / pre-execution-type signature): retry without the newer args.
     const legacyArgs = { ...rpcArgs };
     delete legacyArgs.p_vehicle_id;
     delete legacyArgs.p_driver_name;
+    delete legacyArgs.p_execution_type;
     ({ data, error } = await supabase().rpc(
       "assign_aggregate_trip_driver",
       legacyArgs,

@@ -72,6 +72,9 @@ export type TripPhoneAssignmentWizardProps = {
   onDriverNameChange: (value: string) => void;
   vehiclePlate: string;
   onVehiclePlateChange: (value: string) => void;
+  /** Own-asset vs third-party choice for a supplier-linked (Aggregate) trip. Omit both to hide the toggle. */
+  isOwnAsset?: boolean | null;
+  onIsOwnAssetChange?: (value: boolean | null) => void;
   saving: boolean;
   error: string | null;
   onSubmit: () => void;
@@ -107,6 +110,8 @@ export function TripPhoneAssignmentWizard({
   onDriverNameChange,
   vehiclePlate,
   onVehiclePlateChange,
+  isOwnAsset = null,
+  onIsOwnAssetChange,
   saving,
   error,
   onSubmit,
@@ -985,6 +990,8 @@ export function TripPhoneAssignmentWizard({
                       onDriverPhoneChange={handlePhoneChange}
                       vehicleText={vehiclePlate}
                       onVehicleTextChange={handleVehicleChange}
+                      isOwnAsset={isOwnAsset}
+                      onIsOwnAssetChange={onIsOwnAssetChange}
                       invalid={invalidField}
                       driverPhoneMatches={lookup.matches}
                       driverPhoneLookupLoading={lookup.loading}
@@ -1092,6 +1099,8 @@ export function TripPhoneAssignmentWizard({
                     onDriverPhoneChange={handlePhoneChange}
                     vehicleText={vehiclePlate || initialVehicle}
                     onVehicleTextChange={handleVehicleChange}
+                    isOwnAsset={isOwnAsset}
+                    onIsOwnAssetChange={onIsOwnAssetChange}
                     invalid={invalidField}
                     testIDPrefix="trip-phone-wizard"
                   />
