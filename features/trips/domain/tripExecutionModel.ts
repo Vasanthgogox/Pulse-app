@@ -13,6 +13,17 @@ function normalizePayoutMode(mode: TripRow["trip_payout_mode"]): string {
  * This is the single source of truth for asset vs aggregate behavior.
  */
 export function getTripExecutionModel(trip: TripRow): TripExecutionModel {
+  // Explicit, dispatcher-captured signal (Issue B) — highest priority.
+  // Distinguishes a supplier's own-asset deploy from a third-party/outsourced
+  // driver on a manual/Aggregate-assigned trip, which trip_payout_mode/source
+  // alone cannot do (see the legacy heuristic below). NULL falls through to
+  // that legacy heuristic unchanged — existing trips are never affected.
+  const explicitExecutionType = String(trip.execution_type ?? "")
+    .trim()
+    .toUpperCase();
+  if (explicitExecutionType === "ASSET") return "asset";
+  if (explicitExecutionType === "AGGREGATE") return "aggregate";
+
   // A mover's own execution trip (created when a mover deploys an awarded load
   // with its own driver + vehicle) is ALWAYS asset — the mover pays its driver
   // and books truck expenses on it. Force asset here so its finance UI (driver

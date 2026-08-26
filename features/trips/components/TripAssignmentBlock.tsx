@@ -195,6 +195,8 @@ export function TripAssignmentBlock({
     null,
   );
   const [phoneVehicleInput, setPhoneVehicleInput] = useState("");
+  /** Own-asset vs third-party choice for the Aggregate phone-assignment flow (Issue B). null = not specified, preserves legacy AGGREGATE-default behavior. */
+  const [phoneIsOwnAsset, setPhoneIsOwnAsset] = useState<boolean | null>(null);
   const [phoneModalVehicles, setPhoneModalVehicles] = useState<VehicleRow[]>(
     [],
   );
@@ -547,6 +549,7 @@ export function TripAssignmentBlock({
         matchedVehicle?.id ?? null,    // ← pass vehicle_id to RPC directly
         trip.driver_id ?? null,        // previousDriverId
         driverNameTrimmed,             // persist typed name instead of 'Driver' placeholder
+        phoneIsOwnAsset == null ? null : phoneIsOwnAsset ? "ASSET" : "AGGREGATE",
       );
       if (rpcErr) {
         setPhoneSaving(false);
@@ -666,6 +669,7 @@ export function TripAssignmentBlock({
     phoneInput,
     phoneDriverNameInput,
     phoneVehicleInput,
+    phoneIsOwnAsset,
     applyPhoneDriverDisplayName,
     phoneModalVehicles,
     phoneModalIsReassign,
@@ -2267,6 +2271,7 @@ export function TripAssignmentBlock({
           setShowPhoneModal(false);
           setPhoneAssignOtpReveal(null);
           setPhoneAssignSuccess(null);
+          setPhoneIsOwnAsset(null);
           if (fullPageFlow) onFlowDismiss?.();
         }}
         trip={trip}
@@ -2281,6 +2286,10 @@ export function TripAssignmentBlock({
         onDriverNameChange={setPhoneDriverNameInput}
         vehiclePlate={phoneVehicleInput}
         onVehiclePlateChange={setPhoneVehicleInput}
+        // Own-asset toggle only makes sense for the Aggregate assignment flow
+        // (a supplier is involved); omit both props otherwise to hide it.
+        isOwnAsset={driverAssignOrgId ? phoneIsOwnAsset : undefined}
+        onIsOwnAssetChange={driverAssignOrgId ? setPhoneIsOwnAsset : undefined}
         saving={phoneSaving}
         error={phoneError}
         onSubmit={assignByPhone}

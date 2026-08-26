@@ -35,6 +35,9 @@ export interface AggregateTrackingMobileStepProps {
   onDriverPhoneChange: (value: string) => void;
   vehicleText: string;
   onVehicleTextChange: (value: string) => void;
+  /** Own-asset vs third-party choice for a supplier-linked (Aggregate) trip. Omit to hide the toggle (e.g. non-aggregate assignment flows). */
+  isOwnAsset?: boolean | null;
+  onIsOwnAssetChange?: (value: boolean | null) => void;
   invalid: (field: AddTripIssueField) => boolean;
   driverNameInputRef?: React.RefObject<TextInputType | null>;
   driverPhoneMatches?: readonly ExistingDriverMatch[];
@@ -56,6 +59,8 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
   onDriverPhoneChange,
   vehicleText,
   onVehicleTextChange,
+  isOwnAsset = null,
+  onIsOwnAssetChange,
   invalid,
   driverNameInputRef,
   driverPhoneMatches = [],
@@ -129,6 +134,52 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
         wizardShell
         label="Vehicle number *"
       />
+      {onIsOwnAssetChange ? (
+        <View style={styles.ownAssetRoot}>
+          <Text style={styles.ownAssetLabel}>Whose vehicle is this?</Text>
+          <View style={styles.ownAssetRow}>
+            <Pressable
+              style={[
+                styles.ownAssetOption,
+                isOwnAsset === true && styles.ownAssetOptionSelected,
+              ]}
+              onPress={() => onIsOwnAssetChange(true)}
+              accessibilityRole="button"
+              testID={`${testIDPrefix}-own-asset-yes`}
+            >
+              <Text
+                style={[
+                  styles.ownAssetOptionText,
+                  isOwnAsset === true && styles.ownAssetOptionTextSelected,
+                ]}
+              >
+                Supplier's own vehicle
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.ownAssetOption,
+                isOwnAsset === false && styles.ownAssetOptionSelected,
+              ]}
+              onPress={() => onIsOwnAssetChange(false)}
+              accessibilityRole="button"
+              testID={`${testIDPrefix}-own-asset-no`}
+            >
+              <Text
+                style={[
+                  styles.ownAssetOptionText,
+                  isOwnAsset === false && styles.ownAssetOptionTextSelected,
+                ]}
+              >
+                Third-party / outsourced
+              </Text>
+            </Pressable>
+          </View>
+          <Text style={styles.ownAssetHint}>
+            Not sure? Leave unselected — this trip is treated as outsourced by default.
+          </Text>
+        </View>
+      ) : null}
       </View>
     );
   }
@@ -254,5 +305,46 @@ const styles = StyleSheet.create({
     borderColor: Theme.destructive,
     borderWidth: 2,
     backgroundColor: "#fef2f2",
+  },
+  ownAssetRoot: {
+    marginTop: 16,
+    gap: 8,
+  },
+  ownAssetLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  ownAssetRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  ownAssetOption: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    alignItems: "center",
+  },
+  ownAssetOptionSelected: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceLight,
+  },
+  ownAssetOptionText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    textAlign: "center",
+  },
+  ownAssetOptionTextSelected: {
+    color: Theme.primary,
+  },
+  ownAssetHint: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
   },
 });

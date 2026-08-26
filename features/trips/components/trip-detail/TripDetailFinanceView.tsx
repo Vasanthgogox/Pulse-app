@@ -1342,20 +1342,24 @@ export function TripDetailFinanceView({
   ]);
   const customerSales = Number(trip.client_price ?? 0) || 0;
   const supplierCost = Number(trip.supplier_rate ?? 0) || 0;
-  // Indent: owner = client (shipper), revenue = client_price. Non-owner = supplier, revenue = supplier_rate.
+  // Owner = client (shipper), revenue = client_price. Non-owner supplier
+  // (indent OR manual/Aggregate-assigned — gated on supplier_id, matching
+  // isAggregateTrip()) = revenue = supplier_rate. get_trip_detail_bundle masks
+  // client_price/margin/etc. to null for a non-owner supplier regardless of
+  // indent_id, so this must recognize the same trips or a manual Aggregate
+  // trip shows a false ₹0 sale instead of the supplier's real supplier_rate.
   const isTripOwner =
     viewerOrgId != null &&
     trip.organization_id != null &&
     trip.organization_id === viewerOrgId;
-  /** Non-owner + indent: supplier_rate. Otherwise: client_price. */
-  const sales =
-    trip.indent_id != null && !isTripOwner ? supplierCost : customerSales;
-  /** Owner + indent: cost = supplier_rate. Non-owner + indent: asset-style freight cost (see helper). */
-  const cost =
-    trip.indent_id != null && !isTripOwner
-      ? computePartnerIndentFreightCost(subcontractRate)
-      : supplierCost;
-  const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
+  const isPartnerSettlementView =
+    String(trip.supplier_id ?? "").trim().length > 0 && !isTripOwner;
+  /** Non-owner supplier: supplier_rate. Otherwise: client_price. */
+  const sales = isPartnerSettlementView ? supplierCost : customerSales;
+  /** Owner: cost = supplier_rate. Non-owner supplier: asset-style freight cost (see helper). */
+  const cost = isPartnerSettlementView
+    ? computePartnerIndentFreightCost(subcontractRate)
+    : supplierCost;
   const billingOriginalLabel = isPartnerSettlementView
     ? "Partner Amount"
     : "Original Price";

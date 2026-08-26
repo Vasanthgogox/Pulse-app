@@ -1129,10 +1129,12 @@ export default function DriverRadarScreen() {
     // Durable, server-side record of the driver's tap. The status write above keeps
     // the trip on 'assigned', so without this row nothing outside this device can
     // tell acceptance apart from the dispatcher's assignment — which is why the web
-    // manifest used to guess. Best-effort by design: a failure here must not block a
-    // driver who has already accepted, and the audit helper swallows duplicate-tap
-    // and pre-migration errors.
-    void insertTripAssignmentAudit({
+    // manifest used to guess. Awaited (not fire-and-forget) so this row's changed_at
+    // is committed before the driver can proceed to pickup; otherwise a fast tap-through
+    // can race a later started_at write ahead of this insert, making driver_accepted
+    // appear to happen after pickup. The audit helper still swallows duplicate-tap
+    // and pre-migration errors, so this can't block a driver who has already accepted.
+    await insertTripAssignmentAudit({
       trip_id: trip.id,
       event_type: "driver_accepted",
       driver_id_prev: null,
@@ -2567,7 +2569,9 @@ export default function DriverRadarScreen() {
           // Claiming by OTP is an acceptance too — record it so the web manifest
           // reflects it. driver_id comes from the RPC, which resolves/creates the
           // driver row for auth.uid(); a local trip object would be stale here.
-          void insertTripAssignmentAudit({
+          // Awaited so changed_at commits before the driver can proceed to pickup —
+          // see handleAcceptMission for the same fire-and-forget race this avoids.
+          await insertTripAssignmentAudit({
             trip_id: tripIdToSet,
             event_type: "driver_accepted",
             driver_id_prev: null,

@@ -79,4 +79,68 @@ describe("tripExecutionModel", () => {
     expect(isAssetExecutionTrip(moverAsset)).toBe(true);
     expect(isAggregateExecutionTrip(moverAsset)).toBe(false);
   });
+
+  // Issue B: explicit execution_type on manual/Aggregate-assigned trips.
+  describe("explicit execution_type (Issue B)", () => {
+    it("Case A: manual + supplier + explicit ASSET -> asset, driver payout available", () => {
+      const manualOwnAsset = trip({
+        source: "manual",
+        indent_id: null,
+        supplier_id: "supplier-1",
+        driver_id: "driver-1",
+        execution_type: "ASSET",
+        trip_payout_mode: null,
+      });
+
+      expect(getTripExecutionModel(manualOwnAsset)).toBe("asset");
+      expect(isAssetExecutionTrip(manualOwnAsset)).toBe(true);
+      expect(isAggregateExecutionTrip(manualOwnAsset)).toBe(false);
+    });
+
+    it("Case B: manual + supplier + explicit AGGREGATE (third-party) -> aggregate, driver payout unavailable", () => {
+      const manualThirdParty = trip({
+        source: "manual",
+        indent_id: null,
+        supplier_id: "supplier-1",
+        driver_id: "driver-1",
+        execution_type: "AGGREGATE",
+        trip_payout_mode: null,
+      });
+
+      expect(getTripExecutionModel(manualThirdParty)).toBe("aggregate");
+      expect(isAssetExecutionTrip(manualThirdParty)).toBe(false);
+      expect(isAggregateExecutionTrip(manualThirdParty)).toBe(true);
+    });
+
+    it("Case C: execution_type NULL preserves the existing legacy classification", () => {
+      const legacyManualSupplier = trip({
+        source: "manual",
+        indent_id: null,
+        supplier_id: "supplier-1",
+        driver_id: "driver-1",
+        execution_type: null,
+        trip_payout_mode: null,
+      });
+
+      // Same outcome as the pre-Issue-B "keeps supplier-linked trips
+      // aggregate" case above — NULL must not change historical behavior.
+      expect(getTripExecutionModel(legacyManualSupplier)).toBe("aggregate");
+    });
+
+    it("explicit execution_type takes priority over trip_payout_mode", () => {
+      const conflicting = trip({
+        source: "manual",
+        supplier_id: "supplier-1",
+        execution_type: "ASSET",
+        trip_payout_mode: "market",
+      });
+
+      expect(getTripExecutionModel(conflicting)).toBe("asset");
+    });
+
+    it("is case-insensitive and tolerant of whitespace", () => {
+      const lower = trip({ supplier_id: "supplier-1", execution_type: "asset" as never });
+      expect(getTripExecutionModel(lower)).toBe("asset");
+    });
+  });
 });
