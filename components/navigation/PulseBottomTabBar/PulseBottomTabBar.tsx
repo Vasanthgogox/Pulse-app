@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Signpost,
   Truck,
+  User,
   type LucideIcon,
 } from 'lucide-react-native';
 
@@ -45,6 +46,7 @@ export type PulseBottomTabBarProps = {
   onOpenChatWarm?: () => void;
   onCollapseNetworkDock: () => void;
   onWarmTab?: (tab: DemoTabId) => void;
+  onProfilePress?: () => void;
 };
 
 function TabOutlineIcon({
@@ -79,6 +81,7 @@ function PulseBottomTabBarInner({
   onOpenChatWarm,
   onCollapseNetworkDock,
   onWarmTab,
+  onProfilePress,
 }: PulseBottomTabBarProps) {
   const iconSize = isCompactMobile ? MOBILE_TAB_ICON_SIZE_COMPACT : MOBILE_TAB_ICON_SIZE;
   const showFinance = visibility?.finance ?? true;
@@ -203,6 +206,13 @@ function PulseBottomTabBarInner({
             <TabOutlineIcon Icon={MessageSquare} active={isChatRoute} size={iconSize} />
           }
         />
+        <PulseBottomTabSlot
+          label="Profile"
+          active={false}
+          compact={isCompactMobile}
+          onPress={() => onProfilePress?.()}
+          icon={<TabOutlineIcon Icon={User} active={false} size={iconSize} />}
+        />
       </View>
     </View>
   );
@@ -225,7 +235,8 @@ function propsEqual(prev: PulseBottomTabBarProps, next: PulseBottomTabBarProps):
     prev.onOpenChat === next.onOpenChat &&
     prev.onOpenChatWarm === next.onOpenChatWarm &&
     prev.onCollapseNetworkDock === next.onCollapseNetworkDock &&
-    prev.onWarmTab === next.onWarmTab
+    prev.onWarmTab === next.onWarmTab &&
+    prev.onProfilePress === next.onProfilePress
   );
 }
 
