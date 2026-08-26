@@ -602,6 +602,36 @@ export async function driverRejectTrip(
   };
 }
 
+/**
+ * Decline a phone-assigned trip before OTP claim (drivers.user_id IS NULL).
+ * driver_reject_trip() cannot authorize this state (d.user_id = auth.uid()
+ * never matches while unclaimed) — this RPC authorizes via the caller's own
+ * registered phone matching the assigned driver's phone_normalised instead,
+ * the same identity model claim_trip_by_otp() already uses. Do not call this
+ * for an already-claimed driver; the RPC itself refuses that case.
+ */
+export async function driverDeclinePendingAssignment(
+  tripId: string,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { data, error } = await supabase().rpc(
+    "driver_decline_pending_assignment",
+    { p_trip_id: tripId },
+  );
+  if (error) return { error: new Error(error.message), trip: null };
+  const obj = data as { ok?: boolean; error?: string } | null;
+  if (!obj || obj.ok !== true) {
+    return {
+      error: new Error(obj?.error ?? "Could not decline. Try again."),
+      trip: null,
+    };
+  }
+  const refreshed = await getDriverTripById(tripId);
+  return {
+    error: null,
+    trip: refreshed.trip ? driverRowToTripRow(refreshed.trip) : null,
+  };
+}
+
 /** Trips assigned to a driver (driver app). RLS must allow driver to SELECT where driver_id = self. */
 export async function getTripsByDriver(
   driverId: string,

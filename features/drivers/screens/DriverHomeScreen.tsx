@@ -7,6 +7,7 @@ import {
 } from "@/components/driver/DriverTripSheetLayout";
 import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
 import { JobRequestCard } from "@/components/JobRequestCard";
+import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import { DriverMapAvatarMarker } from "@/components/driver/DriverMapAvatarMarker";
 import {
@@ -353,6 +354,10 @@ export default function DriverRadarScreen() {
   const [acceptLoading, setAcceptLoading] = useState(false);
   const [declineLoading, setDeclineLoading] = useState(false);
   const [declineConfirmTripId, setDeclineConfirmTripId] = useState<string | null>(null);
+  // Alert.alert is a no-op on web (react-native-web stub) — decline failures must
+  // use this themed modal, matching the web-safe pattern already used for the
+  // decline confirmation itself, or the driver sees nothing on mobile web.
+  const [declineErrorMessage, setDeclineErrorMessage] = useState<string | null>(null);
   const [acceptError, setAcceptError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -816,14 +821,22 @@ export default function DriverRadarScreen() {
         setOtpError(null);
       }
       setDeclineLoading(true);
-      const { error } = await tripsService.driverRejectTrip(tripId);
+      // Pre-OTP assignment (drivers.user_id IS NULL) needs a different RPC —
+      // driver_reject_trip() can never authorize an unclaimed driver. Mirrors
+      // the same requiresOtp check handleAcceptMission already uses
+      // (pendingOtpTripsRequiringOtp itself is declared later in this
+      // component, so this recomputes from pendingOtpTrips directly to avoid
+      // a temporal-dead-zone reference).
+      const pendingOtpTrip = pendingOtpTrips.find((t) => t.id === tripId);
+      const requiresOtp = !!pendingOtpTrip && !isRosterTrip(pendingOtpTrip);
+      const { error } = requiresOtp
+        ? await tripsService.driverDeclinePendingAssignment(tripId)
+        : await tripsService.driverRejectTrip(tripId);
       setDeclineLoading(false);
       if (error) {
-        Alert.alert(
-          "Decline failed",
-          error.message ?? "Could not decline. Try again.",
-          [{ text: "OK" }],
-        );
+        // Alert.alert is a no-op on web — use the themed modal so the failure
+        // is actually visible instead of silently doing nothing.
+        setDeclineErrorMessage(error.message ?? "Could not decline. Try again.");
         return;
       }
       if (
@@ -856,7 +869,15 @@ export default function DriverRadarScreen() {
         assignmentFeedbackTimeoutRef.current = null;
       }, 1200);
     },
-    [declineLoading, otpClaimTripId, acceptedTripId, uid, invalidateDriverHome, setDeclinedTripId],
+    [
+      declineLoading,
+      otpClaimTripId,
+      acceptedTripId,
+      uid,
+      invalidateDriverHome,
+      setDeclinedTripId,
+      pendingOtpTrips,
+    ],
   );
 
   const confirmDeclineTrip = useCallback(
@@ -5872,6 +5893,13 @@ export default function DriverRadarScreen() {
           setDeclineConfirmTripId(null);
           if (tripId) void runDeclineTrip(tripId);
         }}
+      />
+      <ThemedAlertModal
+        variant="warning"
+        visible={declineErrorMessage != null}
+        title="Decline failed"
+        message={declineErrorMessage ?? "Could not decline. Try again."}
+        onOk={() => setDeclineErrorMessage(null)}
       />
     </View>
   );
