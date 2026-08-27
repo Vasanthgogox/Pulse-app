@@ -10,8 +10,10 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOptionalActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { platformRoleLabel } from "@/features/organization/utils/teamInviteRoles.util";
 import { WorkspaceDetailLayout } from "@/features/organization/components/workspace/WorkspaceDetailLayout";
 import { useWorkspaceOrgLogo } from "@/features/organization/hooks/useWorkspaceOrgLogo";
 import {
@@ -311,6 +313,14 @@ export function WorkspaceAccountPanel({
     LOCALE_OPTIONS.find((o) => o.value === locale)?.label ?? "English";
   const roleLabel =
     role === "owner" ? "Owner" : role === "admin" ? "Admin" : role === "member" ? "Member" : "Member";
+  // "Member" alone doesn't say what the member can actually do — surface the
+  // assigned functional role (Finance / Sales / Trip Ops / Restricted) so
+  // someone like a Trip-Ops-only member can see their own scope here instead
+  // of having to ask an admin. Redundant for owner/admin (they already read
+  // "Owner"/"Admin" above) so only shown for plain members.
+  const { memberPlatformRole } = useOptionalActiveWorkspace() ?? {};
+  const functionalRoleLabel =
+    role === "member" && memberPlatformRole ? platformRoleLabel(memberPlatformRole) : null;
   const hasOperationalAccess =
     capabilities.includes("finance_view") ||
     capabilities.includes("finance_manage") ||
@@ -498,7 +508,9 @@ export function WorkspaceAccountPanel({
                 </View>
               </View>
               <Text style={styles.orgCardMeta} numberOfLines={1}>
-                {`${roleLabel} · ${accessLabel}`}
+                {functionalRoleLabel
+                  ? `${roleLabel} · ${functionalRoleLabel} · ${accessLabel}`
+                  : `${roleLabel} · ${accessLabel}`}
               </Text>
             </View>
             <ChevronRight size={13} color={Theme.textMuted} strokeWidth={2} />
