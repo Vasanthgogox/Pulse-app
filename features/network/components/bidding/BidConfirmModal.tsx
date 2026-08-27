@@ -225,9 +225,9 @@ export const BidConfirmModal = memo(function BidConfirmModal({
   // Auto-advance from success after a short beat (user can also tap Done).
   useEffect(() => {
     if (!visible || !isSuccess || !onSuccessDone) return;
-    const t = setTimeout(() => onSuccessDone(), 2800);
+    const t = setTimeout(() => onSuccessDone(), isEditMode ? 3200 : 2800);
     return () => clearTimeout(t);
-  }, [visible, isSuccess, onSuccessDone]);
+  }, [visible, isSuccess, onSuccessDone, isEditMode]);
 
   const routeLine =
     origin && destination

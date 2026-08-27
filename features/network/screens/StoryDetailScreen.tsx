@@ -278,12 +278,26 @@ export default function StoryDetailScreen() {
 
   useEffect(() => {
     if (resolvedStoryList.length === 0) return;
+    // Pause auto-advance while bidding so success returns to this story preview.
+    if (bidPost != null) {
+      if (animRef.current) animRef.current.stop();
+      return;
+    }
     if (animRef.current) animRef.current.stop();
     progress.setValue(0);
-    animRef.current = Animated.timing(progress, { toValue: 1, duration: STORY_DURATION, easing: Easing.linear, useNativeDriver: false });
-    animRef.current.start(({ finished }) => { if (finished) goNext(); });
-    return () => { if (animRef.current) animRef.current.stop(); };
-  }, [current, resolvedStoryList.length, goNext, progress]);
+    animRef.current = Animated.timing(progress, {
+      toValue: 1,
+      duration: STORY_DURATION,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    animRef.current.start(({ finished }) => {
+      if (finished) goNext();
+    });
+    return () => {
+      if (animRef.current) animRef.current.stop();
+    };
+  }, [current, resolvedStoryList.length, goNext, progress, bidPost]);
 
   const initialStoryIndex = useMemo(() => {
     const targetPostId = params.postId ?? "";
@@ -948,8 +962,12 @@ export default function StoryDetailScreen() {
         onSuccess={() => {
           invalidatePosts();
           if (myOrgId) invalidateIndents(myOrgId);
+          void myBidQ.refetch();
+          void myQuotesQ.refetch();
           setBidPost(null);
           setEditBidMode(false);
+          // Restart story progress on the same preview after celebration.
+          progress.setValue(0);
         }}
       />
 

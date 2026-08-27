@@ -174,11 +174,22 @@ export function BidSheet({
   const updateMutation = useUpdateBidMutation(post?.id ?? null, orgId);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      setConfirmOpen(false);
+      setConfirmPhase('review');
+      setSubmitting(false);
+      return;
+    }
+    /**
+     * Never reseeds / resets while the confirm or success celebration is open.
+     * Update mutations refresh `existingBid.amount` in cache mid-flight — that
+     * used to wipe `confirmPhase: 'success'` before the animation could play.
+     */
+    if (confirmOpen) return;
+
     setActiveField('amount');
     setValidationError(undefined);
     setSubmitting(false);
-    setConfirmOpen(false);
     setConfirmPhase('review');
     const seed =
       initialAmount && initialAmount > 0
@@ -188,7 +199,15 @@ export function BidSheet({
           : null;
     setAmountRaw(seed != null ? toRawString(seed) : '');
     setNote(existingBid?.note ?? initialNote ?? '');
-  }, [visible, existingBid?.id, existingBid?.amount, existingBid?.note, initialAmount, initialNote]);
+  }, [
+    visible,
+    confirmOpen,
+    existingBid?.id,
+    existingBid?.amount,
+    existingBid?.note,
+    initialAmount,
+    initialNote,
+  ]);
 
   const origin = cityPart(post?.origin);
   const destination = cityPart(post?.destination);
